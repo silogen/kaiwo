@@ -175,7 +175,7 @@ func formatJSON(content []byte) (string, error) {
 
 
 func Submit(path, image string, job, service bool, gpus int) error {
-	if path == "" || (!job && !service) || gpus <= 0 {
+	if path == "" || (!job && !service) || (job && service) || gpus <= 0 {
 		return fmt.Errorf("invalid flags: ensure --path, --job/--service, and --gpus are provided")
 	}
 
