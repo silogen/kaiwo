@@ -1,0 +1,157 @@
+apiVersion: ray.io/v1
+kind: RayJob
+metadata:
+  name: llama3-70b-inference
+  namespace: av-test
+  labels:
+    kueue.x-k8s.io/queue-name: gpu-queue
+spec:
+  shutdownAfterJobFinishes: true
+  entrypoint: >
+    /bin/bash -c "
+    python main.py
+    --model-name=meta-llama/Llama-3.1-8B-Instruct
+    --ds-config=./zero_3_offload_optim_param.json
+    --bucket=silogen-dev-ray
+    --num-epochs=2
+    --lora
+    --num-devices=4
+    --batch-size-per-device=32
+    --eval-batch-size-per-device=32
+    --ctx-len=1024"
+  rayClusterSpec:
+    rayVersion: "2.9.0"
+    enableInTreeAutoscaling: false #cannot be true when using Kueue
+    headGroupSpec:
+      rayStartParams: {}
+      template:
+        spec:
+          containers:
+            - name: ray-head
+              image: ghcr.io/silogen/rocm-ray:v0.3
+              imagePullPolicy: Always
+              env:
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: gcs-credentials
+                      key: access_key
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: gcs-credentials
+                      key: secret_key
+                - name: HF_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: hf-token
+                      key: hf-token
+                - name: GOOGLE_APPLICATION_CREDENTIALS
+                  value: "/etc/gcp/credentials.json"
+              ports:
+                - containerPort: 6379
+                  name: gcs-server
+                - containerPort: 8265
+                  name: dashboard
+                - containerPort: 10001
+                  name: client
+                - containerPort: 8000
+                  name: serve
+              resources:
+                limits:
+                  cpu: "10"
+                  memory: "300Gi"
+                  amd.com/gpu: "4"
+                requests:
+                  cpu: "10"
+                  memory: "300Gi"
+                  amd.com/gpu: "4"
+              volumeMounts:
+                  - mountPath: /workload
+                    name: workload
+                  - mountPath: /dev/shm
+                    name: dshm
+                  - mountPath: /etc/gcp/credentials.json
+                    name: gcp-credentials-volume
+                    subPath: credentials.json
+          volumes:
+            - name: workload
+              configMap:
+                name: ray-job-config
+                items:
+                  - key: main.py
+                    path: main.py
+            - name: gcp-credentials-volume
+              secret:
+                secretName: gcs-credentials
+                items:
+                  - key: gcs-credentials-json
+                    path: credentials.json
+            - name: dshm
+              emptyDir:
+                medium: Memory
+                sizeLimit: 200Gi
+    workerGroupSpecs:
+      - replicas: 1
+        minReplicas: 1
+        maxReplicas: 1
+        groupName: small-group
+        rayStartParams: {}
+        template:
+          spec:
+            containers:
+              - name: ray-worker
+                image: ghcr.io/silogen/rocm-ray:v0.3
+                imagePullPolicy: Always
+                env:
+                  - name: AWS_ACCESS_KEY_ID
+                    valueFrom:
+                      secretKeyRef:
+                        name: gcs-credentials
+                        key: access_key
+                  - name: AWS_SECRET_ACCESS_KEY
+                    valueFrom:
+                      secretKeyRef:
+                        name: gcs-credentials
+                        key: secret_key
+                  - name: HF_TOKEN
+                    valueFrom:
+                      secretKeyRef:
+                        name: hf-token
+                        key: hf-token
+                  - name: GOOGLE_APPLICATION_CREDENTIALS
+                    value: "/etc/gcp/credentials.json"
+                resources:
+                  limits:
+                    cpu: "10"
+                    memory: "300Gi"
+                    amd.com/gpu: "4"
+                  requests:
+                    cpu: "10"
+                    memory: "300Gi"
+                    amd.com/gpu: "4"
+                volumeMounts:
+                  - mountPath: /workload
+                    name: workload
+                  - mountPath: /dev/shm
+                    name: dshm
+                  - mountPath: /etc/gcp/credentials.json
+                    name: gcp-credentials-volume
+                    subPath: credentials.json
+            volumes:
+              - name: workload
+                configMap:
+                  name: ray-job-config
+                  items:
+                    - key: main.py
+                      path: main.py
+              - name: gcp-credentials-volume
+                secret:
+                  secretName: gcs-credentials
+                  items:
+                    - key: gcs-credentials-json
+                      path: credentials.json
+              - name: dshm
+                emptyDir:
+                  medium: Memory
+                  sizeLimit: 200Gi
