@@ -23,8 +23,12 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/goccy/go-yaml/printer"
 	"github.com/sirupsen/logrus"
 	"sigs.k8s.io/yaml"
+
+	"github.com/silogen/ai-workload-orchestrator/pkg/ray"
+	"github.com/silogen/ai-workload-orchestrator/pkg/utils"
 )
 
 type ConfigMap struct {
@@ -173,8 +177,7 @@ func formatJSON(content []byte) (string, error) {
 	return string(formatted), nil
 }
 
-
-func Submit(path, image string, job, service bool, gpus int) error {
+func Submit(path, image string, namespace string, job, service bool, gpus int) error {
 	if path == "" || (!job && !service) || (job && service) || gpus <= 0 {
 		return fmt.Errorf("invalid flags: ensure --path, --job/--service, and --gpus are provided")
 	}
@@ -184,11 +187,18 @@ func Submit(path, image string, job, service bool, gpus int) error {
 	generateConfigMap(path)
 
 	if service {
-		serveConfigPath := filepath.Join(path, "serveconfig")
-		serveOutputPath := filepath.Join(path, "compiled", "ray-services", "serveconfig.yaml")
-		if err := transformServeConfig(serveConfigPath, serveOutputPath, "vllm-distributed-inference-test", "placeholder-namespace"); err != nil {
-			return fmt.Errorf("failed to transform serveconfig: %w", err)
+		// TODO FIX THIS, throws an error currently
+
+		// serveConfigPath := filepath.Join(path, "serveconfig")
+		// serveOutputPath := filepath.Join(path, "compiled", "ray-services", "serveconfig.yaml")
+		// if err := transformServeConfig(serveConfigPath, serveOutputPath, "vllm-distributed-inference-test", "placeholder-namespace"); err != nil {
+		// 	return fmt.Errorf("failed to transform serveconfig: %w", err)
+		// }
+
+		if err := submitRayService(path, image, namespace, gpus); err != nil {
+			return fmt.Errorf("failed to submit RayService: %w", err)
 		}
+
 	}
 
 	if job {
@@ -206,4 +216,85 @@ func Submit(path, image string, job, service bool, gpus int) error {
 
 	logrus.Info("Workload submitted successfully.")
 	return nil
+}
+
+func submitRayService(path string, image string, namespace string, gpus int) error {
+	manifest, err := formatRayServiceYaml(path, image, namespace, gpus)
+
+	if err != nil {
+		return err
+	}
+
+	// TODO - Submit RayService to Kubernetes
+	fmt.Println("Modified manifest:")
+	fmt.Println(manifest)
+
+	return nil
+}
+
+func formatRayServiceYaml(path string, image string, namespace string, gpus int) (string, error) {
+	yamlManifest, err := ray.GetRayServiceYAML()
+
+	if err != nil {
+		logrus.Errorf("Failed to parse RayService YAML: %v", err)
+		return "", err
+	}
+
+	filePath := filepath.Join(path, "serveconfig")
+	content, err := os.ReadFile(filePath)
+
+	if err != nil {
+		logrus.Errorf("Failed to read serveconfig file: %v", err)
+		return "", err
+	}
+
+	gpuResource := fmt.Sprintf("%d", gpus)
+	memoryResource := fmt.Sprintf("%dGi", gpus*32)
+	cpuResource := fmt.Sprintf("%d", gpus*4)
+
+	targets := []utils.StringReplaceParams{
+		{Path: "$.spec.serveConfigV2", Value: string(content)},
+		// TODO update metadata name also
+		{Path: "$.metadata.namespace", Value: namespace},
+
+		// Head group spec
+
+		// Head group image
+		{Path: "$.spec.rayClusterConfig.headGroupSpec.template.spec.containers[0].image", Value: image},
+
+		// Head group resource limits
+		{Path: "$.spec.rayClusterConfig.headGroupSpec.template.spec.containers[0].resources.limits.'amd.com/gpu'", Value: gpuResource},
+		{Path: "$.spec.rayClusterConfig.headGroupSpec.template.spec.containers[0].resources.limits.cpu", Value: cpuResource},
+		{Path: "$.spec.rayClusterConfig.headGroupSpec.template.spec.containers[0].resources.limits.memory", Value: memoryResource},
+
+		// Head group resource reqests
+		{Path: "$.spec.rayClusterConfig.headGroupSpec.template.spec.containers[0].resources.requests.'amd.com/gpu'", Value: gpuResource},
+		{Path: "$.spec.rayClusterConfig.headGroupSpec.template.spec.containers[0].resources.requests.cpu", Value: cpuResource},
+		{Path: "$.spec.rayClusterConfig.headGroupSpec.template.spec.containers[0].resources.requests.memory", Value: memoryResource},
+
+		// Worker group spec
+
+		// Worker group image
+		{Path: "$.spec.rayClusterConfig.workerGroupSpecs[0].template.spec.containers[0].image", Value: image},
+
+		// Worker group resource limits
+		{Path: "$.spec.rayClusterConfig.workerGroupSpecs[0].template.spec.containers[0].resources.limits.'amd.com/gpu'", Value: gpuResource},
+		{Path: "$.spec.rayClusterConfig.workerGroupSpecs[0].template.spec.containers[0].resources.limits.cpu", Value: cpuResource},
+		{Path: "$.spec.rayClusterConfig.workerGroupSpecs[0].template.spec.containers[0].resources.limits.memory", Value: memoryResource},
+
+		// Worker group resource reqests
+		{Path: "$.spec.rayClusterConfig.workerGroupSpecs[0].template.spec.containers[0].resources.requests.'amd.com/gpu'", Value: gpuResource},
+		{Path: "$.spec.rayClusterConfig.workerGroupSpecs[0].template.spec.containers[0].resources.requests.cpu", Value: cpuResource},
+		{Path: "$.spec.rayClusterConfig.workerGroupSpecs[0].template.spec.containers[0].resources.requests.memory", Value: memoryResource},
+	}
+
+	if err := utils.ReplaceStringValues(yamlManifest, targets); err != nil {
+		logrus.Errorf("Failed to replace string values in RayService YAML: %v", err)
+		return "", err
+	}
+
+	var p printer.Printer
+	formattedYAML := p.PrintNode(yamlManifest.Docs[0])
+
+	return string(formattedYAML), nil
 }

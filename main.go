@@ -17,18 +17,21 @@
 package main
 
 import (
+	"github.com/silogen/ai-workload-orchestrator/pkg/submit"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"github.com/silogen/ai-workload-orchestrator/pkg/submit"
 )
 
 var (
-	path    string
-	image   string
-	job     bool
-	service bool
-	gpus    int
+	path      string
+	image     string
+	namespace string
+	job       bool
+	service   bool
+	gpus      int
 )
+
+const defaultImage = "ghcr.io/silogen/rocm-ray:v0.3"
 
 func main() {
 	rootCmd := &cobra.Command{
@@ -40,13 +43,14 @@ func main() {
 		Use:   "submit",
 		Short: "Submit a workload",
 		Run: func(cmd *cobra.Command, args []string) {
-			if err := submit.Submit(path, image, job, service, gpus); err != nil {
+			if err := submit.Submit(path, image, namespace, job, service, gpus); err != nil {
 				logrus.Fatalf("Failed to submit workload: %v", err)
 			}
 		},
 	}
 	submitCmd.Flags().StringVarP(&path, "path", "p", "", "Path to workload code and entrypoint/serveconfig. Format: workloads/workload_type/modality/method_type/workload_code_directory")
-	submitCmd.Flags().StringVarP(&image, "image", "i", "", "Container image to use. Defaults to ghcr.io/silogen/rocm-ray:vx.x")
+	submitCmd.Flags().StringVarP(&image, "image", "i", defaultImage, "Container image to use. Defaults to ghcr.io/silogen/rocm-ray:vx.x")
+	submitCmd.Flags().StringVarP(&namespace, "namespace", "n", "aiwo", "Kubenetes namespace to use. Defaults to `aiwo`")
 	submitCmd.Flags().BoolVarP(&job, "job", "j", false, "Submit as RayJob")
 	submitCmd.Flags().BoolVarP(&service, "service", "s", false, "Submit as RayService")
 	submitCmd.Flags().IntVarP(&gpus, "gpus", "g", 1, "Number of GPUs required")
