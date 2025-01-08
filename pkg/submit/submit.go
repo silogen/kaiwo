@@ -24,7 +24,7 @@ import (
 	"strings"
 
 	"github.com/sirupsen/logrus"
-	"sigs.k8s.io/yaml"
+	"gopkg.in/yaml.v3"
 )
 
 type ConfigMap struct {
@@ -32,6 +32,14 @@ type ConfigMap struct {
 	Kind       string            `yaml:"kind"`
 	Metadata   map[string]string `yaml:"metadata"`
 	Data       map[string]string `yaml:"data"`
+}
+
+const ENTRYPOINT_FILENAME = "entrypoint"
+const SERVECONFIG_FILENAME = "serveconfig"
+
+var skipFiles = map[string]struct{}{
+	ENTRYPOINT_FILENAME:  {},
+	SERVECONFIG_FILENAME: {},
 }
 
 func readTemplate(templatePath string) (map[string]interface{}, error) {
@@ -92,7 +100,7 @@ func isBinaryFile(content []byte) bool {
 }
 
 // Generate ConfigMap from a directory
-func generateConfigMap(dir string) error {
+func generateConfigMap(dir string, configmap_name string, namespace string) error {
 	files, err := os.ReadDir(dir)
 	if err != nil {
 		return fmt.Errorf("failed to read directory: %w", err)
@@ -102,6 +110,10 @@ func generateConfigMap(dir string) error {
 
 	for _, file := range files {
 		if file.IsDir() {
+			continue
+		}
+
+		if _, skip := skipFiles[file.Name()]; skip {
 			continue
 		}
 
@@ -116,17 +128,15 @@ func generateConfigMap(dir string) error {
 			logrus.Warnf("Skipping binary file: %s", file.Name())
 			continue
 		}
-
-		// Use YAML literal block style for all non-binary files
-		data[file.Name()] = formatLiteralBlock(content)
+		data[file.Name()] = string(content)
 	}
 
 	configMap := ConfigMap{
 		APIVersion: "v1",
 		Kind:       "ConfigMap",
 		Metadata: map[string]string{
-			"name":      "ray-job-config",
-			"namespace": "default",
+			"name":      configmap_name,
+			"namespace": namespace,
 		},
 		Data: data,
 	}
@@ -147,30 +157,8 @@ func generateConfigMap(dir string) error {
 	}
 
 	logrus.Infof("ConfigMap successfully generated at %s", outputPath)
+	
 	return nil
-}
-
-// Format content using YAML literal block style
-func formatLiteralBlock(content []byte) string {
-	lines := strings.Split(string(content), "\n")
-	for i, line := range lines {
-		lines[i] = "  " + line // Add indentation
-	}
-	return "|\n" + strings.Join(lines, "\n")
-}
-
-func formatJSON(content []byte) (string, error) {
-	var prettyJSON map[string]interface{}
-	if err := yaml.Unmarshal(content, &prettyJSON); err != nil {
-		return "", fmt.Errorf("failed to parse JSON: %w", err)
-	}
-
-	formatted, err := yaml.Marshal(prettyJSON)
-	if err != nil {
-		return "", fmt.Errorf("failed to format JSON: %w", err)
-	}
-
-	return string(formatted), nil
 }
 
 
@@ -181,10 +169,20 @@ func Submit(path, image string, job, service bool, gpus int) error {
 
 	logrus.Infof("Submitting workload from path: %s", path)
 
-	generateConfigMap(path)
+	workload_name := strings.ToLower(strings.Join(strings.FieldsFunc(path, func(r rune) bool {
+		return r == '/' || r == '_'
+	}), "-"))
+
+	namespace := "av-test" //to be fixed by another PR
+
+	err := generateConfigMap(path, workload_name, namespace)
+	if err != nil {
+		return fmt.Errorf("failed to generate ConfigMap: %w", err)
+	}
+
 
 	if service {
-		serveConfigPath := filepath.Join(path, "serveconfig")
+		serveConfigPath := filepath.Join(path, SERVECONFIG_FILENAME)
 		serveOutputPath := filepath.Join(path, "compiled", "ray-services", "serveconfig.yaml")
 		if err := transformServeConfig(serveConfigPath, serveOutputPath, "vllm-distributed-inference-test", "placeholder-namespace"); err != nil {
 			return fmt.Errorf("failed to transform serveconfig: %w", err)
@@ -192,12 +190,11 @@ func Submit(path, image string, job, service bool, gpus int) error {
 	}
 
 	if job {
-		entrypointPath := filepath.Join(path, "entrypoint")
+		entrypointPath := filepath.Join(path, ENTRYPOINT_FILENAME)
 		entrypointContent, err := os.ReadFile(entrypointPath)
 		if err != nil {
 			return fmt.Errorf("failed to read entrypoint file: %w", err)
 		}
-		entrypointTemplatePath := filepath.Join(path, "entrypoint")
 		entrypointOutputPath := filepath.Join(path, "compiled", "ray-jobs", "entrypoint.yaml")
 		if err := transformEntrypoint(entrypointTemplatePath, entrypointOutputPath, string(entrypointContent)); err != nil {
 			return fmt.Errorf("failed to transform entrypoint: %w", err)

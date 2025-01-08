@@ -72,9 +72,6 @@ spec:
             - name: app-mount
               configMap:
                 name: vllm-serve-example
-                items:
-                  - key: __init__.py
-                    path: __init__.py
     workerGroupSpecs:
       - replicas: 1
         minReplicas: 1
@@ -112,6 +109,3 @@ spec:
               - name: app-mount
                 configMap:
                   name: vllm-serve-example
-                  items:
-                    - key: __init__.py
-                      path: __init__.py
