@@ -23,7 +23,8 @@ spec:
     rayVersion: "2.9.0"
     enableInTreeAutoscaling: false #cannot be true when using Kueue
     headGroupSpec:
-      rayStartParams: {}
+      rayStartParams: 
+        dashboard-host: '0.0.0.0'
       template:
         spec:
           containers:
@@ -48,6 +49,12 @@ spec:
                       key: hf-token
                 - name: GOOGLE_APPLICATION_CREDENTIALS
                   value: "/etc/gcp/credentials.json"
+                - name: RAY_GRAFANA_IFRAME_HOST
+                  value: http://127.0.0.1:3000
+                - name: RAY_GRAFANA_HOST
+                  value: http://prometheus-grafana.prometheus-system.svc:80
+                - name: RAY_PROMETHEUS_HOST
+                  value: http://prometheus-kube-prometheus-prometheus.prometheus-system.svc:9090
               ports:
                 - containerPort: 6379
                   name: gcs-server
@@ -55,8 +62,10 @@ spec:
                   name: dashboard
                 - containerPort: 10001
                   name: client
-                - containerPort: 8000
-                  name: serve
+                - containerPort: 44217
+                  name: as-metrics # autoscaler
+                - containerPort: 44227
+                  name: dash-metrics # dashboard
               resources:
                 limits:
                   cpu: "10"
