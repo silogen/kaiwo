@@ -128,8 +128,6 @@ func generateConfigMap(dir string, configmap_name string, namespace string) erro
 			logrus.Warnf("Skipping binary file: %s", file.Name())
 			continue
 		}
-
-		// Use YAML literal block style for all non-binary files
 		data[file.Name()] = string(content)
 	}
 
@@ -159,22 +157,10 @@ func generateConfigMap(dir string, configmap_name string, namespace string) erro
 	}
 
 	logrus.Infof("ConfigMap successfully generated at %s", outputPath)
+	
 	return nil
 }
 
-func formatJSON(content []byte) (string, error) {
-	var prettyJSON map[string]interface{}
-	if err := yaml.Unmarshal(content, &prettyJSON); err != nil {
-		return "", fmt.Errorf("failed to parse JSON: %w", err)
-	}
-
-	formatted, err := yaml.Marshal(prettyJSON)
-	if err != nil {
-		return "", fmt.Errorf("failed to format JSON: %w", err)
-	}
-
-	return string(formatted), nil
-}
 
 func Submit(path, image string, job, service bool, gpus int) error {
 	if path == "" || (!job && !service) || (job && service) || gpus <= 0 {
@@ -189,7 +175,11 @@ func Submit(path, image string, job, service bool, gpus int) error {
 
 	namespace := "av-test" //to be fixed by another PR
 
-	generateConfigMap(path, workload_name, namespace)
+	err := generateConfigMap(path, workload_name, namespace)
+	if err != nil {
+		return fmt.Errorf("failed to generate ConfigMap: %w", err)
+	}
+
 
 	if service {
 		serveConfigPath := filepath.Join(path, SERVECONFIG_FILENAME)
