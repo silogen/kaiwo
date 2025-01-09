@@ -17,18 +17,27 @@
 package main
 
 import (
+	"fmt"
+	"slices"
+
+	"github.com/silogen/ai-workload-orchestrator/pkg/submit"
+	"github.com/silogen/ai-workload-orchestrator/pkg/templates"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"github.com/silogen/ai-workload-orchestrator/pkg/submit"
 )
 
 var (
-	path    string
-	image   string
-	job     bool
-	service bool
-	gpus    int
+	path      string
+	image     string
+	name      string
+	namespace string
+	type_     string
+	template  string
+	gpus      int
+	dryRun    bool
 )
+
+const defaultImage = "ghcr.io/silogen/rocm-ray:v0.3"
 
 func main() {
 	rootCmd := &cobra.Command{
@@ -40,15 +49,38 @@ func main() {
 		Use:   "submit",
 		Short: "Submit a workload",
 		Run: func(cmd *cobra.Command, args []string) {
-			if err := submit.Submit(path, image, job, service, gpus); err != nil {
+
+			var workloadArgs templates.WorkloadArgs = templates.WorkloadArgs{
+				Path:         path,
+				Image:        image,
+				Name:         name,
+				Namespace:    namespace,
+				TemplatePath: template,
+				Type:         type_,
+				GPUs:         gpus,
+				DryRun:       dryRun,
+			}
+
+			if err := submit.Submit(workloadArgs); err != nil {
 				logrus.Fatalf("Failed to submit workload: %v", err)
 			}
+
+		},
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			// TODO move other validation here as well
+			if !slices.Contains(templates.WorkloadTypes, type_) {
+				return fmt.Errorf("invalid workload type %s. Must be one of %v", type_, templates.WorkloadTypes)
+			}
+			return nil
 		},
 	}
 	submitCmd.Flags().StringVarP(&path, "path", "p", "", "Path to workload code and entrypoint/serveconfig. Format: workloads/workload_type/modality/method_type/workload_code_directory")
-	submitCmd.Flags().StringVarP(&image, "image", "i", "", "Container image to use. Defaults to ghcr.io/silogen/rocm-ray:vx.x")
-	submitCmd.Flags().BoolVarP(&job, "job", "j", false, "Submit as RayJob")
-	submitCmd.Flags().BoolVarP(&service, "service", "s", false, "Submit as RayService")
+	submitCmd.Flags().StringVarP(&image, "image", "i", defaultImage, "Container image to use. Defaults to ghcr.io/silogen/rocm-ray:vx.x")
+	submitCmd.Flags().StringVarP(&name, "name", "n", "", "Kubenetes name to use for the workflow")
+	submitCmd.Flags().StringVarP(&namespace, "namespace", "", "aiwo", "Kubenetes namespace to use. Defaults to `aiwo`")
+	submitCmd.Flags().StringVarP(&template, "template", "", "", "Path to a custom template to use for the workload. If not provided, a default template will be used")
+	submitCmd.Flags().StringVarP(&type_, "type", "t", "", "Workload type, one of [rayjob, rayservice]")
+	submitCmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "Print the generated workload manifest without submitting it")
 	submitCmd.Flags().IntVarP(&gpus, "gpus", "g", 1, "Number of GPUs required")
 
 	rootCmd.AddCommand(submitCmd)

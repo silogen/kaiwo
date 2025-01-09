@@ -21,89 +21,41 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"text/template"
 
+	"github.com/Masterminds/sprig/v3"
+	"github.com/silogen/ai-workload-orchestrator/pkg/templates"
 	"github.com/sirupsen/logrus"
-	"gopkg.in/yaml.v3"
+	"k8s.io/cli-runtime/pkg/printers"
+
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-type ConfigMap struct {
-	APIVersion string            `yaml:"apiVersion"`
-	Kind       string            `yaml:"kind"`
-	Metadata   map[string]string `yaml:"metadata"`
-	Data       map[string]string `yaml:"data"`
-}
-
-const ENTRYPOINT_FILENAME = "entrypoint"
-const SERVECONFIG_FILENAME = "serveconfig"
-
-var skipFiles = map[string]struct{}{
-	ENTRYPOINT_FILENAME:  {},
-	SERVECONFIG_FILENAME: {},
-}
-
-func readTemplate(templatePath string) (map[string]interface{}, error) {
-	content, err := os.ReadFile(templatePath)
-	if err != nil {
-		return nil, err
-	}
-
-	var template map[string]interface{}
-	if err := yaml.Unmarshal(content, &template); err != nil {
-		return nil, err
-	}
-
-	return template, nil
-}
-
-func writeTemplate(outputPath string, content map[string]interface{}) error {
-	outputDir := filepath.Dir(outputPath)
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		return err
-	}
-
-	yamlContent, err := yaml.Marshal(content)
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(outputPath, yamlContent, 0644)
-}
-
-func transformServeConfig(templatePath, outputPath string, metadataName, namespace string) error {
-	template, err := readTemplate(templatePath)
-	if err != nil {
-		return fmt.Errorf("failed to read serve config template: %w", err)
-	}
-
-	metadata := template["metadata"].(map[string]interface{})
-	metadata["name"] = metadataName
-	metadata["namespace"] = namespace
-
-	return writeTemplate(outputPath, template)
-}
-
-func transformEntrypoint(templatePath, outputPath string, entrypointContent string) error {
-	template, err := readTemplate(templatePath)
-	if err != nil {
-		return fmt.Errorf("failed to read entrypoint template: %w", err)
-	}
-
-	spec := template["spec"].(map[string]interface{})
-	spec["entrypoint"] = fmt.Sprintf("/bin/bash -c \"%s\"", entrypointContent)
-
-	return writeTemplate(outputPath, template)
-}
 
 func isBinaryFile(content []byte) bool {
 	return bytes.Contains(content, []byte{0})
 }
 
 // Generate ConfigMap from a directory
-func generateConfigMap(dir string, configmap_name string, namespace string) error {
+func generateConfigMap(dir string, configmap_name string, namespace string, skipFiles []string) (v1.ConfigMap, error) {
 	files, err := os.ReadDir(dir)
+
+	configMap := v1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      configmap_name,
+			Namespace: namespace,
+		},
+		Data: make(map[string]string),
+	}
+
 	if err != nil {
-		return fmt.Errorf("failed to read directory: %w", err)
+		return configMap, fmt.Errorf("failed to read directory: %w", err)
 	}
 
 	data := make(map[string]string)
@@ -113,14 +65,14 @@ func generateConfigMap(dir string, configmap_name string, namespace string) erro
 			continue
 		}
 
-		if _, skip := skipFiles[file.Name()]; skip {
+		if slices.Contains(skipFiles, file.Name()) {
 			continue
 		}
 
 		filePath := filepath.Join(dir, file.Name())
 		content, err := os.ReadFile(filePath)
 		if err != nil {
-			return fmt.Errorf("failed to read file %s: %w", filePath, err)
+			return configMap, fmt.Errorf("failed to read file %s: %w", filePath, err)
 		}
 
 		// Skip binary files
@@ -131,74 +83,111 @@ func generateConfigMap(dir string, configmap_name string, namespace string) erro
 		data[file.Name()] = string(content)
 	}
 
-	configMap := ConfigMap{
-		APIVersion: "v1",
-		Kind:       "ConfigMap",
-		Metadata: map[string]string{
-			"name":      configmap_name,
-			"namespace": namespace,
-		},
-		Data: data,
-	}
+	configMap.Data = data
 
-	yamlData, err := yaml.Marshal(&configMap)
-	if err != nil {
-		return fmt.Errorf("failed to marshal ConfigMap: %w", err)
-	}
-
-	outputDir := filepath.Join(dir, "compiled")
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		return fmt.Errorf("failed to create compiled directory: %w", err)
-	}
-
-	outputPath := filepath.Join(outputDir, "configmap.yaml")
-	if err := os.WriteFile(outputPath, yamlData, 0644); err != nil {
-		return fmt.Errorf("failed to write ConfigMap to file: %w", err)
-	}
-
-	logrus.Infof("ConfigMap successfully generated at %s", outputPath)
-	
-	return nil
+	return configMap, nil
 }
 
+// TODO clarify naming?
+type TemplateConfig struct {
+	// The base workload args
+	Base templates.WorkloadArgs
 
-func Submit(path, image string, job, service bool, gpus int) error {
-	if path == "" || (!job && !service) || (job && service) || gpus <= 0 {
-		return fmt.Errorf("invalid flags: ensure --path, --job/--service, and --gpus are provided")
+	// The type-specific workload args
+	Workload templates.WorkloadLoader
+}
+
+func Submit(args templates.WorkloadArgs) error {
+
+	if !args.DryRun {
+		return fmt.Errorf("live run is not supported yet, please use --dry-run")
 	}
 
-	logrus.Infof("Submitting workload from path: %s", path)
+	if err := templates.ValidateWorkloadArgs(args); err != nil {
+		return err
+	}
 
-	workload_name := strings.ToLower(strings.Join(strings.FieldsFunc(path, func(r rune) bool {
-		return r == '/' || r == '_'
-	}), "-"))
+	// TODO Include username from whoami
+	var workload_name string
+	if args.Name == "" {
+		workload_name = strings.ToLower(strings.Join(strings.FieldsFunc(args.Path, func(r rune) bool {
+			return r == '/' || r == '_'
+		}), "-"))
+		args.Name = workload_name
+	} else {
+		workload_name = args.Name
+	}
 
-	namespace := "av-test" //to be fixed by another PR
+	logrus.Infof("Submitting workload '%s' from path: %s", workload_name, args.Path)
 
-	err := generateConfigMap(path, workload_name, namespace)
+	loader, err := templates.GetWorkloadLoader(args.Type)
+
+	if err != nil {
+		return fmt.Errorf("failed to get workload loader: %w", err)
+	}
+
+	// Load workload
+	if err := loader.Load(args.Path); err != nil {
+		return fmt.Errorf("failed to load workload: %w", err)
+	}
+
+	// Generate ConfigMap
+	configMap, err := generateConfigMap(args.Path, workload_name, args.Namespace, loader.IgnoreFiles())
 	if err != nil {
 		return fmt.Errorf("failed to generate ConfigMap: %w", err)
 	}
 
+	var workloadTemplate []byte
 
-	if service {
-		serveConfigPath := filepath.Join(path, SERVECONFIG_FILENAME)
-		serveOutputPath := filepath.Join(path, "compiled", "ray-services", "serveconfig.yaml")
-		if err := transformServeConfig(serveConfigPath, serveOutputPath, "vllm-distributed-inference-test", "placeholder-namespace"); err != nil {
-			return fmt.Errorf("failed to transform serveconfig: %w", err)
+	// Generate main manifest
+	if args.TemplatePath == "" {
+		// Use the default template
+		logrus.Info("Using default template")
+		workloadTemplate = loader.DefaultTemplate()
+	} else {
+		// Use the provided template
+		logrus.Infof("Using template: %s", args.TemplatePath)
+		workloadTemplate, err = os.ReadFile(args.TemplatePath)
+		if err != nil {
+			return fmt.Errorf("failed to read template file: %w", err)
 		}
 	}
 
-	if job {
-		entrypointPath := filepath.Join(path, ENTRYPOINT_FILENAME)
-		entrypointContent, err := os.ReadFile(entrypointPath)
+	templateContext := TemplateConfig{
+		Base:     args,
+		Workload: loader,
+	}
+
+	parsedTemplate, err := template.New("main").Funcs(sprig.TxtFuncMap()).Parse(string(workloadTemplate))
+
+	if err != nil {
+		return fmt.Errorf("failed to parse template: %w", err)
+	}
+
+	// Render the template
+	var renderedYAML strings.Builder
+	err = parsedTemplate.Execute(&renderedYAML, templateContext)
+	if err != nil {
+		return fmt.Errorf("failed to render template: %w", err)
+	}
+
+	if args.DryRun {
+		logrus.Info("Dry run enabled, printing generated workload to console")
+		logrus.Info("Workload manifest:")
+		fmt.Println(renderedYAML.String())
+
+		// configMapYAML, err := yaml.Marshal(configMap)
+		yamlPrinter := printers.YAMLPrinter{}
+		printedYaml := strings.Builder{}
+		err = yamlPrinter.PrintObj(&configMap, &printedYaml)
+
 		if err != nil {
-			return fmt.Errorf("failed to read entrypoint file: %w", err)
+			logrus.Errorf("failed to marshal ConfigMap: %v", err)
 		}
-		entrypointOutputPath := filepath.Join(path, "compiled", "ray-jobs", "entrypoint.yaml")
-		if err := transformEntrypoint(entrypointTemplatePath, entrypointOutputPath, string(entrypointContent)); err != nil {
-			return fmt.Errorf("failed to transform entrypoint: %w", err)
-		}
+
+		logrus.Info("ConfigMap:")
+		fmt.Println(string(printedYaml.String()))
+		return nil
 	}
 
 	logrus.Info("Workload submitted successfully.")

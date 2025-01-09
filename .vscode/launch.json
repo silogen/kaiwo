@@ -7,7 +7,7 @@
 	    "request": "launch",
 	    "mode": "debug",
 	    "program": "${workspaceFolder}",
-	    "args": ["submit", "-p", "workloads/training/LLMs/lora-supervised-finetuning/ds-zero3", "-j", "-g", "4"],
+	    "args": ["submit", "-p", "workloads/training/LLMs/lora-supervised-finetuning/ds-zero3-single-multinode", "-t", "rayjob", "-g", "4", "--dry-run"],
 	    "env": {
 	      "GO111MODULE": "on"
 	    },
