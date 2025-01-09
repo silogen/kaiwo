@@ -17,76 +17,18 @@
 package submit
 
 import (
-	"bytes"
 	"fmt"
 	"os"
-	"path/filepath"
-	"slices"
 	"strings"
 	"text/template"
 
 	"github.com/Masterminds/sprig/v3"
+	"github.com/silogen/ai-workload-orchestrator/pkg/k8s"
 	"github.com/silogen/ai-workload-orchestrator/pkg/templates"
 	"github.com/sirupsen/logrus"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/printers"
-
-	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-func isBinaryFile(content []byte) bool {
-	return bytes.Contains(content, []byte{0})
-}
-
-// Generate ConfigMap from a directory
-func generateConfigMap(dir string, configmap_name string, namespace string, skipFiles []string) (v1.ConfigMap, error) {
-	files, err := os.ReadDir(dir)
-
-	configMap := v1.ConfigMap{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "ConfigMap",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      configmap_name,
-			Namespace: namespace,
-		},
-		Data: make(map[string]string),
-	}
-
-	if err != nil {
-		return configMap, fmt.Errorf("failed to read directory: %w", err)
-	}
-
-	data := make(map[string]string)
-
-	for _, file := range files {
-		if file.IsDir() {
-			continue
-		}
-
-		if slices.Contains(skipFiles, file.Name()) {
-			continue
-		}
-
-		filePath := filepath.Join(dir, file.Name())
-		content, err := os.ReadFile(filePath)
-		if err != nil {
-			return configMap, fmt.Errorf("failed to read file %s: %w", filePath, err)
-		}
-
-		// Skip binary files
-		if isBinaryFile(content) {
-			logrus.Warnf("Skipping binary file: %s", file.Name())
-			continue
-		}
-		data[file.Name()] = string(content)
-	}
-
-	configMap.Data = data
-
-	return configMap, nil
-}
 
 // TODO clarify naming?
 type TemplateConfig struct {
@@ -132,7 +74,7 @@ func Submit(args templates.WorkloadArgs) error {
 	}
 
 	// Generate ConfigMap
-	configMap, err := generateConfigMap(args.Path, workload_name, args.Namespace, loader.IgnoreFiles())
+	configMap, err := k8s.GenerateConfigMapFromDir(args.Path, workload_name, args.Namespace, loader.IgnoreFiles())
 	if err != nil {
 		return fmt.Errorf("failed to generate ConfigMap: %w", err)
 	}
@@ -171,22 +113,37 @@ func Submit(args templates.WorkloadArgs) error {
 		return fmt.Errorf("failed to render template: %w", err)
 	}
 
+	// Marshal the template into a Kubernetes object
+	templatedManifests, err := k8s.DecodeYAMLToObjects(renderedYAML.String())
+
+	if err != nil {
+		return fmt.Errorf("failed to decode workload manifest YAML: %w", err)
+	}
+
+	// Create namespace
+
+	namespace := k8s.CreateNamespace(args.Namespace)
+
+	workloadManifests := append([]runtime.Object{namespace, &configMap}, templatedManifests...)
+
 	if args.DryRun {
 		logrus.Info("Dry run enabled, printing generated workload to console")
-		logrus.Info("Workload manifest:")
-		fmt.Println(renderedYAML.String())
 
 		// configMapYAML, err := yaml.Marshal(configMap)
 		yamlPrinter := printers.YAMLPrinter{}
+
 		printedYaml := strings.Builder{}
-		err = yamlPrinter.PrintObj(&configMap, &printedYaml)
-
-		if err != nil {
-			logrus.Errorf("failed to marshal ConfigMap: %v", err)
+		for _, obj := range workloadManifests {
+			err = yamlPrinter.PrintObj(obj, &printedYaml)
+			if err != nil {
+				logrus.Errorf("failed to marshal object: %v", err)
+			} else {
+				logrus.Info("Object:")
+				fmt.Println(string(printedYaml.String()))
+				fmt.Println("---")
+			}
+			printedYaml.Reset()
 		}
-
-		logrus.Info("ConfigMap:")
-		fmt.Println(string(printedYaml.String()))
 		return nil
 	}
 
