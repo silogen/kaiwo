@@ -28,7 +28,8 @@ import (
 	"github.com/Masterminds/sprig/v3"
 	"github.com/silogen/ai-workload-orchestrator/pkg/templates"
 	"github.com/sirupsen/logrus"
-	"gopkg.in/yaml.v2"
+	"k8s.io/cli-runtime/pkg/printers"
+
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -42,6 +43,10 @@ func generateConfigMap(dir string, configmap_name string, namespace string, skip
 	files, err := os.ReadDir(dir)
 
 	configMap := v1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      configmap_name,
 			Namespace: namespace,
@@ -171,13 +176,17 @@ func Submit(args templates.WorkloadArgs) error {
 		logrus.Info("Workload manifest:")
 		fmt.Println(renderedYAML.String())
 
-		configMapYAML, err := yaml.Marshal(configMap)
+		// configMapYAML, err := yaml.Marshal(configMap)
+		yamlPrinter := printers.YAMLPrinter{}
+		printedYaml := strings.Builder{}
+		err = yamlPrinter.PrintObj(&configMap, &printedYaml)
+
 		if err != nil {
 			logrus.Errorf("failed to marshal ConfigMap: %v", err)
 		}
 
 		logrus.Info("ConfigMap:")
-		fmt.Println(string(configMapYAML))
+		fmt.Println(string(printedYaml.String()))
 		return nil
 	}
 
