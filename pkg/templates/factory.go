@@ -2,23 +2,27 @@ package templates
 
 import (
 	_ "embed"
-	"fmt"
 
+	"github.com/silogen/ai-workload-orchestrator/pkg/templates/jobs"
 	"github.com/silogen/ai-workload-orchestrator/pkg/templates/ray"
+	
 )
 
 const RayServiceType = "rayservice"
 const RayJobType = "rayjob"
+const JobType = "job"
 
-var WorkloadTypes = []string{RayServiceType, RayJobType}
+var WorkloadTypes = []string{RayServiceType, RayJobType, JobType}
 
-func GetWorkloadLoader(workloadType string) (WorkloadLoader, error) {
+func GetWorkloadLoader(workloadType string) (WorkloadLoader) {
 	switch workloadType {
 	case RayServiceType:
-		return &ray.RayServiceLoader{}, nil
+		return &ray.RayServiceLoader{}
 	case RayJobType:
-		return &ray.RayJobLoader{}, nil
+		return &ray.RayJobLoader{}
+	case JobType:
+		return &jobs.JobLoader{}
 	default:
-		return nil, fmt.Errorf("invalid workload type %s. Must be one of %v", workloadType, WorkloadTypes)
+		return &jobs.JobLoader{}
 	}
 }

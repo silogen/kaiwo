@@ -37,12 +37,12 @@ var (
 	dryRun    bool
 )
 
-const defaultImage = "ghcr.io/silogen/rocm-ray:v0.3"
+const defaultImage = "ghcr.io/silogen/rocm-ray:v0.4"
 
 func main() {
 	rootCmd := &cobra.Command{
 		Use:   "aiwo",
-		Short: "AI Workflow Orchestrator",
+		Short: "AI Workload Orchestrator",
 	}
 
 	submitCmd := &cobra.Command{
@@ -79,7 +79,7 @@ func main() {
 	submitCmd.Flags().StringVarP(&name, "name", "n", "", "Kubenetes name to use for the workflow")
 	submitCmd.Flags().StringVarP(&namespace, "namespace", "", "aiwo", "Kubenetes namespace to use. Defaults to `aiwo`")
 	submitCmd.Flags().StringVarP(&template, "template", "", "", "Path to a custom template to use for the workload. If not provided, a default template will be used")
-	submitCmd.Flags().StringVarP(&type_, "type", "t", "", "Workload type, one of [rayjob, rayservice]")
+	submitCmd.Flags().StringVarP(&type_, "type", "t", "job", "Workload type, one of [rayjob, rayservice]")
 	submitCmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "Print the generated workload manifest without submitting it")
 	submitCmd.Flags().IntVarP(&gpus, "gpus", "g", 1, "Number of GPUs required")
 

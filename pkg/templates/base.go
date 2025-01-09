@@ -18,7 +18,7 @@ type WorkloadArgs struct {
 }
 
 func ValidateWorkloadArgs(args WorkloadArgs) error {
-	if args.Path == "" || args.Type == "" || args.GPUs <= 0 {
+	if args.Path == "" || args.GPUs <= 0 {
 		return fmt.Errorf("invalid flags: ensure --path, --type, and --gpus are provided")
 	}
 	return nil

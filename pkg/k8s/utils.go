@@ -14,6 +14,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -94,6 +95,7 @@ func DecodeYAMLToObjects(yamlData string) ([]runtime.Object, error) {
 	_ = corev1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
 	_ = rayv1.AddToScheme(scheme)
+	_ = batchv1.AddToScheme(scheme)
 
 	// Create a YAML decoder
 	decoder := serializer.NewCodecFactory(scheme).UniversalDeserializer()
