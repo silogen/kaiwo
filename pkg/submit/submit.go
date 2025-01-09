@@ -102,14 +102,15 @@ func Submit(args templates.WorkloadArgs) error {
 		return err
 	}
 
+	// TODO Include username from whoami
 	var workload_name string
 	if args.Name == "" {
 		workload_name = strings.ToLower(strings.Join(strings.FieldsFunc(args.Path, func(r rune) bool {
 			return r == '/' || r == '_'
 		}), "-"))
+		args.Name = workload_name
 	} else {
 		workload_name = args.Name
-		args.Name = workload_name
 	}
 
 	logrus.Infof("Submitting workload '%s' from path: %s", workload_name, args.Path)
@@ -131,7 +132,7 @@ func Submit(args templates.WorkloadArgs) error {
 		return fmt.Errorf("failed to generate ConfigMap: %w", err)
 	}
 
-	var workloadTemplate []byte = make([]byte, 0)
+	var workloadTemplate []byte
 
 	// Generate main manifest
 	if args.TemplatePath == "" {
