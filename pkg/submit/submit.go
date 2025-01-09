@@ -19,6 +19,9 @@ package submit
 import (
 	"fmt"
 	"os"
+	"os/user"
+	"path/filepath"
+	"slices"
 	"strings"
 	"text/template"
 
@@ -39,6 +42,23 @@ type TemplateConfig struct {
 	Workload templates.WorkloadLoader
 }
 
+func getLastPartOfPath(path string) string {
+	lastPart := filepath.Base(path)
+	return strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(lastPart, "/", "-"), "_", "-"))
+}
+
+func setWorkloadName(workloadName string, path string) string {
+	if workloadName == "" {
+		currentUser, err := user.Current()
+		if err != nil {
+			logrus.Fatalf("Error fetching current user: %v", err)
+		}
+		lastPartFromPath := getLastPartOfPath(path)
+		return strings.Join([]string{currentUser.Username, lastPartFromPath}, "-")
+	}
+	return workloadName
+}
+
 func Submit(args templates.WorkloadArgs) error {
 
 	if !args.DryRun {
@@ -49,16 +69,7 @@ func Submit(args templates.WorkloadArgs) error {
 		return err
 	}
 
-	// TODO Include username from whoami
-	var workload_name string
-	if args.Name == "" {
-		workload_name = strings.ToLower(strings.Join(strings.FieldsFunc(args.Path, func(r rune) bool {
-			return r == '/' || r == '_'
-		}), "-"))
-		args.Name = workload_name
-	} else {
-		workload_name = args.Name
-	}
+	workload_name := setWorkloadName(args.Name, args.Path)
 
 	logrus.Infof("Submitting workload '%s' from path: %s", workload_name, args.Path)
 
@@ -128,7 +139,6 @@ func Submit(args templates.WorkloadArgs) error {
 
 	if args.DryRun {
 		logrus.Info("Dry run enabled, printing generated workload to console")
-
 		// configMapYAML, err := yaml.Marshal(configMap)
 		yamlPrinter := printers.YAMLPrinter{}
 

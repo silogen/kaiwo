@@ -67,10 +67,7 @@ spec:
           volumes:
             - name: workload
               configMap:
-                name: ray-job-config
-                items:
-                  - key: main.py
-                    path: main.py
+                name: {{ .Base.Name }}
             - name: gcp-credentials-volume
               secret:
                 secretName: gcs-credentials

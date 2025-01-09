@@ -46,7 +46,7 @@ spec:
           volumes:
             - name: app-mount
               configMap:
-                name: vllm-serve-example
+                name: {{ .Base.Name }}
     workerGroupSpecs:
       - replicas: 1
         minReplicas: 1
@@ -83,4 +83,4 @@ spec:
             volumes:
               - name: app-mount
                 configMap:
-                  name: vllm-serve-example
+                  name: {{ .Base.Name }}
