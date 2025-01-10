@@ -66,141 +66,52 @@ func setWorkloadName(workloadName string, path string) string {
 }
 
 func Submit(args templates.WorkloadArgs) error {
-
 	if !args.DryRun {
 		return fmt.Errorf("live run is not supported yet, please use --dry-run")
 	}
 
 	loader, err := initializeLoader(args)
-
-	args.Name = setWorkloadName(args.Name, args.Path)
-
 	if err != nil {
 		return err
 	}
 
-	var c dynamic.Interface
+	args.Name = setWorkloadName(args.Name, args.Path)
 
+	var c dynamic.Interface
 	if !args.DryRun {
 		logrus.Infof("Initializing Kubernetes client")
 		c, err = k8s.InitializeClient()
+		if err != nil {
+			return fmt.Errorf("failed to initialize Kubernetes client: %v", err)
+		}
 	}
 
-	if err != nil {
-		return fmt.Errorf("failed to initialize k8s client: %v", err)
-	}
+	resources := []*unstructured.Unstructured{}
 
-	var resources []*unstructured.Unstructured
-
-	// Namespace TODO refactor to own method
+	// Handle namespace creation
 	if args.CreateNamespace {
-		namespace := unstructured.Unstructured{
-			Object: map[string]interface{}{
-				"apiVersion": "v1",
-				"kind":       "Namespace",
-				"metadata": map[string]interface{}{
-					"name": args.Namespace,
-				},
-			},
-		}
-		if args.DryRun {
-			logrus.Info("Including namespace definition, but not checking existence due to dry-run mode")
-			resources = append(resources, &namespace)
-		} else {
-			logrus.Infof("checking namespace %s", args.Namespace)
-			gvr := schema.GroupVersionResource{
-				Group:    "",
-				Version:  "v1",
-				Resource: "namespaces",
-			}
-			_, err := c.Resource(gvr).Get(context.TODO(), args.Namespace, metav1.GetOptions{})
-			if err == nil {
-				// Namespace already exists
-				logrus.Infof("namespace %s already exists", args.Namespace)
-				return nil
-			} else if !apierrors.IsNotFound(err) {
-				return fmt.Errorf("failed to check if namespace exists: %v", err)
-			} else {
-				resources = append(resources, &namespace)
-			}
-		}
-	}
-
-	// Config map
-	if args.NoUploadFolder {
-		logrus.Info("Skipping upload folder")
-	} else {
-		configMap, err := k8s.GenerateConfigMapFromDir(args.Path, args.Name, args.Namespace, loader.IgnoreFiles())
+		err := addNamespaceResource(args, c, &resources)
 		if err != nil {
-			return fmt.Errorf("failed to generate ConfigMap: %w", err)
+			return err
 		}
-		resources = append(resources, configMap)
 	}
 
-	// Workload template TODO refactor to own method
-
-	var workloadTemplate []byte
-
-	// Generate main manifest
-	if args.TemplatePath == "" {
-		// Use the default template
-		logrus.Info("Using default template")
-		workloadTemplate = loader.DefaultTemplate()
-	} else {
-		// Use the provided template
-		logrus.Infof("Using template: %s", args.TemplatePath)
-		workloadTemplate, err = os.ReadFile(args.TemplatePath)
+	// Handle config map generation
+	if !args.NoUploadFolder {
+		err := addConfigMapResource(args, loader, &resources)
 		if err != nil {
-			return fmt.Errorf("failed to read template file: %w", err)
+			return err
 		}
 	}
 
-	templateContext := TemplateConfig{
-		Base:     args,
-		Workload: loader,
-	}
-
-	parsedTemplate, err := template.New("main").Funcs(sprig.TxtFuncMap()).Parse(string(workloadTemplate))
-
+	// Process workload template
+	err = processWorkloadTemplate(args, loader, &resources)
 	if err != nil {
-		return fmt.Errorf("failed to parse template: %w", err)
-	}
-
-	var renderedYAML strings.Builder
-	err = parsedTemplate.Execute(&renderedYAML, templateContext)
-
-	// Render the template
-	if err != nil {
-		return fmt.Errorf("failed to render template: %w", err)
-	}
-
-	logrus.Infof("Parsing workload template")
-
-	decoder := k8syaml.NewDecodingSerializer(unstructured.UnstructuredJSONScheme)
-	manifests := strings.Split(renderedYAML.String(), "---")
-
-	for _, manifest := range manifests {
-
-		manifest = strings.TrimSpace(manifest)
-		if manifest == "" {
-			continue
-		}
-
-		// Decode the manifest into an unstructured object
-		obj := &unstructured.Unstructured{}
-		_, gvk, err := decoder.Decode([]byte(manifest), nil, obj)
-
-		if err != nil {
-			return fmt.Errorf("failed to decode YAML manifest: %v", err)
-		}
-
-		_ = gvk
-
-		resources = append(resources, obj)
+		return err
 	}
 
 	if args.DryRun {
-		logrus.Info("Dry-run. Printing generated workload to console")
+		logrus.Info("Dry-run mode. Generated resources:")
 		printResources(resources)
 	} else {
 		err = applyResources(resources, c)
@@ -213,6 +124,7 @@ func Submit(args templates.WorkloadArgs) error {
 	return nil
 }
 
+// initializeLoader validates and initializes the workload loader
 func initializeLoader(args templates.WorkloadArgs) (templates.WorkloadLoader, error) {
 	if err := templates.ValidateWorkloadArgs(args); err != nil {
 		return nil, err
@@ -233,6 +145,100 @@ func initializeLoader(args templates.WorkloadArgs) (templates.WorkloadLoader, er
 	}
 
 	return loader, nil
+}
+
+// addNamespaceResource adds a namespace resource if needed
+func addNamespaceResource(args templates.WorkloadArgs, c dynamic.Interface, resources *[]*unstructured.Unstructured) error {
+	namespace := unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Namespace",
+			"metadata": map[string]interface{}{
+				"name": args.Namespace,
+			},
+		},
+	}
+
+	if args.DryRun {
+		logrus.Info("Including namespace definition, skipping existence check due to dry-run mode")
+		*resources = append(*resources, &namespace)
+		return nil
+	}
+
+	logrus.Infof("Checking if namespace '%s' exists", args.Namespace)
+	gvr := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "namespaces"}
+	_, err := c.Resource(gvr).Get(context.TODO(), args.Namespace, metav1.GetOptions{})
+	if err == nil {
+		logrus.Infof("Namespace '%s' already exists", args.Namespace)
+		return nil
+	}
+
+	if !apierrors.IsNotFound(err) {
+		return fmt.Errorf("failed to check namespace existence: %v", err)
+	}
+
+	*resources = append(*resources, &namespace)
+	return nil
+}
+
+// addConfigMapResource adds a config map resource
+func addConfigMapResource(args templates.WorkloadArgs, loader templates.WorkloadLoader, resources *[]*unstructured.Unstructured) error {
+	logrus.Info("Generating ConfigMap from folder")
+	configMap, err := k8s.GenerateConfigMapFromDir(args.Path, args.Name, args.Namespace, loader.IgnoreFiles())
+	if err != nil {
+		return fmt.Errorf("failed to generate ConfigMap: %w", err)
+	}
+	*resources = append(*resources, configMap)
+	return nil
+}
+
+// processWorkloadTemplate renders and parses the workload template
+func processWorkloadTemplate(args templates.WorkloadArgs, loader templates.WorkloadLoader, resources *[]*unstructured.Unstructured) error {
+	var workloadTemplate []byte
+	var err error
+
+	if args.TemplatePath == "" {
+		logrus.Info("Using default template")
+		workloadTemplate = loader.DefaultTemplate()
+	} else {
+		logrus.Infof("Using template: %s", args.TemplatePath)
+		workloadTemplate, err = os.ReadFile(args.TemplatePath)
+		if err != nil {
+			return fmt.Errorf("failed to read template file: %w", err)
+		}
+	}
+
+	templateContext := TemplateConfig{Base: args, Workload: loader}
+
+	parsedTemplate, err := template.New("main").Funcs(sprig.TxtFuncMap()).Parse(string(workloadTemplate))
+	if err != nil {
+		return fmt.Errorf("failed to parse template: %w", err)
+	}
+
+	var renderedYAML strings.Builder
+	err = parsedTemplate.Execute(&renderedYAML, templateContext)
+	if err != nil {
+		return fmt.Errorf("failed to render template: %w", err)
+	}
+
+	decoder := k8syaml.NewDecodingSerializer(unstructured.UnstructuredJSONScheme)
+	manifests := strings.Split(renderedYAML.String(), "---")
+
+	for _, manifest := range manifests {
+		manifest = strings.TrimSpace(manifest)
+		if manifest == "" {
+			continue
+		}
+
+		obj := &unstructured.Unstructured{}
+		_, _, err := decoder.Decode([]byte(manifest), nil, obj)
+		if err != nil {
+			return fmt.Errorf("failed to decode YAML manifest: %v", err)
+		}
+
+		*resources = append(*resources, obj)
+	}
+	return nil
 }
 
 func printResources(resources []*unstructured.Unstructured) {
