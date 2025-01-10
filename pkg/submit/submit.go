@@ -50,7 +50,7 @@ func setWorkloadName(workloadName string, path string) string {
 	if workloadName == "" {
 		currentUser, err := user.Current()
 		if err != nil {
-			logrus.Fatalf("Error fetching current user: %v", err)
+			panic(fmt.Sprintf("Failed to fetch the current user: %v", err))
 		}
 		lastPartFromPath := getLastPartOfPath(path)
 		return strings.Join([]string{currentUser.Username, lastPartFromPath}, "-")
