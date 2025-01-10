@@ -1,24 +1,14 @@
 apiVersion: ray.io/v1
 kind: RayJob
 metadata:
-  name: llama3-70b-inference
-  namespace: av-test
+  name: {{ .Base.Name }}
+  namespace: {{ .Base.Namespace }}
   labels:
     kueue.x-k8s.io/queue-name: gpu-queue
 spec:
   shutdownAfterJobFinishes: true
-  entrypoint: >
-    /bin/bash -c "
-    python main.py
-    --model-name=meta-llama/Llama-3.1-8B-Instruct
-    --ds-config=./zero_3_offload_optim_param.json
-    --bucket=silogen-dev-ray
-    --num-epochs=2
-    --lora
-    --num-devices=4
-    --batch-size-per-device=32
-    --eval-batch-size-per-device=32
-    --ctx-len=1024"
+  entrypoint: |
+{{ .Workload.Entrypoint | indent 4}}
   rayClusterSpec:
     rayVersion: "2.9.0"
     enableInTreeAutoscaling: false #cannot be true when using Kueue
@@ -28,7 +18,7 @@ spec:
         spec:
           containers:
             - name: ray-head
-              image: ghcr.io/silogen/rocm-ray:v0.3
+              image: {{ .Base.Image }}
               imagePullPolicy: Always
               env:
                 - name: AWS_ACCESS_KEY_ID
@@ -59,13 +49,13 @@ spec:
                   name: serve
               resources:
                 limits:
-                  cpu: "10"
-                  memory: "300Gi"
-                  amd.com/gpu: "4"
+                    cpu: "{{ mul .Base.GPUs 4 }}"
+                    memory: "{{ mul .Base.GPUs 32 }}Gi"
+                    amd.com/gpu: "{{ .Base.GPUs }}"
                 requests:
-                  cpu: "10"
-                  memory: "300Gi"
-                  amd.com/gpu: "4"
+                    cpu: "{{ mul .Base.GPUs 4 }}"
+                    memory: "{{ mul .Base.GPUs 32 }}Gi"
+                    amd.com/gpu: "{{ .Base.GPUs }}"
               volumeMounts:
                   - mountPath: /workload
                     name: workload
@@ -77,7 +67,7 @@ spec:
           volumes:
             - name: workload
               configMap:
-                name: workloads-training-llms-lora-supervised-finetuning-ds-zero3
+                name: {{ .Base.Name }}
             - name: gcp-credentials-volume
               secret:
                 secretName: gcs-credentials
@@ -98,7 +88,7 @@ spec:
           spec:
             containers:
               - name: ray-worker
-                image: ghcr.io/silogen/rocm-ray:v0.3
+                image: {{ .Base.Image }}
                 imagePullPolicy: Always
                 env:
                   - name: AWS_ACCESS_KEY_ID
@@ -119,14 +109,14 @@ spec:
                   - name: GOOGLE_APPLICATION_CREDENTIALS
                     value: "/etc/gcp/credentials.json"
                 resources:
-                  limits:
-                    cpu: "10"
-                    memory: "300Gi"
-                    amd.com/gpu: "4"
-                  requests:
-                    cpu: "10"
-                    memory: "300Gi"
-                    amd.com/gpu: "4"
+                    limits:
+                        cpu: "{{ mul .Base.GPUs 4 }}"
+                        memory: "{{ mul .Base.GPUs 32 }}Gi"
+                        amd.com/gpu: "{{ .Base.GPUs }}"
+                    requests:
+                        cpu: "{{ mul .Base.GPUs 4 }}"
+                        memory: "{{ mul .Base.GPUs 32 }}Gi"
+                        amd.com/gpu: "{{ .Base.GPUs }}"
                 volumeMounts:
                   - mountPath: /workload
                     name: workload
@@ -138,7 +128,7 @@ spec:
             volumes:
               - name: workload
                 configMap:
-                  name: workloads-training-llms-lora-supervised-finetuning-ds-zero3
+                  name: {{ .Base.Name }}
               - name: gcp-credentials-volume
                 secret:
                   secretName: gcs-credentials

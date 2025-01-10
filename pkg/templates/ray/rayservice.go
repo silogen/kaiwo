@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"github.com/sirupsen/logrus"
 )
 
-//go:embed service.yaml.tmpl
+//go:embed rayservice.yaml.tmpl
 var RayServiceTemplate []byte
 
 const SERVECONFIG_FILENAME = "serveconfig"
@@ -19,9 +17,7 @@ type RayServiceLoader struct {
 }
 
 func (r *RayServiceLoader) Load(path string) error {
-	logrus.Infof("Loading Ray service from %s", path)
 
-	// Read the serveconfig file
 	contents, err := os.ReadFile(filepath.Join(path, SERVECONFIG_FILENAME))
 
 	if err != nil {

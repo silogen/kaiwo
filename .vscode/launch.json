@@ -2,7 +2,7 @@
 	"version": "0.2.0",
 	"configurations": [
 	  {
-	    "name": "Launch AIWO",
+	    "name": "Submit Rayjob",
 	    "type": "go",
 	    "request": "launch",
 	    "mode": "debug",
@@ -12,7 +12,19 @@
 	      "GO111MODULE": "on"
 	    },
 	    "buildFlags": "-tags=debug"
-	  }
+	  },
+	{
+		"name": "Submit Job",
+		"type": "go",
+		"request": "launch",
+		"mode": "debug",
+		"program": "${workspaceFolder}",
+		"args": ["submit", "-p", "workloads/training/LLMs/lora-supervised-finetuning/trl-deepspeed-zero3-singlenode", "-g", "4", "--dry-run"],
+		"env": {
+		  "GO111MODULE": "on"
+		},
+		"buildFlags": "-tags=debug"
+	      }
 	]
       }
       

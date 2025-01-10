@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"github.com/sirupsen/logrus"
 )
 
-//go:embed job.yaml.tmpl
+//go:embed rayjob.yaml.tmpl
 var RayJobTemplate []byte
 
 const ENTRYPOINT_FILENAME = "entrypoint"
@@ -20,9 +18,6 @@ type RayJobLoader struct {
 
 func (r *RayJobLoader) Load(path string) error {
 
-	logrus.Infof("Loading Ray job from %s", path)
-
-	// Read entrypoint file
 	contents, err := os.ReadFile(filepath.Join(path, ENTRYPOINT_FILENAME))
 
 	if err != nil {

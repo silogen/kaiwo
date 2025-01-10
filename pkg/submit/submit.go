@@ -19,6 +19,8 @@ package submit
 import (
 	"fmt"
 	"os"
+	"os/user"
+	"path/filepath"
 	"strings"
 	"text/template"
 
@@ -39,6 +41,23 @@ type TemplateConfig struct {
 	Workload templates.WorkloadLoader
 }
 
+func getLastPartOfPath(path string) string {
+	lastPart := filepath.Base(path)
+	return strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(lastPart, "/", "-"), "_", "-"))
+}
+
+func setWorkloadName(workloadName string, path string) string {
+	if workloadName == "" {
+		currentUser, err := user.Current()
+		if err != nil {
+			panic(fmt.Sprintf("Failed to fetch the current user: %v", err))
+		}
+		lastPartFromPath := getLastPartOfPath(path)
+		return strings.Join([]string{currentUser.Username, lastPartFromPath}, "-")
+	}
+	return workloadName
+}
+
 func Submit(args templates.WorkloadArgs) error {
 
 	if !args.DryRun {
@@ -49,24 +68,16 @@ func Submit(args templates.WorkloadArgs) error {
 		return err
 	}
 
-	// TODO Include username from whoami
-	var workload_name string
-	if args.Name == "" {
-		workload_name = strings.ToLower(strings.Join(strings.FieldsFunc(args.Path, func(r rune) bool {
-			return r == '/' || r == '_'
-		}), "-"))
-		args.Name = workload_name
-	} else {
-		workload_name = args.Name
+	args.Name = setWorkloadName(args.Name, args.Path)
+
+	logrus.Infof("Submitting workload '%s' from path: %s", args.Name, args.Path)
+
+	if args.Type == "" {
+		args.Type = "job"
+
 	}
 
-	logrus.Infof("Submitting workload '%s' from path: %s", workload_name, args.Path)
-
-	loader, err := templates.GetWorkloadLoader(args.Type)
-
-	if err != nil {
-		return fmt.Errorf("failed to get workload loader: %w", err)
-	}
+	loader := templates.GetWorkloadLoader(args.Type)
 
 	// Load workload
 	if err := loader.Load(args.Path); err != nil {
@@ -74,7 +85,7 @@ func Submit(args templates.WorkloadArgs) error {
 	}
 
 	// Generate ConfigMap
-	configMap, err := k8s.GenerateConfigMapFromDir(args.Path, workload_name, args.Namespace, loader.IgnoreFiles())
+	configMap, err := k8s.GenerateConfigMapFromDir(args.Path, args.Name, args.Namespace, loader.IgnoreFiles())
 	if err != nil {
 		return fmt.Errorf("failed to generate ConfigMap: %w", err)
 	}
@@ -120,16 +131,13 @@ func Submit(args templates.WorkloadArgs) error {
 		return fmt.Errorf("failed to decode workload manifest YAML: %w", err)
 	}
 
-	// Create namespace
+	// TODO only create namespace if it doesn't exist (we don't want to delete namespaces when deleting resources)
+	// namespace := k8s.CreateNamespace(args.Namespace)
 
-	namespace := k8s.CreateNamespace(args.Namespace)
-
-	workloadManifests := append([]runtime.Object{namespace, &configMap}, templatedManifests...)
+	workloadManifests := append([]runtime.Object{&configMap}, templatedManifests...)
 
 	if args.DryRun {
-		logrus.Info("Dry run enabled, printing generated workload to console")
-
-		// configMapYAML, err := yaml.Marshal(configMap)
+		logrus.Info("Dry-run. Printing generated workload to console")
 		yamlPrinter := printers.YAMLPrinter{}
 
 		printedYaml := strings.Builder{}
@@ -138,9 +146,7 @@ func Submit(args templates.WorkloadArgs) error {
 			if err != nil {
 				logrus.Errorf("failed to marshal object: %v", err)
 			} else {
-				logrus.Info("Object:")
 				fmt.Println(string(printedYaml.String()))
-				fmt.Println("---")
 			}
 			printedYaml.Reset()
 		}
