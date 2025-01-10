@@ -7,14 +7,16 @@ import (
 
 // WorkloadArgs is a struct that holds the high-level arguments used for all workloads
 type WorkloadArgs struct {
-	Path         string
-	Image        string
-	Name         string
-	Namespace    string
-	Type         string
-	GPUs         int
-	TemplatePath string
-	DryRun       bool
+	Path            string
+	Image           string
+	Name            string
+	Namespace       string
+	Type            string
+	GPUs            int
+	TemplatePath    string
+	DryRun          bool
+	CreateNamespace bool
+	NoUploadFolder  bool
 }
 
 func ValidateWorkloadArgs(args WorkloadArgs) error {
@@ -25,12 +27,12 @@ func ValidateWorkloadArgs(args WorkloadArgs) error {
 }
 
 type WorkloadLoader interface {
-	// Loads a workload from a path
+	// Load loads a workload from a path
 	Load(path string) error
 
-	// Returns the default teplate for the workloader
+	// DefaultTemplate returns the default template for the workloader
 	DefaultTemplate() []byte
 
-	// Lists the files that should be ignored in the ConfigMap
+	// IgnoreFiles lists the files that should be ignored in the ConfigMap
 	IgnoreFiles() []string
 }

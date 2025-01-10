@@ -17,7 +17,16 @@
 package submit
 
 import (
+	"context"
 	"fmt"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	k8syaml "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
+	"k8s.io/client-go/dynamic"
+	"sigs.k8s.io/yaml"
+
 	"os"
 	"os/user"
 	"path/filepath"
@@ -28,8 +37,6 @@ import (
 	"github.com/silogen/ai-workload-orchestrator/pkg/k8s"
 	"github.com/silogen/ai-workload-orchestrator/pkg/templates"
 	"github.com/sirupsen/logrus"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/cli-runtime/pkg/printers"
 )
 
 // TODO clarify naming?
@@ -64,31 +71,73 @@ func Submit(args templates.WorkloadArgs) error {
 		return fmt.Errorf("live run is not supported yet, please use --dry-run")
 	}
 
-	if err := templates.ValidateWorkloadArgs(args); err != nil {
-		return err
-	}
+	loader, err := initializeLoader(args)
 
 	args.Name = setWorkloadName(args.Name, args.Path)
 
-	logrus.Infof("Submitting workload '%s' from path: %s", args.Name, args.Path)
-
-	if args.Type == "" {
-		args.Type = "job"
-
-	}
-
-	loader := templates.GetWorkloadLoader(args.Type)
-
-	// Load workload
-	if err := loader.Load(args.Path); err != nil {
-		return fmt.Errorf("failed to load workload: %w", err)
-	}
-
-	// Generate ConfigMap
-	configMap, err := k8s.GenerateConfigMapFromDir(args.Path, args.Name, args.Namespace, loader.IgnoreFiles())
 	if err != nil {
-		return fmt.Errorf("failed to generate ConfigMap: %w", err)
+		return err
 	}
+
+	var c dynamic.Interface
+
+	if !args.DryRun {
+		logrus.Infof("Initializing Kubernetes client")
+		c, err = k8s.InitializeClient()
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to initialize k8s client: %v", err)
+	}
+
+	var resources []*unstructured.Unstructured
+
+	// Namespace TODO refactor to own method
+	if args.CreateNamespace {
+		namespace := unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Namespace",
+				"metadata": map[string]interface{}{
+					"name": args.Namespace,
+				},
+			},
+		}
+		if args.DryRun {
+			logrus.Info("Including namespace definition, but not checking existence due to dry-run mode")
+			resources = append(resources, &namespace)
+		} else {
+			logrus.Infof("checking namespace %s", args.Namespace)
+			gvr := schema.GroupVersionResource{
+				Group:    "",
+				Version:  "v1",
+				Resource: "namespaces",
+			}
+			_, err := c.Resource(gvr).Get(context.TODO(), args.Namespace, metav1.GetOptions{})
+			if err == nil {
+				// Namespace already exists
+				logrus.Infof("namespace %s already exists", args.Namespace)
+				return nil
+			} else if !apierrors.IsNotFound(err) {
+				return fmt.Errorf("failed to check if namespace exists: %v", err)
+			} else {
+				resources = append(resources, &namespace)
+			}
+		}
+	}
+
+	// Config map
+	if args.NoUploadFolder {
+		logrus.Info("Skipping upload folder")
+	} else {
+		configMap, err := k8s.GenerateConfigMapFromDir(args.Path, args.Name, args.Namespace, loader.IgnoreFiles())
+		if err != nil {
+			return fmt.Errorf("failed to generate ConfigMap: %w", err)
+		}
+		resources = append(resources, configMap)
+	}
+
+	// Workload template TODO refactor to own method
 
 	var workloadTemplate []byte
 
@@ -117,42 +166,133 @@ func Submit(args templates.WorkloadArgs) error {
 		return fmt.Errorf("failed to parse template: %w", err)
 	}
 
-	// Render the template
 	var renderedYAML strings.Builder
 	err = parsedTemplate.Execute(&renderedYAML, templateContext)
+
+	// Render the template
 	if err != nil {
 		return fmt.Errorf("failed to render template: %w", err)
 	}
 
-	// Marshal the template into a Kubernetes object
-	templatedManifests, err := k8s.DecodeYAMLToObjects(renderedYAML.String())
+	logrus.Infof("Parsing workload template")
 
-	if err != nil {
-		return fmt.Errorf("failed to decode workload manifest YAML: %w", err)
+	decoder := k8syaml.NewDecodingSerializer(unstructured.UnstructuredJSONScheme)
+	manifests := strings.Split(renderedYAML.String(), "---")
+
+	for _, manifest := range manifests {
+
+		manifest = strings.TrimSpace(manifest)
+		if manifest == "" {
+			continue
+		}
+
+		// Decode the manifest into an unstructured object
+		obj := &unstructured.Unstructured{}
+		_, gvk, err := decoder.Decode([]byte(manifest), nil, obj)
+
+		if err != nil {
+			return fmt.Errorf("failed to decode YAML manifest: %v", err)
+		}
+
+		_ = gvk
+
+		resources = append(resources, obj)
 	}
-
-	// TODO only create namespace if it doesn't exist (we don't want to delete namespaces when deleting resources)
-	// namespace := k8s.CreateNamespace(args.Namespace)
-
-	workloadManifests := append([]runtime.Object{&configMap}, templatedManifests...)
 
 	if args.DryRun {
 		logrus.Info("Dry-run. Printing generated workload to console")
-		yamlPrinter := printers.YAMLPrinter{}
-
-		printedYaml := strings.Builder{}
-		for _, obj := range workloadManifests {
-			err = yamlPrinter.PrintObj(obj, &printedYaml)
-			if err != nil {
-				logrus.Errorf("failed to marshal object: %v", err)
-			} else {
-				fmt.Println(string(printedYaml.String()))
-			}
-			printedYaml.Reset()
+		printResources(resources)
+	} else {
+		err = applyResources(resources, c)
+		if err != nil {
+			return fmt.Errorf("failed to apply resources: %w", err)
 		}
-		return nil
+		logrus.Info("Workload submitted successfully.")
 	}
 
-	logrus.Info("Workload submitted successfully.")
+	return nil
+}
+
+func initializeLoader(args templates.WorkloadArgs) (templates.WorkloadLoader, error) {
+	if err := templates.ValidateWorkloadArgs(args); err != nil {
+		return nil, err
+	}
+
+	args.Name = setWorkloadName(args.Name, args.Path)
+
+	logrus.Infof("Submitting workload '%s' from path: %s", args.Name, args.Path)
+
+	if args.Type == "" {
+		args.Type = "job"
+	}
+
+	loader := templates.GetWorkloadLoader(args.Type)
+
+	if err := loader.Load(args.Path); err != nil {
+		return nil, fmt.Errorf("failed to load workload: %w", err)
+	}
+
+	return loader, nil
+}
+
+func printResources(resources []*unstructured.Unstructured) {
+	for _, resource := range resources {
+		logrus.Infof("%s: %s", resource.GetKind(), resource.GetName())
+		data := resource.UnstructuredContent()
+
+		// Marshal the map into YAML
+		yamlBytes, err := yaml.Marshal(data)
+		if err != nil {
+			logrus.Errorf("failed to convert unstructured object to YAML: %v", err)
+		}
+		fmt.Print(string(yamlBytes))
+		fmt.Println("---")
+	}
+}
+
+func applyResources(resources []*unstructured.Unstructured, c dynamic.Interface) error {
+	//return fmt.Errorf("applying resources is not implemented yet")
+
+	for _, resource := range resources {
+		gvk := resource.GroupVersionKind()
+
+		// Derive the GVR from the GVK
+		gvr := schema.GroupVersionResource{
+			Group:    gvk.Group,
+			Version:  gvk.Version,
+			Resource: strings.ToLower(gvk.Kind) + "s", // Pluralize the kind
+		}
+
+		// Determine the namespace
+		namespace := resource.GetNamespace()
+		if namespace == "" {
+			namespace = "default"
+		}
+
+		// Try to create the resource
+		_, err := c.Resource(gvr).Namespace(namespace).Create(context.TODO(), resource, metav1.CreateOptions{})
+		if err == nil {
+			logrus.Infof("Resource %s/%s created successfully", namespace, resource.GetName())
+			continue
+		}
+
+		if !apierrors.IsAlreadyExists(err) {
+			return fmt.Errorf("failed to apply resource %s/%s: %v", namespace, resource.GetName(), err)
+		}
+
+		// Resource already exists, update it
+		existing, err := c.Resource(gvr).Namespace(namespace).Get(context.TODO(), resource.GetName(), metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to get existing resource %s/%s: %v", namespace, resource.GetName(), err)
+		}
+
+		resource.SetResourceVersion(existing.GetResourceVersion())
+		_, err = c.Resource(gvr).Namespace(namespace).Update(context.TODO(), resource, metav1.UpdateOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to update resource %s/%s: %v", namespace, resource.GetName(), err)
+		}
+
+		logrus.Infof("Resource %s/%s updated successfully", namespace, resource.GetName())
+	}
 	return nil
 }
