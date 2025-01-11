@@ -1,3 +1,12 @@
+```plaintext
+    ___    _
+   /   |  (_)      ______
+  / /| | / / | /| / / __ \
+ / ___ |/ /| |/ |/ / /_/ /
+/_/  |_/_/ |__/|__/\____/
+Kubernetes-native AI Workload Orchestrator 
+```
+
 # Aiwo - AI Workload Orchestrator
 
 Kubernetes-native AI Workload Orchestrator to accelerate GPU workloads
