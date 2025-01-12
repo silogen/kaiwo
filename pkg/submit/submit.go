@@ -58,8 +58,8 @@ func setWorkloadName(workloadName string, path string) string {
 	return workloadName
 }
 
-func Submit(args templates.WorkloadArgs) error {
 
+func Submit(args templates.WorkloadArgs) error {
 	if !args.DryRun {
 		return fmt.Errorf("live run is not supported yet, please use --dry-run")
 	}
@@ -70,7 +70,7 @@ func Submit(args templates.WorkloadArgs) error {
 
 	args.Name = setWorkloadName(args.Name, args.Path)
 
-	logrus.Infof("Submitting workload '%s' from path: %s", args.Name, args.Path)
+	logrus.Infof("Submitting workload '%s'", args.Name)
 
 	if args.Type == "" {
 		args.Type = "job"
@@ -95,11 +95,10 @@ func Submit(args templates.WorkloadArgs) error {
 	// Generate main manifest
 	if args.TemplatePath == "" {
 		// Use the default template
-		logrus.Info("Using default template")
 		workloadTemplate = loader.DefaultTemplate()
 	} else {
 		// Use the provided template
-		logrus.Infof("Using template: %s", args.TemplatePath)
+		logrus.Infof("Using custom template: %s", args.TemplatePath)
 		workloadTemplate, err = os.ReadFile(args.TemplatePath)
 		if err != nil {
 			return fmt.Errorf("failed to read template file: %w", err)

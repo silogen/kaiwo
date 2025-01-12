@@ -18,6 +18,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"slices"
 
 	"github.com/silogen/ai-workload-orchestrator/pkg/submit"
@@ -25,6 +26,16 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
+
+var aiwoBanner = `
+    ___    _
+   /   |  (_)      ______
+  / /| | / / | /| / / __ \
+ / ___ |/ /| |/ |/ / /_/ /
+/_/  |_/_/ |__/|__/\____/
+Kubernetes-native AI Workload Orchestrator 
+
+`
 
 var (
 	path      string
@@ -40,6 +51,11 @@ var (
 const defaultImage = "ghcr.io/silogen/rocm-ray:v0.4"
 
 func main() {
+	fmt.Fprint(os.Stderr, aiwoBanner)
+	logrus.SetFormatter(&logrus.TextFormatter{
+		FullTimestamp: true,
+	})
+
 	rootCmd := &cobra.Command{
 		Use:   "aiwo",
 		Short: "AI Workload Orchestrator",
@@ -60,7 +76,6 @@ func main() {
 				GPUs:         gpus,
 				DryRun:       dryRun,
 			}
-
 			if err := submit.Submit(workloadArgs); err != nil {
 				logrus.Fatalf("Failed to submit workload: %v", err)
 			}
