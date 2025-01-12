@@ -27,15 +27,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var aiwoBanner = `
-    ___    _
-   /   |  (_)      ______
-  / /| | / / | /| / / __ \
- / ___ |/ /| |/ |/ / /_/ /
-/_/  |_/_/ |__/|__/\____/
-Kubernetes-native AI Workload Orchestrator 
+var kaiwoBanner = `
+ _  __     _
+| |/ /__ _(_)_      _____
+| ' // _' | \ \ /\ / / _ \
+| . \ (_| | |\ V  V / (_) |
+|_|\_\__,_|_| \_/\_/ \___/
+Kubernetes-native AI Workload Orchestrator
+
 
 `
+
 
 var (
 	path      string
@@ -51,14 +53,14 @@ var (
 const defaultImage = "ghcr.io/silogen/rocm-ray:v0.4"
 
 func main() {
-	fmt.Fprint(os.Stderr, aiwoBanner)
+	fmt.Fprint(os.Stderr, kaiwoBanner)
 	logrus.SetFormatter(&logrus.TextFormatter{
 		FullTimestamp: true,
 	})
 
 	rootCmd := &cobra.Command{
-		Use:   "aiwo",
-		Short: "AI Workload Orchestrator",
+		Use:   "kaiwo",
+		Short: "Kubernetes-native AI Workload Orchestrator",
 	}
 
 	submitCmd := &cobra.Command{
@@ -92,7 +94,7 @@ func main() {
 	submitCmd.Flags().StringVarP(&path, "path", "p", "", "Path to workload code and entrypoint/serveconfig. Format: workloads/workload_type/modality/method_type/workload_code_directory")
 	submitCmd.Flags().StringVarP(&image, "image", "i", defaultImage, "Container image to use. Defaults to ghcr.io/silogen/rocm-ray:vx.x")
 	submitCmd.Flags().StringVarP(&name, "name", "n", "", "Kubenetes name to use for the workflow")
-	submitCmd.Flags().StringVarP(&namespace, "namespace", "", "aiwo", "Kubenetes namespace to use. Defaults to `aiwo`")
+	submitCmd.Flags().StringVarP(&namespace, "namespace", "", "kaiwo", "Kubenetes namespace to use. Defaults to `kaiwo`")
 	submitCmd.Flags().StringVarP(&template, "template", "", "", "Path to a custom template to use for the workload. If not provided, a default template will be used")
 	submitCmd.Flags().StringVarP(&type_, "type", "t", "job", "Workload type, one of [rayjob, rayservice]")
 	submitCmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "Print the generated workload manifest without submitting it")
