@@ -1,15 +1,13 @@
 ```plaintext
-    ___    _
-   /   |  (_)      ______
-  / /| | / / | /| / / __ \
- / ___ |/ /| |/ |/ / /_/ /
-/_/  |_/_/ |__/|__/\____/
-Kubernetes-native AI Workload Orchestrator 
+ _  __     _
+| |/ /__ _(_)_      _____
+| ' // _' | \ \ /\ / / _ \
+| . \ (_| | |\ V  V / (_) |
+|_|\_\__,_|_| \_/\_/ \___/
+Kubernetes-native AI Workload Orchestrator
 ```
 
-# Aiwo - AI Workload Orchestrator
-
-Kubernetes-native AI Workload Orchestrator to accelerate GPU workloads
+# Kaiwo - Kubernetes-native AI Workload Orchestrator to accelerate GPU workloads
 
 🚀️🚀️ Aiwo supports ***AMD*** GPUs! 🚀️🚀️
 
@@ -34,16 +32,16 @@ To ensure a smooth experience, we strongly recommend that users:
 
 ## Description
 
-**AI Workload Orchestrator (Aiwo)** is a Kubernetes-native tool designed to optimize GPU resource utilization for AI workloads. The project is built primarily for AMD GPUs. Built on top of **Ray** and **Kueue** , Aiwo minimizes GPU idleness and increases resource efficiency through intelligent job queueing, fair sharing of resources, guaranteed quotas and opportunistic batch job scheduling.
+**Kaiwo** is a Kubernetes-native tool designed to optimize GPU resource utilization for AI workloads. The project is built primarily for AMD GPUs. Built on top of **Ray** and **Kueue** , Kaiwo minimizes GPU idleness and increases resource efficiency through intelligent job queueing, fair sharing of resources, guaranteed quotas and opportunistic batch job scheduling.
 
-Aiwo supports a wide range of AI workloads, including distributed multi-node pretraining, fine-tuning, online inference, and batch inference, with seamless integration into Kubernetes environments.
+Kaiwo supports a wide range of AI workloads, including distributed multi-node pretraining, fine-tuning, online inference, and batch inference, with seamless integration into Kubernetes environments.
 
 ## Main Features
 
 * **GPU Utilization Optimization** :
   * Dynamically queues workloads to reduce GPU idle time and maximize resource utilization.
 * **CLI Tool** :
-  * Simplified workload submission using the aiwo CLI tool
+  * Simplified workload submission using the kaiwo CLI tool
 * **Distributed Workload Scheduling** :
   * Effortlessly schedule distributed workloads across multiple Kubernetes nodes.
 * **Broad Workload Support** with pre-built templates:
@@ -55,7 +53,7 @@ Aiwo supports a wide range of AI workloads, including distributed multi-node pre
 
 ### Installation of Ray and Kueue Operators on Kubernetes
 
-Aiwo requires 4-5 components installed on Kubernetes:
+Kaiwo requires 4-5 components installed on Kubernetes:
 
 1. Cert-Manager
 2. AMD Operator (with AMD-Device-Config) or Nvidia Operator
@@ -73,21 +71,21 @@ We recommend using [Cluster-Forge](https://github.com/silogen/cluster-forge) to 
 6. Run `go run . cast`
 7. Run `go run . forge`
 
-### Installation of Aiwo CLI tool
+### Installation of Kaiwo CLI tool
 
-The installation of Aiwo CLI tool is easy as it's a single binary. The only requirement is a kubeconfig file to access a Kubernetes cluster. If you are unsure where to get a kubeconfig, speak to the engineers who set up your Kubernetes cluster. Just like kubectl, Aiwo will first look for a `KUBECONFIG=path` environment variable. If `KUBECONFIG` is not set, Aiwo will then look for kubeconfig file in the default location `~/.kube/config`.
+The installation of Kaiwo CLI tool is easy as it's a single binary. The only requirement is a kubeconfig file to access a Kubernetes cluster. If you are unsure where to get a kubeconfig, speak to the engineers who set up your Kubernetes cluster. Just like kubectl, Kaiwo will first look for a `KUBECONFIG=path` environment variable. If `KUBECONFIG` is not set, Kaiwo will then look for kubeconfig file in the default location `~/.kube/config`.
 
-1. Download the AIWO CLI binary from the [Releases Page](https://github.com/silogen/ai-workload-orchestrator/releases).
+1. Download the Kaiwo CLI binary from the [Releases Page](https://github.com/silogen/ai-workload-orchestrator/releases).
 2. Make the binary executable and add it to your PATH:
 
 ```bash
-chmod +x aiwo
-mv aiwo /usr/local/bin/
+chmod +x kaiwo
+mv kaiwo /usr/local/bin/
 ```
 
 ## Usage
 
-At the moment, Aiwo can submit three types of workloads to Kubernetes
+At the moment, Kaiwo can submit three types of workloads to Kubernetes
 
 - Standard Jobs
 - RayJobs
@@ -110,8 +108,8 @@ Kueue Local Queue
 - Note about typical secrets and environment variables (s3 keys, HF TOKEN, etc)
 - Note about how secrets are managed (ExternalSecrets, etc)
 
-## Contributing to Aiwo
+## Contributing to Kaiwo
 
 TODO
 
-We welcome contributions to Aiwo! Please refer to the [Contributing Guidelines]() for more information on how to contribute to the project.
+We welcome contributions to Kaiwo! Please refer to the [Contributing Guidelines]() for more information on how to contribute to the project.
