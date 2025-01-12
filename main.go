@@ -40,14 +40,16 @@ Kubernetes-native AI Workload Orchestrator
 
 
 var (
-	path      string
-	image     string
-	name      string
-	namespace string
-	type_     string
-	template  string
-	gpus      int
-	dryRun    bool
+	path            string
+	image           string
+	name            string
+	namespace       string
+	type_           string
+	template        string
+	gpus            int
+	dryRun          bool
+	createNamespace bool
+	noUploadFolder  bool
 )
 
 const defaultImage = "ghcr.io/silogen/rocm-ray:v0.4"
@@ -69,14 +71,16 @@ func main() {
 		Run: func(cmd *cobra.Command, args []string) {
 
 			var workloadArgs templates.WorkloadArgs = templates.WorkloadArgs{
-				Path:         path,
-				Image:        image,
-				Name:         name,
-				Namespace:    namespace,
-				TemplatePath: template,
-				Type:         type_,
-				GPUs:         gpus,
-				DryRun:       dryRun,
+				Path:            path,
+				Image:           image,
+				Name:            name,
+				Namespace:       namespace,
+				TemplatePath:    template,
+				Type:            type_,
+				GPUs:            gpus,
+				DryRun:          dryRun,
+				CreateNamespace: createNamespace,
+				NoUploadFolder:  noUploadFolder,
 			}
 			if err := submit.Submit(workloadArgs); err != nil {
 				logrus.Fatalf("Failed to submit workload: %v", err)
@@ -93,8 +97,10 @@ func main() {
 	}
 	submitCmd.Flags().StringVarP(&path, "path", "p", "", "Path to workload code and entrypoint/serveconfig. Format: workloads/workload_type/modality/method_type/workload_code_directory")
 	submitCmd.Flags().StringVarP(&image, "image", "i", defaultImage, "Container image to use. Defaults to ghcr.io/silogen/rocm-ray:vx.x")
-	submitCmd.Flags().StringVarP(&name, "name", "n", "", "Kubenetes name to use for the workflow")
-	submitCmd.Flags().StringVarP(&namespace, "namespace", "", "kaiwo", "Kubenetes namespace to use. Defaults to `kaiwo`")
+	submitCmd.Flags().StringVarP(&name, "name", "", "", "Kubenetes name to use for the workflow")
+	submitCmd.Flags().StringVarP(&namespace, "namespace", "n", "kaiwo", "Kubenetes namespace to use. Defaults to `kaiwo`")
+	submitCmd.Flags().BoolVarP(&createNamespace, "create-namespace", "", false, "Create namespace if it does not exist")
+	submitCmd.Flags().BoolVarP(&noUploadFolder, "no-upload-folder", "", false, "Don't upload path folder contents as a config map")
 	submitCmd.Flags().StringVarP(&template, "template", "", "", "Path to a custom template to use for the workload. If not provided, a default template will be used")
 	submitCmd.Flags().StringVarP(&type_, "type", "t", "job", "Workload type, one of [rayjob, rayservice]")
 	submitCmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "Print the generated workload manifest without submitting it")
@@ -120,6 +126,13 @@ func main() {
 		Short: "Port-forward a workload",
 		Run: func(cmd *cobra.Command, args []string) {
 			logrus.Info("Port-forward command placeholder")
+		},
+	})
+	rootCmd.AddCommand(&cobra.Command{
+		Use:   "delete",
+		Short: "Delete a workload",
+		Run: func(cmd *cobra.Command, args []string) {
+			logrus.Info("Delete command placeholder")
 		},
 	})
 

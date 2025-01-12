@@ -80,7 +80,7 @@ The installation of Kaiwo CLI tool is easy as it's a single binary. The only req
 
 ```bash
 chmod +x kaiwo
-mv kaiwo /usr/local/bin/
+sudo mv kaiwo /usr/local/bin/
 ```
 
 ## Usage
@@ -101,7 +101,9 @@ Kueue resource flavour(s)
 Kueue Cluster Queue
 Kueue Local Queue
 
-- code must be in /workload dir if already mounted in the image
+TODO, describe submit
+
+- code must be in /workload dir if code already mounted in the image
 - Describe commands and flags (Number of GPUs and path are required. Path must include entrypoint file at minimum)
 - Multi-node workloads become single-node by adjustting GPU requests (notice also changes to VLLM pipeline parallel)
 - recommendation to use separate cluster for online inference workloads (due to resource contention)
