@@ -63,6 +63,10 @@ func GenerateConfigMapFromDir(dir string, name string, namespace string, skipFil
 		data[file.Name()] = string(content)
 	}
 
+	if len(data) == 0 {
+		return nil, nil
+	}
+
 	configMap := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "v1",

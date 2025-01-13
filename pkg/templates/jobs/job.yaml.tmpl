@@ -6,6 +6,7 @@ metadata:
   labels:
     kueue.x-k8s.io/queue-name: {{ .Base.Queue }}
 spec:
+  ttlSecondsAfterFinished: {{ mul .Base.TtlMinAfterFinished 60 }}
   template:
     spec:
       restartPolicy: "Never"
@@ -13,6 +14,7 @@ spec:
       - name: {{ .Base.Name }}
         image: {{ .Base.Image }}
         imagePullPolicy: Always
+        {{- if .Workload.Entrypoint }}
         command: 
         - sh
         - -c

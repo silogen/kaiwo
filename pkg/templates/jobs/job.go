@@ -22,6 +22,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/silogen/ai-workload-orchestrator/pkg/utils"
 )
 
 //go:embed job.yaml.tmpl
@@ -55,5 +57,5 @@ func (r *JobLoader) DefaultTemplate() []byte {
 }
 
 func (r *JobLoader) IgnoreFiles() []string {
-	return []string{ENTRYPOINT_FILENAME}
+	return []string{ENTRYPOINT_FILENAME, utils.KAIWOCONFIG_FILENAME}
 }

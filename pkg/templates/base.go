@@ -34,6 +34,7 @@ type WorkloadArgs struct {
 	DryRun          bool
 	CreateNamespace bool
 	NoUploadFolder  bool
+	TtlMinAfterFinished int
 }
 
 func ValidateWorkloadArgs(args WorkloadArgs) error {

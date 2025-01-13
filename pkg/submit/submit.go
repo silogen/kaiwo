@@ -89,13 +89,13 @@ func Submit(args templates.WorkloadArgs) error {
 		}
 	}
 
-	// Handle config map generation
-	if !args.NoUploadFolder {
-		err := addConfigMapResource(args, loader, &resources)
-		if err != nil {
-			return err
-		}
+	
+	err = addConfigMapResource(args, loader, &resources)
+	
+	if err != nil {
+		return err
 	}
+
 
 	// Process workload template
 	err = processWorkloadTemplate(args, loader, &resources)
@@ -110,7 +110,6 @@ func Submit(args templates.WorkloadArgs) error {
 		if err != nil {
 			return fmt.Errorf("failed to apply resources: %w", err)
 		}
-		logrus.Info("Workload submitted successfully.")
 	}
 
 	return nil
@@ -173,12 +172,13 @@ func addNamespaceResource(args templates.WorkloadArgs, c dynamic.Interface, reso
 
 // addConfigMapResource adds a config map resource
 func addConfigMapResource(args templates.WorkloadArgs, loader templates.WorkloadLoader, resources *[]*unstructured.Unstructured) error {
-	logrus.Info("Generating ConfigMap from folder")
 	configMap, err := k8s.GenerateConfigMapFromDir(args.Path, args.Name, args.Namespace, loader.IgnoreFiles())
 	if err != nil {
 		return fmt.Errorf("failed to generate ConfigMap: %w", err)
 	}
-	*resources = append(*resources, configMap)
+	if configMap != nil {
+		*resources = append(*resources, configMap)
+	}
 	return nil
 }
 
@@ -266,27 +266,30 @@ func applyResources(resources []*unstructured.Unstructured, c dynamic.Interface)
 		// Try to create the resource
 		_, err := c.Resource(gvr).Namespace(namespace).Create(context.TODO(), resource, metav1.CreateOptions{})
 		if err == nil {
-			logrus.Infof("Resource %s/%s created successfully", namespace, resource.GetName())
+			logrus.Infof("%s/%s submitted successfully", resource.GetKind(), resource.GetName())
 			continue
+		} else {
+			logrus.Warnf("Skipping submit of %s/%s. Did you already submit it?", resource.GetKind(), resource.GetName())
 		}
 
 		if !apierrors.IsAlreadyExists(err) {
-			return fmt.Errorf("failed to apply resource %s/%s: %v", namespace, resource.GetName(), err)
+			return fmt.Errorf("failed to apply %s/%s: %v", resource.GetKind(), resource.GetName(), err)
 		}
 
+		// TODO: Rethink update logic which now fails with "immutable field" errors
 		// Resource already exists, update it
-		existing, err := c.Resource(gvr).Namespace(namespace).Get(context.TODO(), resource.GetName(), metav1.GetOptions{})
-		if err != nil {
-			return fmt.Errorf("failed to get existing resource %s/%s: %v", namespace, resource.GetName(), err)
-		}
+		// existing, err := c.Resource(gvr).Namespace(namespace).Get(context.TODO(), resource.GetName(), metav1.GetOptions{})
+		// if err != nil {
+		// 	return fmt.Errorf("failed to get existing %s/%s: %v", resource.GetKind(), resource.GetName(), err)
+		// }
 
-		resource.SetResourceVersion(existing.GetResourceVersion())
-		_, err = c.Resource(gvr).Namespace(namespace).Update(context.TODO(), resource, metav1.UpdateOptions{})
-		if err != nil {
-			return fmt.Errorf("failed to update resource %s/%s: %v", namespace, resource.GetName(), err)
-		}
+		// resource.SetResourceVersion(existing.GetResourceVersion())
+		// _, err = c.Resource(gvr).Namespace(namespace).Update(context.TODO(), resource, metav1.UpdateOptions{})
+		// if err != nil {
+		// 	return fmt.Errorf("failed to update %s/%s: %v", resource.GetKind(), resource.GetName(), err)
+		// }
 
-		logrus.Infof("Resource %s/%s updated successfully", namespace, resource.GetName())
+		// logrus.Infof("%s/%s updated successfully", resource.GetKind(), resource.GetName())
 	}
 	return nil
 }

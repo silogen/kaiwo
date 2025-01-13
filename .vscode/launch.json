@@ -24,6 +24,18 @@
 		  "GO111MODULE": "on"
 		},
 		"buildFlags": "-tags=debug"
+	      },
+	{
+		"name": "Submit live RayJob",
+		"type": "go",
+		"request": "launch",
+		"mode": "debug",
+		"program": "${workspaceFolder}",
+		"args": ["submit", "-p", "workloads/training/LLMs/lora-supervised-finetuning/ds-zero3-single-multinode", "-t", "rayjob", "-g", "4"],
+		"env": {
+		  "GO111MODULE": "on"
+		},
+		"buildFlags": "-tags=debug"
 	      }
 	]
       }

@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/silogen/ai-workload-orchestrator/pkg/utils"
 )
 
 //go:embed rayservice.yaml.tmpl
@@ -50,5 +52,5 @@ func (r *RayServiceLoader) DefaultTemplate() []byte {
 }
 
 func (r *RayServiceLoader) IgnoreFiles() []string {
-	return []string{SERVECONFIG_FILENAME}
+	return []string{SERVECONFIG_FILENAME, utils.KAIWOCONFIG_FILENAME}
 }
