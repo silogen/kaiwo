@@ -25,7 +25,7 @@ import (
 type WorkloadArgs struct {
 	Path            string
 	Image           string
-	Queue		string
+	Queue           string
 	Name            string
 	Namespace       string
 	Type            string

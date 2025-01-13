@@ -69,6 +69,10 @@ func Submit(args templates.WorkloadArgs) error {
 
 	args, loader, err := initializeLoader(args)
 
+	if err != nil {
+		return err
+	}
+
 	var c dynamic.Interface
 
 	if !args.DryRun {
@@ -79,7 +83,7 @@ func Submit(args templates.WorkloadArgs) error {
 		}
 	}
 
-	resources := []*unstructured.Unstructured{}
+	var resources []*unstructured.Unstructured
 
 	// Handle namespace creation
 	if args.CreateNamespace {

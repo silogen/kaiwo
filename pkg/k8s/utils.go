@@ -30,7 +30,7 @@ func isBinaryFile(content []byte) bool {
 	return bytes.Contains(content, []byte{0})
 }
 
-// Generate ConfigMap from a directory
+// GenerateConfigMapFromDir generates a ConfigMap from a directory
 func GenerateConfigMapFromDir(dir string, name string, namespace string, skipFiles []string) (*unstructured.Unstructured, error) {
 	files, err := os.ReadDir(dir)
 

@@ -2,12 +2,19 @@ package k8s
 
 import (
 	"fmt"
-	"os"
+	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
+	"os"
 	"path/filepath"
-	"github.com/sirupsen/logrus"
+	"sync"
+)
+
+var (
+	dynamicClient dynamic.Interface
+	initErr       error
+	once          sync.Once
 )
 
 func InitializeClient() (dynamic.Interface, error) {
@@ -29,4 +36,17 @@ func InitializeClient() (dynamic.Interface, error) {
 	}
 
 	return dynamicClient, nil
+}
+
+// GetDynamicClient provides a way to access the client without initializing it multiple times
+func GetDynamicClient() (dynamic.Interface, error) {
+	once.Do(func() {
+		client, err := InitializeClient()
+		if err != nil {
+			logrus.Fatalf("failed to initialize dynamic client: %v", err)
+		}
+		dynamicClient = client
+	})
+
+	return dynamicClient, initErr
 }
