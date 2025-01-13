@@ -75,12 +75,10 @@ func Submit(args templates.WorkloadArgs) error {
 
 	var c dynamic.Interface
 
-	if !args.DryRun {
-		logrus.Infof("Initializing Kubernetes client")
-		c, err = k8s.InitializeClient()
-		if err != nil {
-			return fmt.Errorf("failed to initialize Kubernetes client: %v", err)
-		}
+	logrus.Infof("Initializing Kubernetes client")
+	c, err = k8s.GetDynamicClient()
+	if err != nil {
+		return fmt.Errorf("failed to initialize Kubernetes client: %v", err)
 	}
 
 	var resources []*unstructured.Unstructured

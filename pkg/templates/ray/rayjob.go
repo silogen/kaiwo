@@ -21,6 +21,8 @@ import (
 	_ "embed"
 	"fmt"
 	"github.com/silogen/ai-workload-orchestrator/pkg/k8s"
+	"github.com/silogen/ai-workload-orchestrator/pkg/templates"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"os"
 	"path/filepath"
 )
@@ -70,4 +72,22 @@ func (r *JobLoader) DefaultTemplate() []byte {
 
 func (r *JobLoader) IgnoreFiles() []string {
 	return []string{EntrypointFilename}
+}
+
+func (r *JobLoader) ModifyResources(resources *[]*unstructured.Unstructured, args templates.WorkloadArgs) error {
+
+	c, err := k8s.GetDynamicClient()
+	if err != nil {
+		return err
+	}
+
+	// Handle kueue local queue
+	localQueue, err := k8s.PrepareLocalClusterQueue(args, c)
+	if err != nil {
+		return err
+	}
+
+	*resources = append(*resources, localQueue)
+
+	return nil
 }

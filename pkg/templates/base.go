@@ -17,8 +17,12 @@
 package templates
 
 import (
+	"context"
 	_ "embed"
 	"fmt"
+	"github.com/silogen/ai-workload-orchestrator/pkg/k8s"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic"
 )
 
 // WorkloadArgs is a struct that holds the high-level arguments used for all workloads
@@ -52,4 +56,7 @@ type WorkloadLoader interface {
 
 	// IgnoreFiles lists the files that should be ignored in the ConfigMap
 	IgnoreFiles() []string
+
+	// ModifyResources modifies the list of the workload template resources (loaded from the template file)
+	ModifyResources(resources *[]*unstructured.Unstructured, args WorkloadArgs) error
 }

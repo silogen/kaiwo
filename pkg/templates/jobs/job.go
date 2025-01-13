@@ -19,6 +19,7 @@ package jobs
 import (
 	_ "embed"
 	"fmt"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"os"
 	"path/filepath"
 	"strings"
@@ -42,10 +43,8 @@ func (r *JobLoader) Load(path string) error {
 	}
 
 	r.Entrypoint = strings.ReplaceAll(string(contents), "\n", " ") // Flatten multiline string
-	r.Entrypoint = strings.ReplaceAll(r.Entrypoint, "\"", "\\\"") // Escape double quotes
-	r.Entrypoint = fmt.Sprintf("\"%s\"", r.Entrypoint) // Wrap the entire command in quotes
-
-
+	r.Entrypoint = strings.ReplaceAll(r.Entrypoint, "\"", "\\\"")  // Escape double quotes
+	r.Entrypoint = fmt.Sprintf("\"%s\"", r.Entrypoint)             // Wrap the entire command in quotes
 
 	return nil
 }
@@ -56,4 +55,8 @@ func (r *JobLoader) DefaultTemplate() []byte {
 
 func (r *JobLoader) IgnoreFiles() []string {
 	return []string{ENTRYPOINT_FILENAME}
+}
+
+func (r *JobLoader) ModifyResources(resources *[]*unstructured.Unstructured) error {
+	return nil
 }
