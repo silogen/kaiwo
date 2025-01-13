@@ -17,24 +17,30 @@
 package ray
 
 import (
+	"context"
 	_ "embed"
 	"fmt"
+	"github.com/silogen/ai-workload-orchestrator/pkg/k8s"
+	"github.com/sirupsen/logrus"
 	"os"
 	"path/filepath"
 )
 
 //go:embed rayservice.yaml.tmpl
-var RayServiceTemplate []byte
+var ServiceTemplate []byte
 
-const SERVECONFIG_FILENAME = "serveconfig"
+const ServeconfigFilename = "serveconfig"
 
-type RayServiceLoader struct {
+type ServiceLoader struct {
 	Serveconfig string
+	Kueue       k8s.KueueArgs
 }
 
-func (r *RayServiceLoader) Load(path string) error {
+func (r *ServiceLoader) Load(path string) error {
 
-	contents, err := os.ReadFile(filepath.Join(path, SERVECONFIG_FILENAME))
+	logrus.Debugf("Loading ray service from %s", path)
+
+	contents, err := os.ReadFile(filepath.Join(path, ServeconfigFilename))
 
 	if err != nil {
 		return fmt.Errorf("failed to read serveconfig file: %w", err)
@@ -42,13 +48,32 @@ func (r *RayServiceLoader) Load(path string) error {
 
 	r.Serveconfig = string(contents)
 
+	client, err := k8s.GetDynamicClient()
+
+	if err != nil {
+		return err
+	}
+
+	logrus.Debug("Fetching GPU count")
+	gpuCount, err := k8s.GetDefaultResourceFlavorGpuCount(context.TODO(), client)
+
+	if err != nil {
+		return err
+	}
+
+	logrus.Debugf("Fetched GPU count: %d", gpuCount)
+
+	r.Kueue = k8s.KueueArgs{
+		NodeGpuCount: gpuCount,
+	}
+
 	return nil
 }
 
-func (r *RayServiceLoader) DefaultTemplate() []byte {
-	return RayServiceTemplate
+func (r *ServiceLoader) DefaultTemplate() []byte {
+	return ServiceTemplate
 }
 
-func (r *RayServiceLoader) IgnoreFiles() []string {
-	return []string{SERVECONFIG_FILENAME}
+func (r *ServiceLoader) IgnoreFiles() []string {
+	return []string{ServeconfigFilename}
 }

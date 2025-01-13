@@ -48,7 +48,7 @@ spec:
               configMap:
                 name: {{ .Base.Name }}
     workerGroupSpecs:
-      - replicas: 1
+      - replicas: {{ add (div .Base.GPUs .Workload.Kueue.NodeGpuCount) 1 }}
         minReplicas: 1
         maxReplicas: 4
         groupName: gpu-group

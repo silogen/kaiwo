@@ -17,24 +17,27 @@
 package ray
 
 import (
+	"context"
 	_ "embed"
 	"fmt"
+	"github.com/silogen/ai-workload-orchestrator/pkg/k8s"
 	"os"
 	"path/filepath"
 )
 
 //go:embed rayjob.yaml.tmpl
-var RayJobTemplate []byte
+var JobTemplate []byte
 
-const ENTRYPOINT_FILENAME = "entrypoint"
+const EntrypointFilename = "entrypoint"
 
-type RayJobLoader struct {
+type JobLoader struct {
 	Entrypoint string
+	Kueue      k8s.KueueArgs
 }
 
-func (r *RayJobLoader) Load(path string) error {
+func (r *JobLoader) Load(path string) error {
 
-	contents, err := os.ReadFile(filepath.Join(path, ENTRYPOINT_FILENAME))
+	contents, err := os.ReadFile(filepath.Join(path, EntrypointFilename))
 
 	if err != nil {
 		return fmt.Errorf("failed to read entrypoint file: %w", err)
@@ -42,13 +45,29 @@ func (r *RayJobLoader) Load(path string) error {
 
 	r.Entrypoint = string(contents)
 
+	client, err := k8s.GetDynamicClient()
+
+	if err != nil {
+		return err
+	}
+
+	gpuCount, err := k8s.GetDefaultResourceFlavorGpuCount(context.TODO(), client)
+
+	if err != nil {
+		return err
+	}
+
+	r.Kueue = k8s.KueueArgs{
+		NodeGpuCount: gpuCount,
+	}
+
 	return nil
 }
 
-func (r *RayJobLoader) DefaultTemplate() []byte {
-	return RayJobTemplate
+func (r *JobLoader) DefaultTemplate() []byte {
+	return JobTemplate
 }
 
-func (r *RayJobLoader) IgnoreFiles() []string {
-	return []string{ENTRYPOINT_FILENAME}
+func (r *JobLoader) IgnoreFiles() []string {
+	return []string{EntrypointFilename}
 }

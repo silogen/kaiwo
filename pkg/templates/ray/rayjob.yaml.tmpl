@@ -79,7 +79,7 @@ spec:
                 medium: Memory
                 sizeLimit: 200Gi
     workerGroupSpecs:
-      - replicas: 1
+      - replicas: {{ add (div .Base.GPUs .Workload.Kueue.NodeGpuCount) 1 }}
         minReplicas: 1
         maxReplicas: 1
         groupName: small-group
