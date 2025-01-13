@@ -121,6 +121,8 @@ Or, you may want to mount code from a github repo at runtime and only modify the
 
 `kaiwo submit -i my-registry/my_image -p path_to_entrypoint_directory -g 8`
 
+One important note about GPU requests: it is up to the user to ensure that the code can run on the requested number of GPUs. If the code is not written to run on the requested number of GPUs, the job will fail. Note that some parallelized code may only work on a specific number of GPUs such as 1, 2, 4, 8, 16, 32 but not 3, 5, 7, 9 etc. If you are unsure, start with a single GPU and scale up as needed.
+
 TODO, describe
 
 - Note about typical secrets and environment variables (s3 keys, HF TOKEN, etc)

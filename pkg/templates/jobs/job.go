@@ -39,6 +39,10 @@ func (r *JobLoader) Load(path string) error {
 
 	contents, err := os.ReadFile(filepath.Join(path, ENTRYPOINT_FILENAME))
 
+	if contents == nil {
+		return nil
+	}
+
 	if err != nil {
 		return fmt.Errorf("failed to read entrypoint file: %w", err)
 	}

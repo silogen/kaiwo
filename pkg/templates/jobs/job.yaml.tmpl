@@ -19,6 +19,7 @@ spec:
         - sh
         - -c
         - {{ .Workload.Entrypoint }}
+        {{- end }}
         env:
           - name: AWS_ACCESS_KEY_ID
             valueFrom:

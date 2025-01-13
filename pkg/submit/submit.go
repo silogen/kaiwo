@@ -48,19 +48,31 @@ type TemplateConfig struct {
 	Workload templates.WorkloadLoader
 }
 
-func getLastPartOfPath(path string) string {
-	lastPart := filepath.Base(path)
-	return strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(lastPart, "/", "-"), "_", "-"))
+func sanitizeStringForKubernetes(path string) string {
+	replacer := strings.NewReplacer(
+		":", "-",
+		"/", "-",
+		"_", "-",
+		".", "-",
+	)
+	return strings.ToLower(replacer.Replace(path))
 }
 
-func setWorkloadName(workloadName string, path string) string {
+func setWorkloadName(workloadName string, path string, image string) string {
 	if workloadName == "" {
 		currentUser, err := user.Current()
 		if err != nil {
 			panic(fmt.Sprintf("Failed to fetch the current user: %v", err))
 		}
-		lastPartFromPath := getLastPartOfPath(path)
-		return strings.Join([]string{currentUser.Username, lastPartFromPath}, "-")
+
+		var appendix string
+		
+		if path != "" {
+			appendix = sanitizeStringForKubernetes(filepath.Base(path))
+		} else {
+			appendix = sanitizeStringForKubernetes(image)
+		}
+		return strings.Join([]string{currentUser.Username, appendix}, "-")
 	}
 	return workloadName
 }
@@ -89,14 +101,13 @@ func Submit(args templates.WorkloadArgs) error {
 		}
 	}
 
-	
-	err = addConfigMapResource(args, loader, &resources)
-	
-	if err != nil {
-		return err
+	if args.Path != "" {
+		err = addConfigMapResource(args, loader, &resources)
+		if err != nil {
+			return err
+		}
 	}
-
-
+	
 	// Process workload template
 	err = processWorkloadTemplate(args, loader, &resources)
 	if err != nil {
@@ -121,16 +132,17 @@ func initializeLoader(args templates.WorkloadArgs) (templates.WorkloadArgs, temp
 		return args, nil, err
 	}
 
-	args.Name = setWorkloadName(args.Name, args.Path)
+	args.Name = setWorkloadName(args.Name, args.Path, args.Image)
 
 	if args.Type == "" {
 		args.Type = "job"
 	}
 
 	loader := templates.GetWorkloadLoader(args.Type)
-
-	if err := loader.Load(args.Path); err != nil {
-		return args, nil, fmt.Errorf("failed to load workload: %w", err)
+	if args.Path != "" {
+		if err := loader.Load(args.Path); err != nil {
+			return args, nil, fmt.Errorf("failed to load workload: %w", err)
+		}
 	}
 
 	return args, loader, nil
