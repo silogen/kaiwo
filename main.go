@@ -42,6 +42,7 @@ Kubernetes-native AI Workload Orchestrator
 var (
 	path            string
 	image           string
+	queue		string
 	name            string
 	namespace       string
 	type_           string
@@ -53,6 +54,7 @@ var (
 )
 
 const defaultImage = "ghcr.io/silogen/rocm-ray:v0.4"
+const defaultQueue = "kaiwo"
 
 func main() {
 	fmt.Fprint(os.Stderr, kaiwoBanner)
@@ -73,6 +75,7 @@ func main() {
 			var workloadArgs templates.WorkloadArgs = templates.WorkloadArgs{
 				Path:            path,
 				Image:           image,
+				Queue: 		 queue,
 				Name:            name,
 				Namespace:       namespace,
 				TemplatePath:    template,
@@ -97,6 +100,7 @@ func main() {
 	}
 	submitCmd.Flags().StringVarP(&path, "path", "p", "", "Path to workload code and entrypoint/serveconfig. Format: workloads/workload_type/modality/method_type/workload_code_directory")
 	submitCmd.Flags().StringVarP(&image, "image", "i", defaultImage, "Container image to use. Defaults to ghcr.io/silogen/rocm-ray:vx.x")
+	submitCmd.Flags().StringVarP(&queue, "queue", "i", defaultQueue, "ClusterQueue to use. Defaults to queue")
 	submitCmd.Flags().StringVarP(&name, "name", "", "", "Kubenetes name to use for the workflow")
 	submitCmd.Flags().StringVarP(&namespace, "namespace", "n", "kaiwo", "Kubenetes namespace to use. Defaults to `kaiwo`")
 	submitCmd.Flags().BoolVarP(&createNamespace, "create-namespace", "", false, "Create namespace if it does not exist")

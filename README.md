@@ -9,7 +9,7 @@ Kubernetes-native AI Workload Orchestrator
 
 # Kaiwo - Kubernetes-native AI Workload Orchestrator to accelerate GPU workloads
 
-🚀️🚀️ Aiwo supports ***AMD*** GPUs! 🚀️🚀️
+🚀️🚀️ Kaiwo supports ***AMD*** GPUs! 🚀️🚀️
 
 ⚠️ **Caveat: Heavy Development in Progress** ⚠️
 
@@ -85,28 +85,40 @@ sudo mv kaiwo /usr/local/bin/
 
 ## Usage
 
-At the moment, Kaiwo can submit three types of workloads to Kubernetes
+Run `kaiwo --help` for an overview of currently available commands.
 
-- Standard Jobs
+### Before running workloads with Kaiwo
+
+Kaiwo uses Kueue to manage job queuing. Make sure your cluster-admin has created two necessary Kueue resources on the cluster: `ResourceFlavor` and `ClusterQueue`. Manifests for these can be found under `cluster-admins` directory. By default, kaiwo will always submit workloads to `kaiwo` ClusterQueue if no other queue is provided with `-q`or`--queue` option during `kaiwo submit`. Kaiwo will automatically create the namespaced `LocalQueue` resource if it doesn't exist. Speak to your cluster-admin if you are unsure which `ClusterQueue` is allocated to your team.
+
+### kaiwo submit
+
+`workloads` directory includes examples with code for different types workloads that you can submit with `kaiwo submit`. At the moment, Kaiwo can submit three types of workloads to Kubernetes
+
+- Standard Kubernetes Jobs
 - RayJobs
 - RayServices
 
-`workloads` directory includes examples with code for different types workloads
+RayServices are intended for online inference. They bypass job queues. We recommend running them in a separate cluster as services are constantly running and therefore reserve compute resources 24/7.
 
-Before submitting workloads
+RayJobs and RayServices require using `-p` or `--path` option. Kaiwo will look for `rayjob-entrypoint` or `rayservice-serviceconfig` files in these paths to determine which one is in question. Kubernetes Job is the default workload type if no `-p` option is provided or if `rayjob-entrypoint` or `rayservice-serviceconfig` files are not found in the path.
 
-TODO, describe init
+Run `kaiwo submit --help` for an overview of available options. To get started with a workload, first make sure that your code (e.g. finetuning script) works with the number of GPUs that you request via `kaiwo submit`.  For example, the following command will run the code found in `path` as a RayJob on 16 GPUs.
 
-Kueue resource flavour(s)
-Kueue Cluster Queue
-Kueue Local Queue
+`kaiwo submit -p workloads/training/LLMs/lora-supervised-finetuning/ds-zero3-single-multinode -g 16`
 
-TODO, describe submit
+By default, this will run in `kaiwo` namespace unless another namespace is provided with `-n` or `--namespace` option. If the provided namespace doesn't exist, use `--create-namespace` flag.
 
-- code must be in /workload dir if code already mounted in the image
-- Describe commands and flags (Number of GPUs and path are required. Path must include entrypoint file at minimum)
-- Multi-node workloads become single-node by adjustting GPU requests (notice also changes to VLLM pipeline parallel)
-- recommendation to use separate cluster for online inference workloads (due to resource contention)
+You can also run a workload by just passing `--image` or `-i` flag.
+
+`kaiwo submit -i my-registry/my_image -g 8`
+
+Or, you may want to mount code from a github repo at runtime and only modify the entrypoint for the running container. In such a case and when submitting a standard Kubernetes Job, add `entrypoint` file to `--path` directory and submit your workload like so
+
+`kaiwo submit -i my-registry/my_image -p path_to_entrypoint_directory -g 8`
+
+TODO, describe 
+
 - Note about typical secrets and environment variables (s3 keys, HF TOKEN, etc)
 - Note about how secrets are managed (ExternalSecrets, etc)
 
