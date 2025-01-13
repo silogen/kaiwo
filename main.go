@@ -56,7 +56,13 @@ const defaultImage = "ghcr.io/silogen/rocm-ray:v0.4"
 const defaultQueue = "kaiwo"
 
 func main() {
-	fmt.Fprint(os.Stderr, kaiwoBanner)
+
+	_, err := fmt.Fprint(os.Stderr, kaiwoBanner)
+
+	if err != nil {
+		logrus.Fatal(err)
+	}
+
 	logrus.SetFormatter(&logrus.TextFormatter{
 		FullTimestamp: true,
 	})
