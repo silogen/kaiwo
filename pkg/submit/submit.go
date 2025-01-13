@@ -113,7 +113,6 @@ func Submit(args utils.WorkloadArgs) error {
 		}
 	}
 
-
 	// Process workload template
 	err = processWorkloadTemplate(args, loader, &resources)
 	if err != nil {
