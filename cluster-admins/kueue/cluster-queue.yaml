@@ -1,13 +1,13 @@
 apiVersion: kueue.x-k8s.io/v1beta1
 kind: ClusterQueue
 metadata:
-  name: "gpu-queue"
+  name: kaiwo
 spec:
   namespaceSelector: {} # match all.
   resourceGroups:
   - coveredResources: ["cpu", "memory", "amd.com/gpu", "ephemeral-storage"]
     flavors:
-    - name: "base-gpu-flavour"
+    - name: base-gpu-flavour
       resources:
       - name: "cpu"
         nominalQuota: 400

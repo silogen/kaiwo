@@ -3,6 +3,8 @@ kind: Job
 metadata:
   name: {{ .Base.Name }}
   namespace: {{ .Base.Namespace }}
+  labels:
+    kueue.x-k8s.io/queue-name: {{ .Base.Queue }}
 spec:
   template:
     spec:

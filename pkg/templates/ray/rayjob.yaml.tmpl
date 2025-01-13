@@ -4,7 +4,7 @@ metadata:
   name: {{ .Base.Name }}
   namespace: {{ .Base.Namespace }}
   labels:
-    kueue.x-k8s.io/queue-name: gpu-queue
+    kueue.x-k8s.io/queue-name: {{ .Base.Queue }}
 spec:
   shutdownAfterJobFinishes: true
   entrypoint: |
