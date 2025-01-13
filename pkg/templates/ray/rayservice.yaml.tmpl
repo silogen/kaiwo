@@ -22,15 +22,6 @@ spec:
                     secretKeyRef:
                       name: hf-token
                       key: hf-token
-              resources:
-                limits:
-                    cpu: "{{ mul .Base.GPUs 4 }}"
-                    memory: "{{ mul .Base.GPUs 32 }}Gi"
-                    amd.com/gpu: "{{ .Base.GPUs }}"
-                requests:
-                    cpu: "{{ mul .Base.GPUs 4 }}"
-                    memory: "{{ mul .Base.GPUs 32 }}Gi"
-                    amd.com/gpu: "{{ .Base.GPUs }}"
               volumeMounts:
                 - mountPath: /workload
                   name: app-mount

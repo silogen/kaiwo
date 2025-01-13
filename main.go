@@ -18,6 +18,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/silogen/ai-workload-orchestrator/pkg/utils"
 	"os"
 	"slices"
 
@@ -57,11 +58,7 @@ const defaultQueue = "kaiwo"
 
 func main() {
 
-	_, err := fmt.Fprint(os.Stderr, kaiwoBanner)
-
-	if err != nil {
-		logrus.Fatal(err)
-	}
+	_, _ = fmt.Fprint(os.Stderr, kaiwoBanner)
 
 	logrus.SetFormatter(&logrus.TextFormatter{
 		FullTimestamp: true,
@@ -77,7 +74,7 @@ func main() {
 		Short: "Submit a workload",
 		Run: func(cmd *cobra.Command, args []string) {
 
-			var workloadArgs templates.WorkloadArgs = templates.WorkloadArgs{
+			var workloadArgs utils.WorkloadArgs = utils.WorkloadArgs{
 				Path:            path,
 				Image:           image,
 				Queue:           queue,

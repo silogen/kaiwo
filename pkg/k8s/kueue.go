@@ -3,7 +3,7 @@ package k8s
 import (
 	"context"
 	"fmt"
-	"github.com/silogen/ai-workload-orchestrator/pkg/templates"
+	"github.com/silogen/ai-workload-orchestrator/pkg/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -108,7 +108,7 @@ func GetDefaultClusterQueue(ctx context.Context, client dynamic.Interface) (*kue
 	return &clusterQueues[0], nil
 }
 
-func PrepareLocalClusterQueue(args templates.WorkloadArgs, c dynamic.Interface) (*unstructured.Unstructured, error) {
+func PrepareLocalClusterQueue(args utils.WorkloadArgs, c dynamic.Interface) (*unstructured.Unstructured, error) {
 	clusterQueue, err := GetDefaultClusterQueue(context.TODO(), c)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get default cluster queue: %w", err)

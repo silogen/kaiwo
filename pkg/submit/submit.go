@@ -19,6 +19,7 @@ package submit
 import (
 	"context"
 	"fmt"
+	"github.com/silogen/ai-workload-orchestrator/pkg/utils"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -42,7 +43,7 @@ import (
 // TODO clarify naming?
 type TemplateConfig struct {
 	// The base workload args
-	Base templates.WorkloadArgs
+	Base utils.WorkloadArgs
 
 	// The type-specific workload args
 	Workload templates.WorkloadLoader
@@ -65,7 +66,7 @@ func setWorkloadName(workloadName string, path string) string {
 	return workloadName
 }
 
-func Submit(args templates.WorkloadArgs) error {
+func Submit(args utils.WorkloadArgs) error {
 
 	args, loader, err := initializeLoader(args)
 
@@ -119,7 +120,7 @@ func Submit(args templates.WorkloadArgs) error {
 }
 
 // initializeLoader validates and initializes the workload loader
-func initializeLoader(args templates.WorkloadArgs) (templates.WorkloadArgs, templates.WorkloadLoader, error) {
+func initializeLoader(args utils.WorkloadArgs) (utils.WorkloadArgs, templates.WorkloadLoader, error) {
 	if err := templates.ValidateWorkloadArgs(args); err != nil {
 		return args, nil, err
 	}
@@ -140,7 +141,7 @@ func initializeLoader(args templates.WorkloadArgs) (templates.WorkloadArgs, temp
 }
 
 // addNamespaceResource adds a namespace resource if needed
-func addNamespaceResource(args templates.WorkloadArgs, c dynamic.Interface, resources *[]*unstructured.Unstructured) error {
+func addNamespaceResource(args utils.WorkloadArgs, c dynamic.Interface, resources *[]*unstructured.Unstructured) error {
 	namespace := unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "v1",
@@ -174,7 +175,7 @@ func addNamespaceResource(args templates.WorkloadArgs, c dynamic.Interface, reso
 }
 
 // addConfigMapResource adds a config map resource
-func addConfigMapResource(args templates.WorkloadArgs, loader templates.WorkloadLoader, resources *[]*unstructured.Unstructured) error {
+func addConfigMapResource(args utils.WorkloadArgs, loader templates.WorkloadLoader, resources *[]*unstructured.Unstructured) error {
 	logrus.Info("Generating ConfigMap from folder")
 	configMap, err := k8s.GenerateConfigMapFromDir(args.Path, args.Name, args.Namespace, loader.IgnoreFiles())
 	if err != nil {
@@ -185,7 +186,7 @@ func addConfigMapResource(args templates.WorkloadArgs, loader templates.Workload
 }
 
 // processWorkloadTemplate renders and parses the workload template
-func processWorkloadTemplate(args templates.WorkloadArgs, loader templates.WorkloadLoader, resources *[]*unstructured.Unstructured) error {
+func processWorkloadTemplate(args utils.WorkloadArgs, loader templates.WorkloadLoader, resources *[]*unstructured.Unstructured) error {
 	var workloadTemplate []byte
 	var err error
 

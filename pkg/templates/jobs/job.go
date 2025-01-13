@@ -19,6 +19,7 @@ package jobs
 import (
 	_ "embed"
 	"fmt"
+	"github.com/silogen/ai-workload-orchestrator/pkg/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"os"
 	"path/filepath"
@@ -57,6 +58,6 @@ func (r *JobLoader) IgnoreFiles() []string {
 	return []string{ENTRYPOINT_FILENAME}
 }
 
-func (r *JobLoader) ModifyResources(resources *[]*unstructured.Unstructured) error {
+func (r *JobLoader) ModifyResources(resources *[]*unstructured.Unstructured, args utils.WorkloadArgs) error {
 	return nil
 }

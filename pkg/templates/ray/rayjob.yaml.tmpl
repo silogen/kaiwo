@@ -47,15 +47,6 @@ spec:
                   name: client
                 - containerPort: 8000
                   name: serve
-              resources:
-                limits:
-                    cpu: "{{ mul .Base.GPUs 4 }}"
-                    memory: "{{ mul .Base.GPUs 32 }}Gi"
-                    amd.com/gpu: "{{ .Base.GPUs }}"
-                requests:
-                    cpu: "{{ mul .Base.GPUs 4 }}"
-                    memory: "{{ mul .Base.GPUs 32 }}Gi"
-                    amd.com/gpu: "{{ .Base.GPUs }}"
               volumeMounts:
                   - mountPath: /workload
                     name: workload
@@ -80,8 +71,9 @@ spec:
                 sizeLimit: 200Gi
     workerGroupSpecs:
       - replicas: {{ add (div .Base.GPUs .Workload.Kueue.NodeGpuCount) 1 }}
-        minReplicas: 1
-        maxReplicas: 1
+        # Not used as enableInTreeAutoscaling is false
+        # minReplicas: 1
+        # maxReplicas: 1
         groupName: small-group
         rayStartParams: {}
         template:

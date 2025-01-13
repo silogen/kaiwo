@@ -21,6 +21,7 @@ import (
 	_ "embed"
 	"fmt"
 	"github.com/silogen/ai-workload-orchestrator/pkg/k8s"
+	"github.com/silogen/ai-workload-orchestrator/pkg/utils"
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"os"
@@ -79,6 +80,6 @@ func (r *ServiceLoader) IgnoreFiles() []string {
 	return []string{ServeconfigFilename}
 }
 
-func (r *ServiceLoader) ModifyResources(resources *[]*unstructured.Unstructured) error {
+func (r *ServiceLoader) ModifyResources(resources *[]*unstructured.Unstructured, args utils.WorkloadArgs) error {
 	return nil
 }
