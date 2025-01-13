@@ -113,10 +113,6 @@ func Submit(args utils.WorkloadArgs) error {
 		}
 	}
 
-	// Modify resources based on the loader type
-	if err := loader.AdditionalResources(&resources, args); err != nil {
-		return err
-	}
 
 	// Process workload template
 	err = processWorkloadTemplate(args, loader, &resources)
@@ -291,6 +287,8 @@ func applyResources(resources []*unstructured.Unstructured, c dynamic.Interface)
 		if err == nil {
 			logrus.Infof("%s/%s submitted successfully", resource.GetKind(), resource.GetName())
 			continue
+		} else {
+			logrus.Warnf("Skipping submit of %s/%s. Did you already submit it?", resource.GetKind(), resource.GetName())
 		}
 
 		if !apierrors.IsAlreadyExists(err) {
