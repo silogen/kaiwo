@@ -280,28 +280,19 @@ func applyResources(resources []*unstructured.Unstructured, c dynamic.Interface)
 		if err == nil {
 			logrus.Infof("%s/%s submitted successfully", resource.GetKind(), resource.GetName())
 			continue
-		} else {
-			logrus.Warnf("Skipping submit of %s/%s. Did you already submit it?", resource.GetKind(), resource.GetName())
-		}
+		} 
 
 		if !apierrors.IsAlreadyExists(err) {
 			return fmt.Errorf("failed to apply %s/%s: %v", resource.GetKind(), resource.GetName(), err)
 		}
 
 		// TODO: Rethink update logic which now fails with "immutable field" errors
-		// Resource already exists, update it
-		// existing, err := c.Resource(gvr).Namespace(namespace).Get(context.TODO(), resource.GetName(), metav1.GetOptions{})
-		// if err != nil {
-		// 	return fmt.Errorf("failed to get existing %s/%s: %v", resource.GetKind(), resource.GetName(), err)
-		// }
+		existing, err := c.Resource(gvr).Namespace(namespace).Get(context.TODO(), resource.GetName(), metav1.GetOptions{})
+		if err != nil {
+			continue
+		}
 
-		// resource.SetResourceVersion(existing.GetResourceVersion())
-		// _, err = c.Resource(gvr).Namespace(namespace).Update(context.TODO(), resource, metav1.UpdateOptions{})
-		// if err != nil {
-		// 	return fmt.Errorf("failed to update %s/%s: %v", resource.GetKind(), resource.GetName(), err)
-		// }
-
-		// logrus.Infof("%s/%s updated successfully", resource.GetKind(), resource.GetName())
+		logrus.Warnf("%s/%s already exists. Skipping submit", existing.GetKind(), existing.GetName())
 	}
 	return nil
 }
