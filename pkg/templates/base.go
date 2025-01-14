@@ -19,24 +19,11 @@ package templates
 import (
 	_ "embed"
 	"fmt"
+	"github.com/silogen/ai-workload-orchestrator/pkg/utils"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-// WorkloadArgs is a struct that holds the high-level arguments used for all workloads
-type WorkloadArgs struct {
-	Path            string
-	Image           string
-	Queue		string
-	Name            string
-	Namespace       string
-	Type            string
-	GPUs            int
-	TemplatePath    string
-	DryRun          bool
-	CreateNamespace bool
-	TtlMinAfterFinished int
-}
-
-func ValidateWorkloadArgs(args WorkloadArgs) error {
+func ValidateWorkloadArgs(args utils.WorkloadArgs) error {
 	if args.GPUs <= 0 {
 		return fmt.Errorf("invalid flags: --gpus must be greater than 0")
 	}
@@ -50,11 +37,14 @@ func ValidateWorkloadArgs(args WorkloadArgs) error {
 
 type WorkloadLoader interface {
 	// Load loads a workload from a path
-	Load(path string) error
+	Load(args utils.WorkloadArgs) error
 
 	// DefaultTemplate returns the default template for the workloader
 	DefaultTemplate() []byte
 
 	// IgnoreFiles lists the files that should be ignored in the ConfigMap
 	IgnoreFiles() []string
+
+	// AdditionalResources adds additional resources needed by the worker
+	AdditionalResources(resources *[]*unstructured.Unstructured, args utils.WorkloadArgs) error
 }

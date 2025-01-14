@@ -17,26 +17,32 @@
 package ray
 
 import (
+	"context"
 	_ "embed"
 	"fmt"
+	"github.com/silogen/ai-workload-orchestrator/pkg/k8s"
+	"github.com/silogen/ai-workload-orchestrator/pkg/utils"
+	"github.com/sirupsen/logrus"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"os"
 	"path/filepath"
-
-	"github.com/silogen/ai-workload-orchestrator/pkg/utils"
 )
 
 //go:embed rayservice.yaml.tmpl
-var RayServiceTemplate []byte
+var ServiceTemplate []byte
 
-const SERVECONFIG_FILENAME = "serveconfig"
+const ServeconfigFilename = "serveconfig"
 
-type RayServiceLoader struct {
+type ServiceLoader struct {
 	Serveconfig string
+	Kueue       k8s.KueueArgs
 }
 
-func (r *RayServiceLoader) Load(path string) error {
+func (r *ServiceLoader) Load(args utils.WorkloadArgs) error {
 
-	contents, err := os.ReadFile(filepath.Join(path, SERVECONFIG_FILENAME))
+	logrus.Debugf("Loading ray service from %s", args.Path)
+
+	contents, err := os.ReadFile(filepath.Join(args.Path, ServeconfigFilename))
 
 	if err != nil {
 		return fmt.Errorf("failed to read serveconfig file: %w", err)
@@ -44,13 +50,41 @@ func (r *RayServiceLoader) Load(path string) error {
 
 	r.Serveconfig = string(contents)
 
+	client, err := k8s.GetDynamicClient()
+
+	if err != nil {
+		return err
+	}
+
+	logrus.Debug("Fetching GPU count")
+	// TODO make labelKey dynamic
+	gpuCount, err := k8s.GetDefaultResourceFlavorGpuCount(context.TODO(), client, "beta.amd.com/gpu.family.AI")
+
+	if err != nil {
+		return err
+	}
+
+	logrus.Debugf("Fetched GPU count: %d", gpuCount)
+
+	numReplicas, nodeGpuRequest := k8s.CalculateNumberOfReplicas(args.GPUs, gpuCount)
+
+	r.Kueue = k8s.KueueArgs{
+		GPUsAvailablePerNode:    gpuCount,
+		RequestedGPUsPerReplica: nodeGpuRequest,
+		RequestedNumReplicas:    numReplicas,
+	}
+
 	return nil
 }
 
-func (r *RayServiceLoader) DefaultTemplate() []byte {
-	return RayServiceTemplate
+func (r *ServiceLoader) DefaultTemplate() []byte {
+	return ServiceTemplate
 }
 
-func (r *RayServiceLoader) IgnoreFiles() []string {
-	return []string{SERVECONFIG_FILENAME, utils.KAIWOCONFIG_FILENAME}
+func (r *ServiceLoader) IgnoreFiles() []string {
+	return []string{ServeconfigFilename, utils.KaiwoconfigFilename}
+}
+
+func (r *ServiceLoader) AdditionalResources(resources *[]*unstructured.Unstructured, args utils.WorkloadArgs) error {
+	return nil
 }

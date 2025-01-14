@@ -18,6 +18,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/silogen/ai-workload-orchestrator/pkg/utils"
 	"os"
 	"slices"
 
@@ -38,18 +39,17 @@ Kubernetes-native AI Workload Orchestrator
 
 `
 
-
 var (
-	path            string
-	image           string
-	queue		string
-	name            string
-	namespace       string
-	type_           string
-	template        string
-	gpus            int
-	dryRun          bool
-	createNamespace bool
+	path                string
+	image               string
+	queue               string
+	name                string
+	namespace           string
+	type_               string
+	template            string
+	gpus                int
+	dryRun              bool
+	createNamespace     bool
 	ttlMinAfterFinished int
 )
 
@@ -58,7 +58,9 @@ const defaultQueue = "kaiwo"
 const defaultTtlMinAfterFinished = 2880
 
 func main() {
+
 	fmt.Fprint(os.Stderr, kaiwoBanner)
+
 	logrus.SetFormatter(&logrus.TextFormatter{
 		FullTimestamp: true,
 	})
@@ -73,19 +75,18 @@ func main() {
 		Short: "Submit a workload",
 		Run: func(cmd *cobra.Command, args []string) {
 
-			var workloadArgs templates.WorkloadArgs = templates.WorkloadArgs{
-				Path:            path,
-				Image:           image,
-				Queue: 		 queue,
-				Name:            name,
-				Namespace:       namespace,
-				TemplatePath:    template,
-				Type:            type_,
-				GPUs:            gpus,
-				DryRun:          dryRun,
-				CreateNamespace: createNamespace,
+			var workloadArgs utils.WorkloadArgs = utils.WorkloadArgs{
+				Path:                path,
+				Image:               image,
+				Queue:               queue,
+				Name:                name,
+				Namespace:           namespace,
+				TemplatePath:        template,
+				Type:                type_,
+				GPUs:                gpus,
+				DryRun:              dryRun,
+				CreateNamespace:     createNamespace,
 				TtlMinAfterFinished: ttlMinAfterFinished,
-				
 			}
 			if err := submit.Submit(workloadArgs); err != nil {
 				logrus.Fatalf("Failed to submit workload: %v", err)
@@ -106,7 +107,7 @@ func main() {
 	submitCmd.Flags().StringVarP(&name, "name", "", "", "Kubenetes name to use for the workflow")
 	submitCmd.Flags().StringVarP(&namespace, "namespace", "n", "kaiwo", "Kubenetes namespace to use. Defaults to `kaiwo`")
 	submitCmd.Flags().BoolVarP(&createNamespace, "create-namespace", "", false, "Create namespace if it does not exist")
-	submitCmd.Flags().IntVarP(&ttlMinAfterFinished, "ttl-minutes-after-finished", "", 2880, "Cleanup finished Jobs after minutes. Defaults to 48h (2880 min)")
+	submitCmd.Flags().IntVarP(&ttlMinAfterFinished, "ttl-minutes-after-finished", "", defaultTtlMinAfterFinished, "Cleanup finished Jobs after minutes. Defaults to 48h (2880 min)")
 	submitCmd.Flags().StringVarP(&template, "template", "", "", "Path to a custom template to use for the workload. If not provided, a default template will be used")
 	submitCmd.Flags().StringVarP(&type_, "type", "t", "job", "Workload type, one of [rayjob, rayservice]")
 	submitCmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "Print the generated workload manifest without submitting it")

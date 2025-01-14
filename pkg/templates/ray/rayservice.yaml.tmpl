@@ -22,15 +22,6 @@ spec:
                     secretKeyRef:
                       name: hf-token
                       key: hf-token
-              resources:
-                limits:
-                    cpu: "{{ mul .Base.GPUs 4 }}"
-                    memory: "{{ mul .Base.GPUs 32 }}Gi"
-                    amd.com/gpu: "{{ .Base.GPUs }}"
-                requests:
-                    cpu: "{{ mul .Base.GPUs 4 }}"
-                    memory: "{{ mul .Base.GPUs 32 }}Gi"
-                    amd.com/gpu: "{{ .Base.GPUs }}"
               volumeMounts:
                 - mountPath: /workload
                   name: app-mount
@@ -48,9 +39,9 @@ spec:
               configMap:
                 name: {{ .Base.Name }}
     workerGroupSpecs:
-      - replicas: 1
-        minReplicas: 1
-        maxReplicas: 4
+      - replicas: {{ .Workload.Kueue.RequestedNumReplicas }}
+        # minReplicas: 1
+        # maxReplicas: 4
         groupName: gpu-group
         rayStartParams: {}
         template:
@@ -70,13 +61,13 @@ spec:
                         key: hf-token
                 resources:
                     limits:
-                        cpu: "{{ mul .Base.GPUs 4 }}"
-                        memory: "{{ mul .Base.GPUs 32 }}Gi"
-                        amd.com/gpu: "{{ .Base.GPUs }}"
+                        cpu: "{{ mul .Workload.Kueue.RequestedGPUsPerReplica 4 }}"
+                        memory: "{{ mul .Workload.Kueue.RequestedGPUsPerReplica 32 }}Gi"
+                        amd.com/gpu: "{{ .Workload.Kueue.RequestedGPUsPerReplica }}"
                     requests:
-                        cpu: "{{ mul .Base.GPUs 4 }}"
-                        memory: "{{ mul .Base.GPUs 32 }}Gi"
-                        amd.com/gpu: "{{ .Base.GPUs }}"
+                        cpu: "{{ mul .Workload.Kueue.RequestedGPUsPerReplica 4 }}"
+                        memory: "{{ mul .Workload.Kueue.RequestedGPUsPerReplica 32 }}Gi"
+                        amd.com/gpu: "{{ .Workload.Kueue.RequestedGPUsPerReplica }}"
                 volumeMounts:
                   - mountPath: /workload
                     name: app-mount

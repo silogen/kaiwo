@@ -17,26 +17,29 @@
 package ray
 
 import (
+	"context"
 	_ "embed"
 	"fmt"
+	"github.com/silogen/ai-workload-orchestrator/pkg/k8s"
+	"github.com/silogen/ai-workload-orchestrator/pkg/utils"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"os"
 	"path/filepath"
-
-	"github.com/silogen/ai-workload-orchestrator/pkg/utils"
 )
 
 //go:embed rayjob.yaml.tmpl
-var RayJobTemplate []byte
+var JobTemplate []byte
 
-const ENTRYPOINT_FILENAME = "entrypoint"
+const EntrypointFilename = "entrypoint"
 
-type RayJobLoader struct {
+type JobLoader struct {
 	Entrypoint string
+	Kueue      k8s.KueueArgs
 }
 
-func (r *RayJobLoader) Load(path string) error {
+func (r *JobLoader) Load(args utils.WorkloadArgs) error {
 
-	contents, err := os.ReadFile(filepath.Join(path, ENTRYPOINT_FILENAME))
+	contents, err := os.ReadFile(filepath.Join(args.Path, EntrypointFilename))
 
 	if err != nil {
 		return fmt.Errorf("failed to read entrypoint file: %w", err)
@@ -44,13 +47,52 @@ func (r *RayJobLoader) Load(path string) error {
 
 	r.Entrypoint = string(contents)
 
+	client, err := k8s.GetDynamicClient()
+
+	if err != nil {
+		return err
+	}
+
+	// TODO make labelKey dynamic
+	gpuCount, err := k8s.GetDefaultResourceFlavorGpuCount(context.TODO(), client, "beta.amd.com/gpu.family.AI")
+
+	if err != nil {
+		return err
+	}
+
+	numReplicas, nodeGpuRequest := k8s.CalculateNumberOfReplicas(args.GPUs, gpuCount)
+
+	r.Kueue = k8s.KueueArgs{
+		GPUsAvailablePerNode:    gpuCount,
+		RequestedGPUsPerReplica: nodeGpuRequest,
+		RequestedNumReplicas:    numReplicas,
+	}
+
 	return nil
 }
 
-func (r *RayJobLoader) DefaultTemplate() []byte {
-	return RayJobTemplate
+func (r *JobLoader) DefaultTemplate() []byte {
+	return JobTemplate
 }
 
-func (r *RayJobLoader) IgnoreFiles() []string {
-	return []string{ENTRYPOINT_FILENAME, utils.KAIWOCONFIG_FILENAME}
+func (r *JobLoader) IgnoreFiles() []string {
+	return []string{EntrypointFilename, utils.KaiwoconfigFilename}
+}
+
+func (r *JobLoader) AdditionalResources(resources *[]*unstructured.Unstructured, args utils.WorkloadArgs) error {
+
+	c, err := k8s.GetDynamicClient()
+	if err != nil {
+		return err
+	}
+
+	// Handle kueue local queue
+	localQueue, err := k8s.PrepareLocalClusterQueue(args.Queue, args.Namespace, c)
+	if err != nil {
+		return err
+	}
+
+	*resources = append(*resources, localQueue)
+
+	return nil
 }
