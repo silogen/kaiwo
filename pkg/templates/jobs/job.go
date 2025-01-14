@@ -25,14 +25,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/silogen/ai-workload-orchestrator/pkg/utils"
 )
 
 //go:embed job.yaml.tmpl
 var JobTemplate []byte
 
-const ENTRYPOINT_FILENAME = "entrypoint"
+const EntrypointFilename = "entrypoint"
 
 type JobLoader struct {
 	Entrypoint string
@@ -40,7 +38,7 @@ type JobLoader struct {
 
 func (r *JobLoader) Load(args utils.WorkloadArgs) error {
 
-	contents, err := os.ReadFile(filepath.Join(args.Path, ENTRYPOINT_FILENAME))
+	contents, err := os.ReadFile(filepath.Join(args.Path, EntrypointFilename))
 
 	if contents == nil {
 		return nil
@@ -62,7 +60,7 @@ func (r *JobLoader) DefaultTemplate() []byte {
 }
 
 func (r *JobLoader) IgnoreFiles() []string {
-	return []string{ENTRYPOINT_FILENAME, utils.KAIWOCONFIG_FILENAME}
+	return []string{EntrypointFilename, utils.KaiwoconfigFilename}
 }
 
 func (r *JobLoader) AdditionalResources(resources *[]*unstructured.Unstructured, args utils.WorkloadArgs) error {
