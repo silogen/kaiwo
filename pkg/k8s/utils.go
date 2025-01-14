@@ -27,7 +27,7 @@ import (
 	"slices"
 	"strings"
 
-	 corev1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 func isBinaryFile(content []byte) bool {
@@ -86,17 +86,17 @@ func GenerateConfigMapFromDir(dir string, name string, namespace string, skipFil
 	return configMap, nil
 }
 
-type SecretVolumeItem struct {
-	Key  string
-	Path string
-}
-
 type SecretVolume struct {
 	Name      string
-	Items     []SecretVolumeItem
+	SecretName string
+	Key string
+	SubPath string
+	MountPath string
+
+
 }
 
-func readEnvFile(filePath string) ([]corev1.EnvVar, []SecretVolume, error) {
+func ReadEnvFile(filePath string) ([]corev1.EnvVar, []SecretVolume, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to open env file: %w", err)
@@ -104,7 +104,7 @@ func readEnvFile(filePath string) ([]corev1.EnvVar, []SecretVolume, error) {
 	defer file.Close()
 
 	var envVars []corev1.EnvVar
-	var volumes []SecretVolume
+	var secretVolumes []SecretVolume
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -121,8 +121,8 @@ func readEnvFile(filePath string) ([]corev1.EnvVar, []SecretVolume, error) {
 		key := parts[0]
 		value := parts[1]
 
-		// Handle environment variables from secrets (format: "secretName:key")
-		if strings.Contains(value, ":") {
+		// Handle standard secrets (e.g., KEY=secretName:key)
+		if strings.Contains(value, ":") && !strings.HasPrefix(key, "MOUNT_SECRET_") {
 			refParts := strings.SplitN(value, ":", 2)
 			envVars = append(envVars, corev1.EnvVar{
 				Name: key,
@@ -134,40 +134,32 @@ func readEnvFile(filePath string) ([]corev1.EnvVar, []SecretVolume, error) {
 				},
 			})
 		} else if strings.HasPrefix(key, "MOUNT_SECRET_") {
-			// Handle secret volume mounting (e.g., MOUNT_SECRET_XXX=/sub_path:secret:secret-key)
+			// Handle MOUNT_SECRET_X format
 			mountParts := strings.Split(value, ":")
-			if len(mountParts) < 3 {
+			if len(mountParts) != 3 {
 				return nil, nil, fmt.Errorf("invalid MOUNT_SECRET format: %s", value)
 			}
 
-			secretName := strings.TrimPrefix(key, "MOUNT_SECRET_")
-			secretKey := mountParts[0]
-			subPath := mountParts[1]
+			mountPath := mountParts[0]
+			secretName := mountParts[1]
+			secretKey := mountParts[2]
+			parts:= strings.Split(mountParts[0], "/")
+			subPath := parts[len(parts)-1]
 
-			// Add volume definition
-			found := false
-			for i := range volumes {
-				if volumes[i].Name == secretName {
-					volumes[i].Items = append(volumes[i].Items, SecretVolumeItem{
-						Key:  secretKey,
-						Path: subPath,
-					})
-					found = true
-					break
-				}
-			}
+			// Add the environment variable (without MOUNT_ prefix)
+			envVars = append(envVars, corev1.EnvVar{
+				Name: strings.TrimPrefix(key, "MOUNT_SECRET_"),
+				Value: mountPath, // Mount path as the value
+			})
 
-			if !found {
-				volumes = append(volumes, SecretVolume{
-					Name:      secretName,
-					Items: []SecretVolumeItem{
-						{
-							Key:  secretKey,
-							Path: subPath,
-						},
-					},
-				})
-			}
+			// Add the volume
+			secretVolumes = append(secretVolumes, SecretVolume{
+				Name:       fmt.Sprintf("%s-volume", secretName),
+				SecretName: secretName,
+				Key:        secretKey,
+				SubPath:    subPath,
+				MountPath:  mountPath,
+			})
 		} else {
 			// Handle direct environment variable values
 			envVars = append(envVars, corev1.EnvVar{
@@ -181,5 +173,7 @@ func readEnvFile(filePath string) ([]corev1.EnvVar, []SecretVolume, error) {
 		return nil, nil, fmt.Errorf("failed to read env file: %w", err)
 	}
 
-	return envVars, volumes, nil
+	return envVars, secretVolumes, nil
 }
+
+

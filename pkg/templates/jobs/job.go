@@ -38,9 +38,9 @@ type JobLoader struct {
 
 func (r *JobLoader) Load(args utils.WorkloadArgs) error {
 
-	contents, err := os.ReadFile(filepath.Join(args.Path, EntrypointFilename))
+	entrypoint, err := os.ReadFile(filepath.Join(args.Path, EntrypointFilename))
 
-	if contents == nil {
+	if entrypoint == nil {
 		return nil
 	}
 
@@ -48,9 +48,9 @@ func (r *JobLoader) Load(args utils.WorkloadArgs) error {
 		return fmt.Errorf("failed to read entrypoint file: %w", err)
 	}
 
-	r.Entrypoint = strings.ReplaceAll(string(contents), "\n", " ") // Flatten multiline string
-	r.Entrypoint = strings.ReplaceAll(r.Entrypoint, "\"", "\\\"")  // Escape double quotes
-	r.Entrypoint = fmt.Sprintf("\"%s\"", r.Entrypoint)             // Wrap the entire command in quotes
+	r.Entrypoint = strings.ReplaceAll(string(entrypoint), "\n", " ") // Flatten multiline string
+	r.Entrypoint = strings.ReplaceAll(r.Entrypoint, "\"", "\\\"") // Escape double quotes
+	r.Entrypoint = fmt.Sprintf("\"%s\"", r.Entrypoint) // Wrap the entire command in quotes
 
 	return nil
 }
@@ -60,7 +60,7 @@ func (r *JobLoader) DefaultTemplate() []byte {
 }
 
 func (r *JobLoader) IgnoreFiles() []string {
-	return []string{EntrypointFilename, utils.KaiwoconfigFilename}
+	return []string{EntrypointFilename, utils.KAIWOCONFIG_FILENAME, utils.ENV_FILENAME}
 }
 
 func (r *JobLoader) AdditionalResources(resources *[]*unstructured.Unstructured, args utils.WorkloadArgs) error {

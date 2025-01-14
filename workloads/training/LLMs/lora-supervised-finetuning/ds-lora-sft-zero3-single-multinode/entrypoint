@@ -4,7 +4,7 @@ python main.py
 --bucket=silogen-dev-ray
 --num-epochs=2
 --lora
---num-devices=16
+--num-devices=2
 --batch-size-per-device=32
 --eval-batch-size-per-device=32
 --ctx-len=1024

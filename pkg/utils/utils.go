@@ -1,3 +1,4 @@
 package utils
 
-const KaiwoconfigFilename = "kaiwoconfig"
+const KAIWOCONFIG_FILENAME = "kaiwoconfig"
+const ENV_FILENAME = "env"

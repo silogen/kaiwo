@@ -19,7 +19,7 @@
 		"request": "launch",
 		"mode": "debug",
 		"program": "${workspaceFolder}",
-		"args": ["submit", "-p", "workloads/training/LLMs/lora-supervised-finetuning/trl-deepspeed-zero3-singlenode", "-g", "4", "--dry-run"],
+		"args": ["submit", "-p", "workloads/training/LLMs/lora-supervised-finetuning/trl-deepspeed-zero3-singlenode-copy", "-g", "4", "--dry-run"],
 		"env": {
 		  "GO111MODULE": "on"
 		},

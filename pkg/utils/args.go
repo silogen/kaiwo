@@ -12,6 +12,6 @@ type WorkloadArgs struct {
 	TemplatePath        string
 	DryRun              bool
 	CreateNamespace     bool
-	NoUploadFolder      bool
 	TtlMinAfterFinished int
+	ConfigMap	bool
 }

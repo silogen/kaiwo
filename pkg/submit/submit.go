@@ -19,7 +19,6 @@ package submit
 import (
 	"context"
 	"fmt"
-	"github.com/silogen/ai-workload-orchestrator/pkg/utils"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -37,7 +36,10 @@ import (
 	"github.com/Masterminds/sprig/v3"
 	"github.com/silogen/ai-workload-orchestrator/pkg/k8s"
 	"github.com/silogen/ai-workload-orchestrator/pkg/templates"
+	"github.com/silogen/ai-workload-orchestrator/pkg/utils"
 	"github.com/sirupsen/logrus"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
 // TODO clarify naming?
@@ -47,36 +49,10 @@ type TemplateConfig struct {
 
 	// The type-specific workload args
 	Workload templates.WorkloadLoader
+	EnvVars []corev1.EnvVar
+	SecretVolumes []k8s.SecretVolume
 }
 
-func sanitizeStringForKubernetes(path string) string {
-	replacer := strings.NewReplacer(
-		":", "-",
-		"/", "-",
-		"_", "-",
-		".", "-",
-	)
-	return strings.ToLower(replacer.Replace(path))
-}
-
-func setWorkloadName(workloadName string, path string, image string) string {
-	if workloadName == "" {
-		currentUser, err := user.Current()
-		if err != nil {
-			panic(fmt.Sprintf("Failed to fetch the current user: %v", err))
-		}
-
-		var appendix string
-
-		if path != "" {
-			appendix = sanitizeStringForKubernetes(filepath.Base(path))
-		} else {
-			appendix = sanitizeStringForKubernetes(image)
-		}
-		return strings.Join([]string{currentUser.Username, appendix}, "-")
-	}
-	return workloadName
-}
 
 func Submit(args utils.WorkloadArgs) error {
 
@@ -106,15 +82,32 @@ func Submit(args utils.WorkloadArgs) error {
 		}
 	}
 
+	var envVars []corev1.EnvVar
+	var secretVolumes []k8s.SecretVolume
+	envFilePath := filepath.Join(args.Path, utils.ENV_FILENAME)
+	if _, err := os.Stat(envFilePath); err == nil {
+		logrus.Infof("Found env file at %s, parsing environment variables and secret volumes", envFilePath)
+		envVars, secretVolumes, err = k8s.ReadEnvFile(envFilePath)
+		if err != nil {
+			return fmt.Errorf("failed to parse env file: %w", err)
+		}
+		logrus.Infof("Parsed %d environment variables and %d secret volumes from env file", len(envVars), len(secretVolumes))
+	} 
+	
+
 	if args.Path != "" {
-		err = addConfigMapResource(args, loader, &resources)
+		args, err = addConfigMapResource(args, loader, &resources)
 		if err != nil {
 			return err
 		}
 	}
 
+	if err := loader.AdditionalResources(&resources, args); err != nil {
+		return err
+	}
+
 	// Process workload template
-	err = processWorkloadTemplate(args, loader, &resources)
+	err = processWorkloadTemplate(args, loader, &resources, envVars, secretVolumes)
 	if err != nil {
 		return err
 	}
@@ -153,6 +146,35 @@ func initializeLoader(args utils.WorkloadArgs) (utils.WorkloadArgs, templates.Wo
 	return args, loader, nil
 }
 
+func setWorkloadName(workloadName string, path string, image string) string {
+	if workloadName == "" {
+		currentUser, err := user.Current()
+		if err != nil {
+			panic(fmt.Sprintf("Failed to fetch the current user: %v", err))
+		}
+
+		var appendix string
+		
+		if path != "" {
+			appendix = sanitizeStringForKubernetes(filepath.Base(path))
+		} else {
+			appendix = sanitizeStringForKubernetes(image)
+		}
+		return strings.Join([]string{currentUser.Username, appendix}, "-")
+	}
+	return workloadName
+}
+
+func sanitizeStringForKubernetes(path string) string {
+	replacer := strings.NewReplacer(
+		":", "-",
+		"/", "-",
+		"_", "-",
+		".", "-",
+	)
+	return strings.ToLower(replacer.Replace(path))
+}
+
 // addNamespaceResource adds a namespace resource if needed
 func addNamespaceResource(args utils.WorkloadArgs, c dynamic.Interface, resources *[]*unstructured.Unstructured) error {
 	namespace := unstructured.Unstructured{
@@ -188,20 +210,26 @@ func addNamespaceResource(args utils.WorkloadArgs, c dynamic.Interface, resource
 }
 
 // addConfigMapResource adds a config map resource
-func addConfigMapResource(args utils.WorkloadArgs, loader templates.WorkloadLoader, resources *[]*unstructured.Unstructured) error {
-	logrus.Info("Generating ConfigMap from folder")
+func addConfigMapResource(args utils.WorkloadArgs, loader templates.WorkloadLoader, resources *[]*unstructured.Unstructured) (utils.WorkloadArgs, error) {
 	configMap, err := k8s.GenerateConfigMapFromDir(args.Path, args.Name, args.Namespace, loader.IgnoreFiles())
 	if err != nil {
-		return fmt.Errorf("failed to generate ConfigMap: %w", err)
+		return args, fmt.Errorf("failed to generate ConfigMap: %w", err)
 	}
 	if configMap != nil {
 		*resources = append(*resources, configMap)
+		args.ConfigMap = true
 	}
-	return nil
+	return args, nil
 }
 
 // processWorkloadTemplate renders and parses the workload template
-func processWorkloadTemplate(args utils.WorkloadArgs, loader templates.WorkloadLoader, resources *[]*unstructured.Unstructured) error {
+func processWorkloadTemplate(
+	args utils.WorkloadArgs,
+	loader templates.WorkloadLoader,
+	resources *[]*unstructured.Unstructured,
+	envVars []corev1.EnvVar,
+	secretVolumes []k8s.SecretVolume,
+) error {
 	var workloadTemplate []byte
 	var err error
 
@@ -215,7 +243,12 @@ func processWorkloadTemplate(args utils.WorkloadArgs, loader templates.WorkloadL
 		}
 	}
 
-	templateContext := TemplateConfig{Base: args, Workload: loader}
+	templateContext := TemplateConfig{
+		Base:         args,
+		Workload:     loader,
+		EnvVars:      envVars,
+		SecretVolumes: secretVolumes,
+	}
 
 	parsedTemplate, err := template.New("main").Funcs(sprig.TxtFuncMap()).Parse(string(workloadTemplate))
 	if err != nil {
@@ -247,6 +280,7 @@ func processWorkloadTemplate(args utils.WorkloadArgs, loader templates.WorkloadL
 	}
 	return nil
 }
+
 
 func printResources(resources []*unstructured.Unstructured) {
 	for _, resource := range resources {
@@ -286,8 +320,6 @@ func applyResources(resources []*unstructured.Unstructured, c dynamic.Interface)
 		if err == nil {
 			logrus.Infof("%s/%s submitted successfully", resource.GetKind(), resource.GetName())
 			continue
-		} else {
-			logrus.Warnf("Skipping submit of %s/%s. Did you already submit it?", resource.GetKind(), resource.GetName())
 		}
 
 		if !apierrors.IsAlreadyExists(err) {
