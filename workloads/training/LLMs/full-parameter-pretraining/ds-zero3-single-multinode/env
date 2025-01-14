@@ -1,0 +1,4 @@
+AWS_ACCESS_KEY_ID=gcs-credentials:access_key
+AWS_SECRET_ACCESS_KEY=gcs-credentials:secret_key
+HF_TOKEN=hf-token:hf-token
+MOUNT_SECRET_GCP_CREDENTIALS=credentials.json:gcs-credentials:gcs-credentials-json

@@ -22,23 +22,18 @@ spec:
               image: {{ .Base.Image }}
               imagePullPolicy: Always
               env:
-                - name: AWS_ACCESS_KEY_ID
+          {{- range .Env }}
+          {{- if .Value }}
+                - name: {{ .Name }}
+                  value: {{ .Value }}
+          {{- else }}
+                - name: {{ .Name }}
                   valueFrom:
                     secretKeyRef:
-                      name: gcs-credentials
-                      key: access_key
-                - name: AWS_SECRET_ACCESS_KEY
-                  valueFrom:
-                    secretKeyRef:
-                      name: gcs-credentials
-                      key: secret_key
-                - name: HF_TOKEN
-                  valueFrom:
-                    secretKeyRef:
-                      name: hf-token
-                      key: hf-token
-                - name: GOOGLE_APPLICATION_CREDENTIALS
-                  value: "/etc/gcp/credentials.json"
+                      name: {{ .ValueFrom.SecretKeyRef.Name }}
+                      key: {{ .ValueFrom.SecretKeyRef.Key }}
+          {{- end }}
+          {{- end }}
               ports:
                 - containerPort: 6379
                   name: gcs-server
@@ -84,23 +79,18 @@ spec:
                 image: {{ .Base.Image }}
                 imagePullPolicy: Always
                 env:
-                  - name: AWS_ACCESS_KEY_ID
+            {{- range .Env }}
+            {{- if .Value }}
+                  - name: {{ .Name }}
+                    value: {{ .Value }}
+            {{- else }}
+                  - name: {{ .Name }}
                     valueFrom:
                       secretKeyRef:
-                        name: gcs-credentials
-                        key: access_key
-                  - name: AWS_SECRET_ACCESS_KEY
-                    valueFrom:
-                      secretKeyRef:
-                        name: gcs-credentials
-                        key: secret_key
-                  - name: HF_TOKEN
-                    valueFrom:
-                      secretKeyRef:
-                        name: hf-token
-                        key: hf-token
-                  - name: GOOGLE_APPLICATION_CREDENTIALS
-                    value: "/etc/gcp/credentials.json"
+                        name: {{ .ValueFrom.SecretKeyRef.Name }}
+                        key: {{ .ValueFrom.SecretKeyRef.Key }}
+            {{- end }}
+            {{- end }}
                 resources:
                     limits:
                         cpu: "{{ mul .Workload.Kueue.RequestedGPUsPerReplica 4 }}"
@@ -110,7 +100,14 @@ spec:
                         cpu: "{{ mul .Workload.Kueue.RequestedGPUsPerReplica 4 }}"
                         memory: "{{ mul .Workload.Kueue.RequestedGPUsPerReplica 32 }}Gi"
                         amd.com/gpu: "{{ .Workload.Kueue.RequestedGPUsPerReplica }}"
-                volumeMounts:
+                volumeMounts: 
+            {{- range .Volumes }}
+            {{- range .Items }}
+                  - name: {{ $.Volumes.Name }}
+                    mountPath: {{ $.Volumes.MountPath }}
+                    subPath: {{ .Path }}
+            {{- end }}
+            {{- end }}
                   - mountPath: /workload
                     name: workload
                   - mountPath: /dev/shm

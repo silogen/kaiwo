@@ -17,6 +17,7 @@
 package k8s
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"github.com/sirupsen/logrus"
@@ -24,6 +25,9 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
+
+	 corev1 "k8s.io/api/core/v1"
 )
 
 func isBinaryFile(content []byte) bool {
@@ -80,4 +84,102 @@ func GenerateConfigMapFromDir(dir string, name string, namespace string, skipFil
 	}
 
 	return configMap, nil
+}
+
+type SecretVolumeItem struct {
+	Key  string
+	Path string
+}
+
+type SecretVolume struct {
+	Name      string
+	Items     []SecretVolumeItem
+}
+
+func readEnvFile(filePath string) ([]corev1.EnvVar, []SecretVolume, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to open env file: %w", err)
+	}
+	defer file.Close()
+
+	var envVars []corev1.EnvVar
+	var volumes []SecretVolume
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue // Skip empty lines and comments
+		}
+
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			return nil, nil, fmt.Errorf("invalid env file format: %s", line)
+		}
+
+		key := parts[0]
+		value := parts[1]
+
+		// Handle environment variables from secrets (format: "secretName:key")
+		if strings.Contains(value, ":") {
+			refParts := strings.SplitN(value, ":", 2)
+			envVars = append(envVars, corev1.EnvVar{
+				Name: key,
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: refParts[0]},
+						Key:                  refParts[1],
+					},
+				},
+			})
+		} else if strings.HasPrefix(key, "MOUNT_SECRET_") {
+			// Handle secret volume mounting (e.g., MOUNT_SECRET_XXX=/sub_path:secret:secret-key)
+			mountParts := strings.Split(value, ":")
+			if len(mountParts) < 3 {
+				return nil, nil, fmt.Errorf("invalid MOUNT_SECRET format: %s", value)
+			}
+
+			secretName := strings.TrimPrefix(key, "MOUNT_SECRET_")
+			secretKey := mountParts[0]
+			subPath := mountParts[1]
+
+			// Add volume definition
+			found := false
+			for i := range volumes {
+				if volumes[i].Name == secretName {
+					volumes[i].Items = append(volumes[i].Items, SecretVolumeItem{
+						Key:  secretKey,
+						Path: subPath,
+					})
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				volumes = append(volumes, SecretVolume{
+					Name:      secretName,
+					Items: []SecretVolumeItem{
+						{
+							Key:  secretKey,
+							Path: subPath,
+						},
+					},
+				})
+			}
+		} else {
+			// Handle direct environment variable values
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  key,
+				Value: value,
+			})
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, nil, fmt.Errorf("failed to read env file: %w", err)
+	}
+
+	return envVars, volumes, nil
 }
