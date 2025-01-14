@@ -24,6 +24,7 @@ type KueueArgs struct {
 	RequestedGPUsPerReplica int
 }
 
+// CalculateNumberOfReplicas attempts to balance the number of replicas by maximizing the number of GPUs used per node
 func CalculateNumberOfReplicas(requestedGpus int, gpusPerNode int) (int, int) {
 	// TODO handle cases where nodes are not empty and some GPUs are in use
 
