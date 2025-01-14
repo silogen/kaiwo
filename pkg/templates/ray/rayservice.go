@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"os"
 	"path/filepath"
+
 )
 
 //go:embed rayservice.yaml.tmpl
@@ -82,7 +83,7 @@ func (r *ServiceLoader) DefaultTemplate() []byte {
 }
 
 func (r *ServiceLoader) IgnoreFiles() []string {
-	return []string{ServeconfigFilename}
+	return []string{ServeconfigFilename, utils.KAIWOCONFIG_FILENAME}
 }
 
 func (r *ServiceLoader) AdditionalResources(resources *[]*unstructured.Unstructured, args utils.WorkloadArgs) error {

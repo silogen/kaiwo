@@ -50,11 +50,12 @@ var (
 	gpus            int
 	dryRun          bool
 	createNamespace bool
-	noUploadFolder  bool
+	ttlMinAfterFinished int
 )
 
 const defaultImage = "ghcr.io/silogen/rocm-ray:v0.4"
 const defaultQueue = "kaiwo"
+const defaultTtlMinAfterFinished = 2880
 
 func main() {
 
@@ -85,7 +86,8 @@ func main() {
 				GPUs:            gpus,
 				DryRun:          dryRun,
 				CreateNamespace: createNamespace,
-				NoUploadFolder:  noUploadFolder,
+				TtlMinAfterFinished: ttlMinAfterFinished,
+				
 			}
 			if err := submit.Submit(workloadArgs); err != nil {
 				logrus.Fatalf("Failed to submit workload: %v", err)
@@ -100,13 +102,13 @@ func main() {
 			return nil
 		},
 	}
-	submitCmd.Flags().StringVarP(&path, "path", "p", "", "Path to workload code and entrypoint/serveconfig. Format: workloads/workload_type/modality/method_type/workload_code_directory")
+	submitCmd.Flags().StringVarP(&path, "path", "p", "", "absolute or relative path to workload code and entrypoint/serveconfig directory")
 	submitCmd.Flags().StringVarP(&image, "image", "i", defaultImage, "Container image to use. Defaults to ghcr.io/silogen/rocm-ray:vx.x")
 	submitCmd.Flags().StringVarP(&queue, "queue", "q", defaultQueue, "ClusterQueue to use. Defaults to queue")
 	submitCmd.Flags().StringVarP(&name, "name", "", "", "Kubenetes name to use for the workflow")
 	submitCmd.Flags().StringVarP(&namespace, "namespace", "n", "kaiwo", "Kubenetes namespace to use. Defaults to `kaiwo`")
 	submitCmd.Flags().BoolVarP(&createNamespace, "create-namespace", "", false, "Create namespace if it does not exist")
-	submitCmd.Flags().BoolVarP(&noUploadFolder, "no-upload-folder", "", false, "Don't upload path folder contents as a config map")
+	submitCmd.Flags().IntVarP(&ttlMinAfterFinished, "ttl-minutes-after-finished", "", 2880, "Cleanup finished Jobs after minutes. Defaults to 48h (2880 min)")
 	submitCmd.Flags().StringVarP(&template, "template", "", "", "Path to a custom template to use for the workload. If not provided, a default template will be used")
 	submitCmd.Flags().StringVarP(&type_, "type", "t", "job", "Workload type, one of [rayjob, rayservice]")
 	submitCmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "Print the generated workload manifest without submitting it")
