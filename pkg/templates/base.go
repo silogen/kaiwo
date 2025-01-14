@@ -33,13 +33,18 @@ type WorkloadArgs struct {
 	TemplatePath    string
 	DryRun          bool
 	CreateNamespace bool
-	NoUploadFolder  bool
+	TtlMinAfterFinished int
 }
 
 func ValidateWorkloadArgs(args WorkloadArgs) error {
-	if args.Path == "" || args.GPUs <= 0 {
-		return fmt.Errorf("invalid flags: ensure --path, --type, and --gpus are provided")
+	if args.GPUs <= 0 {
+		return fmt.Errorf("invalid flags: --gpus must be greater than 0")
 	}
+
+	if args.Image == "" && args.Path == "" {
+		return fmt.Errorf("invalid flags: at least one of --image or --path must be provided")
+	}
+
 	return nil
 }
 

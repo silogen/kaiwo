@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/silogen/ai-workload-orchestrator/pkg/utils"
 )
 
 //go:embed rayjob.yaml.tmpl
@@ -50,5 +52,5 @@ func (r *RayJobLoader) DefaultTemplate() []byte {
 }
 
 func (r *RayJobLoader) IgnoreFiles() []string {
-	return []string{ENTRYPOINT_FILENAME}
+	return []string{ENTRYPOINT_FILENAME, utils.KAIWOCONFIG_FILENAME}
 }

@@ -32,7 +32,7 @@ To ensure a smooth experience, we strongly recommend that users:
 
 ## Description
 
-**Kaiwo** is a Kubernetes-native tool designed to optimize GPU resource utilization for AI workloads. The project is built primarily for AMD GPUs. Built on top of **Ray** and **Kueue** , Kaiwo minimizes GPU idleness and increases resource efficiency through intelligent job queueing, fair sharing of resources, guaranteed quotas and opportunistic batch job scheduling.
+**Kaiwo** (pronunciation *"ky-voh"*) is a Kubernetes-native tool designed to optimize GPU resource utilization for AI workloads. The project is built primarily for AMD GPUs. Built on top of **Ray** and **Kueue** , Kaiwo minimizes GPU idleness and increases resource efficiency through intelligent job queueing, fair sharing of resources, guaranteed quotas and opportunistic batch job scheduling.
 
 Kaiwo supports a wide range of AI workloads, including distributed multi-node pretraining, fine-tuning, online inference, and batch inference, with seamless integration into Kubernetes environments.
 
@@ -75,13 +75,17 @@ We recommend using [Cluster-Forge](https://github.com/silogen/cluster-forge) to 
 
 The installation of Kaiwo CLI tool is easy as it's a single binary. The only requirement is a kubeconfig file to access a Kubernetes cluster. If you are unsure where to get a kubeconfig, speak to the engineers who set up your Kubernetes cluster. Just like kubectl, Kaiwo will first look for a `KUBECONFIG=path` environment variable. If `KUBECONFIG` is not set, Kaiwo will then look for kubeconfig file in the default location `~/.kube/config`.
 
-1. Download the Kaiwo CLI binary from the [Releases Page](https://github.com/silogen/ai-workload-orchestrator/releases).
+1. To install Kaiwo, download the Kaiwo CLI binary from the [Releases Page](https://github.com/silogen/ai-workload-orchestrator/releases).
 2. Make the binary executable and add it to your PATH:
 
 ```bash
 chmod +x kaiwo
 sudo mv kaiwo /usr/local/bin/
 ```
+
+3. You're off to the races!
+
+Although not required by Kaiwo, we also recommend that you [install kubectl](https://kubernetes.io/docs/tasks/tools/) just in case you need some functionality that Kaiwo can't provide.
 
 ## Usage
 
@@ -101,11 +105,11 @@ Kaiwo uses Kueue to manage job queuing. Make sure your cluster-admin has created
 
 RayServices are intended for online inference. They bypass job queues. We recommend running them in a separate cluster as services are constantly running and therefore reserve compute resources 24/7.
 
-RayJobs and RayServices require using `-p` or `--path` option. Kaiwo will look for `rayjob-entrypoint` or `rayservice-serviceconfig` files in these paths to determine which one is in question. Kubernetes Job is the default workload type if no `-p` option is provided or if `rayjob-entrypoint` or `rayservice-serviceconfig` files are not found in the path.
+RayJobs and RayServices require using `-p`/`--path` and `-t`/`--type` options. Kaiwo will look for `entrypoint` or `serviceconfig` files in `path` which are required for RayJobs and RayServices, respectively. Kubernetes Job is the default workload type if no `-p` option is provided as well as when `--type` or `-t` is omitted.
 
 Run `kaiwo submit --help` for an overview of available options. To get started with a workload, first make sure that your code (e.g. finetuning script) works with the number of GPUs that you request via `kaiwo submit`.  For example, the following command will run the code found in `path` as a RayJob on 16 GPUs.
 
-`kaiwo submit -p workloads/training/LLMs/lora-supervised-finetuning/ds-zero3-single-multinode -g 16`
+`kaiwo submit -p workloads/training/LLMs/lora-supervised-finetuning/ds-zero3-single-multinode -g 16 -t rayjob`
 
 By default, this will run in `kaiwo` namespace unless another namespace is provided with `-n` or `--namespace` option. If the provided namespace doesn't exist, use `--create-namespace` flag.
 
@@ -117,7 +121,9 @@ Or, you may want to mount code from a github repo at runtime and only modify the
 
 `kaiwo submit -i my-registry/my_image -p path_to_entrypoint_directory -g 8`
 
-TODO, describe 
+One important note about GPU requests: it is up to the user to ensure that the code can run on the requested number of GPUs. If the code is not written to run on the requested number of GPUs, the job will fail. Note that some parallelized code may only work on a specific number of GPUs such as 1, 2, 4, 8, 16, 32 but not 3, 5, 7, 9 etc. If you are unsure, start with a single GPU and scale up as needed.
+
+TODO, describe
 
 - Note about typical secrets and environment variables (s3 keys, HF TOKEN, etc)
 - Note about how secrets are managed (ExternalSecrets, etc)
