@@ -82,7 +82,7 @@ func (r *ServiceLoader) DefaultTemplate() []byte {
 }
 
 func (r *ServiceLoader) IgnoreFiles() []string {
-	return []string{ServeconfigFilename, utils.KaiwoconfigFilename}
+	return []string{ServeconfigFilename, utils.KAIWOCONFIG_FILENAME, utils.ENV_FILENAME}
 }
 
 func (r *ServiceLoader) AdditionalResources(resources *[]*unstructured.Unstructured, args utils.WorkloadArgs) error {

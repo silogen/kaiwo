@@ -1,0 +1,5 @@
+envVars:
+  - fromSecret:
+        name: "HF_TOKEN"
+        secret: "hf-token"
+        key: "hf-token"

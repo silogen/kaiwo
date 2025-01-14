@@ -24,6 +24,8 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"gopkg.in/yaml.v3"
+	corev1 "k8s.io/api/core/v1"
 )
 
 func isBinaryFile(content []byte) bool {
@@ -80,4 +82,87 @@ func GenerateConfigMapFromDir(dir string, name string, namespace string, skipFil
 	}
 
 	return configMap, nil
+}
+
+type SecretVolume struct {
+	Name      string
+	SecretName string
+	Key string
+	SubPath string
+	MountPath string
+
+
+}
+type EnvVarInput struct {
+	Name       string `yaml:"name,omitempty"`
+	Value      string `yaml:"value,omitempty"`
+	FromSecret *struct {
+		Name   string `yaml:"name"`
+		Secret string `yaml:"secret"`
+		Key    string `yaml:"key"`
+	} `yaml:"fromSecret,omitempty"`
+	MountSecret *struct {
+		Name   string `yaml:"name"`
+		Secret string `yaml:"secret"`
+		Key    string `yaml:"key"`
+		Path   string `yaml:"path"`
+	} `yaml:"mountSecret,omitempty"`
+}
+
+type EnvFile struct {
+	EnvVars []EnvVarInput `yaml:"envVars"`
+}
+
+func ReadEnvFile(filePath string) ([]corev1.EnvVar, []SecretVolume, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to open env file: %w", err)
+	}
+	defer file.Close()
+
+	var envFile EnvFile
+	if err := yaml.NewDecoder(file).Decode(&envFile); err != nil {
+		return nil, nil, fmt.Errorf("failed to parse YAML: %w", err)
+	}
+
+	var envVars []corev1.EnvVar
+	var secretVolumes []SecretVolume
+
+	for _, input := range envFile.EnvVars {
+		if input.Value != "" {
+			// Normal environment variable
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  input.Name,
+				Value: input.Value,
+			})
+		} else if input.FromSecret != nil {
+			// Secret-based environment variable
+			envVars = append(envVars, corev1.EnvVar{
+				Name: input.FromSecret.Name,
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: input.FromSecret.Secret,
+						},
+						Key: input.FromSecret.Key,
+					},
+				},
+			})
+		} else if input.MountSecret != nil {
+			// Secret-based volume mount
+			secretVolumes = append(secretVolumes, SecretVolume{
+				Name:       fmt.Sprintf("%s-volume", input.MountSecret.Secret),
+				SecretName: input.MountSecret.Secret,
+				Key:        input.MountSecret.Key,
+				SubPath:    input.MountSecret.Path, // File name to mount
+				MountPath:  input.MountSecret.Path,
+			})
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  input.MountSecret.Name,
+				Value: input.MountSecret.Path, // Set the mount path as an environment variable
+			})
+		}
+	}
+
+	return envVars, secretVolumes, nil
 }

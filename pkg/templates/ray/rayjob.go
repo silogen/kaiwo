@@ -76,7 +76,7 @@ func (r *JobLoader) DefaultTemplate() []byte {
 }
 
 func (r *JobLoader) IgnoreFiles() []string {
-	return []string{EntrypointFilename, utils.KaiwoconfigFilename}
+	return []string{EntrypointFilename, utils.KAIWOCONFIG_FILENAME, utils.ENV_FILENAME}
 }
 
 func (r *JobLoader) AdditionalResources(resources *[]*unstructured.Unstructured, args utils.WorkloadArgs) error {

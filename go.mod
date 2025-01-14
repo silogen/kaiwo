@@ -5,6 +5,8 @@ go 1.23.3
 require (
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/sirupsen/logrus v1.9.3
+	gopkg.in/yaml.v3 v3.0.1
+	k8s.io/api v0.32.0
 	k8s.io/apimachinery v0.32.0
 	sigs.k8s.io/kueue v0.10.0
 )
@@ -20,7 +22,6 @@ require (
 	golang.org/x/time v0.9.0 // indirect
 	golang.org/x/tools v0.29.0 // indirect
 	google.golang.org/protobuf v1.36.2 // indirect
-	k8s.io/api v0.32.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20241212222426-2c72e554b1e7 // indirect
 	sigs.k8s.io/controller-runtime v0.19.4 // indirect
 )

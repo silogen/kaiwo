@@ -17,14 +17,34 @@ spec:
             - name: ray-head
               image: {{ .Base.Image }}
               env:
-                - name: HUGGING_FACE_HUB_TOKEN
+              {{- if .EnvVars }}
+              {{- range .EnvVars }}
+              {{- if .Value }}
+                - name: {{ .Name }}
+                  value: {{ .Value }}
+              {{- else }}
+                - name: {{ .Name }}
                   valueFrom:
                     secretKeyRef:
-                      name: hf-token
-                      key: hf-token
-              volumeMounts:
+                      name: {{ .ValueFrom.SecretKeyRef.Name }}
+                      key: {{ .ValueFrom.SecretKeyRef.Key }}
+              {{- end }}
+              {{- end }}
+              {{- end }}
+              volumeMounts: 
+              {{- if .SecretVolumes }}
+              {{- range .SecretVolumes }}
+                - name: {{ .Name }}
+                  mountPath: {{ .MountPath }}
+                  subPath: {{ .SubPath }}
+              {{- end }}
+              {{- end }}
+              {{- if .Base.ConfigMap }}
                 - mountPath: /workload
-                  name: app-mount
+                  name: workload
+              {{- end }}
+                - mountPath: /dev/shm
+                  name: dshm
               ports:
                 - containerPort: 6379
                   name: gcs-server
@@ -35,9 +55,25 @@ spec:
                 - containerPort: 8000
                   name: serve
           volumes:
-            - name: app-mount
+          {{- if .SecretVolumes }}
+          {{- range .SecretVolumes }}
+            - name: {{ .Name }}
+              secret:
+                secretName: {{ .SecretName }}
+                items:
+                  - key: {{ .Key }}
+                    path: {{ .SubPath }}
+          {{- end }}
+          {{- end }}
+          {{- if .Base.ConfigMap }}
+            - name: workload
               configMap:
                 name: {{ .Base.Name }}
+          {{- end }}
+            - name: dshm
+              emptyDir:
+                medium: Memory
+                sizeLimit: 200Gi
     workerGroupSpecs:
       - replicas: {{ .Workload.Kueue.RequestedNumReplicas }}
         # minReplicas: 1
@@ -54,11 +90,20 @@ spec:
                     exec:
                       command: ["/bin/sh", "-c", "ray stop"]
                 env:
-                  - name: HUGGING_FACE_HUB_TOKEN
+                {{- if .EnvVars }}
+                {{- range .EnvVars }}
+                {{- if .Value }}
+                  - name: {{ .Name }}
+                    value: {{ .Value }}
+                {{- else }}
+                  - name: {{ .Name }}
                     valueFrom:
                       secretKeyRef:
-                        name: hf-token
-                        key: hf-token
+                        name: {{ .ValueFrom.SecretKeyRef.Name }}
+                        key: {{ .ValueFrom.SecretKeyRef.Key }}
+                {{- end }}
+                {{- end }}
+                {{- end }}
                 resources:
                     limits:
                         cpu: "{{ mul .Workload.Kueue.RequestedGPUsPerReplica 4 }}"
@@ -68,10 +113,37 @@ spec:
                         cpu: "{{ mul .Workload.Kueue.RequestedGPUsPerReplica 4 }}"
                         memory: "{{ mul .Workload.Kueue.RequestedGPUsPerReplica 32 }}Gi"
                         amd.com/gpu: "{{ .Workload.Kueue.RequestedGPUsPerReplica }}"
-                volumeMounts:
+                volumeMounts: 
+                {{- if .SecretVolumes }}
+                {{- range .SecretVolumes }}
+                  - name: {{ .Name }}
+                    mountPath: {{ .MountPath }}
+                    subPath: {{ .SubPath }}
+                {{- end }}
+                {{- end }}
+                {{- if .Base.ConfigMap }}
                   - mountPath: /workload
-                    name: app-mount
+                    name: workload
+                {{- end }}
+                  - mountPath: /dev/shm
+                    name: dshm
             volumes:
-              - name: app-mount
+            {{- if .SecretVolumes }}
+            {{- range .SecretVolumes }}
+              - name: {{ .Name }}
+                secret:
+                  secretName: {{ .SecretName }}
+                  items:
+                    - key: {{ .Key }}
+                      path: {{ .SubPath }}
+            {{- end }}
+            {{- end }}
+            {{- if .Base.ConfigMap }}
+              - name: workload
                 configMap:
                   name: {{ .Base.Name }}
+            {{- end }}
+              - name: dshm
+                emptyDir:
+                  medium: Memory
+                  sizeLimit: 200Gi

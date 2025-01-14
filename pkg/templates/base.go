@@ -23,6 +23,8 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
+// WorkloadArgs is a struct that holds the high-level arguments used for all workloads
+
 func ValidateWorkloadArgs(args utils.WorkloadArgs) error {
 	if args.GPUs <= 0 {
 		return fmt.Errorf("invalid flags: --gpus must be greater than 0")
