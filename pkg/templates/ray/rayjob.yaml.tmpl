@@ -122,19 +122,19 @@ spec:
                         memory: "{{ mul .Workload.Kueue.RequestedGPUsPerReplica 32 }}Gi"
                         amd.com/gpu: "{{ .Workload.Kueue.RequestedGPUsPerReplica }}"
                 volumeMounts: 
-              {{- if .SecretVolumes }}
-              {{- range .SecretVolumes }}
-                - name: {{ .Name }}
-                  mountPath: {{ .MountPath }}
-                  subPath: {{ .SubPath }}
-              {{- end }}
-              {{- end }}
-              {{- if .Base.ConfigMap }}
-                - mountPath: /workload
-                  name: workload
-              {{- end }}
-                - mountPath: /dev/shm
-                  name: dshm
+                {{- if .SecretVolumes }}
+                {{- range .SecretVolumes }}
+                  - name: {{ .Name }}
+                    mountPath: {{ .MountPath }}
+                    subPath: {{ .SubPath }}
+                {{- end }}
+                {{- end }}
+                {{- if .Base.ConfigMap }}
+                  - mountPath: /workload
+                    name: workload
+                {{- end }}
+                  - mountPath: /dev/shm
+                    name: dshm
             volumes:
             {{- if .SecretVolumes }}
             {{- range .SecretVolumes }}

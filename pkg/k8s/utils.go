@@ -17,7 +17,6 @@
 package k8s
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"github.com/sirupsen/logrus"
@@ -25,8 +24,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
-
+	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -95,6 +93,25 @@ type SecretVolume struct {
 
 
 }
+type EnvVarInput struct {
+	Name       string `yaml:"name,omitempty"`
+	Value      string `yaml:"value,omitempty"`
+	FromSecret *struct {
+		Name   string `yaml:"name"`
+		Secret string `yaml:"secret"`
+		Key    string `yaml:"key"`
+	} `yaml:"fromSecret,omitempty"`
+	MountSecret *struct {
+		Name   string `yaml:"name"`
+		Secret string `yaml:"secret"`
+		Key    string `yaml:"key"`
+		Path   string `yaml:"path"`
+	} `yaml:"mountSecret,omitempty"`
+}
+
+type EnvFile struct {
+	EnvVars []EnvVarInput `yaml:"envVars"`
+}
 
 func ReadEnvFile(filePath string) ([]corev1.EnvVar, []SecretVolume, error) {
 	file, err := os.Open(filePath)
@@ -103,77 +120,49 @@ func ReadEnvFile(filePath string) ([]corev1.EnvVar, []SecretVolume, error) {
 	}
 	defer file.Close()
 
+	var envFile EnvFile
+	if err := yaml.NewDecoder(file).Decode(&envFile); err != nil {
+		return nil, nil, fmt.Errorf("failed to parse YAML: %w", err)
+	}
+
 	var envVars []corev1.EnvVar
 	var secretVolumes []SecretVolume
 
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue // Skip empty lines and comments
-		}
-
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) != 2 {
-			return nil, nil, fmt.Errorf("invalid env file format: %s", line)
-		}
-
-		key := parts[0]
-		value := parts[1]
-
-		// Handle standard secrets (e.g., KEY=secretName:key)
-		if strings.Contains(value, ":") && !strings.HasPrefix(key, "MOUNT_SECRET_") {
-			refParts := strings.SplitN(value, ":", 2)
+	for _, input := range envFile.EnvVars {
+		if input.Value != "" {
+			// Normal environment variable
 			envVars = append(envVars, corev1.EnvVar{
-				Name: key,
+				Name:  input.Name,
+				Value: input.Value,
+			})
+		} else if input.FromSecret != nil {
+			// Secret-based environment variable
+			envVars = append(envVars, corev1.EnvVar{
+				Name: input.FromSecret.Name,
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{Name: refParts[0]},
-						Key:                  refParts[1],
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: input.FromSecret.Secret,
+						},
+						Key: input.FromSecret.Key,
 					},
 				},
 			})
-		} else if strings.HasPrefix(key, "MOUNT_SECRET_") {
-			// Handle MOUNT_SECRET_X format
-			mountParts := strings.Split(value, ":")
-			if len(mountParts) != 3 {
-				return nil, nil, fmt.Errorf("invalid MOUNT_SECRET format: %s", value)
-			}
-
-			mountPath := mountParts[0]
-			secretName := mountParts[1]
-			secretKey := mountParts[2]
-			parts:= strings.Split(mountParts[0], "/")
-			subPath := parts[len(parts)-1]
-
-			// Add the environment variable (without MOUNT_ prefix)
-			envVars = append(envVars, corev1.EnvVar{
-				Name: strings.TrimPrefix(key, "MOUNT_SECRET_"),
-				Value: mountPath, // Mount path as the value
-			})
-
-			// Add the volume
+		} else if input.MountSecret != nil {
+			// Secret-based volume mount
 			secretVolumes = append(secretVolumes, SecretVolume{
-				Name:       fmt.Sprintf("%s-volume", secretName),
-				SecretName: secretName,
-				Key:        secretKey,
-				SubPath:    subPath,
-				MountPath:  mountPath,
+				Name:       fmt.Sprintf("%s-volume", input.MountSecret.Secret),
+				SecretName: input.MountSecret.Secret,
+				Key:        input.MountSecret.Key,
+				SubPath:    input.MountSecret.Path, // File name to mount
+				MountPath:  input.MountSecret.Path,
 			})
-		} else {
-			// Handle direct environment variable values
 			envVars = append(envVars, corev1.EnvVar{
-				Name:  key,
-				Value: value,
+				Name:  input.MountSecret.Name,
+				Value: input.MountSecret.Path, // Set the mount path as an environment variable
 			})
 		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, nil, fmt.Errorf("failed to read env file: %w", err)
 	}
 
 	return envVars, secretVolumes, nil
 }
-
-

@@ -123,11 +123,34 @@ Or, you may want to mount code from a github repo at runtime and only modify the
 
 One important note about GPU requests: it is up to the user to ensure that the code can run on the requested number of GPUs. If the code is not written to run on the requested number of GPUs, the job will fail. Note that some parallelized code may only work on a specific number of GPUs such as 1, 2, 4, 8, 16, 32 but not 3, 5, 7, 9 etc. If you are unsure, start with a single GPU and scale up as needed.
 
-TODO, describe
+#### Note about environment variables
 
-- Note about typical secrets and environment variables (s3 keys, HF TOKEN, etc)
-- Note about how secrets are managed (ExternalSecrets, etc)
+Kaiwo cannot assume how secret management has been set up on your cluster (permissions to create/get secrets, backend for ExternalSecrets, etc.). Therefore, Kaiwo does not create secrets for you. If your workload requires secrets, you must create them yourself. You can create secrets in the namespace where you are running your workload. If you are using ExternalSecrets, make sure that the ExternalSecrets are created in the same namespace where you are running your workload.
 
+To pass environment variables (from secrets or otherwise) into your workload, you can add `env` file to the `--path` directory. The file format follows YAML syntax and looks something like this:
+
+```yaml
+envVars:
+  - name: MY_VAR
+    value: "my_value"
+  - fromSecret:
+      name: "AWS_ACCESS_KEY_ID"
+      secret: "gcs-credentials"
+      key: "access_key"
+  - fromSecret:
+      name: "AWS_SECRET_ACCESS_KEY"
+      secret: "gcs-credentials"
+      key: "secret_key"
+  - fromSecret:
+      name: "HF_TOKEN"
+      secret: "hf-token"
+      key: "hf-token"
+  - mountSecret:
+      name: "GOOGLE_APPLICATION_CREDENTIALS"
+      secret: "gcs-credentials"
+      key: "gcs-credentials-json"
+      path: "/etc/gcp/credentials.json"
+```
 ## Contributing to Kaiwo
 
 TODO
