@@ -100,6 +100,11 @@ func Submit(args utils.WorkloadArgs) error {
 		}
 	}
 
+	// Modify resources based on the loader type
+	if err := loader.AdditionalResources(&resources, args); err != nil {
+		return err
+	}
+
 	// Process workload template
 	err = processWorkloadTemplate(args, loader, &resources)
 	if err != nil {
@@ -133,7 +138,7 @@ func initializeLoader(args utils.WorkloadArgs) (utils.WorkloadArgs, templates.Wo
 
 	loader := templates.GetWorkloadLoader(args.Type)
 
-	if err := loader.Load(args.Path); err != nil {
+	if err := loader.Load(args); err != nil {
 		return args, nil, fmt.Errorf("failed to load workload: %w", err)
 	}
 

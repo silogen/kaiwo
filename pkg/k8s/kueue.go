@@ -3,7 +3,7 @@ package k8s
 import (
 	"context"
 	"fmt"
-	"github.com/silogen/ai-workload-orchestrator/pkg/utils"
+	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -16,37 +16,83 @@ import (
 )
 
 type KueueArgs struct {
-	NodeGpuCount int
+	// The number of GPUs per node in the resource flavor
+	GPUsAvailablePerNode int
+	// The number of replicas needed
+	RequestedNumReplicas int
+	// The number of GPUs per replica needed
+	RequestedGPUsPerReplica int
 }
 
-func ListResourceFlavors(ctx context.Context, client dynamic.Interface) ([]kueuev1beta1.ResourceFlavor, error) {
+func CalculateNumberOfReplicas(requestedGpus int, gpusPerNode int) (int, int) {
+	// TODO handle cases where nodes are not empty and some GPUs are in use
+
+	var numReplicas int = 0
+	var nodeGpuRequest int = 0
+
+	if requestedGpus < 0 {
+		logrus.Warnf("Cannot determine number of replicas for negative GPUs")
+	} else if requestedGpus == 0 {
+		// TODO determine if rational logic
+		numReplicas = 1
+	} else if requestedGpus <= gpusPerNode {
+		// Can fit onto a single node
+		numReplicas = 1
+		nodeGpuRequest = requestedGpus
+	} else {
+		// Cannot fit onto a single node
+		for nodeGpuRequest = gpusPerNode; nodeGpuRequest > 0; nodeGpuRequest-- {
+
+			// If we can cleanly divide the number of GPUs
+			if requestedGpus%nodeGpuRequest == 0 {
+				numReplicas = requestedGpus / nodeGpuRequest
+				break
+			}
+		}
+	}
+
+	if (float32(nodeGpuRequest) / float32(gpusPerNode)) < 0.5 {
+		logrus.Warnf("Inefficient use of GPU nodes: %d GPUs per node, but %d GPUs assigned per replica, leading to %d replicas. Check that the number of requested GPUs (%d) can be well divided with the number of GPUs per node (%d)", requestedGpus, nodeGpuRequest, numReplicas, requestedGpus, gpusPerNode)
+	}
+
+	return numReplicas, nodeGpuRequest
+}
+
+func ListResourceFlavorsWithNodeLabel(ctx context.Context, client dynamic.Interface, labelKey string) ([]kueuev1beta1.ResourceFlavor, error) {
 	gvr := schema.GroupVersionResource{
 		Group:    "kueue.x-k8s.io",
 		Version:  "v1beta1",
 		Resource: "resourceflavors",
 	}
+
+	// Fetch all ResourceFlavors
 	resourceList, err := client.Resource(gvr).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list resource flavors: %v", err)
 	}
 
-	var resourceFlavors []kueuev1beta1.ResourceFlavor
+	var filteredResourceFlavors []kueuev1beta1.ResourceFlavor
 	for _, item := range resourceList.Items {
 		resourceFlavor := kueuev1beta1.ResourceFlavor{}
+
 		err = runtime.DefaultUnstructuredConverter.FromUnstructured(item.UnstructuredContent(), &resourceFlavor)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert unstructured item: %v", err)
 		}
-		resourceFlavors = append(resourceFlavors, resourceFlavor)
+
+		// Check if the specified label exists and matches the value
+		if _, found := resourceFlavor.Spec.NodeLabels[labelKey]; found {
+			filteredResourceFlavors = append(filteredResourceFlavors, resourceFlavor)
+		}
 	}
 
-	return resourceFlavors, nil
+	return filteredResourceFlavors, nil
 }
 
-func GetResourceFlavorGpuCount(resourceFlavor kueuev1beta1.ResourceFlavor) (int, error) {
-	gpuLabel, found := resourceFlavor.Spec.NodeLabels["beta.amd.com/gpu.family.AI"]
+func GetResourceFlavorGpuCount(resourceFlavor kueuev1beta1.ResourceFlavor, labelKey string) (int, error) {
+	gpuLabel, found := resourceFlavor.Spec.NodeLabels[labelKey]
 	if !found {
-		return 0, fmt.Errorf("GPU label not found in ResourceFlavor")
+		return 0, fmt.Errorf("GPU label %s not found in ResourceFlavor", labelKey)
 	}
 
 	gpuCount, err := strconv.Atoi(gpuLabel)
@@ -57,59 +103,42 @@ func GetResourceFlavorGpuCount(resourceFlavor kueuev1beta1.ResourceFlavor) (int,
 	return gpuCount, nil
 }
 
-func GetDefaultResourceFlavorGpuCount(ctx context.Context, client dynamic.Interface) (int, error) {
-	resourceFlavors, err := ListResourceFlavors(ctx, client)
+func GetDefaultResourceFlavorGpuCount(ctx context.Context, client dynamic.Interface, labelKey string) (int, error) {
+	resourceFlavors, err := ListResourceFlavorsWithNodeLabel(ctx, client, labelKey)
 	if err != nil {
 		return 0, fmt.Errorf("failed to list resource flavors: %v", err)
 	}
 	if len(resourceFlavors) == 1 {
-		return GetResourceFlavorGpuCount(resourceFlavors[0])
+		return GetResourceFlavorGpuCount(resourceFlavors[0], labelKey)
 	} else {
 		return 0, fmt.Errorf("zero or more than one resource flavor found, expected just one")
 	}
 }
 
-func ListClusterQueues(ctx context.Context, client dynamic.Interface) ([]kueuev1beta1.ClusterQueue, error) {
+func GetClusterQueue(ctx context.Context, client dynamic.Interface, clusterQueueName string) (*kueuev1beta1.ClusterQueue, error) {
 	gvr := schema.GroupVersionResource{
 		Group:    "kueue.x-k8s.io",
 		Version:  "v1beta1",
 		Resource: "clusterqueues",
 	}
-	resourceList, err := client.Resource(gvr).List(ctx, metav1.ListOptions{})
+
+	resource, err := client.Resource(gvr).Get(ctx, clusterQueueName, metav1.GetOptions{})
+
 	if err != nil {
-		return nil, fmt.Errorf("failed to list cluster queues: %v", err)
+		return nil, fmt.Errorf("failed to get cluster queue: %v", err)
 	}
 
-	var clusterQueues []kueuev1beta1.ClusterQueue
-	for _, item := range resourceList.Items {
-		clusterQueue := kueuev1beta1.ClusterQueue{}
-		err = runtime.DefaultUnstructuredConverter.FromUnstructured(item.UnstructuredContent(), &clusterQueue)
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert unstructured item: %v", err)
-		}
-		clusterQueues = append(clusterQueues, clusterQueue)
+	clusterQueue := kueuev1beta1.ClusterQueue{}
+	err = runtime.DefaultUnstructuredConverter.FromUnstructured(resource.UnstructuredContent(), &clusterQueue)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse cluster queue: %v", err)
 	}
 
-	return clusterQueues, nil
+	return &clusterQueue, nil
 }
 
-func GetDefaultClusterQueue(ctx context.Context, client dynamic.Interface) (*kueuev1beta1.ClusterQueue, error) {
-	clusterQueues, err := ListClusterQueues(ctx, client)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list cluster queues: %v", err)
-	}
-	if len(clusterQueues) == 0 {
-		return nil, fmt.Errorf("no cluster queues found")
-	}
-	// FIXME determine how to choose
-	//if len(clusterQueues) > 1 {
-	//	return nil, fmt.Errorf("multiple cluster queues found")
-	//}
-	return &clusterQueues[0], nil
-}
-
-func PrepareLocalClusterQueue(args utils.WorkloadArgs, c dynamic.Interface) (*unstructured.Unstructured, error) {
-	clusterQueue, err := GetDefaultClusterQueue(context.TODO(), c)
+func PrepareLocalClusterQueue(queueName string, namespace string, c dynamic.Interface) (*unstructured.Unstructured, error) {
+	_, err := GetClusterQueue(context.TODO(), c, queueName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get default cluster queue: %w", err)
 	}
@@ -118,11 +147,11 @@ func PrepareLocalClusterQueue(args utils.WorkloadArgs, c dynamic.Interface) (*un
 			"apiVersion": "kueue.x-k8s.io/v1beta1",
 			"kind":       "LocalQueue",
 			"metadata": map[string]interface{}{
-				"namespace": args.Namespace,
-				"name":      clusterQueue.Name,
+				"namespace": namespace,
+				"name":      queueName,
 			},
 			"spec": map[string]interface{}{
-				"clusterQueue": clusterQueue.Name,
+				"clusterQueue": queueName,
 			},
 		},
 	}

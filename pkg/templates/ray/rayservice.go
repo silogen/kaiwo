@@ -38,11 +38,11 @@ type ServiceLoader struct {
 	Kueue       k8s.KueueArgs
 }
 
-func (r *ServiceLoader) Load(path string) error {
+func (r *ServiceLoader) Load(args utils.WorkloadArgs) error {
 
-	logrus.Debugf("Loading ray service from %s", path)
+	logrus.Debugf("Loading ray service from %s", args.Path)
 
-	contents, err := os.ReadFile(filepath.Join(path, ServeconfigFilename))
+	contents, err := os.ReadFile(filepath.Join(args.Path, ServeconfigFilename))
 
 	if err != nil {
 		return fmt.Errorf("failed to read serveconfig file: %w", err)
@@ -57,7 +57,8 @@ func (r *ServiceLoader) Load(path string) error {
 	}
 
 	logrus.Debug("Fetching GPU count")
-	gpuCount, err := k8s.GetDefaultResourceFlavorGpuCount(context.TODO(), client)
+	// TODO make labelKey dynamic
+	gpuCount, err := k8s.GetDefaultResourceFlavorGpuCount(context.TODO(), client, "beta.amd.com/gpu.family.AI")
 
 	if err != nil {
 		return err
@@ -65,8 +66,12 @@ func (r *ServiceLoader) Load(path string) error {
 
 	logrus.Debugf("Fetched GPU count: %d", gpuCount)
 
+	numReplicas, nodeGpuRequest := k8s.CalculateNumberOfReplicas(args.GPUs, gpuCount)
+
 	r.Kueue = k8s.KueueArgs{
-		NodeGpuCount: gpuCount,
+		GPUsAvailablePerNode:    gpuCount,
+		RequestedGPUsPerReplica: nodeGpuRequest,
+		RequestedNumReplicas:    numReplicas,
 	}
 
 	return nil
@@ -80,6 +85,6 @@ func (r *ServiceLoader) IgnoreFiles() []string {
 	return []string{ServeconfigFilename}
 }
 
-func (r *ServiceLoader) ModifyResources(resources *[]*unstructured.Unstructured, args utils.WorkloadArgs) error {
+func (r *ServiceLoader) AdditionalResources(resources *[]*unstructured.Unstructured, args utils.WorkloadArgs) error {
 	return nil
 }

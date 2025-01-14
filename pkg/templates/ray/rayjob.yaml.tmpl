@@ -70,7 +70,7 @@ spec:
                 medium: Memory
                 sizeLimit: 200Gi
     workerGroupSpecs:
-      - replicas: {{ add (div .Base.GPUs .Workload.Kueue.NodeGpuCount) 1 }}
+      - replicas: {{ .Workload.Kueue.RequestedNumReplicas }}
         # Not used as enableInTreeAutoscaling is false
         # minReplicas: 1
         # maxReplicas: 1
@@ -102,13 +102,13 @@ spec:
                     value: "/etc/gcp/credentials.json"
                 resources:
                     limits:
-                        cpu: "{{ mul .Base.GPUs 4 }}"
-                        memory: "{{ mul .Base.GPUs 32 }}Gi"
-                        amd.com/gpu: "{{ .Base.GPUs }}"
+                        cpu: "{{ mul .Workload.Kueue.RequestedGPUsPerReplica 4 }}"
+                        memory: "{{ mul .Workload.Kueue.RequestedGPUsPerReplica 32 }}Gi"
+                        amd.com/gpu: "{{ .Workload.Kueue.RequestedGPUsPerReplica }}"
                     requests:
-                        cpu: "{{ mul .Base.GPUs 4 }}"
-                        memory: "{{ mul .Base.GPUs 32 }}Gi"
-                        amd.com/gpu: "{{ .Base.GPUs }}"
+                        cpu: "{{ mul .Workload.Kueue.RequestedGPUsPerReplica 4 }}"
+                        memory: "{{ mul .Workload.Kueue.RequestedGPUsPerReplica 32 }}Gi"
+                        amd.com/gpu: "{{ .Workload.Kueue.RequestedGPUsPerReplica }}"
                 volumeMounts:
                   - mountPath: /workload
                     name: workload

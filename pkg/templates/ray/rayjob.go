@@ -37,9 +37,9 @@ type JobLoader struct {
 	Kueue      k8s.KueueArgs
 }
 
-func (r *JobLoader) Load(path string) error {
+func (r *JobLoader) Load(args utils.WorkloadArgs) error {
 
-	contents, err := os.ReadFile(filepath.Join(path, EntrypointFilename))
+	contents, err := os.ReadFile(filepath.Join(args.Path, EntrypointFilename))
 
 	if err != nil {
 		return fmt.Errorf("failed to read entrypoint file: %w", err)
@@ -53,14 +53,19 @@ func (r *JobLoader) Load(path string) error {
 		return err
 	}
 
-	gpuCount, err := k8s.GetDefaultResourceFlavorGpuCount(context.TODO(), client)
+	// TODO make labelKey dynamic
+	gpuCount, err := k8s.GetDefaultResourceFlavorGpuCount(context.TODO(), client, "beta.amd.com/gpu.family.AI")
 
 	if err != nil {
 		return err
 	}
 
+	numReplicas, nodeGpuRequest := k8s.CalculateNumberOfReplicas(args.GPUs, gpuCount)
+
 	r.Kueue = k8s.KueueArgs{
-		NodeGpuCount: gpuCount,
+		GPUsAvailablePerNode:    gpuCount,
+		RequestedGPUsPerReplica: nodeGpuRequest,
+		RequestedNumReplicas:    numReplicas,
 	}
 
 	return nil
@@ -74,7 +79,7 @@ func (r *JobLoader) IgnoreFiles() []string {
 	return []string{EntrypointFilename}
 }
 
-func (r *JobLoader) ModifyResources(resources *[]*unstructured.Unstructured, args utils.WorkloadArgs) error {
+func (r *JobLoader) AdditionalResources(resources *[]*unstructured.Unstructured, args utils.WorkloadArgs) error {
 
 	c, err := k8s.GetDynamicClient()
 	if err != nil {
@@ -82,7 +87,7 @@ func (r *JobLoader) ModifyResources(resources *[]*unstructured.Unstructured, arg
 	}
 
 	// Handle kueue local queue
-	localQueue, err := k8s.PrepareLocalClusterQueue(args, c)
+	localQueue, err := k8s.PrepareLocalClusterQueue(args.Queue, args.Namespace, c)
 	if err != nil {
 		return err
 	}

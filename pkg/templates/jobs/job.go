@@ -19,6 +19,7 @@ package jobs
 import (
 	_ "embed"
 	"fmt"
+	"github.com/silogen/ai-workload-orchestrator/pkg/k8s"
 	"github.com/silogen/ai-workload-orchestrator/pkg/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"os"
@@ -35,9 +36,9 @@ type JobLoader struct {
 	Entrypoint string
 }
 
-func (r *JobLoader) Load(path string) error {
+func (r *JobLoader) Load(args utils.WorkloadArgs) error {
 
-	contents, err := os.ReadFile(filepath.Join(path, ENTRYPOINT_FILENAME))
+	contents, err := os.ReadFile(filepath.Join(args.Path, ENTRYPOINT_FILENAME))
 
 	if err != nil {
 		return fmt.Errorf("failed to read entrypoint file: %w", err)
@@ -58,6 +59,19 @@ func (r *JobLoader) IgnoreFiles() []string {
 	return []string{ENTRYPOINT_FILENAME}
 }
 
-func (r *JobLoader) ModifyResources(resources *[]*unstructured.Unstructured, args utils.WorkloadArgs) error {
+func (r *JobLoader) AdditionalResources(resources *[]*unstructured.Unstructured, args utils.WorkloadArgs) error {
+	c, err := k8s.GetDynamicClient()
+	if err != nil {
+		return err
+	}
+
+	// Handle kueue local queue
+	localQueue, err := k8s.PrepareLocalClusterQueue(args.Queue, args.Namespace, c)
+	if err != nil {
+		return err
+	}
+
+	*resources = append(*resources, localQueue)
+
 	return nil
 }

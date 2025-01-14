@@ -32,7 +32,7 @@ func ValidateWorkloadArgs(args utils.WorkloadArgs) error {
 
 type WorkloadLoader interface {
 	// Load loads a workload from a path
-	Load(path string) error
+	Load(args utils.WorkloadArgs) error
 
 	// DefaultTemplate returns the default template for the workloader
 	DefaultTemplate() []byte
@@ -40,6 +40,6 @@ type WorkloadLoader interface {
 	// IgnoreFiles lists the files that should be ignored in the ConfigMap
 	IgnoreFiles() []string
 
-	// ModifyResources modifies the list of the workload template resources (loaded from the template file)
-	ModifyResources(resources *[]*unstructured.Unstructured, args utils.WorkloadArgs) error
+	// AdditionalResources adds additional resources needed by the worker
+	AdditionalResources(resources *[]*unstructured.Unstructured, args utils.WorkloadArgs) error
 }

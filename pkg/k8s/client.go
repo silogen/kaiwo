@@ -32,7 +32,7 @@ func InitializeClient() (dynamic.Interface, error) {
 
 	dynamicClient, err := dynamic.NewForConfig(config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create dynamic client: %v", err)
+		return nil, fmt.Errorf("failed to create kubernetes client: %v", err)
 	}
 
 	return dynamicClient, nil
@@ -43,7 +43,7 @@ func GetDynamicClient() (dynamic.Interface, error) {
 	once.Do(func() {
 		client, err := InitializeClient()
 		if err != nil {
-			logrus.Fatalf("failed to initialize dynamic client: %v", err)
+			logrus.Fatalf("failed to initialize kubernetes client: %v", err)
 		}
 		dynamicClient = client
 	})
