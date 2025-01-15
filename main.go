@@ -17,10 +17,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"github.com/silogen/ai-workload-orchestrator/pkg/k8s"
 	"github.com/silogen/ai-workload-orchestrator/pkg/utils"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"log"
 	"os"
 	"slices"
+	"strings"
 
 	"github.com/silogen/ai-workload-orchestrator/pkg/submit"
 	"github.com/silogen/ai-workload-orchestrator/pkg/templates"
@@ -135,13 +141,56 @@ func main() {
 			logrus.Info("Port-forward command placeholder")
 		},
 	})
-	rootCmd.AddCommand(&cobra.Command{
-		Use:   "delete",
-		Short: "Delete a workload",
+
+	deleteCmd := &cobra.Command{
+		Use:   "delete -n [namespace] [workload-type]/[workload-name]",
+		Short: "Delete a workload. Workload type must be one of [job, rayjob, rayservice]",
+		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			logrus.Info("Delete command placeholder")
+			//  TODO move to another location later during the refactoring
+
+			split := strings.Split(args[0], "/")
+
+			if len(split) != 2 {
+				logrus.Fatalf("Invalid input format. Expected format: [workload-type]/[workload-name].")
+				return
+			}
+
+			workloadType := split[0]
+			name := split[1]
+
+			var gvr schema.GroupVersionResource
+
+			switch workloadType {
+			case "job":
+				gvr = schema.GroupVersionResource{Group: "batch", Version: "v1", Resource: "jobs"}
+			case "rayjob":
+				gvr = schema.GroupVersionResource{Group: "ray.io", Version: "v1", Resource: "rayjobs"}
+			case "rayservice":
+				gvr = schema.GroupVersionResource{Group: "ray.io", Version: "v1", Resource: "rayservices"}
+			default:
+				logrus.Fatalf("Invalid workload type %s", workloadType)
+				return
+			}
+
+			ctx := context.TODO()
+			dynamicClient, err := k8s.GetDynamicClient()
+			if err != nil {
+				logrus.Fatal(err)
+				return
+			}
+			err = dynamicClient.Resource(gvr).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+			if err != nil {
+				log.Fatalf("Failed to delete resource: %v", err)
+			}
+
+			fmt.Printf("Resource %s/%s deleted successfully\n", namespace, name)
 		},
-	})
+	}
+
+	deleteCmd.Flags().StringVarP(&namespace, "namespace", "n", "kaiwo", "Kubenetes namespace to use. Defaults to `kaiwo`")
+
+	rootCmd.AddCommand(deleteCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		logrus.Fatal(err)
