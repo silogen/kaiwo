@@ -39,6 +39,13 @@ Kubernetes-native AI Workload Orchestrator
 
 `
 
+// Build-time variables (set with -ldflags). Do not touch
+var (
+	version = "unknown" // Build version
+	commit  = "unknown" // Git commit hash
+	date    = "unknown" // Build timestamp
+)
+
 var (
 	path                string
 	image               string
@@ -70,12 +77,22 @@ func main() {
 		Short: "Kubernetes-native AI Workload Orchestrator",
 	}
 
+	rootCmd.AddCommand(&cobra.Command{
+		Use:   "version",
+		Short: "Show the version of kaiwo",
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Printf("kaiwo version: %s\n", version)
+			fmt.Printf("commit: %s\n", commit)
+			fmt.Printf("build date: %s\n", date)
+		},
+	})
+
 	submitCmd := &cobra.Command{
 		Use:   "submit",
 		Short: "Submit a workload",
 		Run: func(cmd *cobra.Command, args []string) {
 
-			var workloadArgs utils.WorkloadArgs = utils.WorkloadArgs{
+			workloadArgs := utils.WorkloadArgs{
 				Path:                path,
 				Image:               image,
 				Queue:               queue,
@@ -91,16 +108,17 @@ func main() {
 			if err := submit.Submit(workloadArgs); err != nil {
 				logrus.Fatalf("Failed to submit workload: %v", err)
 			}
-
 		},
+
 		PreRunE: func(cmd *cobra.Command, args []string) error {
-			// TODO move other validation here as well
+			// TODO Move other validation here as well
 			if !slices.Contains(templates.WorkloadTypes, type_) {
 				return fmt.Errorf("invalid workload type %s. Must be one of %v", type_, templates.WorkloadTypes)
 			}
 			return nil
 		},
 	}
+
 	submitCmd.Flags().StringVarP(&path, "path", "p", "", "absolute or relative path to workload code and entrypoint/serveconfig directory")
 	submitCmd.Flags().StringVarP(&image, "image", "i", defaultImage, "Container image to use. Defaults to ghcr.io/silogen/rocm-ray:vx.x")
 	submitCmd.Flags().StringVarP(&queue, "queue", "q", defaultQueue, "ClusterQueue to use. Defaults to queue")
