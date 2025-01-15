@@ -1,4 +1,4 @@
-module github.com/silogen/ai-workload-orchestrator
+module github.com/silogen/kaiwo
 
 go 1.23.3
 

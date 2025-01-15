@@ -13,6 +13,18 @@
 	    },
 	    "buildFlags": "-tags=debug"
 	  },
+	  {
+		"name": "Submit Rayservice",
+		"type": "go",
+		"request": "launch",
+		"mode": "debug",
+		"program": "${workspaceFolder}",
+		"args": ["submit", "-p", "workloads/inference/LLMs/online-inference/vllm-single-multinode", "-t", "rayservice", "-g", "4", "--dry-run"],
+		"env": {
+		  "GO111MODULE": "on"
+		},
+		"buildFlags": "-tags=debug"
+	      },
 	{
 		"name": "Submit Job",
 		"type": "go",

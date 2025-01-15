@@ -19,6 +19,7 @@ package submit
 import (
 	"context"
 	"fmt"
+
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -34,9 +35,9 @@ import (
 	"text/template"
 
 	"github.com/Masterminds/sprig/v3"
-	"github.com/silogen/ai-workload-orchestrator/pkg/k8s"
-	"github.com/silogen/ai-workload-orchestrator/pkg/templates"
-	"github.com/silogen/ai-workload-orchestrator/pkg/utils"
+	"github.com/silogen/kaiwo/pkg/k8s"
+	"github.com/silogen/kaiwo/pkg/templates"
+	"github.com/silogen/kaiwo/pkg/utils"
 	"github.com/sirupsen/logrus"
 
 	corev1 "k8s.io/api/core/v1"
@@ -48,15 +49,26 @@ type TemplateConfig struct {
 	Base utils.WorkloadArgs
 
 	// The type-specific workload args
-	Workload templates.WorkloadLoader
-	EnvVars []corev1.EnvVar
+	Workload      templates.WorkloadLoader
+	EnvVars       []corev1.EnvVar
 	SecretVolumes []k8s.SecretVolume
 }
 
-
 func Submit(args utils.WorkloadArgs) error {
 
-	args, loader, err := initializeLoader(args)
+	var envVars []corev1.EnvVar
+	var secretVolumes []k8s.SecretVolume
+	envFilePath := filepath.Join(args.Path, utils.ENV_FILENAME)
+	if _, err := os.Stat(envFilePath); err == nil {
+		logrus.Infof("Found env file at %s, parsing environment variables and secret volumes", envFilePath)
+		envVars, secretVolumes, err = k8s.ReadEnvFile(envFilePath)
+		if err != nil {
+			return fmt.Errorf("failed to parse env file: %w", err)
+		}
+		logrus.Infof("Parsed %d environment variables and %d secret volumes from env file", len(envVars), len(secretVolumes))
+	}
+
+	args, loader, err := initializeLoader(args, envVars)
 
 	if err != nil {
 		return err
@@ -81,19 +93,6 @@ func Submit(args utils.WorkloadArgs) error {
 			return err
 		}
 	}
-
-	var envVars []corev1.EnvVar
-	var secretVolumes []k8s.SecretVolume
-	envFilePath := filepath.Join(args.Path, utils.ENV_FILENAME)
-	if _, err := os.Stat(envFilePath); err == nil {
-		logrus.Infof("Found env file at %s, parsing environment variables and secret volumes", envFilePath)
-		envVars, secretVolumes, err = k8s.ReadEnvFile(envFilePath)
-		if err != nil {
-			return fmt.Errorf("failed to parse env file: %w", err)
-		}
-		logrus.Infof("Parsed %d environment variables and %d secret volumes from env file", len(envVars), len(secretVolumes))
-	} 
-	
 
 	if args.Path != "" {
 		args, err = addConfigMapResource(args, loader, &resources)
@@ -125,7 +124,7 @@ func Submit(args utils.WorkloadArgs) error {
 }
 
 // initializeLoader validates and initializes the workload loader
-func initializeLoader(args utils.WorkloadArgs) (utils.WorkloadArgs, templates.WorkloadLoader, error) {
+func initializeLoader(args utils.WorkloadArgs, envVars []corev1.EnvVar) (utils.WorkloadArgs, templates.WorkloadLoader, error) {
 	if err := templates.ValidateWorkloadArgs(args); err != nil {
 		return args, nil, err
 	}
@@ -138,7 +137,7 @@ func initializeLoader(args utils.WorkloadArgs) (utils.WorkloadArgs, templates.Wo
 
 	loader := templates.GetWorkloadLoader(args.Type)
 	if args.Path != "" {
-		if err := loader.Load(args); err != nil {
+		if err := loader.Load(args, envVars); err != nil {
 			return args, nil, fmt.Errorf("failed to load workload: %w", err)
 		}
 	}
@@ -154,7 +153,7 @@ func setWorkloadName(workloadName string, path string, image string) string {
 		}
 
 		var appendix string
-		
+
 		if path != "" {
 			appendix = sanitizeStringForKubernetes(filepath.Base(path))
 		} else {
@@ -245,9 +244,9 @@ func processWorkloadTemplate(
 	}
 
 	templateContext := TemplateConfig{
-		Base:         args,
-		Workload:     loader,
-		EnvVars:      envVars,
+		Base:          args,
+		Workload:      loader,
+		EnvVars:       envVars,
 		SecretVolumes: secretVolumes,
 	}
 
@@ -281,7 +280,6 @@ func processWorkloadTemplate(
 	}
 	return nil
 }
-
 
 func printResources(resources []*unstructured.Unstructured) {
 	for _, resource := range resources {

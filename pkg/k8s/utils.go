@@ -154,7 +154,7 @@ func ReadEnvFile(filePath string) ([]corev1.EnvVar, []SecretVolume, error) {
 				Name:       fmt.Sprintf("%s-volume", input.MountSecret.Secret),
 				SecretName: input.MountSecret.Secret,
 				Key:        input.MountSecret.Key,
-				SubPath:    input.MountSecret.Path, // File name to mount
+				SubPath:    filepath.Base(input.MountSecret.Path), // File name to mount
 				MountPath:  input.MountSecret.Path,
 			})
 			envVars = append(envVars, corev1.EnvVar{

@@ -26,7 +26,7 @@ spec:
               {{- range .EnvVars }}
               {{- if .Value }}
                 - name: {{ .Name }}
-                  value: {{ .Value }}
+                  value: "{{ .Value }}"
               {{- else }}
                 - name: {{ .Name }}
                   valueFrom:
@@ -36,6 +36,13 @@ spec:
               {{- end }}
               {{- end }}
               {{- end }}
+              resources:
+                limits:
+                  cpu: "2"
+                  memory: "16Gi"
+                requests:
+                  cpu: "2"
+                  memory: "16Gi"
               ports:
                 - containerPort: 6379
                   name: gcs-server
@@ -95,7 +102,7 @@ spec:
                 {{- range .EnvVars }}
                 {{- if .Value }}
                   - name: {{ .Name }}
-                    value: {{ .Value }}
+                    value: "{{ .Value }}"
                 {{- else }}
                   - name: {{ .Name }}
                     valueFrom:

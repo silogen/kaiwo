@@ -1,0 +1,16 @@
+applications:
+- name: llm
+  route_prefix: /
+  import_path: app:deployment
+  deployments:
+  - name: VLLMDeployment
+    autoscaling_config:
+      metrics_interval_s: 0.2
+      look_back_period_s: 2
+      downscale_delay_s: 600
+      upscale_delay_s: 30
+      target_num_ongoing_requests_per_replica: 20
+    graceful_shutdown_timeout_s: 5
+    max_concurrent_queries: 100
+
+    

@@ -19,12 +19,15 @@ package jobs
 import (
 	_ "embed"
 	"fmt"
-	"github.com/silogen/ai-workload-orchestrator/pkg/k8s"
-	"github.com/silogen/ai-workload-orchestrator/pkg/utils"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/silogen/kaiwo/pkg/k8s"
+	"github.com/silogen/kaiwo/pkg/utils"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
 //go:embed job.yaml.tmpl
@@ -36,7 +39,7 @@ type JobLoader struct {
 	Entrypoint string
 }
 
-func (r *JobLoader) Load(args utils.WorkloadArgs) error {
+func (r *JobLoader) Load(args utils.WorkloadArgs, envVars []corev1.EnvVar) error {
 
 	entrypoint, err := os.ReadFile(filepath.Join(args.Path, EntrypointFilename))
 
@@ -49,8 +52,8 @@ func (r *JobLoader) Load(args utils.WorkloadArgs) error {
 	}
 
 	r.Entrypoint = strings.ReplaceAll(string(entrypoint), "\n", " ") // Flatten multiline string
-	r.Entrypoint = strings.ReplaceAll(r.Entrypoint, "\"", "\\\"") // Escape double quotes
-	r.Entrypoint = fmt.Sprintf("\"%s\"", r.Entrypoint) // Wrap the entire command in quotes
+	r.Entrypoint = strings.ReplaceAll(r.Entrypoint, "\"", "\\\"")    // Escape double quotes
+	r.Entrypoint = fmt.Sprintf("\"%s\"", r.Entrypoint)               // Wrap the entire command in quotes
 
 	return nil
 }

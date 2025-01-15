@@ -1,4 +1,8 @@
 envVars:
+  - name: NCCL_P2P_DISABLE
+    value: "1"
+  - name: NCCL_IB_DISABLE
+    value: "1"
   - fromSecret:
         name: "HF_TOKEN"
         secret: "hf-token"

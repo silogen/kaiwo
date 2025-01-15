@@ -4,6 +4,9 @@ Note! this workload expects existing secrets. Have a look at `env` file for the 
 
 - LORA finetuning: if you use a different model architecture, you may need to adjust LORA configuration and `target_modules` in particular.
 - Supports single-node and multi-node scenarios
-- DeepSpeed ZeRO partitions LLM parameters, gradients, and optimizer states across multiple GPUs
+- DeepSpeed Zero stage 3 partitions LLM parameters, gradients, and optimizer states across multiple GPUs
 - set `num_devices` to total number of GPUs.
 
+To run this workload on 16 GPUs in `kaiwo` namespace, set `num_devices` in `entrypoint` to `16` and use the following command:
+
+`kaiwo submit -p workloads/training/LLMs/lora-supervised-finetuning/lora-sft-zero3-single-multinode -g 16 -t rayjob`

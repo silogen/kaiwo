@@ -19,8 +19,11 @@ package templates
 import (
 	_ "embed"
 	"fmt"
-	"github.com/silogen/ai-workload-orchestrator/pkg/utils"
+
+	"github.com/silogen/kaiwo/pkg/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
 // WorkloadArgs is a struct that holds the high-level arguments used for all workloads
@@ -39,7 +42,7 @@ func ValidateWorkloadArgs(args utils.WorkloadArgs) error {
 
 type WorkloadLoader interface {
 	// Load loads a workload from a path
-	Load(args utils.WorkloadArgs) error
+	Load(args utils.WorkloadArgs, envVars []corev1.EnvVar) error
 
 	// DefaultTemplate returns the default template for the workloader
 	DefaultTemplate() []byte

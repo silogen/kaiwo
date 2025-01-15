@@ -18,10 +18,11 @@ package templates
 
 import (
 	_ "embed"
+
 	"github.com/sirupsen/logrus"
 
-	"github.com/silogen/ai-workload-orchestrator/pkg/templates/jobs"
-	"github.com/silogen/ai-workload-orchestrator/pkg/templates/ray"
+	"github.com/silogen/kaiwo/pkg/templates/jobs"
+	"github.com/silogen/kaiwo/pkg/templates/ray"
 )
 
 const RayServiceType = "rayservice"

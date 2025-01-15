@@ -10,8 +10,8 @@ import (
 	"k8s.io/client-go/dynamic"
 	"strconv"
 
+	corev1 "k8s.io/api/core/v1"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -25,12 +25,51 @@ type KueueArgs struct {
 }
 
 // CalculateNumberOfReplicas attempts to balance the number of replicas by maximizing the number of GPUs used per node
-func CalculateNumberOfReplicas(requestedGpus int, gpusPerNode int) (int, int) {
+func CalculateNumberOfReplicas(requestedGpus int, gpusPerNode int, envVars []corev1.EnvVar) (int, int) {
 	// TODO handle cases where nodes are not empty and some GPUs are in use
 
 	var numReplicas int = 0
 	var nodeGpuRequest int = 0
 
+	// Retrieve PIPELINE_PARALLELISM and TENSOR_PARALLELISM from envVars
+	var pipelineParallelism, tensorParallelism int
+	for _, envVar := range envVars {
+		switch envVar.Name {
+		case "PIPELINE_PARALLELISM":
+			val, err := strconv.Atoi(envVar.Value)
+			if err == nil {
+				pipelineParallelism = val
+			} else {
+				logrus.Warnf("Invalid PIPELINE_PARALLELISM value: %s", envVar.Value)
+			}
+		case "TENSOR_PARALLELISM":
+			val, err := strconv.Atoi(envVar.Value)
+			if err == nil {
+				tensorParallelism = val
+			} else {
+				logrus.Warnf("Invalid TENSOR_PARALLELISM value: %s", envVar.Value)
+			}
+		}
+	}
+
+	// If PIPELINE_PARALLELISM and TENSOR_PARALLELISM are set, enforce their values
+	if pipelineParallelism > 0 && tensorParallelism > 0 {
+		numReplicas = pipelineParallelism
+		nodeGpuRequest = tensorParallelism
+
+		// Validate the configuration
+		if numReplicas*tensorParallelism != requestedGpus {
+			logrus.Warnf("Mismatch between requested GPUs (%d) and calculated GPUs (%d) from PIPELINE_PARALLELISM (%d) and TENSOR_PARALLELISM (%d)", requestedGpus, numReplicas*tensorParallelism, pipelineParallelism, tensorParallelism)
+		}
+
+		if tensorParallelism > gpusPerNode {
+			logrus.Warnf("TENSOR_PARALLELISM (%d) exceeds available GPUs per node (%d)", tensorParallelism, gpusPerNode)
+		}
+
+		return numReplicas, nodeGpuRequest
+	}
+
+	// Default logic if PIPELINE_PARALLELISM and TENSOR_PARALLELISM are not set
 	if requestedGpus < 0 {
 		logrus.Warnf("Cannot determine number of replicas for negative GPUs")
 	} else if requestedGpus == 0 {
@@ -43,7 +82,6 @@ func CalculateNumberOfReplicas(requestedGpus int, gpusPerNode int) (int, int) {
 	} else {
 		// Cannot fit onto a single node
 		for nodeGpuRequest = gpusPerNode; nodeGpuRequest > 0; nodeGpuRequest-- {
-
 			// If we can cleanly divide the number of GPUs
 			if requestedGpus%nodeGpuRequest == 0 {
 				numReplicas = requestedGpus / nodeGpuRequest
@@ -58,6 +96,7 @@ func CalculateNumberOfReplicas(requestedGpus int, gpusPerNode int) (int, int) {
 
 	return numReplicas, nodeGpuRequest
 }
+
 
 func ListResourceFlavorsWithNodeLabel(ctx context.Context, client dynamic.Interface, labelKey string) ([]kueuev1beta1.ResourceFlavor, error) {
 	gvr := schema.GroupVersionResource{

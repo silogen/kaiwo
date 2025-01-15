@@ -18,12 +18,13 @@ package main
 
 import (
 	"fmt"
-	"github.com/silogen/ai-workload-orchestrator/pkg/utils"
 	"os"
 	"slices"
 
-	"github.com/silogen/ai-workload-orchestrator/pkg/submit"
-	"github.com/silogen/ai-workload-orchestrator/pkg/templates"
+	"github.com/silogen/kaiwo/pkg/utils"
+
+	"github.com/silogen/kaiwo/pkg/submit"
+	"github.com/silogen/kaiwo/pkg/templates"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
