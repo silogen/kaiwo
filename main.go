@@ -27,8 +27,10 @@ import (
 
 	"github.com/silogen/kaiwo/pkg/submit"
 	"github.com/silogen/kaiwo/pkg/templates"
+	cli "github.com/silogen/ai-workload-orchestrator/pkg/cli/apply"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"os"
 )
 
 var kaiwoBanner = `
@@ -181,11 +183,7 @@ func main() {
 			}
 
 		},
-	}
-
-	deleteCmd.Flags().StringVarP(&namespace, "namespace", "n", "kaiwo", "Kubenetes namespace to use. Defaults to `kaiwo`")
-
-	rootCmd.AddCommand(deleteCmd)
+	})
 
 	if err := rootCmd.Execute(); err != nil {
 		logrus.Fatal(err)

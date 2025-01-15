@@ -81,7 +81,7 @@ func Submit(args utils.WorkloadArgs) error {
 
 	if !args.DryRun {
 		logrus.Infof("Initializing Kubernetes client")
-		c, err = k8s.InitializeClient()
+		c, err = k8s.InitializeDynamicClient()
 		if err != nil {
 			return fmt.Errorf("failed to initialize Kubernetes client: %v", err)
 		}

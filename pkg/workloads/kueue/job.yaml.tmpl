@@ -1,0 +1,74 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Base.Name }}
+  namespace: {{ .Base.Namespace }}
+  labels:
+    kueue.x-k8s.io/queue-name: {{ .Base.Queue }}
+spec:
+  ttlSecondsAfterFinished: {{ mul .Base.TtlMinAfterFinished 60 }}
+  template:
+    spec:
+      restartPolicy: "Never"
+      containers:
+      - name: {{ .Base.Name }}
+        image: {{ .Base.Image }}
+        imagePullPolicy: Always
+        {{- if .Workload.Entrypoint }}
+        command: 
+        - sh
+        - -c
+        - {{ .Workload.Entrypoint }}
+        {{- end }}
+        env:
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: gcs-credentials
+                key: access_key
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: gcs-credentials
+                key: secret_key
+          - name: HF_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: hf-token
+                key: hf-token
+          - name: GOOGLE_APPLICATION_CREDENTIALS
+            value: "/etc/gcp/credentials.json"
+        resources:
+          requests:
+            memory: "{{ mul .Base.GPUs 32 }}Gi"
+            cpu: "{{ mul .Base.GPUs 4 }}"
+            amd.com/gpu: "{{ .Base.GPUs }}"
+          limits:
+            memory: "{{ mul .Base.GPUs 32 }}Gi"
+            cpu: "{{ mul .Base.GPUs 4 }}"
+            amd.com/gpu: "{{ .Base.GPUs }}"
+        volumeMounts:
+        - mountPath: /workload
+          name: workload
+        - mountPath: /dev/shm
+          name: dshm
+        - mountPath: /etc/gcp/credentials.json
+          name: gcp-credentials-volume
+          subPath: credentials.json
+      volumes:
+      - name: workload
+        configMap:
+          name: {{ .Base.Name }}
+          defaultMode: 0700
+      - name: gcp-credentials-volume
+        secret:
+          secretName: gcs-credentials
+          items:
+          - key: gcs-credentials-json
+            path: credentials.json
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 200Gi
+
+       

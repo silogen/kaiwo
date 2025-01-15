@@ -1,0 +1,77 @@
+apiVersion: ray.io/v1
+kind: RayService
+metadata:
+  name: {{ .Base.Name }}
+  namespace: {{ .Base.Namespace }} 
+spec:
+  serveConfigV2: | 
+{{ .Workload.Serveconfig | indent 4 }}
+  rayClusterConfig:
+    enableInTreeAutoscaling: true
+    headGroupSpec:
+      rayStartParams:
+        dashboard-host: "0.0.0.0"
+      template:
+        spec:
+          containers:
+            - name: ray-head
+              image: {{ .Base.Image }}
+              env:
+                - name: HUGGING_FACE_HUB_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: hf-token
+                      key: hf-token
+              volumeMounts:
+                - mountPath: /workload
+                  name: app-mount
+              ports:
+                - containerPort: 6379
+                  name: gcs-server
+                - containerPort: 8265
+                  name: dashboard
+                - containerPort: 10001
+                  name: client
+                - containerPort: 8000
+                  name: serve
+          volumes:
+            - name: app-mount
+              configMap:
+                name: {{ .Base.Name }}
+    workerGroupSpecs:
+      - replicas: {{ .Workload.Kueue.RequestedNumReplicas }}
+        # minReplicas: 1
+        # maxReplicas: 4
+        groupName: gpu-group
+        rayStartParams: {}
+        template:
+          spec:
+            containers:
+              - name: llm
+                image: {{ .Base.Image }}
+                lifecycle:
+                  preStop:
+                    exec:
+                      command: ["/bin/sh", "-c", "ray stop"]
+                env:
+                  - name: HUGGING_FACE_HUB_TOKEN
+                    valueFrom:
+                      secretKeyRef:
+                        name: hf-token
+                        key: hf-token
+                resources:
+                    limits:
+                        cpu: "{{ mul .Workload.Kueue.RequestedGPUsPerReplica 4 }}"
+                        memory: "{{ mul .Workload.Kueue.RequestedGPUsPerReplica 32 }}Gi"
+                        amd.com/gpu: "{{ .Workload.Kueue.RequestedGPUsPerReplica }}"
+                    requests:
+                        cpu: "{{ mul .Workload.Kueue.RequestedGPUsPerReplica 4 }}"
+                        memory: "{{ mul .Workload.Kueue.RequestedGPUsPerReplica 32 }}Gi"
+                        amd.com/gpu: "{{ .Workload.Kueue.RequestedGPUsPerReplica }}"
+                volumeMounts:
+                  - mountPath: /workload
+                    name: app-mount
+            volumes:
+              - name: app-mount
+                configMap:
+                  name: {{ .Base.Name }}

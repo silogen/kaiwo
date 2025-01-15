@@ -1,0 +1,134 @@
+apiVersion: ray.io/v1
+kind: RayJob
+metadata:
+  name: {{ .Base.Name }}
+  namespace: {{ .Base.Namespace }}
+  labels:
+    kueue.x-k8s.io/queue-name: {{ .Base.Queue }}
+spec:
+  shutdownAfterJobFinishes: true
+  ttlSecondsAfterFinished: {{ mul .Base.TtlMinAfterFinished 60 }}
+  entrypoint: |
+{{ .Workload.Entrypoint | indent 4}}
+  rayClusterSpec:
+    rayVersion: "2.9.0"
+    enableInTreeAutoscaling: false #cannot be true when using Kueue
+    headGroupSpec:
+      rayStartParams: {}
+      template:
+        spec:
+          containers:
+            - name: ray-head
+              image: {{ .Base.Image }}
+              imagePullPolicy: Always
+              env:
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: gcs-credentials
+                      key: access_key
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: gcs-credentials
+                      key: secret_key
+                - name: HF_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: hf-token
+                      key: hf-token
+                - name: GOOGLE_APPLICATION_CREDENTIALS
+                  value: "/etc/gcp/credentials.json"
+              ports:
+                - containerPort: 6379
+                  name: gcs-server
+                - containerPort: 8265
+                  name: dashboard
+                - containerPort: 10001
+                  name: client
+                - containerPort: 8000
+                  name: serve
+              volumeMounts:
+                  - mountPath: /workload
+                    name: workload
+                  - mountPath: /dev/shm
+                    name: dshm
+                  - mountPath: /etc/gcp/credentials.json
+                    name: gcp-credentials-volume
+                    subPath: credentials.json
+          volumes:
+            - name: workload
+              configMap:
+                name: {{ .Base.Name }}
+            - name: gcp-credentials-volume
+              secret:
+                secretName: gcs-credentials
+                items:
+                  - key: gcs-credentials-json
+                    path: credentials.json
+            - name: dshm
+              emptyDir:
+                medium: Memory
+                sizeLimit: 200Gi
+    workerGroupSpecs:
+      - replicas: {{ .Workload.Kueue.RequestedNumReplicas }}
+        # Not used as enableInTreeAutoscaling is false
+        # minReplicas: 1
+        # maxReplicas: 1
+        groupName: small-group
+        rayStartParams: {}
+        template:
+          spec:
+            containers:
+              - name: ray-worker
+                image: {{ .Base.Image }}
+                imagePullPolicy: Always
+                env:
+                  - name: AWS_ACCESS_KEY_ID
+                    valueFrom:
+                      secretKeyRef:
+                        name: gcs-credentials
+                        key: access_key
+                  - name: AWS_SECRET_ACCESS_KEY
+                    valueFrom:
+                      secretKeyRef:
+                        name: gcs-credentials
+                        key: secret_key
+                  - name: HF_TOKEN
+                    valueFrom:
+                      secretKeyRef:
+                        name: hf-token
+                        key: hf-token
+                  - name: GOOGLE_APPLICATION_CREDENTIALS
+                    value: "/etc/gcp/credentials.json"
+                resources:
+                    limits:
+                        cpu: "{{ mul .Workload.Kueue.RequestedGPUsPerReplica 4 }}"
+                        memory: "{{ mul .Workload.Kueue.RequestedGPUsPerReplica 32 }}Gi"
+                        amd.com/gpu: "{{ .Workload.Kueue.RequestedGPUsPerReplica }}"
+                    requests:
+                        cpu: "{{ mul .Workload.Kueue.RequestedGPUsPerReplica 4 }}"
+                        memory: "{{ mul .Workload.Kueue.RequestedGPUsPerReplica 32 }}Gi"
+                        amd.com/gpu: "{{ .Workload.Kueue.RequestedGPUsPerReplica }}"
+                volumeMounts:
+                  - mountPath: /workload
+                    name: workload
+                  - mountPath: /dev/shm
+                    name: dshm
+                  - mountPath: /etc/gcp/credentials.json
+                    name: gcp-credentials-volume
+                    subPath: credentials.json
+            volumes:
+              - name: workload
+                configMap:
+                  name: {{ .Base.Name }}
+              - name: gcp-credentials-volume
+                secret:
+                  secretName: gcs-credentials
+                  items:
+                    - key: gcs-credentials-json
+                      path: credentials.json
+              - name: dshm
+                emptyDir:
+                  medium: Memory
+                  sizeLimit: 200Gi
