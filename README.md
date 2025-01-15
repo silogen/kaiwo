@@ -76,10 +76,11 @@ We recommend using [Cluster-Forge](https://github.com/silogen/cluster-forge) to 
 The installation of Kaiwo CLI tool is easy as it's a single binary. The only requirement is a kubeconfig file to access a Kubernetes cluster. If you are unsure where to get a kubeconfig, speak to the engineers who set up your Kubernetes cluster. Just like kubectl, Kaiwo will first look for a `KUBECONFIG=path` environment variable. If `KUBECONFIG` is not set, Kaiwo will then look for kubeconfig file in the default location `~/.kube/config`.
 
 1. To install Kaiwo, download the Kaiwo CLI binary from the [Releases Page](https://github.com/silogen/ai-workload-orchestrator/releases).
-2. Make the binary executable and add it to your PATH:
+2. Make the binary executable and add it to your PATH with a single command:
 
 ```bash
-chmod +x kaiwo
+mv kaiwo_linux_amd64 kaiwo && \
+chmod +x kaiwo && \
 sudo mv kaiwo /usr/local/bin/
 ```
 
@@ -151,6 +152,7 @@ envVars:
       key: "gcs-credentials-json"
       path: "/etc/gcp/credentials.json"
 ```
+
 ## Contributing to Kaiwo
 
 TODO

@@ -169,6 +169,7 @@ func sanitizeStringForKubernetes(path string) string {
 	replacer := strings.NewReplacer(
 		":", "-",
 		"/", "-",
+		"\\", "-",
 		"_", "-",
 		".", "-",
 	)
