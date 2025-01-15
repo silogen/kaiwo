@@ -3,6 +3,8 @@ envVars:
     value: "1"
   - name: NCCL_IB_DISABLE
     value: "1"
+  - name: ACCELERATE_USE_FSDP
+    value: false
   - fromSecret:
         name: "HF_TOKEN"
         secret: "hf-token"
