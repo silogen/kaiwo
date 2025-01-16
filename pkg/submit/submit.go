@@ -49,23 +49,25 @@ type TemplateConfig struct {
 	Base utils.WorkloadArgs
 
 	// The type-specific workload args
-	Workload      templates.WorkloadLoader
-	EnvVars       []corev1.EnvVar
-	SecretVolumes []k8s.SecretVolume
+	Workload         templates.WorkloadLoader
+	EnvVars          []corev1.EnvVar
+	SecretVolumes    []k8s.SecretVolume
+	ImagePullSecrets []corev1.LocalObjectReference
 }
 
 func Submit(args utils.WorkloadArgs) error {
 
 	var envVars []corev1.EnvVar
 	var secretVolumes []k8s.SecretVolume
+	var imagePullSecrets []corev1.LocalObjectReference //`json:"imagePullSecrets,omitempty" patchStrategy:"merge" patchMergeKey:"name" protobuf:"bytes,15,rep,name=imagePullSecrets"`
 	envFilePath := filepath.Join(args.Path, utils.ENV_FILENAME)
 	if _, err := os.Stat(envFilePath); err == nil {
 		logrus.Infof("Found env file at %s, parsing environment variables and secret volumes", envFilePath)
-		envVars, secretVolumes, err = k8s.ReadEnvFile(envFilePath)
+		envVars, secretVolumes, imagePullSecrets, err = k8s.ReadEnvFile(envFilePath)
 		if err != nil {
 			return fmt.Errorf("failed to parse env file: %w", err)
 		}
-		logrus.Infof("Parsed %d environment variables and %d secret volumes from env file", len(envVars), len(secretVolumes))
+		logrus.Infof("Parsed %d environment variables, %d secret volumes, and %d image pull secrets from env file", len(envVars), len(secretVolumes), len(imagePullSecrets))
 	}
 
 	args, loader, err := initializeLoader(args, envVars)
@@ -106,7 +108,7 @@ func Submit(args utils.WorkloadArgs) error {
 	}
 
 	// Process workload template
-	err = processWorkloadTemplate(args, loader, &resources, envVars, secretVolumes)
+	err = processWorkloadTemplate(args, loader, &resources, envVars, secretVolumes, imagePullSecrets)
 	if err != nil {
 		return err
 	}
@@ -229,6 +231,7 @@ func processWorkloadTemplate(
 	resources *[]*unstructured.Unstructured,
 	envVars []corev1.EnvVar,
 	secretVolumes []k8s.SecretVolume,
+	imagePullSecrets []corev1.LocalObjectReference, //`json:"imagePullSecrets,omitempty" patchStrategy:"merge" patchMergeKey:"name" protobuf:"bytes,15,rep,name=imagePullSecrets"`,
 ) error {
 	var workloadTemplate []byte
 	var err error
@@ -244,10 +247,11 @@ func processWorkloadTemplate(
 	}
 
 	templateContext := TemplateConfig{
-		Base:          args,
-		Workload:      loader,
-		EnvVars:       envVars,
-		SecretVolumes: secretVolumes,
+		Base:             args,
+		Workload:         loader,
+		EnvVars:          envVars,
+		SecretVolumes:    secretVolumes,
+		ImagePullSecrets: imagePullSecrets,
 	}
 
 	parsedTemplate, err := template.New("main").Funcs(sprig.TxtFuncMap()).Parse(string(workloadTemplate))

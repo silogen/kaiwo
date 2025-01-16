@@ -20,12 +20,12 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/sirupsen/logrus"
+	"gopkg.in/yaml.v3"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"os"
 	"path/filepath"
 	"slices"
-	"gopkg.in/yaml.v3"
-	corev1 "k8s.io/api/core/v1"
 )
 
 func isBinaryFile(content []byte) bool {
@@ -85,14 +85,13 @@ func GenerateConfigMapFromDir(dir string, name string, namespace string, skipFil
 }
 
 type SecretVolume struct {
-	Name      string
+	Name       string
 	SecretName string
-	Key string
-	SubPath string
-	MountPath string
-
-
+	Key        string
+	SubPath    string
+	MountPath  string
 }
+
 type EnvVarInput struct {
 	Name       string `yaml:"name,omitempty"`
 	Value      string `yaml:"value,omitempty"`
@@ -107,26 +106,30 @@ type EnvVarInput struct {
 		Key    string `yaml:"key"`
 		Path   string `yaml:"path"`
 	} `yaml:"mountSecret,omitempty"`
+	ImagePullSecret *struct {
+		Name string `yaml:"name"`
+	} `yaml:"imagePullSecret,omitempty"`
 }
 
 type EnvFile struct {
 	EnvVars []EnvVarInput `yaml:"envVars"`
 }
 
-func ReadEnvFile(filePath string) ([]corev1.EnvVar, []SecretVolume, error) {
+func ReadEnvFile(filePath string) ([]corev1.EnvVar, []SecretVolume, []corev1.LocalObjectReference, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to open env file: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to open env file: %w", err)
 	}
 	defer file.Close()
 
 	var envFile EnvFile
 	if err := yaml.NewDecoder(file).Decode(&envFile); err != nil {
-		return nil, nil, fmt.Errorf("failed to parse YAML: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to parse YAML: %w", err)
 	}
 
 	var envVars []corev1.EnvVar
 	var secretVolumes []SecretVolume
+	var imagePullSecrets []corev1.LocalObjectReference //`json:"imagePullSecrets,omitempty" patchStrategy:"merge" patchMergeKey:"name" protobuf:"bytes,15,rep,name=imagePullSecrets"`
 
 	for _, input := range envFile.EnvVars {
 		if input.Value != "" {
@@ -161,8 +164,13 @@ func ReadEnvFile(filePath string) ([]corev1.EnvVar, []SecretVolume, error) {
 				Name:  input.MountSecret.Name,
 				Value: input.MountSecret.Path, // Set the mount path as an environment variable
 			})
+		} else if input.ImagePullSecret != nil {
+			// imagePullSecrets
+			imagePullSecrets = append(imagePullSecrets, corev1.LocalObjectReference{
+				Name: input.ImagePullSecret.Name,
+			})
 		}
 	}
 
-	return envVars, secretVolumes, nil
+	return envVars, secretVolumes, imagePullSecrets, nil
 }
