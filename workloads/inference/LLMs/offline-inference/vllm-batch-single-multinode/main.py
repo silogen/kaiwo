@@ -26,19 +26,21 @@ from vllm import LLM, SamplingParams
 
 sampling_params = SamplingParams(temperature=0.8, top_p=0.95)
 
-num_instances=1
+num_instances= int(os.getenv("NUM_INSTANCES", "1"))
 tensor_parallel_size=int(os.getenv("TENSOR_PARALLELISM", "8"))
 
 class LLMPredictor:
 
     def __init__(self):
-        self.llm = LLM(model="meta-llama/Meta-Llama-3-8B-Instruct",
-                    device="cuda",
-                    tensor_parallel_size=tensor_parallel_size,
-                    tokenizer_pool_size=4,
-                    tokenizer_pool_type="ray",
-                    distributed_executor_backend="ray",
-                    trust_remote_code=True,)
+        self.llm = LLM(
+        model=os.getenv("MODEL_ID", "meta-llama/Llama-3.1-8B-Instruct"),
+        device="cuda",
+        tensor_parallel_size=tensor_parallel_size,
+        tokenizer_pool_size=4,
+        tokenizer_pool_type="ray",
+        distributed_executor_backend="ray",
+        trust_remote_code=True,
+        )
 
     def __call__(self, batch: Dict[str, np.ndarray]) -> Dict[str, list]:
         outputs = self.llm.generate(batch["text"], sampling_params)

@@ -20,11 +20,14 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
-	"github.com/silogen/ai-workload-orchestrator/pkg/k8s"
-	"github.com/silogen/ai-workload-orchestrator/pkg/utils"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"os"
 	"path/filepath"
+
+	"github.com/silogen/kaiwo/pkg/k8s"
+	"github.com/silogen/kaiwo/pkg/utils"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
 //go:embed rayjob.yaml.tmpl
@@ -37,7 +40,7 @@ type JobLoader struct {
 	Kueue      k8s.KueueArgs
 }
 
-func (r *JobLoader) Load(args utils.WorkloadArgs) error {
+func (r *JobLoader) Load(args utils.WorkloadArgs, envVars []corev1.EnvVar) error {
 
 	contents, err := os.ReadFile(filepath.Join(args.Path, EntrypointFilename))
 
@@ -60,7 +63,7 @@ func (r *JobLoader) Load(args utils.WorkloadArgs) error {
 		return err
 	}
 
-	numReplicas, nodeGpuRequest := k8s.CalculateNumberOfReplicas(args.GPUs, gpuCount)
+	numReplicas, nodeGpuRequest := k8s.CalculateNumberOfReplicas(args.GPUs, gpuCount, envVars)
 
 	r.Kueue = k8s.KueueArgs{
 		GPUsAvailablePerNode:    gpuCount,

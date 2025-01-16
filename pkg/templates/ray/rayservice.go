@@ -20,12 +20,16 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
-	"github.com/silogen/ai-workload-orchestrator/pkg/k8s"
-	"github.com/silogen/ai-workload-orchestrator/pkg/utils"
-	"github.com/sirupsen/logrus"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"github.com/silogen/kaiwo/pkg/k8s"
+	"github.com/silogen/kaiwo/pkg/utils"
+	"github.com/sirupsen/logrus"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
 //go:embed rayservice.yaml.tmpl
@@ -38,7 +42,7 @@ type ServiceLoader struct {
 	Kueue       k8s.KueueArgs
 }
 
-func (r *ServiceLoader) Load(args utils.WorkloadArgs) error {
+func (r *ServiceLoader) Load(args utils.WorkloadArgs, envVars []corev1.EnvVar) error {
 
 	logrus.Debugf("Loading ray service from %s", args.Path)
 
@@ -48,7 +52,7 @@ func (r *ServiceLoader) Load(args utils.WorkloadArgs) error {
 		return fmt.Errorf("failed to read serveconfig file: %w", err)
 	}
 
-	r.Serveconfig = string(contents)
+	r.Serveconfig = strings.TrimSpace(string(contents))
 
 	client, err := k8s.GetDynamicClient()
 
@@ -66,7 +70,7 @@ func (r *ServiceLoader) Load(args utils.WorkloadArgs) error {
 
 	logrus.Debugf("Fetched GPU count: %d", gpuCount)
 
-	numReplicas, nodeGpuRequest := k8s.CalculateNumberOfReplicas(args.GPUs, gpuCount)
+	numReplicas, nodeGpuRequest := k8s.CalculateNumberOfReplicas(args.GPUs, gpuCount, envVars)
 
 	r.Kueue = k8s.KueueArgs{
 		GPUsAvailablePerNode:    gpuCount,

@@ -21,7 +21,7 @@ spec:
               {{- range .EnvVars }}
               {{- if .Value }}
                 - name: {{ .Name }}
-                  value: {{ .Value }}
+                  value: "{{ .Value }}"
               {{- else }}
                 - name: {{ .Name }}
                   valueFrom:
@@ -31,6 +31,13 @@ spec:
               {{- end }}
               {{- end }}
               {{- end }}
+              resources:
+                limits:
+                  cpu: "2"
+                  memory: "16Gi"
+                requests:
+                  cpu: "2"
+                  memory: "16Gi"
               volumeMounts: 
               {{- if .SecretVolumes }}
               {{- range .SecretVolumes }}
@@ -40,7 +47,7 @@ spec:
               {{- end }}
               {{- end }}
               {{- if .Base.ConfigMap }}
-                - mountPath: /workload
+                - mountPath: /workload/app
                   name: workload
               {{- end }}
                 - mountPath: /dev/shm
@@ -76,8 +83,8 @@ spec:
                 sizeLimit: 200Gi
     workerGroupSpecs:
       - replicas: {{ .Workload.Kueue.RequestedNumReplicas }}
-        # minReplicas: 1
-        # maxReplicas: 4
+        minReplicas: {{ .Workload.Kueue.RequestedNumReplicas }}
+        maxReplicas: {{ mul .Workload.Kueue.RequestedNumReplicas 4 }}
         groupName: gpu-group
         rayStartParams: {}
         template:
@@ -94,7 +101,7 @@ spec:
                 {{- range .EnvVars }}
                 {{- if .Value }}
                   - name: {{ .Name }}
-                    value: {{ .Value }}
+                    value: "{{ .Value }}"
                 {{- else }}
                   - name: {{ .Name }}
                     valueFrom:
@@ -122,7 +129,7 @@ spec:
                 {{- end }}
                 {{- end }}
                 {{- if .Base.ConfigMap }}
-                  - mountPath: /workload
+                  - mountPath: /workload/app
                     name: workload
                 {{- end }}
                   - mountPath: /dev/shm

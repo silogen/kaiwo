@@ -161,6 +161,13 @@ def main(model_args, data_args, training_args):
 
 
 if __name__ == "__main__":
+    os.environ["CUDA_VISIBLE_DEVICES"] = os.popen("rocm-smi --showuniqueid | grep -Eo 'GPU\[[0-9]+\]' | grep -Eo '[0-9]+' | tr '\\n' ',' | sed 's/,$//'").read().strip()
+    os.environ["HIP_VISIBLE_DEVICES"] = os.environ["CUDA_VISIBLE_DEVICES"]
+    os.environ["ROCR_VISIBLE_DEVICES"] = os.environ["CUDA_VISIBLE_DEVICES"]
+    cuda_visible_devices = os.environ["CUDA_VISIBLE_DEVICES"].split(",")
+    local_rank = int(os.environ["LOCAL_RANK"])
+    device_id = cuda_visible_devices[local_rank]
+    os.environ["ACCELERATE_TORCH_DEVICE"] = f"cuda:{device_id}"
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, SFTConfig))
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,

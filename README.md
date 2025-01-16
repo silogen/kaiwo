@@ -19,16 +19,16 @@ To ensure a smooth experience, we strongly recommend that users:
 
 **1.** ****Stick to Stable Releases****
 
-- Use the tagged [releases on GitHub](https://github.com/silogen/ai-workload-orchestrator/releases) for the most stable and tested versions.
+- Use the tagged [releases on GitHub](https://github.com/silogen/kaiwo/releases) for the most stable and tested versions.
 - Avoid building directly from the **`main`** branch unless you are comfortable with potential instability or are contributing to the project.
 
 **2.** ****Monitor Changes****
 
-- Keep an eye on the [Changelog](https://github.com/silogen/ai-workload-orchestrator/CHANGELOG.md) for updates and breaking changes.
+- Keep an eye on the [Changelog](https://github.com/silogen/kaiwo/CHANGELOG.md) for updates and breaking changes.
 
 **3.** ****Provide Feedback****
 
-- If you encounter any issues or have suggestions, feel free to open an issue in the [Issues section](https://github.com/silogen/ai-workload-orchestrator/issues).
+- If you encounter any issues or have suggestions, feel free to open an issue in the [Issues section](https://github.com/silogen/kaiwo/issues).
 
 ## Description
 
@@ -75,10 +75,13 @@ We recommend using [Cluster-Forge](https://github.com/silogen/cluster-forge) to 
 
 The installation of Kaiwo CLI tool is easy as it's a single binary. The only requirement is a kubeconfig file to access a Kubernetes cluster. If you are unsure where to get a kubeconfig, speak to the engineers who set up your Kubernetes cluster. Just like kubectl, Kaiwo will first look for a `KUBECONFIG=path` environment variable. If `KUBECONFIG` is not set, Kaiwo will then look for kubeconfig file in the default location `~/.kube/config`.
 
-1. To install Kaiwo, download the Kaiwo CLI binary from the [Releases Page](https://github.com/silogen/ai-workload-orchestrator/releases).
-2. Make the binary executable and add it to your PATH with a single command:
+1. To install Kaiwo, download the Kaiwo CLI binary from the [Releases Page](https://github.com/silogen/kaiwo/releases).
+2. Make the binary executable and add it to your PATH
+
+To do both steps in one command for Linux (AMD64), edit `v.x.x.x` in the following and run it
 
 ```bash
+wget https://github.com/silogen/kaiwo/releases/download/v.x.x.x/kaiwo_linux_amd64 && \
 mv kaiwo_linux_amd64 kaiwo && \
 chmod +x kaiwo && \
 sudo mv kaiwo /usr/local/bin/
@@ -106,7 +109,7 @@ Kaiwo uses Kueue to manage job queuing. Make sure your cluster-admin has created
 
 RayServices are intended for online inference. They bypass job queues. We recommend running them in a separate cluster as services are constantly running and therefore reserve compute resources 24/7.
 
-RayJobs and RayServices require using `-p`/`--path` and `-t`/`--type` options. Kaiwo will look for `entrypoint` or `serviceconfig` files in `path` which are required for RayJobs and RayServices, respectively. Kubernetes Job is the default workload type if no `-p` option is provided as well as when `--type` or `-t` is omitted.
+RayJobs and RayServices require using `-p`/`--path` and `-t`/`--type` options. Kaiwo will look for `entrypoint` or `serveconfig` files in `path` which are required for RayJobs and RayServices, respectively. Kubernetes Job is the default workload type if no `-p` option is provided as well as when `--type` or `-t` is omitted.
 
 Run `kaiwo submit --help` for an overview of available options. To get started with a workload, first make sure that your code (e.g. finetuning script) works with the number of GPUs that you request via `kaiwo submit`.  For example, the following command will run the code found in `path` as a RayJob on 16 GPUs.
 
@@ -122,7 +125,9 @@ Or, you may want to mount code from a github repo at runtime and only modify the
 
 `kaiwo submit -i my-registry/my_image -p path_to_entrypoint_directory -g 8`
 
-One important note about GPU requests: it is up to the user to ensure that the code can run on the requested number of GPUs. If the code is not written to run on the requested number of GPUs, the job will fail. Note that some parallelized code may only work on a specific number of GPUs such as 1, 2, 4, 8, 16, 32 but not 3, 5, 7, 9 etc. If you are unsure, start with a single GPU and scale up as needed.
+One important note about GPU requests: it is up to the user to ensure that the code can run on the requested number of GPUs. If the code is not written to run on the requested number of GPUs, the job will fail. Note that some parallelized code may only work on a specific number of GPUs such as 1, 2, 4, 8, 16, 32 but not 6, 10, 12 etc. If you are unsure, start with a single GPU and scale up as needed. For example, the total number of attention heads must be divisible by tensor parallel size.
+
+When passing custom images, please be mindful that kaiwo mounts local files to `/workload` for all jobs and to `/workload/app` for services (RayService, Deployment) to adhere to `RayService` semantics
 
 #### Note about environment variables
 
@@ -152,6 +157,19 @@ envVars:
       key: "gcs-credentials-json"
       path: "/etc/gcp/credentials.json"
 ```
+
+#### Enabling auto-completion for kaiwo
+
+The instructions for setting up auto-completion differ slightly by type of terminal. See help with `kaiwo completion --help`
+
+For bash, you can run the following
+
+```bash
+sudo apt update && sudo apt install bash-completion && \
+kaiwo completion bash | sudo tee /etc/bash_completion.d/kaiwo > /dev/null
+```
+
+You have to restart your terminal for auto-completion to take effect.
 
 ## Contributing to Kaiwo
 
