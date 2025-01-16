@@ -10,6 +10,12 @@ spec:
   template:
     spec:
       restartPolicy: "Never"
+      {{- if .ImagePullSecrets }}
+      {{- range .ImagePullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Name }} 
+      {{- end }}
+      {{- end }}
       containers:
       - name: {{ .Base.Name }}
         image: {{ .Base.Image }}
