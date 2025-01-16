@@ -3,16 +3,17 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"strconv"
+
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
-	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
-	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 )
 
 type KueueArgs struct {
@@ -53,21 +54,22 @@ func CalculateNumberOfReplicas(requestedGpus int, gpusPerNode int, envVars []cor
 	}
 
 	// If PIPELINE_PARALLELISM and TENSOR_PARALLELISM are set, enforce their values
-	if pipelineParallelism > 0 && tensorParallelism > 0 {
+	if pipelineParallelism > 1 && tensorParallelism > 0 {
 		numReplicas = pipelineParallelism
 		nodeGpuRequest = tensorParallelism
 
-		// Validate the configuration
-		if numReplicas*tensorParallelism != requestedGpus {
-			logrus.Warnf("Mismatch between requested GPUs (%d) and calculated GPUs (%d) from PIPELINE_PARALLELISM (%d) and TENSOR_PARALLELISM (%d)", requestedGpus, numReplicas*tensorParallelism, pipelineParallelism, tensorParallelism)
+		if numReplicas*tensorParallelism != requestedGpus || tensorParallelism > gpusPerNode {
+			logrus.Fatalf(
+				"Mismatch between requested GPUs (%d) and calculated GPUs (%d) from PIPELINE_PARALLELISM (%d) and TENSOR_PARALLELISM (%d)",
+				requestedGpus, numReplicas*tensorParallelism, pipelineParallelism, tensorParallelism,
+			)
 		}
-
-		if tensorParallelism > gpusPerNode {
-			logrus.Warnf("TENSOR_PARALLELISM (%d) exceeds available GPUs per node (%d). This will have significant negative performance impact unless you have extremely fast and low latency network.",
-			 tensorParallelism, gpusPerNode)
-		}
-
 		return numReplicas, nodeGpuRequest
+	}
+
+	if tensorParallelism > gpusPerNode {
+		logrus.Warnf("TENSOR_PARALLELISM (%d) exceeds available GPUs per node (%d). This will have significant negative performance impact unless you have extremely fast and low latency network.",
+			tensorParallelism, gpusPerNode)
 	}
 
 	// Default logic if PIPELINE_PARALLELISM and TENSOR_PARALLELISM are not set
@@ -97,7 +99,6 @@ func CalculateNumberOfReplicas(requestedGpus int, gpusPerNode int, envVars []cor
 
 	return numReplicas, nodeGpuRequest
 }
-
 
 func ListResourceFlavorsWithNodeLabel(ctx context.Context, client dynamic.Interface, labelKey string) ([]kueuev1beta1.ResourceFlavor, error) {
 	gvr := schema.GroupVersionResource{
