@@ -61,7 +61,7 @@ func Submit(args utils.WorkloadArgs) error {
 	envFilePath := filepath.Join(args.Path, utils.ENV_FILENAME)
 	if _, err := os.Stat(envFilePath); err == nil {
 		logrus.Infof("Found env file at %s, parsing environment variables and secret volumes", envFilePath)
-		envVars, secretVolumes, err = k8s.ReadEnvFile(envFilePath)
+		envVars, secretVolumes, err = k8s.ReadEnvFile(envFilePath, args)
 		if err != nil {
 			return fmt.Errorf("failed to parse env file: %w", err)
 		}

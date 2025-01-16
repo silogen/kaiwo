@@ -1,0 +1,3 @@
+cd / && git clone https://github.com/huggingface/accelerate && \
+cd accelerate/examples && \
+torchrun --nproc_per_node $NUM_GPUS ./nlp_example.py

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Build version information
-BUILD_VERSION="v.0.0.2"
+BUILD_VERSION="v.0.0.3"
 BUILD_COMMIT=$(git rev-parse --short HEAD)
 BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 

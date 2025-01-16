@@ -24,8 +24,11 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
+
+	"github.com/silogen/kaiwo/pkg/utils"
 )
 
 func isBinaryFile(content []byte) bool {
@@ -113,7 +116,7 @@ type EnvFile struct {
 	EnvVars []EnvVarInput `yaml:"envVars"`
 }
 
-func ReadEnvFile(filePath string) ([]corev1.EnvVar, []SecretVolume, error) {
+func ReadEnvFile(filePath string, args utils.WorkloadArgs) ([]corev1.EnvVar, []SecretVolume, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to open env file: %w", err)
@@ -124,6 +127,13 @@ func ReadEnvFile(filePath string) ([]corev1.EnvVar, []SecretVolume, error) {
 	if err := yaml.NewDecoder(file).Decode(&envFile); err != nil {
 		return nil, nil, fmt.Errorf("failed to parse YAML: %w", err)
 	}
+
+	gpuEnvVar := EnvVarInput{
+		Name:  "NUM_GPUS",
+		Value: strconv.Itoa(args.GPUs),
+	    }
+	
+	envFile.EnvVars = append(envFile.EnvVars, gpuEnvVar)
 
 	var envVars []corev1.EnvVar
 	var secretVolumes []SecretVolume
