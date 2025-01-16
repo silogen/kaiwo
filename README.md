@@ -89,7 +89,7 @@ sudo mv kaiwo /usr/local/bin/
 
 3. You're off to the races!
 
-Although not required by Kaiwo, we also recommend that you [install kubectl](https://kubernetes.io/docs/tasks/tools/) just in case you need some functionality that Kaiwo can't prokaiwovide.
+Although not required by Kaiwo, we also recommend that you [install kubectl](https://kubernetes.io/docs/tasks/tools/) just in case you need some functionality that Kaiwo can't provide.
 
 ## Usage
 

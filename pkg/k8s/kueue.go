@@ -63,7 +63,8 @@ func CalculateNumberOfReplicas(requestedGpus int, gpusPerNode int, envVars []cor
 		}
 
 		if tensorParallelism > gpusPerNode {
-			logrus.Warnf("TENSOR_PARALLELISM (%d) exceeds available GPUs per node (%d)", tensorParallelism, gpusPerNode)
+			logrus.Warnf("TENSOR_PARALLELISM (%d) exceeds available GPUs per node (%d). This will have significant negative performance impact unless you have extremely fast and low latency network.",
+			 tensorParallelism, gpusPerNode)
 		}
 
 		return numReplicas, nodeGpuRequest
