@@ -17,9 +17,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 
 	"github.com/silogen/kaiwo/pkg/utils"
 
@@ -154,13 +156,36 @@ func main() {
 			logrus.Info("Port-forward command placeholder")
 		},
 	})
-	rootCmd.AddCommand(&cobra.Command{
-		Use:   "delete",
-		Short: "Delete a workload",
+
+	deleteCmd := &cobra.Command{
+		Use:   "delete -n [namespace] [workload-type]/[workload-name]",
+		Short: "Delete a workload. Workload type must be one of [job, rayjob, rayservice]",
+		Args:  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			logrus.Info("Delete command placeholder")
+			//  TODO move to another location later during the refactoring
+
+			split := strings.Split(args[0], "/")
+
+			if len(split) != 2 {
+				logrus.Fatalf("Invalid input format. Expected format: [workload-type]/[workload-name].")
+				return
+			}
+
+			workloadType := split[0]
+			name := split[1]
+
+			err := templates.Cleanup(context.TODO(), workloadType, name, namespace, true)
+
+			if err != nil {
+				logrus.Errorf("Failed to delete workload: %v", err)
+			}
+
 		},
-	})
+	}
+
+	deleteCmd.Flags().StringVarP(&namespace, "namespace", "n", "kaiwo", "Kubenetes namespace to use. Defaults to `kaiwo`")
+
+	rootCmd.AddCommand(deleteCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		logrus.Fatal(err)
