@@ -129,7 +129,7 @@ func ReadEnvFile(filePath string) ([]corev1.EnvVar, []SecretVolume, []corev1.Loc
 
 	var envVars []corev1.EnvVar
 	var secretVolumes []SecretVolume
-	var imagePullSecrets []corev1.LocalObjectReference //`json:"imagePullSecrets,omitempty" patchStrategy:"merge" patchMergeKey:"name" protobuf:"bytes,15,rep,name=imagePullSecrets"`
+	var imagePullSecrets []corev1.LocalObjectReference // This is the type in K8s for ImagePullSecrets
 
 	for _, input := range envFile.EnvVars {
 		if input.Value != "" {

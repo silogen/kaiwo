@@ -59,7 +59,7 @@ func Submit(args utils.WorkloadArgs) error {
 
 	var envVars []corev1.EnvVar
 	var secretVolumes []k8s.SecretVolume
-	var imagePullSecrets []corev1.LocalObjectReference //`json:"imagePullSecrets,omitempty" patchStrategy:"merge" patchMergeKey:"name" protobuf:"bytes,15,rep,name=imagePullSecrets"`
+	var imagePullSecrets []corev1.LocalObjectReference // This is the type in K8s for ImagePullSecrets
 	envFilePath := filepath.Join(args.Path, utils.ENV_FILENAME)
 	if _, err := os.Stat(envFilePath); err == nil {
 		logrus.Infof("Found env file at %s, parsing environment variables and secret volumes", envFilePath)
@@ -231,7 +231,7 @@ func processWorkloadTemplate(
 	resources *[]*unstructured.Unstructured,
 	envVars []corev1.EnvVar,
 	secretVolumes []k8s.SecretVolume,
-	imagePullSecrets []corev1.LocalObjectReference, //`json:"imagePullSecrets,omitempty" patchStrategy:"merge" patchMergeKey:"name" protobuf:"bytes,15,rep,name=imagePullSecrets"`,
+	imagePullSecrets []corev1.LocalObjectReference,
 ) error {
 	var workloadTemplate []byte
 	var err error
