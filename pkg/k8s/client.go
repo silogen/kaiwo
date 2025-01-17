@@ -6,6 +6,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"os"
 	"path/filepath"
 	"sync"
