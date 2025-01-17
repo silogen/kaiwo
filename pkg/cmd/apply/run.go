@@ -12,6 +12,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"sigs.k8s.io/yaml"
+	"strconv"
 	"strings"
 )
 
@@ -59,6 +60,9 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 	}
 
 	schedulingFlags := GetSchedulingFlags()
+
+	// Add number of requested GPUs as an environmental variable
+	metaFlags.EnvVars = append(metaFlags.EnvVars, corev1.EnvVar{Name: "NUM_GPUS", Value: strconv.Itoa(schedulingFlags.TotalRequestedGPUs)})
 
 	dynamicClient, err := k8s.GetDynamicClient()
 
