@@ -24,7 +24,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
 
@@ -127,13 +126,6 @@ func ReadEnvFile(filePath string, args utils.WorkloadArgs) ([]corev1.EnvVar, []S
 	if err := yaml.NewDecoder(file).Decode(&envFile); err != nil {
 		return nil, nil, fmt.Errorf("failed to parse YAML: %w", err)
 	}
-
-	gpuEnvVar := EnvVarInput{
-		Name:  "NUM_GPUS",
-		Value: strconv.Itoa(args.GPUs),
-	    }
-	
-	envFile.EnvVars = append(envFile.EnvVars, gpuEnvVar)
 
 	var envVars []corev1.EnvVar
 	var secretVolumes []SecretVolume

@@ -31,6 +31,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -66,7 +67,9 @@ func Submit(args utils.WorkloadArgs) error {
 			return fmt.Errorf("failed to parse env file: %w", err)
 		}
 		logrus.Infof("Parsed %d environment variables and %d secret volumes from env file", len(envVars), len(secretVolumes))
-	}
+	} 
+		
+	envVars = append(envVars, corev1.EnvVar{Name:  "NUM_GPUS", Value: strconv.Itoa(args.GPUs)})
 
 	args, loader, err := initializeLoader(args, envVars)
 
