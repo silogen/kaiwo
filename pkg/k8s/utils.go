@@ -20,14 +20,14 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/sirupsen/logrus"
+	"gopkg.in/yaml.v3"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"os"
 	"path/filepath"
 	"slices"
 	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
-
-	"github.com/silogen/kaiwo/pkg/utils"
 )
 
 func isBinaryFile(content []byte) bool {
@@ -72,10 +72,10 @@ func GenerateConfigMapFromDir(dir string, name string, namespace string, skipFil
 	}
 
 	configMap := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "ConfigMap",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      name,
 				"namespace": namespace,
 			},
@@ -87,13 +87,11 @@ func GenerateConfigMapFromDir(dir string, name string, namespace string, skipFil
 }
 
 type SecretVolume struct {
-	Name      string
+	Name       string
 	SecretName string
-	Key string
-	SubPath string
-	MountPath string
-
-
+	Key        string
+	SubPath    string
+	MountPath  string
 }
 type EnvVarInput struct {
 	Name       string `yaml:"name,omitempty"`
@@ -115,7 +113,7 @@ type EnvFile struct {
 	EnvVars []EnvVarInput `yaml:"envVars"`
 }
 
-func ReadEnvFile(filePath string, args utils.WorkloadArgs) ([]corev1.EnvVar, []SecretVolume, error) {
+func ReadEnvFile(filePath string) ([]corev1.EnvVar, []SecretVolume, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to open env file: %w", err)

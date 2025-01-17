@@ -1,9 +1,25 @@
-package templates
+/**
+ * Copyright 2025 Advanced Micro Devices, Inc. All rights reserved.
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+**/
+
+package workloads
 
 import (
 	"context"
 	"fmt"
-	"github.com/silogen/ai-workload-orchestrator/pkg/k8s"
+	"github.com/silogen/kaiwo/pkg/k8s"
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,8 +43,10 @@ func Cleanup(ctx context.Context, resource string, name string, namespace string
 
 	logrus.Infof("Removing workload %s/%s/%s", namespace, resource, name)
 
-	// Define the GVR based on resource type
+	// Define the GVR and delete options based on resource type
 	var gvr schema.GroupVersionResource
+	deleteOptions := metav1.DeleteOptions{}
+
 	switch resource {
 	case "job":
 		gvr = schema.GroupVersionResource{
@@ -36,6 +54,13 @@ func Cleanup(ctx context.Context, resource string, name string, namespace string
 			Version:  "v1",
 			Resource: "jobs",
 		}
+
+		// Add propagation policy to ensure the pods are also removed
+		propagationPolicy := metav1.DeletePropagationBackground
+		deleteOptions = metav1.DeleteOptions{
+			PropagationPolicy: &propagationPolicy,
+		}
+
 	case "rayjob":
 		gvr = schema.GroupVersionResource{
 			Group:    "ray.io",
@@ -53,7 +78,7 @@ func Cleanup(ctx context.Context, resource string, name string, namespace string
 		return fmt.Errorf("unknown resource %s", resource)
 	}
 
-	err = client.Resource(gvr).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+	err = client.Resource(gvr).Namespace(namespace).Delete(ctx, name, deleteOptions)
 	if err != nil {
 		return fmt.Errorf("failed to delete %s/%s %s in namespace %s: %w", gvr.Group, gvr.Resource, name, namespace, err)
 	}
