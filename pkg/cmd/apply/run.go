@@ -1,3 +1,19 @@
+/**
+ * Copyright 2025 Advanced Micro Devices, Inc. All rights reserved.
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+**/
+
 package cli
 
 import (
@@ -12,7 +28,6 @@ import (
 	"os/user"
 	"path/filepath"
 	"sigs.k8s.io/yaml"
-	"strconv"
 	"strings"
 )
 
@@ -20,64 +35,51 @@ import (
 func RunApply(workload workloads.Workload, workloadMeta any) error {
 	logrus.Debugln("Applying workload")
 
-	// Fetch all CLI flags to generate the template context
-
+	// Fetch flags
 	execFlags := GetExecFlags()
-	workloadConfig, err := workload.GenerateTemplateContext(execFlags)
-	if err != nil {
-		return fmt.Errorf("failed to generate template context: %w", err)
-	}
-
-	var customConfig any = nil
-
-	// Load custom config data, if any
-	if execFlags.CustomConfigPath != "" {
-		logrus.Debugln("Loading custom config")
-		customConfigContents, err := os.ReadFile(execFlags.CustomConfigPath)
-		if err != nil {
-			return fmt.Errorf("failed to read custom config file: %w", err)
-		}
-		customConfig, err = yaml.Marshal(customConfigContents)
-		if err != nil {
-			return fmt.Errorf("failed to marshal custom config file: %w", err)
-		}
-	} else {
-		logrus.Debugln("No custom config to load")
-	}
-
 	metaFlags := GetMetaFlags()
 
+	// Generate workload configuration
+	workloadConfig, err := workload.GenerateTemplateContext(execFlags)
+	if err != nil {
+		return fmt.Errorf("error generating workload config: %w", err)
+	}
+
+	// Load custom configuration, if provided
+	var customConfig any
+	if execFlags.CustomConfigPath != "" {
+		customConfig, err = loadCustomConfig(execFlags.CustomConfigPath)
+		if err != nil {
+			return fmt.Errorf("error loading custom config: %w", err)
+		}
+	}
+
+	// Finalize metadata flags
 	if metaFlags.Name == "" {
 		metaFlags.Name = makeWorkloadName(execFlags.Path, metaFlags.Image)
 		logrus.Infof("No explicit name provided, using name: %s", metaFlags.Name)
 	}
 
-	// Load env vars
-	logrus.Debugln("Attempting to read env file")
+	// Parse environment variables
 	envFilePath := filepath.Join(execFlags.Path, workloads.EnvFilename)
 	if err := parseEnvFile(envFilePath, &metaFlags); err != nil {
-		return fmt.Errorf("failed to parse env file: %w", err)
+		return fmt.Errorf("error parsing environment: %w", err)
 	}
 
-	schedulingFlags := GetSchedulingFlags()
-
-	// Add number of requested GPUs as an environmental variable
-	metaFlags.EnvVars = append(metaFlags.EnvVars, corev1.EnvVar{Name: "NUM_GPUS", Value: strconv.Itoa(schedulingFlags.TotalRequestedGPUs)})
-
+	// Prepare scheduling flags
 	dynamicClient, err := k8s.GetDynamicClient()
-
 	if err != nil {
-		return fmt.Errorf("error fetching Kubernetes client: %v", err)
+		return fmt.Errorf("error fetching Kubernetes client: %w", err)
 	}
 
 	ctx := context.TODO()
-
-	logrus.Debugf("Loading scheduling info from Kubernetes...")
+	schedulingFlags := GetSchedulingFlags()
 	if err := fillSchedulingFlags(ctx, dynamicClient, &schedulingFlags, execFlags.ResourceFlavorGpuNodeLabelKey); err != nil {
-		return fmt.Errorf("error filling scheduling flags: %v", err)
+		return fmt.Errorf("error filling scheduling flags: %w", err)
 	}
-	logrus.Infof("Succesfully loaded scheduling info from Kubernetes")
+	logrus.Infof("Successfully loaded scheduling info from Kubernetes")
 
+	// Create the workload template context
 	templateContext := workloads.WorkloadTemplateConfig{
 		WorkloadMeta: workloadMeta,
 		Workload:     workloadConfig,
@@ -86,11 +88,28 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 		Custom:       customConfig,
 	}
 
+	// Apply the workload
 	if err := workloads.ApplyWorkload(ctx, dynamicClient, workload, execFlags, templateContext); err != nil {
-		return fmt.Errorf("error applying workload: %v", err)
+		return fmt.Errorf("error applying workload: %w", err)
 	}
 
 	return nil
+}
+
+// loadCustomConfig loads custom configuration data from a file
+func loadCustomConfig(path string) (any, error) {
+	logrus.Debugln("Loading custom config")
+	customConfigContents, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read custom config file: %w", err)
+	}
+
+	customConfig, err := yaml.Marshal(customConfigContents)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal custom config file: %w", err)
+	}
+
+	return customConfig, nil
 }
 
 func makeWorkloadName(path string, image string) string {

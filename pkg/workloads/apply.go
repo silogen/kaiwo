@@ -48,7 +48,7 @@ func ApplyWorkload(
 	if execFlags.CreateNamespace {
 		namespaceResource, err := generateNamespaceManifestIfNotExists(ctx, client, templateContext.Meta.Namespace)
 		if err != nil {
-			return fmt.Errorf("failed to generate namespace resource: %v", err)
+			return fmt.Errorf("failed to generate namespace resource: %w", err)
 		}
 		if namespaceResource != nil {
 			resources = append(resources, namespaceResource)
@@ -59,7 +59,7 @@ func ApplyWorkload(
 	if execFlags.Path != "" {
 		configMapResource, err := generateConfigMapManifest(execFlags.Path, workload, templateContext.Meta)
 		if err != nil {
-			return fmt.Errorf("failed to generate configmap resource: %v", err)
+			return fmt.Errorf("failed to generate configmap resource: %w", err)
 		}
 		if configMapResource != nil {
 			resources = append(resources, configMapResource)
@@ -70,7 +70,7 @@ func ApplyWorkload(
 	additionalResourceManifests, err := workload.GenerateAdditionalResourceManifests(templateContext)
 
 	if err != nil {
-		return fmt.Errorf("failed to generate additional resource manifests: %v", err)
+		return fmt.Errorf("failed to generate additional resource manifests: %w", err)
 	}
 	if additionalResourceManifests != nil && len(additionalResourceManifests) > 0 {
 		resources = append(resources, additionalResourceManifests...)
@@ -93,7 +93,7 @@ func ApplyWorkload(
 
 	templateResources, err := generateManifests(workloadTemplate, templateContext)
 	if err != nil {
-		return fmt.Errorf("failed to generate manifests: %v", err)
+		return fmt.Errorf("failed to generate manifests: %w", err)
 	}
 	if templateResources == nil || len(templateResources) == 0 {
 		return fmt.Errorf("failed to generate manifests: no resources found")
@@ -103,25 +103,14 @@ func ApplyWorkload(
 	if execFlags.DryRun {
 		printResources(resources)
 	} else {
-		err = applyResources(resources, ctx, client)
-		if err != nil {
-			return fmt.Errorf("failed to apply resources: %v", err)
+		if err := applyResources(resources, ctx, client); err != nil {
+			return fmt.Errorf("failed to apply resources: %w", err)
 		}
 	}
 	return nil
 }
 
 func generateNamespaceManifestIfNotExists(ctx context.Context, client dynamic.Interface, namespaceName string) (*unstructured.Unstructured, error) {
-	namespace := unstructured.Unstructured{
-		Object: map[string]any{
-			"apiVersion": "v1",
-			"kind":       "Namespace",
-			"metadata": map[string]any{
-				"name": namespaceName,
-			},
-		},
-	}
-
 	logrus.Infof("Checking if namespace '%s' exists", namespaceName)
 
 	gvr := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "namespaces"}
@@ -133,10 +122,18 @@ func generateNamespaceManifestIfNotExists(ctx context.Context, client dynamic.In
 	}
 
 	if !apierrors.IsNotFound(err) {
-		return nil, fmt.Errorf("failed to check namespace existence: %v", err)
+		return nil, fmt.Errorf("failed to check namespace existence: %w", err)
 	}
 
-	return &namespace, nil
+	return &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "v1",
+			"kind":       "Namespace",
+			"metadata": map[string]any{
+				"name": namespaceName,
+			},
+		},
+	}, nil
 }
 
 // generateConfigMapManifest adds a config map resource
@@ -178,7 +175,7 @@ func generateManifests(workloadTemplate []byte, templateContext WorkloadTemplate
 		obj := &unstructured.Unstructured{}
 		_, _, err := decoder.Decode([]byte(manifest), nil, obj)
 		if err != nil {
-			return nil, fmt.Errorf("failed to decode YAML manifest: %v", err)
+			return nil, fmt.Errorf("failed to decode YAML manifest: %w", err)
 		}
 
 		parsedManifests = append(parsedManifests, obj)
@@ -197,7 +194,7 @@ func printResources(resources []*unstructured.Unstructured) {
 		// Marshal the map into YAML
 		yamlBytes, err := yaml.Marshal(data)
 		if err != nil {
-			logrus.Errorf("failed to convert unstructured object to YAML: %v", err)
+			logrus.Errorf("failed to convert unstructured object to YAML: %w", err)
 		}
 		fmt.Print(string(yamlBytes))
 		fmt.Println("---")
@@ -231,7 +228,7 @@ func applyResources(resources []*unstructured.Unstructured, ctx context.Context,
 		}
 
 		if !apierrors.IsAlreadyExists(err) {
-			return fmt.Errorf("failed to apply %s/%s: %v", resource.GetKind(), resource.GetName(), err)
+			return fmt.Errorf("failed to apply %s/%s: %w", resource.GetKind(), resource.GetName(), err)
 		} else {
 			logrus.Warnf("%s/%s already exists. Skipping submit", resource.GetKind(), resource.GetName())
 		}
@@ -240,13 +237,13 @@ func applyResources(resources []*unstructured.Unstructured, ctx context.Context,
 		// Resource already exists, update it
 		// existing, err := c.Resource(gvr).Namespace(namespace).Get(ctx, resource.GetName(), metav1.GetOptions{})
 		// if err != nil {
-		// 	return fmt.Errorf("failed to get existing %s/%s: %v", resource.GetKind(), resource.GetName(), err)
+		// 	return fmt.Errorf("failed to get existing %s/%s: %w", resource.GetKind(), resource.GetName(), err)
 		// }
 
 		// resource.SetResourceVersion(existing.GetResourceVersion())
 		// _, err = c.Resource(gvr).Namespace(namespace).Update(ctx, resource, metav1.UpdateOptions{})
 		// if err != nil {
-		// 	return fmt.Errorf("failed to update %s/%s: %v", resource.GetKind(), resource.GetName(), err)
+		// 	return fmt.Errorf("failed to update %s/%s: %w", resource.GetKind(), resource.GetName(), err)
 		// }
 
 		// logrus.Infof("%s/%s updated successfully", resource.GetKind(), resource.GetName())
