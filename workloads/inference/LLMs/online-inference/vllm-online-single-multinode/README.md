@@ -6,7 +6,7 @@ Note! this workload expects existing secrets. Have a look at `env` file for the 
 
 For best performance, set `TENSOR_PARALLELISM` to number of GPUs per node and `PIPELINE_PARALLELISM` to number of nodes in `env` file. The product of these two should be your total GPU request. In the following example, `TENSOR_PARALLELISM` should be set to `8` and `PIPELINE_PARALLELISM` to `2`.
 
-Note also that currently multi-node setup (`PIPELINE_PARALLELISM` > 1) requires setting `NCCL_P2P_DISABLE=1` which involves some performance penalty in addition to the penalty introduced by network latency/bandwidth between nodes.
+Note also that currently multi-node setup (`PIPELINE_PARALLELISM` > 1) requires setting `NCCL_P2P_DISABLE=1` which involves some performance penalty in addition to the penalty introduced by network latency/bandwidth between nodes. Do not set `NCCL_P2P_DISABLE=1` for single-node setup.
 
 To run this workload on 16 GPUs in `kaiwo` namespace, you can use the following command:	 
 
