@@ -3,7 +3,7 @@ package templates
 import (
 	"context"
 	"fmt"
-	"github.com/silogen/ai-workload-orchestrator/pkg/k8s"
+	"github.com/silogen/kaiwo/pkg/k8s"
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
