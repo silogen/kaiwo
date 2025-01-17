@@ -2,4 +2,4 @@
 .env
 **/compiled
 builds/
-.idea
+.idea/
