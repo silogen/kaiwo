@@ -18,7 +18,7 @@ package cli
 
 import (
 	"github.com/silogen/kaiwo/pkg/workloads"
-	"github.com/silogen/kaiwo/pkg/workloads/kueue"
+	"github.com/silogen/kaiwo/pkg/workloads/jobs"
 	"github.com/silogen/kaiwo/pkg/workloads/ray"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -51,7 +51,7 @@ func BuildSubmitCmd() *cobra.Command {
 				job = ray.Job{}
 			} else {
 				logrus.Debugln("Not using ray for job")
-				job = kueue.Job{}
+				job = jobs.Job{}
 			}
 			return RunApply(job, jobFlags)
 		},

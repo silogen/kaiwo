@@ -147,8 +147,9 @@ func fillSchedulingFlags(
 	schedulingFlags *workloads.SchedulingFlags,
 	resourceFlavorGpuNodeLabelKey string,
 ) error {
+	logrus.Infof("Connecting to Kubernetes cluster to fetch resource flavor")
 	gpuCount, err := k8s.GetDefaultResourceFlavorGpuCount(ctx, client, resourceFlavorGpuNodeLabelKey)
-
+	logrus.Debugf("Found a resource flavor with %d GPUs per node", gpuCount)
 	schedulingFlags.GPUsAvailablePerNode = gpuCount
 
 	if err != nil {

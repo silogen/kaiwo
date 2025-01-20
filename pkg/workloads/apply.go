@@ -63,6 +63,7 @@ func ApplyWorkload(
 		}
 		if configMapResource != nil {
 			resources = append(resources, configMapResource)
+			templateContext.Meta.HasConfigMap = true
 		}
 
 	}

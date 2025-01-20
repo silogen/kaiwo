@@ -22,23 +22,27 @@ spec:
               image: {{ .Meta.Image }}
               imagePullPolicy: Always
               env:
-                - name: AWS_ACCESS_KEY_ID
+              {{- if .Meta.EnvVars }}
+              {{- range .Meta.EnvVars }}
+              {{- if .Value }}
+                - name: {{ .Name }}
+                  value: "{{ .Value }}"
+              {{- else }}
+                - name: {{ .Name }}
                   valueFrom:
                     secretKeyRef:
-                      name: gcs-credentials
-                      key: access_key
-                - name: AWS_SECRET_ACCESS_KEY
-                  valueFrom:
-                    secretKeyRef:
-                      name: gcs-credentials
-                      key: secret_key
-                - name: HF_TOKEN
-                  valueFrom:
-                    secretKeyRef:
-                      name: hf-token
-                      key: hf-token
-                - name: GOOGLE_APPLICATION_CREDENTIALS
-                  value: "/etc/gcp/credentials.json"
+                      name: {{ .ValueFrom.SecretKeyRef.Name }}
+                      key: {{ .ValueFrom.SecretKeyRef.Key }}
+              {{- end }}
+              {{- end }}
+              {{- end }}
+              resources:
+                limits:
+                  cpu: "2"
+                  memory: "16Gi"
+                requests:
+                  cpu: "2"
+                  memory: "16Gi"
               ports:
                 - containerPort: 6379
                   name: gcs-server
@@ -46,26 +50,36 @@ spec:
                   name: dashboard
                 - containerPort: 10001
                   name: client
-                - containerPort: 8000
-                  name: serve
               volumeMounts:
-                  - mountPath: /workload
-                    name: workload
-                  - mountPath: /dev/shm
-                    name: dshm
-                  - mountPath: /etc/gcp/credentials.json
-                    name: gcp-credentials-volume
-                    subPath: credentials.json
+              {{- if .Meta.SecretVolumes }}
+              {{- range .Meta.SecretVolumes }}
+                - name: {{ .Name }}
+                  mountPath: {{ .MountPath }}
+                  subPath: {{ .SubPath }}
+              {{- end }}
+              {{- end }}
+              {{- if .Meta.HasConfigMap }}
+                - mountPath: /workload
+                  name: workload
+              {{- end }}
+                - mountPath: /dev/shm
+                  name: dshm
           volumes:
+          {{- if .Meta.SecretVolumes }}
+          {{- range .Meta.SecretVolumes }}
+            - name: {{ .Name }}
+              secret:
+                secretName: {{ .SecretName }}
+                items:
+                  - key: {{ .Key }}
+                    path: {{ .SubPath }}
+          {{- end }}
+          {{- end }}
+          {{- if .Meta.HasConfigMap }}
             - name: workload
               configMap:
                 name: {{ .Meta.Name }}
-            - name: gcp-credentials-volume
-              secret:
-                secretName: gcs-credentials
-                items:
-                  - key: gcs-credentials-json
-                    path: credentials.json
+          {{- end }}
             - name: dshm
               emptyDir:
                 medium: Memory
@@ -84,23 +98,27 @@ spec:
                 image: {{ .Meta.Image }}
                 imagePullPolicy: Always
                 env:
-                  - name: AWS_ACCESS_KEY_ID
+                {{- if .Meta.EnvVars }}
+                {{- range .Meta.EnvVars }}
+                {{- if .Value }}
+                  - name: {{ .Name }}
+                    value: "{{ .Value }}"
+                {{- else }}
+                  - name: {{ .Name }}
                     valueFrom:
                       secretKeyRef:
-                        name: gcs-credentials
-                        key: access_key
-                  - name: AWS_SECRET_ACCESS_KEY
-                    valueFrom:
-                      secretKeyRef:
-                        name: gcs-credentials
-                        key: secret_key
-                  - name: HF_TOKEN
-                    valueFrom:
-                      secretKeyRef:
-                        name: hf-token
-                        key: hf-token
-                  - name: GOOGLE_APPLICATION_CREDENTIALS
-                    value: "/etc/gcp/credentials.json"
+                        name: {{ .ValueFrom.SecretKeyRef.Name }}
+                        key: {{ .ValueFrom.SecretKeyRef.Key }}
+                {{- end }}
+                {{- end }}
+                {{- end }}
+                ports:
+                  - containerPort: 6379
+                    name: gcs-server
+                  - containerPort: 8265
+                    name: dashboard
+                  - containerPort: 10001
+                    name: client
                 resources:
                     limits:
                         cpu: "{{ mul .Scheduling.CalculatedGPUsPerReplica 4 }}"
@@ -111,23 +129,35 @@ spec:
                         memory: "{{ mul .Scheduling.CalculatedGPUsPerReplica 32 }}Gi"
                         amd.com/gpu: "{{ .Scheduling.CalculatedGPUsPerReplica }}"
                 volumeMounts:
+                {{- if .Meta.SecretVolumes }}
+                {{- range .Meta.SecretVolumes }}
+                  - name: {{ .Name }}
+                    mountPath: {{ .MountPath }}
+                    subPath: {{ .SubPath }}
+                {{- end }}
+                {{- end }}
+                {{- if .Meta.HasConfigMap }}
                   - mountPath: /workload
                     name: workload
+                {{- end }}
                   - mountPath: /dev/shm
                     name: dshm
-                  - mountPath: /etc/gcp/credentials.json
-                    name: gcp-credentials-volume
-                    subPath: credentials.json
             volumes:
+            {{- if.Meta.SecretVolumes }}
+            {{- range .Meta.SecretVolumes }}
+              - name: {{ .Name }}
+                secret:
+                  secretName: {{ .SecretName }}
+                  items:
+                    - key: {{ .Key }}
+                      path: {{ .SubPath }}
+            {{- end }}
+            {{- end }}
+            {{- if .Meta.HasConfigMap }}
               - name: workload
                 configMap:
                   name: {{ .Meta.Name }}
-              - name: gcp-credentials-volume
-                secret:
-                  secretName: gcs-credentials
-                  items:
-                    - key: gcs-credentials-json
-                      path: credentials.json
+            {{- end }}
               - name: dshm
                 emptyDir:
                   medium: Memory

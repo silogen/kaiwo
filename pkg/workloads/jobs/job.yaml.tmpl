@@ -1,0 +1,81 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Meta.Name }}
+  namespace: {{ .Meta.Namespace }}
+  labels:
+    kueue.x-k8s.io/queue-name: {{ .WorkloadMeta.Queue }}
+spec:
+  ttlSecondsAfterFinished: {{ mul .WorkloadMeta.TtlMinAfterFinished 60 }}
+  template:
+    spec:
+      restartPolicy: "Never"
+      containers:
+      - name: {{ .Meta.Name }}
+        image: {{ .Meta.Image }}
+        imagePullPolicy: Always
+        {{- if .Workload.Entrypoint }}
+        command: 
+        - sh
+        - -c
+        - {{ .Workload.Entrypoint }}
+        {{- end }}
+        env:
+        {{- if .Meta.EnvVars }}
+        {{- range .Meta.EnvVars }}
+        {{- if .Value }}
+          - name: {{ .Name }}
+            value: "{{ .Value }}"
+        {{- else }}
+          - name: {{ .Name }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .ValueFrom.SecretKeyRef.Name }}
+                key: {{ .ValueFrom.SecretKeyRef.Key }}
+        {{- end }}
+        {{- end }}
+        {{- end }}
+        resources:
+          requests:
+            memory: "{{ mul .Scheduling.TotalRequestedGPUs 32 }}Gi"
+            cpu: "{{ mul .Scheduling.TotalRequestedGPUs 4 }}"
+            amd.com/gpu: "{{ .Scheduling.TotalRequestedGPUs }}"
+          limits:
+            memory: "{{ mul .Scheduling.TotalRequestedGPUs 32 }}Gi"
+            cpu: "{{ mul .Scheduling.TotalRequestedGPUs 4 }}"
+            amd.com/gpu: "{{ .Scheduling.TotalRequestedGPUs }}"
+        volumeMounts:
+        {{- if .Meta.SecretVolumes }}
+        {{- range .Meta.SecretVolumes }}
+          - name: {{ .Name }}
+            mountPath: {{ .MountPath }}
+            subPath: {{ .SubPath }}
+        {{- end }}
+        {{- end }}
+        {{- if .Meta.HasConfigMap }}
+          - mountPath: /workload
+            name: workload
+        {{- end }}
+          - mountPath: /dev/shm
+            name: dshm
+      volumes:
+      {{- if .Meta.SecretVolumes }}
+      {{- range .Meta.SecretVolumes }}
+        - name: {{ .Name }}
+          secret:
+            secretName: {{ .SecretName }}
+            items:
+              - key: {{ .Key }}
+                path: {{ .SubPath }}
+      {{- end }}
+      {{- end }}
+      {{- if .Meta.HasConfigMap }}
+        - name: workload
+          configMap:
+            name: {{ .Meta.Name }}
+      {{- end }}
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 200Gi
+

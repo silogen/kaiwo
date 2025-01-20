@@ -14,7 +14,7 @@
  *  limitations under the License.
 **/
 
-package kueue
+package jobs
 
 import (
 	_ "embed"

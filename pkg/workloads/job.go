@@ -44,7 +44,7 @@ func CreateLocalClusterQueueManifest(templateContext WorkloadTemplateConfig) (*u
 		return nil, fmt.Errorf("workload meta is not of type workloads.JobFlags")
 	}
 
-	// Handle kueue local queue
+	// Handle jobs local queue
 	localQueue, err := k8s.PrepareLocalClusterQueue(jobMeta.Queue, templateContext.Meta.Namespace, c)
 	if err != nil {
 		return nil, fmt.Errorf("error preparing local cluster queue: %v", err)

@@ -73,6 +73,9 @@ type MetaFlags struct {
 
 	// Secret volumes
 	SecretVolumes []k8s.SecretVolume
+
+	// Whether there is associated config map data
+	HasConfigMap bool
 }
 
 // ExecFlags contain flags that are shared by all workloads during the resource-creation process,

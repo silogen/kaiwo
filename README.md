@@ -175,9 +175,20 @@ You have to restart your terminal for auto-completion to take effect.
 
 ### Workload templates
 
-Kaiwo manages Kubernetes workloads through templates. These templates are YAML files that use go template syntax. If you do not provide a template when submitting or serving a workload by using the `--template` flag, a default template is used. The context available for the template is defined by the [WorkloadTemplateConfig struct](./pkg/workloads/config.go), and you can refer to the default templates for [Ray](pkg/workloads/ray) and [Kueue](./pkg/workloads/kueue).
+Kaiwo manages Kubernetes workloads through templates. These templates are YAML files that use go template syntax. If you do not provide a template when submitting or serving a workload by using the `--template` flag, a default template is used. The context available for the template is defined by the [WorkloadTemplateConfig struct](./pkg/workloads/config.go), and you can refer to the default templates for [Ray](pkg/workloads/ray) and [Kueue](./pkg/workloads/jobs).
 
-If you want to provide custom configuration for the templates, you can do so via the `-c / --custom-config` flag, which should point to a YAML file. The contents of this file will then be available under the `.Custom` key in the templates.
+If you want to provide custom configuration for the templates, you can do so via the `-c / --custom-config` flag, which should point to a YAML file. The contents of this file will then be available under the `.Custom` key in the templates. For example, if you provide a YAML file with the following structure
+
+```yaml
+parent:
+  child: "value"
+```
+
+You can access this in the template via
+
+```gotemplate
+{{ .Custom.parent.child }}
+```
 
 ## Contributing to Kaiwo
 
