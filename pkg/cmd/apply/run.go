@@ -28,6 +28,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"sigs.k8s.io/yaml"
+	"strconv"
 	"strings"
 )
 
@@ -74,10 +75,14 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 
 	ctx := context.TODO()
 	schedulingFlags := GetSchedulingFlags()
+
 	if err := fillSchedulingFlags(ctx, dynamicClient, &schedulingFlags, execFlags.ResourceFlavorGpuNodeLabelKey); err != nil {
 		return fmt.Errorf("error filling scheduling flags: %w", err)
 	}
 	logrus.Infof("Successfully loaded scheduling info from Kubernetes")
+
+	// Add NUM_GPUS env var
+	metaFlags.EnvVars = append(metaFlags.EnvVars, corev1.EnvVar{Name: "NUM_GPUS", Value: strconv.Itoa(schedulingFlags.TotalRequestedGPUs)})
 
 	// Create the workload template context
 	templateContext := workloads.WorkloadTemplateConfig{
