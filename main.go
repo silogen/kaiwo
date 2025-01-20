@@ -65,7 +65,7 @@ var (
 
 const defaultImage = "ghcr.io/silogen/rocm-ray:v0.4"
 const defaultQueue = "kaiwo"
-const defaultTtlMinAfterFinished = 2880
+const defaultTtlMinAfterFinished = 1
 
 func main() {
 
@@ -128,7 +128,7 @@ func main() {
 	submitCmd.Flags().StringVarP(&name, "name", "", "", "Kubernetes name to use for the workflow")
 	submitCmd.Flags().StringVarP(&namespace, "namespace", "n", "kaiwo", "Kubernetes namespace to use. Defaults to `kaiwo`")
 	submitCmd.Flags().BoolVarP(&createNamespace, "create-namespace", "", false, "Create namespace if it does not exist")
-	submitCmd.Flags().IntVarP(&ttlMinAfterFinished, "ttl-minutes-after-finished", "", defaultTtlMinAfterFinished, "Cleanup finished Jobs after minutes. Defaults to 48h (2880 min)")
+	submitCmd.Flags().IntVarP(&ttlMinAfterFinished, "ttl-minutes-after-finished", "", defaultTtlMinAfterFinished, "Cleanup finished Jobs after minutes. Defaults to 1min")
 	submitCmd.Flags().StringVarP(&template, "template", "", "", "Path to a custom template to use for the workload. If not provided, a default template will be used")
 	submitCmd.Flags().StringVarP(&type_, "type", "t", "job", "Workload type, one of [rayjob, rayservice, job] (default 'job')")
 	submitCmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "Print the generated workload manifest without submitting it")

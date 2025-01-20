@@ -157,7 +157,7 @@ RayJobs and RayServices require using `-p`/`--path` and `-t`/`--type` options. K
 
 Run `kaiwo submit --help` for an overview of available options. To get started with a workload, first make sure that your code (e.g. finetuning script) works with the number of GPUs that you request via `kaiwo submit`.  For example, the following command will run the code found in `path` as a RayJob on 16 GPUs.
 
-`kaiwo submit -p workloads/training/LLMs/lora-supervised-finetuning/ds-zero3-single-multinode -g 16 -t rayjob`
+`kaiwo submit -p path/to/workload/directory -g 16 -t rayjob`
 
 By default, this will run in `kaiwo` namespace unless another namespace is provided with `-n` or `--namespace` option. If the provided namespace doesn't exist, use `--create-namespace` flag.
 
