@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type Deployment struct{}
@@ -47,7 +48,7 @@ func (deployment Deployment) GenerateTemplateContext(execFlags workloads.ExecFla
 		return nil, fmt.Errorf("failed to read serveconfig file: %w", err)
 	}
 
-	return DeploymentFlags{Serveconfig: string(contents)}, nil
+	return DeploymentFlags{Serveconfig: strings.TrimSpace(string(contents))}, nil
 }
 
 func (deployment Deployment) DefaultTemplate() ([]byte, error) {
@@ -62,7 +63,7 @@ func (deployment Deployment) DefaultTemplate() ([]byte, error) {
 //}
 
 func (deployment Deployment) IgnoreFiles() []string {
-	return []string{ServeconfigFilename, workloads.KaiwoconfigFilename}
+	return []string{ServeconfigFilename, workloads.KaiwoconfigFilename, workloads.EnvFilename}
 }
 
 func (deployment Deployment) GetPods() ([]corev1.Pod, error) {

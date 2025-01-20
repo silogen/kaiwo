@@ -67,7 +67,7 @@ func (job Job) DefaultTemplate() ([]byte, error) {
 }
 
 func (job Job) IgnoreFiles() []string {
-	return []string{EntrypointFilename, workloads.KaiwoconfigFilename}
+	return []string{EntrypointFilename, workloads.KaiwoconfigFilename, workloads.EnvFilename}
 }
 
 func (job Job) GetPods() ([]corev1.Pod, error) {
