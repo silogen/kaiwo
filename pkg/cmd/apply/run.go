@@ -76,7 +76,7 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 	ctx := context.TODO()
 	schedulingFlags := GetSchedulingFlags()
 
-	if err := fillSchedulingFlags(ctx, dynamicClient, &schedulingFlags, execFlags.ResourceFlavorGpuNodeLabelKey); err != nil {
+	if err := fillSchedulingFlags(ctx, dynamicClient, &schedulingFlags, execFlags.ResourceFlavorGpuNodeLabelKey, metaFlags.EnvVars); err != nil {
 		return fmt.Errorf("error filling scheduling flags: %w", err)
 	}
 	logrus.Infof("Successfully loaded scheduling info from Kubernetes")
@@ -151,6 +151,7 @@ func fillSchedulingFlags(
 	client dynamic.Interface,
 	schedulingFlags *workloads.SchedulingFlags,
 	resourceFlavorGpuNodeLabelKey string,
+	envVars []corev1.EnvVar,
 ) error {
 	logrus.Infof("Connecting to Kubernetes cluster to fetch resource flavor")
 	gpuCount, err := k8s.GetDefaultResourceFlavorGpuCount(ctx, client, resourceFlavorGpuNodeLabelKey)
@@ -161,7 +162,7 @@ func fillSchedulingFlags(
 		return err
 	}
 
-	numReplicas, nodeGpuRequest := k8s.CalculateNumberOfReplicas(schedulingFlags.TotalRequestedGPUs, gpuCount, nil)
+	numReplicas, nodeGpuRequest := k8s.CalculateNumberOfReplicas(schedulingFlags.TotalRequestedGPUs, gpuCount, envVars)
 
 	schedulingFlags.CalculatedNumReplicas = numReplicas
 	schedulingFlags.CalculatedGPUsPerReplica = nodeGpuRequest

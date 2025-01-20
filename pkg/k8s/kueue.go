@@ -67,6 +67,8 @@ func CalculateNumberOfReplicas(requestedGpus int, gpusPerNode int, envVars []cor
 			numReplicas = pipelineParallelism
 			nodeGpuRequest = tensorParallelism
 
+			logrus.Infof("Found GPU scheduling info from env vars, PIPELINE_PARALLELISM: %d, TENSOR_PARALLELISM: %d", pipelineParallelism, tensorParallelism)
+
 			if numReplicas*tensorParallelism != requestedGpus || tensorParallelism > gpusPerNode {
 				logrus.Fatalf(
 					"Mismatch between requested GPUs (%d) and calculated GPUs (%d) from PIPELINE_PARALLELISM (%d) and TENSOR_PARALLELISM (%d)",
