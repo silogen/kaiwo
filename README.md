@@ -73,7 +73,7 @@ We recommend using [Cluster-Forge](https://github.com/silogen/cluster-forge) to 
 
 ### Installation of Kaiwo CLI tool
 
-The installation of Kaiwo CLI tool is easy as it's a single binary. The only requirement is a kubeconfig file to access a Kubernetes cluster. If you are unsure where to get a kubeconfig, speak to the engineers who set up your Kubernetes cluster. Just like kubectl, Kaiwo will first look for a `KUBECONFIG=path` environment variable. If `KUBECONFIG` is not set, Kaiwo will then look for kubeconfig file in the default location `~/.kube/config`.
+The installation of Kaiwo CLI tool is easy as it's a single binary. The only requirement is a kubeconfig file to access a Kubernetes cluster (see authentication below for authentication plugins). If you are unsure where to get a kubeconfig, speak to the engineers who set up your Kubernetes cluster. Just like kubectl, Kaiwo will first look for a `KUBECONFIG=path` environment variable. If `KUBECONFIG` is not set, Kaiwo will then look for kubeconfig file in the default location `~/.kube/config`.
 
 1. To install Kaiwo, download the Kaiwo CLI binary from the [Releases Page](https://github.com/silogen/kaiwo/releases).
 2. Make the binary executable and add it to your PATH
@@ -90,6 +90,51 @@ sudo mv kaiwo /usr/local/bin/
 3. You're off to the races!
 
 Although not required by Kaiwo, we also recommend that you [install kubectl](https://kubernetes.io/docs/tasks/tools/) just in case you need some functionality that Kaiwo can't provide.
+
+#### Authentication
+
+If your cluster uses external authentication (OIDC, Azure, GKE), you will have to install a separate authentication plugin. These plugins should work with Kaiwo, so you won't need a separate installation of kubectl.
+
+Links to authentication plugins:
+
+- [int128/kubelogin: kubectl plugin for Kubernetes OpenID Connect authentication (kubectl oidc-login)](https://github.com/int128/kubelogin))(tested)
+- [Azure Kubelogin](https://azure.github.io/kubelogin/index.html)(untested)
+- [GKE: gke-gcloud-auth-plugin](https://cloud.google.com/blog/products/containers-kubernetes/kubectl-auth-changes-in-gke)(tested)
+
+For example, your kubeconfig that uses kubelogin should resemble the following format:
+
+
+```
+apiVersion: v1
+clusters:
+-   cluster:
+        server: https://kube-api-endpoint:6443
+    name: default
+contexts:
+-   context:
+        cluster: default
+        user: default
+    name: default
+current-context: default
+kind: Config
+preferences: {}
+users:
+-   name: default
+    user:
+        exec:
+            apiVersion: client.authentication.k8s.io/v1beta1
+            args:
+            - get-token
+            - --oidc-issuer-url=https://my.issuer.address.com/realms/realm_name
+            - --oidc-client-id=my_client_id_name
+            - --oidc-client-secret=my_client_id_secret
+            command: kubelogin
+            interactiveMode: IfAvailable
+            provideClusterInfo: false
+```
+
+In case your certificate trust store gives "untrusted" certificate errors, you can use `insecure-skip-tls-verify: true` under cluster and `--insecure-skip-tls-verify` in `kubelogin get-token` as a temporary workaround. As usual, we don't recommend this in production.  
+
 
 ## Usage
 
@@ -115,7 +160,7 @@ RayJobs and RayServices require using the `-p`/`--path` option. Kaiwo will look 
 
 Run `kaiwo submit --help` and `kaiwo serve --help` for an overview of available options. To get started with a workload, first make sure that your code (e.g. finetuning script) works with the number of GPUs that you request via `kaiwo submit/serve`.  For example, the following command will run the code found in `path` as a RayJob on 16 GPUs.
 
-`kaiwo submit -p workloads/training/LLMs/lora-supervised-finetuning/ds-zero3-single-multinode -g 16 --ray`
+`kaiwo submit -p path/to/workload/directory -g 16 --ray`
 
 By default, this will run in `kaiwo` namespace unless another namespace is provided with `-n` or `--namespace` option. If the provided namespace doesn't exist, use `--create-namespace` flag.
 

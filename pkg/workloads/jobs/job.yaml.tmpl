@@ -6,10 +6,14 @@ metadata:
   labels:
     kueue.x-k8s.io/queue-name: {{ .WorkloadMeta.Queue }}
 spec:
-  ttlSecondsAfterFinished: {{ mul .WorkloadMeta.TtlMinAfterFinished 60 }}
+  ttlSecondsAfterFinished: 60 
   template:
     spec:
       restartPolicy: "Never"
+      {{- if .Meta.ImagePullSecret }}
+      imagePullSecrets:
+      - name: {{ .Meta.ImagePullSecret }}
+      {{- end }}
       containers:
       - name: {{ .Meta.Name }}
         image: {{ .Meta.Image }}

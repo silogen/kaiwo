@@ -7,7 +7,6 @@ metadata:
     kueue.x-k8s.io/queue-name: {{ .WorkloadMeta.Queue }}
 spec:
   shutdownAfterJobFinishes: true
-  ttlSecondsAfterFinished: {{ mul .WorkloadMeta.TtlMinAfterFinished 60 }}
   entrypoint: |
 {{ .Workload.Entrypoint | indent 4}}
   rayClusterSpec:
@@ -17,6 +16,10 @@ spec:
       rayStartParams: {}
       template:
         spec:
+          {{- if .Meta.ImagePullSecret }}
+          imagePullSecrets:
+          - name: {{ .Meta.ImagePullSecret }}
+          {{- end }}
           containers:
             - name: ray-head
               image: {{ .Meta.Image }}
@@ -93,6 +96,10 @@ spec:
         rayStartParams: {}
         template:
           spec:
+            {{- if .Meta.ImagePullSecret }}
+            imagePullSecrets:
+            - name: {{ .Meta.ImagePullSecret }}
+            {{- end }}
             containers:
               - name: ray-worker
                 image: {{ .Meta.Image }}

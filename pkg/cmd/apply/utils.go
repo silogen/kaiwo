@@ -63,6 +63,7 @@ var (
 	name      string
 	namespace string
 	image     string
+	imagePullSecret string
 )
 
 // AddMetaFlags adds flags that are needed for basic Kubernetes metadata
@@ -70,6 +71,7 @@ func AddMetaFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&name, "name", "", "", "Name of the workload")
 	cmd.Flags().StringVarP(&namespace, "namespace", "n", defaultNamespace, "Namespace of the workload")
 	cmd.Flags().StringVarP(&image, "image", "i", defaultImage, "The image to use for the workload")
+	cmd.Flags().StringVarP(&imagePullSecret, "imagepullsecret", "", "", "ImagePullSecret name for job/deployment if private registry")
 }
 
 func GetMetaFlags() workloads.MetaFlags {
@@ -77,6 +79,7 @@ func GetMetaFlags() workloads.MetaFlags {
 		Name:      name,
 		Namespace: namespace,
 		Image:     image,
+		ImagePullSecret: imagePullSecret,
 	}
 }
 
