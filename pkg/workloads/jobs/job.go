@@ -19,14 +19,16 @@ package jobs
 import (
 	_ "embed"
 	"fmt"
+	"github.com/silogen/kaiwo/pkg/workloads"
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"os"
 	"path/filepath"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
 
-	"github.com/silogen/kaiwo/pkg/workloads"
 	"github.com/sirupsen/logrus"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 //go:embed job.yaml.tmpl
@@ -69,6 +71,11 @@ func (job Job) DefaultTemplate() ([]byte, error) {
 	return JobTemplate, nil
 }
 
+func (job Job) ConvertObject(object runtime.Object) (runtime.Object, bool) {
+	obj, ok := object.(*batchv1.Job)
+	return obj, ok
+}
+
 func (job Job) IgnoreFiles() []string {
 	return []string{EntrypointFilename, workloads.KaiwoconfigFilename, workloads.EnvFilename}
 }
@@ -81,12 +88,12 @@ func (job Job) GetServices() ([]corev1.Service, error) {
 	return []corev1.Service{}, nil
 }
 
-func (job Job) GenerateAdditionalResourceManifests(templateContext workloads.WorkloadTemplateConfig) ([]*unstructured.Unstructured, error) {
-	localClusterQueueManifest, err := workloads.CreateLocalClusterQueueManifest(templateContext)
+func (job Job) GenerateAdditionalResourceManifests(k8sClient client.Client, templateContext workloads.WorkloadTemplateConfig) ([]runtime.Object, error) {
+	localClusterQueueManifest, err := workloads.CreateLocalClusterQueueManifest(k8sClient, templateContext)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create local cluster queue manifest: %w", err)
 	}
 
-	return []*unstructured.Unstructured{localClusterQueueManifest}, nil
+	return []runtime.Object{localClusterQueueManifest}, nil
 }

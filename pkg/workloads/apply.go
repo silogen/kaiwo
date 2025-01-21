@@ -22,14 +22,15 @@ import (
 	"github.com/Masterminds/sprig/v3"
 	"github.com/silogen/kaiwo/pkg/k8s"
 	"github.com/sirupsen/logrus"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	k8syaml "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
-	"k8s.io/client-go/dynamic"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"k8s.io/apimachinery/pkg/runtime"
 	"os"
-	"sigs.k8s.io/yaml"
 	"strings"
 	"text/template"
 )
@@ -37,23 +38,22 @@ import (
 // ApplyWorkload runs the main workload submission routine
 func ApplyWorkload(
 	ctx context.Context,
-	client dynamic.Interface,
+	k8sClient client.Client,
 	workload Workload,
 	execFlags ExecFlags,
 	templateContext WorkloadTemplateConfig,
 ) error {
 
-	var resources []*unstructured.Unstructured
+	var resources []runtime.Object
 
 	if execFlags.CreateNamespace {
-		namespaceResource, err := generateNamespaceManifestIfNotExists(ctx, client, templateContext.Meta.Namespace)
+		namespaceResource, err := generateNamespaceManifestIfNotExists(ctx, k8sClient, templateContext.Meta.Namespace)
 		if err != nil {
 			return fmt.Errorf("failed to generate namespace resource: %w", err)
 		}
 		if namespaceResource != nil {
 			resources = append(resources, namespaceResource)
 		}
-
 	}
 
 	if execFlags.Path != "" {
@@ -65,17 +65,9 @@ func ApplyWorkload(
 			resources = append(resources, configMapResource)
 			templateContext.Meta.HasConfigMap = true
 		}
-
 	}
 
-	additionalResourceManifests, err := workload.GenerateAdditionalResourceManifests(templateContext)
-
-	if err != nil {
-		return fmt.Errorf("failed to generate additional resource manifests: %w", err)
-	}
-	if additionalResourceManifests != nil && len(additionalResourceManifests) > 0 {
-		resources = append(resources, additionalResourceManifests...)
-	}
+	var err error
 
 	// Choose the template
 	var workloadTemplate []byte
@@ -92,7 +84,7 @@ func ApplyWorkload(
 		}
 	}
 
-	templateResources, err := generateManifests(workloadTemplate, templateContext)
+	templateResources, err := generateManifests(k8sClient, workloadTemplate, templateContext, workload)
 	if err != nil {
 		return fmt.Errorf("failed to generate manifests: %w", err)
 	}
@@ -101,44 +93,48 @@ func ApplyWorkload(
 	}
 	resources = append(resources, templateResources...)
 
+	s, err := k8s.GetScheme()
+	if err != nil {
+		return fmt.Errorf("failed to get k8s scheme: %w", err)
+	}
+
 	if execFlags.DryRun {
-		printResources(resources)
+		printResources(&s, resources)
 	} else {
-		if err := applyResources(resources, ctx, client); err != nil {
+		if err := applyResources(resources, ctx, k8sClient); err != nil {
 			return fmt.Errorf("failed to apply resources: %w", err)
 		}
 	}
 	return nil
 }
 
-func generateNamespaceManifestIfNotExists(ctx context.Context, client dynamic.Interface, namespaceName string) (*unstructured.Unstructured, error) {
+func generateNamespaceManifestIfNotExists(
+	ctx context.Context,
+	k8sClient client.Client,
+	namespaceName string,
+) (*corev1.Namespace, error) {
 	logrus.Infof("Checking if namespace '%s' exists", namespaceName)
 
-	gvr := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "namespaces"}
-
-	_, err := client.Resource(gvr).Get(ctx, namespaceName, metav1.GetOptions{})
+	ns := &corev1.Namespace{}
+	err := k8sClient.Get(ctx, client.ObjectKey{Name: namespaceName}, ns)
 	if err == nil {
-		logrus.Infof("Namespace '%s' already exists", namespaceName)
+		logrus.Info("Namespace already exists")
 		return nil, nil
 	}
 
-	if !apierrors.IsNotFound(err) {
+	if !errors.IsNotFound(err) {
 		return nil, fmt.Errorf("failed to check namespace existence: %w", err)
 	}
 
-	return &unstructured.Unstructured{
-		Object: map[string]any{
-			"apiVersion": "v1",
-			"kind":       "Namespace",
-			"metadata": map[string]any{
-				"name": namespaceName,
-			},
+	return &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: namespaceName,
 		},
 	}, nil
 }
 
 // generateConfigMapManifest adds a config map resource
-func generateConfigMapManifest(path string, workload Workload, metaConfig MetaFlags) (*unstructured.Unstructured, error) {
+func generateConfigMapManifest(path string, workload Workload, metaConfig MetaFlags) (*corev1.ConfigMap, error) {
 	configMap, err := k8s.GenerateConfigMapFromDir(path, metaConfig.Name, metaConfig.Namespace, workload.IgnoreFiles())
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate ConfigMap: %w", err)
@@ -150,7 +146,7 @@ func generateConfigMapManifest(path string, workload Workload, metaConfig MetaFl
 }
 
 // generateManifests prepares a list of Kubernetes manifests to apply
-func generateManifests(workloadTemplate []byte, templateContext WorkloadTemplateConfig) ([]*unstructured.Unstructured, error) {
+func generateManifests(k8sClient client.Client, workloadTemplate []byte, templateContext WorkloadTemplateConfig, workload Workload) ([]runtime.Object, error) {
 	parsedTemplate, err := template.New("main").Funcs(sprig.TxtFuncMap()).Parse(string(workloadTemplate))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse template: %w", err)
@@ -162,85 +158,93 @@ func generateManifests(workloadTemplate []byte, templateContext WorkloadTemplate
 		return nil, fmt.Errorf("failed to render template: %w", err)
 	}
 
-	decoder := k8syaml.NewDecodingSerializer(unstructured.UnstructuredJSONScheme)
-	manifests := strings.Split(renderedYAML.String(), "---")
-
-	var parsedManifests []*unstructured.Unstructured
-
-	for _, manifest := range manifests {
-		manifest = strings.TrimSpace(manifest)
-		if manifest == "" {
-			continue
-		}
-
-		obj := &unstructured.Unstructured{}
-		_, _, err := decoder.Decode([]byte(manifest), nil, obj)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decode YAML manifest: %w", err)
-		}
-
-		parsedManifests = append(parsedManifests, obj)
+	scheme, err := k8s.GetScheme()
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch scheme: %w", err)
 	}
 
-	return parsedManifests, nil
+	decoder := serializer.NewCodecFactory(&scheme).UniversalDeserializer()
+
+	obj, _, err := decoder.Decode([]byte(renderedYAML.String()), nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode manifest: %w", err)
+	}
+
+	converted, ok := workload.ConvertObject(obj)
+	if !ok {
+		return nil, fmt.Errorf("failed to convert manifest, ensure it is of the correct type")
+	}
+
+	additionalWorkloadManifests, err := workload.GenerateAdditionalResourceManifests(k8sClient, templateContext)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate additional resource manifests: %w", err)
+	}
+
+	return append(additionalWorkloadManifests, []runtime.Object{converted}...), nil
 
 }
 
 // printResources prints each Kubernetes manifest in an array
-func printResources(resources []*unstructured.Unstructured) {
+func printResources(s *runtime.Scheme, resources []runtime.Object) {
 	for _, resource := range resources {
-		logrus.Infof("Generated %s: %s", resource.GetKind(), resource.GetName())
-		data := resource.UnstructuredContent()
+		clientObject := resource.(client.Object)
 
-		// Marshal the map into YAML
-		yamlBytes, err := yaml.Marshal(data)
+		cleanedResource, err := k8s.MinimalizeAndConvertToYAML(s, clientObject)
+
 		if err != nil {
-			logrus.Errorf("failed to convert unstructured object to YAML: %w", err)
+			logrus.Errorf("Failed to minimize resource %s: %w", clientObject.GetName(), err)
+			continue
 		}
-		fmt.Print(string(yamlBytes))
+
+		fmt.Print(cleanedResource)
 		fmt.Println("---")
 	}
 }
 
 // applyResources applies (creates or updates if possible) each Kubernetes object within an array
-func applyResources(resources []*unstructured.Unstructured, ctx context.Context, c dynamic.Interface) error {
+func applyResources(resources []runtime.Object, ctx context.Context, k8sClient client.Client) error {
 
 	for _, resource := range resources {
-		gvk := resource.GroupVersionKind()
-
-		// Derive the GVR from the GVK
-		gvr := schema.GroupVersionResource{
-			Group:    gvk.Group,
-			Version:  gvk.Version,
-			Resource: strings.ToLower(gvk.Kind) + "s", // Pluralize the kind
+		// Ensure the resource implements client.Object
+		obj, ok := resource.(client.Object)
+		if !ok {
+			return fmt.Errorf("resource does not implement client.Object: %T", resource)
 		}
 
-		var resourceInterface dynamic.ResourceInterface
-
-		if gvk.Kind == "Namespace" {
-			resourceInterface = c.Resource(gvr)
-		} else {
-			// Determine the namespace
-			namespace := resource.GetNamespace()
-			if namespace == "" {
-				return fmt.Errorf("resource %s/%s does not have a namespace specified", resource.GetKind(), resource.GetName())
-			}
-
-			resourceInterface = c.Resource(gvr).Namespace(namespace)
+		// Access metadata for logging
+		objMeta, err := meta.Accessor(obj)
+		if err != nil {
+			return fmt.Errorf("failed to access metadata for resource: %w", err)
 		}
 
-		// Try to create the resource
-		_, err := resourceInterface.Create(ctx, resource, metav1.CreateOptions{})
+		logrus.Infof("Applying resource %T: %s/%s", resource, objMeta.GetNamespace(), objMeta.GetName())
+
+		// Check if the resource exists
+		key := client.ObjectKey{
+			Namespace: objMeta.GetNamespace(),
+			Name:      objMeta.GetName(),
+		}
+
+		existing := resource.DeepCopyObject().(client.Object)
+
+		err = k8sClient.Get(ctx, key, existing)
+
 		if err == nil {
-			logrus.Infof("%s/%s submitted successfully", resource.GetKind(), resource.GetName())
+			logrus.Warnf("%s/%s already exists. Skipping submit", objMeta.GetNamespace(), objMeta.GetName())
 			continue
 		}
 
-		if !apierrors.IsAlreadyExists(err) {
-			return fmt.Errorf("failed to apply %s/%s: %w", resource.GetKind(), resource.GetName(), err)
-		} else {
-			logrus.Warnf("%s/%s already exists. Skipping submit", resource.GetKind(), resource.GetName())
+		if client.IgnoreNotFound(err) != nil {
+			return fmt.Errorf("failed to get resource %s/%s: %w", objMeta.GetNamespace(), objMeta.GetName(), err)
 		}
+
+		if err := k8sClient.Create(ctx, obj); err != nil {
+			return fmt.Errorf("failed to create resource %s/%s: %w", objMeta.GetNamespace(), objMeta.GetName(), err)
+		}
+
+		logrus.Infof("resource %s/%s created successfully", objMeta.GetNamespace(), objMeta.GetName())
+
+		continue
 
 		// TODO: Rethink update logic which now fails with "immutable field" errors
 		// Resource already exists, update it

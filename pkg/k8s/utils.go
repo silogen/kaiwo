@@ -22,7 +22,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"os"
 	"path/filepath"
 	"slices"
@@ -33,7 +34,7 @@ func isBinaryFile(content []byte) bool {
 }
 
 // GenerateConfigMapFromDir generates a ConfigMap from a directory
-func GenerateConfigMapFromDir(dir string, name string, namespace string, skipFiles []string) (*unstructured.Unstructured, error) {
+func GenerateConfigMapFromDir(dir string, name string, namespace string, skipFiles []string) (*corev1.ConfigMap, error) {
 	files, err := os.ReadDir(dir)
 
 	if err != nil {
@@ -69,16 +70,12 @@ func GenerateConfigMapFromDir(dir string, name string, namespace string, skipFil
 		return nil, nil
 	}
 
-	configMap := &unstructured.Unstructured{
-		Object: map[string]any{
-			"apiVersion": "v1",
-			"kind":       "ConfigMap",
-			"metadata": map[string]any{
-				"name":      name,
-				"namespace": namespace,
-			},
-			"data": data,
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
 		},
+		Data: data,
 	}
 
 	return configMap, nil
@@ -163,4 +160,60 @@ func ReadEnvFile(filePath string) ([]corev1.EnvVar, []SecretVolume, error) {
 	}
 
 	return envVars, secretVolumes, nil
+}
+
+// MinimalizeAndConvertToYAML converts a runtime.Object or client.Object to its YAML representation
+// while removing read-only fields like `metadata.creationTimestamp`, `status`, and others.
+func MinimalizeAndConvertToYAML(s *runtime.Scheme, obj runtime.Object) (string, error) {
+	// Convert the resource to an unstructured map
+
+	gvks, _, err := s.ObjectKinds(obj)
+	if err != nil {
+		return "", fmt.Errorf("failed to get GVK for object: %w", err)
+	}
+	if len(gvks) > 0 {
+		obj.GetObjectKind().SetGroupVersionKind(gvks[0])
+	}
+
+	unstructuredMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
+	if err != nil {
+		return "", fmt.Errorf("failed to convert object to unstructured: %w", err)
+	}
+
+	// Inject apiVersion and kind into the unstructured map, as this is not always included in the runtime.Object
+	gvk := obj.GetObjectKind().GroupVersionKind()
+	groupVersion := gvk.GroupVersion()
+	if groupVersion.Group == "" {
+		unstructuredMap["apiVersion"] = groupVersion.Version
+	} else {
+		unstructuredMap["apiVersion"] = fmt.Sprintf("%s/%s", groupVersion.Group, groupVersion.Version)
+	}
+
+	unstructuredMap["kind"] = gvk.Kind
+
+	// Remove unwanted fields
+	removeUnwantedFields(unstructuredMap)
+
+	// Marshal the cleaned object to YAML
+	yamlBytes, err := yaml.Marshal(unstructuredMap)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal object to YAML: %w", err)
+	}
+
+	return string(yamlBytes), nil
+}
+
+// removeUnwantedFields removes common server-side generated fields
+// TODO find out if there is a better way to do this
+func removeUnwantedFields(obj map[string]interface{}) {
+	if metadata, ok := obj["metadata"].(map[string]interface{}); ok {
+		delete(metadata, "creationTimestamp")
+		delete(metadata, "managedFields")
+		delete(metadata, "uid")
+		delete(metadata, "selfLink")
+		delete(metadata, "generation")
+	}
+
+	// Remove the status field
+	delete(obj, "status")
 }

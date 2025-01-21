@@ -19,12 +19,14 @@ package ray
 import (
 	_ "embed"
 	"fmt"
+	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	"github.com/silogen/kaiwo/pkg/workloads"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"os"
 	"path/filepath"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
 )
 
@@ -51,6 +53,11 @@ func (deployment Deployment) GenerateTemplateContext(execFlags workloads.ExecFla
 	return DeploymentFlags{Serveconfig: strings.TrimSpace(string(contents))}, nil
 }
 
+func (deployment Deployment) ConvertObject(object runtime.Object) (runtime.Object, bool) {
+	obj, ok := object.(*rayv1.RayService)
+	return obj, ok
+}
+
 func (deployment Deployment) DefaultTemplate() ([]byte, error) {
 	if DeploymentTemplate == nil {
 		return nil, fmt.Errorf("job template is empty")
@@ -74,6 +81,6 @@ func (deployment Deployment) GetServices() ([]corev1.Service, error) {
 	return []corev1.Service{}, nil
 }
 
-func (deployment Deployment) GenerateAdditionalResourceManifests(_ workloads.WorkloadTemplateConfig) ([]*unstructured.Unstructured, error) {
-	return []*unstructured.Unstructured{}, nil
+func (deployment Deployment) GenerateAdditionalResourceManifests(k8sClient client.Client, templateContext workloads.WorkloadTemplateConfig) ([]runtime.Object, error) {
+	return []runtime.Object{}, nil
 }

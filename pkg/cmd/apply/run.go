@@ -23,10 +23,10 @@ import (
 	"github.com/silogen/kaiwo/pkg/workloads"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/dynamic"
 	"os"
 	"os/user"
 	"path/filepath"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 	"strconv"
 	"strings"
@@ -68,7 +68,7 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 	}
 
 	// Prepare scheduling flags
-	dynamicClient, err := k8s.GetDynamicClient()
+	dynamicClient, err := k8s.GetClient()
 	if err != nil {
 		return fmt.Errorf("error fetching Kubernetes client: %w", err)
 	}
@@ -167,7 +167,7 @@ func sanitizeStringForKubernetes(path string) string {
 // fillSchedulingFlags fills in the GPU scheduling flags based on the Kubernetes cluster state
 func fillSchedulingFlags(
 	ctx context.Context,
-	client dynamic.Interface,
+	client client.Client,
 	schedulingFlags *workloads.SchedulingFlags,
 	resourceFlavorGpuNodeLabelKey string,
 	envVars []corev1.EnvVar,

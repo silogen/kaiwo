@@ -19,7 +19,8 @@ package workloads
 import (
 	"fmt"
 	"github.com/silogen/kaiwo/pkg/k8s"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 )
 
 // JobFlags contain flags specific to job-workloads
@@ -28,13 +29,7 @@ type JobFlags struct {
 	Queue string
 }
 
-func CreateLocalClusterQueueManifest(templateContext WorkloadTemplateConfig) (*unstructured.Unstructured, error) {
-	c, err := k8s.GetDynamicClient()
-
-	if err != nil {
-		return nil, fmt.Errorf("error getting Kubernetes client: %v", err)
-	}
-
+func CreateLocalClusterQueueManifest(k8sClient client.Client, templateContext WorkloadTemplateConfig) (*kueuev1beta1.LocalQueue, error) {
 	jobMeta, ok := templateContext.WorkloadMeta.(JobFlags)
 
 	if !ok {
@@ -42,7 +37,7 @@ func CreateLocalClusterQueueManifest(templateContext WorkloadTemplateConfig) (*u
 	}
 
 	// Handle jobs local queue
-	localQueue, err := k8s.PrepareLocalClusterQueue(jobMeta.Queue, templateContext.Meta.Namespace, c)
+	localQueue, err := k8s.PrepareLocalClusterQueue(jobMeta.Queue, templateContext.Meta.Namespace, k8sClient)
 	if err != nil {
 		return nil, fmt.Errorf("error preparing local cluster queue: %v", err)
 	}
