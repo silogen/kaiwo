@@ -1,9 +1,7 @@
 #!/bin/bash
 
-# Use the first argument as BUILD_VERSION, or default to v.0.0.3
+# Set default build version if not provided as an argument
 BUILD_VERSION=${1:-"v.0.0.3"}
-
-# Build version information
 BUILD_COMMIT=$(git rev-parse --short HEAD)
 BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
@@ -19,6 +17,11 @@ targets=(
 
 mkdir -p builds/
 
+# Display build information
+echo "Using Build Version: $BUILD_VERSION"
+echo "Using Build Commit: $BUILD_COMMIT"
+echo "Using Build Date: $BUILD_DATE"
+
 # Iterate over targets and build
 for target in "${targets[@]}"; do
     # Split the target into OS and ARCH
@@ -31,8 +34,8 @@ for target in "${targets[@]}"; do
     fi
 
     # Build the binary
-    echo "Building for $os/$arch with version $BUILD_VERSION..."
-    env GOOS=$os GOARCH=$arch go build -ldflags="-X 'main.version=${BUILD_VERSION}' -X 'main.commit=${BUILD_COMMIT}' -X 'main.date=${BUILD_DATE}'" -o builds/"$output" main.go
+    echo "Building for $os/$arch..."
+    env GOOS=$os GOARCH=$arch go build -ldflags="-X 'github.com/silogen/kaiwo/pkg/cmd.version=${BUILD_VERSION}' -X 'github.com/silogen/kaiwo/pkg/cmd.commit=${BUILD_COMMIT}' -X 'github.com/silogen/kaiwo/pkg/cmd.date=${BUILD_DATE}'" -o builds/"$output" main.go
 
     if [ $? -eq 0 ]; then
         echo "Successfully built $output"
