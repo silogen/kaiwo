@@ -26,6 +26,7 @@ import (
 	"github.com/silogen/kaiwo/pkg/workloads"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"github.com/sirupsen/logrus"
 )
 
 //go:embed deployment.yaml.tmpl
@@ -43,6 +44,7 @@ func (deployment Deployment) GenerateTemplateContext(execFlags workloads.ExecFla
 	contents, err := os.ReadFile(filepath.Join(execFlags.Path, EntrypointFilename))
 
 	if contents == nil {
+		logrus.Warnln("No entrypoint file found. Expecting entrypoint in image")
 		return nil, nil
 	}
 

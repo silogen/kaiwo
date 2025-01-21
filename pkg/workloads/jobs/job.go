@@ -19,12 +19,14 @@ package jobs
 import (
 	_ "embed"
 	"fmt"
-	"github.com/silogen/kaiwo/pkg/workloads"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/silogen/kaiwo/pkg/workloads"
+	"github.com/sirupsen/logrus"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 //go:embed job.yaml.tmpl
@@ -42,6 +44,7 @@ func (job Job) GenerateTemplateContext(execFlags workloads.ExecFlags) (any, erro
 	contents, err := os.ReadFile(filepath.Join(execFlags.Path, EntrypointFilename))
 
 	if contents == nil {
+		logrus.Warnln("No entrypoint file found. Expecting entrypoint in image")
 		return nil, nil
 	}
 
