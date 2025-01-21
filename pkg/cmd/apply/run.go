@@ -134,6 +134,7 @@ func makeWorkloadName(path string, image string, version string) string {
 	// Calculate the max allowed length for the appendix
 	separatorCount := 1 // At least one "-" between username and appendix
 	if version != "" {
+		version = sanitizeStringForKubernetes(version)
 		separatorCount = 2 // Include one more "-" for the version
 	}
 	maxAppendixLength := 63 - len(currentUser.Username) - len(version) - separatorCount

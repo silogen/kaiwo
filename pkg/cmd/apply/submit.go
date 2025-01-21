@@ -44,10 +44,9 @@ func BuildSubmitCmd() *cobra.Command {
 			}
 
 			if useRayForJob {
-				logrus.Debugln("Using ray for job")
+				logrus.Debugln("Using RayJob for job")
 				job = ray.Job{}
 			} else {
-				logrus.Debugln("Not using ray for job")
 				job = jobs.Job{}
 			}
 			return RunApply(job, jobFlags)

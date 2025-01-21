@@ -114,7 +114,7 @@ func RunCli() {
 
 	deleteCmd := &cobra.Command{
 		Use:   "delete -n [namespace] [workload-type]/[workload-name]",
-		Short: "Delete a workload. Workload type must be one of [job, rayjob, rayservice]",
+		Short: "Delete a workload. Workload type must be one of [job, deployment, rayjob, rayservice]",
 		Args:  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 

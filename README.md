@@ -146,11 +146,12 @@ Kaiwo uses Kueue to manage job queuing. Make sure your cluster-admin has created
 
 ### Deploying with kaiwo
 
-Kaiwo allows you to both `submit` jobs and `serve` deployments. Currently, the following types are supported:
+Kaiwo allows you to both `submit` jobs and `serve` deployments. It's important to note that `kaiwo serve` does not use Kueue or any other form of job queueing.  The assumption is that immediate serving of models is required when using `serve`. We encourage users to use separate clusters for `submit` and `serve`. Currently, the following types are supported:
 
 * Standard Kubernetes jobs `batch/v1 Job` via `kaiwo submit`
 * Ray jobs `ray.io/v1 RayJob` via `kaiwo submit --ray`
 * Ray services `ray.io/v1 RayService` via `kaiwo serve --ray`
+* Standard Kubernetes deployments `apps/v1 Deployment` via `kaiwo serve`
 
 The `workloads` directory includes examples with code for different types workloads that you can create.
 

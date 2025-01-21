@@ -61,6 +61,13 @@ func Cleanup(ctx context.Context, resource string, name string, namespace string
 			PropagationPolicy: &propagationPolicy,
 		}
 
+	case "deployment":
+		gvr = schema.GroupVersionResource{
+			Group:    "apps",
+			Version:  "v1",
+			Resource: "deployments",
+		}
+
 	case "rayjob":
 		gvr = schema.GroupVersionResource{
 			Group:    "ray.io",

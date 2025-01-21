@@ -14,7 +14,7 @@
  *  limitations under the License.
 **/
 
-package jobs
+package deployments
 
 import (
 	_ "embed"
@@ -24,23 +24,23 @@ import (
 	"strings"
 
 	"github.com/silogen/kaiwo/pkg/workloads"
-	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"github.com/sirupsen/logrus"
 )
 
-//go:embed job.yaml.tmpl
-var JobTemplate []byte
+//go:embed deployment.yaml.tmpl
+var DeploymentTemplate []byte
 
 const EntrypointFilename = "entrypoint"
 
-type Job struct{}
+type Deployment struct{}
 
-type JobFlags struct {
+type DeploymentFlags struct {
 	Entrypoint string
 }
 
-func (job Job) GenerateTemplateContext(execFlags workloads.ExecFlags) (any, error) {
+func (deployment Deployment) GenerateTemplateContext(execFlags workloads.ExecFlags) (any, error) {
 	contents, err := os.ReadFile(filepath.Join(execFlags.Path, EntrypointFilename))
 
 	if contents == nil {
@@ -58,35 +58,29 @@ func (job Job) GenerateTemplateContext(execFlags workloads.ExecFlags) (any, erro
 	entrypoint = strings.ReplaceAll(entrypoint, "\"", "\\\"") // Escape double quotes
 	entrypoint = fmt.Sprintf("\"%s\"", entrypoint)            // Wrap the entire command in quotes
 
-	return JobFlags{Entrypoint: entrypoint}, nil
+	return DeploymentFlags{Entrypoint: entrypoint}, nil
 
 }
 
-func (job Job) DefaultTemplate() ([]byte, error) {
-	if JobTemplate == nil {
-		return nil, fmt.Errorf("job template is empty")
+func (deployment Deployment) DefaultTemplate() ([]byte, error) {
+	if DeploymentTemplate == nil {
+		return nil, fmt.Errorf("deployment template is empty")
 	}
-	return JobTemplate, nil
+	return DeploymentTemplate, nil
 }
 
-func (job Job) IgnoreFiles() []string {
+func (deployment Deployment) IgnoreFiles() []string {
 	return []string{EntrypointFilename, workloads.KaiwoconfigFilename, workloads.EnvFilename}
 }
 
-func (job Job) GetPods() ([]corev1.Pod, error) {
+func (deployment Deployment) GetPods() ([]corev1.Pod, error) {
 	return []corev1.Pod{}, nil
 }
 
-func (job Job) GetServices() ([]corev1.Service, error) {
+func (deployment Deployment) GetServices() ([]corev1.Service, error) {
 	return []corev1.Service{}, nil
 }
 
-func (job Job) GenerateAdditionalResourceManifests(templateContext workloads.WorkloadTemplateConfig) ([]*unstructured.Unstructured, error) {
-	localClusterQueueManifest, err := workloads.CreateLocalClusterQueueManifest(templateContext)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to create local cluster queue manifest: %w", err)
-	}
-
-	return []*unstructured.Unstructured{localClusterQueueManifest}, nil
+func (deployment Deployment) GenerateAdditionalResourceManifests(templateContext workloads.WorkloadTemplateConfig) ([]*unstructured.Unstructured, error) {
+	return []*unstructured.Unstructured{}, nil
 }
