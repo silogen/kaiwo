@@ -73,7 +73,7 @@ func AddMetaFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&namespace, "namespace", "n", defaultNamespace, "Namespace of the workload")
 	cmd.Flags().StringVarP(&image, "image", "i", defaultImage, "The image to use for the workload")
 	cmd.Flags().StringVarP(&imagePullSecret, "imagepullsecret", "", "", "ImagePullSecret name for job/deployment if private registry")
-	cmd.Flags().StringVarP(&version, "version", "v", "", "Optional version for job/deployment")
+	cmd.Flags().StringVarP(&version, "version", "", "", "Optional version for job/deployment")
 }
 
 func GetMetaFlags() workloads.MetaFlags {
