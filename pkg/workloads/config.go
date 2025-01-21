@@ -70,6 +70,8 @@ type MetaFlags struct {
 
 	ImagePullSecret string
 
+	Version string
+
 	// Environment variables
 	EnvVars []corev1.EnvVar
 
