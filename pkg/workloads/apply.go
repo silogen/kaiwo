@@ -223,7 +223,7 @@ func applyResources(resources []*unstructured.Unstructured, ctx context.Context,
 			// Determine the namespace
 			namespace := resource.GetNamespace()
 			if namespace == "" {
-				namespace = "default"
+				return fmt.Errorf("resource %s/%s does not have a namespace specified", resource.GetKind(), resource.GetName())
 			}
 
 			resourceInterface = c.Resource(gvr).Namespace(namespace)
