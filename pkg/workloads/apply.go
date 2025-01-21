@@ -215,14 +215,22 @@ func applyResources(resources []*unstructured.Unstructured, ctx context.Context,
 			Resource: strings.ToLower(gvk.Kind) + "s", // Pluralize the kind
 		}
 
-		// Determine the namespace
-		namespace := resource.GetNamespace()
-		if namespace == "" {
-			namespace = "default"
+		var resourceInterface dynamic.ResourceInterface
+
+		if gvk.Kind == "Namespace" {
+			resourceInterface = c.Resource(gvr)
+		} else {
+			// Determine the namespace
+			namespace := resource.GetNamespace()
+			if namespace == "" {
+				namespace = "default"
+			}
+
+			resourceInterface = c.Resource(gvr).Namespace(namespace)
 		}
 
 		// Try to create the resource
-		_, err := c.Resource(gvr).Namespace(namespace).Create(ctx, resource, metav1.CreateOptions{})
+		_, err := resourceInterface.Create(ctx, resource, metav1.CreateOptions{})
 		if err == nil {
 			logrus.Infof("%s/%s submitted successfully", resource.GetKind(), resource.GetName())
 			continue
