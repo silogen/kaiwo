@@ -17,9 +17,10 @@
 package cli
 
 import (
-	"fmt"
 	"github.com/silogen/kaiwo/pkg/workloads"
+	"github.com/silogen/kaiwo/pkg/workloads/deployments"
 	"github.com/silogen/kaiwo/pkg/workloads/ray"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
@@ -41,8 +42,9 @@ func BuildServeCmd() *cobra.Command {
 
 			if useRayForServe {
 				deployment = ray.Deployment{}
+				logrus.Debugln("Using RayService for deployment")
 			} else {
-				return fmt.Errorf("only ray serve is available at the moment")
+				deployment = deployments.Deployment{}
 			}
 
 			return RunApply(deployment, deploymentFlags)
