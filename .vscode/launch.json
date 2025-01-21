@@ -7,7 +7,7 @@
 	    "request": "launch",
 	    "mode": "debug",
 	    "program": "${workspaceFolder}",
-	    "args": ["submit", "-p", "workloads/training/LLMs/lora-supervised-finetuning/lora-sft-zero3-single-multinode", "-t", "rayjob", "-g", "4", "--dry-run"],
+	    "args": ["submit", "-p", "workloads/training/LLMs/lora-supervised-finetuning/lora-sft-zero3-single-multinode", "--ray", "-g", "4", "--dry-run"],
 	    "env": {
 	      "GO111MODULE": "on"
 	    },
@@ -19,7 +19,7 @@
 		"request": "launch",
 		"mode": "debug",
 		"program": "${workspaceFolder}",
-		"args": ["submit", "-p", "workloads/inference/LLMs/online-inference/vllm-online-single-multinode", "-t", "rayservice", "-g", "4", "--dry-run"],
+		"args": ["serve", "-p", "workloads/inference/LLMs/online-inference/vllm-online-single-multinode", "--ray", "-g", "4", "--dry-run"],
 		"env": {
 		  "GO111MODULE": "on"
 		},
@@ -55,7 +55,7 @@
 		"request": "launch",
 		"mode": "debug",
 		"program": "${workspaceFolder}",
-		"args": ["submit", "-p", "workloads/training/LLMs/lora-supervised-finetuning/ds-zero3-single-multinode", "-t", "rayjob", "-g", "4"],
+		"args": ["submit", "-p", "workloads/training/LLMs/lora-supervised-finetuning/ds-zero3-single-multinode", "--ray", "-g", "4"],
 		"env": {
 		  "GO111MODULE": "on"
 		},
