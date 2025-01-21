@@ -5,6 +5,7 @@ metadata:
   namespace: {{ .Meta.Namespace }}
   labels:
     kueue.x-k8s.io/queue-name: {{ .WorkloadMeta.Queue }}
+    kaiwo-cli/username: {{ .Meta.User }}
 spec:
   ttlSecondsAfterFinished: 60 
   template:

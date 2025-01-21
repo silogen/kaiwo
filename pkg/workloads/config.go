@@ -72,6 +72,8 @@ type MetaFlags struct {
 
 	Version string
 
+	User string
+
 	// Environment variables
 	EnvVars []corev1.EnvVar
 
