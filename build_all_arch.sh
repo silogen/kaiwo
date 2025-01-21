@@ -1,7 +1,9 @@
 #!/bin/bash
 
+# Use the first argument as BUILD_VERSION, or default to v.0.0.3
+BUILD_VERSION=${1:-"v.0.0.3"}
+
 # Build version information
-BUILD_VERSION="v.0.0.3"
 BUILD_COMMIT=$(git rev-parse --short HEAD)
 BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
@@ -29,7 +31,7 @@ for target in "${targets[@]}"; do
     fi
 
     # Build the binary
-    echo "Building for $os/$arch..."
+    echo "Building for $os/$arch with version $BUILD_VERSION..."
     env GOOS=$os GOARCH=$arch go build -ldflags="-X 'main.version=${BUILD_VERSION}' -X 'main.commit=${BUILD_COMMIT}' -X 'main.date=${BUILD_DATE}'" -o builds/"$output" main.go
 
     if [ $? -eq 0 ]; then
@@ -39,3 +41,4 @@ for target in "${targets[@]}"; do
         exit 1
     fi
 done
+
