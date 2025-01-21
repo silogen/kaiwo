@@ -1,8 +1,25 @@
+/**
+ * Copyright 2025 Advanced Micro Devices, Inc. All rights reserved.
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+**/
+
 package k8s
 
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 
 	"github.com/sirupsen/logrus"
@@ -16,55 +33,50 @@ import (
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 )
 
-type KueueArgs struct {
-	// The number of GPUs per node in the resource flavor
-	GPUsAvailablePerNode int
-	// The number of replicas needed
-	RequestedNumReplicas int
-	// The number of GPUs per replica needed
-	RequestedGPUsPerReplica int
-}
-
 // CalculateNumberOfReplicas attempts to balance the number of replicas by maximizing the number of GPUs used per node
 func CalculateNumberOfReplicas(requestedGpus int, gpusPerNode int, envVars []corev1.EnvVar) (int, int) {
 	// TODO handle cases where nodes are not empty and some GPUs are in use
 
-	var numReplicas int = 0
-	var nodeGpuRequest int = 0
+	var numReplicas = 0
+	var nodeGpuRequest = 0
 
-	// Retrieve PIPELINE_PARALLELISM and TENSOR_PARALLELISM from envVars
+	// Retrieve PIPELINE_PARALLELISM and TENSOR_PARALLELISM from envVars, if they exist
 	var pipelineParallelism, tensorParallelism int
-	for _, envVar := range envVars {
-		switch envVar.Name {
-		case "PIPELINE_PARALLELISM":
-			val, err := strconv.Atoi(envVar.Value)
-			if err == nil {
-				pipelineParallelism = val
-			} else {
-				logrus.Warnf("Invalid PIPELINE_PARALLELISM value: %s", envVar.Value)
-			}
-		case "TENSOR_PARALLELISM":
-			val, err := strconv.Atoi(envVar.Value)
-			if err == nil {
-				tensorParallelism = val
-			} else {
-				logrus.Warnf("Invalid TENSOR_PARALLELISM value: %s", envVar.Value)
+	if envVars != nil {
+		for _, envVar := range envVars {
+			switch envVar.Name {
+			case "PIPELINE_PARALLELISM":
+				val, err := strconv.Atoi(envVar.Value)
+				if err == nil {
+					pipelineParallelism = val
+				} else {
+					logrus.Warnf("Invalid PIPELINE_PARALLELISM value: %s", envVar.Value)
+				}
+			case "TENSOR_PARALLELISM":
+				val, err := strconv.Atoi(envVar.Value)
+				if err == nil {
+					tensorParallelism = val
+				} else {
+					logrus.Warnf("Invalid TENSOR_PARALLELISM value: %s", envVar.Value)
+				}
 			}
 		}
-	}
 
-	// If PIPELINE_PARALLELISM and TENSOR_PARALLELISM are set, enforce their values
-	if pipelineParallelism > 1 && tensorParallelism > 0 {
-		numReplicas = pipelineParallelism
-		nodeGpuRequest = tensorParallelism
+		// If PIPELINE_PARALLELISM and TENSOR_PARALLELISM are set, enforce their values
+		if pipelineParallelism > 1 && tensorParallelism > 0 {
+			numReplicas = pipelineParallelism
+			nodeGpuRequest = tensorParallelism
 
-		if numReplicas*tensorParallelism != requestedGpus || tensorParallelism > gpusPerNode {
-			logrus.Fatalf(
-				"Mismatch between requested GPUs (%d) and calculated GPUs (%d) from PIPELINE_PARALLELISM (%d) and TENSOR_PARALLELISM (%d)",
-				requestedGpus, numReplicas*tensorParallelism, pipelineParallelism, tensorParallelism,
-			)
+			logrus.Infof("Found GPU scheduling info from env vars, PIPELINE_PARALLELISM: %d, TENSOR_PARALLELISM: %d", pipelineParallelism, tensorParallelism)
+
+			if numReplicas*tensorParallelism != requestedGpus || tensorParallelism > gpusPerNode {
+				logrus.Fatalf(
+					"Mismatch between requested GPUs (%d) and calculated GPUs (%d) from PIPELINE_PARALLELISM (%d) and TENSOR_PARALLELISM (%d)",
+					requestedGpus, numReplicas*tensorParallelism, pipelineParallelism, tensorParallelism,
+				)
+			}
+			return numReplicas, nodeGpuRequest
 		}
-		return numReplicas, nodeGpuRequest
 	}
 
 	if tensorParallelism > gpusPerNode {
@@ -93,8 +105,10 @@ func CalculateNumberOfReplicas(requestedGpus int, gpusPerNode int, envVars []cor
 		}
 	}
 
-	if (float32(nodeGpuRequest) / float32(gpusPerNode)) < 0.5 {
-		logrus.Warnf("Inefficient use of GPU nodes: %d GPUs per node, but %d GPUs assigned per replica, leading to %d replicas. Check that the number of requested GPUs (%d) can be well divided with the number of GPUs per node (%d)", requestedGpus, nodeGpuRequest, numReplicas, requestedGpus, gpusPerNode)
+	maxGpusPerNode := math.Min(float64(gpusPerNode), float64(requestedGpus))
+
+	if (float64(nodeGpuRequest) / maxGpusPerNode) < 0.5 {
+		logrus.Warnf("Inefficient use of GPU nodes: %d GPUs per node, but %d GPUs assigned per replica, leading to %d replicas. Check that the number of requested GPUs (%d) can be well divided with the number of GPUs per node (%d)", gpusPerNode, nodeGpuRequest, numReplicas, requestedGpus, gpusPerNode)
 	}
 
 	return numReplicas, nodeGpuRequest
@@ -185,14 +199,14 @@ func PrepareLocalClusterQueue(queueName string, namespace string, c dynamic.Inte
 		return nil, fmt.Errorf("failed to get default cluster queue: %w", err)
 	}
 	localClusterQueue := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "kueue.x-k8s.io/v1beta1",
 			"kind":       "LocalQueue",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"namespace": namespace,
 				"name":      queueName,
 			},
-			"spec": map[string]interface{}{
+			"spec": map[string]any{
 				"clusterQueue": queueName,
 			},
 		},

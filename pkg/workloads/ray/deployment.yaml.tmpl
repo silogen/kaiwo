@@ -1,8 +1,8 @@
 apiVersion: ray.io/v1
 kind: RayService
 metadata:
-  name: {{ .Base.Name }}
-  namespace: {{ .Base.Namespace }} 
+  name: {{ .Meta.Name }}
+  namespace: {{ .Meta.Namespace }}
 spec:
   serveConfigV2: | 
 {{ .Workload.Serveconfig | indent 4 }}
@@ -15,10 +15,10 @@ spec:
         spec:
           containers:
             - name: ray-head
-              image: {{ .Base.Image }}
+              image: {{ .Meta.Image }}
               env:
-              {{- if .EnvVars }}
-              {{- range .EnvVars }}
+              {{- if .Meta.EnvVars }}
+              {{- range .Meta.EnvVars }}
               {{- if .Value }}
                 - name: {{ .Name }}
                   value: "{{ .Value }}"
@@ -38,15 +38,15 @@ spec:
                 requests:
                   cpu: "2"
                   memory: "16Gi"
-              volumeMounts: 
-              {{- if .SecretVolumes }}
-              {{- range .SecretVolumes }}
+              volumeMounts:
+              {{- if .Meta.SecretVolumes }}
+              {{- range .Meta.SecretVolumes }}
                 - name: {{ .Name }}
                   mountPath: {{ .MountPath }}
                   subPath: {{ .SubPath }}
               {{- end }}
               {{- end }}
-              {{- if .Base.ConfigMap }}
+              {{- if .Meta.HasConfigMap }}
                 - mountPath: /workload/app
                   name: workload
               {{- end }}
@@ -62,8 +62,8 @@ spec:
                 - containerPort: 8000
                   name: serve
           volumes:
-          {{- if .SecretVolumes }}
-          {{- range .SecretVolumes }}
+          {{- if .Meta.SecretVolumes }}
+          {{- range .Meta.SecretVolumes }}
             - name: {{ .Name }}
               secret:
                 secretName: {{ .SecretName }}
@@ -72,33 +72,33 @@ spec:
                     path: {{ .SubPath }}
           {{- end }}
           {{- end }}
-          {{- if .Base.ConfigMap }}
+          {{- if .Meta.HasConfigMap }}
             - name: workload
               configMap:
-                name: {{ .Base.Name }}
+                name: {{ .Meta.Name }}
           {{- end }}
             - name: dshm
               emptyDir:
                 medium: Memory
                 sizeLimit: 200Gi
     workerGroupSpecs:
-      - replicas: {{ .Workload.Kueue.RequestedNumReplicas }}
-        minReplicas: {{ .Workload.Kueue.RequestedNumReplicas }}
-        maxReplicas: {{ mul .Workload.Kueue.RequestedNumReplicas 4 }}
+      - replicas: {{ .Scheduling.CalculatedNumReplicas }}
+        minReplicas: {{ .Scheduling.CalculatedNumReplicas }}
+        maxReplicas: {{ mul .Scheduling.CalculatedNumReplicas 4 }}
         groupName: gpu-group
         rayStartParams: {}
         template:
           spec:
             containers:
               - name: llm
-                image: {{ .Base.Image }}
+                image: {{ .Meta.Image }}
                 lifecycle:
                   preStop:
                     exec:
                       command: ["/bin/sh", "-c", "ray stop"]
                 env:
-                {{- if .EnvVars }}
-                {{- range .EnvVars }}
+                {{- if .Meta.EnvVars }}
+                {{- range .Meta.EnvVars }}
                 {{- if .Value }}
                   - name: {{ .Name }}
                     value: "{{ .Value }}"
@@ -113,30 +113,30 @@ spec:
                 {{- end }}
                 resources:
                     limits:
-                        cpu: "{{ mul .Workload.Kueue.RequestedGPUsPerReplica 4 }}"
-                        memory: "{{ mul .Workload.Kueue.RequestedGPUsPerReplica 32 }}Gi"
-                        amd.com/gpu: "{{ .Workload.Kueue.RequestedGPUsPerReplica }}"
+                        cpu: "{{ mul .Scheduling.CalculatedGPUsPerReplica 4 }}"
+                        memory: "{{ mul .Scheduling.CalculatedGPUsPerReplica 32 }}Gi"
+                        amd.com/gpu: "{{ .Scheduling.CalculatedGPUsPerReplica }}"
                     requests:
-                        cpu: "{{ mul .Workload.Kueue.RequestedGPUsPerReplica 4 }}"
-                        memory: "{{ mul .Workload.Kueue.RequestedGPUsPerReplica 32 }}Gi"
-                        amd.com/gpu: "{{ .Workload.Kueue.RequestedGPUsPerReplica }}"
-                volumeMounts: 
-                {{- if .SecretVolumes }}
+                        cpu: "{{ mul .Scheduling.CalculatedGPUsPerReplica 4 }}"
+                        memory: "{{ mul .Scheduling.CalculatedGPUsPerReplica 32 }}Gi"
+                        amd.com/gpu: "{{ .Scheduling.CalculatedGPUsPerReplica }}"
+                volumeMounts:
+                {{- if .Meta.SecretVolumes }}
                 {{- range .SecretVolumes }}
                   - name: {{ .Name }}
                     mountPath: {{ .MountPath }}
                     subPath: {{ .SubPath }}
                 {{- end }}
                 {{- end }}
-                {{- if .Base.ConfigMap }}
+                {{- if .Meta.HasConfigMap }}
                   - mountPath: /workload/app
                     name: workload
                 {{- end }}
                   - mountPath: /dev/shm
                     name: dshm
             volumes:
-            {{- if .SecretVolumes }}
-            {{- range .SecretVolumes }}
+            {{- if .Meta.SecretVolumes }}
+            {{- range .Meta.SecretVolumes }}
               - name: {{ .Name }}
                 secret:
                   secretName: {{ .SecretName }}
@@ -145,10 +145,10 @@ spec:
                       path: {{ .SubPath }}
             {{- end }}
             {{- end }}
-            {{- if .Base.ConfigMap }}
+            {{- if .Meta.HasConfigMap }}
               - name: workload
                 configMap:
-                  name: {{ .Base.Name }}
+                  name: {{ .Meta.Name }}
             {{- end }}
               - name: dshm
                 emptyDir:

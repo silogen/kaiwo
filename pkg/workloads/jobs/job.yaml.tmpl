@@ -1,18 +1,18 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ .Base.Name }}
-  namespace: {{ .Base.Namespace }}
+  name: {{ .Meta.Name }}
+  namespace: {{ .Meta.Namespace }}
   labels:
-    kueue.x-k8s.io/queue-name: {{ .Base.Queue }}
+    kueue.x-k8s.io/queue-name: {{ .WorkloadMeta.Queue }}
 spec:
-  ttlSecondsAfterFinished: {{ mul .Base.TtlMinAfterFinished 60 }}
+  ttlSecondsAfterFinished: {{ mul .WorkloadMeta.TtlMinAfterFinished 60 }}
   template:
     spec:
       restartPolicy: "Never"
       containers:
-      - name: {{ .Base.Name }}
-        image: {{ .Base.Image }}
+      - name: {{ .Meta.Name }}
+        image: {{ .Meta.Image }}
         imagePullPolicy: Always
         {{- if .Workload.Entrypoint }}
         command: 
@@ -21,8 +21,8 @@ spec:
         - {{ .Workload.Entrypoint }}
         {{- end }}
         env:
-        {{- if .EnvVars }}
-        {{- range .EnvVars }}
+        {{- if .Meta.EnvVars }}
+        {{- range .Meta.EnvVars }}
         {{- if .Value }}
           - name: {{ .Name }}
             value: "{{ .Value }}"
@@ -37,30 +37,30 @@ spec:
         {{- end }}
         resources:
           requests:
-            memory: "{{ mul .Base.GPUs 32 }}Gi"
-            cpu: "{{ mul .Base.GPUs 4 }}"
-            amd.com/gpu: "{{ .Base.GPUs }}"
+            memory: "{{ mul .Scheduling.TotalRequestedGPUs 32 }}Gi"
+            cpu: "{{ mul .Scheduling.TotalRequestedGPUs 4 }}"
+            amd.com/gpu: "{{ .Scheduling.TotalRequestedGPUs }}"
           limits:
-            memory: "{{ mul .Base.GPUs 32 }}Gi"
-            cpu: "{{ mul .Base.GPUs 4 }}"
-            amd.com/gpu: "{{ .Base.GPUs }}"
+            memory: "{{ mul .Scheduling.TotalRequestedGPUs 32 }}Gi"
+            cpu: "{{ mul .Scheduling.TotalRequestedGPUs 4 }}"
+            amd.com/gpu: "{{ .Scheduling.TotalRequestedGPUs }}"
         volumeMounts:
-        {{- if .SecretVolumes }}
-        {{- range .SecretVolumes }}
+        {{- if .Meta.SecretVolumes }}
+        {{- range .Meta.SecretVolumes }}
           - name: {{ .Name }}
             mountPath: {{ .MountPath }}
             subPath: {{ .SubPath }}
         {{- end }}
         {{- end }}
-        {{- if .Base.ConfigMap }}
+        {{- if .Meta.HasConfigMap }}
           - mountPath: /workload
             name: workload
         {{- end }}
           - mountPath: /dev/shm
             name: dshm
       volumes:
-      {{- if .SecretVolumes }}
-      {{- range .SecretVolumes }}
+      {{- if .Meta.SecretVolumes }}
+      {{- range .Meta.SecretVolumes }}
         - name: {{ .Name }}
           secret:
             secretName: {{ .SecretName }}
@@ -69,14 +69,13 @@ spec:
                 path: {{ .SubPath }}
       {{- end }}
       {{- end }}
-      {{- if .Base.ConfigMap }}
+      {{- if .Meta.HasConfigMap }}
         - name: workload
           configMap:
-            name: {{ .Base.Name }}
+            name: {{ .Meta.Name }}
       {{- end }}
         - name: dshm
           emptyDir:
             medium: Memory
             sizeLimit: 200Gi
 
-       

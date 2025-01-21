@@ -99,21 +99,23 @@ Run `kaiwo --help` for an overview of currently available commands.
 
 Kaiwo uses Kueue to manage job queuing. Make sure your cluster-admin has created two necessary Kueue resources on the cluster: `ResourceFlavor` and `ClusterQueue`. Manifests for these can be found under `cluster-admins` directory. By default, kaiwo will always submit workloads to `kaiwo` ClusterQueue if no other queue is provided with `-q`or`--queue` option during `kaiwo submit`. Kaiwo will automatically create the namespaced `LocalQueue` resource if it doesn't exist. Speak to your cluster-admin if you are unsure which `ClusterQueue` is allocated to your team.
 
-### kaiwo submit
+### Deploying with kaiwo
 
-`workloads` directory includes examples with code for different types workloads that you can submit with `kaiwo submit`. At the moment, Kaiwo can submit three types of workloads to Kubernetes
+Kaiwo allows you to both `submit` jobs and `serve` deployments. Currently, the following types are supported:
 
-- Standard Kubernetes Jobs
-- RayJobs
-- RayServices
+* Standard Kubernetes jobs `batch/v1 Job` via `kaiwo submit`
+* Ray jobs `ray.io/v1 RayJob` via `kaiwo submit --ray`
+* Ray services `ray.io/v1 RayService` via `kaiwo serve --ray`
+
+The `workloads` directory includes examples with code for different types workloads that you can create.
 
 RayServices are intended for online inference. They bypass job queues. We recommend running them in a separate cluster as services are constantly running and therefore reserve compute resources 24/7.
 
-RayJobs and RayServices require using `-p`/`--path` and `-t`/`--type` options. Kaiwo will look for `entrypoint` or `serveconfig` files in `path` which are required for RayJobs and RayServices, respectively. Kubernetes Job is the default workload type if no `-p` option is provided as well as when `--type` or `-t` is omitted.
+RayJobs and RayServices require using the `-p`/`--path` option. Kaiwo will look for `entrypoint` or `serveconfig` files in `path` which are required for RayJobs and RayServices, respectively.
 
-Run `kaiwo submit --help` for an overview of available options. To get started with a workload, first make sure that your code (e.g. finetuning script) works with the number of GPUs that you request via `kaiwo submit`.  For example, the following command will run the code found in `path` as a RayJob on 16 GPUs.
+Run `kaiwo submit --help` and `kaiwo serve --help` for an overview of available options. To get started with a workload, first make sure that your code (e.g. finetuning script) works with the number of GPUs that you request via `kaiwo submit/serve`.  For example, the following command will run the code found in `path` as a RayJob on 16 GPUs.
 
-`kaiwo submit -p workloads/training/LLMs/lora-supervised-finetuning/ds-zero3-single-multinode -g 16 -t rayjob`
+`kaiwo submit -p workloads/training/LLMs/lora-supervised-finetuning/ds-zero3-single-multinode -g 16 --ray`
 
 By default, this will run in `kaiwo` namespace unless another namespace is provided with `-n` or `--namespace` option. If the provided namespace doesn't exist, use `--create-namespace` flag.
 
@@ -170,6 +172,23 @@ kaiwo completion bash | sudo tee /etc/bash_completion.d/kaiwo > /dev/null
 ```
 
 You have to restart your terminal for auto-completion to take effect.
+
+### Workload templates
+
+Kaiwo manages Kubernetes workloads through templates. These templates are YAML files that use go template syntax. If you do not provide a template when submitting or serving a workload by using the `--template` flag, a default template is used. The context available for the template is defined by the [WorkloadTemplateConfig struct](./pkg/workloads/config.go), and you can refer to the default templates for [Ray](pkg/workloads/ray) and [Kueue](./pkg/workloads/jobs).
+
+If you want to provide custom configuration for the templates, you can do so via the `-c / --custom-config` flag, which should point to a YAML file. The contents of this file will then be available under the `.Custom` key in the templates. For example, if you provide a YAML file with the following structure
+
+```yaml
+parent:
+  child: "value"
+```
+
+You can access this in the template via
+
+```gotemplate
+{{ .Custom.parent.child }}
+```
 
 ## Contributing to Kaiwo
 

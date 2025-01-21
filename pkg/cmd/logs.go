@@ -14,34 +14,4 @@
  *  limitations under the License.
 **/
 
-package main
-
-import (
-	"fmt"
-	"github.com/silogen/kaiwo/pkg/cmd"
-	"github.com/sirupsen/logrus"
-	"os"
-)
-
-var kaiwoBanner = `
- _  __     _
-| |/ /__ _(_)_      _____
-| ' // _' | \ \ /\ / / _ \
-| . \ (_| | |\ V  V / (_) |
-|_|\_\__,_|_| \_/\_/ \___/
-Kubernetes-native AI Workload Orchestrator
-
-
-`
-
-func main() {
-
-	fmt.Fprint(os.Stderr, kaiwoBanner)
-
-	logrus.SetFormatter(&logrus.TextFormatter{
-		FullTimestamp: true,
-	})
-
-	cmd.RunCli()
-
-}
+package cmd

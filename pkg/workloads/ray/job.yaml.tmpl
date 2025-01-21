@@ -1,29 +1,29 @@
 apiVersion: ray.io/v1
 kind: RayJob
 metadata:
-  name: {{ .Base.Name }}
-  namespace: {{ .Base.Namespace }}
+  name: {{ .Meta.Name }}
+  namespace: {{ .Meta.Namespace }}
   labels:
-    kueue.x-k8s.io/queue-name: {{ .Base.Queue }}
+    kueue.x-k8s.io/queue-name: {{ .WorkloadMeta.Queue }}
 spec:
   shutdownAfterJobFinishes: true
-  ttlSecondsAfterFinished: {{ mul .Base.TtlMinAfterFinished 60 }}
+  ttlSecondsAfterFinished: {{ mul .WorkloadMeta.TtlMinAfterFinished 60 }}
   entrypoint: |
-{{ .Workload.Entrypoint | indent 4 }}
+{{ .Workload.Entrypoint | indent 4}}
   rayClusterSpec:
     rayVersion: "2.9.0"
-    enableInTreeAutoscaling: false # cannot be true when using Kueue
+    enableInTreeAutoscaling: false #cannot be true when using Kueue
     headGroupSpec:
       rayStartParams: {}
       template:
         spec:
           containers:
             - name: ray-head
-              image: {{ .Base.Image }}
+              image: {{ .Meta.Image }}
               imagePullPolicy: Always
               env:
-              {{- if .EnvVars }}
-              {{- range .EnvVars }}
+              {{- if .Meta.EnvVars }}
+              {{- range .Meta.EnvVars }}
               {{- if .Value }}
                 - name: {{ .Name }}
                   value: "{{ .Value }}"
@@ -51,22 +51,22 @@ spec:
                 - containerPort: 10001
                   name: client
               volumeMounts:
-              {{- if .SecretVolumes }}
-              {{- range .SecretVolumes }}
+              {{- if .Meta.SecretVolumes }}
+              {{- range .Meta.SecretVolumes }}
                 - name: {{ .Name }}
                   mountPath: {{ .MountPath }}
                   subPath: {{ .SubPath }}
               {{- end }}
               {{- end }}
-              {{- if .Base.ConfigMap }}
+              {{- if .Meta.HasConfigMap }}
                 - mountPath: /workload
                   name: workload
               {{- end }}
                 - mountPath: /dev/shm
                   name: dshm
           volumes:
-          {{- if .SecretVolumes }}
-          {{- range .SecretVolumes }}
+          {{- if .Meta.SecretVolumes }}
+          {{- range .Meta.SecretVolumes }}
             - name: {{ .Name }}
               secret:
                 secretName: {{ .SecretName }}
@@ -75,17 +75,17 @@ spec:
                     path: {{ .SubPath }}
           {{- end }}
           {{- end }}
-          {{- if .Base.ConfigMap }}
+          {{- if .Meta.HasConfigMap }}
             - name: workload
               configMap:
-                name: {{ .Base.Name }}
+                name: {{ .Meta.Name }}
           {{- end }}
             - name: dshm
               emptyDir:
                 medium: Memory
                 sizeLimit: 200Gi
     workerGroupSpecs:
-      - replicas: {{ .Workload.Kueue.RequestedNumReplicas }}
+      - replicas: {{ .Scheduling.CalculatedNumReplicas }}
         # Not used as enableInTreeAutoscaling is false
         # minReplicas: 1
         # maxReplicas: 1
@@ -95,11 +95,11 @@ spec:
           spec:
             containers:
               - name: ray-worker
-                image: {{ .Base.Image }}
+                image: {{ .Meta.Image }}
                 imagePullPolicy: Always
                 env:
-                {{- if .EnvVars }}
-                {{- range .EnvVars }}
+                {{- if .Meta.EnvVars }}
+                {{- range .Meta.EnvVars }}
                 {{- if .Value }}
                   - name: {{ .Name }}
                     value: "{{ .Value }}"
@@ -121,30 +121,30 @@ spec:
                     name: client
                 resources:
                     limits:
-                        cpu: "{{ mul .Workload.Kueue.RequestedGPUsPerReplica 4 }}"
-                        memory: "{{ mul .Workload.Kueue.RequestedGPUsPerReplica 32 }}Gi"
-                        amd.com/gpu: "{{ .Workload.Kueue.RequestedGPUsPerReplica }}"
+                        cpu: "{{ mul .Scheduling.CalculatedGPUsPerReplica 4 }}"
+                        memory: "{{ mul .Scheduling.CalculatedGPUsPerReplica 32 }}Gi"
+                        amd.com/gpu: "{{ .Scheduling.CalculatedGPUsPerReplica }}"
                     requests:
-                        cpu: "{{ mul .Workload.Kueue.RequestedGPUsPerReplica 4 }}"
-                        memory: "{{ mul .Workload.Kueue.RequestedGPUsPerReplica 32 }}Gi"
-                        amd.com/gpu: "{{ .Workload.Kueue.RequestedGPUsPerReplica }}"
-                volumeMounts: 
-                {{- if .SecretVolumes }}
-                {{- range .SecretVolumes }}
+                        cpu: "{{ mul .Scheduling.CalculatedGPUsPerReplica 4 }}"
+                        memory: "{{ mul .Scheduling.CalculatedGPUsPerReplica 32 }}Gi"
+                        amd.com/gpu: "{{ .Scheduling.CalculatedGPUsPerReplica }}"
+                volumeMounts:
+                {{- if .Meta.SecretVolumes }}
+                {{- range .Meta.SecretVolumes }}
                   - name: {{ .Name }}
                     mountPath: {{ .MountPath }}
                     subPath: {{ .SubPath }}
                 {{- end }}
                 {{- end }}
-                {{- if .Base.ConfigMap }}
+                {{- if .Meta.HasConfigMap }}
                   - mountPath: /workload
                     name: workload
                 {{- end }}
                   - mountPath: /dev/shm
                     name: dshm
             volumes:
-            {{- if .SecretVolumes }}
-            {{- range .SecretVolumes }}
+            {{- if.Meta.SecretVolumes }}
+            {{- range .Meta.SecretVolumes }}
               - name: {{ .Name }}
                 secret:
                   secretName: {{ .SecretName }}
@@ -153,10 +153,10 @@ spec:
                       path: {{ .SubPath }}
             {{- end }}
             {{- end }}
-            {{- if .Base.ConfigMap }}
+            {{- if .Meta.HasConfigMap }}
               - name: workload
                 configMap:
-                  name: {{ .Base.Name }}
+                  name: {{ .Meta.Name }}
             {{- end }}
               - name: dshm
                 emptyDir:
