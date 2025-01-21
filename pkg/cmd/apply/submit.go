@@ -27,11 +27,9 @@ import (
 var (
 	useRayForJob        bool
 	queue               string
-	ttlMinAfterFinished int
 )
 
 const defaultQueue = "kaiwo"
-const defaultTtlMinAfterFinished = 2880
 
 func BuildSubmitCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -43,7 +41,6 @@ func BuildSubmitCmd() *cobra.Command {
 
 			jobFlags := workloads.JobFlags{
 				Queue:               queue,
-				TtlMinAfterFinished: ttlMinAfterFinished,
 			}
 
 			if useRayForJob {
@@ -65,7 +62,6 @@ func BuildSubmitCmd() *cobra.Command {
 	// Job-specific flags
 	cmd.Flags().BoolVarP(&useRayForJob, "ray", "", false, "use ray for submitting the job")
 	cmd.Flags().StringVarP(&queue, "queue", "", defaultQueue, "the queue to submit job to")
-	cmd.Flags().IntVarP(&ttlMinAfterFinished, "ttl-minutes-after-finished", "", defaultTtlMinAfterFinished, "cleanup finished Jobs after minutes. Defaults to 48h (2880 min)")
 
 	return cmd
 }

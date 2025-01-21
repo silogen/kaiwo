@@ -26,9 +26,6 @@ import (
 type JobFlags struct {
 	// The Kueue queue to use
 	Queue string
-
-	// Cleanup finished jobs after minutes
-	TtlMinAfterFinished int
 }
 
 func CreateLocalClusterQueueManifest(templateContext WorkloadTemplateConfig) (*unstructured.Unstructured, error) {

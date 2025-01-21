@@ -68,6 +68,10 @@ type MetaFlags struct {
 	// The base image to use
 	Image string
 
+	ImagePullSecret string
+
+	Version string
+
 	// Environment variables
 	EnvVars []corev1.EnvVar
 
