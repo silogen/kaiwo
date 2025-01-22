@@ -19,6 +19,7 @@ package workloads
 import (
 	"context"
 	"fmt"
+
 	"github.com/Masterminds/sprig/v3"
 	"github.com/silogen/kaiwo/pkg/k8s"
 	"github.com/sirupsen/logrus"
@@ -29,10 +30,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"k8s.io/apimachinery/pkg/runtime"
 	"os"
 	"strings"
 	"text/template"
+
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // ApplyWorkload runs the main workload submission routine
@@ -151,7 +153,9 @@ func generateManifests(k8sClient client.Client, workloadTemplate []byte, templat
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse template: %w", err)
 	}
-
+	// fmt.Print("====== PIPING THE TEMPLATE EXECUTE TO STDOUT ======\n")
+	// _ = parsedTemplate.Execute(os.Stdout, templateContext)
+	// fmt.Print("\n====== DONE ======\n")
 	var renderedYAML strings.Builder
 	err = parsedTemplate.Execute(&renderedYAML, templateContext)
 	if err != nil {

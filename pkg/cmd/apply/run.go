@@ -19,17 +19,18 @@ package cli
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/user"
+	"path/filepath"
+	"strconv"
+	"strings"
+
 	"github.com/silogen/kaiwo/pkg/k8s"
 	"github.com/silogen/kaiwo/pkg/workloads"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
-	"os"
-	"os/user"
-	"path/filepath"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
-	"strconv"
-	"strings"
 )
 
 // RunApply prepares the workload and applies it
@@ -63,11 +64,10 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 			return fmt.Errorf("Failed to fetch the current user: %v", err)
 		}
 
-	if metaFlags.Name == "" {
-		metaFlags.Name = makeWorkloadName(execFlags.Path, metaFlags.Image, metaFlags.Version, metaFlags.User)
-		logrus.Infof("No explicit name provided, using name: %s", metaFlags.Name)
-	}
-
+		if metaFlags.Name == "" {
+			metaFlags.Name = makeWorkloadName(execFlags.Path, metaFlags.Image, metaFlags.Version, metaFlags.User)
+			logrus.Infof("No explicit name provided, using name: %s", metaFlags.Name)
+		}
 
 	}
 
@@ -118,17 +118,17 @@ func loadCustomConfig(path string) (any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read custom config file: %w", err)
 	}
-
-	customConfig, err := yaml.Marshal(customConfigContents)
+	config := make(map[string]interface{})
+	err = yaml.Unmarshal(customConfigContents, &config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal custom config file: %w", err)
+		return nil, fmt.Errorf("failed to unmarshal custom config file: %w", err)
 	}
 
-	return customConfig, nil
+	return config, nil
 }
 
 func makeWorkloadName(path string, image string, version string, currentUser string) string {
-	
+
 	var appendix string
 
 	if path != "" {
