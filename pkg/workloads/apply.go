@@ -86,7 +86,7 @@ func ApplyWorkload(
 
 	templateResources, err := generateManifests(k8sClient, workloadTemplate, templateContext, workload)
 	if err != nil {
-		return fmt.Errorf("failed to generate manifests: %w", err)
+		return fmt.Errorf("Check workload type. Failed to generate manifests: %w", err)
 	}
 	if templateResources == nil || len(templateResources) == 0 {
 		return fmt.Errorf("failed to generate manifests: no resources found")

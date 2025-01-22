@@ -56,9 +56,19 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 	}
 
 	// Finalize metadata flags
+	if metaFlags.User == "" {
+		currentUser, err := user.Current()
+		metaFlags.User = currentUser.Username
+		if err != nil {
+			return fmt.Errorf("Failed to fetch the current user: %v", err)
+		}
+
 	if metaFlags.Name == "" {
-		metaFlags.Name = makeWorkloadName(execFlags.Path, metaFlags.Image, metaFlags.Version)
+		metaFlags.Name = makeWorkloadName(execFlags.Path, metaFlags.Image, metaFlags.Version, metaFlags.User)
 		logrus.Infof("No explicit name provided, using name: %s", metaFlags.Name)
+	}
+
+
 	}
 
 	// Parse environment variables
@@ -117,12 +127,8 @@ func loadCustomConfig(path string) (any, error) {
 	return customConfig, nil
 }
 
-func makeWorkloadName(path string, image string, version string) string {
-	currentUser, err := user.Current()
-	if err != nil {
-		panic(fmt.Sprintf("Failed to fetch the current user: %v", err))
-	}
-
+func makeWorkloadName(path string, image string, version string, currentUser string) string {
+	
 	var appendix string
 
 	if path != "" {
@@ -137,7 +143,7 @@ func makeWorkloadName(path string, image string, version string) string {
 		version = sanitizeStringForKubernetes(version)
 		separatorCount = 2 // Include one more "-" for the version
 	}
-	maxAppendixLength := 63 - len(currentUser.Username) - len(version) - separatorCount
+	maxAppendixLength := 63 - len(currentUser) - len(version) - separatorCount
 
 	// Truncate appendix if necessary
 	if len(appendix) > maxAppendixLength {
@@ -145,7 +151,7 @@ func makeWorkloadName(path string, image string, version string) string {
 	}
 
 	// Combine components
-	components := []string{currentUser.Username, appendix}
+	components := []string{currentUser, appendix}
 	if version != "" {
 		components = append(components, version)
 	}

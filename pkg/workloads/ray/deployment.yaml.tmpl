@@ -3,6 +3,8 @@ kind: RayService
 metadata:
   name: {{ .Meta.Name }}
   namespace: {{ .Meta.Namespace }}
+  labels:
+    kaiwo-cli/username: {{ .Meta.User }}
 spec:
   serveConfigV2: | 
 {{ .Workload.Serveconfig | indent 4 }}

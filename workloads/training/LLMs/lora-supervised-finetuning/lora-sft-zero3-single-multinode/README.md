@@ -1,5 +1,7 @@
 # DeepSpeed Zero3: Single and Multi-Node finetuning
 
+## Overview
+
 Note! this workload expects existing secrets. Have a look at `env` file for the expected secrets. If you find both S3 and GCS secrets, you can choose to use either one. Remember to refactor your code accordingly.
 
 - LORA finetuning: if you use a different model architecture, you may need to adjust LORA configuration and `target_modules` in particular.
@@ -9,4 +11,8 @@ Note! this workload expects existing secrets. Have a look at `env` file for the 
 
 To run this workload on 16 GPUs in `kaiwo` namespace, set `num_devices` in `entrypoint` to `16` and use the following command:
 
-`kaiwo submit -p workloads/training/LLMs/lora-supervised-finetuning/lora-sft-zero3-single-multinode -g 16 -t rayjob`
+`kaiwo submit -p workloads/training/LLMs/lora-supervised-finetuning/lora-sft-zero3-single-multinode -g 16 --ray`
+
+## Dependencies
+- hf-token: Hugging Face API token for model download
+- s3-secret: S3 secret for model upload or GCS secret for model upload - refactor `env` file and code accordingly

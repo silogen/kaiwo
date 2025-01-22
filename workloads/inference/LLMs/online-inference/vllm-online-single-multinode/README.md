@@ -1,5 +1,7 @@
 # VLLM-based online inference
 
+## Overview
+
 Supports single-node and multi-node inference
 
 Note! this workload expects existing secrets. Have a look at `env` file for the expected secrets. 
@@ -10,5 +12,7 @@ Note also that currently multi-node setup (`PIPELINE_PARALLELISM` > 1) requires 
 
 To run this workload on 16 GPUs in `kaiwo` namespace, you can use the following command:	 
 
-`kaiwo submit -p workloads/inference/LLMs/online-inference/vllm-single-multinode -g 16 -t rayservice`
+`kaiwo serve -p workloads/inference/LLMs/online-inference/vllm-single-multinode -g 16 --ray`
 
+## Dependencies
+- Secret `hf-token`: Hugging Face API token for model download

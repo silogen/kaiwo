@@ -1,0 +1,65 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+	  {
+	    "name": "Submit Rayjob",
+	    "type": "go",
+	    "request": "launch",
+	    "mode": "debug",
+	    "program": "${workspaceFolder}",
+	    "args": ["submit", "-p", "workloads/training/LLMs/lora-supervised-finetuning/lora-sft-zero3-single-multinode", "--ray", "-g", "4", "--dry-run"],
+	    "env": {
+	      "GO111MODULE": "on"
+	    },
+	    "buildFlags": "-tags=debug"
+	  },
+	  {
+		"name": "Submit Rayservice",
+		"type": "go",
+		"request": "launch",
+		"mode": "debug",
+		"program": "${workspaceFolder}",
+		"args": ["serve", "-p", "workloads/inference/LLMs/online-inference/vllm-online-single-multinode", "--ray", "-g", "4", "--dry-run"],
+		"env": {
+		  "GO111MODULE": "on"
+		},
+		"buildFlags": "-tags=debug"
+	      },
+	{
+		"name": "Submit Job",
+		"type": "go",
+		"request": "launch",
+		"mode": "debug",
+		"program": "${workspaceFolder}",
+		"args": ["submit", "-p", "workloads/training/LLMs/lora-supervised-finetuning/trl-deepspeed-zero3-singlenode-copy", "-g", "4", "--dry-run"],
+		"env": {
+		  "GO111MODULE": "on"
+		},
+		"buildFlags": "-tags=debug"
+	      },
+	      {
+		"name": "Submit image only",
+		"type": "go",
+		"request": "launch",
+		"mode": "debug",
+		"program": "${workspaceFolder}",
+		"args": ["submit", "-i", "ghcr.io/silogen/rocm-ray:v0.4", "-g", "4"],
+		"env": {
+		  "GO111MODULE": "on"
+		},
+		"buildFlags": "-tags=debug"
+	      },
+	{
+		"name": "Submit live RayJob",
+		"type": "go",
+		"request": "launch",
+		"mode": "debug",
+		"program": "${workspaceFolder}",
+		"args": ["submit", "-p", "workloads/training/LLMs/lora-supervised-finetuning/ds-zero3-single-multinode", "--ray", "-g", "4"],
+		"env": {
+		  "GO111MODULE": "on"
+		},
+		"buildFlags": "-tags=debug"
+	      }
+	]
+      }
