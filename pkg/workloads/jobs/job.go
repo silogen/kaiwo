@@ -19,14 +19,15 @@ package jobs
 import (
 	_ "embed"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
 	"github.com/silogen/kaiwo/pkg/workloads"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"os"
-	"path/filepath"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"strings"
 
 	"github.com/sirupsen/logrus"
 )
@@ -44,18 +45,16 @@ type JobFlags struct {
 
 func (job Job) GenerateTemplateContext(execFlags workloads.ExecFlags) (any, error) {
 	contents, err := os.ReadFile(filepath.Join(execFlags.Path, EntrypointFilename))
-
-	if contents == nil {
-		logrus.Warnln("No entrypoint file found. Expecting entrypoint in image")
-		return nil, nil
-	}
-
 	if err != nil {
-		return nil, fmt.Errorf("failed to read entrypoint file: %w", err)
+		if os.IsNotExist(err) {
+			logrus.Warnln("No entrypoint file found. Expecting entrypoint in image")
+			return JobFlags{Entrypoint: ""}, nil
+		} else {
+			return nil, fmt.Errorf("failed to read entrypoint file: %w", err)
+		}
 	}
 
 	entrypoint := string(contents)
-
 	entrypoint = strings.ReplaceAll(entrypoint, "\n", " ")    // Flatten multiline string
 	entrypoint = strings.ReplaceAll(entrypoint, "\"", "\\\"") // Escape double quotes
 	entrypoint = fmt.Sprintf("\"%s\"", entrypoint)            // Wrap the entire command in quotes
