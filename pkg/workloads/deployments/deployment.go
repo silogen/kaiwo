@@ -15,6 +15,7 @@
 package deployments
 
 import (
+	"context"
 	_ "embed"
 	"fmt"
 	"os"
@@ -34,6 +35,51 @@ import (
 var DeploymentTemplate []byte
 
 const EntrypointFilename = "entrypoint"
+
+//
+//type DeploymentReference struct {
+//	Deployment  *appsv1.Deployment
+//	Replicasets []ReplicaSetReference
+//}
+//
+//type ReplicaSetReference struct {
+//	ReplicaSet *appsv1.ReplicaSet
+//	Pods       []corev1.Pod
+//}
+//
+//// GetWorkloadWrapper builds the workload wrapper from a deployment
+//func (d *DeploymentReference) GetWorkloadWrapper() (workloads.WorkloadReference, error) {
+//
+//	rootWrapper := workloads.WorkloadReference{
+//		Object: d.Deployment,
+//		ObjectKey: client.ObjectKey{
+//			Namespace: d.Deployment.Namespace,
+//			Name:      d.Deployment.Name,
+//		},
+//		GVK:    appsv1.SchemeGroupVersion.WithKind("Deployment"),
+//		IsLeaf: false,
+//	}
+//
+//	for _, replicaSet := range d.Replicasets {
+//
+//		replicasetWrapper := workloads.WorkloadReference{
+//			Object: replicaSet.ReplicaSet,
+//			ObjectKey: client.ObjectKey{
+//				Namespace: d.Deployment.Namespace,
+//				Name:      replicaSet.ReplicaSet.Name,
+//			},
+//			GVK:    appsv1.SchemeGroupVersion.WithKind("ReplicaSet"),
+//			IsLeaf: true,
+//		}
+//		rootWrapper.Children = append(rootWrapper.Children, replicasetWrapper)
+//
+//		for _, pod := range replicaSet.Pods {
+//			replicasetWrapper.Pods = append(replicasetWrapper.Pods, pod)
+//		}
+//	}
+//
+//	return rootWrapper, nil
+//}
 
 type Deployment struct{}
 
@@ -88,4 +134,52 @@ func (deployment Deployment) GetServices() ([]corev1.Service, error) {
 
 func (deployment Deployment) GenerateAdditionalResourceManifests(k8sClient client.Client, templateContext workloads.WorkloadTemplateConfig) ([]runtime.Object, error) {
 	return []runtime.Object{}, nil
+}
+
+func (deployment Deployment) BuildReference(ctx context.Context, k8sClient client.Client, key client.ObjectKey) (*workloads.WorkloadReference, error) {
+	obj := &appsv1.Deployment{}
+
+	logrus.Debugf("Building deployment reference for %s / %s", key.Name, key.Namespace)
+
+	if err := k8sClient.Get(ctx, key, obj); err != nil {
+		return nil, fmt.Errorf("could not get deployment: %w", err)
+	}
+
+	reference := workloads.WorkloadReference{
+		Object: obj,
+		IsLeaf: false,
+	}
+
+	replicaSets := &appsv1.ReplicaSetList{}
+	labelSelector := client.MatchingLabels(obj.Spec.Selector.MatchLabels)
+
+	if err := k8sClient.List(ctx, replicaSets, client.InNamespace(key.Namespace), labelSelector); err != nil {
+		return nil, fmt.Errorf("could not list replicasets: %w", err)
+	}
+
+	for _, replicaSet := range replicaSets.Items {
+		logrus.Debugf("Found replicaset %s with selector %s", replicaSet.Name, replicaSet.Spec.Selector.MatchLabels)
+
+		replicasetWrapper := &workloads.WorkloadReference{
+			Object: &replicaSet,
+			IsLeaf: true,
+		}
+		reference.Children = append(reference.Children, replicasetWrapper)
+
+		pods := &corev1.PodList{}
+		if err := k8sClient.List(ctx, pods, client.InNamespace(key.Namespace), client.MatchingLabels(replicaSet.Spec.Selector.MatchLabels)); err != nil {
+			return nil, fmt.Errorf("could not list pods: %w", err)
+		}
+
+		for _, pod := range pods.Items {
+			logrus.Debugf("Found pod %s", pod.Name)
+
+			replicasetWrapper.Pods = append(replicasetWrapper.Pods, pod)
+		}
+
+		logrus.Debugf("Replicaset has %d pods", len(replicasetWrapper.Pods))
+	}
+
+	return &reference, nil
+
 }

@@ -47,13 +47,17 @@ spec:
         {{- end }}
         resources:
           requests:
-            memory: "{{ mul .Scheduling.TotalRequestedGPUs 32 }}Gi"
-            cpu: "{{ mul .Scheduling.TotalRequestedGPUs 4 }}"
+            memory: "{{ max (mul .Scheduling.TotalRequestedGPUs 32) 4 }}Gi"
+            cpu: "{{ max (mul .Scheduling.TotalRequestedGPUs 4) 1 }}"
+            {{ if .Scheduling.TotalRequestedGPUs }}
             amd.com/gpu: "{{ .Scheduling.TotalRequestedGPUs }}"
+            {{ end }}
           limits:
-            memory: "{{ mul .Scheduling.TotalRequestedGPUs 32 }}Gi"
-            cpu: "{{ mul .Scheduling.TotalRequestedGPUs 4 }}"
+            memory: "{{ max (mul .Scheduling.TotalRequestedGPUs 32) 4 }}Gi"
+            cpu: "{{ max (mul .Scheduling.TotalRequestedGPUs 4) 1 }}"
+            {{ if .Scheduling.TotalRequestedGPUs }}
             amd.com/gpu: "{{ .Scheduling.TotalRequestedGPUs }}"
+            {{ end }}
         volumeMounts:
         {{- if .Meta.SecretVolumes }}
         {{- range .Meta.SecretVolumes }}

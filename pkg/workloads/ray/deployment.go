@@ -15,6 +15,7 @@
 package ray
 
 import (
+	"context"
 	_ "embed"
 	"fmt"
 	"os"
@@ -55,6 +56,7 @@ func (deployment Deployment) GenerateTemplateContext(execFlags workloads.ExecFla
 
 func (deployment Deployment) ConvertObject(object runtime.Object) (runtime.Object, bool) {
 	obj, ok := object.(*rayv1.RayService)
+
 	return obj, ok
 }
 
@@ -83,4 +85,8 @@ func (deployment Deployment) GetServices() ([]corev1.Service, error) {
 
 func (deployment Deployment) GenerateAdditionalResourceManifests(k8sClient client.Client, templateContext workloads.WorkloadTemplateConfig) ([]runtime.Object, error) {
 	return []runtime.Object{}, nil
+}
+
+func (deployment Deployment) BuildReference(ctx context.Context, k8sClient client.Client, key client.ObjectKey) (*workloads.WorkloadReference, error) {
+	return nil, nil
 }

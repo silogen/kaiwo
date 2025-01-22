@@ -84,11 +84,8 @@ func RunCli() {
 		},
 	})
 
-	submitCmd := cli.BuildSubmitCmd()
-	rootCmd.AddCommand(submitCmd)
-
-	serveCmd := cli.BuildServeCmd()
-	rootCmd.AddCommand(serveCmd)
+	rootCmd.AddCommand(cli.BuildSubmitCmd())
+	rootCmd.AddCommand(cli.BuildServeCmd())
 
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "attach",
@@ -97,13 +94,7 @@ func RunCli() {
 			logrus.Info("Attach command placeholder")
 		},
 	})
-	rootCmd.AddCommand(&cobra.Command{
-		Use:   "logs",
-		Short: "View logs of a workload",
-		Run: func(cmd *cobra.Command, args []string) {
-			logrus.Info("Logs command placeholder")
-		},
-	})
+	rootCmd.AddCommand(BuildLogCmd())
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "port-forward",
 		Short: "Port-forward a workload",
