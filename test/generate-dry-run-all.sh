@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 # Base command
 BASE_COMMAND="go run ."
 
@@ -20,8 +22,7 @@ mkdir -p "$OUTPUT_DIR"
 targets=(
   "path:workloads/inference/LLMs/offline-inference/vllm-batch-single-multinode args:submit --ray --gpus 16 --dry-run --path \$path"
   "path:workloads/inference/LLMs/online-inference/vllm-online-single-multinode args:serve --ray --gpus 16 --dry-run --path \$path"
-  "path:workloads/training/LLMs/bert/hf-accelerate-bert args:submit --ray --gpus 8 --dry-run --path \$path"
-  "path:workloads/training/LLMs/full-parameter-pretraining/full-param-zero3-single-multinode args:submit --ray --gpus 8 --dry-run --path \$path"
+  "path:workloads/training/LLMs/bert/hf-accelerate-bert args:submit --gpus 8 --dry-run --path \$path"
   "path:workloads/training/LLMs/lora-supervised-finetuning/lora-sft-zero3-single-multinode args:submit --ray --gpus 8 --dry-run --path \$path"
 )
 

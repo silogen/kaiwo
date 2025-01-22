@@ -192,7 +192,7 @@ func printResources(s *runtime.Scheme, resources []runtime.Object) {
 		cleanedResource, err := k8s.MinimalizeAndConvertToYAML(s, clientObject)
 
 		if err != nil {
-			logrus.Errorf("Failed to minimize resource %s: %w", clientObject.GetName(), err)
+			logrus.Errorf("Failed to marshal object to YAML %s: %w", clientObject.GetName(), err)
 			continue
 		}
 
