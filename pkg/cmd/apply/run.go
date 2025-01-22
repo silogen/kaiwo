@@ -60,7 +60,7 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 		currentUser, err := user.Current()
 		metaFlags.User = currentUser.Username
 		if err != nil {
-			panic(fmt.Sprintf("Failed to fetch the current user: %v", err))
+			return fmt.Errorf("Failed to fetch the current user: %v", err)
 		}
 
 	if metaFlags.Name == "" {
