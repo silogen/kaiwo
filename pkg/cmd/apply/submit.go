@@ -25,8 +25,8 @@ import (
 )
 
 var (
-	useRayForJob        bool
-	queue               string
+	useRayForJob bool
+	queue        string
 )
 
 const defaultQueue = "kaiwo"
@@ -35,12 +35,15 @@ func BuildSubmitCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "submit",
 		Short: "Submit a job",
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			return PreRunLoadConfig(cmd, args)
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 
 			var job workloads.Workload
 
 			jobFlags := workloads.JobFlags{
-				Queue:               queue,
+				Queue: queue,
 			}
 
 			if useRayForJob {

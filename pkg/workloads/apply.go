@@ -18,22 +18,28 @@ package workloads
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"path"
+
 	"github.com/Masterminds/sprig/v3"
 	"github.com/silogen/kaiwo/pkg/k8s"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"k8s.io/apimachinery/pkg/runtime"
 	"os"
 	"strings"
 	"text/template"
+
+	"k8s.io/apimachinery/pkg/runtime"
 )
+
+const TemplateFileName = "template"
 
 // ApplyWorkload runs the main workload submission routine
 func ApplyWorkload(
@@ -67,30 +73,20 @@ func ApplyWorkload(
 		}
 	}
 
-	var err error
-
-	// Choose the template
-	var workloadTemplate []byte
-	if execFlags.Template != "" {
-		logrus.Infof("Using custom template: %s", execFlags.Template)
-		workloadTemplate, err = os.ReadFile(execFlags.Template)
-		if err != nil {
-			return fmt.Errorf("failed to read template file: %w", err)
-		}
-	} else {
-		workloadTemplate, err = workload.DefaultTemplate()
-		if err != nil {
-			return fmt.Errorf("failed to fetch default workload template: %w", err)
-		}
+	workloadTemplate, err := getWorkloadTemplate(execFlags, workload)
+	if err != nil {
+	return fmt.Errorf("failed to get workload template: %w", err)
 	}
+
+	
 
 	templateResources, err := generateManifests(k8sClient, workloadTemplate, templateContext, workload)
 	if err != nil {
 		return fmt.Errorf("Check workload type. Failed to generate manifests: %w", err)
 	}
-	if templateResources == nil || len(templateResources) == 0 {
+	if len(templateResources) == 0 {
 		return fmt.Errorf("failed to generate manifests: no resources found")
-	}
+	    }
 	resources = append(resources, templateResources...)
 
 	s, err := k8s.GetScheme()
@@ -108,6 +104,44 @@ func ApplyWorkload(
 	return nil
 }
 
+func getWorkloadTemplate(execFlags ExecFlags, workload Workload) ([]byte, error) {
+	// Check if a custom template is explicitly provided
+	if execFlags.Template != "" {
+		logrus.Infof("Using custom template: %s", execFlags.Template)
+		return readTemplateFile(execFlags.Template)
+	}
+
+	// Check for a template file in the specified path
+	templateFilePath := path.Join(execFlags.Path, TemplateFileName)
+	if exists, err := fileExists(templateFilePath); err != nil {
+		return nil, fmt.Errorf("failed to check custom template file: %w", err)
+	} else if exists {
+		logrus.Infof("Using custom template %s instead of default template", templateFilePath)
+		return readTemplateFile(templateFilePath)
+	}
+
+	return workload.DefaultTemplate()
+}
+
+func readTemplateFile(filePath string) ([]byte, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read template file %s: %w", filePath, err)
+	}
+	return data, nil
+}
+
+func fileExists(filePath string) (bool, error) {
+	if _, err := os.Stat(filePath); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+
 func generateNamespaceManifestIfNotExists(
 	ctx context.Context,
 	k8sClient client.Client,
@@ -122,7 +156,7 @@ func generateNamespaceManifestIfNotExists(
 		return nil, nil
 	}
 
-	if !errors.IsNotFound(err) {
+	if !apierrors.IsNotFound(err) {
 		return nil, fmt.Errorf("failed to check namespace existence: %w", err)
 	}
 
@@ -192,7 +226,7 @@ func printResources(s *runtime.Scheme, resources []runtime.Object) {
 		cleanedResource, err := k8s.MinimalizeAndConvertToYAML(s, clientObject)
 
 		if err != nil {
-			logrus.Errorf("Failed to marshal object to YAML %s: %w", clientObject.GetName(), err)
+			logrus.Errorf("Failed to marshal object to YAML %s: %v", clientObject.GetName(), err)
 			continue
 		}
 

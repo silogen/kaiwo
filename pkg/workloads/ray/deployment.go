@@ -70,7 +70,7 @@ func (deployment Deployment) DefaultTemplate() ([]byte, error) {
 //}
 
 func (deployment Deployment) IgnoreFiles() []string {
-	return []string{ServeconfigFilename, workloads.KaiwoconfigFilename, workloads.EnvFilename}
+	return []string{ServeconfigFilename, workloads.KaiwoconfigFilename, workloads.EnvFilename, workloads.TemplateFileName}
 }
 
 func (deployment Deployment) GetPods() ([]corev1.Pod, error) {

@@ -204,7 +204,7 @@ func MinimalizeAndConvertToYAML(s *runtime.Scheme, obj runtime.Object) (string, 
 		return "", fmt.Errorf("failed to convert object to yaml: %w", err)
 	}
 
-	return string(b.Bytes()), nil
+	return b.String(), nil
 }
 
 // removeUnwantedFields removes common server-side generated fields

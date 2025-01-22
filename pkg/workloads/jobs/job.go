@@ -76,7 +76,7 @@ func (job Job) ConvertObject(object runtime.Object) (runtime.Object, bool) {
 }
 
 func (job Job) IgnoreFiles() []string {
-	return []string{EntrypointFilename, workloads.KaiwoconfigFilename, workloads.EnvFilename}
+	return []string{EntrypointFilename, workloads.KaiwoconfigFilename, workloads.EnvFilename, workloads.TemplateFileName}
 }
 
 func (job Job) GetPods() ([]corev1.Pod, error) {

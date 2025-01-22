@@ -104,4 +104,7 @@ type ExecFlags struct {
 
 	// Path to custom config file
 	CustomConfigPath string
+
+	// Path to env file if not in Path
+	EnvFilePath string
 }

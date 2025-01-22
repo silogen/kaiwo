@@ -17,11 +17,17 @@
 package cli
 
 import (
+	"fmt"
+	"path/filepath"
+	"os"
+	"gopkg.in/yaml.v3"
 	"github.com/silogen/kaiwo/pkg/workloads"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
 const defaultGpuNodeLabelKey = "beta.amd.com/gpu.family.AI"
+
 
 // Exec flags
 var (
@@ -31,16 +37,18 @@ var (
 	path             string
 	gpuNodeLabelKey  string
 	customConfigPath string
+	envFilePath      string
 )
 
 // AddExecFlags adds flags that are needed for the execution of apply functions
 func AddExecFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolVarP(&createNamespace, "create-namespace", "", false, "Create namespace if it does not exist")
 	cmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "Print the generated workload manifest without submitting it")
-	cmd.Flags().StringVarP(&template, "template", "t", "", "Path to a custom template to use for the workload. If not provided, a default template will be used")
-	cmd.Flags().StringVarP(&path, "path", "p", "", "absolute or relative path to workload code and entrypoint/serveconfig directory")
-	cmd.Flags().StringVarP(&gpuNodeLabelKey, "gpu-node-label-key", "", defaultGpuNodeLabelKey, "The node label key used to specify the resource flavor GPU count")
-	cmd.Flags().StringVarP(&customConfigPath, "custom-config", "c", "", "Path to a custom YAML configuration file whose contents are made available in the template")
+	cmd.Flags().StringVarP(&path, "path", "p", "", "Path to directory for workload code, entrypoint/serveconfig, env-file, etc. Either image or path is mandatory")
+	cmd.Flags().StringVarP(&gpuNodeLabelKey, "gpu-node-label-key", "", defaultGpuNodeLabelKey, fmt.Sprintf("Optional node label key used to specify the resource flavor GPU count. Defaults to %s", defaultGpuNodeLabelKey))
+	cmd.Flags().StringVarP(&template, "template", "t", "", "Optional path to a custom template to use for the workload. If not provided, a default template will be used unless template file found in workload directory")
+	cmd.Flags().StringVarP(&customConfigPath, "custom-config", "c", "", "Optional path to a custom YAML configuration file whose contents are made available in the template")
+	cmd.Flags().StringVarP(&envFilePath, "env-file", "", "", "Optional path to env file. Defaults to 'env' in workload code directory")
 }
 
 func GetExecFlags() workloads.ExecFlags {
@@ -51,6 +59,7 @@ func GetExecFlags() workloads.ExecFlags {
 		Path:                          path,
 		ResourceFlavorGpuNodeLabelKey: gpuNodeLabelKey,
 		CustomConfigPath:              customConfigPath,
+		EnvFilePath:                   envFilePath,
 	}
 }
 
@@ -69,9 +78,9 @@ var (
 
 // AddMetaFlags adds flags that are needed for basic Kubernetes metadata
 func AddMetaFlags(cmd *cobra.Command) {
-	cmd.Flags().StringVarP(&name, "name", "", "", "Name of the workload")
-	cmd.Flags().StringVarP(&namespace, "namespace", "n", defaultNamespace, "Namespace of the workload")
-	cmd.Flags().StringVarP(&image, "image", "i", defaultImage, "The image to use for the workload")
+	cmd.Flags().StringVarP(&name, "name", "", "", "Optional name for the workload")
+	cmd.Flags().StringVarP(&namespace, "namespace", "n", defaultNamespace, fmt.Sprintf("Namespace of the workload. Defaults to %s", defaultNamespace))
+	cmd.Flags().StringVarP(&image, "image", "i", defaultImage, fmt.Sprintf("Optional Image to use for the workload. Defaults to %s. Either image or workload path is mandatory", defaultImage))
 	cmd.Flags().StringVarP(&imagePullSecret, "imagepullsecret", "", "", "ImagePullSecret name for job/deployment if private registry")
 	cmd.Flags().StringVarP(&version, "version", "", "", "Optional version for job/deployment")
 }
@@ -102,4 +111,90 @@ func GetSchedulingFlags() workloads.SchedulingFlags {
 	return workloads.SchedulingFlags{
 		TotalRequestedGPUs: gpus,
 	}
+}
+
+type Config struct {
+	DryRun          bool   `yaml:"DryRun"`
+	CreateNamespace bool   `yaml:"CreateNamespace"`
+	Path            string `yaml:"Path"`
+	GpuNodeLabelKey string `yaml:"GpuNodeLabelKey"`
+	Template        string `yaml:"Template"`
+	CustomConfigPath    string `yaml:"CustomConfig"`
+	EnvFilePath     string `yaml:"EnvFilePath"`
+	Name            string `yaml:"Name"`
+	Namespace       string `yaml:"Namespace"`
+	Image           string `yaml:"Image"`
+	ImagePullSecret string `yaml:"ImagePullSecret"`
+	Version         string `yaml:"Version"`
+	Gpus            int    `yaml:"Gpus"`
+}
+
+func LoadConfigFromPath(path string) (*Config, error) {
+	configPath := filepath.Join(path, "kaiwoconfig")
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		return nil, nil
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file %s: %w", configPath, err)
+	}
+
+	var config Config
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse config file %s: %w", configPath, err)
+	}
+
+	return &config, nil
+}
+
+func ApplyConfigToFlags(cmd *cobra.Command, config *Config) {
+	if config == nil {
+		return
+	}
+	setFlag := func(name, value string) {
+		if err := cmd.Flags().Set(name, value); err != nil {
+			logrus.Errorf("Failed to set flag %s: %v", name, err)
+		}
+	}
+
+	// ExecFlags
+	setFlag("dry-run", fmt.Sprintf("%v", config.DryRun))
+	setFlag("create-namespace", fmt.Sprintf("%v", config.CreateNamespace))
+	setFlag("path", config.Path)
+	setFlag("gpu-node-label-key", config.GpuNodeLabelKey)
+	setFlag("template", config.Template)
+	setFlag("custom-config", config.CustomConfigPath)
+	setFlag("env-file", config.EnvFilePath)
+
+	// MetaFlags
+	setFlag("name", config.Name)
+	setFlag("namespace", config.Namespace)
+	setFlag("image", config.Image)
+	setFlag("imagepullsecret", config.ImagePullSecret)
+	setFlag("version", config.Version)
+
+	// SchedulingFlags
+	setFlag("gpus", fmt.Sprintf("%d", config.Gpus))
+}
+
+
+func PreRunLoadConfig(cmd *cobra.Command, args []string) error {
+	if path == "" {
+		return nil
+	}
+
+	config, err := LoadConfigFromPath(path)
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	if config != nil {
+		ApplyConfigToFlags(cmd, config)
+		logrus.Infof("Configuration loaded from %s", filepath.Join(path, "kaiwoconfig"))
+	} else {
+		logrus.Infof("No configuration file found in %s", path)
+	}
+
+	return nil
 }

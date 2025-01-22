@@ -63,16 +63,21 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 			return fmt.Errorf("Failed to fetch the current user: %v", err)
 		}
 
-	if metaFlags.Name == "" {
-		metaFlags.Name = makeWorkloadName(execFlags.Path, metaFlags.Image, metaFlags.Version, metaFlags.User)
-		logrus.Infof("No explicit name provided, using name: %s", metaFlags.Name)
-	}
-
+		if metaFlags.Name == "" {
+			metaFlags.Name = makeWorkloadName(execFlags.Path, metaFlags.Image, metaFlags.Version, metaFlags.User)
+			logrus.Infof("No explicit name provided, using name: %s", metaFlags.Name)
+		}
 
 	}
 
 	// Parse environment variables
-	envFilePath := filepath.Join(execFlags.Path, workloads.EnvFilename)
+	if execFlags.EnvFilePath == "" {
+		envFilePath = filepath.Join(execFlags.Path, workloads.EnvFilename)
+
+	} else {
+		envFilePath = execFlags.EnvFilePath
+	}
+	
 	if err := parseEnvFile(envFilePath, &metaFlags); err != nil {
 		return fmt.Errorf("error parsing environment: %w", err)
 	}
@@ -129,7 +134,7 @@ func loadCustomConfig(path string) (any, error) {
 }
 
 func makeWorkloadName(path string, image string, version string, currentUser string) string {
-	
+
 	var appendix string
 
 	if path != "" {

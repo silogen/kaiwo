@@ -32,7 +32,10 @@ var (
 func BuildServeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "serve",
-		Short: "Serve a deployment process", // TODO name
+		Short: "Serve a deployment process", 
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			return PreRunLoadConfig(cmd, args)
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var deployment workloads.Workload
 
@@ -58,7 +61,7 @@ func BuildServeCmd() *cobra.Command {
 
 	// Deployment-specific flags
 	cmd.Flags().BoolVarP(&useRayForServe, "ray", "", false, "use ray for submitting the job")
-	cmd.Flags().StringVarP(&model, "model", "m", "", "the model to use")
+	cmd.Flags().StringVarP(&model, "model", "m", "", "the model to use (Not implemented yet)")
 
 	return cmd
 }
