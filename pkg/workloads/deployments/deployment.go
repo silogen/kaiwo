@@ -19,14 +19,16 @@ package deployments
 import (
 	_ "embed"
 	"fmt"
+	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"os"
 	"path/filepath"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
 
 	"github.com/silogen/kaiwo/pkg/workloads"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"github.com/sirupsen/logrus"
+	corev1 "k8s.io/api/core/v1"
 )
 
 //go:embed deployment.yaml.tmpl
@@ -62,6 +64,11 @@ func (deployment Deployment) GenerateTemplateContext(execFlags workloads.ExecFla
 
 }
 
+func (deployment Deployment) ConvertObject(object runtime.Object) (runtime.Object, bool) {
+	obj, ok := object.(*appsv1.Deployment)
+	return obj, ok
+}
+
 func (deployment Deployment) DefaultTemplate() ([]byte, error) {
 	if DeploymentTemplate == nil {
 		return nil, fmt.Errorf("deployment template is empty")
@@ -81,6 +88,6 @@ func (deployment Deployment) GetServices() ([]corev1.Service, error) {
 	return []corev1.Service{}, nil
 }
 
-func (deployment Deployment) GenerateAdditionalResourceManifests(templateContext workloads.WorkloadTemplateConfig) ([]*unstructured.Unstructured, error) {
-	return []*unstructured.Unstructured{}, nil
+func (deployment Deployment) GenerateAdditionalResourceManifests(k8sClient client.Client, templateContext workloads.WorkloadTemplateConfig) ([]runtime.Object, error) {
+	return []runtime.Object{}, nil
 }

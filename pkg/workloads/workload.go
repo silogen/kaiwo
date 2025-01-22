@@ -18,7 +18,8 @@ package workloads
 
 import (
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type Workload interface {
@@ -32,6 +33,8 @@ type Workload interface {
 	// DefaultTemplate returns a default template to use for this workload
 	DefaultTemplate() ([]byte, error)
 
+	ConvertObject(object runtime.Object) (runtime.Object, bool)
+
 	// IgnoreFiles lists the files that should be ignored in the ConfigMap
 	IgnoreFiles() []string
 
@@ -42,5 +45,5 @@ type Workload interface {
 	GetServices() ([]corev1.Service, error)
 
 	// GenerateAdditionalResourceManifests allow
-	GenerateAdditionalResourceManifests(WorkloadTemplateConfig) ([]*unstructured.Unstructured, error)
+	GenerateAdditionalResourceManifests(k8sClient client.Client, templateContext WorkloadTemplateConfig) ([]runtime.Object, error)
 }

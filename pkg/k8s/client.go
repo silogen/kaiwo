@@ -18,14 +18,22 @@ package k8s
 
 import (
 	"fmt"
+	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	"github.com/sirupsen/logrus"
+	batchv1 "k8s.io/api/batch/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
-	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"os"
+	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
+
 	"path/filepath"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sync"
 )
 
@@ -38,6 +46,10 @@ var (
 
 	dynamicOnce sync.Once
 	//typedOnce   sync.Once
+
+	scheme2       runtime.Scheme
+	schemeInitErr error
+	schemeOnce    sync.Once
 )
 
 // getKubeConfig loads the kubeconfig file path
@@ -87,15 +99,71 @@ func InitializeDynamicClient() (dynamic.Interface, error) {
 // GetDynamicClient provides a singleton for the dynamic client
 func GetDynamicClient() (dynamic.Interface, error) {
 	dynamicOnce.Do(func() {
-		client, err := InitializeDynamicClient()
+		c, err := InitializeDynamicClient()
 		if err != nil {
 			logrus.Fatalf("failed to initialize dynamic Kubernetes client: %v", err)
 			dynamicInitErr = err
 			return
 		}
-		dynamicClient = client
+		dynamicClient = c
 	})
 	return dynamicClient, dynamicInitErr
+}
+
+func buildScheme() (*runtime.Scheme, error) {
+	scheme := runtime.NewScheme()
+	// Add core Kubernetes API types
+	if err := clientgoscheme.AddToScheme(scheme); err != nil {
+		return nil, fmt.Errorf("failed to add core Kubernetes types to scheme: %v", err)
+	}
+
+	// Add batch API types
+	if err := batchv1.AddToScheme(scheme); err != nil {
+		return nil, fmt.Errorf("failed to add batch Kubernetes types to scheme: %v", err)
+	}
+
+	// Add Kueue API types
+	if err := kueuev1beta1.AddToScheme(scheme); err != nil {
+		return nil, fmt.Errorf("failed to add kueue Kubernetes types to scheme: %v", err)
+	}
+
+	// Add RayService custom resource API types
+	if err := rayv1.AddToScheme(scheme); err != nil {
+		return nil, fmt.Errorf("failed to add RayService types to scheme: %v", err)
+	}
+
+	return scheme, nil
+}
+
+func GetScheme() (runtime.Scheme, error) {
+	schemeOnce.Do(func() {
+		s, err := buildScheme()
+		if err != nil {
+			logrus.Fatalf("failed to build scheme: %v", err)
+			schemeInitErr = fmt.Errorf("failed to build scheme: %v", err)
+			return
+		}
+		scheme2 = *s
+	})
+	return scheme2, schemeInitErr
+}
+
+func GetClient() (client.Client, error) {
+	cfg, err := config.GetConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Kubernetes config: %v", err)
+	}
+
+	s, err := GetScheme()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Kubernetes scheme: %v", err)
+	}
+
+	k8sClient, err := client.New(cfg, client.Options{Scheme: &s})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Kubernetes client: %v", err)
+	}
+	return k8sClient, err
 }
 
 //// InitializeTypedClient initializes the typed Kubernetes client
