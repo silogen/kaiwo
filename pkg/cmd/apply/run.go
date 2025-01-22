@@ -119,8 +119,9 @@ func loadCustomConfig(path string) (any, error) {
 		return nil, fmt.Errorf("failed to read custom config file: %w", err)
 	}
 
-	customConfig, err := yaml.Marshal(customConfigContents)
-	if err != nil {
+	customConfig := make(map[string]any)
+
+	if err := yaml.Unmarshal(customConfigContents, &customConfig); err != nil {
 		return nil, fmt.Errorf("failed to marshal custom config file: %w", err)
 	}
 
