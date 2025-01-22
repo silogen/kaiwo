@@ -17,6 +17,7 @@
 package ray
 
 import (
+	"context"
 	_ "embed"
 	"fmt"
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
@@ -84,4 +85,8 @@ func (job Job) GenerateAdditionalResourceManifests(k8sClient client.Client, temp
 	}
 
 	return []runtime.Object{localClusterQueueManifest}, nil
+}
+
+func (job Job) BuildReference(ctx context.Context, k8sClient client.Client, key client.ObjectKey) (*workloads.WorkloadReference, error) {
+	return nil, nil
 }

@@ -17,6 +17,7 @@
 package jobs
 
 import (
+	"context"
 	_ "embed"
 	"fmt"
 	"github.com/silogen/kaiwo/pkg/workloads"
@@ -96,4 +97,8 @@ func (job Job) GenerateAdditionalResourceManifests(k8sClient client.Client, temp
 	}
 
 	return []runtime.Object{localClusterQueueManifest}, nil
+}
+
+func (job Job) BuildReference(ctx context.Context, k8sClient client.Client, key client.ObjectKey) (*workloads.WorkloadReference, error) {
+	return nil, nil
 }
