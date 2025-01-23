@@ -129,7 +129,7 @@ type Config struct {
 }
 
 func LoadConfigFromPath(path string) (*Config, error) {
-	configPath := filepath.Join(path, "kaiwoconfig")
+	configPath := filepath.Join(path, workloads.KaiwoconfigFilename)
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		return nil, nil
 	}
@@ -152,9 +152,11 @@ func ApplyConfigToFlags(cmd *cobra.Command, config *Config) {
 		return
 	}
 	setFlag := func(name, value string) {
+		if value != "" {
 		if err := cmd.Flags().Set(name, value); err != nil {
 			logrus.Errorf("Failed to set flag %s: %v", name, err)
 		}
+	}
 	}
 
 	// ExecFlags
@@ -189,7 +191,7 @@ func PreRunLoadConfig(cmd *cobra.Command, args []string) error {
 
 	if config != nil {
 		ApplyConfigToFlags(cmd, config)
-		logrus.Infof("Configuration loaded from %s", filepath.Join(path, "kaiwoconfig"))
+		logrus.Infof("Configuration loaded from %s", filepath.Join(path, workloads.KaiwoconfigFilename))
 	} else {
 		logrus.Infof("No configuration file found in %s", path)
 	}
