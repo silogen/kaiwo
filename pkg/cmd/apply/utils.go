@@ -118,8 +118,8 @@ type Config struct {
 	Path             string `yaml:"path"`
 	GpuNodeLabelKey  string `yaml:"gpuNodeLabelKey"`
 	Template         string `yaml:"template"`
-	CustomConfigPath string `yaml:"customConfigPath"`
-	EnvFilePath      string `yaml:"envFilePath"`
+	CustomConfig string `yaml:"customConfig"`
+	EnvFile      string `yaml:"envFile"`
 	Name             string `yaml:"name"`
 	Namespace        string `yaml:"namespace"`
 	Image            string `yaml:"image"`
@@ -165,8 +165,8 @@ func ApplyConfigToFlags(cmd *cobra.Command, config *Config) {
 	setFlag("path", config.Path)
 	setFlag("gpu-node-label-key", config.GpuNodeLabelKey)
 	setFlag("template", config.Template)
-	setFlag("custom-config", config.CustomConfigPath)
-	setFlag("env-file", config.EnvFilePath)
+	setFlag("custom-config", config.CustomConfig)
+	setFlag("env-file", config.EnvFile)
 
 	// MetaFlags
 	setFlag("name", config.Name)
