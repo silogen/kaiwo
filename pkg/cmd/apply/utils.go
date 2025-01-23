@@ -1,33 +1,32 @@
-/**
- * Copyright 2025 Advanced Micro Devices, Inc. All rights reserved.
- *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
-**/
+// Copyright 2024 Advanced Micro Devices, Inc.  All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package cli
 
 import (
 	"fmt"
-	"path/filepath"
 	"os"
-	"gopkg.in/yaml.v3"
-	"github.com/silogen/kaiwo/pkg/workloads"
+	"path/filepath"
+
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
+
+	"github.com/silogen/kaiwo/pkg/workloads"
 )
 
 const defaultGpuNodeLabelKey = "beta.amd.com/gpu.family.AI"
-
 
 // Exec flags
 var (
@@ -114,19 +113,19 @@ func GetSchedulingFlags() workloads.SchedulingFlags {
 }
 
 type Config struct {
-	DryRun          bool   `yaml:"DryRun"`
-	CreateNamespace bool   `yaml:"CreateNamespace"`
-	Path            string `yaml:"Path"`
-	GpuNodeLabelKey string `yaml:"GpuNodeLabelKey"`
-	Template        string `yaml:"Template"`
-	CustomConfigPath    string `yaml:"CustomConfig"`
-	EnvFilePath     string `yaml:"EnvFilePath"`
-	Name            string `yaml:"Name"`
-	Namespace       string `yaml:"Namespace"`
-	Image           string `yaml:"Image"`
-	ImagePullSecret string `yaml:"ImagePullSecret"`
-	Version         string `yaml:"Version"`
-	Gpus            int    `yaml:"Gpus"`
+	DryRun           bool   `yaml:"dryRun"`
+	CreateNamespace  bool   `yaml:"createNamespace"`
+	Path             string `yaml:"path"`
+	GpuNodeLabelKey  string `yaml:"gpuNodeLabelKey"`
+	Template         string `yaml:"template"`
+	CustomConfigPath string `yaml:"customConfigPath"`
+	EnvFilePath      string `yaml:"envFilePath"`
+	Name             string `yaml:"name"`
+	Namespace        string `yaml:"namespace"`
+	Image            string `yaml:"image"`
+	ImagePullSecret  string `yaml:"imagePullSecret"`
+	Version          string `yaml:"version"`
+	Gpus             int    `yaml:"gpus"`
 }
 
 func LoadConfigFromPath(path string) (*Config, error) {
@@ -177,7 +176,6 @@ func ApplyConfigToFlags(cmd *cobra.Command, config *Config) {
 	// SchedulingFlags
 	setFlag("gpus", fmt.Sprintf("%d", config.Gpus))
 }
-
 
 func PreRunLoadConfig(cmd *cobra.Command, args []string) error {
 	if path == "" {

@@ -1,18 +1,16 @@
-/**
- * Copyright 2025 Advanced Micro Devices, Inc. All rights reserved.
- *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
-**/
+// Copyright 2024 Advanced Micro Devices, Inc.  All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package workloads
 
@@ -23,7 +21,6 @@ import (
 	"path"
 
 	"github.com/Masterminds/sprig/v3"
-	"github.com/silogen/kaiwo/pkg/k8s"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -31,6 +28,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/silogen/kaiwo/pkg/k8s"
 
 	"os"
 	"strings"
@@ -75,10 +74,8 @@ func ApplyWorkload(
 
 	workloadTemplate, err := getWorkloadTemplate(execFlags, workload)
 	if err != nil {
-	return fmt.Errorf("failed to get workload template: %w", err)
+		return fmt.Errorf("failed to get workload template: %w", err)
 	}
-
-	
 
 	templateResources, err := generateManifests(k8sClient, workloadTemplate, templateContext, workload)
 	if err != nil {
@@ -86,7 +83,7 @@ func ApplyWorkload(
 	}
 	if len(templateResources) == 0 {
 		return fmt.Errorf("failed to generate manifests: no resources found")
-	    }
+	}
 	resources = append(resources, templateResources...)
 
 	s, err := k8s.GetScheme()
@@ -140,7 +137,6 @@ func fileExists(filePath string) (bool, error) {
 	}
 	return true, nil
 }
-
 
 func generateNamespaceManifestIfNotExists(
 	ctx context.Context,

@@ -1,0 +1,26 @@
+linters:
+  enable:
+      - errcheck
+      - gosimple
+      - goheader
+      - gofmt
+      - goimports
+      - govet
+      - ineffassign
+      - staticcheck
+      - unused
+      - exptostd
+issues:
+  fix: true
+linters-settings:
+  goimports:
+    local-prefixes: github.com/silogen/kaiwo
+  gofmt:
+    simplify: false
+    rewrite-rules:
+      - pattern: 'interface{}'
+        replacement: 'any'
+      - pattern: 'a[b:len(a)]'
+        replacement: 'a[b:]'
+  goheader:
+    template-path: .copyright-template
