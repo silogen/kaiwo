@@ -23,7 +23,7 @@ spec:
           {{- end }}
           containers:
             - name: ray-head
-              image: {{ .Meta.Image }}
+              image: {{ default "ghcr.io/silogen/rocm-ray:v0.4" .Meta.Image }}
               imagePullPolicy: Always
               env:
               {{- if .Meta.EnvVars }}
@@ -103,7 +103,7 @@ spec:
             {{- end }}
             containers:
               - name: ray-worker
-                image: {{ .Meta.Image }}
+                image: {{ default "ghcr.io/silogen/rocm-ray:v0.4" .Meta.Image }}
                 imagePullPolicy: Always
                 env:
                 {{- if .Meta.EnvVars }}

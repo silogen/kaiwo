@@ -22,7 +22,7 @@ spec:
       {{- end }}
       containers:
       - name: {{ .Meta.Name }}
-        image: {{ .Meta.Image }}
+        image: {{ default "ghcr.io/silogen/rocm-ray:v0.4" .Meta.Image }}
         imagePullPolicy: Always
         {{- if .Workload.Entrypoint }}
         command: 

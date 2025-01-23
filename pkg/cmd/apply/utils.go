@@ -57,7 +57,6 @@ func GetExecFlags() workloads.ExecFlags {
 // Kubernetes meta flags
 
 const defaultNamespace = "kaiwo"
-const defaultImage = "ghcr.io/silogen/rocm-ray:v0.4"
 
 var (
 	name            string
@@ -71,7 +70,7 @@ var (
 func AddMetaFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&name, "name", "", "", "Name of the workload")
 	cmd.Flags().StringVarP(&namespace, "namespace", "n", defaultNamespace, "Namespace of the workload")
-	cmd.Flags().StringVarP(&image, "image", "i", defaultImage, "The image to use for the workload")
+	cmd.Flags().StringVarP(&image, "image", "i", "", "The image to use for the workload")
 	cmd.Flags().StringVarP(&imagePullSecret, "imagepullsecret", "", "", "ImagePullSecret name for job/deployment if private registry")
 	cmd.Flags().StringVarP(&version, "version", "", "", "Optional version for job/deployment")
 }
