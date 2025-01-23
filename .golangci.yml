@@ -9,7 +9,6 @@ linters:
       - ineffassign
       - staticcheck
       - unused
-      - exptostd
 issues:
   fix: true
 linters-settings:
