@@ -1,10 +1,6 @@
 envVars:
   - name: MODEL_ID
     value: "meta-llama/Llama-3.1-8B-Instruct"
-  - name: TENSOR_PARALLELISM
-    value: "8"
-  - name: NUM_INSTANCES
-    value: "2"
   - fromSecret:
         name: "HF_TOKEN"
         secret: "hf-token"

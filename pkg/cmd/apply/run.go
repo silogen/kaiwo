@@ -40,6 +40,11 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 	execFlags := GetExecFlags()
 	metaFlags := GetMetaFlags()
 
+	if execFlags.Path == "" && metaFlags.Image == defaultImage {
+		logrus.Error("Cannot run workload without image or path")
+		return nil
+	}
+
 	// Generate workload configuration
 	workloadConfig, err := workload.GenerateTemplateContext(execFlags)
 	if err != nil {
@@ -94,8 +99,9 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 	}
 	logrus.Infof("Successfully loaded scheduling info from Kubernetes")
 
-	// Add NUM_GPUS env var
 	metaFlags.EnvVars = append(metaFlags.EnvVars, corev1.EnvVar{Name: "NUM_GPUS", Value: strconv.Itoa(schedulingFlags.TotalRequestedGPUs)})
+	metaFlags.EnvVars = append(metaFlags.EnvVars, corev1.EnvVar{Name: "NUM_REPLICAS", Value: strconv.Itoa(schedulingFlags.RequestedReplicas)})
+	metaFlags.EnvVars = append(metaFlags.EnvVars, corev1.EnvVar{Name: "NUM_GPUS_PER_REPLICA", Value: strconv.Itoa(schedulingFlags.RequestedGPUsPerReplica)})
 
 	// Create the workload template context
 	templateContext := workloads.WorkloadTemplateConfig{
@@ -191,8 +197,23 @@ func fillSchedulingFlags(
 		return err
 	}
 
-	numReplicas, nodeGpuRequest := k8s.CalculateNumberOfReplicas(schedulingFlags.TotalRequestedGPUs, gpuCount, envVars)
 
+	if schedulingFlags.RequestedReplicas > 0 && schedulingFlags.RequestedGPUsPerReplica > 0 {
+		if schedulingFlags.RequestedGPUsPerReplica > schedulingFlags.GPUsAvailablePerNode {
+			return fmt.Errorf("You requested %d GPUs per replica, but there are only %d GPUs available per node", 
+			    schedulingFlags.RequestedGPUsPerReplica, schedulingFlags.GPUsAvailablePerNode)
+		    }
+		if schedulingFlags.TotalRequestedGPUs > 0 {
+			return fmt.Errorf("Cannot set requested gpus with --gpus when --replicas and --gpus-per-replica are set")
+
+		}
+		schedulingFlags.CalculatedNumReplicas = schedulingFlags.RequestedReplicas
+		schedulingFlags.CalculatedGPUsPerReplica = schedulingFlags.RequestedGPUsPerReplica
+		schedulingFlags.TotalRequestedGPUs = schedulingFlags.RequestedReplicas * schedulingFlags.RequestedGPUsPerReplica
+		return nil
+	}
+
+	numReplicas, nodeGpuRequest := k8s.CalculateNumberOfReplicas(schedulingFlags.TotalRequestedGPUs, gpuCount, envVars)
 	schedulingFlags.CalculatedNumReplicas = numReplicas
 	schedulingFlags.CalculatedGPUsPerReplica = nodeGpuRequest
 

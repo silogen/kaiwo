@@ -97,35 +97,43 @@ func GetMetaFlags() workloads.MetaFlags {
 // Scheduling flags
 
 var (
-	gpus int
+	gpus           int
+	replicas       int
+	gpusPerReplica int
 )
 
 // AddSchedulingFlags adds flags related to (Kueue) scheduling
 func AddSchedulingFlags(cmd *cobra.Command) {
 	cmd.Flags().IntVarP(&gpus, "gpus", "g", 0, "Number of GPUs requested for the workload")
+	cmd.Flags().IntVarP(&replicas, "replicas", "", 0, "Number of replicas requested for the workload")
+	cmd.Flags().IntVarP(&gpusPerReplica, "gpus-per-replica", "", 0, "Number of GPUs requested per replica")
 }
 
 // GetSchedulingFlags initializes the scheduling flags with the number of GPUs requested
 func GetSchedulingFlags() workloads.SchedulingFlags {
 	return workloads.SchedulingFlags{
-		TotalRequestedGPUs: gpus,
+		TotalRequestedGPUs:      gpus,
+		RequestedReplicas:       replicas,
+		RequestedGPUsPerReplica: gpusPerReplica,
 	}
 }
 
 type Config struct {
-	DryRun           bool   `yaml:"dryRun"`
-	CreateNamespace  bool   `yaml:"createNamespace"`
-	Path             string `yaml:"path"`
-	GpuNodeLabelKey  string `yaml:"gpuNodeLabelKey"`
-	Template         string `yaml:"template"`
-	CustomConfig string `yaml:"customConfig"`
-	EnvFile      string `yaml:"envFile"`
-	Name             string `yaml:"name"`
-	Namespace        string `yaml:"namespace"`
-	Image            string `yaml:"image"`
-	ImagePullSecret  string `yaml:"imagePullSecret"`
-	Version          string `yaml:"version"`
-	Gpus             int    `yaml:"gpus"`
+	DryRun                  bool   `yaml:"dryRun"`
+	CreateNamespace         bool   `yaml:"createNamespace"`
+	Path                    string `yaml:"path"`
+	GpuNodeLabelKey         string `yaml:"gpuNodeLabelKey"`
+	Template                string `yaml:"template"`
+	CustomConfig            string `yaml:"customConfig"`
+	EnvFile                 string `yaml:"envFile"`
+	Name                    string `yaml:"name"`
+	Namespace               string `yaml:"namespace"`
+	Image                   string `yaml:"image"`
+	ImagePullSecret         string `yaml:"imagePullSecret"`
+	Version                 string `yaml:"version"`
+	Gpus                    int    `yaml:"gpus"`
+	RequestedReplicas       int    `yaml:"requestedReplicas"`
+	RequestedGPUsPerReplica int    `yaml:"requestedGPUsPerReplica"`
 }
 
 func LoadConfigFromPath(path string) (*Config, error) {
@@ -153,10 +161,10 @@ func ApplyConfigToFlags(cmd *cobra.Command, config *Config) {
 	}
 	setFlag := func(name, value string) {
 		if value != "" {
-		if err := cmd.Flags().Set(name, value); err != nil {
-			logrus.Errorf("Failed to set flag %s: %v", name, err)
+			if err := cmd.Flags().Set(name, value); err != nil {
+				logrus.Errorf("Failed to set flag %s: %v", name, err)
+			}
 		}
-	}
 	}
 
 	// ExecFlags
@@ -177,6 +185,9 @@ func ApplyConfigToFlags(cmd *cobra.Command, config *Config) {
 
 	// SchedulingFlags
 	setFlag("gpus", fmt.Sprintf("%d", config.Gpus))
+	setFlag("replicas", fmt.Sprintf("%d", config.RequestedReplicas))
+	setFlag("gpus-per-replica", fmt.Sprintf("%d", config.RequestedGPUsPerReplica))
+
 }
 
 func PreRunLoadConfig(cmd *cobra.Command, args []string) error {

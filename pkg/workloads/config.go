@@ -46,8 +46,12 @@ type SchedulingFlags struct {
 	// GPUsAvailablePerNode refers to the Kueue resource flavor's GPU count
 	GPUsAvailablePerNode int
 
+	RequestedGPUsPerReplica int
+
 	// TotalRequestedGPUs refers to the total number of GPUs requested for the workload
 	TotalRequestedGPUs int
+
+	RequestedReplicas int
 
 	// CalculatedGPUsPerReplica refers to the number of GPUs per replica, calculated from the available GPUs per node
 	CalculatedGPUsPerReplica int
