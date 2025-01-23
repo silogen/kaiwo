@@ -19,12 +19,13 @@ package deployments
 import (
 	_ "embed"
 	"fmt"
-	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"os"
 	"path/filepath"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
+
+	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/silogen/kaiwo/pkg/workloads"
 	"github.com/sirupsen/logrus"
@@ -44,14 +45,13 @@ type DeploymentFlags struct {
 
 func (deployment Deployment) GenerateTemplateContext(execFlags workloads.ExecFlags) (any, error) {
 	contents, err := os.ReadFile(filepath.Join(execFlags.Path, EntrypointFilename))
-
-	if contents == nil {
-		logrus.Warnln("No entrypoint file found. Expecting entrypoint in image")
-		return nil, nil
-	}
-
 	if err != nil {
-		return nil, fmt.Errorf("failed to read entrypoint file: %w", err)
+		if os.IsNotExist(err) {
+			logrus.Warnln("No entrypoint file found. Expecting entrypoint in image")
+			return DeploymentFlags{Entrypoint: ""}, nil
+		} else {
+			return nil, fmt.Errorf("failed to read entrypoint file: %w", err)
+		}
 	}
 
 	entrypoint := string(contents)
