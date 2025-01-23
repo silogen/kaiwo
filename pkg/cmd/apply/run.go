@@ -1,35 +1,35 @@
-/**
- * Copyright 2025 Advanced Micro Devices, Inc. All rights reserved.
- *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
-**/
+// Copyright 2024 Advanced Micro Devices, Inc.  All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package cli
 
 import (
 	"context"
 	"fmt"
-	"github.com/silogen/kaiwo/pkg/k8s"
-	"github.com/silogen/kaiwo/pkg/workloads"
-	"github.com/sirupsen/logrus"
-	corev1 "k8s.io/api/core/v1"
 	"os"
 	"os/user"
 	"path/filepath"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/yaml"
 	"strconv"
 	"strings"
+
+	"github.com/sirupsen/logrus"
+	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/yaml"
+
+	"github.com/silogen/kaiwo/pkg/k8s"
+	"github.com/silogen/kaiwo/pkg/workloads"
 )
 
 // RunApply prepares the workload and applies it
@@ -39,6 +39,11 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 	// Fetch flags
 	execFlags := GetExecFlags()
 	metaFlags := GetMetaFlags()
+
+	if execFlags.Path == "" && metaFlags.Image == defaultImage {
+		logrus.Error("Cannot run workload without image or path")
+		return nil
+	}
 
 	// Generate workload configuration
 	workloadConfig, err := workload.GenerateTemplateContext(execFlags)
@@ -56,23 +61,26 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 	}
 
 	// Finalize metadata flags
-	if metaFlags.User == "" {
-		currentUser, err := user.Current()
-		metaFlags.User = currentUser.Username
-		if err != nil {
-			return fmt.Errorf("Failed to fetch the current user: %v", err)
-		}
+
+	currentUser, err := user.Current()
+	metaFlags.User = currentUser.Username
+	if err != nil {
+		return fmt.Errorf("Failed to fetch the current user: %v", err)
+	}
 
 	if metaFlags.Name == "" {
 		metaFlags.Name = makeWorkloadName(execFlags.Path, metaFlags.Image, metaFlags.Version, metaFlags.User)
 		logrus.Infof("No explicit name provided, using name: %s", metaFlags.Name)
 	}
 
+	// Parse environment variables
+	if execFlags.EnvFilePath == "" {
+		envFilePath = filepath.Join(execFlags.Path, workloads.EnvFilename)
 
+	} else {
+		envFilePath = execFlags.EnvFilePath
 	}
 
-	// Parse environment variables
-	envFilePath := filepath.Join(execFlags.Path, workloads.EnvFilename)
 	if err := parseEnvFile(envFilePath, &metaFlags); err != nil {
 		return fmt.Errorf("error parsing environment: %w", err)
 	}
@@ -91,8 +99,9 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 	}
 	logrus.Infof("Successfully loaded scheduling info from Kubernetes")
 
-	// Add NUM_GPUS env var
 	metaFlags.EnvVars = append(metaFlags.EnvVars, corev1.EnvVar{Name: "NUM_GPUS", Value: strconv.Itoa(schedulingFlags.TotalRequestedGPUs)})
+	metaFlags.EnvVars = append(metaFlags.EnvVars, corev1.EnvVar{Name: "NUM_REPLICAS", Value: strconv.Itoa(schedulingFlags.RequestedReplicas)})
+	metaFlags.EnvVars = append(metaFlags.EnvVars, corev1.EnvVar{Name: "NUM_GPUS_PER_REPLICA", Value: strconv.Itoa(schedulingFlags.RequestedGPUsPerReplica)})
 
 	// Create the workload template context
 	templateContext := workloads.WorkloadTemplateConfig{
@@ -129,7 +138,7 @@ func loadCustomConfig(path string) (any, error) {
 }
 
 func makeWorkloadName(path string, image string, version string, currentUser string) string {
-	
+
 	var appendix string
 
 	if path != "" {
@@ -188,8 +197,23 @@ func fillSchedulingFlags(
 		return err
 	}
 
-	numReplicas, nodeGpuRequest := k8s.CalculateNumberOfReplicas(schedulingFlags.TotalRequestedGPUs, gpuCount, envVars)
 
+	if schedulingFlags.RequestedReplicas > 0 && schedulingFlags.RequestedGPUsPerReplica > 0 {
+		if schedulingFlags.RequestedGPUsPerReplica > schedulingFlags.GPUsAvailablePerNode {
+			return fmt.Errorf("You requested %d GPUs per replica, but there are only %d GPUs available per node", 
+			    schedulingFlags.RequestedGPUsPerReplica, schedulingFlags.GPUsAvailablePerNode)
+		    }
+		if schedulingFlags.TotalRequestedGPUs > 0 {
+			return fmt.Errorf("Cannot set requested gpus with --gpus when --replicas and --gpus-per-replica are set")
+
+		}
+		schedulingFlags.CalculatedNumReplicas = schedulingFlags.RequestedReplicas
+		schedulingFlags.CalculatedGPUsPerReplica = schedulingFlags.RequestedGPUsPerReplica
+		schedulingFlags.TotalRequestedGPUs = schedulingFlags.RequestedReplicas * schedulingFlags.RequestedGPUsPerReplica
+		return nil
+	}
+
+	numReplicas, nodeGpuRequest := k8s.CalculateNumberOfReplicas(schedulingFlags.TotalRequestedGPUs, gpuCount, envVars)
 	schedulingFlags.CalculatedNumReplicas = numReplicas
 	schedulingFlags.CalculatedGPUsPerReplica = nodeGpuRequest
 

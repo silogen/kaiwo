@@ -1,18 +1,16 @@
-/**
- * Copyright 2025 Advanced Micro Devices, Inc. All rights reserved.
- *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
-**/
+// Copyright 2024 Advanced Micro Devices, Inc.  All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package jobs
 
@@ -23,11 +21,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/silogen/kaiwo/pkg/workloads"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/silogen/kaiwo/pkg/workloads"
 
 	"github.com/sirupsen/logrus"
 )
@@ -76,7 +75,7 @@ func (job Job) ConvertObject(object runtime.Object) (runtime.Object, bool) {
 }
 
 func (job Job) IgnoreFiles() []string {
-	return []string{EntrypointFilename, workloads.KaiwoconfigFilename, workloads.EnvFilename}
+	return []string{EntrypointFilename, workloads.KaiwoconfigFilename, workloads.EnvFilename, workloads.TemplateFileName}
 }
 
 func (job Job) GetPods() ([]corev1.Pod, error) {

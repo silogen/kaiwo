@@ -1,33 +1,33 @@
-/**
- * Copyright 2025 Advanced Micro Devices, Inc. All rights reserved.
- *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
-**/
+// Copyright 2024 Advanced Micro Devices, Inc.  All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package ray
 
 import (
 	_ "embed"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
-	"github.com/silogen/kaiwo/pkg/workloads"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"os"
-	"path/filepath"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"strings"
+
+	"github.com/silogen/kaiwo/pkg/workloads"
 )
 
 type Deployment struct{}
@@ -70,7 +70,7 @@ func (deployment Deployment) DefaultTemplate() ([]byte, error) {
 //}
 
 func (deployment Deployment) IgnoreFiles() []string {
-	return []string{ServeconfigFilename, workloads.KaiwoconfigFilename, workloads.EnvFilename}
+	return []string{ServeconfigFilename, workloads.KaiwoconfigFilename, workloads.EnvFilename, workloads.TemplateFileName}
 }
 
 func (deployment Deployment) GetPods() ([]corev1.Pod, error) {

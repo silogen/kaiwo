@@ -19,7 +19,7 @@
 		"request": "launch",
 		"mode": "debug",
 		"program": "${workspaceFolder}",
-		"args": ["serve", "-p", "workloads/inference/LLMs/online-inference/vllm-online-single-multinode", "--ray", "-g", "4", "--dry-run"],
+		"args": ["serve", "-p", "workloads/inference/LLMs/online-inference/vllm-online-single-multinode", "--ray", "--replicas", "1", "--gpus-per-replica", "4", "--dry-run"],
 		"env": {
 		  "GO111MODULE": "on"
 		},
@@ -31,7 +31,7 @@
 		"request": "launch",
 		"mode": "debug",
 		"program": "${workspaceFolder}",
-		"args": ["submit", "-p", "workloads/training/LLMs/lora-supervised-finetuning/trl-deepspeed-zero3-singlenode-copy", "-g", "4", "--dry-run"],
+		"args": ["submit", "-p", "workloads/training/LLMs/bert/hf-accelerate-bert", "-g", "4", "--dry-run"],
 		"env": {
 		  "GO111MODULE": "on"
 		},

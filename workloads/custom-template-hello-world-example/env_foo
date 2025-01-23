@@ -1,0 +1,3 @@
+envVars:
+  - name: MY_VAR
+    value: "my_value"

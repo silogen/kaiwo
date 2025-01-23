@@ -26,8 +26,8 @@ from vllm import LLM, SamplingParams
 
 sampling_params = SamplingParams(temperature=0.8, top_p=0.95)
 
-num_instances= int(os.getenv("NUM_INSTANCES", "1"))
-tensor_parallel_size=int(os.getenv("TENSOR_PARALLELISM", "8"))
+num_instances= int(os.getenv("NUM_REPLICAS", "1"))
+tensor_parallel_size=int(os.getenv("NUM_GPUS_PER_REPLICA", "8"))
 
 class LLMPredictor:
 
