@@ -1,0 +1,11 @@
+repos:
+  - repo: local
+    hooks:
+      - id: golangci-lint
+        name: golangci-lint
+        description: Fast linters runner for Go. Note that only modified files are linted, so linters like 'unused' that need to scan all files won't work as expected.
+        entry: golangci-lint run --timeout 10m 
+        types: [go]
+        language: golang
+        require_serial: true
+        pass_filenames: false

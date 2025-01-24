@@ -260,7 +260,7 @@ func applyResources(resources []runtime.Object, ctx context.Context, k8sClient c
 		err = k8sClient.Get(ctx, key, existing)
 
 		if err == nil {
-			logrus.Warnf("%s/%s already exists. Skipping submit", objMeta.GetNamespace(), objMeta.GetName())
+			logrus.Warnf("%s/%s already exists. Skipping submit. Use --version flag if you really want to create another resource of this kind", objMeta.GetNamespace(), objMeta.GetName())
 			continue
 		}
 
