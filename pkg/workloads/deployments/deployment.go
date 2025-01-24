@@ -20,11 +20,14 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"github.com/silogen/kaiwo/pkg/k8s"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"os"
 	"path/filepath"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"strings"
 
 	"github.com/silogen/kaiwo/pkg/workloads"
@@ -140,6 +143,7 @@ func (deployment Deployment) GenerateAdditionalResourceManifests(k8sClient clien
 
 func (deployment Deployment) BuildReference(ctx context.Context, k8sClient client.Client, key client.ObjectKey) (*workloads.WorkloadReference, error) {
 	obj := &appsv1.Deployment{}
+	var gvk schema.GroupVersionKind
 
 	logrus.Debugf("Building deployment reference for %s / %s", key.Name, key.Namespace)
 
@@ -147,9 +151,21 @@ func (deployment Deployment) BuildReference(ctx context.Context, k8sClient clien
 		return nil, fmt.Errorf("could not get deployment: %w", err)
 	}
 
+	scheme, err := k8s.GetScheme()
+	if err != nil {
+		return nil, fmt.Errorf("could not get k8s scheme: %w", err)
+	}
+
+	gvk, err = apiutil.GVKForObject(obj, &scheme)
+
+	if err != nil {
+		return nil, fmt.Errorf("could not get k8s GVK: %w", err)
+	}
+
 	reference := workloads.WorkloadReference{
 		Object: obj,
 		IsLeaf: false,
+		GVK:    gvk,
 	}
 
 	replicaSets := &appsv1.ReplicaSetList{}
@@ -160,11 +176,17 @@ func (deployment Deployment) BuildReference(ctx context.Context, k8sClient clien
 	}
 
 	for _, replicaSet := range replicaSets.Items {
-		logrus.Debugf("Found replicaset %s with selector %s", replicaSet.Name, replicaSet.Spec.Selector.MatchLabels)
+
+		gvk, err = apiutil.GVKForObject(&replicaSet, &scheme)
+
+		if err != nil {
+			return nil, fmt.Errorf("could not get k8s GVK: %w", err)
+		}
 
 		replicasetWrapper := &workloads.WorkloadReference{
 			Object: &replicaSet,
 			IsLeaf: true,
+			GVK:    gvk,
 		}
 		reference.Children = append(reference.Children, replicasetWrapper)
 
@@ -174,12 +196,8 @@ func (deployment Deployment) BuildReference(ctx context.Context, k8sClient clien
 		}
 
 		for _, pod := range pods.Items {
-			logrus.Debugf("Found pod %s", pod.Name)
-
 			replicasetWrapper.Pods = append(replicasetWrapper.Pods, pod)
 		}
-
-		logrus.Debugf("Replicaset has %d pods", len(replicasetWrapper.Pods))
 	}
 
 	return &reference, nil

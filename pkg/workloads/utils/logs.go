@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/silogen/kaiwo/pkg/tui"
 	"github.com/silogen/kaiwo/pkg/workloads"
 	"github.com/sirupsen/logrus"
 	"io"
@@ -28,16 +29,9 @@ import (
 	"os"
 	"os/signal"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"strings"
 	"syscall"
 )
-
-//type StreamType string
-//
-//var (
-//	StreamTypeAll    = StreamType("all")
-//	StreamTypeStdout = StreamType("stdout")
-//	StreamTypeStderr = StreamType("stderr")
-//)
 
 func OutputLogs(
 	workload workloads.Workload,
@@ -47,7 +41,6 @@ func OutputLogs(
 	objectKey client.ObjectKey,
 	tailLines int64,
 	noAutoSelect bool,
-	//stream StreamType,
 	follow bool,
 ) error {
 	reference, err := workload.BuildReference(ctx, k8sClient, objectKey)
@@ -85,7 +78,7 @@ func OutputLogs(
 			if len(pod.Status.InitContainerStatuses) > 0 {
 				logrus.Warn("Pod init containers found for workload, not displaying logs for these. Disable auto select to choose init containers")
 			}
-			return outputLogs(ctx, clientset, pod, pod.Status.ContainerStatuses[0].Name, tailLines, follow)
+			return outputLogs(ctx, clientset, pod.Name, pod.Status.ContainerStatuses[0].Name, tailLines, objectKey.Namespace, follow)
 		} else {
 			logrus.Infof("Found multiple containers for pod %s", pod.Name)
 		}
@@ -93,23 +86,29 @@ func OutputLogs(
 		logrus.Infof("Found multiple pods for workload")
 	}
 
-	pod, containerName, err := choosePodAndContainer(*reference)
+	podName, containerName, err, cancelled := choosePodAndContainer(*reference)
 	if err != nil {
 		return fmt.Errorf("failed to choose pod and container for workload: %w", err)
 	}
 
-	return outputLogs(ctx, clientset, pod, containerName, tailLines, follow)
+	if cancelled {
+		return nil
+	}
+
+	return outputLogs(ctx, clientset, podName, containerName, tailLines, objectKey.Namespace, follow)
 }
 
 // outputLogs outputs logs for a given pod container to the standard output
 func outputLogs(
 	ctx context.Context,
 	clientset *kubernetes.Clientset,
-	pod corev1.Pod,
+	podName string,
 	containerName string,
 	tailLines int64,
+	namespace string,
 	follow bool,
 ) error {
+	logrus.Infof("Outputting logs for pod: %s (container: %s)", podName, containerName)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -132,10 +131,10 @@ func outputLogs(
 	}
 
 	// Get the log stream
-	req := clientset.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, podLogOpts)
+	req := clientset.CoreV1().Pods(namespace).GetLogs(podName, podLogOpts)
 	logStream, err := req.Stream(ctx)
 	if err != nil {
-		return fmt.Errorf("error streaming logs for pod %s container %s: %w", pod.Name, containerName, err)
+		return fmt.Errorf("error streaming logs for pod %s container %s: %w", podName, containerName, err)
 	}
 
 	// Channel to signal when log streaming is done
@@ -144,7 +143,7 @@ func outputLogs(
 	defer func() {
 		<-done
 		if closeErr := logStream.Close(); closeErr != nil {
-			logrus.Errorf("Error closing log stream for pod %s container %s: %v\n", pod.Name, containerName, closeErr)
+			logrus.Errorf("Error closing log stream for pod %s container %s: %v\n", podName, containerName, closeErr)
 		}
 	}()
 
@@ -164,7 +163,7 @@ func outputLogs(
 				}
 				if err != nil {
 					if err == io.EOF {
-						break // End of the log stream
+						return
 					}
 					// Check if the error is due to context cancellation
 					if errors.Is(err, context.Canceled) || err.Error() == "context canceled" {
@@ -189,7 +188,122 @@ func outputLogs(
 	return nil
 }
 
+type PodContainerOption struct {
+	pod           corev1.Pod
+	containerName string
+}
+
+type OptionRow struct {
+	status        string
+	indent        int
+	selectable    bool
+	selected      bool
+	type_         string
+	name          string
+	containerName string
+	podName       string
+	reference     workloads.WorkloadReference
+}
+
+func (or OptionRow) GetCells() []any {
+	return []any{
+		strings.Repeat(" ", or.indent) + or.type_,
+		or.name,
+	}
+}
+
+func (or OptionRow) IsSelectable() bool {
+	return or.selectable
+}
+
+func (or OptionRow) GetData() *OptionRow {
+	return &or
+}
+
+func traverse(node workloads.WorkloadReference, currentIdent int) []OptionRow {
+	var rows []OptionRow
+	rows = append(rows, OptionRow{
+		status:        "N/A",
+		indent:        currentIdent,
+		selectable:    false,
+		type_:         node.GVK.String(),
+		name:          node.Object.GetName(),
+		containerName: "",
+		podName:       "",
+		reference:     node,
+	})
+
+	if node.IsLeaf {
+		for _, pod := range node.Pods {
+			rows = append(rows, OptionRow{
+				status:        "N/A",
+				indent:        currentIdent + 1,
+				selectable:    false,
+				type_:         "Pod",
+				name:          pod.Name,
+				containerName: "",
+				podName:       "",
+			})
+
+			for _, container := range pod.Status.InitContainerStatuses {
+				rows = append(rows, OptionRow{
+					status:        "N/A",
+					indent:        currentIdent + 2,
+					selectable:    true,
+					type_:         "Init container",
+					name:          container.Name,
+					containerName: container.Name,
+					podName:       pod.Name,
+				})
+			}
+
+			for _, container := range pod.Status.ContainerStatuses {
+				rows = append(rows, OptionRow{
+					status:        "N/A",
+					indent:        currentIdent + 2,
+					selectable:    true,
+					type_:         "Container",
+					name:          container.Name,
+					containerName: container.Name,
+					podName:       pod.Name,
+				})
+			}
+
+		}
+	}
+
+	for _, child := range node.Children {
+		rows = append(rows, traverse(*child, currentIdent+1)...)
+	}
+	return rows
+}
+
 // choosePodAndContainer allows the user to choose the pod and the container they want to interact with
-func choosePodAndContainer(reference workloads.WorkloadReference) (corev1.Pod, string, error) {
-	return corev1.Pod{}, "", nil
+// As the workload reference structure is dynamic and not structured, the output is rendered one step at a time
+// The user can still navigate back up the reference tree and choose a different branch
+func choosePodAndContainer(reference workloads.WorkloadReference) (string, string, error, bool) {
+
+	flatList := traverse(reference, 0)
+	entries := make([]tui.SelectTableEntry[OptionRow], len(flatList))
+
+	for i, row := range flatList {
+		entries[i] = row // OptionRow implements SelectTableEntry[OptionRow]
+	}
+
+	columns := []string{
+		"Type",
+		"Name",
+	}
+	selected, err := tui.RunSelectTable(entries, columns, "Select the container to view", true)
+
+	if err != nil {
+		return "", "", err, false
+	}
+
+	if selected == nil {
+		return "", "", nil, true
+	}
+
+	return selected.podName, selected.containerName, nil, false
+
 }
