@@ -58,7 +58,7 @@ func BuildLogCmd() *cobra.Command {
 			}
 
 			// TODO move
-			kubeconfig := "/home/alex/.kube/config"
+			kubeconfig, _ := k8s.GetKubeConfig()
 			config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 			if err != nil {
 				panic(err)
