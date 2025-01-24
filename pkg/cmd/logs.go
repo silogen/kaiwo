@@ -16,24 +16,26 @@ package cmd
 
 import (
 	"context"
-	"github.com/silogen/kaiwo/pkg/k8s"
-	"github.com/silogen/kaiwo/pkg/workloads/factory"
-	"github.com/silogen/kaiwo/pkg/workloads/utils"
+
 	"github.com/spf13/cobra"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
+
+	"github.com/silogen/kaiwo/pkg/k8s"
+	"github.com/silogen/kaiwo/pkg/workloads/factory"
+	"github.com/silogen/kaiwo/pkg/workloads/utils"
 )
 
 var (
-	defaultContainer bool
-	follow           bool
-	since            string
-	sinceTime        string
-	tailLines        int
-	timestamps       bool
-	previous         bool
-	stream           string
-	namespaceLogs    string
+	// defaultContainer bool
+	follow bool
+	// since            string
+	// sinceTime        string
+	tailLines int
+	// timestamps bool
+	// previous         bool
+	// stream           string
+	namespaceLogs string
 )
 
 func BuildLogCmd() *cobra.Command {

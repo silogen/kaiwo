@@ -197,12 +197,11 @@ func fillSchedulingFlags(
 		return err
 	}
 
-
 	if schedulingFlags.RequestedReplicas > 0 && schedulingFlags.RequestedGPUsPerReplica > 0 {
 		if schedulingFlags.RequestedGPUsPerReplica > schedulingFlags.GPUsAvailablePerNode {
-			return fmt.Errorf("You requested %d GPUs per replica, but there are only %d GPUs available per node", 
-			    schedulingFlags.RequestedGPUsPerReplica, schedulingFlags.GPUsAvailablePerNode)
-		    }
+			return fmt.Errorf("You requested %d GPUs per replica, but there are only %d GPUs available per node",
+				schedulingFlags.RequestedGPUsPerReplica, schedulingFlags.GPUsAvailablePerNode)
+		}
 		if schedulingFlags.TotalRequestedGPUs > 0 {
 			return fmt.Errorf("Cannot set requested gpus with --gpus when --replicas and --gpus-per-replica are set")
 

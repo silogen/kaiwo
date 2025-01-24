@@ -18,21 +18,20 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
-	"github.com/silogen/kaiwo/pkg/k8s"
+	"os"
+	"path/filepath"
+	"strings"
+
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"os"
-	"path/filepath"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
-	"strings"
+
+	"github.com/silogen/kaiwo/pkg/k8s"
 
 	"github.com/sirupsen/logrus"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/silogen/kaiwo/pkg/workloads"
 )
@@ -196,9 +195,7 @@ func (deployment Deployment) BuildReference(ctx context.Context, k8sClient clien
 			return nil, fmt.Errorf("could not list pods: %w", err)
 		}
 
-		for _, pod := range pods.Items {
-			replicasetWrapper.Pods = append(replicasetWrapper.Pods, pod)
-		}
+		replicasetWrapper.Pods = append(replicasetWrapper.Pods, pods.Items...)
 	}
 
 	return &reference, nil

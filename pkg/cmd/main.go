@@ -94,7 +94,11 @@ func RunCli() {
 			logrus.Info("Attach command placeholder")
 		},
 	})
-	rootCmd.AddCommand(BuildLogCmd())
+	rootCmd.AddCommand(
+		BuildLogCmd(),
+		BuildMonitorCmd("monitor", "watch -n 1 rocm-smi"),
+		BuildExecCommand(),
+	)
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "port-forward",
 		Short: "Port-forward a workload",

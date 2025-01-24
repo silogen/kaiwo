@@ -1,18 +1,16 @@
-/**
- * Copyright 2025 Advanced Micro Devices, Inc. All rights reserved.
- *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
-**/
+// Copyright 2024 Advanced Micro Devices, Inc.  All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package utils
 
@@ -20,17 +18,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/silogen/kaiwo/pkg/tui"
-	"github.com/silogen/kaiwo/pkg/workloads"
-	"github.com/sirupsen/logrus"
 	"io"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/kubernetes"
 	"os"
 	"os/signal"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
 	"syscall"
+
+	"github.com/sirupsen/logrus"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/silogen/kaiwo/pkg/tui"
+	"github.com/silogen/kaiwo/pkg/workloads"
 )
 
 func OutputLogs(
@@ -49,9 +49,9 @@ func OutputLogs(
 		return fmt.Errorf("failed to get workload reference: %w", err)
 	}
 
-	logrus.Infof(reference.String())
+	logrus.Infof("%s", reference.String())
 	for _, child := range reference.Children {
-		logrus.Infof(child.String())
+		logrus.Infof("%s", child.String())
 	}
 
 	allPods := reference.GetPodsRecursive()
@@ -86,7 +86,7 @@ func OutputLogs(
 		logrus.Infof("Found multiple pods for workload")
 	}
 
-	podName, containerName, err, cancelled := choosePodAndContainer(*reference)
+	podName, containerName, err, cancelled := ChoosePodAndContainer(*reference, false)
 	if err != nil {
 		return fmt.Errorf("failed to choose pod and container for workload: %w", err)
 	}
@@ -189,15 +189,15 @@ func outputLogs(
 }
 
 type PodContainerOption struct {
-	pod           corev1.Pod
-	containerName string
+	// pod           corev1.Pod
+	// containerName string
 }
 
 type OptionRow struct {
-	status        string
-	indent        int
-	selectable    bool
-	selected      bool
+	status     string
+	indent     int
+	selectable bool
+	// selected      bool
 	type_         string
 	name          string
 	containerName string
@@ -220,7 +220,7 @@ func (or OptionRow) GetData() *OptionRow {
 	return &or
 }
 
-func traverse(node workloads.WorkloadReference, currentIdent int) []OptionRow {
+func traverse(node workloads.WorkloadReference, currentIdent int, onlyGPUPods bool) []OptionRow {
 	var rows []OptionRow
 	rows = append(rows, OptionRow{
 		status:        "N/A",
@@ -235,6 +235,10 @@ func traverse(node workloads.WorkloadReference, currentIdent int) []OptionRow {
 
 	if node.IsLeaf {
 		for _, pod := range node.Pods {
+			if onlyGPUPods && !isGPUPod(pod) {
+				continue
+			}
+
 			rows = append(rows, OptionRow{
 				status:        "N/A",
 				indent:        currentIdent + 1,
@@ -268,22 +272,17 @@ func traverse(node workloads.WorkloadReference, currentIdent int) []OptionRow {
 					podName:       pod.Name,
 				})
 			}
-
 		}
 	}
 
 	for _, child := range node.Children {
-		rows = append(rows, traverse(*child, currentIdent+1)...)
+		rows = append(rows, traverse(*child, currentIdent+1, onlyGPUPods)...)
 	}
 	return rows
 }
 
-// choosePodAndContainer allows the user to choose the pod and the container they want to interact with
-// As the workload reference structure is dynamic and not structured, the output is rendered one step at a time
-// The user can still navigate back up the reference tree and choose a different branch
-func choosePodAndContainer(reference workloads.WorkloadReference) (string, string, error, bool) {
-
-	flatList := traverse(reference, 0)
+func ChoosePodAndContainer(reference workloads.WorkloadReference, onlyGPUPods bool) (string, string, error, bool) {
+	flatList := traverse(reference, 0, onlyGPUPods)
 	entries := make([]tui.SelectTableEntry[OptionRow], len(flatList))
 
 	for i, row := range flatList {
@@ -305,5 +304,15 @@ func choosePodAndContainer(reference workloads.WorkloadReference) (string, strin
 	}
 
 	return selected.podName, selected.containerName, nil, false
+}
 
+func isGPUPod(pod corev1.Pod) bool {
+	for _, container := range pod.Spec.Containers {
+		for resourceName := range container.Resources.Limits {
+			if resourceName == "nvidia.com/gpu" || resourceName == "amd.com/gpu" {
+				return true
+			}
+		}
+	}
+	return false
 }
