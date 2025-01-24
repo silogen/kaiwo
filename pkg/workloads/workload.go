@@ -66,11 +66,13 @@ type WorkloadReference struct {
 
 	// Children list any direct descendents this wrapper logically owns
 	Children []*WorkloadReference
+
+	GVK schema.GroupVersionKind
 }
 
-func (w WorkloadReference) GetGVK() schema.GroupVersionKind {
-	return w.Object.GetObjectKind().GroupVersionKind()
-}
+//func (w WorkloadReference) GetGVK() schema.GroupVersionKind {
+//	return w.Object.GetObjectKind().GroupVersionKind()
+//}
 
 func (w WorkloadReference) GetObjectKey() client.ObjectKey {
 	return client.ObjectKey{
@@ -80,8 +82,8 @@ func (w WorkloadReference) GetObjectKey() client.ObjectKey {
 }
 
 func (w WorkloadReference) String() string {
-	gvk := w.GetGVK()
-	return fmt.Sprintf("%s/%s %s / %s/%s", gvk.Group, gvk.Version, gvk.Kind, w.Object.GetNamespace(), w.Object.GetName())
+	gvk := w.GVK
+	return fmt.Sprintf("%s/%s %s (%s/%s)", gvk.Group, gvk.Version, gvk.Kind, w.Object.GetNamespace(), w.Object.GetName())
 }
 
 func (w WorkloadReference) GetPodsRecursive() []corev1.Pod {
