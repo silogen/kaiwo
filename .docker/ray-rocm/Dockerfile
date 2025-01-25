@@ -10,22 +10,33 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /
 
+RUN sudo useradd -m -s /bin/bash kaiwo && \
+    sudo usermod -a -G render,video kaiwo && \
+    chown -R kaiwo:kaiwo /home/kaiwo && \
+    chmod 700 /home/kaiwo && \
+    mkdir -p /workload && \
+    chown -R kaiwo:kaiwo /workload && \
+    chmod 700 /workload
+
+
 COPY requirements.txt .
 
 RUN pip install -r requirements.txt --no-cache-dir
 
-RUN pip install -U "ray[data,train,tune,serve,default] @ https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-3.0.0.dev0-cp312-cp312-manylinux2014_x86_64.whl"
+RUN pip install -U ray[data,train,tune,serve,default] 
 
 RUN pip install --force-reinstall \
     'https://github.com/bitsandbytes-foundation/bitsandbytes/releases/download/continuous-release_multi-backend-refactor/bitsandbytes-0.44.1.dev0-py3-none-manylinux_2_24_x86_64.whl' \
     --no-deps --no-cache-dir 
 
-RUN pip uninstall -y triton && pip install -U triton 
-
 RUN sudo sysctl kernel.numa_balancing=0
+
+USER kaiwo
 
 WORKDIR /workload
 
 ENV VLLM_USE_TRITON_FLASH_ATTN=0
 ENV TORCH_NCCL_HIGH_PRIORITY="1"
+# Use only when absolutely necessary (may cause performance degradation)
+ENV NCCL_DISABLE_P2P=0
 ENV LD_LIBRARY_PATH=/usr/lib64:$LD_LIBRARY_PATH
