@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/jedib0t/go-pretty/v6/table"
 )
 
@@ -39,6 +40,15 @@ type SelectTableModel[T any] struct {
 	Columns []string
 	Title   string
 }
+
+// Lipgloss Styles
+var (
+	titleStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
+	headerStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("69"))
+	rowStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+	selectedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57"))
+	cursorStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("207"))
+)
 
 func (m SelectTableModel[any]) Init() tea.Cmd {
 	return nil
@@ -103,24 +113,30 @@ func (m SelectTableModel[any]) View() string {
 	displayHeaders := make([]interface{}, len(m.Columns)+1)
 	displayHeaders[0] = ""
 	for i := 1; i < len(displayHeaders); i++ {
-		displayHeaders[i] = m.Columns[i-1]
+		displayHeaders[i] = headerStyle.Render(m.Columns[i-1])
 	}
 
 	tw.AppendHeader(displayHeaders)
-	tw.SetTitle(m.Title)
+	tw.SetTitle(titleStyle.Render(m.Title))
 
 	for _, row := range m.Rows {
-		var cursor interface{}
-		cursor = " "
+		cursor := " "
+		rowStyleToApply := rowStyle
 		if row.Selected {
-			cursor = ">"
+			cursor = cursorStyle.Render(">")
+			rowStyleToApply = selectedStyle
 		}
 
 		displayRow := append([]interface{}{cursor}, row.Entry.GetCells()...)
-		tw.AppendRow(displayRow)
+		renderedRow := make([]interface{}, len(displayRow))
+		for i, cell := range displayRow {
+			renderedRow[i] = rowStyleToApply.Render(fmt.Sprintf("%v", cell))
+		}
+
+		tw.AppendRow(renderedRow)
 	}
 
-	// You can customize table style, borders, etc. here
+	// Customize table borders and alignment
 	return tw.Render()
 }
 

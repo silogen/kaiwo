@@ -56,7 +56,7 @@ var (
 func GetKubeConfig() (string, error) {
 	kubeConfigPath := os.Getenv("KUBECONFIG")
 	if kubeConfigPath != "" {
-		logrus.Infof("Using KUBECONFIG environment variable: %s", kubeConfigPath)
+		logrus.Debugf("Using KUBECONFIG environment variable: %s", kubeConfigPath)
 	} else {
 		kubeConfigPath = filepath.Join(homedir.HomeDir(), ".kube", "config")
 		if _, err := os.Stat(kubeConfigPath); os.IsNotExist(err) {
