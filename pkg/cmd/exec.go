@@ -22,6 +22,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	"golang.org/x/term"
+
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	corev1 "k8s.io/api/core/v1"
@@ -101,6 +103,7 @@ func validateCommand(command string) error {
 }
 
 func executeContainerCommand(args []string, command []string, gpuPodsOnly bool) error {
+	// Use Bubble Tea to select the pod/container
 	workload, objectKey, err := factory.GetWorkloadAndObjectKey(args[0], execNamespace)
 	if err != nil {
 		return fmt.Errorf("failed to get workload and object key: %w", err)
@@ -160,7 +163,7 @@ func execInContainer(
 	interactive bool,
 	tty bool,
 ) error {
-	logrus.Infof("Executing command: %v in container %s of pod %s", command, containerName, podName)
+	logrus.Debugf("Executing command: %v in container %s of pod %s", command, containerName, podName)
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -170,6 +173,9 @@ func execInContainer(
 		<-signalCh
 		cancel()
 	}()
+
+	// Get terminal size for full-width rendering
+	termWidth, termHeight := getTerminalSize()
 
 	req := clientset.CoreV1().RESTClient().
 		Post().
@@ -192,9 +198,29 @@ func execInContainer(
 	}
 
 	return exec.StreamWithContext(ctx, remotecommand.StreamOptions{
-		Stdin:  os.Stdin,
-		Stdout: os.Stdout,
-		Stderr: os.Stderr,
-		Tty:    tty,
+		Stdin:             os.Stdin,
+		Stdout:            os.Stdout,
+		Stderr:            os.Stderr,
+		Tty:               tty,
+		TerminalSizeQueue: &fixedSizeQueue{Width: termWidth, Height: termHeight},
 	})
+}
+
+// fixedSizeQueue implements the TerminalSizeQueue interface
+type fixedSizeQueue struct {
+	Width  int
+	Height int
+}
+
+func (q *fixedSizeQueue) Next() *remotecommand.TerminalSize {
+	return &remotecommand.TerminalSize{Width: uint16(q.Width), Height: uint16(q.Height)}
+}
+
+// getTerminalSize fetches the current terminal size
+func getTerminalSize() (int, int) {
+	width, height, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil {
+		return 80, 24 // Default to 80x24 if size can't be determined
+	}
+	return width, height
 }

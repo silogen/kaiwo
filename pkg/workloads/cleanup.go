@@ -41,7 +41,7 @@ func Cleanup(ctx context.Context, resource string, name string, namespace string
 		return fmt.Errorf("dynamic client is nil")
 	}
 
-	logrus.Infof("Removing workload %s/%s/%s", namespace, resource, name)
+	logrus.Debugf("Removing workload %s/%s/%s", namespace, resource, name)
 
 	// Define the GVR and delete options based on resource type
 	var gvr schema.GroupVersionResource

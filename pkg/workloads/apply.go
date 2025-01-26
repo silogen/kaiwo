@@ -143,7 +143,7 @@ func generateNamespaceManifestIfNotExists(
 	k8sClient client.Client,
 	namespaceName string,
 ) (*corev1.Namespace, error) {
-	logrus.Infof("Checking if namespace '%s' exists", namespaceName)
+	logrus.Debugf("Checking if namespace '%s' exists", namespaceName)
 
 	ns := &corev1.Namespace{}
 	err := k8sClient.Get(ctx, client.ObjectKey{Name: namespaceName}, ns)
@@ -247,7 +247,7 @@ func applyResources(resources []runtime.Object, ctx context.Context, k8sClient c
 			return fmt.Errorf("failed to access metadata for resource: %w", err)
 		}
 
-		logrus.Infof("Applying resource %T: %s/%s", resource, objMeta.GetNamespace(), objMeta.GetName())
+		logrus.Debugf("Applying resource %T: %s/%s", resource, objMeta.GetNamespace(), objMeta.GetName())
 
 		// Check if the resource exists
 		key := client.ObjectKey{
