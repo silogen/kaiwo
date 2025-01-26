@@ -87,6 +87,94 @@ func (deployment Deployment) GenerateAdditionalResourceManifests(k8sClient clien
 	return []runtime.Object{}, nil
 }
 
-func (deployment Deployment) BuildReference(ctx context.Context, k8sClient client.Client, key client.ObjectKey) (*workloads.WorkloadReference, error) {
-	return nil, nil
+func (deployment Deployment) BuildReference(ctx context.Context, k8sClient client.Client, key client.ObjectKey) (workloads.WorkloadReference2, error) {
+	obj := &rayv1.RayService{}
+	if err := k8sClient.Get(ctx, key, obj); err != nil {
+		return nil, fmt.Errorf("could not get job: %w", err)
+	}
+	deploymentRef := &ServiceReference{
+		RayService: *obj,
+	}
+	return deploymentRef, nil
+}
+
+type ServiceReference struct {
+	RayService rayv1.RayService
+	HeadPod    *corev1.Pod
+	WorkerPods []*corev1.Pod
+}
+
+func (serviceRef *ServiceReference) Load(ctx context.Context, k8sClient client.Client) error {
+
+	// Fetch ray cluster
+
+	clusterLabelSelector := client.MatchingLabels{
+		"ray.io/originated-from-cr-name": serviceRef.RayService.Name,
+		"ray.io/originated-from-crd":     "RayService",
+	}
+
+	logrus.Debugln(clusterLabelSelector)
+
+	clusterList := &rayv1.RayClusterList{}
+	if err := k8sClient.List(ctx, clusterList, clusterLabelSelector); err != nil {
+		return fmt.Errorf("could not list clusters: %w", err)
+	}
+	if len(clusterList.Items) == 0 {
+		return fmt.Errorf("no clusters found")
+	}
+	if len(clusterList.Items) > 1 {
+		return fmt.Errorf("more than one clusters found")
+	}
+	rayCluster := clusterList.Items[0]
+
+	clusterPodLabelSelector := client.MatchingLabels{
+		"ray.io/cluster": rayCluster.Name,
+	}
+
+	clusterPodList := &corev1.PodList{}
+	if err := k8sClient.List(ctx, clusterPodList, clusterPodLabelSelector); err != nil {
+		return fmt.Errorf("could not list cluster pods: %w", err)
+	}
+
+	// Clear
+	serviceRef.HeadPod = nil
+	serviceRef.WorkerPods = []*corev1.Pod{}
+
+	for _, pod := range clusterPodList.Items {
+		nodeType := pod.Labels["ray.io/node-type"]
+		if nodeType == "worker" {
+			serviceRef.WorkerPods = append(serviceRef.WorkerPods, &pod)
+		} else if nodeType == "head" {
+			if serviceRef.HeadPod == nil {
+				serviceRef.HeadPod = &pod
+			} else {
+				logrus.Warn("More than one head pod encountered")
+			}
+		} else {
+			logrus.Warnf("Encountered unknown node type: %s", nodeType)
+		}
+	}
+
+	return nil
+}
+
+func (serviceRef *ServiceReference) GetPods() []workloads.WorkloadPod {
+	var pods []workloads.WorkloadPod
+
+	if serviceRef.HeadPod != nil {
+		pods = append(pods, workloads.WorkloadPod{
+			Pod:          *serviceRef.HeadPod,
+			LogicalGroup: "head",
+		})
+	} else {
+		logrus.Debug("No head pod")
+	}
+
+	for _, pod := range serviceRef.WorkerPods {
+		pods = append(pods, workloads.WorkloadPod{
+			Pod:          *pod,
+			LogicalGroup: "worker",
+		})
+	}
+	return pods
 }
