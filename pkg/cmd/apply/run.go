@@ -100,8 +100,8 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 	logrus.Infof("Successfully loaded scheduling info from Kubernetes")
 
 	metaFlags.EnvVars = append(metaFlags.EnvVars, corev1.EnvVar{Name: "NUM_GPUS", Value: strconv.Itoa(schedulingFlags.TotalRequestedGPUs)})
-	metaFlags.EnvVars = append(metaFlags.EnvVars, corev1.EnvVar{Name: "NUM_REPLICAS", Value: strconv.Itoa(schedulingFlags.RequestedReplicas)})
-	metaFlags.EnvVars = append(metaFlags.EnvVars, corev1.EnvVar{Name: "NUM_GPUS_PER_REPLICA", Value: strconv.Itoa(schedulingFlags.RequestedGPUsPerReplica)})
+	metaFlags.EnvVars = append(metaFlags.EnvVars, corev1.EnvVar{Name: "NUM_REPLICAS", Value: strconv.Itoa(schedulingFlags.CalculatedNumReplicas)})
+	metaFlags.EnvVars = append(metaFlags.EnvVars, corev1.EnvVar{Name: "NUM_GPUS_PER_REPLICA", Value: strconv.Itoa(schedulingFlags.CalculatedGPUsPerReplica)})
 
 	// Create the workload template context
 	templateContext := workloads.WorkloadTemplateConfig{
