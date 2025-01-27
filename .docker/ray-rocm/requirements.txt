@@ -55,7 +55,7 @@ requests
 sqlalchemy
 statsmodels
 tornado
-triton
+triton==3.1.0 
 tqdm
 Brotli
 Farama-Notifications

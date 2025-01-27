@@ -22,6 +22,7 @@ spec:
           containers:
             - name: ray-head
               image: {{ .Meta.Image }}
+              imagePullPolicy: Always
               env:
               {{- if .Meta.EnvVars }}
               {{- range .Meta.EnvVars }}
@@ -102,6 +103,7 @@ spec:
             containers:
               - name: llm
                 image: {{ .Meta.Image }}
+                imagePullPolicy: Always
                 lifecycle:
                   preStop:
                     exec:

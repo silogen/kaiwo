@@ -240,4 +240,4 @@ You can access this in the template via
 
 TODO
 
-We welcome contributions to Kaiwo! Please refer to the [Contributing Guidelines]() for more information on how to contribute to the project.
+We welcome contributions to Kaiwo! Please refer to the [Contributing Guidelines](contributing-guidelines.md) for more information on how to contribute to the project.

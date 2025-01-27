@@ -60,6 +60,18 @@
 		  "GO111MODULE": "on"
 		},
 		"buildFlags": "-tags=debug"
+	      },
+	      {
+		"name": "Run monitoring",
+		"type": "go",
+		"request": "launch",
+		"mode": "debug",
+		"program": "${workspaceFolder}",
+		"args": ["monitor", "deployment/avsuni-gpu-monitoring", "-n", "av-test"],
+		"env": {
+		  "GO111MODULE": "on"
+		},
+		"buildFlags": "-tags=debug"
 	      }
 	]
       }

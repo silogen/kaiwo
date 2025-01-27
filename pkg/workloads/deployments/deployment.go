@@ -15,17 +15,23 @@
 package deployments
 
 import (
+	"context"
 	_ "embed"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+
+	"github.com/silogen/kaiwo/pkg/k8s"
+
+	"github.com/sirupsen/logrus"
+	corev1 "k8s.io/api/core/v1"
 
 	"github.com/silogen/kaiwo/pkg/workloads"
 )
@@ -34,6 +40,51 @@ import (
 var DeploymentTemplate []byte
 
 const EntrypointFilename = "entrypoint"
+
+//
+//type DeploymentReference struct {
+//	Deployment  *appsv1.Deployment
+//	Replicasets []ReplicaSetReference
+//}
+//
+//type ReplicaSetReference struct {
+//	ReplicaSet *appsv1.ReplicaSet
+//	Pods       []corev1.Pod
+//}
+//
+//// GetWorkloadWrapper builds the workload wrapper from a deployment
+//func (d *DeploymentReference) GetWorkloadWrapper() (workloads.WorkloadReference, error) {
+//
+//	rootWrapper := workloads.WorkloadReference{
+//		Object: d.Deployment,
+//		ObjectKey: client.ObjectKey{
+//			Namespace: d.Deployment.Namespace,
+//			Name:      d.Deployment.Name,
+//		},
+//		GVK:    appsv1.SchemeGroupVersion.WithKind("Deployment"),
+//		IsLeaf: false,
+//	}
+//
+//	for _, replicaSet := range d.Replicasets {
+//
+//		replicasetWrapper := workloads.WorkloadReference{
+//			Object: replicaSet.ReplicaSet,
+//			ObjectKey: client.ObjectKey{
+//				Namespace: d.Deployment.Namespace,
+//				Name:      replicaSet.ReplicaSet.Name,
+//			},
+//			GVK:    appsv1.SchemeGroupVersion.WithKind("ReplicaSet"),
+//			IsLeaf: true,
+//		}
+//		rootWrapper.Children = append(rootWrapper.Children, replicasetWrapper)
+//
+//		for _, pod := range replicaSet.Pods {
+//			replicasetWrapper.Pods = append(replicasetWrapper.Pods, pod)
+//		}
+//	}
+//
+//	return rootWrapper, nil
+//}
 
 type Deployment struct{}
 
@@ -88,4 +139,65 @@ func (deployment Deployment) GetServices() ([]corev1.Service, error) {
 
 func (deployment Deployment) GenerateAdditionalResourceManifests(k8sClient client.Client, templateContext workloads.WorkloadTemplateConfig) ([]runtime.Object, error) {
 	return []runtime.Object{}, nil
+}
+
+func (deployment Deployment) BuildReference(ctx context.Context, k8sClient client.Client, key client.ObjectKey) (*workloads.WorkloadReference, error) {
+	obj := &appsv1.Deployment{}
+	var gvk schema.GroupVersionKind
+
+	logrus.Debugf("Building deployment reference for %s / %s", key.Name, key.Namespace)
+
+	if err := k8sClient.Get(ctx, key, obj); err != nil {
+		return nil, fmt.Errorf("could not get deployment: %w", err)
+	}
+
+	scheme, err := k8s.GetScheme()
+	if err != nil {
+		return nil, fmt.Errorf("could not get k8s scheme: %w", err)
+	}
+
+	gvk, err = apiutil.GVKForObject(obj, &scheme)
+
+	if err != nil {
+		return nil, fmt.Errorf("could not get k8s GVK: %w", err)
+	}
+
+	reference := workloads.WorkloadReference{
+		Object: obj,
+		IsLeaf: false,
+		GVK:    gvk,
+	}
+
+	replicaSets := &appsv1.ReplicaSetList{}
+	labelSelector := client.MatchingLabels(obj.Spec.Selector.MatchLabels)
+
+	if err := k8sClient.List(ctx, replicaSets, client.InNamespace(key.Namespace), labelSelector); err != nil {
+		return nil, fmt.Errorf("could not list replicasets: %w", err)
+	}
+
+	for _, replicaSet := range replicaSets.Items {
+
+		gvk, err = apiutil.GVKForObject(&replicaSet, &scheme)
+
+		if err != nil {
+			return nil, fmt.Errorf("could not get k8s GVK: %w", err)
+		}
+
+		replicasetWrapper := &workloads.WorkloadReference{
+			Object: &replicaSet,
+			IsLeaf: true,
+			GVK:    gvk,
+		}
+		reference.Children = append(reference.Children, replicasetWrapper)
+
+		pods := &corev1.PodList{}
+		if err := k8sClient.List(ctx, pods, client.InNamespace(key.Namespace), client.MatchingLabels(replicaSet.Spec.Selector.MatchLabels)); err != nil {
+			return nil, fmt.Errorf("could not list pods: %w", err)
+		}
+
+		replicasetWrapper.Pods = append(replicasetWrapper.Pods, pods.Items...)
+	}
+
+	return &reference, nil
+
 }

@@ -70,7 +70,7 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 
 	if metaFlags.Name == "" {
 		metaFlags.Name = makeWorkloadName(execFlags.Path, metaFlags.Image, metaFlags.Version, metaFlags.User)
-		logrus.Infof("No explicit name provided, using name: %s", metaFlags.Name)
+		logrus.Debugf("No explicit name provided, using name: %s", metaFlags.Name)
 	}
 
 	// Parse environment variables
@@ -97,11 +97,11 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 	if err := fillSchedulingFlags(ctx, dynamicClient, &schedulingFlags, execFlags.ResourceFlavorGpuNodeLabelKey, metaFlags.EnvVars); err != nil {
 		return fmt.Errorf("error filling scheduling flags: %w", err)
 	}
-	logrus.Infof("Successfully loaded scheduling info from Kubernetes")
+	logrus.Debugf("Successfully loaded scheduling info from Kubernetes")
 
 	metaFlags.EnvVars = append(metaFlags.EnvVars, corev1.EnvVar{Name: "NUM_GPUS", Value: strconv.Itoa(schedulingFlags.TotalRequestedGPUs)})
-	metaFlags.EnvVars = append(metaFlags.EnvVars, corev1.EnvVar{Name: "NUM_REPLICAS", Value: strconv.Itoa(schedulingFlags.RequestedReplicas)})
-	metaFlags.EnvVars = append(metaFlags.EnvVars, corev1.EnvVar{Name: "NUM_GPUS_PER_REPLICA", Value: strconv.Itoa(schedulingFlags.RequestedGPUsPerReplica)})
+	metaFlags.EnvVars = append(metaFlags.EnvVars, corev1.EnvVar{Name: "NUM_REPLICAS", Value: strconv.Itoa(schedulingFlags.CalculatedNumReplicas)})
+	metaFlags.EnvVars = append(metaFlags.EnvVars, corev1.EnvVar{Name: "NUM_GPUS_PER_REPLICA", Value: strconv.Itoa(schedulingFlags.CalculatedGPUsPerReplica)})
 
 	// Create the workload template context
 	templateContext := workloads.WorkloadTemplateConfig{
@@ -188,7 +188,7 @@ func fillSchedulingFlags(
 	resourceFlavorGpuNodeLabelKey string,
 	envVars []corev1.EnvVar,
 ) error {
-	logrus.Infof("Connecting to Kubernetes cluster to fetch resource flavor")
+	logrus.Debugf("Connecting to Kubernetes cluster to fetch resource flavor")
 	gpuCount, err := k8s.GetDefaultResourceFlavorGpuCount(ctx, client, resourceFlavorGpuNodeLabelKey)
 	logrus.Debugf("Found a resource flavor with %d GPUs per node", gpuCount)
 	schedulingFlags.GPUsAvailablePerNode = gpuCount
@@ -197,12 +197,11 @@ func fillSchedulingFlags(
 		return err
 	}
 
-
 	if schedulingFlags.RequestedReplicas > 0 && schedulingFlags.RequestedGPUsPerReplica > 0 {
 		if schedulingFlags.RequestedGPUsPerReplica > schedulingFlags.GPUsAvailablePerNode {
-			return fmt.Errorf("You requested %d GPUs per replica, but there are only %d GPUs available per node", 
-			    schedulingFlags.RequestedGPUsPerReplica, schedulingFlags.GPUsAvailablePerNode)
-		    }
+			return fmt.Errorf("You requested %d GPUs per replica, but there are only %d GPUs available per node",
+				schedulingFlags.RequestedGPUsPerReplica, schedulingFlags.GPUsAvailablePerNode)
+		}
 		if schedulingFlags.TotalRequestedGPUs > 0 {
 			return fmt.Errorf("Cannot set requested gpus with --gpus when --replicas and --gpus-per-replica are set")
 
