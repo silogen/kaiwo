@@ -20,6 +20,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -62,8 +63,7 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 
 	// Finalize metadata flags
 
-	currentUser, err := user.Current()
-	metaFlags.User = currentUser.Username
+	metaFlags.User, err = GetCurrentUser()
 	if err != nil {
 		return fmt.Errorf("Failed to fetch the current user: %v", err)
 	}
@@ -118,6 +118,33 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 	}
 
 	return nil
+}
+
+func GetCurrentUser() (string, error) {
+	userEmail := os.Getenv("USER_EMAIL")
+
+	if userEmail != "" {
+		emailRegex := `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
+		matched, err := regexp.MatchString(emailRegex, userEmail)
+		if err != nil {
+			return "", fmt.Errorf("failed to validate USER_EMAIL: %w", err)
+		}
+		if !matched {
+			return "", fmt.Errorf("invalid email format: %s", userEmail)
+		}
+
+		parts := strings.Split(userEmail, "@")
+		username := strings.Split(parts[0], "-")[0]
+		domain := strings.ReplaceAll(parts[1], ".", "-")
+		return fmt.Sprintf("%s-%s", username, domain), nil
+	}
+
+	logrus.Warn("USER_EMAIL not set. Falling back to UNIX user")
+	currentUser, err := user.Current()
+	if err != nil {
+		return "", fmt.Errorf("failed to retrieve current user: %w", err)
+	}
+	return currentUser.Username, nil
 }
 
 // loadCustomConfig loads custom configuration data from a file
