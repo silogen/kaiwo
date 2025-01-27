@@ -20,6 +20,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -62,8 +63,7 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 
 	// Finalize metadata flags
 
-	currentUser, err := user.Current()
-	metaFlags.User = currentUser.Username
+	metaFlags.User, err = GetCurrentUser()
 	if err != nil {
 		return fmt.Errorf("Failed to fetch the current user: %v", err)
 	}
@@ -118,6 +118,51 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 	}
 
 	return nil
+}
+
+func GetCurrentUser() (string, error) {
+	userEmail := os.Getenv("KAIWO_USER_EMAIL")
+
+	if userEmail != "" {
+		emailRegex := `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
+		matched, err := regexp.MatchString(emailRegex, userEmail)
+		if err != nil {
+			return "", fmt.Errorf("failed to validate USER_EMAIL: %w", err)
+		}
+		if !matched {
+			return "", fmt.Errorf("invalid email format: %s", userEmail)
+		}
+
+		parts := strings.Split(userEmail, "@")
+		username := strings.Split(parts[0], "-")[0]
+		domain := strings.ReplaceAll(parts[1], ".", "-")
+		return makeRFC1123Compliant(fmt.Sprintf("%s-%s", username, domain)), nil
+	}
+
+	logrus.Warn("USER_EMAIL not set. Falling back to UNIX username and hostname")
+	currentUser, err := user.Current()
+	if err != nil {
+		return "", fmt.Errorf("failed to retrieve current user: %w", err)
+	}
+	hostname, err := os.Hostname()
+	if err != nil {
+		return "", fmt.Errorf("failed to retrieve hostname: %w", err)
+	}
+
+	k8sCompatibleHostname := strings.ReplaceAll(hostname, ".", "-")
+
+	return makeRFC1123Compliant(fmt.Sprintf("%s-%s", currentUser.Username, k8sCompatibleHostname)), nil
+}
+
+func makeRFC1123Compliant(input string) string {
+	input = strings.ToLower(input)
+
+	rfc1123Regex := regexp.MustCompile(`[^a-z0-9.-]`)
+	input = rfc1123Regex.ReplaceAllString(input, "-")
+
+	input = strings.Trim(input, "-.")
+
+	return input
 }
 
 // loadCustomConfig loads custom configuration data from a file
