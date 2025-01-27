@@ -88,7 +88,7 @@ func (job Job) GenerateAdditionalResourceManifests(k8sClient client.Client, temp
 	return []runtime.Object{localClusterQueueManifest}, nil
 }
 
-func (job Job) BuildReference(ctx context.Context, k8sClient client.Client, key client.ObjectKey) (workloads.WorkloadReference2, error) {
+func (job Job) BuildReference(ctx context.Context, k8sClient client.Client, key client.ObjectKey) (workloads.WorkloadReference, error) {
 	obj := &rayv1.RayJob{}
 
 	if err := k8sClient.Get(ctx, key, obj); err != nil {

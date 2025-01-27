@@ -93,7 +93,7 @@ func (deployment Deployment) GenerateAdditionalResourceManifests(k8sClient clien
 	return []runtime.Object{}, nil
 }
 
-func (deployment Deployment) BuildReference(ctx context.Context, k8sClient client.Client, key client.ObjectKey) (workloads.WorkloadReference2, error) {
+func (deployment Deployment) BuildReference(ctx context.Context, k8sClient client.Client, key client.ObjectKey) (workloads.WorkloadReference, error) {
 	obj := &appsv1.Deployment{}
 	if err := k8sClient.Get(ctx, key, obj); err != nil {
 		return nil, fmt.Errorf("could not get job: %w", err)

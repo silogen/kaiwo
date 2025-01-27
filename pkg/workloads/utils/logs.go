@@ -65,21 +65,21 @@ func OutputLogs(
 	} else if len(allPods) == 1 {
 		// If there is only a single pod with a single container, just list its logs
 		logrus.Info("Found a single pod for workload")
-		pod := allPods[0]
+		pod := allPods[0].Pod
 
-		if len(pod.Pod.Status.ContainerStatuses) == 0 {
+		if len(pod.Status.ContainerStatuses) == 0 {
 			logrus.Warn("No containers found for workload")
 			return nil
 		}
 
-		if len(pod.Pod.Status.ContainerStatuses) == 1 {
-			logrus.Infof("Found a single container for pod %s, defaulting to this one", pod.Pod.Name)
-			if len(pod.Pod.Status.InitContainerStatuses) > 0 {
+		if len(pod.Status.ContainerStatuses) == 1 {
+			logrus.Infof("Found a single container for pod %s, defaulting to this one", pod.Name)
+			if len(pod.Status.InitContainerStatuses) > 0 {
 				logrus.Warn("Pod init containers found for workload, not displaying logs for these. Disable auto select to choose init containers")
 			}
-			return outputLogs(ctx, clientset, pod.Pod.Name, pod.Pod.Status.ContainerStatuses[0].Name, tailLines, objectKey.Namespace, follow)
+			return outputLogs(ctx, clientset, pod.Name, pod.Status.ContainerStatuses[0].Name, tailLines, objectKey.Namespace, follow)
 		} else {
-			logrus.Infof("Found multiple containers for pod %s", pod.Pod.Name)
+			logrus.Infof("Found multiple containers for pod %s", pod.Name)
 		}
 	} else {
 		logrus.Infof("Found multiple pods for workload")
@@ -110,7 +110,7 @@ var (
 // choosePodAndContainer allows the user to choose the pod and the container they want to interact with
 // As the workload reference structure is dynamic and not structured, the output is rendered one step at a time
 // The user can still navigate back up the reference tree and choose a different branch
-func choosePodAndContainer(reference workloads.WorkloadReference2) (string, string, error, bool) {
+func choosePodAndContainer(reference workloads.WorkloadReference) (string, string, error, bool) {
 
 	allPods := reference.GetPods()
 
@@ -166,40 +166,6 @@ func choosePodAndContainer(reference workloads.WorkloadReference2) (string, stri
 	}
 
 	return selectedPodName, selectedContainerName, err, selectedRow == nil && err != nil
-
-	//flatList := traverse(reference, 0)
-	//for i := 0; i < len(flatList); i++ {
-	//	flatList[i].Cells = []any{
-	//		flatList[i].Entry.GetType(),
-	//		flatList[i].Entry.GetName(),
-	//		flatList[i].Entry.GetStatus(),
-	//	}
-	//}
-	//entries := make([]tui.SelectTableEntry, len(flatList))
-	//
-	//columns := []string{
-	//	"Type",
-	//	"Name",
-	//	"Status",
-	//}
-	//selected, err := tui.RunSelectTable(flatList, columns, "Select the container to view", true)
-	//
-	//if err != nil {
-	//	return "", "", err, false
-	//}
-	//
-	//if selected == nil {
-	//	return "", "", nil, true
-	//}
-	//
-	//selectedContainerReference, ok := selected.(workloads.ContainerReference)
-	//
-	//if !ok {
-	//	return "", "", fmt.Errorf("could not cast container to workloads.ContainerReference"), false
-	//}
-	//
-	//return selectedContainerReference.PodName, selectedContainerReference.ContainerName, nil, false
-
 }
 
 // outputLogs outputs logs for a given pod container to the standard output
