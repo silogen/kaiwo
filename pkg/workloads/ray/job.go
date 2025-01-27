@@ -21,6 +21,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/sirupsen/logrus"
+
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -87,6 +89,108 @@ func (job Job) GenerateAdditionalResourceManifests(k8sClient client.Client, temp
 	return []runtime.Object{localClusterQueueManifest}, nil
 }
 
-func (job Job) BuildReference(ctx context.Context, k8sClient client.Client, key client.ObjectKey) (*workloads.WorkloadReference, error) {
-	return nil, nil
+func (job Job) BuildReference(ctx context.Context, k8sClient client.Client, key client.ObjectKey) (workloads.WorkloadReference, error) {
+	obj := &rayv1.RayJob{}
+
+	if err := k8sClient.Get(ctx, key, obj); err != nil {
+		return nil, fmt.Errorf("could not get job: %w", err)
+	}
+	jobRef := &JobReference{
+		RayJob: *obj,
+	}
+	return jobRef, nil
+}
+
+type JobReference struct {
+	RayJob       rayv1.RayJob
+	SubmitterPod *corev1.Pod
+	HeadPod      *corev1.Pod
+	WorkerPods   []*corev1.Pod
+}
+
+func (jobRef *JobReference) Load(ctx context.Context, k8sClient client.Client) error {
+	// Find cluster pods
+	clusterPodLabelSelector := client.MatchingLabels{
+		"ray.io/cluster": jobRef.RayJob.Status.RayClusterName,
+	}
+
+	clusterPodList := &corev1.PodList{}
+	if err := k8sClient.List(ctx, clusterPodList, clusterPodLabelSelector); err != nil {
+		return fmt.Errorf("could not list cluster pods: %w", err)
+	}
+
+	// Clear
+	jobRef.HeadPod = nil
+	jobRef.WorkerPods = []*corev1.Pod{}
+
+	for _, pod := range clusterPodList.Items {
+		nodeType := pod.Labels["ray.io/node-type"]
+		if nodeType == "worker" {
+			jobRef.WorkerPods = append(jobRef.WorkerPods, &pod)
+		} else if nodeType == "head" {
+			if jobRef.HeadPod == nil {
+				jobRef.HeadPod = &pod
+			} else {
+				logrus.Warn("More than one head pod encountered")
+			}
+		} else {
+			logrus.Warnf("Encountered unknown node type: %s", nodeType)
+		}
+	}
+
+	// Find submitter pod
+	submitterPodLabelSelector := client.MatchingLabels{
+		"batch.kubernetes.io/job-name": jobRef.RayJob.GetName(),
+		"job-name":                     jobRef.RayJob.GetName(),
+	}
+
+	submitterPodList := &corev1.PodList{}
+	if err := k8sClient.List(ctx, submitterPodList, submitterPodLabelSelector); err != nil {
+		return fmt.Errorf("could not list submitter pods: %w", err)
+	}
+
+	switch len(submitterPodList.Items) {
+	case 0:
+		logrus.Warn("No submitter pods found")
+	case 1:
+		jobRef.SubmitterPod = &submitterPodList.Items[0]
+	default:
+		logrus.Warn("More than one submitter pods found")
+	}
+
+	return nil
+}
+
+func (jobRef *JobReference) GetPods() []workloads.WorkloadPod {
+	var pods []workloads.WorkloadPod
+
+	if jobRef.SubmitterPod != nil {
+		pods = append(pods, workloads.WorkloadPod{
+			Pod:          *jobRef.SubmitterPod,
+			LogicalGroup: "submitter",
+		})
+	}
+
+	if jobRef.HeadPod != nil {
+		pods = append(pods, workloads.WorkloadPod{
+			Pod:          *jobRef.HeadPod,
+			LogicalGroup: "head",
+		})
+	}
+
+	for _, pod := range jobRef.WorkerPods {
+		pods = append(pods, workloads.WorkloadPod{
+			Pod:          *pod,
+			LogicalGroup: "worker",
+		})
+	}
+	return pods
+}
+
+func (jobRef *JobReference) GetName() string {
+	return jobRef.RayJob.GetName()
+}
+
+func (jobRef *JobReference) GetStatus() string {
+	return "N/A (TODO)"
 }

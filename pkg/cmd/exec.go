@@ -97,7 +97,7 @@ func parseCommand(command string) []string {
 
 func validateCommand(command string) error {
 	if _, err := exec.LookPath(command); err != nil {
-		return fmt.Errorf("Error: %s not found in the container", command)
+		return fmt.Errorf("error: %s not found in the container", command)
 	}
 	return nil
 }
@@ -136,12 +136,22 @@ func executeContainerCommand(args []string, command []string, gpuPodsOnly bool) 
 		return fmt.Errorf("failed to build workload reference: %w", err)
 	}
 
-	allPods := reference.GetPodsRecursive()
+	if err := reference.Load(ctx, k8sClient); err != nil {
+		return fmt.Errorf("failed to load workload reference: %w", err)
+	}
+
+	allPods := reference.GetPods()
 	if len(allPods) == 0 {
 		return fmt.Errorf("no pods found for workload %s", args[0])
 	}
 
-	podName, containerName, err, cancelled := utils.ChoosePodAndContainer(*reference, gpuPodsOnly)
+	var predicates []utils.PodSelectionPredicate
+
+	if gpuPodsOnly {
+		predicates = []utils.PodSelectionPredicate{utils.IsGPUPod}
+	}
+
+	podName, containerName, err, cancelled := utils.ChoosePodAndContainer(reference, predicates...)
 	if err != nil {
 		return fmt.Errorf("failed to choose pod and container: %w", err)
 	}
@@ -192,12 +202,12 @@ func execInContainer(
 			TTY:       tty,
 		}, scheme.ParameterCodec)
 
-	exec, err := remotecommand.NewSPDYExecutor(config, "POST", req.URL())
+	executor, err := remotecommand.NewSPDYExecutor(config, "POST", req.URL())
 	if err != nil {
 		return fmt.Errorf("failed to create SPDY executor: %w", err)
 	}
 
-	return exec.StreamWithContext(ctx, remotecommand.StreamOptions{
+	return executor.StreamWithContext(ctx, remotecommand.StreamOptions{
 		Stdin:             os.Stdin,
 		Stdout:            os.Stdout,
 		Stderr:            os.Stderr,
