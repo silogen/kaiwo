@@ -121,7 +121,7 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 }
 
 func GetCurrentUser() (string, error) {
-	userEmail := os.Getenv("USER_EMAIL")
+	userEmail := os.Getenv("KAIWO_USER_EMAIL")
 
 	if userEmail != "" {
 		emailRegex := `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
@@ -136,15 +136,33 @@ func GetCurrentUser() (string, error) {
 		parts := strings.Split(userEmail, "@")
 		username := strings.Split(parts[0], "-")[0]
 		domain := strings.ReplaceAll(parts[1], ".", "-")
-		return fmt.Sprintf("%s-%s", username, domain), nil
+		return makeRFC1123Compliant(fmt.Sprintf("%s-%s", username, domain)), nil
 	}
 
-	logrus.Warn("USER_EMAIL not set. Falling back to UNIX user")
+	logrus.Warn("USER_EMAIL not set. Falling back to UNIX username and hostname")
 	currentUser, err := user.Current()
 	if err != nil {
 		return "", fmt.Errorf("failed to retrieve current user: %w", err)
 	}
-	return currentUser.Username, nil
+	hostname, err := os.Hostname()
+	if err != nil {
+		return "", fmt.Errorf("failed to retrieve hostname: %w", err)
+	}
+
+	k8sCompatibleHostname := strings.ReplaceAll(hostname, ".", "-")
+
+	return makeRFC1123Compliant(fmt.Sprintf("%s-%s", currentUser.Username, k8sCompatibleHostname)), nil
+}
+
+func makeRFC1123Compliant(input string) string {
+	input = strings.ToLower(input)
+
+	rfc1123Regex := regexp.MustCompile(`[^a-z0-9.-]`)
+	input = rfc1123Regex.ReplaceAllString(input, "-")
+
+	input = strings.Trim(input, "-.")
+
+	return input
 }
 
 // loadCustomConfig loads custom configuration data from a file
