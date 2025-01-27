@@ -18,163 +18,122 @@ package tui
 
 import (
 	"fmt"
+	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/jedib0t/go-pretty/v6/table"
+	"github.com/charmbracelet/lipgloss"
 	"strings"
 )
 
-type SelectTableRow[T any] struct {
-	Selectable bool
-	Selected   bool
-	Entry      SelectTableEntry[T]
+var baseStyle = lipgloss.NewStyle().
+	BorderStyle(lipgloss.RoundedBorder()).
+	BorderForeground(lipgloss.Color("63")).
+	Padding(1, 1)
+
+type model struct {
+	table       table.Model
+	selectedRow *[]string
+	title       string
 }
 
-type SelectTableEntry[T interface{}] interface {
-	GetCells() []interface{}
-	IsSelectable() bool
-	GetData() *T
-}
+func (m model) Init() tea.Cmd { return nil }
 
-type SelectTableModel[T any] struct {
-	Rows    []SelectTableRow[T]
-	Columns []string
-	Title   string
-}
-
-func (m SelectTableModel[any]) Init() tea.Cmd {
-	return nil
-}
-
-func (m SelectTableModel[any]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "q":
+		case "esc":
+			if m.table.Focused() {
+				m.table.Blur()
+			} else {
+				m.table.Focus()
+			}
+		case "q", "ctrl+c":
+			m.selectedRow = nil
 			return m, tea.Quit
-		case "down":
-			moveSelection(m, 1)
-		case "up":
-			moveSelection(m, -1)
 		case "enter":
+			selectedRow := []string(m.table.SelectedRow())
+			m.selectedRow = &selectedRow
 			return m, tea.Quit
 		}
 	}
-
-	return m, nil
+	m.table, cmd = m.table.Update(msg)
+	return m, cmd
 }
 
-func moveSelection[T any](m SelectTableModel[T], direction int) SelectTableModel[T] {
-	var previouslySelectedIndex = -1
-
-	// Find the currently selected row
-	for i := range m.Rows {
-		if m.Rows[i].Selected {
-			previouslySelectedIndex = i
-			break
-		}
-	}
-
-	// If no row was selected yet or the table is empty, just return
-	if previouslySelectedIndex == -1 || len(m.Rows) == 0 {
-		return m
-	}
-
-	// Move in the specified direction, looking for the next selectable row
-	newIndex := previouslySelectedIndex
-	for {
-		newIndex += direction
-		if newIndex < 0 || newIndex >= len(m.Rows) {
-			// If we roll off the top or bottom, break (or wrap if you want).
-			break
-		}
-		if m.Rows[newIndex].Selectable {
-			// Unselect old row, select new row, and break.
-			m.Rows[previouslySelectedIndex].Selected = false
-			m.Rows[newIndex].Selected = true
-			break
-		}
-	}
-	return m
+func (m model) View() string {
+	return lipgloss.NewStyle().Bold(true).Render(m.title) + "\n" + baseStyle.Render(m.table.View()) + "\n"
 }
 
-// View returns a textual representation of our table for rendering.
-func (m SelectTableModel[any]) View() string {
-	tw := table.NewWriter()
+func RunSelectTable(data [][]string, columns []string, title string, clearAfterFinish bool) (*[]string, error) {
 
-	displayHeaders := make([]interface{}, len(m.Columns)+1)
-	displayHeaders[0] = ""
-	for i := 1; i < len(displayHeaders); i++ {
-		displayHeaders[i] = m.Columns[i-1]
+	if len(data) == 0 {
+		return nil, fmt.Errorf("no data to show")
 	}
 
-	tw.AppendHeader(displayHeaders)
-	tw.SetTitle(m.Title)
-
-	for _, row := range m.Rows {
-		var cursor interface{}
-		cursor = " "
-		if row.Selected {
-			cursor = ">"
+	// Check for column consistency
+	numColumns := len(data[0])
+	for _, row := range data {
+		if len(row) != numColumns {
+			return nil, fmt.Errorf("column count mismatch")
 		}
-
-		displayRow := append([]interface{}{cursor}, row.Entry.GetCells()...)
-		tw.AppendRow(displayRow)
 	}
 
-	// You can customize table style, borders, etc. here
-	return tw.Render()
-}
-
-// RunSelectTable is a helper function that spins up the Bubble Tea program
-// with the given columns and rows and returns which row the user selected.
-func RunSelectTable[T any](data []SelectTableEntry[T], columns []string, title string, clearAfterCompletion bool) (*T, error) {
-
-	var rows []SelectTableRow[T]
-
-	// Ensure that at least one selectable row is marked as Selected by default
-	firstSelected := false
-	for _, entry := range data {
-		row := SelectTableRow[T]{
-			Selectable: entry.IsSelectable(),
-			Entry:      entry,
+	// Create table columns
+	tableColumns := make([]table.Column, numColumns)
+	for j := 0; j < numColumns; j++ {
+		maxWidth := len(columns[j])
+		for i := 0; i < len(data); i++ {
+			maxWidth = max(maxWidth, len(data[i][j]))
 		}
-		if row.Selectable && !firstSelected {
-			firstSelected = true
-			row.Selected = true
+		tableColumns[j] = table.Column{
+			Width: maxWidth,
+			Title: columns[j],
 		}
-		rows = append(rows, row)
 	}
 
-	m := SelectTableModel[T]{
-		Columns: columns,
-		Rows:    rows,
-		Title:   title,
+	// Create table rows
+	rows := make([]table.Row, len(data))
+	for i, row := range data {
+		rows[i] = row
 	}
 
-	program := tea.NewProgram(m)
-	output, err := program.Run()
+	t := table.New(
+		table.WithColumns(tableColumns),
+		table.WithRows(rows),
+		table.WithFocused(true),
+		table.WithHeight(10),
+	)
+
+	s := table.DefaultStyles()
+	s.Header = s.Header.
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("240")).
+		BorderBottom(true).
+		Bold(false)
+	s.Selected = s.Selected.
+		Foreground(lipgloss.Color("229")).
+		Background(lipgloss.Color("57")).
+		Bold(false)
+	t.SetStyles(s)
+
+	m := model{table: t, selectedRow: nil, title: title}
+	om, err := tea.NewProgram(m).Run()
 	if err != nil {
-		return nil, fmt.Errorf("failed to run table select: %w", err)
+		return nil, fmt.Errorf("error running tea: %v", err)
 	}
 
-	outputModel := output.(SelectTableModel[T])
-
-	if clearAfterCompletion {
-		tableView := outputModel.View()
-		lines := strings.Count(tableView, "\n")
-
-		// Move the cursor up by the number of lines and clear the content
-		for i := 0; i < lines; i++ {
-			fmt.Print("\033[F\033[2K") // Move up and clear the current line
-		}
+	if clearAfterFinish {
+		clearTable(len(strings.Split(m.View(), "\n")))
 	}
 
-	for _, row := range outputModel.Rows {
-		if row.Selected {
-			return row.Entry.GetData(), nil
-		}
+	outputModel := om.(model)
+	return outputModel.selectedRow, nil
+}
+
+// clearTable clears the last `height` rows from the terminal
+func clearTable(height int) {
+	for i := 0; i < height; i++ {
+		fmt.Print("\033[F\033[2K") // Move up and clear the current line
 	}
-
-	return nil, fmt.Errorf("failed to run table select: no rows selected")
-
 }

@@ -18,23 +18,16 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
-	"github.com/silogen/kaiwo/pkg/k8s"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"os"
 	"path/filepath"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"strings"
 
-	"github.com/sirupsen/logrus"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	"github.com/silogen/kaiwo/pkg/workloads"
+	"github.com/sirupsen/logrus"
+	corev1 "k8s.io/api/core/v1"
 )
 
 //go:embed deployment.yaml.tmpl
@@ -142,65 +135,73 @@ func (deployment Deployment) GenerateAdditionalResourceManifests(k8sClient clien
 	return []runtime.Object{}, nil
 }
 
-func (deployment Deployment) BuildReference(ctx context.Context, k8sClient client.Client, key client.ObjectKey) (*workloads.WorkloadReference, error) {
+func (deployment Deployment) BuildReference(ctx context.Context, k8sClient client.Client, key client.ObjectKey) (workloads.WorkloadReference, error) {
 	obj := &appsv1.Deployment{}
-	var gvk schema.GroupVersionKind
-
-	logrus.Debugf("Building deployment reference for %s / %s", key.Name, key.Namespace)
-
 	if err := k8sClient.Get(ctx, key, obj); err != nil {
-		return nil, fmt.Errorf("could not get deployment: %w", err)
+		return nil, fmt.Errorf("could not get job: %w", err)
 	}
-
-	scheme, err := k8s.GetScheme()
-	if err != nil {
-		return nil, fmt.Errorf("could not get k8s scheme: %w", err)
+	deploymentRef := &DeploymentReference{
+		Deployment: *obj,
 	}
+	return deploymentRef, nil
+}
 
-	gvk, err = apiutil.GVKForObject(obj, &scheme)
+type DeploymentReference struct {
+	Deployment  appsv1.Deployment
+	ReplicaSets []ReplicaSetReference
+}
 
-	if err != nil {
-		return nil, fmt.Errorf("could not get k8s GVK: %w", err)
-	}
+type ReplicaSetReference struct {
+	ReplicaSet appsv1.ReplicaSet
+	Pods       []corev1.Pod
+}
 
-	reference := workloads.WorkloadReference{
-		Object: obj,
-		IsLeaf: false,
-		GVK:    gvk,
-	}
-
+func (deploymentRef *DeploymentReference) Load(ctx context.Context, k8sClient client.Client) error {
+	logrus.Debugf("Loading deployment reference %s", deploymentRef.Deployment.Name)
 	replicaSets := &appsv1.ReplicaSetList{}
-	labelSelector := client.MatchingLabels(obj.Spec.Selector.MatchLabels)
+	labelSelector := client.MatchingLabels(deploymentRef.Deployment.Spec.Selector.MatchLabels)
 
-	if err := k8sClient.List(ctx, replicaSets, client.InNamespace(key.Namespace), labelSelector); err != nil {
-		return nil, fmt.Errorf("could not list replicasets: %w", err)
+	if err := k8sClient.List(ctx, replicaSets, client.InNamespace(deploymentRef.Deployment.Namespace), labelSelector); err != nil {
+		return fmt.Errorf("could not list replicasets: %w", err)
 	}
+
+	deploymentRef.ReplicaSets = nil
 
 	for _, replicaSet := range replicaSets.Items {
 
-		gvk, err = apiutil.GVKForObject(&replicaSet, &scheme)
+		logrus.Debugf("Found ReplicaSet %s", replicaSet.Name)
 
-		if err != nil {
-			return nil, fmt.Errorf("could not get k8s GVK: %w", err)
+		replicaSetRef := ReplicaSetReference{
+			ReplicaSet: replicaSet,
 		}
-
-		replicasetWrapper := &workloads.WorkloadReference{
-			Object: &replicaSet,
-			IsLeaf: true,
-			GVK:    gvk,
-		}
-		reference.Children = append(reference.Children, replicasetWrapper)
 
 		pods := &corev1.PodList{}
-		if err := k8sClient.List(ctx, pods, client.InNamespace(key.Namespace), client.MatchingLabels(replicaSet.Spec.Selector.MatchLabels)); err != nil {
-			return nil, fmt.Errorf("could not list pods: %w", err)
+		if err := k8sClient.List(ctx, pods, client.InNamespace(deploymentRef.Deployment.Namespace), client.MatchingLabels(replicaSet.Spec.Selector.MatchLabels)); err != nil {
+			return fmt.Errorf("could not list pods: %w", err)
 		}
 
 		for _, pod := range pods.Items {
-			replicasetWrapper.Pods = append(replicasetWrapper.Pods, pod)
+			logrus.Debugf("Found Pod %s", pod.Name)
+			replicaSetRef.Pods = append(replicaSetRef.Pods, pod)
+		}
+
+		deploymentRef.ReplicaSets = append(deploymentRef.ReplicaSets, replicaSetRef)
+	}
+
+	return nil
+}
+
+func (deploymentRef *DeploymentReference) GetPods() []workloads.WorkloadPod {
+	var workloadPods []workloads.WorkloadPod
+
+	for _, replicaSet := range deploymentRef.ReplicaSets {
+		for _, pod := range replicaSet.Pods {
+			workloadPods = append(workloadPods, workloads.WorkloadPod{
+				Pod:          pod,
+				LogicalGroup: fmt.Sprintf("ReplicaSet: %s", replicaSet.ReplicaSet.Name),
+			})
 		}
 	}
 
-	return &reference, nil
-
+	return workloadPods
 }

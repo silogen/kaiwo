@@ -1,25 +1,25 @@
-// Copyright 2024 Advanced Micro Devices, Inc.  All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//       http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/**
+ * Copyright 2025 Advanced Micro Devices, Inc. All rights reserved.
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+**/
 
 package workloads
 
 import (
 	"context"
-	"fmt"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -50,55 +50,18 @@ type Workload interface {
 	GenerateAdditionalResourceManifests(k8sClient client.Client, templateContext WorkloadTemplateConfig) ([]runtime.Object, error)
 
 	// BuildReference builds the workload reference from this workload
-	BuildReference(ctx context.Context, k8sClient client.Client, key client.ObjectKey) (*WorkloadReference, error)
+	BuildReference(ctx context.Context, k8sClient client.Client, key client.ObjectKey) (WorkloadReference, error)
 }
 
-// WorkloadReference contains all the primary resources that represent a particular workload
-type WorkloadReference struct {
-	// Object is the primary Kubernetes object
-	Object client.Object
-
-	// Pods lists any pods that this resource manages, if any
-	Pods []corev1.Pod
-
-	// IsLeaf denotes whether this wrapper should contain any pods
-	IsLeaf bool
-
-	// Children list any direct descendents this wrapper logically owns
-	Children []*WorkloadReference
-
-	GVK schema.GroupVersionKind
+type WorkloadPod struct {
+	Pod          corev1.Pod
+	LogicalGroup string
 }
 
-//func (w WorkloadReference) GetGVK() schema.GroupVersionKind {
-//	return w.Object.GetObjectKind().GroupVersionKind()
-//}
+type WorkloadReference interface {
+	// Load loads the current state from k8s
+	Load(ctx context.Context, k8sClient client.Client) error
 
-func (w WorkloadReference) GetObjectKey() client.ObjectKey {
-	return client.ObjectKey{
-		Namespace: w.Object.GetNamespace(),
-		Name:      w.Object.GetName(),
-	}
-}
-
-func (w WorkloadReference) String() string {
-	gvk := w.GVK
-	return fmt.Sprintf("%s/%s %s (%s/%s)", gvk.Group, gvk.Version, gvk.Kind, w.Object.GetNamespace(), w.Object.GetName())
-}
-
-func (w WorkloadReference) GetPodsRecursive() []corev1.Pod {
-	return getPodsRecursive(&w)
-}
-
-func getPodsRecursive(w *WorkloadReference) []corev1.Pod {
-	var pods []corev1.Pod
-
-	if w.IsLeaf {
-		pods = append(pods, w.Pods...)
-	} else {
-		for _, child := range w.Children {
-			pods = append(pods, child.GetPodsRecursive()...)
-		}
-	}
-	return pods
+	// GetPods returns the pods that the reference is currently aware of
+	GetPods() []WorkloadPod
 }

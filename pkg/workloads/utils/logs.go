@@ -29,8 +29,8 @@ import (
 	"os"
 	"os/signal"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"strings"
 	"syscall"
+	"time"
 )
 
 func OutputLogs(
@@ -49,12 +49,11 @@ func OutputLogs(
 		return fmt.Errorf("failed to get workload reference: %w", err)
 	}
 
-	logrus.Infof(reference.String())
-	for _, child := range reference.Children {
-		logrus.Infof(child.String())
+	if err := reference.Load(ctx, k8sClient); err != nil {
+		return fmt.Errorf("failed to load workload reference: %w", err)
 	}
 
-	allPods := reference.GetPodsRecursive()
+	allPods := reference.GetPods()
 
 	if len(allPods) == 0 {
 		logrus.Warn("No pods found for workload")
@@ -66,7 +65,7 @@ func OutputLogs(
 	} else if len(allPods) == 1 {
 		// If there is only a single pod with a single container, just list its logs
 		logrus.Info("Found a single pod for workload")
-		pod := allPods[0]
+		pod := allPods[0].Pod
 
 		if len(pod.Status.ContainerStatuses) == 0 {
 			logrus.Warn("No containers found for workload")
@@ -86,7 +85,7 @@ func OutputLogs(
 		logrus.Infof("Found multiple pods for workload")
 	}
 
-	podName, containerName, err, cancelled := choosePodAndContainer(*reference)
+	podName, containerName, err, cancelled := choosePodAndContainer(reference)
 	if err != nil {
 		return fmt.Errorf("failed to choose pod and container for workload: %w", err)
 	}
@@ -96,6 +95,77 @@ func OutputLogs(
 	}
 
 	return outputLogs(ctx, clientset, podName, containerName, tailLines, objectKey.Namespace, follow)
+}
+
+var (
+	containerSelectColumns = []string{
+		"Logical group",
+		"Pod name",
+		"Pod phase",
+		"Container name",
+		"Container status",
+	}
+)
+
+// choosePodAndContainer allows the user to choose the pod and the container they want to interact with
+// As the workload reference structure is dynamic and not structured, the output is rendered one step at a time
+// The user can still navigate back up the reference tree and choose a different branch
+func choosePodAndContainer(reference workloads.WorkloadReference) (string, string, error, bool) {
+
+	allPods := reference.GetPods()
+
+	var data [][]string
+
+	containerStatusToRow := func(pod workloads.WorkloadPod, containerStatus corev1.ContainerStatus, isInitContainer bool) []string {
+		containerStatusMsg := ""
+
+		if containerStatus.State.Running != nil {
+			containerStatusMsg = fmt.Sprintf("Running since %s", containerStatus.State.Running.StartedAt.Format(time.RFC3339))
+		} else if containerStatus.State.Waiting != nil {
+			containerStatusMsg = fmt.Sprintf("Waiting (%s)", containerStatus.State.Waiting.Reason)
+		} else if containerStatus.State.Terminated != nil {
+			containerStatusMsg = fmt.Sprintf("Terminated (%s)", containerStatus.State.Terminated.Reason)
+		} else {
+			containerStatusMsg = "N/A"
+		}
+
+		// TODO add
+		//prefix := ""
+		//if isInitContainer {
+		//	prefix = "[init] "
+		//}
+
+		return []string{
+			pod.LogicalGroup,
+			pod.Pod.Name,
+			string(pod.Pod.Status.Phase),
+			containerStatus.Name,
+			containerStatusMsg,
+		}
+	}
+
+	for _, pod := range allPods {
+		for _, container := range pod.Pod.Status.ContainerStatuses {
+			data = append(data, containerStatusToRow(pod, container, false))
+		}
+		for _, container := range pod.Pod.Status.InitContainerStatuses {
+			data = append(data, containerStatusToRow(pod, container, true))
+		}
+		logrus.Infof("Found pod %s (%s)", pod.Pod.Name, pod.LogicalGroup)
+	}
+
+	title := ""
+	selectedRow, err := tui.RunSelectTable(data, containerSelectColumns, title, true)
+
+	selectedContainerName := ""
+	selectedPodName := ""
+
+	if selectedRow != nil {
+		selectedPodName = (*selectedRow)[1]
+		selectedContainerName = (*selectedRow)[3]
+	}
+
+	return selectedPodName, selectedContainerName, err, selectedRow == nil && err != nil
 }
 
 // outputLogs outputs logs for a given pod container to the standard output
@@ -186,124 +256,4 @@ func outputLogs(
 	}
 
 	return nil
-}
-
-type PodContainerOption struct {
-	pod           corev1.Pod
-	containerName string
-}
-
-type OptionRow struct {
-	status        string
-	indent        int
-	selectable    bool
-	selected      bool
-	type_         string
-	name          string
-	containerName string
-	podName       string
-	reference     workloads.WorkloadReference
-}
-
-func (or OptionRow) GetCells() []any {
-	return []any{
-		strings.Repeat(" ", or.indent) + or.type_,
-		or.name,
-	}
-}
-
-func (or OptionRow) IsSelectable() bool {
-	return or.selectable
-}
-
-func (or OptionRow) GetData() *OptionRow {
-	return &or
-}
-
-func traverse(node workloads.WorkloadReference, currentIdent int) []OptionRow {
-	var rows []OptionRow
-	rows = append(rows, OptionRow{
-		status:        "N/A",
-		indent:        currentIdent,
-		selectable:    false,
-		type_:         node.GVK.String(),
-		name:          node.Object.GetName(),
-		containerName: "",
-		podName:       "",
-		reference:     node,
-	})
-
-	if node.IsLeaf {
-		for _, pod := range node.Pods {
-			rows = append(rows, OptionRow{
-				status:        "N/A",
-				indent:        currentIdent + 1,
-				selectable:    false,
-				type_:         "Pod",
-				name:          pod.Name,
-				containerName: "",
-				podName:       "",
-			})
-
-			for _, container := range pod.Status.InitContainerStatuses {
-				rows = append(rows, OptionRow{
-					status:        "N/A",
-					indent:        currentIdent + 2,
-					selectable:    true,
-					type_:         "Init container",
-					name:          container.Name,
-					containerName: container.Name,
-					podName:       pod.Name,
-				})
-			}
-
-			for _, container := range pod.Status.ContainerStatuses {
-				rows = append(rows, OptionRow{
-					status:        "N/A",
-					indent:        currentIdent + 2,
-					selectable:    true,
-					type_:         "Container",
-					name:          container.Name,
-					containerName: container.Name,
-					podName:       pod.Name,
-				})
-			}
-
-		}
-	}
-
-	for _, child := range node.Children {
-		rows = append(rows, traverse(*child, currentIdent+1)...)
-	}
-	return rows
-}
-
-// choosePodAndContainer allows the user to choose the pod and the container they want to interact with
-// As the workload reference structure is dynamic and not structured, the output is rendered one step at a time
-// The user can still navigate back up the reference tree and choose a different branch
-func choosePodAndContainer(reference workloads.WorkloadReference) (string, string, error, bool) {
-
-	flatList := traverse(reference, 0)
-	entries := make([]tui.SelectTableEntry[OptionRow], len(flatList))
-
-	for i, row := range flatList {
-		entries[i] = row // OptionRow implements SelectTableEntry[OptionRow]
-	}
-
-	columns := []string{
-		"Type",
-		"Name",
-	}
-	selected, err := tui.RunSelectTable(entries, columns, "Select the container to view", true)
-
-	if err != nil {
-		return "", "", err, false
-	}
-
-	if selected == nil {
-		return "", "", nil, true
-	}
-
-	return selected.podName, selected.containerName, nil, false
-
 }
