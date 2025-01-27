@@ -8,6 +8,8 @@ At the moment, we have relatively light requirements for contributors. We are lo
 
 The easiest way to contribute is to open an issue on the GitHub repository. This could be a bug report, a feature request, or even just a question. We will do our best to respond to all issues in a timely manner.
 
+When you open an issue, please provide as much detail as possible. This will help us understand the issue and respond more effectively. At minimum, please provide a description of current behavior vs expected behavior.
+
 If you are interested in contributing code to the project, please follow the guidelines below.
 
 ### Guidelines for code contributions

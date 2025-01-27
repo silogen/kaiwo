@@ -1,0 +1,45 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: kaiwojobs.example.com
+spec:
+  group: example.com
+  names:
+    kind: KaiwoJob
+    listKind: KaiwoJobList
+    plural: kaiwojobs
+    singular: kaiwojob
+  scope: Namespaced
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              rayJobSpec:
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+                description: Fields corresponding to RayJob.
+              jobSpec:
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+                description: Fields corresponding to Kubernetes Job.
+              kueue:
+                type: object
+                properties:
+                  clusterQueueName:
+                    type: string
+                    description: Name of the Kueue ClusterQueue.
+                  quotas:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                    description: Quotas related to the Kueue ClusterQueue.
+          status:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+            description: Status of the KaiwoJob.
