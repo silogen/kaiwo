@@ -139,10 +139,7 @@ func (jobRef *JobReference) Load(ctx context.Context, k8sClient client.Client) e
 	logrus.Debugf("Found %d pods", len(pods.Items))
 
 	// Clear existing pods and append the new ones
-	jobRef.Pods = nil
-	for _, pod := range pods.Items {
-		jobRef.Pods = append(jobRef.Pods, pod)
-	}
+	jobRef.Pods = append(jobRef.Pods, pods.Items...)
 
 	return nil
 }

@@ -22,11 +22,12 @@ import (
 	"path/filepath"
 
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
-	"github.com/silogen/kaiwo/pkg/workloads"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/silogen/kaiwo/pkg/workloads"
 )
 
 //go:embed job.yaml.tmpl

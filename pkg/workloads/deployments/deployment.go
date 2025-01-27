@@ -18,16 +18,18 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
-	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"os"
 	"path/filepath"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
 
-	"github.com/silogen/kaiwo/pkg/workloads"
+	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
+
+	"github.com/silogen/kaiwo/pkg/workloads"
 )
 
 //go:embed deployment.yaml.tmpl
