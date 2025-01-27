@@ -21,7 +21,6 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
 	"github.com/sirupsen/logrus"
@@ -29,7 +28,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/silogen/kaiwo/pkg/tui"
 	"github.com/silogen/kaiwo/pkg/workloads"
 )
 
@@ -49,12 +47,11 @@ func OutputLogs(
 		return fmt.Errorf("failed to get workload reference: %w", err)
 	}
 
-	logrus.Debugf("%s", reference.String())
-	for _, child := range reference.Children {
-		logrus.Debugf("%s", child.String())
+	if err := reference.Load(ctx, k8sClient); err != nil {
+		return fmt.Errorf("failed to load workload reference: %w", err)
 	}
 
-	allPods := reference.GetPodsRecursive()
+	allPods := reference.GetPods()
 
 	if len(allPods) == 0 {
 		logrus.Warn("No pods found for workload")
@@ -66,7 +63,7 @@ func OutputLogs(
 	} else if len(allPods) == 1 {
 		// If there is only a single pod with a single container, just list its logs
 		logrus.Info("Found a single pod for workload")
-		pod := allPods[0]
+		pod := allPods[0].Pod
 
 		if len(pod.Status.ContainerStatuses) == 0 {
 			logrus.Warn("No containers found for workload")
@@ -86,7 +83,7 @@ func OutputLogs(
 		logrus.Debugf("Found multiple pods for workload")
 	}
 
-	podName, containerName, err, cancelled := ChoosePodAndContainer(*reference, false)
+	podName, containerName, err, cancelled := ChoosePodAndContainer(reference)
 	if err != nil {
 		return fmt.Errorf("failed to choose pod and container for workload: %w", err)
 	}
@@ -186,133 +183,4 @@ func outputLogs(
 	}
 
 	return nil
-}
-
-type PodContainerOption struct {
-	// pod           corev1.Pod
-	// containerName string
-}
-
-type OptionRow struct {
-	status     string
-	indent     int
-	selectable bool
-	// selected      bool
-	type_         string
-	name          string
-	containerName string
-	podName       string
-	reference     workloads.WorkloadReference
-}
-
-func (or OptionRow) GetCells() []any {
-	return []any{
-		strings.Repeat(" ", or.indent) + or.type_,
-		or.name,
-	}
-}
-
-func (or OptionRow) IsSelectable() bool {
-	return or.selectable
-}
-
-func (or OptionRow) GetData() *OptionRow {
-	return &or
-}
-
-func traverse(node workloads.WorkloadReference, currentIdent int, onlyGPUPods bool) []OptionRow {
-	var rows []OptionRow
-	rows = append(rows, OptionRow{
-		status:        "N/A",
-		indent:        currentIdent,
-		selectable:    false,
-		type_:         node.GVK.String(),
-		name:          node.Object.GetName(),
-		containerName: "",
-		podName:       "",
-		reference:     node,
-	})
-
-	if node.IsLeaf {
-		for _, pod := range node.Pods {
-			if onlyGPUPods && !isGPUPod(pod) {
-				continue
-			}
-
-			rows = append(rows, OptionRow{
-				status:        "N/A",
-				indent:        currentIdent + 1,
-				selectable:    false,
-				type_:         "Pod",
-				name:          pod.Name,
-				containerName: "",
-				podName:       "",
-			})
-
-			for _, container := range pod.Status.InitContainerStatuses {
-				rows = append(rows, OptionRow{
-					status:        "N/A",
-					indent:        currentIdent + 2,
-					selectable:    true,
-					type_:         "Init container",
-					name:          container.Name,
-					containerName: container.Name,
-					podName:       pod.Name,
-				})
-			}
-
-			for _, container := range pod.Status.ContainerStatuses {
-				rows = append(rows, OptionRow{
-					status:        "N/A",
-					indent:        currentIdent + 2,
-					selectable:    true,
-					type_:         "Container",
-					name:          container.Name,
-					containerName: container.Name,
-					podName:       pod.Name,
-				})
-			}
-		}
-	}
-
-	for _, child := range node.Children {
-		rows = append(rows, traverse(*child, currentIdent+1, onlyGPUPods)...)
-	}
-	return rows
-}
-
-func ChoosePodAndContainer(reference workloads.WorkloadReference, onlyGPUPods bool) (string, string, error, bool) {
-	flatList := traverse(reference, 0, onlyGPUPods)
-	entries := make([]tui.SelectTableEntry[OptionRow], len(flatList))
-
-	for i, row := range flatList {
-		entries[i] = row // OptionRow implements SelectTableEntry[OptionRow]
-	}
-
-	columns := []string{
-		"Type",
-		"Name",
-	}
-	selected, err := tui.RunSelectTable(entries, columns, "Select the container to view", true)
-
-	if err != nil {
-		return "", "", err, false
-	}
-
-	if selected == nil {
-		return "", "", nil, true
-	}
-
-	return selected.podName, selected.containerName, nil, false
-}
-
-func isGPUPod(pod corev1.Pod) bool {
-	for _, container := range pod.Spec.Containers {
-		for resourceName := range container.Resources.Limits {
-			if resourceName == "nvidia.com/gpu" || resourceName == "amd.com/gpu" {
-				return true
-			}
-		}
-	}
-	return false
 }

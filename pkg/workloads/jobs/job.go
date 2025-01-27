@@ -97,6 +97,68 @@ func (job Job) GenerateAdditionalResourceManifests(k8sClient client.Client, temp
 	return []runtime.Object{localClusterQueueManifest}, nil
 }
 
-func (job Job) BuildReference(ctx context.Context, k8sClient client.Client, key client.ObjectKey) (*workloads.WorkloadReference, error) {
-	return nil, nil
+func (job Job) BuildReference(ctx context.Context, k8sClient client.Client, key client.ObjectKey) (workloads.WorkloadReference, error) {
+	obj := &batchv1.Job{}
+	if err := k8sClient.Get(ctx, key, obj); err != nil {
+		return nil, fmt.Errorf("could not get job: %w", err)
+	}
+	jobRef := &JobReference{
+		Job: *obj,
+	}
+	return jobRef, nil
+}
+
+type JobReference struct {
+	Job  batchv1.Job
+	Pods []corev1.Pod
+}
+
+func (jobRef *JobReference) Load(ctx context.Context, k8sClient client.Client) error {
+	logrus.Debugf("loading job reference %s", jobRef.Job.Name)
+
+	pods := &corev1.PodList{}
+
+	controllerUID, exists := jobRef.Job.Spec.Template.Labels["batch.kubernetes.io/controller-uid"]
+
+	if !exists {
+		return fmt.Errorf("controller-uid label is missing in the Job's pod template")
+	}
+
+	logrus.Infof("Using controller uid: %s", controllerUID)
+
+	labelSelector := client.MatchingLabels{
+		"batch.kubernetes.io/controller-uid": controllerUID,
+		"controller-uid":                     controllerUID,
+		"batch.kubernetes.io/job-name":       jobRef.Job.GetName(),
+		"job-name":                           jobRef.Job.GetName(),
+	}
+	if err := k8sClient.List(ctx, pods, client.InNamespace(jobRef.Job.Namespace), labelSelector); err != nil {
+		return fmt.Errorf("could not list pods: %w", err)
+	}
+
+	logrus.Debugf("Found %d pods", len(pods.Items))
+
+	// Clear existing pods and append the new ones
+	jobRef.Pods = nil
+	jobRef.Pods = append(jobRef.Pods, pods.Items...)
+
+	return nil
+}
+
+func (jobRef *JobReference) GetPods() []workloads.WorkloadPod {
+	var workloadPods = make([]workloads.WorkloadPod, len(jobRef.Pods))
+	for i, pod := range jobRef.Pods {
+		workloadPods[i] = workloads.WorkloadPod{
+			Pod: pod,
+		}
+	}
+	return workloadPods
+}
+
+func (jobRef *JobReference) GetName() string {
+	return jobRef.Job.GetName()
+}
+
+func (jobRef *JobReference) GetStatus() string {
+	return "N/A"
 }
