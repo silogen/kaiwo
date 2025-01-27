@@ -184,5 +184,5 @@ func (serviceRef *ServiceReference) GetName() string {
 }
 
 func (serviceRef *ServiceReference) GetStatus() string {
-	return "N/A"
+	return "N/A (TODO)"
 }

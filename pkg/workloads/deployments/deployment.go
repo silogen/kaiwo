@@ -95,7 +95,7 @@ func (deployment Deployment) GenerateAdditionalResourceManifests(k8sClient clien
 func (deployment Deployment) BuildReference(ctx context.Context, k8sClient client.Client, key client.ObjectKey) (workloads.WorkloadReference, error) {
 	obj := &appsv1.Deployment{}
 	if err := k8sClient.Get(ctx, key, obj); err != nil {
-		return nil, fmt.Errorf("could not get job: %w", err)
+		return nil, fmt.Errorf("could not get deployment: %w", err)
 	}
 	deploymentRef := &DeploymentReference{
 		Deployment: *obj,
@@ -172,5 +172,5 @@ func (deploymentRef *DeploymentReference) GetName() string {
 }
 
 func (deploymentRef *DeploymentReference) GetStatus() string {
-	return "N/A"
+	return "N/A (TODO)"
 }

@@ -160,5 +160,5 @@ func (jobRef *JobReference) GetName() string {
 }
 
 func (jobRef *JobReference) GetStatus() string {
-	return "N/A"
+	return "N/A (TODO)"
 }
