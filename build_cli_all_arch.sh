@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Set default build version if not provided as an argument
-BUILD_VERSION=${1:-"v.0.0.3"}
+BUILD_VERSION=${1:-"v.0.0.5"}
 BUILD_COMMIT=$(git rev-parse --short HEAD)
 BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
@@ -35,7 +35,7 @@ for target in "${targets[@]}"; do
 
     # Build the binary
     echo "Building for $os/$arch..."
-    env GOOS=$os GOARCH=$arch go build -ldflags="-X 'github.com/silogen/kaiwo/pkg/cli.version=${BUILD_VERSION}' -X 'github.com/silogen/kaiwo/pkg/cli.commit=${BUILD_COMMIT}' -X 'github.com/silogen/kaiwo/pkg/cli.date=${BUILD_DATE}'" -o builds/"$output" main.go
+    env GOOS=$os GOARCH=$arch go build -ldflags="-X 'github.com/silogen/kaiwo/pkg/cli.version=${BUILD_VERSION}' -X 'github.com/silogen/kaiwo/pkg/cli.commit=${BUILD_COMMIT}' -X 'github.com/silogen/kaiwo/pkg/cli.date=${BUILD_DATE}'" -o builds/"$output" cmd/cli/main.go
 
     if [ $? -eq 0 ]; then
         echo "Successfully built $output"
