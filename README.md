@@ -219,6 +219,13 @@ kaiwo completion bash | sudo tee /etc/bash_completion.d/kaiwo > /dev/null
 
 You have to restart your terminal for auto-completion to take effect.
 
+#### Usernames
+
+Each workload is given a `kaiwo-cli/username` label to provide an easy way to distinguish and filter workloads created by different users. The value for this is determined by
+
+* The `KAIWO_USER_EMAIL` environment variable, if present
+* The current user and hostname
+
 ### Workload templates
 
 Kaiwo manages Kubernetes workloads through templates. These templates are YAML files that use go template syntax. If you do not provide a template when submitting or serving a workload by using the `--template` flag, a default template is used. The context available for the template is defined by the [WorkloadTemplateConfig struct](./pkg/workloads/config.go), and you can refer to the default templates for [Ray](pkg/workloads/ray) and [Kueue](./pkg/workloads/jobs).
@@ -235,6 +242,32 @@ You can access this in the template via
 ```gotemplate
 {{ .Custom.parent.child }}
 ```
+
+## Interacting with workloads
+
+While Kaiwo's primary purpose is to deploy workloads, it can also be used as a light tool to discover and interact with running workloads.
+
+Run the commands with the `--help` flag to see all the available options.
+
+* `kaiwo list [<workload type>/[<workload name>]]` lets you browse all available workloads and interact with them
+  * By default, only workloads that have been created by you are shown. This is inferred by your [username](#usernames)
+  * If you want to list workloads by all users, use the `--all-users` flag
+  * If you want to specify another user, use the `--user=...` flag
+* `kaiwo logs <workload type>/<workload name>` lets you view logs of a particular workload's container
+* `kaiwo exec <workload type>/<workload name> --command ...` lets you run a command in a workload's container
+* `kaiwo monitor <workload type>/<workload name>` lets you run a GPU monitoring command in a workload's GPU container
+
+Ensure that you provide the correct namespace for all commands via the `-n` or `--namespace` flags.
+
+### list command
+
+The `kaiwo list` command can be used as an easy entrypoint to view existing resources. 
+
+### logs command
+
+### exec command
+
+### monitor command
 
 ## Contributing to Kaiwo
 

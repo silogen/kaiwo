@@ -12,6 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// The `RunList` function implements an interactive, multi-step process to allow users
+// to list, filter, and interact with Kubernetes workloads and their associated pods
+// and containers. The logic for this process can be broken down as follows:
+//
+// 1. **Interactive Workflow**:
+//    - The user is guided through a series of interactive screens implemented as `runFuncs`.
+//      Each screen corresponds to a specific step:
+//        - Selecting a workload type (e.g., job, deployment).
+//        - Selecting a specific workload by listing available resources of the chosen type.
+//        - Selecting a pod and container from the workload.
+//        - Performing an action (e.g., viewing logs, monitoring, or executing commands).
+//
+// 2. **State Management**:
+//    - The current state of the interaction is stored in the `runState` struct, which
+//      tracks details like the selected workload type, pod name, and container name.
+//    - Screen transitions are managed using `tui.SelectTableResult` values. Depending on
+//      the user's selection, the flow can move forward, backward, or terminate.
+//
+// 3. **Actions**:
+//    - After completing the selection process, the user can perform specific actions
+//      on the selected pod/container, such as viewing logs, monitoring the container,
+//      or executing arbitrary commands.
+//
+// The code is structured to be modular, with separate functions handling each step of the process.
+
 package utils
 
 import (
@@ -55,22 +80,6 @@ func RunList(workloadType string, workloadName string, namespace string, user st
 		return err
 	}
 
-	// TODO fix
-	kubeconfig := "/home/alex/.kube/config"
-	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
-	if err != nil {
-		return fmt.Errorf("failed to build config from flags: %w", err)
-	}
-
-	// Create Kubernetes clientset
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return fmt.Errorf("failed to build config from flags: %w", err)
-	}
-
-	_ = clientset
-	_ = k8sClient
-
 	ctx := context.Background()
 
 	var workloadReference workloads.WorkloadReference
@@ -113,22 +122,18 @@ func RunList(workloadType string, workloadName string, namespace string, user st
 		}
 
 		if result == tui.SelectTableGoToPrevious {
-			if screenIndex == 0 {
-				// Already at the beginning, do nothing
-				continue
+			if screenIndex > 0 {
+				screenIndex--
 			}
-			screenIndex -= 1
-		} else if result == tui.SelectTableQuit {
-			// Quit
-			return nil
 		} else if result == tui.SelectTableRowSelected {
 			if screenIndex < len(runFuncs)-1 {
-				// Still have more screens left
-				screenIndex += 1
+				screenIndex++
 			} else {
-				// Final screen finished, quit
+				// Final screen completed
 				return nil
 			}
+		} else if result == tui.SelectTableQuit {
+			return nil
 		}
 	}
 }
@@ -244,56 +249,7 @@ func runSelectPodAndContainer(ctx context.Context, k8sClient client.Client, runS
 
 	allPods := runState.workloadReference.GetPods()
 
-	var data [][]string
-
-	containerStatusToRow := func(pod workloads.WorkloadPod, containerStatus corev1.ContainerStatus, isInitContainer bool) []string {
-		containerStatusMsg := ""
-
-		if containerStatus.State.Running != nil {
-			containerStatusMsg = fmt.Sprintf("Running since %s", containerStatus.State.Running.StartedAt.Format(time.RFC3339))
-		} else if containerStatus.State.Waiting != nil {
-			containerStatusMsg = fmt.Sprintf("Waiting (%s)", containerStatus.State.Waiting.Reason)
-		} else if containerStatus.State.Terminated != nil {
-			containerStatusMsg = fmt.Sprintf("Terminated (%s)", containerStatus.State.Terminated.Reason)
-		} else {
-			containerStatusMsg = "N/A"
-		}
-
-		// TODO add indicator about being an init container (another column?)
-		//prefix := ""
-		//if isInitContainer {
-		//	prefix = "[init] "
-		//}
-
-		return []string{
-			pod.LogicalGroup,
-			pod.Pod.Name,
-			string(pod.Pod.Status.Phase),
-			containerStatus.Name,
-			containerStatusMsg,
-		}
-	}
-
-	for _, pod := range allPods {
-
-		skip := false
-		for _, predicate := range runState.podSelectionPredicates {
-			if !predicate(pod.Pod) {
-				skip = true
-			}
-		}
-		if skip {
-			continue
-		}
-
-		for _, container := range pod.Pod.Status.ContainerStatuses {
-			data = append(data, containerStatusToRow(pod, container, false))
-		}
-		for _, container := range pod.Pod.Status.InitContainerStatuses {
-			data = append(data, containerStatusToRow(pod, container, true))
-		}
-		logrus.Infof("Found pod %s (%s)", pod.Pod.Name, pod.LogicalGroup)
-	}
+	data := gatherPodData(allPods, runState.podSelectionPredicates)
 
 	title := "Select pod and container"
 	selectedRow, result, err := tui.RunSelectTable(data, containerSelectColumns, title, true)
@@ -308,6 +264,58 @@ func runSelectPodAndContainer(ctx context.Context, k8sClient client.Client, runS
 		runState.containerName = ""
 	}
 	return result, nil
+}
+
+func gatherPodData(pods []workloads.WorkloadPod, predicates []PodSelectionPredicate) [][]string {
+	var data [][]string
+
+	for _, pod := range pods {
+		if !applyPredicates(predicates, pod.Pod) {
+			continue
+		}
+		data = append(data, getContainerData(pod)...)
+	}
+
+	return data
+}
+
+func applyPredicates(predicates []PodSelectionPredicate, pod corev1.Pod) bool {
+	for _, predicate := range predicates {
+		if !predicate(pod) {
+			return false
+		}
+	}
+	return true
+}
+
+func getContainerData(pod workloads.WorkloadPod) [][]string {
+	var rows [][]string
+	for _, container := range pod.Pod.Status.ContainerStatuses {
+		rows = append(rows, formatContainerRow(pod, container, false))
+	}
+	for _, container := range pod.Pod.Status.InitContainerStatuses {
+		rows = append(rows, formatContainerRow(pod, container, true))
+	}
+	return rows
+}
+
+func formatContainerRow(pod workloads.WorkloadPod, container corev1.ContainerStatus, isInitContainer bool) []string {
+	containerStatus := "N/A"
+	if container.State.Running != nil {
+		containerStatus = fmt.Sprintf("Running since %s", container.State.Running.StartedAt.Format(time.RFC3339))
+	} else if container.State.Waiting != nil {
+		containerStatus = fmt.Sprintf("Waiting (%s)", container.State.Waiting.Reason)
+	} else if container.State.Terminated != nil {
+		containerStatus = fmt.Sprintf("Terminated (%s)", container.State.Terminated.Reason)
+	}
+
+	return []string{
+		pod.LogicalGroup,
+		pod.Pod.Name,
+		string(pod.Pod.Status.Phase),
+		container.Name,
+		containerStatus,
+	}
 }
 
 type runAction string
@@ -357,7 +365,6 @@ func runViewLogsAction(ctx context.Context, _ client.Client, runState *runState)
 	follow := true
 	lines := ""
 	var numLines int
-	showFormatMessage := false
 
 	clientset, err := k8s.GetClientset()
 	if err != nil {
@@ -365,18 +372,11 @@ func runViewLogsAction(ctx context.Context, _ client.Client, runState *runState)
 	}
 
 	for {
-		inputs := []huh.Field{
+		err := huh.NewForm(huh.NewGroup(
 			huh.NewInput().Title("Tail lines (-1 shows all lines)").Value(&lines).Placeholder("-1"),
 			huh.NewConfirm().Title("Follow").Value(&follow),
-		}
+		)).Run()
 
-		if showFormatMessage {
-			inputs = append(inputs, huh.NewNote().Title("Lines must be a non-zero whole number"))
-		}
-
-		f := huh.NewForm(huh.NewGroup(inputs...))
-
-		err := f.Run()
 		if err != nil {
 			return fmt.Errorf("failed to fetch input: %w", err)
 		}
@@ -387,9 +387,10 @@ func runViewLogsAction(ctx context.Context, _ client.Client, runState *runState)
 
 		numLines, err = strconv.Atoi(lines)
 		if err != nil || numLines == 0 {
-			showFormatMessage = true
+			logrus.Warn("Lines must be a non-zero integer")
 			continue
 		}
+
 		break
 	}
 

@@ -65,7 +65,7 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 
 	metaFlags.User, err = baseutils.GetCurrentUser()
 	if err != nil {
-		return fmt.Errorf("Failed to fetch the current user: %v", err)
+		return fmt.Errorf("failed to fetch the current user: %v", err)
 	}
 
 	if metaFlags.Name == "" {
