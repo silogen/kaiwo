@@ -75,12 +75,12 @@ func buildKubeConfig() (*rest.Config, error) {
 		return nil, err
 	}
 
-	config_, err := clientcmd.BuildConfigFromFlags("", kubeConfigPath)
+	config, err := clientcmd.BuildConfigFromFlags("", kubeConfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build kubeconfig: %v", err)
 	}
 
-	return config_, nil
+	return config, nil
 }
 
 // InitializeDynamicClient initializes the dynamic Kubernetes client
@@ -176,9 +176,9 @@ func GetClientset() (*kubernetes.Clientset, error) {
 	}
 
 	// Create Kubernetes clientset
-	clientset_, err := kubernetes.NewForConfig(config_)
+	clientset, err := kubernetes.NewForConfig(config_)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Kubernetes client: %v", err)
 	}
-	return clientset_, nil
+	return clientset, nil
 }

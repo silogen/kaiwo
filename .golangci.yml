@@ -20,7 +20,6 @@ linters:
       - gocyclo
       - misspell
       - nakedret
-      - revive
       - typecheck
       - unconvert
       - unparam

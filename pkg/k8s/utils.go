@@ -115,7 +115,7 @@ func ReadEnvFile(filePath string) ([]corev1.EnvVar, []SecretVolume, error) {
 	defer func() {
 		if cerr := file.Close(); cerr != nil {
 			// Log the error, as defer cannot modify the return values of the outer function
-			log.Printf("failed to close file: %v", cerr)
+			logrus.Warnf("failed to close file: %v", cerr)
 		}
 	}()
 
@@ -165,7 +165,6 @@ func ReadEnvFile(filePath string) ([]corev1.EnvVar, []SecretVolume, error) {
 
 	return envVars, secretVolumes, nil
 }
-
 
 // MinimalizeAndConvertToYAML converts a runtime.Object or client.Object to its YAML representation
 // while removing read-only fields like `metadata.creationTimestamp`, `status`, and others.

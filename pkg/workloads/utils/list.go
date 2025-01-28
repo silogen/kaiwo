@@ -291,15 +291,15 @@ func applyPredicates(predicates []PodSelectionPredicate, pod corev1.Pod) bool {
 func getContainerData(pod workloads.WorkloadPod) [][]string {
 	var rows [][]string
 	for _, container := range pod.Pod.Status.ContainerStatuses {
-		rows = append(rows, formatContainerRow(pod, container, false))
+		rows = append(rows, formatContainerRow(pod, container))
 	}
 	for _, container := range pod.Pod.Status.InitContainerStatuses {
-		rows = append(rows, formatContainerRow(pod, container, true))
+		rows = append(rows, formatContainerRow(pod, container))
 	}
 	return rows
 }
 
-func formatContainerRow(pod workloads.WorkloadPod, container corev1.ContainerStatus, isInitContainer bool) []string {
+func formatContainerRow(pod workloads.WorkloadPod, container corev1.ContainerStatus) []string {
 	containerStatus := "N/A"
 	if container.State.Running != nil {
 		containerStatus = fmt.Sprintf("Running since %s", container.State.Running.StartedAt.Format(time.RFC3339))

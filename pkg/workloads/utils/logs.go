@@ -155,10 +155,10 @@ func OutputLogs(
 					// Check if the error is due to context cancellation
 					if errors.Is(err, context.Canceled) || err.Error() == "context canceled" {
 						logrus.Tracef("Log stream terminated by context cancellation.")
-						break
+						return
 					}
 					logrus.Errorf("Error reading log stream: %v\n", err)
-					break
+					return
 				}
 			}
 		}
