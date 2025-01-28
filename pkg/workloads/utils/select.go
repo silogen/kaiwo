@@ -15,11 +15,10 @@
 package utils
 
 import (
-	"fmt"
-	"time"
+	"context"
 
-	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/silogen/kaiwo/pkg/tui"
 	"github.com/silogen/kaiwo/pkg/workloads"
@@ -50,71 +49,18 @@ func IsGPUPod(pod corev1.Pod) bool {
 
 // ChoosePodAndContainer allows the user to choose the pod and the container they want to interact with
 // predicates define an optional list of predicates that must be matched in order to include the pod in the list
-func ChoosePodAndContainer(reference workloads.WorkloadReference, predicates ...PodSelectionPredicate) (string, string, error, bool) {
+func ChoosePodAndContainer(ctx context.Context, k8sClient client.Client, reference workloads.WorkloadReference, predicates ...PodSelectionPredicate) (string, string, error, bool) {
 
-	allPods := reference.GetPods()
-
-	var data [][]string
-
-	containerStatusToRow := func(pod workloads.WorkloadPod, containerStatus corev1.ContainerStatus, isInitContainer bool) []string {
-		containerStatusMsg := ""
-
-		if containerStatus.State.Running != nil {
-			containerStatusMsg = fmt.Sprintf("Running since %s", containerStatus.State.Running.StartedAt.Format(time.RFC3339))
-		} else if containerStatus.State.Waiting != nil {
-			containerStatusMsg = fmt.Sprintf("Waiting (%s)", containerStatus.State.Waiting.Reason)
-		} else if containerStatus.State.Terminated != nil {
-			containerStatusMsg = fmt.Sprintf("Terminated (%s)", containerStatus.State.Terminated.Reason)
-		} else {
-			containerStatusMsg = "N/A"
-		}
-
-		// TODO add
-		//prefix := ""
-		//if isInitContainer {
-		//	prefix = "[init] "
-		//}
-
-		return []string{
-			pod.LogicalGroup,
-			pod.Pod.Name,
-			string(pod.Pod.Status.Phase),
-			containerStatus.Name,
-			containerStatusMsg,
-		}
+	state := &runState{
+		workloadReference:      reference,
+		podSelectionPredicates: predicates,
 	}
 
-	for _, pod := range allPods {
+	result, err := runSelectPodAndContainer(
+		ctx,
+		k8sClient,
+		state,
+	)
 
-		skip := false
-		for _, predicate := range predicates {
-			if !predicate(pod.Pod) {
-				skip = true
-			}
-		}
-		if skip {
-			continue
-		}
-
-		for _, container := range pod.Pod.Status.ContainerStatuses {
-			data = append(data, containerStatusToRow(pod, container, false))
-		}
-		for _, container := range pod.Pod.Status.InitContainerStatuses {
-			data = append(data, containerStatusToRow(pod, container, true))
-		}
-		logrus.Infof("Found pod %s (%s)", pod.Pod.Name, pod.LogicalGroup)
-	}
-
-	title := ""
-	selectedRow, err := tui.RunSelectTable(data, containerSelectColumns, title, true)
-
-	selectedContainerName := ""
-	selectedPodName := ""
-
-	if selectedRow != nil {
-		selectedPodName = (*selectedRow)[1]
-		selectedContainerName = (*selectedRow)[3]
-	}
-
-	return selectedPodName, selectedContainerName, err, selectedRow == nil && err != nil
+	return state.podName, state.containerName, err, result == tui.SelectTableQuit || result == tui.SelectTableGoToPrevious
 }
