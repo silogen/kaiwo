@@ -20,7 +20,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"github.com/silogen/kaiwo/pkg/cmd"
+	cmd "github.com/silogen/kaiwo/pkg/cli"
 )
 
 var kaiwoBanner = `

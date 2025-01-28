@@ -35,7 +35,7 @@ for target in "${targets[@]}"; do
 
     # Build the binary
     echo "Building for $os/$arch..."
-    env GOOS=$os GOARCH=$arch go build -ldflags="-X 'github.com/silogen/kaiwo/pkg/cmd.version=${BUILD_VERSION}' -X 'github.com/silogen/kaiwo/pkg/cmd.commit=${BUILD_COMMIT}' -X 'github.com/silogen/kaiwo/pkg/cmd.date=${BUILD_DATE}'" -o builds/"$output" main.go
+    env GOOS=$os GOARCH=$arch go build -ldflags="-X 'github.com/silogen/kaiwo/pkg/cli.version=${BUILD_VERSION}' -X 'github.com/silogen/kaiwo/pkg/cli.commit=${BUILD_COMMIT}' -X 'github.com/silogen/kaiwo/pkg/cli.date=${BUILD_DATE}'" -o builds/"$output" main.go
 
     if [ $? -eq 0 ]; then
         echo "Successfully built $output"

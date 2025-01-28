@@ -112,7 +112,12 @@ func ReadEnvFile(filePath string) ([]corev1.EnvVar, []SecretVolume, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to open env file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if cerr := file.Close(); cerr != nil {
+			// Log the error, as defer cannot modify the return values of the outer function
+			log.Printf("failed to close file: %v", cerr)
+		}
+	}()
 
 	var envFile EnvFile
 	if err := yaml.NewDecoder(file).Decode(&envFile); err != nil {
@@ -160,6 +165,7 @@ func ReadEnvFile(filePath string) ([]corev1.EnvVar, []SecretVolume, error) {
 
 	return envVars, secretVolumes, nil
 }
+
 
 // MinimalizeAndConvertToYAML converts a runtime.Object or client.Object to its YAML representation
 // while removing read-only fields like `metadata.creationTimestamp`, `status`, and others.

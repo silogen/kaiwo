@@ -24,7 +24,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
-	cli "github.com/silogen/kaiwo/pkg/cmd/apply"
+	cli "github.com/silogen/kaiwo/pkg/cli/apply"
 	"github.com/silogen/kaiwo/pkg/workloads"
 )
 
