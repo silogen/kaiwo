@@ -57,6 +57,22 @@ type WorkloadPod struct {
 	LogicalGroup string
 }
 
+type WorkloadReferenceBase struct {
+	WorkloadObject client.Object
+}
+
+func (workloadReferenceBase WorkloadReferenceBase) GetName() string {
+	return workloadReferenceBase.WorkloadObject.GetName()
+}
+
+func (workloadReferenceBase WorkloadReferenceBase) GetNamespace() string {
+	return workloadReferenceBase.WorkloadObject.GetNamespace()
+}
+
+func (workloadReferenceBase WorkloadReferenceBase) GetKaiwoUser() string {
+	return workloadReferenceBase.WorkloadObject.GetLabels()[KaiwoUsernameLabel]
+}
+
 type WorkloadReference interface {
 	// Load loads the current state from k8s
 	Load(ctx context.Context, k8sClient client.Client) error
@@ -64,7 +80,11 @@ type WorkloadReference interface {
 	// GetPods returns the pods that the reference is currently aware of
 	GetPods() []WorkloadPod
 
+	GetStatus() string
+
 	GetName() string
 
-	GetStatus() string
+	GetNamespace() string
+
+	GetKaiwoUser() string
 }

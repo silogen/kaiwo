@@ -104,11 +104,18 @@ func (job Job) BuildReference(ctx context.Context, k8sClient client.Client, key 
 	}
 	jobRef := &JobReference{
 		Job: *obj,
+		WorkloadReferenceBase: workloads.WorkloadReferenceBase{
+			WorkloadObject: obj,
+		},
+	}
+	if err := jobRef.Load(ctx, k8sClient); err != nil {
+		return nil, fmt.Errorf("could not load job: %w", err)
 	}
 	return jobRef, nil
 }
 
 type JobReference struct {
+	workloads.WorkloadReferenceBase
 	Job  batchv1.Job
 	Pods []corev1.Pod
 }
@@ -153,10 +160,6 @@ func (jobRef *JobReference) GetPods() []workloads.WorkloadPod {
 		}
 	}
 	return workloadPods
-}
-
-func (jobRef *JobReference) GetName() string {
-	return jobRef.Job.GetName()
 }
 
 func (jobRef *JobReference) GetStatus() string {

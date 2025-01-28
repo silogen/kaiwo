@@ -17,21 +17,10 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
-	"os/exec"
-	"os/signal"
-	"syscall"
 
-	"golang.org/x/term"
-
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/client-go/tools/remotecommand"
 
 	"github.com/silogen/kaiwo/pkg/k8s"
 	"github.com/silogen/kaiwo/pkg/workloads/factory"
@@ -50,8 +39,8 @@ func BuildMonitorCmd(name string, command string) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		Short: fmt.Sprintf("Run %s in a container", command),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			parsedCommand := parseCommand(command)
-			if err := validateCommand(parsedCommand[0]); err != nil {
+			parsedCommand := utils.ParseCommand(command)
+			if err := utils.ValidateCommand(parsedCommand[0]); err != nil {
 				return err
 			}
 			return executeContainerCommand(args, parsedCommand, true)
@@ -75,8 +64,8 @@ func BuildExecCommand() *cobra.Command {
 				return fmt.Errorf("--command flag is required")
 			}
 
-			command := parseCommand(execCommand)
-			if err := validateCommand(command[0]); err != nil {
+			command := utils.ParseCommand(execCommand)
+			if err := utils.ValidateCommand(command[0]); err != nil {
 				return err
 			}
 			return executeContainerCommand(args, command, false)
@@ -89,17 +78,6 @@ func BuildExecCommand() *cobra.Command {
 	cmd.Flags().BoolVarP(&execTTY, "tty", "t", true, "Enable TTY")
 
 	return cmd
-}
-
-func parseCommand(command string) []string {
-	return []string{"/bin/sh", "-c", command}
-}
-
-func validateCommand(command string) error {
-	if _, err := exec.LookPath(command); err != nil {
-		return fmt.Errorf("error: %s not found in the container", command)
-	}
-	return nil
 }
 
 func executeContainerCommand(args []string, command []string, gpuPodsOnly bool) error {
@@ -136,10 +114,6 @@ func executeContainerCommand(args []string, command []string, gpuPodsOnly bool) 
 		return fmt.Errorf("failed to build workload reference: %w", err)
 	}
 
-	if err := reference.Load(ctx, k8sClient); err != nil {
-		return fmt.Errorf("failed to load workload reference: %w", err)
-	}
-
 	allPods := reference.GetPods()
 	if len(allPods) == 0 {
 		return fmt.Errorf("no pods found for workload %s", args[0])
@@ -151,7 +125,7 @@ func executeContainerCommand(args []string, command []string, gpuPodsOnly bool) 
 		predicates = []utils.PodSelectionPredicate{utils.IsGPUPod}
 	}
 
-	podName, containerName, err, cancelled := utils.ChoosePodAndContainer(reference, predicates...)
+	podName, containerName, err, cancelled := utils.ChoosePodAndContainer(ctx, k8sClient, reference, predicates...)
 	if err != nil {
 		return fmt.Errorf("failed to choose pod and container: %w", err)
 	}
@@ -159,78 +133,5 @@ func executeContainerCommand(args []string, command []string, gpuPodsOnly bool) 
 		return nil
 	}
 
-	return execInContainer(ctx, clientset, config, podName, containerName, execNamespace, command, execInteractive, execTTY)
-}
-
-func execInContainer(
-	ctx context.Context,
-	clientset *kubernetes.Clientset,
-	config *rest.Config,
-	podName string,
-	containerName string,
-	namespace string,
-	command []string,
-	interactive bool,
-	tty bool,
-) error {
-	logrus.Debugf("Executing command: %v in container %s of pod %s", command, containerName, podName)
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	signalCh := make(chan os.Signal, 1)
-	signal.Notify(signalCh, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-signalCh
-		cancel()
-	}()
-
-	// Get terminal size for full-width rendering
-	termWidth, termHeight := getTerminalSize()
-
-	req := clientset.CoreV1().RESTClient().
-		Post().
-		Resource("pods").
-		Namespace(namespace).
-		Name(podName).
-		SubResource("exec").
-		VersionedParams(&corev1.PodExecOptions{
-			Container: containerName,
-			Command:   command,
-			Stdin:     interactive,
-			Stdout:    true,
-			Stderr:    true,
-			TTY:       tty,
-		}, scheme.ParameterCodec)
-
-	executor, err := remotecommand.NewSPDYExecutor(config, "POST", req.URL())
-	if err != nil {
-		return fmt.Errorf("failed to create SPDY executor: %w", err)
-	}
-
-	return executor.StreamWithContext(ctx, remotecommand.StreamOptions{
-		Stdin:             os.Stdin,
-		Stdout:            os.Stdout,
-		Stderr:            os.Stderr,
-		Tty:               tty,
-		TerminalSizeQueue: &fixedSizeQueue{Width: termWidth, Height: termHeight},
-	})
-}
-
-// fixedSizeQueue implements the TerminalSizeQueue interface
-type fixedSizeQueue struct {
-	Width  int
-	Height int
-}
-
-func (q *fixedSizeQueue) Next() *remotecommand.TerminalSize {
-	return &remotecommand.TerminalSize{Width: uint16(q.Width), Height: uint16(q.Height)}
-}
-
-// getTerminalSize fetches the current terminal size
-func getTerminalSize() (int, int) {
-	width, height, err := term.GetSize(int(os.Stdout.Fd()))
-	if err != nil {
-		return 80, 24 // Default to 80x24 if size can't be determined
-	}
-	return width, height
+	return utils.ExecInContainer(ctx, clientset, config, podName, containerName, execNamespace, command, execInteractive, execTTY)
 }

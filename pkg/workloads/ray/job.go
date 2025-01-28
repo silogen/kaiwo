@@ -97,11 +97,18 @@ func (job Job) BuildReference(ctx context.Context, k8sClient client.Client, key 
 	}
 	jobRef := &JobReference{
 		RayJob: *obj,
+		WorkloadReferenceBase: workloads.WorkloadReferenceBase{
+			WorkloadObject: obj,
+		},
+	}
+	if err := jobRef.Load(ctx, k8sClient); err != nil {
+		return nil, fmt.Errorf("could not load job: %w", err)
 	}
 	return jobRef, nil
 }
 
 type JobReference struct {
+	workloads.WorkloadReferenceBase
 	RayJob       rayv1.RayJob
 	SubmitterPod *corev1.Pod
 	HeadPod      *corev1.Pod
@@ -185,10 +192,6 @@ func (jobRef *JobReference) GetPods() []workloads.WorkloadPod {
 		})
 	}
 	return pods
-}
-
-func (jobRef *JobReference) GetName() string {
-	return jobRef.RayJob.GetName()
 }
 
 func (jobRef *JobReference) GetStatus() string {

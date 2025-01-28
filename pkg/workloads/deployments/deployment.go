@@ -88,7 +88,7 @@ func (deployment Deployment) GetServices() ([]corev1.Service, error) {
 	return []corev1.Service{}, nil
 }
 
-func (deployment Deployment) GenerateAdditionalResourceManifests(k8sClient client.Client, templateContext workloads.WorkloadTemplateConfig) ([]runtime.Object, error) {
+func (deployment Deployment) GenerateAdditionalResourceManifests(_ client.Client, _ workloads.WorkloadTemplateConfig) ([]runtime.Object, error) {
 	return []runtime.Object{}, nil
 }
 
@@ -99,11 +99,18 @@ func (deployment Deployment) BuildReference(ctx context.Context, k8sClient clien
 	}
 	deploymentRef := &DeploymentReference{
 		Deployment: *obj,
+		WorkloadReferenceBase: workloads.WorkloadReferenceBase{
+			WorkloadObject: obj,
+		},
+	}
+	if err := deploymentRef.Load(ctx, k8sClient); err != nil {
+		return nil, fmt.Errorf("could not load deployment: %w", err)
 	}
 	return deploymentRef, nil
 }
 
 type DeploymentReference struct {
+	workloads.WorkloadReferenceBase
 	Deployment  appsv1.Deployment
 	ReplicaSets []ReplicaSetReference
 }
@@ -165,10 +172,6 @@ func (deploymentRef *DeploymentReference) GetPods() []workloads.WorkloadPod {
 	}
 
 	return workloadPods
-}
-
-func (deploymentRef *DeploymentReference) GetName() string {
-	return deploymentRef.Deployment.GetName()
 }
 
 func (deploymentRef *DeploymentReference) GetStatus() string {

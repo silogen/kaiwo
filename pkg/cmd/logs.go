@@ -16,10 +16,9 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/spf13/cobra"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/silogen/kaiwo/pkg/k8s"
 	"github.com/silogen/kaiwo/pkg/workloads/factory"
@@ -59,28 +58,25 @@ func BuildLogCmd() *cobra.Command {
 				return err
 			}
 
-			// TODO move
-			kubeconfig, _ := k8s.GetKubeConfig()
-			config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
-			if err != nil {
-				panic(err)
-			}
-
 			// Create Kubernetes clientset
-			clientset, err := kubernetes.NewForConfig(config)
+			clientset, err := k8s.GetClientset()
 			if err != nil {
 				panic(err)
 			}
 
-			return utils.OutputLogs(
-				workload,
+			workloadReference, err := workload.BuildReference(ctx, k8sClient, objectKey)
+
+			if err != nil {
+				return fmt.Errorf("failed to build workload reference: %w", err)
+			}
+
+			return utils.OutputLogsWithSelect(
+				workloadReference,
 				ctx,
 				k8sClient,
 				clientset,
-				objectKey,
 				int64(tailLines),
 				false,
-				//utils.StreamType(stream),
 				follow,
 			)
 		},

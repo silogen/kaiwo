@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"os"
 
+	"k8s.io/client-go/kubernetes"
+
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	"github.com/sirupsen/logrus"
 	batchv1 "k8s.io/api/batch/v1"
@@ -73,27 +75,27 @@ func buildKubeConfig() (*rest.Config, error) {
 		return nil, err
 	}
 
-	config, err := clientcmd.BuildConfigFromFlags("", kubeConfigPath)
+	config_, err := clientcmd.BuildConfigFromFlags("", kubeConfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build kubeconfig: %v", err)
 	}
 
-	return config, nil
+	return config_, nil
 }
 
 // InitializeDynamicClient initializes the dynamic Kubernetes client
 func InitializeDynamicClient() (dynamic.Interface, error) {
-	config, err := buildKubeConfig()
+	config_, err := buildKubeConfig()
 	if err != nil {
 		return nil, err
 	}
 
-	client, err := dynamic.NewForConfig(config)
+	client_, err := dynamic.NewForConfig(config_)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create dynamic Kubernetes client: %v", err)
 	}
 
-	return client, nil
+	return client_, nil
 }
 
 // GetDynamicClient provides a singleton for the dynamic client
@@ -166,31 +168,17 @@ func GetClient() (client.Client, error) {
 	return k8sClient, err
 }
 
-//// InitializeTypedClient initializes the typed Kubernetes client
-//func InitializeTypedClient() (*kubernetes.Clientset, error) {
-//	config, err := buildKubeConfig()
-//	if err != nil {
-//		return nil, err
-//	}
-//
-//	client, err := kubernetes.NewForConfig(config)
-//	if err != nil {
-//		return nil, fmt.Errorf("failed to create typed Kubernetes client: %v", err)
-//	}
-//
-//	return client, nil
-//}
-//
-//// GetTypedClient provides a singleton for the typed client
-//func GetTypedClient() (*kubernetes.Clientset, error) {
-//	typedOnce.Do(func() {
-//		client, err := InitializeTypedClient()
-//		if err != nil {
-//			logrus.Fatalf("failed to initialize typed Kubernetes client: %v", err)
-//			typedInitErr = err
-//			return
-//		}
-//		typedClient = client
-//	})
-//	return typedClient, typedInitErr
-//}
+func GetClientset() (*kubernetes.Clientset, error) {
+	kubeconfig, _ := GetKubeConfig()
+	config_, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Kubernetes config: %v", err)
+	}
+
+	// Create Kubernetes clientset
+	clientset_, err := kubernetes.NewForConfig(config_)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Kubernetes client: %v", err)
+	}
+	return clientset_, nil
+}
