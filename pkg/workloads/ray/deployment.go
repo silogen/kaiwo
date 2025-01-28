@@ -94,11 +94,18 @@ func (deployment Deployment) BuildReference(ctx context.Context, k8sClient clien
 	}
 	deploymentRef := &ServiceReference{
 		RayService: *obj,
+		WorkloadReferenceBase: workloads.WorkloadReferenceBase{
+			WorkloadObject: obj,
+		},
+	}
+	if err := deploymentRef.Load(ctx, k8sClient); err != nil {
+		return nil, fmt.Errorf("could not load service: %w", err)
 	}
 	return deploymentRef, nil
 }
 
 type ServiceReference struct {
+	workloads.WorkloadReferenceBase
 	RayService rayv1.RayService
 	HeadPod    *corev1.Pod
 	WorkerPods []*corev1.Pod
@@ -177,10 +184,6 @@ func (serviceRef *ServiceReference) GetPods() []workloads.WorkloadPod {
 		})
 	}
 	return pods
-}
-
-func (serviceRef *ServiceReference) GetName() string {
-	return serviceRef.RayService.GetName()
 }
 
 func (serviceRef *ServiceReference) GetStatus() string {
