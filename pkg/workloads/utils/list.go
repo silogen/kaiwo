@@ -426,7 +426,7 @@ func runMonitorAction(ctx context.Context, _ client.Client, runState *runState) 
 	)
 }
 
-func runCommandAction(ctx context.Context, k8sClient client.Client, runState *runState) error {
+func runCommandAction(ctx context.Context, _ client.Client, runState *runState) error {
 	kubeconfig, _ := k8s.GetKubeConfig()
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {

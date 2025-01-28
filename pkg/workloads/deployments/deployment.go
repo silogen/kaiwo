@@ -88,7 +88,7 @@ func (deployment Deployment) GetServices() ([]corev1.Service, error) {
 	return []corev1.Service{}, nil
 }
 
-func (deployment Deployment) GenerateAdditionalResourceManifests(k8sClient client.Client, templateContext workloads.WorkloadTemplateConfig) ([]runtime.Object, error) {
+func (deployment Deployment) GenerateAdditionalResourceManifests(_ client.Client, _ workloads.WorkloadTemplateConfig) ([]runtime.Object, error) {
 	return []runtime.Object{}, nil
 }
 

@@ -75,27 +75,27 @@ func buildKubeConfig() (*rest.Config, error) {
 		return nil, err
 	}
 
-	config, err := clientcmd.BuildConfigFromFlags("", kubeConfigPath)
+	config_, err := clientcmd.BuildConfigFromFlags("", kubeConfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build kubeconfig: %v", err)
 	}
 
-	return config, nil
+	return config_, nil
 }
 
 // InitializeDynamicClient initializes the dynamic Kubernetes client
 func InitializeDynamicClient() (dynamic.Interface, error) {
-	config, err := buildKubeConfig()
+	config_, err := buildKubeConfig()
 	if err != nil {
 		return nil, err
 	}
 
-	client, err := dynamic.NewForConfig(config)
+	client_, err := dynamic.NewForConfig(config_)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create dynamic Kubernetes client: %v", err)
 	}
 
-	return client, nil
+	return client_, nil
 }
 
 // GetDynamicClient provides a singleton for the dynamic client
@@ -170,15 +170,15 @@ func GetClient() (client.Client, error) {
 
 func GetClientset() (*kubernetes.Clientset, error) {
 	kubeconfig, _ := GetKubeConfig()
-	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+	config_, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Kubernetes config: %v", err)
 	}
 
 	// Create Kubernetes clientset
-	clientset, err := kubernetes.NewForConfig(config)
+	clientset_, err := kubernetes.NewForConfig(config_)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Kubernetes client: %v", err)
 	}
-	return clientset, nil
+	return clientset_, nil
 }
