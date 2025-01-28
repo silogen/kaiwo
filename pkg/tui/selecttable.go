@@ -16,10 +16,20 @@ package tui
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"strings"
+)
+
+type SelectTableResult string
+
+var (
+	SelectTableRowSelected  SelectTableResult = "selected"
+	SelectTableQuit         SelectTableResult = "quit"
+	SelectTableGoToPrevious SelectTableResult = "previous"
+	SelectTableError        SelectTableResult = "error"
 )
 
 var baseStyle = lipgloss.NewStyle().
@@ -31,6 +41,7 @@ type model struct {
 	table       table.Model
 	selectedRow *[]string
 	title       string
+	result      SelectTableResult
 }
 
 func (m model) Init() tea.Cmd { return nil }
@@ -40,18 +51,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "esc":
-			if m.table.Focused() {
-				m.table.Blur()
-			} else {
-				m.table.Focus()
-			}
+		case "esc", tea.KeyBackspace.String():
+			m.result = SelectTableGoToPrevious
+			return m, tea.Quit
 		case "q", "ctrl+c":
 			m.selectedRow = nil
+			m.result = SelectTableQuit
 			return m, tea.Quit
 		case "enter":
 			selectedRow := []string(m.table.SelectedRow())
 			m.selectedRow = &selectedRow
+			m.result = SelectTableRowSelected
 			return m, tea.Quit
 		}
 	}
@@ -63,17 +73,17 @@ func (m model) View() string {
 	return lipgloss.NewStyle().Bold(true).Render(m.title) + "\n" + baseStyle.Render(m.table.View()) + "\n"
 }
 
-func RunSelectTable(data [][]string, columns []string, title string, clearAfterFinish bool) (*[]string, error) {
+func RunSelectTable(data [][]string, columns []string, title string, clearAfterFinish bool) (*[]string, SelectTableResult, error) {
 
 	if len(data) == 0 {
-		return nil, fmt.Errorf("no data to show")
+		return nil, SelectTableError, fmt.Errorf("no data to show")
 	}
 
 	// Check for column consistency
 	numColumns := len(data[0])
 	for _, row := range data {
 		if len(row) != numColumns {
-			return nil, fmt.Errorf("column count mismatch")
+			return nil, SelectTableError, fmt.Errorf("column count mismatch")
 		}
 	}
 
@@ -118,7 +128,7 @@ func RunSelectTable(data [][]string, columns []string, title string, clearAfterF
 	m := model{table: t, selectedRow: nil, title: title}
 	om, err := tea.NewProgram(m).Run()
 	if err != nil {
-		return nil, fmt.Errorf("error running tea: %v", err)
+		return nil, SelectTableError, fmt.Errorf("error running tea: %v", err)
 	}
 
 	if clearAfterFinish {
@@ -126,7 +136,7 @@ func RunSelectTable(data [][]string, columns []string, title string, clearAfterF
 	}
 
 	outputModel := om.(model)
-	return outputModel.selectedRow, nil
+	return outputModel.selectedRow, outputModel.result, nil
 }
 
 // clearTable clears the last `height` rows from the terminal

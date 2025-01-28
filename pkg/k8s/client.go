@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"os"
 
+	"k8s.io/client-go/kubernetes"
+
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	"github.com/sirupsen/logrus"
 	batchv1 "k8s.io/api/batch/v1"
@@ -166,31 +168,17 @@ func GetClient() (client.Client, error) {
 	return k8sClient, err
 }
 
-//// InitializeTypedClient initializes the typed Kubernetes client
-//func InitializeTypedClient() (*kubernetes.Clientset, error) {
-//	config, err := buildKubeConfig()
-//	if err != nil {
-//		return nil, err
-//	}
-//
-//	client, err := kubernetes.NewForConfig(config)
-//	if err != nil {
-//		return nil, fmt.Errorf("failed to create typed Kubernetes client: %v", err)
-//	}
-//
-//	return client, nil
-//}
-//
-//// GetTypedClient provides a singleton for the typed client
-//func GetTypedClient() (*kubernetes.Clientset, error) {
-//	typedOnce.Do(func() {
-//		client, err := InitializeTypedClient()
-//		if err != nil {
-//			logrus.Fatalf("failed to initialize typed Kubernetes client: %v", err)
-//			typedInitErr = err
-//			return
-//		}
-//		typedClient = client
-//	})
-//	return typedClient, typedInitErr
-//}
+func GetClientset() (*kubernetes.Clientset, error) {
+	kubeconfig, _ := GetKubeConfig()
+	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Kubernetes config: %v", err)
+	}
+
+	// Create Kubernetes clientset
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Kubernetes client: %v", err)
+	}
+	return clientset, nil
+}

@@ -23,35 +23,25 @@ import (
 	"os/signal"
 	"syscall"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/silogen/kaiwo/pkg/workloads"
 )
 
-func OutputLogs(
-	workload workloads.Workload,
+func OutputLogsWithSelect(
+	workloadReference workloads.WorkloadReference,
 	ctx context.Context,
 	k8sClient client.Client,
 	clientset *kubernetes.Clientset,
-	objectKey client.ObjectKey,
 	tailLines int64,
 	noAutoSelect bool,
 	follow bool,
 ) error {
-	reference, err := workload.BuildReference(ctx, k8sClient, objectKey)
-
-	if err != nil {
-		return fmt.Errorf("failed to get workload reference: %w", err)
-	}
-
-	if err := reference.Load(ctx, k8sClient); err != nil {
-		return fmt.Errorf("failed to load workload reference: %w", err)
-	}
-
-	allPods := reference.GetPods()
+	allPods := workloadReference.GetPods()
 
 	if len(allPods) == 0 {
 		logrus.Warn("No pods found for workload")
@@ -75,7 +65,7 @@ func OutputLogs(
 			if len(pod.Status.InitContainerStatuses) > 0 {
 				logrus.Warn("Pod init containers found for workload, not displaying logs for these. Disable auto select to choose init containers")
 			}
-			return outputLogs(ctx, clientset, pod.Name, pod.Status.ContainerStatuses[0].Name, tailLines, objectKey.Namespace, follow)
+			return OutputLogs(ctx, clientset, pod.Name, pod.Status.ContainerStatuses[0].Name, tailLines, workloadReference.GetNamespace(), follow)
 		} else {
 			logrus.Debugf("Found multiple containers for pod %s", pod.Name)
 		}
@@ -83,7 +73,7 @@ func OutputLogs(
 		logrus.Debugf("Found multiple pods for workload")
 	}
 
-	podName, containerName, err, cancelled := ChoosePodAndContainer(reference)
+	podName, containerName, err, cancelled := ChoosePodAndContainer(ctx, k8sClient, workloadReference)
 	if err != nil {
 		return fmt.Errorf("failed to choose pod and container for workload: %w", err)
 	}
@@ -92,11 +82,11 @@ func OutputLogs(
 		return nil
 	}
 
-	return outputLogs(ctx, clientset, podName, containerName, tailLines, objectKey.Namespace, follow)
+	return OutputLogs(ctx, clientset, podName, containerName, tailLines, workloadReference.GetName(), follow)
 }
 
-// outputLogs outputs logs for a given pod container to the standard output
-func outputLogs(
+// OutputLogs outputs logs for a given pod container to the standard output
+func OutputLogs(
 	ctx context.Context,
 	clientset *kubernetes.Clientset,
 	podName string,

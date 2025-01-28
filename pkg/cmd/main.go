@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/silogen/kaiwo/pkg/workloads/utils"
+
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
@@ -96,7 +98,8 @@ func RunCli() {
 	})
 	rootCmd.AddCommand(
 		BuildLogCmd(),
-		BuildMonitorCmd("monitor", "watch -n 1 rocm-smi"),
+		BuildListCmd(),
+		BuildMonitorCmd("monitor", utils.DefaultMonitorCommand),
 		BuildExecCommand(),
 	)
 	rootCmd.AddCommand(&cobra.Command{

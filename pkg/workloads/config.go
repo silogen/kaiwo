@@ -20,8 +20,11 @@ import (
 	"github.com/silogen/kaiwo/pkg/k8s"
 )
 
-const KaiwoconfigFilename = "kaiwoconfig"
-const EnvFilename = "env"
+const (
+	KaiwoconfigFilename = "kaiwoconfig"
+	EnvFilename         = "env"
+	KaiwoUsernameLabel  = "kaiwo-cli/username"
+)
 
 // WorkloadTemplateConfig is the config context that is passed to the workflow templates
 type WorkloadTemplateConfig struct {

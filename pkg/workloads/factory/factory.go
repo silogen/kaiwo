@@ -15,8 +15,13 @@
 package factory
 
 import (
+	"context"
 	"fmt"
 	"strings"
+
+	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
+	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -59,4 +64,66 @@ func GetWorkloadAndObjectKey(workloadDescriptor string, namespace string) (workl
 	key.Name = parts[1]
 
 	return workload, key, nil
+}
+
+func ListObjects(ctx context.Context, k8sClient client.Client, workloadType string, opts ...client.ListOption) ([]workloads.WorkloadReference, error) {
+	var workloadReferences []workloads.WorkloadReference
+
+	// TODO refactor
+	switch workloadType {
+	case "rayjob":
+		rayJobList := &rayv1.RayJobList{}
+		if err := k8sClient.List(ctx, rayJobList, opts...); err != nil {
+			return nil, err
+		}
+		for _, rayJob := range rayJobList.Items {
+			workloadReferences = append(workloadReferences, &ray.JobReference{
+				RayJob: rayJob,
+				WorkloadReferenceBase: workloads.WorkloadReferenceBase{
+					WorkloadObject: &rayJob,
+				},
+			})
+		}
+	case "rayservice":
+		rayServiceList := &rayv1.RayServiceList{}
+		if err := k8sClient.List(ctx, rayServiceList, opts...); err != nil {
+			return nil, err
+		}
+		for _, rayService := range rayServiceList.Items {
+			workloadReferences = append(workloadReferences, &ray.ServiceReference{RayService: rayService,
+				WorkloadReferenceBase: workloads.WorkloadReferenceBase{
+					WorkloadObject: &rayService,
+				},
+			})
+		}
+	case "job":
+		jobList := &batchv1.JobList{}
+		if err := k8sClient.List(ctx, jobList, opts...); err != nil {
+			return nil, err
+		}
+		for _, job := range jobList.Items {
+			workloadReferences = append(workloadReferences, &jobs.JobReference{
+				Job: job,
+				WorkloadReferenceBase: workloads.WorkloadReferenceBase{
+					WorkloadObject: &job,
+				},
+			})
+		}
+	case "deployment":
+		deploymentList := &appsv1.DeploymentList{}
+		if err := k8sClient.List(ctx, deploymentList, opts...); err != nil {
+			return nil, err
+		}
+		for _, deployment := range deploymentList.Items {
+			workloadReferences = append(workloadReferences, &deployments.DeploymentReference{
+				Deployment: deployment,
+				WorkloadReferenceBase: workloads.WorkloadReferenceBase{
+					WorkloadObject: &deployment,
+				},
+			})
+		}
+	default:
+		return nil, fmt.Errorf("unknown workload type: %s", workloadType)
+	}
+	return workloadReferences, nil
 }
