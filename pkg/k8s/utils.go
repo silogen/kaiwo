@@ -112,7 +112,12 @@ func ReadEnvFile(filePath string) ([]corev1.EnvVar, []SecretVolume, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to open env file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if cerr := file.Close(); cerr != nil {
+			// Log the error, as defer cannot modify the return values of the outer function
+			logrus.Warnf("failed to close file: %v", cerr)
+		}
+	}()
 
 	var envFile EnvFile
 	if err := yaml.NewDecoder(file).Decode(&envFile); err != nil {

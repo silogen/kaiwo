@@ -1,0 +1,9 @@
+apiVersion: kaiwo.silogen.ai/v1
+kind: KaiwoService
+metadata:
+  labels:
+    app.kubernetes.io/name: kaiwo
+    app.kubernetes.io/managed-by: kustomize
+  name: kaiwoservice-sample
+spec:
+  # TODO(user): Add fields here
