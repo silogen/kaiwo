@@ -291,5 +291,7 @@ func applyResources(resources []runtime.Object, ctx context.Context, k8sClient c
 
 		// logrus.Infof("%s/%s updated successfully", resource.GetKind(), resource.GetName())
 	}
+	logrus.Info("To monitor and manage your workloads interactively, run $ kaiwo list -n mynamespace")
+
 	return nil
 }
