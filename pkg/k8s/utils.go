@@ -1,4 +1,4 @@
-// Copyright 2024 Advanced Micro Devices, Inc.  All rights reserved.
+// Copyright 2025 Advanced Micro Devices, Inc.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -35,7 +35,6 @@ func isBinaryFile(content []byte) bool {
 // GenerateConfigMapFromDir generates a ConfigMap from a directory
 func GenerateConfigMapFromDir(dir string, name string, namespace string, skipFiles []string) (*corev1.ConfigMap, error) {
 	files, err := os.ReadDir(dir)
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to read directory: %w", err)
 	}
@@ -203,7 +202,6 @@ func MinimalizeAndConvertToYAML(s *runtime.Scheme, obj runtime.Object) (string, 
 	yamlEncoder := yaml.NewEncoder(&b)
 	yamlEncoder.SetIndent(2)
 	err = yamlEncoder.Encode(&unstructuredMap)
-
 	if err != nil {
 		return "", fmt.Errorf("failed to convert object to yaml: %w", err)
 	}

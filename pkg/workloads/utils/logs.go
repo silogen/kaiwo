@@ -1,4 +1,4 @@
-// Copyright 2024 Advanced Micro Devices, Inc.  All rights reserved.
+// Copyright 2025 Advanced Micro Devices, Inc.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,67 +23,10 @@ import (
 	"os/signal"
 	"syscall"
 
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
-
-	"github.com/silogen/kaiwo/pkg/workloads"
 )
-
-func OutputLogsWithSelect(
-	workloadReference workloads.WorkloadReference,
-	ctx context.Context,
-	k8sClient client.Client,
-	clientset *kubernetes.Clientset,
-	tailLines int64,
-	noAutoSelect bool,
-	follow bool,
-) error {
-	allPods := workloadReference.GetPods()
-
-	if len(allPods) == 0 {
-		logrus.Warn("No pods found for workload")
-		return nil
-	}
-
-	if noAutoSelect {
-		// Skip trying to select
-	} else if len(allPods) == 1 {
-		// If there is only a single pod with a single container, just list its logs
-		logrus.Info("Found a single pod for workload")
-		pod := allPods[0].Pod
-
-		if len(pod.Status.ContainerStatuses) == 0 {
-			logrus.Warn("No containers found for workload")
-			return nil
-		}
-
-		if len(pod.Status.ContainerStatuses) == 1 {
-			logrus.Debugf("Found a single container for pod %s, defaulting to this one", pod.Name)
-			if len(pod.Status.InitContainerStatuses) > 0 {
-				logrus.Warn("Pod init containers found for workload, not displaying logs for these. Disable auto select to choose init containers")
-			}
-			return OutputLogs(ctx, clientset, pod.Name, pod.Status.ContainerStatuses[0].Name, tailLines, workloadReference.GetNamespace(), follow)
-		} else {
-			logrus.Debugf("Found multiple containers for pod %s", pod.Name)
-		}
-	} else {
-		logrus.Debugf("Found multiple pods for workload")
-	}
-
-	podName, containerName, err, cancelled := ChoosePodAndContainer(ctx, k8sClient, workloadReference)
-	if err != nil {
-		return fmt.Errorf("failed to choose pod and container for workload: %w", err)
-	}
-
-	if cancelled {
-		return nil
-	}
-
-	return OutputLogs(ctx, clientset, podName, containerName, tailLines, workloadReference.GetName(), follow)
-}
 
 // OutputLogs outputs logs for a given pod container to the standard output
 func OutputLogs(

@@ -12,4 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cmd
+package tuicomponents
+
+import (
+	"github.com/silogen/kaiwo/pkg/workloads"
+	"github.com/silogen/kaiwo/pkg/workloads/utils"
+)
+
+type RunState struct {
+	WorkloadType           string
+	WorkloadReference      workloads.WorkloadReference
+	User                   string
+	Namespace              string
+	PodName                string
+	ContainerName          string
+	PodSelectionPredicates []utils.PodSelectionPredicate
+}

@@ -1,4 +1,4 @@
-// Copyright 2024 Advanced Micro Devices, Inc.  All rights reserved.
+// Copyright 2025 Advanced Micro Devices, Inc.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -110,7 +110,6 @@ func Cleanup(ctx context.Context, resource string, name string, namespace string
 		} else {
 			return fmt.Errorf("failed to delete config map %s in namespace %s: %w", name, namespace, err)
 		}
-
 	} else {
 		logrus.Infof("ConfigMap (%s/%s) deleted successfully", namespace, name)
 	}

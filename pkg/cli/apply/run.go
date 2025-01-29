@@ -1,4 +1,4 @@
-// Copyright 2024 Advanced Micro Devices, Inc.  All rights reserved.
+// Copyright 2025 Advanced Micro Devices, Inc.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,14 +22,13 @@ import (
 	"strconv"
 	"strings"
 
-	baseutils "github.com/silogen/kaiwo/pkg/utils"
-
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
 	"github.com/silogen/kaiwo/pkg/k8s"
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 	"github.com/silogen/kaiwo/pkg/workloads"
 )
 
@@ -76,7 +75,6 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 	// Parse environment variables
 	if execFlags.EnvFilePath == "" {
 		envFilePath = filepath.Join(execFlags.Path, workloads.EnvFilename)
-
 	} else {
 		envFilePath = execFlags.EnvFilePath
 	}
@@ -138,7 +136,6 @@ func loadCustomConfig(path string) (any, error) {
 }
 
 func makeWorkloadName(path string, image string, version string, currentUser string) string {
-
 	var appendix string
 
 	if path != "" {
@@ -204,7 +201,6 @@ func fillSchedulingFlags(
 		}
 		if schedulingFlags.TotalRequestedGPUs > 0 {
 			return fmt.Errorf("Cannot set requested gpus with --gpus when --replicas and --gpus-per-replica are set")
-
 		}
 		schedulingFlags.CalculatedNumReplicas = schedulingFlags.RequestedReplicas
 		schedulingFlags.CalculatedGPUsPerReplica = schedulingFlags.RequestedGPUsPerReplica

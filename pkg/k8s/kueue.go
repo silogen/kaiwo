@@ -1,4 +1,4 @@
-// Copyright 2024 Advanced Micro Devices, Inc.  All rights reserved.
+// Copyright 2025 Advanced Micro Devices, Inc.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,11 +20,10 @@ import (
 	"math"
 	"strconv"
 
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 )
 
@@ -32,8 +31,8 @@ import (
 func CalculateNumberOfReplicas(requestedGpus int, gpusPerNode int, envVars []corev1.EnvVar) (int, int) {
 	// TODO handle cases where nodes are not empty and some GPUs are in use
 
-	var numReplicas = 0
-	var nodeGpuRequest = 0
+	numReplicas := 0
+	nodeGpuRequest := 0
 
 	// Retrieve PIPELINE_PARALLELISM and TENSOR_PARALLELISM from envVars, if they exist
 	var pipelineParallelism, tensorParallelism int
@@ -115,11 +114,9 @@ func CalculateNumberOfReplicas(requestedGpus int, gpusPerNode int, envVars []cor
 }
 
 func ListResourceFlavorsWithNodeLabel(ctx context.Context, k8sClient client.Client, labelKey string) ([]kueuev1beta1.ResourceFlavor, error) {
-
 	resourceFlavorList := &kueuev1beta1.ResourceFlavorList{}
 
 	err := k8sClient.List(ctx, client.ObjectList(resourceFlavorList), &client.ListOptions{})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to list resource flavors: %w", err)
 	}

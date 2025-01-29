@@ -1,4 +1,4 @@
-// Copyright 2024 Advanced Micro Devices, Inc.  All rights reserved.
+// Copyright 2025 Advanced Micro Devices, Inc.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,14 +22,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/sirupsen/logrus"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/silogen/kaiwo/pkg/workloads"
-
-	"github.com/sirupsen/logrus"
 )
 
 //go:embed job.yaml.tmpl
@@ -60,7 +59,6 @@ func (job Job) GenerateTemplateContext(execFlags workloads.ExecFlags) (any, erro
 	entrypoint = fmt.Sprintf("\"%s\"", entrypoint)            // Wrap the entire command in quotes
 
 	return JobFlags{Entrypoint: entrypoint}, nil
-
 }
 
 func (job Job) DefaultTemplate() ([]byte, error) {
@@ -89,7 +87,6 @@ func (job Job) GetServices() ([]corev1.Service, error) {
 
 func (job Job) GenerateAdditionalResourceManifests(k8sClient client.Client, templateContext workloads.WorkloadTemplateConfig) ([]runtime.Object, error) {
 	localClusterQueueManifest, err := workloads.CreateLocalClusterQueueManifest(k8sClient, templateContext)
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to create local cluster queue manifest: %w", err)
 	}
@@ -153,7 +150,7 @@ func (jobRef *JobReference) Load(ctx context.Context, k8sClient client.Client) e
 }
 
 func (jobRef *JobReference) GetPods() []workloads.WorkloadPod {
-	var workloadPods = make([]workloads.WorkloadPod, len(jobRef.Pods))
+	workloadPods := make([]workloads.WorkloadPod, len(jobRef.Pods))
 	for i, pod := range jobRef.Pods {
 		workloadPods[i] = workloads.WorkloadPod{
 			Pod: pod,

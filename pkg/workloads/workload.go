@@ -1,4 +1,4 @@
-// Copyright 2024 Advanced Micro Devices, Inc.  All rights reserved.
+// Copyright 2025 Advanced Micro Devices, Inc.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,7 +24,6 @@ import (
 
 // Workload represents the workload as it is meant to be created
 type Workload interface {
-
 	// GenerateTemplateContext creates the workload-specific context that can be passed to the template
 	GenerateTemplateContext(ExecFlags) (any, error)
 

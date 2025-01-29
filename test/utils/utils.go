@@ -1,5 +1,5 @@
 /*
-Copyright 2024 Advanced Micro Devices, Inc.  All rights reserved.
+Copyright 2025 Advanced Micro Devices, Inc.  All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -247,5 +247,5 @@ func UncommentCode(filename, target, prefix string) error {
 	}
 	// false positive
 	// nolint:gosec
-	return os.WriteFile(filename, out.Bytes(), 0644)
+	return os.WriteFile(filename, out.Bytes(), 0o644)
 }

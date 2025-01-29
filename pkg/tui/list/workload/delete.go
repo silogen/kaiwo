@@ -12,4 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cmd
+package workloadlist
+
+import (
+	"context"
+
+	"github.com/sirupsen/logrus"
+
+	"github.com/silogen/kaiwo/pkg/k8s"
+	tuicomponents "github.com/silogen/kaiwo/pkg/tui/components"
+)
+
+func runDeleteWorkload(ctx context.Context, clients k8s.KubernetesClients, state *tuicomponents.RunState) (tuicomponents.StepResult, tuicomponents.RunStep[tuicomponents.RunState], error) {
+	logrus.Infof("Delete")
+	return tuicomponents.StepResultOk, nil, nil
+}

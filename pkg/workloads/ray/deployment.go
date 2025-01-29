@@ -1,4 +1,4 @@
-// Copyright 2024 Advanced Micro Devices, Inc.  All rights reserved.
+// Copyright 2025 Advanced Micro Devices, Inc.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -46,7 +46,6 @@ func (deployment Deployment) GenerateTemplateContext(execFlags workloads.ExecFla
 	logrus.Debugf("Loading ray service from %s", execFlags.Path)
 
 	contents, err := os.ReadFile(filepath.Join(execFlags.Path, ServeconfigFilename))
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to read serveconfig file: %w", err)
 	}
@@ -112,7 +111,6 @@ type ServiceReference struct {
 }
 
 func (serviceRef *ServiceReference) Load(ctx context.Context, k8sClient client.Client) error {
-
 	// Fetch ray cluster
 
 	clusterLabelSelector := client.MatchingLabels{

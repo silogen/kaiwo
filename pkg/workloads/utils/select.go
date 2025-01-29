@@ -1,4 +1,4 @@
-// Copyright 2024 Advanced Micro Devices, Inc.  All rights reserved.
+// Copyright 2025 Advanced Micro Devices, Inc.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,23 +15,7 @@
 package utils
 
 import (
-	"context"
-
 	corev1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/silogen/kaiwo/pkg/tui"
-	"github.com/silogen/kaiwo/pkg/workloads"
-)
-
-var (
-	containerSelectColumns = []string{
-		"Logical group",
-		"Pod name",
-		"Pod phase",
-		"Container name",
-		"Container status",
-	}
 )
 
 type PodSelectionPredicate func(pod corev1.Pod) bool
@@ -45,22 +29,4 @@ func IsGPUPod(pod corev1.Pod) bool {
 		}
 	}
 	return false
-}
-
-// ChoosePodAndContainer allows the user to choose the pod and the container they want to interact with
-// predicates define an optional list of predicates that must be matched in order to include the pod in the list
-func ChoosePodAndContainer(ctx context.Context, k8sClient client.Client, reference workloads.WorkloadReference, predicates ...PodSelectionPredicate) (string, string, error, bool) {
-
-	state := &runState{
-		workloadReference:      reference,
-		podSelectionPredicates: predicates,
-	}
-
-	result, err := runSelectPodAndContainer(
-		ctx,
-		k8sClient,
-		state,
-	)
-
-	return state.podName, state.containerName, err, result == tui.SelectTableQuit || result == tui.SelectTableGoToPrevious
 }

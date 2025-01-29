@@ -1,4 +1,4 @@
-// Copyright 2024 Advanced Micro Devices, Inc.  All rights reserved.
+// Copyright 2025 Advanced Micro Devices, Inc.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,9 +18,9 @@ import (
 	"context"
 	"fmt"
 
+	list "github.com/silogen/kaiwo/pkg/tui/list/pod"
+
 	"github.com/spf13/cobra"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/silogen/kaiwo/pkg/k8s"
 	"github.com/silogen/kaiwo/pkg/workloads/factory"
@@ -93,23 +93,12 @@ func executeContainerCommand(args []string, command []string, gpuPodsOnly bool) 
 
 	ctx := context.TODO()
 
-	k8sClient, err := k8s.GetClient()
+	clients, err := k8s.GetKubernetesClients()
 	if err != nil {
-		return fmt.Errorf("failed to get Kubernetes client: %w", err)
+		return fmt.Errorf("failed to get k8s clients: %w", err)
 	}
 
-	kubeconfig, _ := k8s.GetKubeConfig()
-	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
-	if err != nil {
-		return fmt.Errorf("failed to build kubeconfig: %w", err)
-	}
-
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return fmt.Errorf("failed to create Kubernetes client: %w", err)
-	}
-
-	reference, err := workload.BuildReference(ctx, k8sClient, objectKey)
+	reference, err := workload.BuildReference(ctx, clients.Client, objectKey)
 	if err != nil {
 		return fmt.Errorf("failed to build workload reference: %w", err)
 	}
@@ -125,7 +114,7 @@ func executeContainerCommand(args []string, command []string, gpuPodsOnly bool) 
 		predicates = []utils.PodSelectionPredicate{utils.IsGPUPod}
 	}
 
-	podName, containerName, err, cancelled := utils.ChoosePodAndContainer(ctx, k8sClient, reference, predicates...)
+	podName, containerName, err, cancelled := list.ChoosePodAndContainer(ctx, *clients, reference, predicates...)
 	if err != nil {
 		return fmt.Errorf("failed to choose pod and container: %w", err)
 	}
@@ -133,5 +122,5 @@ func executeContainerCommand(args []string, command []string, gpuPodsOnly bool) 
 		return nil
 	}
 
-	return utils.ExecInContainer(ctx, clientset, config, podName, containerName, execNamespace, command, execInteractive, execTTY)
+	return utils.ExecInContainer(ctx, clients.Clientset, clients.Kubeconfig, podName, containerName, execNamespace, command, execInteractive, execTTY)
 }

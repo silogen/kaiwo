@@ -1,4 +1,4 @@
-// Copyright 2024 Advanced Micro Devices, Inc.  All rights reserved.
+// Copyright 2025 Advanced Micro Devices, Inc.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,7 +22,6 @@ import (
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/silogen/kaiwo/pkg/workloads"
@@ -47,7 +46,6 @@ func GetWorkload(workloadType string) (workloads.Workload, error) {
 }
 
 func GetWorkloadAndObjectKey(workloadDescriptor string, namespace string) (workloads.Workload, client.ObjectKey, error) {
-
 	key := client.ObjectKey{}
 
 	parts := strings.Split(workloadDescriptor, "/")
@@ -55,7 +53,6 @@ func GetWorkloadAndObjectKey(workloadDescriptor string, namespace string) (workl
 		return nil, key, fmt.Errorf("invalid workload descriptor: %s", workloadDescriptor)
 	}
 	workload, err := GetWorkload(parts[0])
-
 	if err != nil {
 		return nil, key, err
 	}
@@ -90,7 +87,8 @@ func ListObjects(ctx context.Context, k8sClient client.Client, workloadType stri
 			return nil, err
 		}
 		for _, rayService := range rayServiceList.Items {
-			workloadReferences = append(workloadReferences, &ray.ServiceReference{RayService: rayService,
+			workloadReferences = append(workloadReferences, &ray.ServiceReference{
+				RayService: rayService,
 				WorkloadReferenceBase: workloads.WorkloadReferenceBase{
 					WorkloadObject: &rayService,
 				},

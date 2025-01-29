@@ -1,4 +1,4 @@
-// Copyright 2024 Advanced Micro Devices, Inc.  All rights reserved.
+// Copyright 2025 Advanced Micro Devices, Inc.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -64,8 +64,10 @@ func GetExecFlags() workloads.ExecFlags {
 
 // Kubernetes meta flags
 
-const defaultNamespace = "kaiwo"
-const defaultImage = "ghcr.io/silogen/rocm-ray:v0.5"
+const (
+	defaultNamespace = "kaiwo"
+	defaultImage     = "ghcr.io/silogen/rocm-ray:v0.5"
+)
 
 var (
 	name            string
@@ -187,7 +189,6 @@ func ApplyConfigToFlags(cmd *cobra.Command, config *Config) {
 	setFlag("gpus", fmt.Sprintf("%d", config.Gpus))
 	setFlag("replicas", fmt.Sprintf("%d", config.RequestedReplicas))
 	setFlag("gpus-per-replica", fmt.Sprintf("%d", config.RequestedGPUsPerReplica))
-
 }
 
 func PreRunLoadConfig(cmd *cobra.Command, args []string) error {
