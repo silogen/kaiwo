@@ -75,12 +75,12 @@ func buildKubeConfig() (*rest.Config, error) {
 		return nil, err
 	}
 
-	config, err := clientcmd.BuildConfigFromFlags("", kubeConfigPath)
+	kubeconfig, err := clientcmd.BuildConfigFromFlags("", kubeConfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build kubeconfig: %v", err)
 	}
 
-	return config, nil
+	return kubeconfig, nil
 }
 
 // InitializeDynamicClient initializes the dynamic Kubernetes client

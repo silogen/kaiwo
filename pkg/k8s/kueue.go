@@ -103,7 +103,12 @@ func CalculateNumberOfReplicas(requestedGpus int, gpusPerNode int, envVars []cor
 	maxGpusPerNode := math.Min(float64(gpusPerNode), float64(requestedGpus))
 
 	if (float64(nodeGpuRequest) / maxGpusPerNode) < 0.5 {
-		logrus.Warnf("Inefficient use of GPU nodes: %d GPUs per node, but %d GPUs assigned per replica, leading to %d replicas. Check that the number of requested GPUs (%d) can be well divided with the number of GPUs per node (%d)", gpusPerNode, nodeGpuRequest, numReplicas, requestedGpus, gpusPerNode)
+		logrus.Warnf("Inefficient GPU allocation:\n"+
+			"  - %d GPUs per node\n"+
+			"  - %d GPUs assigned per replica\n"+
+			"  - %d replicas\n"+
+			"Check that requested GPUs (%d) is divisible by GPUs per node (%d).",
+			gpusPerNode, nodeGpuRequest, numReplicas, requestedGpus, gpusPerNode)
 	}
 
 	return numReplicas, nodeGpuRequest

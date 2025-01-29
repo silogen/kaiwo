@@ -24,12 +24,12 @@ help: ## Display this help.
 
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole, and CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) rbac:roleName=manager-role crd paths="./pkg/api/v1/..." output:crd:artifacts:config=config/crd/bases
+	$(CONTROLLER_GEN) rbac:roleName=manager-role crd paths="./pkg/api/v1alpha1/..." output:crd:artifacts:config=config/crd/bases
 
 .PHONY: generate
 generate: controller-gen ## Generate DeepCopy and related methods.
 	@sed 's/^/\/\/ /' .copyright-template > .copyright-template.goheader
-	$(CONTROLLER_GEN) object:headerFile=".copyright-template.goheader" paths="./pkg/api/v1/..."
+	$(CONTROLLER_GEN) object:headerFile=".copyright-template.goheader" paths="./pkg/api/v1alpha1/..."
 	@rm .copyright-template.goheader
 	
 .PHONY: fmt

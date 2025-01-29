@@ -9,21 +9,21 @@ projectName: kaiwo
 repo: github.com/silogen/kaiwo
 resources:
 - api:
-    crdVersion: v1
+    crdVersion: v1alpha1
     namespaced: true
   controller: true
   domain: silogen.ai
   group: kaiwo
   kind: KaiwoJob
-  path: github.com/silogen/kaiwo/pkg/api/v1
-  version: v1
+  path: github.com/silogen/kaiwo/pkg/api/v1alpha1
+  version: v1alpha1
 - api:
-    crdVersion: v1
+    crdVersion: v1alpha1
     namespaced: true
   controller: true
   domain: silogen.ai
   group: kaiwo
   kind: KaiwoService
-  path: github.com/silogen/kaiwo/pkg/api/v1
-  version: v1
+  path: github.com/silogen/kaiwo/pkg/api/v1alpha1
+  version: v1alpha1
 version: "3"

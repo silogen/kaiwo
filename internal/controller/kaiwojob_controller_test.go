@@ -27,7 +27,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	kaiwov1 "github.com/silogen/kaiwo/pkg/api/v1"
+	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
 )
 
 var _ = Describe("KaiwoJob Controller", func() {
@@ -40,13 +40,13 @@ var _ = Describe("KaiwoJob Controller", func() {
 			Name:      resourceName,
 			Namespace: "default", // TODO(user):Modify as needed
 		}
-		kaiwojob := &kaiwov1.KaiwoJob{}
+		kaiwojob := &kaiwov1alpha1.KaiwoJob{}
 
 		BeforeEach(func() {
 			By("creating the custom resource for the Kind KaiwoJob")
 			err := k8sClient.Get(ctx, typeNamespacedName, kaiwojob)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &kaiwov1.KaiwoJob{
+				resource := &kaiwov1alpha1.KaiwoJob{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
@@ -59,7 +59,7 @@ var _ = Describe("KaiwoJob Controller", func() {
 
 		AfterEach(func() {
 			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &kaiwov1.KaiwoJob{}
+			resource := &kaiwov1alpha1.KaiwoJob{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 

@@ -18,6 +18,7 @@ linters:
       - ginkgolinter
       - goconst
       - gocyclo
+      - lll
       - misspell
       - nakedret
       - typecheck
@@ -49,3 +50,5 @@ linters-settings:
         replacement: 'a[b:]'
   goheader:
     template-path: .copyright-template
+  lll:
+    line-length: 250  # We strive for about 180, but 250 is a good upper limit

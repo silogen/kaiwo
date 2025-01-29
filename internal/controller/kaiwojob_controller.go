@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	kaiwov1 "github.com/silogen/kaiwo/pkg/api/v1"
+	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
 )
 
 // KaiwoJobReconciler reconciles a KaiwoJob object
@@ -57,7 +57,7 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 // SetupWithManager sets up the controller with the Manager.
 func (r *KaiwoJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&kaiwov1.KaiwoJob{}).
+		For(&kaiwov1alpha1.KaiwoJob{}).
 		Named("kaiwojob").
 		Complete(r)
 }
