@@ -4,6 +4,7 @@
 resources:
 - bases/kaiwo.silogen.ai_kaiwojobs.yaml
 - bases/kaiwo.silogen.ai_kaiwoservices.yaml
+- bases/kaiwo.silogen.ai_kaiwoqueueconfigs.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

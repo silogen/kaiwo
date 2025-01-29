@@ -22,6 +22,9 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the {{ .ProjectName }} itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
+- kaiwoqueueconfig_admin_role.yaml
+- kaiwoqueueconfig_editor_role.yaml
+- kaiwoqueueconfig_viewer_role.yaml
 - kaiwoservice_admin_role.yaml
 - kaiwoservice_editor_role.yaml
 - kaiwoservice_viewer_role.yaml

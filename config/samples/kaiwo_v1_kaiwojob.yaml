@@ -1,4 +1,4 @@
-apiVersion: kaiwo.silogen.ai/v1
+apiVersion: kaiwo.silogen.ai/v1alpha1
 kind: KaiwoJob
 metadata:
   labels:

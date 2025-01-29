@@ -2,4 +2,5 @@
 resources:
 - kaiwo_v1_kaiwojob.yaml
 - kaiwo_v1_kaiwoservice.yaml
+- kaiwo_v1alpha1_kaiwoqueueconfig.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

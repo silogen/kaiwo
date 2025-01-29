@@ -26,4 +26,13 @@ resources:
   kind: KaiwoService
   path: github.com/silogen/kaiwo/pkg/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1alpha1
+    namespaced: true
+  controller: true
+  domain: silogen.ai
+  group: kaiwo
+  kind: KaiwoQueueConfig
+  path: github.com/silogen/kaiwo/pkg/api/v1alpha1
+  version: v1alpha1
 version: "3"

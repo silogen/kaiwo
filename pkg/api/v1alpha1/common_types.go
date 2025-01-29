@@ -24,6 +24,15 @@ const (
 	QueueLabel    = "kueue.x-k8s.io/queue-name"
 )
 
+type WorkloadType string
+
+const (
+	WorkloadRayJob     WorkloadType = "RayJob"
+	WorkloadJob        WorkloadType = "Job"
+	WorkloadDeployment WorkloadType = "Deployment"
+	WorkloadRayService WorkloadType = "RayService"
+)
+
 // CommonMetaSpec defines reusable metadata fields.
 type CommonMetaSpec struct {
 	Name        string            `json:"name"`
