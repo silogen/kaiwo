@@ -12,21 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package utils
+package workloadlist
 
 import (
-	corev1 "k8s.io/api/core/v1"
+	"context"
+
+	"github.com/sirupsen/logrus"
+
+	"github.com/silogen/kaiwo/pkg/k8s"
+	tuicomponents "github.com/silogen/kaiwo/pkg/tui/components"
 )
 
-type PodSelectionPredicate func(pod corev1.Pod) bool
-
-func IsGPUPod(pod corev1.Pod) bool {
-	for _, container := range pod.Spec.Containers {
-		for resourceName := range container.Resources.Limits {
-			if resourceName == "nvidia.com/gpu" || resourceName == "amd.com/gpu" {
-				return true
-			}
-		}
-	}
-	return false
+func runPortForward(ctx context.Context, clients k8s.KubernetesClients, state *tuicomponents.RunState) (tuicomponents.StepResult, tuicomponents.RunStep[tuicomponents.RunState], error) {
+	logrus.Infof("Port forward")
+	return tuicomponents.StepResultOk, nil, nil
 }

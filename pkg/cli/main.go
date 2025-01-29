@@ -19,13 +19,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/silogen/kaiwo/pkg/workloads/utils"
-
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	cli "github.com/silogen/kaiwo/pkg/cli/apply"
 	"github.com/silogen/kaiwo/pkg/workloads"
+	"github.com/silogen/kaiwo/pkg/workloads/utils"
 )
 
 // Build-time variables (set with -ldflags). Do not touch
@@ -47,7 +46,6 @@ func RunCli() {
 		SilenceUsage: true,
 		Short:        "Kubernetes-native AI Workload Orchestrator",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-
 			if verbosity != 0 && quiet != 0 {
 				return fmt.Errorf("cannot set both verbose and quiet at the same time")
 			}
@@ -115,7 +113,6 @@ func RunCli() {
 		Short: "Delete a workload. Workload type must be one of [job, deployment, rayjob, rayservice]",
 		Args:  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-
 			split := strings.Split(args[0], "/")
 
 			if len(split) != 2 {
@@ -127,11 +124,9 @@ func RunCli() {
 			name := split[1]
 
 			err := workloads.Cleanup(context.TODO(), workloadType, name, namespace, true)
-
 			if err != nil {
 				logrus.Errorf("Failed to delete workload: %v", err)
 			}
-
 		},
 	}
 

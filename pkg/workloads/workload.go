@@ -24,7 +24,6 @@ import (
 
 // Workload represents the workload as it is meant to be created
 type Workload interface {
-
 	// GenerateTemplateContext creates the workload-specific context that can be passed to the template
 	GenerateTemplateContext(ExecFlags) (any, error)
 

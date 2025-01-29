@@ -110,7 +110,6 @@ func Cleanup(ctx context.Context, resource string, name string, namespace string
 		} else {
 			return fmt.Errorf("failed to delete config map %s in namespace %s: %w", name, namespace, err)
 		}
-
 	} else {
 		logrus.Infof("ConfigMap (%s/%s) deleted successfully", namespace, name)
 	}

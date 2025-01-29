@@ -46,7 +46,6 @@ func (deployment Deployment) GenerateTemplateContext(execFlags workloads.ExecFla
 	logrus.Debugf("Loading ray service from %s", execFlags.Path)
 
 	contents, err := os.ReadFile(filepath.Join(execFlags.Path, ServeconfigFilename))
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to read serveconfig file: %w", err)
 	}
@@ -112,7 +111,6 @@ type ServiceReference struct {
 }
 
 func (serviceRef *ServiceReference) Load(ctx context.Context, k8sClient client.Client) error {
-
 	// Fetch ray cluster
 
 	clusterLabelSelector := client.MatchingLabels{

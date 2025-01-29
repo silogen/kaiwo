@@ -17,37 +17,34 @@ package k8s
 import (
 	"fmt"
 	"os"
-
-	"k8s.io/client-go/kubernetes"
+	"path/filepath"
+	"sync"
 
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	"github.com/sirupsen/logrus"
 	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
-	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
-
-	"path/filepath"
-	"sync"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
+	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 )
 
 var (
 	dynamicClient dynamic.Interface
-	//typedClient   *kubernetes.Clientset
+	// typedClient   *kubernetes.Clientset
 
 	dynamicInitErr error
-	//typedInitErr   error
+	// typedInitErr   error
 
 	dynamicOnce sync.Once
-	//typedOnce   sync.Once
+	// typedOnce   sync.Once
 
 	scheme2       runtime.Scheme
 	schemeInitErr error
@@ -181,4 +178,33 @@ func GetClientset() (*kubernetes.Clientset, error) {
 		return nil, fmt.Errorf("failed to create Kubernetes client: %v", err)
 	}
 	return clientset, nil
+}
+
+type KubernetesClients struct {
+	Client     client.Client
+	Clientset  *kubernetes.Clientset
+	Kubeconfig *rest.Config
+}
+
+func GetKubernetesClients() (*KubernetesClients, error) {
+	k8sClient, err := GetClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Kubernetes client: %v", err)
+	}
+
+	clientset, err := GetClientset()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Kubernetes clientset: %v", err)
+	}
+
+	kubeconfig, err := buildKubeConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Kubernetes config: %v", err)
+	}
+
+	return &KubernetesClients{
+		Client:     k8sClient,
+		Clientset:  clientset,
+		Kubeconfig: kubeconfig,
+	}, nil
 }

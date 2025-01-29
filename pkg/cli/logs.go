@@ -21,6 +21,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/silogen/kaiwo/pkg/k8s"
+	list "github.com/silogen/kaiwo/pkg/tui/list/pod"
 	"github.com/silogen/kaiwo/pkg/workloads/factory"
 	"github.com/silogen/kaiwo/pkg/workloads/utils"
 )
@@ -43,52 +44,55 @@ func BuildLogCmd() *cobra.Command {
 		Use:   "logs <workloadType>/<workloadName>",
 		Args:  cobra.ExactArgs(1),
 		Short: "Display logs for a workload. You will be prompted to choose the target container if there is more than one",
-		RunE: func(cmd *cobra.Command, args []string) error {
-
-			workload, objectKey, err := factory.GetWorkloadAndObjectKey(args[0], namespaceLogs)
-
-			if err != nil {
-				return err
-			}
-
-			ctx := context.TODO()
-
-			k8sClient, err := k8s.GetClient()
-			if err != nil {
-				return err
-			}
-
-			// Create Kubernetes clientset
-			clientset, err := k8s.GetClientset()
-			if err != nil {
-				panic(err)
-			}
-
-			workloadReference, err := workload.BuildReference(ctx, k8sClient, objectKey)
-
-			if err != nil {
-				return fmt.Errorf("failed to build workload reference: %w", err)
-			}
-
-			return utils.OutputLogsWithSelect(
-				workloadReference,
-				ctx,
-				k8sClient,
-				clientset,
-				int64(tailLines),
-				false,
-				follow,
-			)
-		},
+		RunE:  executeLogsCommand,
 	}
-	//cmd.Flags().BoolVarP(&defaultContainer, "default", "d", defaultContainer, "Select the default container within the workflow")
-	//cmd.Flags().StringVarP(&since, "since", "", "0s", "Only return logs newer than a relative duration")
-	//cmd.Flags().StringVarP(&sinceTime, "since-time", "", "", "Only return logs after a specific date (RFC3339)")
+	// cmd.Flags().BoolVarP(&defaultContainer, "default", "d", defaultContainer, "Select the default container within the workflow")
+	// cmd.Flags().StringVarP(&since, "since", "", "0s", "Only return logs newer than a relative duration")
+	// cmd.Flags().StringVarP(&sinceTime, "since-time", "", "", "Only return logs after a specific date (RFC3339)")
 	cmd.Flags().IntVarP(&tailLines, "tail", "", -1, "Number of lines to show from the end of the log")
-	//cmd.Flags().BoolVarP(&timestamps, "timestamps", "", false, "Show timestamps")
+	// cmd.Flags().BoolVarP(&timestamps, "timestamps", "", false, "Show timestamps")
 	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "Follow log output")
-	//cmd.Flags().BoolVarP(&previous, "previous", "p", false, "If true, print the logs for the previous instance of the container in a pod if it exists.")
-	//cmd.Flags().StringVarP(&stream, "stream", "", string(StreamTypeAll), "Specify which container log stream to return to the client. One of All, Stdout or Stderr.")
+	// cmd.Flags().BoolVarP(&previous, "previous", "p", false, "If true, print the logs for the previous instance of the container in a pod if it exists.")
+	// cmd.Flags().StringVarP(&stream, "stream", "", string(StreamTypeAll), "Specify which container log stream to return to the client. One of All, Stdout or Stderr.")
 	cmd.Flags().StringVarP(&namespaceLogs, "namespace", "n", "kaiwo", "Namespace of the workflow")
 	return cmd
+}
+
+func executeLogsCommand(_ *cobra.Command, args []string) error {
+	workload, objectKey, err := factory.GetWorkloadAndObjectKey(args[0], namespaceLogs)
+	if err != nil {
+		return err
+	}
+
+	ctx := context.TODO()
+
+	var clients *k8s.KubernetesClients
+	clients, err = k8s.GetKubernetesClients()
+	if err != nil {
+		return fmt.Errorf("failed to get k8s clients: %w", err)
+	}
+
+	workloadReference, err := workload.BuildReference(ctx, clients.Client, objectKey)
+	if err != nil {
+		return fmt.Errorf("failed to build workload reference: %w", err)
+	}
+
+	podName, containerName, err, cancelled := list.ChoosePodAndContainer(ctx, *clients, workloadReference)
+
+	if err != nil {
+		return fmt.Errorf("failed to choose pod and container: %w", err)
+	}
+	if cancelled {
+		return nil
+	}
+
+	return utils.OutputLogs(
+		ctx,
+		clients.Clientset,
+		podName,
+		containerName,
+		int64(tailLines),
+		namespaceLogs,
+		follow,
+	)
 }

@@ -12,21 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package utils
+package tuicomponents
 
 import (
-	corev1 "k8s.io/api/core/v1"
+	"github.com/silogen/kaiwo/pkg/workloads"
+	"github.com/silogen/kaiwo/pkg/workloads/utils"
 )
 
-type PodSelectionPredicate func(pod corev1.Pod) bool
-
-func IsGPUPod(pod corev1.Pod) bool {
-	for _, container := range pod.Spec.Containers {
-		for resourceName := range container.Resources.Limits {
-			if resourceName == "nvidia.com/gpu" || resourceName == "amd.com/gpu" {
-				return true
-			}
-		}
-	}
-	return false
+type RunState struct {
+	WorkloadType           string
+	WorkloadReference      workloads.WorkloadReference
+	User                   string
+	Namespace              string
+	PodName                string
+	ContainerName          string
+	PodSelectionPredicates []utils.PodSelectionPredicate
 }

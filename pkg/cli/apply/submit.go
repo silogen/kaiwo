@@ -38,7 +38,6 @@ func BuildSubmitCmd() *cobra.Command {
 			return PreRunLoadConfig(cmd, args)
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-
 			var job workloads.Workload
 
 			jobFlags := workloads.JobFlags{

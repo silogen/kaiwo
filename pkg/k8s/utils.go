@@ -35,7 +35,6 @@ func isBinaryFile(content []byte) bool {
 // GenerateConfigMapFromDir generates a ConfigMap from a directory
 func GenerateConfigMapFromDir(dir string, name string, namespace string, skipFiles []string) (*corev1.ConfigMap, error) {
 	files, err := os.ReadDir(dir)
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to read directory: %w", err)
 	}
@@ -203,7 +202,6 @@ func MinimalizeAndConvertToYAML(s *runtime.Scheme, obj runtime.Object) (string, 
 	yamlEncoder := yaml.NewEncoder(&b)
 	yamlEncoder.SetIndent(2)
 	err = yamlEncoder.Encode(&unstructuredMap)
-
 	if err != nil {
 		return "", fmt.Errorf("failed to convert object to yaml: %w", err)
 	}

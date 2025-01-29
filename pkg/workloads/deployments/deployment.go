@@ -22,12 +22,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/sirupsen/logrus"
-	corev1 "k8s.io/api/core/v1"
 
 	"github.com/silogen/kaiwo/pkg/workloads"
 )
@@ -61,7 +60,6 @@ func (deployment Deployment) GenerateTemplateContext(execFlags workloads.ExecFla
 	entrypoint = fmt.Sprintf("\"%s\"", entrypoint)            // Wrap the entire command in quotes
 
 	return DeploymentFlags{Entrypoint: entrypoint}, nil
-
 }
 
 func (deployment Deployment) ConvertObject(object runtime.Object) (runtime.Object, bool) {

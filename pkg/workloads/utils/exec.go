@@ -32,9 +32,7 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 )
 
-var (
-	DefaultMonitorCommand = "watch -n 1 rocm-smi"
-)
+var DefaultMonitorCommand = "watch -n 1 rocm-smi"
 
 func ParseCommand(command string) []string {
 	return []string{"/bin/sh", "-c", command}
@@ -101,7 +99,7 @@ func ExecInContainer(
 	})
 
 	if errors.Is(ctx.Err(), context.Canceled) {
-		logrus.Debug("Execution canceled by user")
+		logrus.Debug("Execution canceled by User")
 		return nil
 	}
 
@@ -111,7 +109,6 @@ func ExecInContainer(
 
 	logrus.Debug("Executor stream finished successfully")
 	return nil
-
 }
 
 // fixedSizeQueue implements the TerminalSizeQueue interface

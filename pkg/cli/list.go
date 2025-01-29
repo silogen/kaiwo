@@ -20,9 +20,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	tui "github.com/silogen/kaiwo/pkg/tui/list"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-
-	"github.com/silogen/kaiwo/pkg/workloads/utils"
 )
 
 var (
@@ -37,7 +36,6 @@ func BuildListCmd() *cobra.Command {
 		Args:  cobra.MaximumNArgs(2),
 		Short: "List workloads",
 		RunE: func(cmd *cobra.Command, args []string) error {
-
 			workloadType := ""
 			workloadName := ""
 
@@ -59,7 +57,7 @@ func BuildListCmd() *cobra.Command {
 				logrus.Infof("Listing as user: %s", user)
 			}
 
-			return utils.RunList(workloadType, workloadName, namespaceList, user)
+			return tui.RunList(workloadType, workloadName, namespaceList, user)
 		},
 	}
 	cmd.Flags().StringVarP(&user, "user", "u", "", "Limit the workloads to one created by this user")

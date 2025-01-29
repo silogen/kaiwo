@@ -35,7 +35,6 @@ Kubernetes-native AI Workload Orchestrator
 `
 
 func main() {
-
 	fmt.Fprint(os.Stderr, kaiwoBanner)
 
 	logrus.SetFormatter(&logrus.TextFormatter{
@@ -43,5 +42,4 @@ func main() {
 	})
 
 	cmd.RunCli()
-
 }

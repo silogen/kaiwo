@@ -18,7 +18,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path"
+	"strings"
+	"text/template"
 
 	"github.com/Masterminds/sprig/v3"
 	"github.com/sirupsen/logrus"
@@ -26,16 +29,12 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/silogen/kaiwo/pkg/k8s"
 
-	"os"
-	"strings"
-	"text/template"
-
-	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const TemplateFileName = "template"
@@ -48,7 +47,6 @@ func ApplyWorkload(
 	execFlags ExecFlags,
 	templateContext WorkloadTemplateConfig,
 ) error {
-
 	var resources []runtime.Object
 
 	if execFlags.CreateNamespace {
@@ -211,7 +209,6 @@ func generateManifests(k8sClient client.Client, workloadTemplate []byte, templat
 	}
 
 	return append(additionalWorkloadManifests, []runtime.Object{converted}...), nil
-
 }
 
 // printResources prints each Kubernetes manifest in an array
@@ -220,7 +217,6 @@ func printResources(s *runtime.Scheme, resources []runtime.Object) {
 		clientObject := resource.(client.Object)
 
 		cleanedResource, err := k8s.MinimalizeAndConvertToYAML(s, clientObject)
-
 		if err != nil {
 			logrus.Errorf("Failed to marshal object to YAML %s: %v", clientObject.GetName(), err)
 			continue
@@ -233,7 +229,6 @@ func printResources(s *runtime.Scheme, resources []runtime.Object) {
 
 // applyResources applies (creates or updates if possible) each Kubernetes object within an array
 func applyResources(resources []runtime.Object, ctx context.Context, k8sClient client.Client) error {
-
 	for _, resource := range resources {
 		// Ensure the resource implements client.Object
 		obj, ok := resource.(client.Object)
