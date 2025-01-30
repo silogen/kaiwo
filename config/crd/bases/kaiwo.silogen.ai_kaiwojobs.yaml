@@ -43,6 +43,7 @@ spec:
                   type: string
                 type: object
               clusterQueue:
+                description: Kueue-specific fields only apply to jobs
                 type: string
               configmap:
                 description: ConfigMap holds configuration data for pods to consume.
@@ -596,8 +597,6 @@ spec:
                 required:
                 - template
                 type: object
-              kaiwo-version:
-                type: string
               labels:
                 additionalProperties:
                   type: string
@@ -1614,6 +1613,8 @@ spec:
                 type: object
               replicas:
                 type: integer
+              username:
+                type: string
               version:
                 type: string
             required:

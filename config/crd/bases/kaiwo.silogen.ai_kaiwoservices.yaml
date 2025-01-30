@@ -42,8 +42,6 @@ spec:
                 additionalProperties:
                   type: string
                 type: object
-              clusterQueue:
-                type: string
               configmap:
                 description: ConfigMap holds configuration data for pods to consume.
                 properties:
@@ -595,8 +593,6 @@ spec:
                 items:
                   type: string
                 type: array
-              kaiwo-version:
-                type: string
               labels:
                 additionalProperties:
                   type: string
@@ -604,8 +600,6 @@ spec:
               name:
                 type: string
               namespace:
-                type: string
-              priorityClass:
                 type: string
               ray:
                 type: boolean
@@ -1616,6 +1610,8 @@ spec:
                 type: integer
               serveConfigV2:
                 description: RayService configuration
+                type: string
+              username:
                 type: string
               version:
                 type: string
