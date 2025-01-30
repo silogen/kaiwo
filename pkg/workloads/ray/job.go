@@ -113,6 +113,17 @@ type JobReference struct {
 	WorkerPods   []*corev1.Pod
 }
 
+func (jobRef *JobReference) GetServices(ctx context.Context, k8sClient client.Client) ([]corev1.Service, error) {
+	serviceLabelSelector := client.MatchingLabels{
+		"ray.io/cluster": jobRef.RayJob.Status.RayClusterName,
+	}
+	serviceList := &corev1.ServiceList{}
+	if err := k8sClient.List(ctx, serviceList, serviceLabelSelector); err != nil {
+		return nil, fmt.Errorf("could not list services: %w", err)
+	}
+	return serviceList.Items, nil
+}
+
 func (jobRef *JobReference) Load(ctx context.Context, k8sClient client.Client) error {
 	// Find cluster pods
 	clusterPodLabelSelector := client.MatchingLabels{
