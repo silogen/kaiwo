@@ -102,6 +102,8 @@ var (
 	gpus           int
 	replicas       int
 	gpusPerReplica int
+	storageRequested string
+	storageclass	string
 )
 
 // AddSchedulingFlags adds flags related to (Kueue) scheduling

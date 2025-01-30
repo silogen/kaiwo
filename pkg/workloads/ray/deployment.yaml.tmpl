@@ -166,3 +166,16 @@ spec:
                 emptyDir:
                   medium: Memory
                   sizeLimit: 200Gi
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Meta.Name }}
+  namespace: {{ .Meta.Namespace }}
+spec:
+  volumeMode: Filesystem
+  storageClassName: {{ .Scheduling.Storageclass }}
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: {{ .Scheduling.StorageRequested }}
