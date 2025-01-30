@@ -25,6 +25,10 @@ type KaiwoJobSpec struct {
 	// Unified workload parameters
 	EntryPoint string `json:"entryPoint,omitempty"`
 
+	// Kueue-specific fields only apply to jobs
+	ClusterQueue  string `json:"clusterQueue,omitempty"`  // Kueue ClusterQueue
+	PriorityClass string `json:"priorityClass,omitempty"` // Kueue PriorityClass
+
 	// Optional workload-specific configs
 	RayClusterSpec *RayClusterSpec `json:"rayClusterSpec,omitempty"`
 	JobSpec        *JobSpec        `json:"jobSpec,omitempty"`

@@ -26,20 +26,18 @@ const (
 
 // CommonMetaSpec defines reusable metadata fields.
 type CommonMetaSpec struct {
+	Username         string            `json:"username,omitempty"`
 	Name             string            `json:"name,omitempty"`
 	Namespace        string            `json:"namespace,omitempty"`
-	ClusterQueue     string            `json:"clusterQueue,omitempty"`
-	PriorityClass    string            `json:"priorityClass,omitempty"`
 	Labels           map[string]string `json:"labels,omitempty"`
 	Annotations      map[string]string `json:"annotations,omitempty"`
 	Gpus             int               `json:"gpus,omitempty"`
-	Version          string            `json:"version,omitempty"`
-	KaiwoVersion     string            `json:"kaiwo-version,omitempty"`
-	Replicas         int               `json:"replicas,omitempty"`
-	GpusPerReplica   int               `json:"gpus-per-replica,omitempty"`
+	Version          string            `json:"version,omitempty"`          // Optional version of workload
+	Replicas         int               `json:"replicas,omitempty"`         // How many replicas. Must be Ray if greater than one
+	GpusPerReplica   int               `json:"gpus-per-replica,omitempty"` // How many GPUs per replica
 	Image            string            `json:"image,omitempty"`
 	ImagePullSecrets []string          `json:"image-pull-secrets,omitempty"`
-	Ray              bool              `json:"ray"`
+	Ray              bool              `json:"ray"` // Operator must know whether entrypoint should use RayCluster, default false
 	ConfigMap        *corev1.ConfigMap `json:"configmap,omitempty"`
 }
 
