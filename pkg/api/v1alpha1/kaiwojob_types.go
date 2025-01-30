@@ -22,10 +22,6 @@ import (
 type KaiwoJobSpec struct {
 	CommonMetaSpec `json:",inline"`
 
-	ClusterQueue  string       `json:"clusterQueue,omitempty"`
-	PriorityClass string       `json:"priorityClass,omitempty"`
-	WorkloadType  WorkloadType `json:"workloadType"`
-
 	// Unified workload parameters
 	EntryPoint string `json:"entryPoint,omitempty"`
 

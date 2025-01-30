@@ -24,21 +24,23 @@ const (
 	QueueLabel    = "kueue.x-k8s.io/queue-name"
 )
 
-type WorkloadType string
-
-const (
-	WorkloadRayJob     WorkloadType = "RayJob"
-	WorkloadJob        WorkloadType = "Job"
-	WorkloadDeployment WorkloadType = "Deployment"
-	WorkloadRayService WorkloadType = "RayService"
-)
-
 // CommonMetaSpec defines reusable metadata fields.
 type CommonMetaSpec struct {
-	Name        string            `json:"name"`
-	Namespace   string            `json:"namespace"`
-	Labels      map[string]string `json:"labels,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
+	Name             string            `json:"name,omitempty"`
+	Namespace        string            `json:"namespace,omitempty"`
+	ClusterQueue     string            `json:"clusterQueue,omitempty"`
+	PriorityClass    string            `json:"priorityClass,omitempty"`
+	Labels           map[string]string `json:"labels,omitempty"`
+	Annotations      map[string]string `json:"annotations,omitempty"`
+	Gpus             int               `json:"gpus,omitempty"`
+	Version          string            `json:"version,omitempty"`
+	KaiwoVersion     string            `json:"kaiwo-version,omitempty"`
+	Replicas         int               `json:"replicas,omitempty"`
+	GpusPerReplica   int               `json:"gpus-per-replica,omitempty"`
+	Image            string            `json:"image,omitempty"`
+	ImagePullSecrets []string          `json:"image-pull-secrets,omitempty"`
+	Ray              bool              `json:"ray"`
+	ConfigMap        *corev1.ConfigMap `json:"configmap,omitempty"`
 }
 
 type CommonContainer struct {

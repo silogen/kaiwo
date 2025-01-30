@@ -22,10 +22,6 @@ import (
 type KaiwoServiceSpec struct {
 	CommonMetaSpec `json:",inline"`
 
-	ClusterQueue  string       `json:"clusterQueue,omitempty"`
-	PriorityClass string       `json:"priorityClass,omitempty"`
-	WorkloadType  WorkloadType `json:"workloadType"`
-
 	// RayService configuration
 	ServeConfigV2 string `json:"serveConfigV2,omitempty"`
 
