@@ -280,8 +280,8 @@ func generateWorkloadManifest(workloadTemplate []byte, templateContext WorkloadT
 
 // printResources prints each Kubernetes manifest in an array
 func printResources(s *runtime.Scheme, resources []runtime.Object) {
-	for _, resource := range resources {
-		clientObject := resource.(client.Object)
+	for _, resource_ := range resources {
+		clientObject := resource_.(client.Object)
 
 		cleanedResource, err := k8s.MinimalizeAndConvertToYAML(s, clientObject)
 		if err != nil {

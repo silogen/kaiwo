@@ -216,7 +216,7 @@ func ApplyConfigToFlags(cmd *cobra.Command, config *Config) {
 	setFlag("gpus-per-replica", fmt.Sprintf("%d", config.RequestedGPUsPerReplica))
 }
 
-func PreRunLoadConfig(cmd *cobra.Command, args []string) error {
+func PreRunLoadConfig(cmd *cobra.Command, _ []string) error {
 	if path == "" {
 		return nil
 	}
