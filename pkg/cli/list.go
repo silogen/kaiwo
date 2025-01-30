@@ -61,7 +61,7 @@ func BuildListCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&user, "user", "u", "", "Limit the workloads to one created by this user")
-	cmd.Flags().StringVarP(&namespaceList, "namespace", "n", "kaiwo", "Namespace of the workflows to return")
+	cmd.Flags().StringVarP(&namespaceList, "namespace", "n", "kaiwo", "Namespace of the workloads to return")
 	cmd.Flags().BoolVarP(&allUsers, "all-users", "", false, "Return workloads for all users")
 	return cmd
 }

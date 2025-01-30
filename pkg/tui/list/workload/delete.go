@@ -48,11 +48,11 @@ func runDeleteWorkload(ctx context.Context, clients k8s.KubernetesClients, state
 
 	deletePropagationPolicy := client.PropagationPolicy(metav1.DeletePropagationBackground)
 
-	deleteWorkflow := func() {
+	deleteWorkload := func() {
 		err = clients.Client.Delete(ctx, state.WorkloadReference.GetObject(), deletePropagationPolicy)
 	}
 
-	if spinnerErr := spinner.New().Title("Deleting workload").Action(deleteWorkflow).Run(); spinnerErr != nil {
+	if spinnerErr := spinner.New().Title("Deleting workload").Action(deleteWorkload).Run(); spinnerErr != nil {
 		return tuicomponents.StepResultErr, nil, spinnerErr
 	}
 
