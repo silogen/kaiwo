@@ -18,6 +18,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -102,6 +105,7 @@ var (
 	gpus           int
 	replicas       int
 	gpusPerReplica int
+	storage        string
 )
 
 // AddSchedulingFlags adds flags related to (Kueue) scheduling
@@ -109,15 +113,36 @@ func AddSchedulingFlags(cmd *cobra.Command) {
 	cmd.Flags().IntVarP(&gpus, "gpus", "g", 0, "Number of GPUs requested for the workload")
 	cmd.Flags().IntVarP(&replicas, "replicas", "", 0, "Number of replicas requested for the workload")
 	cmd.Flags().IntVarP(&gpusPerReplica, "gpus-per-replica", "", 0, "Number of GPUs requested per replica")
+	cmd.Flags().StringVarP(&storage, "storage", "", "", "Storage requested for the workload, use: --storage=10Gi,storageClassName")
 }
 
 // GetSchedulingFlags initializes the scheduling flags with the number of GPUs requested
-func GetSchedulingFlags() workloads.SchedulingFlags {
-	return workloads.SchedulingFlags{
+func GetSchedulingFlags() (*workloads.SchedulingFlags, error) {
+	flags := &workloads.SchedulingFlags{
 		TotalRequestedGPUs:      gpus,
 		RequestedReplicas:       replicas,
 		RequestedGPUsPerReplica: gpusPerReplica,
 	}
+
+	if storage == "" {
+		return flags, nil
+	}
+
+	split := strings.Split(storage, ",")
+	if len(split) != 2 {
+		return nil, fmt.Errorf("invalid storage specifier %s", storage)
+	}
+
+	if _, err := resource.ParseQuantity(split[0]); err != nil {
+		return nil, fmt.Errorf("invalid storage specifier %s", storage)
+	}
+
+	flags.Storage = &workloads.StorageSchedulingFlags{
+		RequestedStorage: split[0],
+		StorageClassName: split[1],
+	}
+
+	return flags, nil
 }
 
 type Config struct {

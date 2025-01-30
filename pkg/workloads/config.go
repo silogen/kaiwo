@@ -61,6 +61,13 @@ type SchedulingFlags struct {
 
 	// CalculatedNumReplicas refers to the number of replicas, calculated from the available GPUs per node
 	CalculatedNumReplicas int
+
+	Storage *StorageSchedulingFlags
+}
+
+type StorageSchedulingFlags struct {
+	RequestedStorage string
+	StorageClassName string
 }
 
 // MetaFlags contain flags that are shared by all workloads

@@ -90,9 +90,12 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 	}
 
 	ctx := context.TODO()
-	schedulingFlags := GetSchedulingFlags()
+	schedulingFlags, err := GetSchedulingFlags()
+	if err != nil {
+		return fmt.Errorf("error getting scheduling flags: %w", err)
+	}
 
-	if err := fillSchedulingFlags(ctx, dynamicClient, &schedulingFlags, execFlags.ResourceFlavorGpuNodeLabelKey, metaFlags.EnvVars); err != nil {
+	if err := fillSchedulingFlags(ctx, dynamicClient, schedulingFlags, execFlags.ResourceFlavorGpuNodeLabelKey, metaFlags.EnvVars); err != nil {
 		return fmt.Errorf("error filling scheduling flags: %w", err)
 	}
 	logrus.Debugf("Successfully loaded scheduling info from Kubernetes")
@@ -106,7 +109,7 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 		WorkloadMeta: workloadMeta,
 		Workload:     workloadConfig,
 		Meta:         metaFlags,
-		Scheduling:   schedulingFlags,
+		Scheduling:   *schedulingFlags,
 		Custom:       customConfig,
 	}
 
@@ -196,11 +199,11 @@ func fillSchedulingFlags(
 
 	if schedulingFlags.RequestedReplicas > 0 && schedulingFlags.RequestedGPUsPerReplica > 0 {
 		if schedulingFlags.RequestedGPUsPerReplica > schedulingFlags.GPUsAvailablePerNode {
-			return fmt.Errorf("You requested %d GPUs per replica, but there are only %d GPUs available per node",
+			return fmt.Errorf("you requested %d GPUs per replica, but there are only %d GPUs available per node",
 				schedulingFlags.RequestedGPUsPerReplica, schedulingFlags.GPUsAvailablePerNode)
 		}
 		if schedulingFlags.TotalRequestedGPUs > 0 {
-			return fmt.Errorf("Cannot set requested gpus with --gpus when --replicas and --gpus-per-replica are set")
+			return fmt.Errorf("cannot set requested gpus with --gpus when --replicas and --gpus-per-replica are set")
 		}
 		schedulingFlags.CalculatedNumReplicas = schedulingFlags.RequestedReplicas
 		schedulingFlags.CalculatedGPUsPerReplica = schedulingFlags.RequestedGPUsPerReplica

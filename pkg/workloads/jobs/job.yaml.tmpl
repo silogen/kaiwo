@@ -26,6 +26,8 @@ spec:
         - {{ .Workload.Entrypoint }}
         {{- end }}
         env:
+          - name: HF_HOME
+            value /workload/.cache/huggingface
         {{- if .Meta.EnvVars }}
         {{- range .Meta.EnvVars }}
         {{- if .Value }}
@@ -50,6 +52,10 @@ spec:
             cpu: "{{ mul .Scheduling.TotalRequestedGPUs 4 }}"
             amd.com/gpu: "{{ .Scheduling.TotalRequestedGPUs }}"
         volumeMounts:
+        {{- if .Scheduling.Storage }}
+          - mountPath: /workload
+            name: {{ .Meta.Name }}-pv
+        {{- end }}
         {{- if .Meta.SecretVolumes }}
         {{- range .Meta.SecretVolumes }}
           - name: {{ .Name }}
@@ -58,12 +64,17 @@ spec:
         {{- end }}
         {{- end }}
         {{- if .Meta.HasConfigMap }}
-          - mountPath: /workload
-            name: workload
+          - mountPath: /workload/mounted
+            name: workload-mount
         {{- end }}
           - mountPath: /dev/shm
             name: dshm
       volumes:
+      {{- if .Scheduling.Storage }}
+        - name: {{ .Meta.Name }}-pv
+          persistentVolumeClaim:
+            claimName: {{ .Meta.Name }}
+      {{- end }}
       {{- if .Meta.SecretVolumes }}
       {{- range .Meta.SecretVolumes }}
         - name: {{ .Name }}
@@ -75,7 +86,7 @@ spec:
       {{- end }}
       {{- end }}
       {{- if .Meta.HasConfigMap }}
-        - name: workload
+        - name: workload-mount
           configMap:
             name: {{ .Meta.Name }}
       {{- end }}
@@ -83,4 +94,3 @@ spec:
           emptyDir:
             medium: Memory
             sizeLimit: 200Gi
-

@@ -24,6 +24,8 @@ spec:
               image: {{ .Meta.Image }}
               imagePullPolicy: Always
               env:
+                - name: HF_HOME
+                  value /workload/.cache/huggingface
               {{- if .Meta.EnvVars }}
               {{- range .Meta.EnvVars }}
               {{- if .Value }}
@@ -46,6 +48,10 @@ spec:
                   cpu: "2"
                   memory: "16Gi"
               volumeMounts:
+              {{- if .Scheduling.Storage }}
+                - mountPath: /workload
+                  name: {{ .Meta.Name }}-pv
+              {{- end }}
               {{- if .Meta.SecretVolumes }}
               {{- range .Meta.SecretVolumes }}
                 - name: {{ .Name }}
@@ -69,6 +75,11 @@ spec:
                 - containerPort: 8000
                   name: serve
           volumes:
+          {{- if .Scheduling.Storage }}
+            - name: {{ .Meta.Name }}-pv
+              persistentVolumeClaim:
+                claimName: {{ .Meta.Name }}
+          {{- end }}
           {{- if .Meta.SecretVolumes }}
           {{- range .Meta.SecretVolumes }}
             - name: {{ .Name }}
@@ -109,6 +120,8 @@ spec:
                     exec:
                       command: ["/bin/sh", "-c", "ray stop"]
                 env:
+                  - name: HF_HOME
+                    value /workload/.cache/huggingface
                 {{- if .Meta.EnvVars }}
                 {{- range .Meta.EnvVars }}
                 {{- if .Value }}
@@ -133,6 +146,10 @@ spec:
                         memory: "{{ mul .Scheduling.CalculatedGPUsPerReplica 32 }}Gi"
                         amd.com/gpu: "{{ .Scheduling.CalculatedGPUsPerReplica }}"
                 volumeMounts:
+                {{- if .Scheduling.Storage }}
+                  - mountPath: /workload
+                    name: {{ .Meta.Name }}-pv
+                {{- end }}
                 {{- if .Meta.SecretVolumes }}
                 {{- range .SecretVolumes }}
                   - name: {{ .Name }}
@@ -147,6 +164,11 @@ spec:
                   - mountPath: /dev/shm
                     name: dshm
             volumes:
+            {{- if .Scheduling.Storage }}
+              - name: {{ .Meta.Name }}-pv
+                persistentVolumeClaim:
+                  claimName: {{ .Meta.Name }}
+            {{- end }}
             {{- if .Meta.SecretVolumes }}
             {{- range .Meta.SecretVolumes }}
               - name: {{ .Name }}

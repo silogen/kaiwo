@@ -53,7 +53,7 @@ func (deployment Deployment) GenerateTemplateContext(execFlags workloads.ExecFla
 	return DeploymentFlags{Serveconfig: strings.TrimSpace(string(contents))}, nil
 }
 
-func (deployment Deployment) ConvertObject(object runtime.Object) (runtime.Object, bool) {
+func (deployment Deployment) ConvertObject(object runtime.Object) (client.Object, bool) {
 	obj, ok := object.(*rayv1.RayService)
 
 	return obj, ok
