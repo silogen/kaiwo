@@ -106,6 +106,7 @@ func (deployment Deployment) BuildReference(ctx context.Context, k8sClient clien
 type ServiceReference struct {
 	workloads.WorkloadReferenceBase
 	RayService rayv1.RayService
+	RayCluster *rayv1.RayCluster
 	HeadPod    *corev1.Pod
 	WorkerPods []*corev1.Pod
 }
@@ -130,10 +131,10 @@ func (serviceRef *ServiceReference) Load(ctx context.Context, k8sClient client.C
 	if len(clusterList.Items) > 1 {
 		return fmt.Errorf("more than one clusters found")
 	}
-	rayCluster := clusterList.Items[0]
+	serviceRef.RayCluster = &clusterList.Items[0]
 
 	clusterPodLabelSelector := client.MatchingLabels{
-		"ray.io/cluster": rayCluster.Name,
+		"ray.io/cluster": serviceRef.RayCluster.Name,
 	}
 
 	clusterPodList := &corev1.PodList{}
@@ -186,4 +187,20 @@ func (serviceRef *ServiceReference) GetPods() []workloads.WorkloadPod {
 
 func (serviceRef *ServiceReference) GetStatus() string {
 	return "N/A (TODO)"
+}
+
+func (serviceRef *ServiceReference) GetServices(ctx context.Context, k8sClient client.Client) ([]corev1.Service, error) {
+	if serviceRef.RayCluster == nil {
+		return []corev1.Service{}, fmt.Errorf("no ray cluster set, run ServiceReference.Load() first")
+	}
+
+	serviceLabelSelector := client.MatchingLabels{
+		"ray.io/cluster": serviceRef.RayCluster.Name,
+	}
+	serviceList := &corev1.ServiceList{}
+	if err := k8sClient.List(ctx, serviceList, serviceLabelSelector); err != nil {
+		return nil, fmt.Errorf("could not list services: %w", err)
+	}
+
+	return serviceList.Items, nil
 }

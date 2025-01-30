@@ -76,6 +76,10 @@ func (workloadReferenceBase WorkloadReferenceBase) GetObject() client.Object {
 	return workloadReferenceBase.WorkloadObject
 }
 
+func (workloadReferenceBase WorkloadReferenceBase) GetServices(_ context.Context, _ client.Client) ([]corev1.Service, error) {
+	return []corev1.Service{}, nil
+}
+
 type WorkloadReference interface {
 	// Load loads the current state from k8s
 	Load(ctx context.Context, k8sClient client.Client) error
@@ -92,4 +96,6 @@ type WorkloadReference interface {
 	GetNamespace() string
 
 	GetKaiwoUser() string
+
+	GetServices(ctx context.Context, k8sClient client.Client) ([]corev1.Service, error)
 }
