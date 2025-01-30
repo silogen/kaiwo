@@ -26,7 +26,7 @@ const (
 	KaiwoUsernameLabel  = "kaiwo-cli/username"
 )
 
-// WorkloadTemplateConfig is the config context that is passed to the workflow templates
+// WorkloadTemplateConfig is the config context that is passed to the workload templates
 type WorkloadTemplateConfig struct {
 	// Workload-specific config
 	Workload any

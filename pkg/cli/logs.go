@@ -46,7 +46,7 @@ func BuildLogCmd() *cobra.Command {
 		Short: "Display logs for a workload. You will be prompted to choose the target container if there is more than one",
 		RunE:  executeLogsCommand,
 	}
-	// cmd.Flags().BoolVarP(&defaultContainer, "default", "d", defaultContainer, "Select the default container within the workflow")
+	// cmd.Flags().BoolVarP(&defaultContainer, "default", "d", defaultContainer, "Select the default container within the workload")
 	// cmd.Flags().StringVarP(&since, "since", "", "0s", "Only return logs newer than a relative duration")
 	// cmd.Flags().StringVarP(&sinceTime, "since-time", "", "", "Only return logs after a specific date (RFC3339)")
 	cmd.Flags().IntVarP(&tailLines, "tail", "", -1, "Number of lines to show from the end of the log")
@@ -54,7 +54,7 @@ func BuildLogCmd() *cobra.Command {
 	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "Follow log output")
 	// cmd.Flags().BoolVarP(&previous, "previous", "p", false, "If true, print the logs for the previous instance of the container in a pod if it exists.")
 	// cmd.Flags().StringVarP(&stream, "stream", "", string(StreamTypeAll), "Specify which container log stream to return to the client. One of All, Stdout or Stderr.")
-	cmd.Flags().StringVarP(&namespaceLogs, "namespace", "n", "kaiwo", "Namespace of the workflow")
+	cmd.Flags().StringVarP(&namespaceLogs, "namespace", "n", "kaiwo", "Namespace of the workload")
 	return cmd
 }
 

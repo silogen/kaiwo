@@ -107,36 +107,36 @@ func runSelectWorkload(ctx context.Context, clients k8s.KubernetesClients, state
 		state.WorkloadReference = nil
 	}
 
-	return result, runSelectWorkflowAction, nil
+	return result, runSelectWorkloadAction, nil
 }
 
-func runSelectWorkflowAction(_ context.Context, _ k8s.KubernetesClients, _ *tuicomponents.RunState) (tuicomponents.StepResult, tuicomponents.RunStep[tuicomponents.RunState], error) {
-	type workflowAction string
+func runSelectWorkloadAction(_ context.Context, _ k8s.KubernetesClients, _ *tuicomponents.RunState) (tuicomponents.StepResult, tuicomponents.RunStep[tuicomponents.RunState], error) {
+	type workloadAction string
 	var (
-		viewPods       workflowAction = "View pods"
-		portForward    workflowAction = "Port-forward"
-		deleteWorkflow workflowAction = "Delete workflow"
+		viewPods       workloadAction = "View pods"
+		portForward    workloadAction = "Port-forward"
+		deleteWorkload workloadAction = "Delete workload"
 	)
 
 	data := [][]string{
 		{string(viewPods)},
 		{string(portForward)},
-		{string(deleteWorkflow)},
+		{string(deleteWorkload)},
 	}
-	title := "Select the action you wish to take on the workflow"
+	title := "Select the action you wish to take on the workload"
 	selectedRow, result, err := tuicomponents.RunSelectTable(data, []string{"Action"}, title, true)
 	if err != nil {
 		return result, nil, fmt.Errorf("failed to select the action: %w", err)
 	}
 
-	actionMap := map[workflowAction]tuicomponents.RunStep[tuicomponents.RunState]{
+	actionMap := map[workloadAction]tuicomponents.RunStep[tuicomponents.RunState]{
 		viewPods:       podlist.RunSelectPodAndContainer,
 		portForward:    runPortForward,
-		deleteWorkflow: runDeleteWorkload,
+		deleteWorkload: runDeleteWorkload,
 	}
 
 	if result == tuicomponents.StepResultOk {
-		selectedAction := workflowAction(data[selectedRow][0])
+		selectedAction := workloadAction(data[selectedRow][0])
 		return result, actionMap[selectedAction], nil
 	}
 

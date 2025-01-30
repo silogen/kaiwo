@@ -72,6 +72,10 @@ func (workloadReferenceBase WorkloadReferenceBase) GetKaiwoUser() string {
 	return workloadReferenceBase.WorkloadObject.GetLabels()[KaiwoUsernameLabel]
 }
 
+func (workloadReferenceBase WorkloadReferenceBase) GetObject() client.Object {
+	return workloadReferenceBase.WorkloadObject
+}
+
 type WorkloadReference interface {
 	// Load loads the current state from k8s
 	Load(ctx context.Context, k8sClient client.Client) error
@@ -82,6 +86,8 @@ type WorkloadReference interface {
 	GetStatus() string
 
 	GetName() string
+
+	GetObject() client.Object
 
 	GetNamespace() string
 
