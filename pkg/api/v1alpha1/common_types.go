@@ -18,99 +18,181 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// Common labels used across resources
+// Common labels used across resources.
 const (
 	UsernameLabel = "kaiwo-cli/username"
 	QueueLabel    = "kueue.x-k8s.io/queue-name"
 )
 
-// CommonMetaSpec defines reusable metadata fields.
+// CommonMetaSpec defines reusable metadata fields for workloads.
 type CommonMetaSpec struct {
-	Username         string            `json:"username,omitempty"`
-	Name             string            `json:"name,omitempty"`
-	Namespace        string            `json:"namespace,omitempty"`
-	Labels           map[string]string `json:"labels,omitempty"`
-	Annotations      map[string]string `json:"annotations,omitempty"`
-	Gpus             int               `json:"gpus,omitempty"`
-	Version          string            `json:"version,omitempty"`          // Optional version of workload
-	Replicas         int               `json:"replicas,omitempty"`         // How many replicas. Must be Ray if greater than one
-	GpusPerReplica   int               `json:"gpus-per-replica,omitempty"` // How many GPUs per replica
-	Image            string            `json:"image,omitempty"`
-	ImagePullSecrets []string          `json:"image-pull-secrets,omitempty"`
-	Ray              bool              `json:"ray"` // Operator must know whether entrypoint should use RayCluster, default false
-	ConfigMap        *corev1.ConfigMap `json:"configmap,omitempty"`
+	// Username specifies the owner or creator of the workload.
+	Username string `json:"username,omitempty"`
+
+	// Name is the name of the workload.
+	Name string `json:"name,omitempty"`
+
+	// Namespace defines the namespace in which the workload is deployed.
+	Namespace string `json:"namespace,omitempty"`
+
+	// Labels is a map of key-value pairs used for organizing workloads.
+	Labels map[string]string `json:"labels,omitempty"`
+
+	// Annotations provides additional metadata for the workload.
+	Annotations map[string]string `json:"annotations,omitempty"`
+
+	// Gpus specifies the total number of GPUs allocated to the workload.
+	Gpus int `json:"gpus,omitempty"`
+
+	// Version is an optional field specifying the version of the workload.
+	Version string `json:"version,omitempty"`
+
+	// Replicas specifies the number of replicas for the workload.
+	// If greater than one, the workload must use Ray.
+	Replicas int `json:"replicas,omitempty"`
+
+	// GpusPerReplica specifies the number of GPUs allocated per replica.
+	GpusPerReplica int `json:"gpus-per-replica,omitempty"`
+
+	// Image defines the container image used for the workload.
+	Image string `json:"image,omitempty"`
+
+	// ImagePullSecrets contains the list of secrets used to pull the container image.
+	ImagePullSecrets []string `json:"image-pull-secrets,omitempty"`
+
+	// Ray determines whether the operator should use RayCluster for workload execution.
+	// Default is false.
+	Ray bool `json:"ray"`
+
+	// ConfigMap optionally mounts a ConfigMap into the workload.
+	ConfigMap *corev1.ConfigMap `json:"configmap,omitempty"`
 }
 
+// CommonContainer defines the container specifications within a workload.
 type CommonContainer struct {
-	Name            string                      `json:"name"`
-	Image           string                      `json:"image"`
-	ImagePullPolicy corev1.PullPolicy           `json:"imagePullPolicy,omitempty"`
-	Command         []string                    `json:"command,omitempty"`
-	Env             []corev1.EnvVar             `json:"env,omitempty"`
-	Resources       corev1.ResourceRequirements `json:"resources,omitempty"`
-	VolumeMounts    []corev1.VolumeMount        `json:"volumeMounts,omitempty"`
+	// Name is the name of the container.
+	Name string `json:"name"`
+
+	// Image specifies the container image to be used.
+	Image string `json:"image"`
+
+	// ImagePullPolicy defines when Kubernetes should pull the container image.
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+
+	// Command specifies the entrypoint commands executed within the container.
+	Command []string `json:"command,omitempty"`
+
+	// Env defines environment variables for the container.
+	Env []corev1.EnvVar `json:"env,omitempty"`
+
+	// Resources specifies CPU, memory, and GPU requirements.
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// VolumeMounts defines the volumes mounted to the container.
+	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
 }
 
-// CommonVolume defines simplified volume configuration.
+// CommonVolume defines simplified volume configurations.
 type CommonVolume struct {
-	Name      string                        `json:"name"`
-	Secret    *corev1.SecretVolumeSource    `json:"secret,omitempty"`
+	// Name is the name of the volume.
+	Name string `json:"name"`
+
+	// Secret defines a volume sourced from a Kubernetes Secret.
+	Secret *corev1.SecretVolumeSource `json:"secret,omitempty"`
+
+	// ConfigMap defines a volume sourced from a Kubernetes ConfigMap.
 	ConfigMap *corev1.ConfigMapVolumeSource `json:"configMap,omitempty"`
-	EmptyDir  *corev1.EmptyDirVolumeSource  `json:"emptyDir,omitempty"`
+
+	// EmptyDir defines an ephemeral volume backed by node storage.
+	EmptyDir *corev1.EmptyDirVolumeSource `json:"emptyDir,omitempty"`
 }
 
-// CommonPodSpec captures essential fields from the pod spec.
+// CommonPodSpec captures essential fields from the Pod specification.
 type CommonPodSpec struct {
-	RestartPolicy    corev1.RestartPolicy          `json:"restartPolicy,omitempty"`
+	// RestartPolicy defines the restart behavior of the pod.
+	RestartPolicy corev1.RestartPolicy `json:"restartPolicy,omitempty"`
+
+	// ImagePullSecrets contains secrets used to pull container images.
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
-	Containers       []CommonContainer             `json:"containers"`
-	Volumes          []CommonVolume                `json:"volumes,omitempty"`
+
+	// Containers lists the primary containers in the pod.
+	Containers []CommonContainer `json:"containers"`
+
+	// Volumes lists the volumes mounted to the pod.
+	Volumes []CommonVolume `json:"volumes,omitempty"`
 }
 
-// // RayServiceSpec defines fields specific to RayService.
+// RayServiceSpec defines fields specific to a RayService workload.
 type RayServiceSpec struct {
+	// ServeConfig specifies the Ray Serve configuration.
 	ServeConfig string `json:"serveConfig,omitempty"`
 
-	// RayClusterConfig contains configuration specific to RayService, such as autoscaling
+	// RayClusterConfig contains the configuration for the underlying Ray cluster.
 	RayClusterConfig RayClusterSpec `json:"rayClusterConfig"`
 }
 
+// RayJobSpec defines fields specific to a RayJob workload.
 type RayJobSpec struct {
+	// EntryPoint specifies the command or script that starts the Ray job.
 	EntryPoint string `json:"entryPoint,omitempty"`
 
+	// RayClusterSpec defines the Ray cluster that executes the job.
 	RayClusterSpec RayClusterSpec `json:"rayClusterSpec"`
 }
 
+// RayClusterSpec defines the configuration of a Ray cluster.
 type RayClusterSpec struct {
-	// HeadGroupSpec is the specification for the head pod in the cluster
+	// HeadGroupSpec specifies the configuration for the Ray cluster head node.
 	HeadGroupSpec HeadGroupSpec `json:"headGroupSpec"`
 
-	// WorkerGroupSpecs defines configurations for worker pods in the cluster
+	// WorkerGroupSpecs defines the configurations for Ray worker nodes.
 	WorkerGroupSpecs []WorkerGroupSpec `json:"workerGroupSpecs,omitempty"`
 }
 
+// HeadGroupSpec defines the configuration for the Ray head node.
 type HeadGroupSpec struct {
+	// RayStartParams specifies startup parameters for the Ray head node.
 	RayStartParams map[string]string `json:"rayStartParams,omitempty"`
-	Template       CommonPodSpec     `json:"template"`
-}
 
-type WorkerGroupSpec struct {
-	GroupName      string            `json:"groupName"`
-	Replicas       *int32            `json:"replicas,omitempty"`
-	MinReplicas    *int32            `json:"minReplicas,omitempty"`
-	MaxReplicas    *int32            `json:"maxReplicas,omitempty"`
-	RayStartParams map[string]string `json:"rayStartParams,omitempty"`
-	Template       CommonPodSpec     `json:"template"`
-}
-
-// DeploymentSpec defines fields specific to Kubernetes Deployment.
-type DeploymentSpec struct {
-	Replicas int32         `json:"replicas"`
+	// Template defines the pod specifications for the Ray head node.
 	Template CommonPodSpec `json:"template"`
 }
 
-// JobSpec defines fields specific to Kubernetes Job.
+// WorkerGroupSpec defines the configuration for a Ray worker node group.
+type WorkerGroupSpec struct {
+	// GroupName specifies the name of the worker group.
+	GroupName string `json:"groupName"`
+
+	// Replicas defines the desired number of worker nodes in the group.
+	Replicas *int32 `json:"replicas,omitempty"`
+
+	// MinReplicas defines the minimum number of worker nodes.
+	MinReplicas *int32 `json:"minReplicas,omitempty"`
+
+	// MaxReplicas defines the maximum number of worker nodes.
+	MaxReplicas *int32 `json:"maxReplicas,omitempty"`
+
+	// RayStartParams specifies startup parameters for Ray worker nodes.
+	RayStartParams map[string]string `json:"rayStartParams,omitempty"`
+
+	// Template defines the pod specifications for Ray worker nodes.
+	Template CommonPodSpec `json:"template"`
+}
+
+// DeploymentSpec defines fields specific to Kubernetes Deployment workloads.
+type DeploymentSpec struct {
+	// Replicas defines the number of pod replicas for the deployment.
+	Replicas int32 `json:"replicas"`
+
+	// Template defines the pod specifications for the deployment.
+	Template CommonPodSpec `json:"template"`
+}
+
+// JobSpec defines fields specific to Kubernetes Job workloads.
 type JobSpec struct {
-	TTLSecondsAfterFinished *int32        `json:"ttlSecondsAfterFinished,omitempty"`
-	Template                CommonPodSpec `json:"template"`
+	// TTLSecondsAfterFinished specifies how long a job should persist after completion.
+	TTLSecondsAfterFinished *int32 `json:"ttlSecondsAfterFinished,omitempty"`
+
+	// Template defines the pod specifications for the job.
+	Template CommonPodSpec `json:"template"`
 }

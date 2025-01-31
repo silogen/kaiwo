@@ -19,77 +19,120 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ResourceFlavorSpec represents the configuration for a ResourceFlavor.
+// ResourceFlavorSpec defines the configuration for a specific resource flavor.
+// A resource flavor describes a particular type of node with specific labels,
+// taints, and tolerations.
 type ResourceFlavorSpec struct {
-	Name       string            `json:"name"`       // Name of the resource flavor
-	NodeLabels map[string]string `json:"nodeLabels"` // Node labels associated with this flavor
+	// Name specifies the name of the resource flavor.
+	Name string `json:"name"`
 
-	// Taints applied to nodes with this flavor
+	// NodeLabels defines labels associated with nodes that match this flavor.
+	NodeLabels map[string]string `json:"nodeLabels"`
+
+	// Taints lists taints applied to nodes with this flavor.
 	Taints []corev1.Taint `json:"taints,omitempty"`
 
-	// Tolerations for workloads that should be scheduled on nodes with this flavor
+	// Tolerations defines the tolerations required for workloads to be scheduled on nodes with this flavor.
 	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
 }
 
-// WorkloadPriorityClassSpec represents the configuration for a WorkloadPriorityClass.
+// WorkloadPriorityClassSpec defines the priority class configuration for workloads.
+// Priority classes influence the scheduling order of workloads.
 type WorkloadPriorityClassSpec struct {
-	Name        string `json:"name"`        // Priority class name
-	Value       int32  `json:"value"`       // Numeric priority value
-	Description string `json:"description"` // Optional description
+	// Name is the name of the priority class.
+	Name string `json:"name"`
+
+	// Value represents the numeric priority value assigned to this priority class.
+	Value int32 `json:"value"`
+
+	// Description provides an optional explanation for this priority class.
+	Description string `json:"description"`
 }
 
-// ResourceQuota represents the quota for a specific resource.
+// ResourceQuota defines the quota allocation for a specific resource within a flavor or cluster queue.
 type ResourceQuota struct {
-	ResourceName string `json:"resourceName"` // e.g., "cpu", "memory", "gpu"
-	NominalQuota string `json:"nominalQuota"` // e.g., "10", "50Gi"
+	// ResourceName specifies the type of resource (e.g., "cpu", "memory", "gpu").
+	ResourceName string `json:"resourceName"`
+
+	// NominalQuota defines the quantity of the resource allocated (e.g., "10", "50Gi").
+	NominalQuota string `json:"nominalQuota"`
 }
 
-// ClusterQueueSpec represents the configuration of a ClusterQueue.
+// ClusterQueueSpec defines the configuration for a ClusterQueue.
+// A ClusterQueue determines how workloads are scheduled across available resources.
 type ClusterQueueSpec struct {
-	Name              string            `json:"name"`                        // Name of the cluster queue
-	NamespaceSelector map[string]string `json:"namespaceSelector,omitempty"` // Namespace selector
-	ResourceGroups    []ResourceGroup   `json:"resourceGroups"`              // Resource group definitions
+	// Name specifies the name of the cluster queue.
+	Name string `json:"name"`
+
+	// NamespaceSelector defines which namespaces are eligible for scheduling in this cluster queue.
+	NamespaceSelector map[string]string `json:"namespaceSelector,omitempty"`
+
+	// ResourceGroups contains definitions for resource allocations within the cluster queue.
+	ResourceGroups []ResourceGroup `json:"resourceGroups"`
 }
 
-// ResourceGroup defines a group of covered resources and their available flavors.
+// ResourceGroup defines a grouping of resources and their associated flavors within a cluster queue.
 type ResourceGroup struct {
-	CoveredResources []string              `json:"coveredResources"` // List of covered resources, e.g., ["cpu", "memory"]
-	Flavors          []FlavorResourceQuota `json:"flavors"`          // Mapping of flavors to quotas
+	// CoveredResources lists the types of resources managed in this group (e.g., ["cpu", "memory"]).
+	CoveredResources []string `json:"coveredResources"`
+
+	// Flavors specifies the available resource flavors and their associated quotas.
+	Flavors []FlavorResourceQuota `json:"flavors"`
 }
 
-// FlavorResourceQuota maps a flavor to a set of resource quotas.
+// FlavorResourceQuota associates a resource flavor with specific quotas.
 type FlavorResourceQuota struct {
-	Name      string          `json:"name"`      // Flavor name
-	Resources []ResourceQuota `json:"resources"` // List of resource quotas
+	// Name specifies the name of the resource flavor.
+	Name string `json:"name"`
+
+	// Resources defines the resource quotas allocated to this flavor.
+	Resources []ResourceQuota `json:"resources"`
 }
 
-// KaiwoQueueConfigSpec defines the desired state of KaiwoQueueConfig.
+// KaiwoQueueConfigSpec defines the desired configuration for a KaiwoQueueConfig.
+// It includes multiple cluster queues, resource flavors, and workload priority classes.
 type KaiwoQueueConfigSpec struct {
-	ClusterQueues           []ClusterQueueSpec          `json:"clusterQueues,omitempty"`           // List of ClusterQueues
-	ResourceFlavors         []ResourceFlavorSpec        `json:"resourceFlavors,omitempty"`         // List of ResourceFlavors
-	WorkloadPriorityClasses []WorkloadPriorityClassSpec `json:"workloadPriorityClasses,omitempty"` // List of WorkloadPriorityClasses
+	// ClusterQueues is a list of ClusterQueue specifications that define scheduling policies.
+	ClusterQueues []ClusterQueueSpec `json:"clusterQueues,omitempty"`
+
+	// ResourceFlavors specifies the different node flavors available in the cluster.
+	ResourceFlavors []ResourceFlavorSpec `json:"resourceFlavors,omitempty"`
+
+	// WorkloadPriorityClasses defines the priority classes available for workloads.
+	WorkloadPriorityClasses []WorkloadPriorityClassSpec `json:"workloadPriorityClasses,omitempty"`
 }
 
-// KaiwoQueueConfigStatus defines the observed state of KaiwoQueueConfig.
+// KaiwoQueueConfigStatus represents the current observed state of KaiwoQueueConfig.
 type KaiwoQueueConfigStatus struct {
+	// Conditions provide information on the status of the KaiwoQueueConfig.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
+// KaiwoQueueConfig is the API resource that defines the configuration for queue management
+// within the Kaiwo Operator. It specifies cluster queues, resource flavors, and priority classes.
+//
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 type KaiwoQueueConfig struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   KaiwoQueueConfigSpec   `json:"spec,omitempty"`
+	// Spec defines the desired configuration for the queue system.
+	Spec KaiwoQueueConfigSpec `json:"spec,omitempty"`
+
+	// Status represents the observed state of the queue configuration.
 	Status KaiwoQueueConfigStatus `json:"status,omitempty"`
 }
 
+// KaiwoQueueConfigList is a list of KaiwoQueueConfig resources.
+//
 // +kubebuilder:object:root=true
 type KaiwoQueueConfigList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []KaiwoQueueConfig `json:"items"`
+
+	// Items contains multiple KaiwoQueueConfig resources.
+	Items []KaiwoQueueConfig `json:"items"`
 }
 
 func init() {
