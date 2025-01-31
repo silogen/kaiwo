@@ -300,11 +300,11 @@ func printResources(s *runtime.Scheme, resources []runtime.Object) {
 
 // applyResources applies (creates or updates if possible) each Kubernetes object within an array
 func applyResources(resources []runtime.Object, ctx context.Context, k8sClient client.Client) error {
-	for _, resource := range resources {
+	for _, resource_ := range resources {
 		// Ensure the resource implements client.Object
-		obj, ok := resource.(client.Object)
+		obj, ok := resource_.(client.Object)
 		if !ok {
-			return fmt.Errorf("resource does not implement client.Object: %T", resource)
+			return fmt.Errorf("resource does not implement client.Object: %T", resource_)
 		}
 
 		// Access metadata for logging
@@ -313,7 +313,7 @@ func applyResources(resources []runtime.Object, ctx context.Context, k8sClient c
 			return fmt.Errorf("failed to access metadata for resource: %w", err)
 		}
 
-		logrus.Debugf("Applying resource %T: %s/%s", resource, objMeta.GetNamespace(), objMeta.GetName())
+		logrus.Debugf("Applying resource %T: %s/%s", resource_, objMeta.GetNamespace(), objMeta.GetName())
 
 		// Check if the resource exists
 		key := client.ObjectKey{
@@ -321,7 +321,7 @@ func applyResources(resources []runtime.Object, ctx context.Context, k8sClient c
 			Name:      objMeta.GetName(),
 		}
 
-		existing := resource.DeepCopyObject().(client.Object)
+		existing := resource_.DeepCopyObject().(client.Object)
 
 		err = k8sClient.Get(ctx, key, existing)
 
