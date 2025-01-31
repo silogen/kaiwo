@@ -22,17 +22,18 @@ import (
 type KaiwoServiceSpec struct {
 	CommonMetaSpec `json:",inline"`
 
-	ClusterQueue  string `json:"clusterQueue,omitempty"`
-	PriorityClass string `json:"priorityClass,omitempty"`
-
 	// RayService configuration
-	ServeConfigV2    string         `json:"serveConfigV2,omitempty"`
-	RayClusterConfig RayClusterSpec `json:"rayClusterConfig"`
+	ServeConfigV2 string `json:"serveConfigV2,omitempty"`
+
+	// Optional workload-specific configs (Pointers to avoid bloating CRD)
+	RayClusterSpec *RayClusterSpec `json:"rayClusterConfig,omitempty"`
+	DeploymentSpec *DeploymentSpec `json:"deploymentSpec,omitempty"`
 }
 
 // KaiwoServiceStatus defines the observed state of KaiwoService.
 type KaiwoServiceStatus struct {
-	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	Conditions      []metav1.Condition `json:"conditions,omitempty"`
+	ReplicaStatuses map[string]int32   `json:"replicaStatuses,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -50,4 +51,8 @@ type KaiwoServiceList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []KaiwoService `json:"items"`
+}
+
+func init() {
+	SchemeBuilder.Register(&KaiwoService{}, &KaiwoServiceList{})
 }

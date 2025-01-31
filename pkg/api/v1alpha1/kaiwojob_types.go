@@ -22,13 +22,16 @@ import (
 type KaiwoJobSpec struct {
 	CommonMetaSpec `json:",inline"`
 
-	ClusterQueue  string `json:"clusterQueue,omitempty"`
-	PriorityClass string `json:"priorityClass,omitempty"`
+	// Unified workload parameters
+	EntryPoint string `json:"entryPoint,omitempty"`
 
-	// RayJob configuration
-	ShutdownAfterJobFinishes bool           `json:"shutdownAfterJobFinishes"`
-	EntryPoint               string         `json:"entryPoint,omitempty"`
-	RayClusterSpec           RayClusterSpec `json:"rayClusterSpec"`
+	// Kueue-specific fields only apply to jobs
+	ClusterQueue  string `json:"clusterQueue,omitempty"`  // Kueue ClusterQueue
+	PriorityClass string `json:"priorityClass,omitempty"` // Kueue PriorityClass
+
+	// Optional workload-specific configs
+	RayClusterSpec *RayClusterSpec `json:"rayClusterSpec,omitempty"`
+	JobSpec        *JobSpec        `json:"jobSpec,omitempty"`
 }
 
 // KaiwoJobStatus defines the observed state of KaiwoJob.
@@ -54,4 +57,8 @@ type KaiwoJobList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []KaiwoJob `json:"items"`
+}
+
+func init() {
+	SchemeBuilder.Register(&KaiwoJob{}, &KaiwoJobList{})
 }
