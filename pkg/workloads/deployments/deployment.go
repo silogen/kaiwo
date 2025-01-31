@@ -19,7 +19,6 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -43,7 +42,7 @@ type DeploymentFlags struct {
 }
 
 func (deployment Deployment) GenerateTemplateContext(execFlags workloads.ExecFlags) (any, error) {
-	contents, err := os.ReadFile(filepath.Join(execFlags.Path, EntrypointFilename))
+	contents, err := os.ReadFile(execFlags.WorkloadFiles[EntrypointFilename])
 	if err != nil {
 		if os.IsNotExist(err) {
 			logrus.Warnln("No entrypoint file found. Expecting entrypoint in image")

@@ -26,6 +26,7 @@ const (
 	KaiwoUsernameLabel                = "kaiwo-cli/username"
 	KaiwoDefaultStorageClassNameLabel = "kaiwo-cli/default-storage-class-name"
 	KaiwoDefaultStorageQuantityLabel  = "kaiwo-cli/default-storage-quantity"
+	CustomTemplateValuesFilename = "custom-template-values.yaml"
 )
 
 // WorkloadTemplateConfig is the config context that is passed to the workload templates
@@ -120,9 +121,7 @@ type ExecFlags struct {
 	// The key used to store the GPU count per node in the resource flavor
 	ResourceFlavorGpuNodeLabelKey string
 
-	// Path to custom config file
-	CustomConfigPath string
-
-	// Path to env file if not in Path
-	EnvFilePath string
+	// WorkloadFiles list the files that are considered to be part of the workload after merging Path and OverlayPath
+	// The map is from the workload path (how the workload would see it) to the true relative path (how the CLI client sees it)
+	WorkloadFiles map[string]string
 }
