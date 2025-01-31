@@ -153,10 +153,9 @@ func ApplyWorkload(
 
 func generatePvcManifest(templateContext WorkloadTemplateConfig) *corev1.PersistentVolumeClaim {
 	v := corev1.PersistentVolumeFilesystem
-	return &corev1.PersistentVolumeClaim{
+	pvc := &corev1.PersistentVolumeClaim{
 		Spec: corev1.PersistentVolumeClaimSpec{
-			VolumeMode:       &v,
-			StorageClassName: &templateContext.Scheduling.Storage.StorageClassName,
+			VolumeMode: &v,
 			AccessModes: []corev1.PersistentVolumeAccessMode{
 				corev1.ReadWriteOnce,
 			},
@@ -171,6 +170,12 @@ func generatePvcManifest(templateContext WorkloadTemplateConfig) *corev1.Persist
 			Namespace: templateContext.Meta.Namespace,
 		},
 	}
+
+	if templateContext.Scheduling.Storage.StorageClassName != "" {
+		pvc.Spec.StorageClassName = &templateContext.Scheduling.Storage.StorageClassName
+	}
+
+	return pvc
 }
 
 func getWorkloadTemplate(execFlags ExecFlags, workload Workload) ([]byte, error) {
