@@ -27,7 +27,7 @@ spec:
         {{- end }}
         env:
           - name: HF_HOME
-            value /workload/.cache/huggingface
+            value: /workload/.cache/huggingface
         {{- if .Meta.EnvVars }}
         {{- range .Meta.EnvVars }}
         {{- if .Value }}
