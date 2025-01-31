@@ -119,7 +119,7 @@ func ApplyWorkload(
 	}
 
 	if configMapResource != nil || pvc != nil {
-		logrus.Info("Config map and / or PVC are set, linking them to the workload")
+		logrus.Debug("Config map and / or PVC are set, linking them to the workload")
 
 		owner := workloadResource.DeepCopyObject().(client.Object)
 		err := k8sClient.Get(ctx, client.ObjectKey{Name: owner.GetName(), Namespace: owner.GetNamespace()}, owner)
@@ -132,19 +132,17 @@ func ApplyWorkload(
 			return fmt.Errorf("owner resource %s/%s has no valid UID", owner.GetNamespace(), owner.GetName())
 		}
 		workloadResource = owner
-	} else {
-		logrus.Warn("WO")
 	}
 
 	// Attach config map and PVC to the workload, if they are defined
 	if configMapResource != nil {
-		logrus.Info("Updating the config map's owner reference")
+		logrus.Debug("Updating the config map's owner reference")
 		if err := updateOwnerReference(ctx, k8sClient, configMapResource, workloadResource, &scheme); err != nil {
 			return fmt.Errorf("failed to update owner reference of config map: %w", err)
 		}
 	}
 	if pvc != nil {
-		logrus.Info("Updating the PVC's owner reference")
+		logrus.Debug("Updating the PVC's owner reference")
 		if err := updateOwnerReference(ctx, k8sClient, pvc, workloadResource, &scheme); err != nil {
 			return fmt.Errorf("failed to update owner reference of persistent volume claim: %w", err)
 		}
