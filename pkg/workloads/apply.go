@@ -67,25 +67,7 @@ func ApplyWorkload(
 	}
 
 	if templateContext.Scheduling.Storage != nil {
-		v := corev1.PersistentVolumeFilesystem
-		pvc = &corev1.PersistentVolumeClaim{
-			Spec: corev1.PersistentVolumeClaimSpec{
-				VolumeMode:       &v,
-				StorageClassName: &templateContext.Scheduling.Storage.StorageClassName,
-				AccessModes: []corev1.PersistentVolumeAccessMode{
-					corev1.ReadWriteOnce,
-				},
-				Resources: corev1.VolumeResourceRequirements{
-					Requests: corev1.ResourceList{
-						"storage": resource.MustParse(templateContext.Scheduling.Storage.RequestedStorage),
-					},
-				},
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      templateContext.Meta.Name,
-				Namespace: templateContext.Meta.Namespace,
-			},
-		}
+		pvc = generatePvcManifest(templateContext)
 		resources = append(resources, pvc)
 	}
 
@@ -169,6 +151,28 @@ func ApplyWorkload(
 	}
 
 	return nil
+}
+
+func generatePvcManifest(templateContext WorkloadTemplateConfig) *corev1.PersistentVolumeClaim {
+	v := corev1.PersistentVolumeFilesystem
+	return &corev1.PersistentVolumeClaim{
+		Spec: corev1.PersistentVolumeClaimSpec{
+			VolumeMode:       &v,
+			StorageClassName: &templateContext.Scheduling.Storage.StorageClassName,
+			AccessModes: []corev1.PersistentVolumeAccessMode{
+				corev1.ReadWriteOnce,
+			},
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{
+					"storage": resource.MustParse(templateContext.Scheduling.Storage.RequestedStorage),
+				},
+			},
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      templateContext.Meta.Name,
+			Namespace: templateContext.Meta.Namespace,
+		},
+	}
 }
 
 func getWorkloadTemplate(execFlags ExecFlags, workload Workload) ([]byte, error) {
