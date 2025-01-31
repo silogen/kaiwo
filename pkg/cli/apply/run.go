@@ -22,6 +22,9 @@ import (
 	"strconv"
 	"strings"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -84,9 +87,9 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 	}
 
 	// Prepare scheduling flags
-	dynamicClient, err := k8s.GetClient()
+	clients, err := k8s.GetKubernetesClients()
 	if err != nil {
-		return fmt.Errorf("error fetching Kubernetes client: %w", err)
+		return fmt.Errorf("error getting k8s clients: %w", err)
 	}
 
 	ctx := context.TODO()
@@ -95,7 +98,22 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 		return fmt.Errorf("error getting scheduling flags: %w", err)
 	}
 
-	if err := fillSchedulingFlags(ctx, dynamicClient, schedulingFlags, execFlags.ResourceFlavorGpuNodeLabelKey, metaFlags.EnvVars); err != nil {
+	if schedulingFlags.Storage != nil && schedulingFlags.Storage.StorageClassName == "" {
+		logrus.Debugf("Storage requested but no storage class name provided, checking if a default storage class exists")
+		defaultExists, err := defaultStorageClassExists(*clients.Clientset)
+		if err != nil {
+			return fmt.Errorf("error checking if default storage class exists: %w", err)
+		}
+		if defaultExists {
+			logrus.Debugf("Default storage class exists")
+		} else {
+			logrus.Warn("Default storage class does not exist. You must either explicitly provide the name of the storage class, or ensure a default one exists. " +
+				"For example you can run `kubectl patch storageclass mystorageclassname -p '{\"metadata\": {\"annotations\":{\"storageclass.kubernetes.io/is-default-class\":\"true\"}}}'`")
+			return fmt.Errorf("storage class not specified and default storage class does not exists")
+		}
+	}
+
+	if err := fillSchedulingFlags(ctx, clients.Client, schedulingFlags, execFlags.ResourceFlavorGpuNodeLabelKey, metaFlags.EnvVars); err != nil {
 		return fmt.Errorf("error filling scheduling flags: %w", err)
 	}
 	logrus.Debugf("Successfully loaded scheduling info from Kubernetes")
@@ -114,11 +132,26 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 	}
 
 	// Apply the workload
-	if err := workloads.ApplyWorkload(ctx, dynamicClient, workload, execFlags, templateContext); err != nil {
+	if err := workloads.ApplyWorkload(ctx, clients.Client, workload, execFlags, templateContext); err != nil {
 		return fmt.Errorf("error applying workload: %w", err)
 	}
 
 	return nil
+}
+
+func defaultStorageClassExists(clientset kubernetes.Clientset) (bool, error) {
+	scList, err := clientset.StorageV1().StorageClasses().List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return false, fmt.Errorf("error listing storage classes: %w", err)
+	}
+
+	for _, sc := range scList.Items {
+		if isDefault, ok := sc.Annotations["storageclass.kubernetes.io/is-default-class"]; ok && isDefault == "true" {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 // loadCustomConfig loads custom configuration data from a file

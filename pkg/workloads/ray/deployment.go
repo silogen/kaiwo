@@ -22,8 +22,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
@@ -55,34 +53,34 @@ func (deployment Deployment) GenerateTemplateContext(execFlags workloads.ExecFla
 	return DeploymentFlags{Serveconfig: strings.TrimSpace(string(contents))}, nil
 }
 
-func (deployment Deployment) BuildObject(flags workloads.WorkloadTemplateConfig) (client.Object, error) {
-	obj := &rayv1.RayService{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      flags.Meta.Name,
-			Namespace: flags.Meta.Namespace,
-			Labels: map[string]string{
-				"kaiwo-cli/username": flags.Meta.User,
-			},
-		},
-		Spec: rayv1.RayServiceSpec{
-			ServeConfigV2: "",
-			RayClusterSpec: rayv1.RayClusterSpec{
-				// EnableInTreeAutoscaling: true,
-				HeadGroupSpec: rayv1.HeadGroupSpec{
-					RayStartParams: map[string]string{
-						"dashboard-host": "0.0.0.0",
-					},
-					Template: corev1.PodTemplateSpec{},
-				},
-			},
-		},
-	}
-	return obj, nil
-}
-
-func buildPodSpec(metaFlags workloads.MetaFlags, ports []corev1.ContainerPort) corev1.PodSpec {
-	return corev1.PodSpec{}
-}
+//func (deployment Deployment) BuildObject(flags workloads.WorkloadTemplateConfig) (client.Object, error) {
+//	obj := &rayv1.RayService{
+//		ObjectMeta: metav1.ObjectMeta{
+//			Name:      flags.Meta.Name,
+//			Namespace: flags.Meta.Namespace,
+//			Labels: map[string]string{
+//				"kaiwo-cli/username": flags.Meta.User,
+//			},
+//		},
+//		Spec: rayv1.RayServiceSpec{
+//			ServeConfigV2: "",
+//			RayClusterSpec: rayv1.RayClusterSpec{
+//				// EnableInTreeAutoscaling: true,
+//				HeadGroupSpec: rayv1.HeadGroupSpec{
+//					RayStartParams: map[string]string{
+//						"dashboard-host": "0.0.0.0",
+//					},
+//					Template: corev1.PodTemplateSpec{},
+//				},
+//			},
+//		},
+//	}
+//	return obj, nil
+//}
+//
+//func buildPodSpec(metaFlags workloads.MetaFlags, ports []corev1.ContainerPort) corev1.PodSpec {
+//	return corev1.PodSpec{}
+//}
 
 func (deployment Deployment) ConvertObject(object runtime.Object) (client.Object, bool) {
 	obj, ok := object.(*rayv1.RayService)

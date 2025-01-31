@@ -122,8 +122,8 @@ func AddSchedulingFlags(cmd *cobra.Command) {
 		&storage,
 		"storage",
 		"",
-		"",
-		"Storage requested for the workload, use: --storage=10Gi,storageClassName or --storage=10Gi to use the default storage class. "+
+		defaultStorageAmount,
+		fmt.Sprintf("Storage requested for the workload, use: --storage=%s,storageClassName or --storage=%s to use the default storage class. ", defaultStorageAmount, defaultStorageAmount)+
 			fmt.Sprintf("If not provided, --storage=%s is implied. If you do not want to include storage, use the --no-storage flag", defaultStorageAmount),
 	)
 	cmd.Flags().BoolVarP(&noStorage, "no-storage", "", false, "Don't use storage for the workload")

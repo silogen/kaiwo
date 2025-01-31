@@ -73,8 +73,8 @@ spec:
         {{- end }}
         {{- end }}
         {{- if .Meta.HasConfigMap }}
-          - mountPath: /workload
-            name: workload
+          - mountPath: /workload/mounted
+            name: workload-mount
         {{- end }}
           - mountPath: /dev/shm
             name: dshm
@@ -100,7 +100,7 @@ spec:
       {{- end }}
       {{- end }}
       {{- if .Meta.HasConfigMap }}
-        - name: workload
+        - name: workload-mount
           configMap:
             name: {{ .Meta.Name }}
       {{- end }}
