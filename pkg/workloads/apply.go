@@ -64,7 +64,7 @@ func ApplyWorkload(
 	}
 
 	if execFlags.Path != "" {
-		configMapResource, err = generateConfigMapManifest(execFlags.Path, workload, templateContext.Meta)
+		configMapResource, err = generateConfigMapManifest(execFlags.Path, execFlags.OverlayPath, workload, templateContext.Meta)
 		if err != nil {
 			return fmt.Errorf("failed to generate configmap resource: %w", err)
 		}
@@ -72,6 +72,8 @@ func ApplyWorkload(
 			resources = append(resources, configMapResource)
 			templateContext.Meta.HasConfigMap = true
 		}
+	} else if execFlags.OverlayPath != "" {
+		return fmt.Errorf("overlay path set without setting the path")
 	}
 
 	workloadTemplate, err := getWorkloadTemplate(execFlags, workload)
@@ -200,11 +202,30 @@ func generateNamespaceManifestIfNotExists(
 }
 
 // generateConfigMapManifest adds a config map resource
-func generateConfigMapManifest(path string, workload Workload, metaConfig MetaFlags) (*corev1.ConfigMap, error) {
+func generateConfigMapManifest(path string, overlayPath string, workload Workload, metaConfig MetaFlags) (*corev1.ConfigMap, error) {
 	configMap, err := k8s.GenerateConfigMapFromDir(path, metaConfig.Name, metaConfig.Namespace, workload.IgnoreFiles())
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate ConfigMap: %w", err)
+		return nil, fmt.Errorf("failed to generate ConfigMap from path: %w", err)
 	}
+
+	if overlayPath != "" {
+		overlayConfigMap, err := k8s.GenerateConfigMapFromDir(overlayPath, metaConfig.Name, metaConfig.Namespace, workload.IgnoreFiles())
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate ConfigMap from overlay path: %w", err)
+		}
+
+		if configMap == nil {
+			configMap = overlayConfigMap
+		}
+
+		if overlayConfigMap != nil {
+			for k, v := range overlayConfigMap.Data {
+				// Override values
+				configMap.Data[k] = v
+			}
+		}
+	}
+
 	if configMap != nil {
 		return configMap, nil
 	}

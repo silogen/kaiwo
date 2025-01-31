@@ -37,6 +37,7 @@ var (
 	createNamespace  bool
 	template         string
 	path             string
+	overlayPath      string
 	gpuNodeLabelKey  string
 	customConfigPath string
 	envFilePath      string
@@ -47,6 +48,7 @@ func AddExecFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolVarP(&createNamespace, "create-namespace", "", false, "Create namespace if it does not exist")
 	cmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "Print the generated workload manifest without submitting it")
 	cmd.Flags().StringVarP(&path, "path", "p", "", "Path to directory for workload code, entrypoint/serveconfig, env-file, etc. Either image or path is mandatory")
+	cmd.Flags().StringVarP(&overlayPath, "overlay-path", "o", "", "Additional overlay path. Files from both path and overlay-path are combined, if the file exists in both, the one from overlay-path is used")
 	// TODO: remove gpuNodeLabelKey and have this logic be handled by the operator
 	cmd.Flags().StringVarP(&gpuNodeLabelKey, "gpu-node-label-key", "", defaultGpuNodeLabelKey, fmt.Sprintf("Optional node label key used to specify the resource flavor GPU count. Defaults to %s", defaultGpuNodeLabelKey))
 	cmd.Flags().StringVarP(&template, "template", "t", "", "Optional path to a custom template to use for the workload. If not provided, a default template will be used unless template file found in workload directory")
@@ -60,6 +62,7 @@ func GetExecFlags() workloads.ExecFlags {
 		DryRun:                        dryRun,
 		Template:                      template,
 		Path:                          path,
+		OverlayPath:                   overlayPath,
 		ResourceFlavorGpuNodeLabelKey: gpuNodeLabelKey,
 		CustomConfigPath:              customConfigPath,
 		EnvFilePath:                   envFilePath,

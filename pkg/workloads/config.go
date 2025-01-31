@@ -114,6 +114,9 @@ type ExecFlags struct {
 	// Path to workload folder
 	Path string
 
+	// OverlayPath contains specific files that override files in Path
+	OverlayPath string
+
 	// The key used to store the GPU count per node in the resource flavor
 	ResourceFlavorGpuNodeLabelKey string
 
