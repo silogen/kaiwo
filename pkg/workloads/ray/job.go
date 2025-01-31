@@ -19,12 +19,12 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/silogen/kaiwo/pkg/workloads"
@@ -42,7 +42,7 @@ type JobFlags struct {
 }
 
 func (job Job) GenerateTemplateContext(execFlags workloads.ExecFlags) (any, error) {
-	contents, err := os.ReadFile(filepath.Join(execFlags.Path, EntrypointFilename))
+	contents, err := os.ReadFile(execFlags.WorkloadFiles[EntrypointFilename])
 	if err != nil {
 		return nil, fmt.Errorf("failed to read entrypoint file: %w", err)
 	}

@@ -19,7 +19,6 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
@@ -43,9 +42,7 @@ var DeploymentTemplate []byte
 const ServeconfigFilename = "serveconfig"
 
 func (deployment Deployment) GenerateTemplateContext(execFlags workloads.ExecFlags) (any, error) {
-	logrus.Debugf("Loading ray service from %s", execFlags.Path)
-
-	contents, err := os.ReadFile(filepath.Join(execFlags.Path, ServeconfigFilename))
+	contents, err := os.ReadFile(execFlags.WorkloadFiles[ServeconfigFilename])
 	if err != nil {
 		return nil, fmt.Errorf("failed to read serveconfig file: %w", err)
 	}
