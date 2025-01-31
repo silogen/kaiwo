@@ -33,6 +33,9 @@ func BuildServeCmd() *cobra.Command {
 		Use:   "serve",
 		Short: "Serve a deployment process",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if err := cmd.Parent().PersistentPreRunE(cmd, args); err != nil {
+				return err
+			}
 			return PreRunLoadConfig(cmd, args)
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
