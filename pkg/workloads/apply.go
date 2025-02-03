@@ -157,7 +157,7 @@ func generatePvcManifest(templateContext WorkloadTemplateConfig) *corev1.Persist
 		Spec: corev1.PersistentVolumeClaimSpec{
 			VolumeMode: &v,
 			AccessModes: []corev1.PersistentVolumeAccessMode{
-				corev1.ReadWriteOnce,
+				corev1.ReadWriteMany,
 			},
 			Resources: corev1.VolumeResourceRequirements{
 				Requests: corev1.ResourceList{
@@ -341,7 +341,7 @@ func applyResources(resources []runtime.Object, ctx context.Context, k8sClient c
 			return fmt.Errorf("failed to create resource %s/%s: %w", objMeta.GetNamespace(), objMeta.GetName(), err)
 		}
 
-		logrus.Infof("resource %s/%s created successfully", objMeta.GetNamespace(), objMeta.GetName())
+		logrus.Infof("resource %T: %s/%s created successfully", resource_, objMeta.GetNamespace(), objMeta.GetName())
 
 	}
 	logrus.Info("To monitor and manage your workloads interactively, run $ kaiwo list -n mynamespace")

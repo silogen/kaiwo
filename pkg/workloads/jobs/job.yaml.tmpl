@@ -74,6 +74,11 @@ spec:
         - name: {{ .Meta.Name }}-pv
           persistentVolumeClaim:
             claimName: {{ .Meta.Name }}
+      {{- else }}
+        - name: {{ .Meta.Name }}-pv
+          emptyDir:
+            medium: Memory
+            sizeLimit: 10Mi
       {{- end }}
       {{- if .Meta.SecretVolumes }}
       {{- range .Meta.SecretVolumes }}

@@ -102,7 +102,7 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 
 	if schedulingFlags.Storage != nil {
 		if schedulingFlags.Storage.StorageClassName == "" || schedulingFlags.Storage.Quantity == "" {
-			logrus.Info("Storage requested but storage class name and / or quantity not provided, checking namespace labels for defaults")
+			logrus.Info("Storage class name and / or quantity not provided, checking namespace labels for defaults")
 
 			defaultStorageFlags, err := findDefaultStorageFlags(ctx, *clients.Clientset, metaFlags.Namespace)
 			if err != nil {
@@ -111,13 +111,13 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 
 			if schedulingFlags.Storage.StorageClassName == "" {
 				if defaultStorageFlags.StorageClassName == "" {
-					return fmt.Errorf("storage requested, but no storage class name provided and no default exists in the namespace label '%s'", workloads.KaiwoDefaultStorageClassNameLabel)
+					return fmt.Errorf("storage requested, but no storage class name provided and no default exists in the namespace '%s' label '%s'", metaFlags.Namespace, workloads.KaiwoDefaultStorageClassNameLabel)
 				}
 				schedulingFlags.Storage.StorageClassName = defaultStorageFlags.StorageClassName
 			}
 			if schedulingFlags.Storage.Quantity == "" {
 				if defaultStorageFlags.Quantity == "" {
-					return fmt.Errorf("storage requested, but no quantity provided and no default exists in the namespace label '%s'", workloads.KaiwoDefaultStorageQuantityLabel)
+					return fmt.Errorf("storage requested, but no quantity provided and no default exists in the namespace '%s' label '%s'", metaFlags.Namespace, workloads.KaiwoDefaultStorageQuantityLabel)
 				}
 				schedulingFlags.Storage.Quantity = defaultStorageFlags.Quantity
 			}
@@ -128,7 +128,7 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 			return fmt.Errorf("error checking if storage class exists: %w", err)
 		}
 		if !storageClassExists {
-			logrus.Warnf("Requested storage class '%s' does not exist, applying this workload will likely fail", schedulingFlags.Storage.StorageClassName)
+			return fmt.Errorf("storage class '%s' does not exist", schedulingFlags.Storage.StorageClassName)
 		}
 	}
 
