@@ -1,8 +1,8 @@
 name: compile-release
 on:
-  release:
-    types:
-      - published
+  push:
+    tags:
+      - "v*"
 
 jobs:
   build:
@@ -60,14 +60,11 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            kaiwo_linux_amd64
-            kaiwo_linux_arm64
+            builds/*
             workflows.zip
-            kaiwo_darvin_amd64
-            kaiwo_darvin_arm64
-            kaiwo_windows_amd64.exe
-            kaiwo_windows_arm64.exe
           token: '${{ secrets.GITHUB_TOKEN }}'
+          draft: true
+          prerelease: true
 
 #      - name: Upload compiled binaries
 #        shell: bash
