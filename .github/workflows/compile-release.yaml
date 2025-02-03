@@ -34,16 +34,6 @@ jobs:
           echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
           echo "Using version: ${VERSION}"
 
-#      - name: Set release upload URL
-#        shell: bash
-#        run: |
-#          # The event payload provides an upload_url with a template, e.g.:
-#          # "https://uploads.github.com/repos/owner/repo/releases/123/assets{?name,label}"
-#          # Remove the template part.
-#          UPLOAD_URL=$(echo "${{ github.event.release.upload_url }}" | sed 's/{.*}//')
-#          echo "UPLOAD_URL=$UPLOAD_URL" >> $GITHUB_ENV
-#          echo "Upload URL set to: $UPLOAD_URL"
-
       - name: Run build script
         shell: bash
         run: |
@@ -56,44 +46,12 @@ jobs:
         run: |
           zip -r workloads.zip ./workloads
 
-      - name: Upload assets
+      - name: Create draft release and upload assets
         uses: softprops/action-gh-release@v2
         with:
           files: |
             builds/*
-            workflows.zip
+            workloads.zip
           token: '${{ secrets.GITHUB_TOKEN }}'
           draft: true
           prerelease: true
-
-#      - name: Upload compiled binaries
-#        shell: bash
-#        run: |
-#          set -e
-#          for file in builds/*; do
-#            echo "Uploading $file..."
-#            curl --fail -s --data-binary @"$file" \
-#              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-#              -H "Content-Type: application/octet-stream" \
-#              "${UPLOAD_URL}?name=$(basename "$file")"
-#          done
-#
-#      - name: Upload workloads
-#        shell: bash
-#        run: |
-#          set -e
-#          echo "Uploading workloads..."
-#          curl --fail -s --data-binary @"workloads.zip" \
-#            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-#            -H "Content-Type: application/octet-stream" \
-#            "${UPLOAD_URL}?name=workloads.zip"
-#
-#      - name: Upload workloads asset
-#        uses: actions/upload-release-asset@v1
-#        env:
-#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-#        with:
-#          upload_url: ${{ env.UPLOAD_URL }}
-#          asset_path: ./workloads.zip
-#          asset_name: workloads.zip
-#          asset_content_type: application/zip
