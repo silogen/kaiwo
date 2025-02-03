@@ -26,6 +26,7 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 	"github.com/silogen/kaiwo/pkg/workloads"
 )
 
@@ -81,8 +82,8 @@ var (
 // AddMetaFlags adds flags that are needed for basic Kubernetes metadata
 func AddMetaFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&name, "name", "", "", "Optional name for the workload")
-	cmd.Flags().StringVarP(&namespace, "namespace", "n", defaultNamespace, fmt.Sprintf("Namespace of the workload. Defaults to %s", defaultNamespace))
-	cmd.Flags().StringVarP(&image, "image", "i", defaultImage, fmt.Sprintf("Optional Image to use for the workload. Defaults to %s. Either image or workload path is mandatory", defaultImage))
+	cmd.Flags().StringVarP(&namespace, "namespace", "n", baseutils.DefaultNamespace, fmt.Sprintf("Namespace of the workload. Defaults to %s", baseutils.DefaultNamespace))
+	cmd.Flags().StringVarP(&image, "image", "i", baseutils.DefaultRayImage, fmt.Sprintf("Optional Image to use for the workload. Defaults to %s. Either image or workload path is mandatory", baseutils.DefaultRayImage))
 	cmd.Flags().StringVarP(&imagePullSecret, "imagepullsecret", "", "", "ImagePullSecret name for job/deployment if private registry")
 	cmd.Flags().StringVarP(&version, "version", "", "", "Optional version for job/deployment")
 }

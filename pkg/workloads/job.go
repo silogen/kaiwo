@@ -29,7 +29,7 @@ type JobFlags struct {
 	Queue string
 }
 
-func CreateLocalClusterQueueManifest(k8sClient client.Client, templateContext WorkloadTemplateConfig) (*kueuev1beta1.LocalQueue, error) {
+func CreateLocalQueueManifest(k8sClient client.Client, templateContext WorkloadTemplateConfig) (*kueuev1beta1.LocalQueue, error) {
 	jobMeta, ok := templateContext.WorkloadMeta.(JobFlags)
 
 	if !ok {
@@ -37,7 +37,7 @@ func CreateLocalClusterQueueManifest(k8sClient client.Client, templateContext Wo
 	}
 
 	// Handle jobs local queue
-	localQueue, err := k8s.PrepareLocalClusterQueue(jobMeta.Queue, templateContext.Meta.Namespace, k8sClient)
+	localQueue, err := k8s.PrepareLocalQueue(jobMeta.Queue, templateContext.Meta.Namespace, k8sClient)
 	if err != nil {
 		return nil, fmt.Errorf("error preparing local cluster queue: %v", err)
 	}

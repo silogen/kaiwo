@@ -45,7 +45,7 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 	execFlags := GetExecFlags()
 	metaFlags := GetMetaFlags()
 
-	if execFlags.Path == "" && metaFlags.Image == defaultImage {
+	if execFlags.Path == "" && metaFlags.Image == baseutils.DefaultRayImage {
 		logrus.Error("Cannot run workload without image or path")
 		return nil
 	}
@@ -261,15 +261,15 @@ func makeWorkloadName(path string, image string, version string, currentUser str
 	var appendix string
 
 	if path != "" {
-		appendix = sanitizeStringForKubernetes(filepath.Base(path))
+		appendix = baseutils.SanitizeStringForKubernetes(filepath.Base(path))
 	} else {
-		appendix = sanitizeStringForKubernetes(image)
+		appendix = baseutils.SanitizeStringForKubernetes(image)
 	}
 
 	// Calculate the max allowed length for the appendix
 	separatorCount := 1 // At least one "-" between username and appendix
 	if version != "" {
-		version = sanitizeStringForKubernetes(version)
+		version = baseutils.SanitizeStringForKubernetes(version)
 		separatorCount = 2 // Include one more "-" for the version
 	}
 	maxAppendixLength := 45 - len(currentUser) - len(version) - separatorCount
@@ -285,18 +285,7 @@ func makeWorkloadName(path string, image string, version string, currentUser str
 		components = append(components, version)
 	}
 
-	return baseutils.MakeRFC1123Compliant(strings.Join(components, "-"))
-}
-
-func sanitizeStringForKubernetes(path string) string {
-	replacer := strings.NewReplacer(
-		":", "-",
-		"/", "-",
-		"\\", "-",
-		"_", "-",
-		".", "-",
-	)
-	return strings.ToLower(replacer.Replace(path))
+	return strings.Join(components, "-")
 }
 
 // fillSchedulingFlags fills in the GPU scheduling flags based on the Kubernetes cluster state

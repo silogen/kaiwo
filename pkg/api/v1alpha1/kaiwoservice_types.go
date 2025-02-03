@@ -15,6 +15,8 @@
 package v1alpha1
 
 import (
+	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -26,8 +28,8 @@ type KaiwoServiceSpec struct {
 	ServeConfigV2 string `json:"serveConfigV2,omitempty"`
 
 	// Optional workload-specific configs (Pointers to avoid bloating CRD)
-	RayClusterSpec *RayClusterSpec `json:"rayClusterConfig,omitempty"`
-	DeploymentSpec *DeploymentSpec `json:"deploymentSpec,omitempty"`
+	RayClusterSpec rayv1.RayClusterSpec  `json:"rayClusterConfig,omitempty"`
+	DeploymentSpec appsv1.DeploymentSpec `json:"deploymentSpec,omitempty"`
 }
 
 // KaiwoServiceStatus defines the observed state of KaiwoService.

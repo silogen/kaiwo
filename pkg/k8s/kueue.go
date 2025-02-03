@@ -173,7 +173,7 @@ func GetClusterQueue(ctx context.Context, k8sClient client.Client, clusterQueueN
 	return clusterQueue, nil
 }
 
-func PrepareLocalClusterQueue(queueName string, namespace string, k8sClient client.Client) (*kueuev1beta1.LocalQueue, error) {
+func PrepareLocalQueue(queueName string, namespace string, k8sClient client.Client) (*kueuev1beta1.LocalQueue, error) {
 	_, err := GetClusterQueue(context.TODO(), k8sClient, queueName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get default cluster queue: %w", err)

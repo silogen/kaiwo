@@ -20,15 +20,12 @@ import (
 
 // Common labels used across resources.
 const (
-	UsernameLabel = "kaiwo-cli/username"
-	QueueLabel    = "kueue.x-k8s.io/queue-name"
+	UserLabel  = "kaiwo/user"
+	QueueLabel = "kueue.x-k8s.io/queue-name"
 )
 
 // CommonMetaSpec defines reusable metadata fields for workloads.
 type CommonMetaSpec struct {
-	// Username specifies the owner or creator of the workload.
-	Username string `json:"username,omitempty"`
-
 	// Name is the name of the workload.
 	Name string `json:"name,omitempty"`
 
@@ -40,159 +37,41 @@ type CommonMetaSpec struct {
 
 	// Annotations provides additional metadata for the workload.
 	Annotations map[string]string `json:"annotations,omitempty"`
-
-	// Gpus specifies the total number of GPUs allocated to the workload.
-	Gpus int `json:"gpus,omitempty"`
-
-	// Version is an optional field specifying the version of the workload.
-	Version string `json:"version,omitempty"`
-
-	// Replicas specifies the number of replicas for the workload.
-	// If greater than one, the workload must use Ray.
-	Replicas int `json:"replicas,omitempty"`
-
-	// GpusPerReplica specifies the number of GPUs allocated per replica.
-	GpusPerReplica int `json:"gpus-per-replica,omitempty"`
-
-	// Image defines the container image used for the workload.
-	Image string `json:"image,omitempty"`
-
-	// ImagePullSecrets contains the list of secrets used to pull the container image.
-	ImagePullSecrets []string `json:"image-pull-secrets,omitempty"`
-
-	// Ray determines whether the operator should use RayCluster for workload execution.
-	// Default is false.
-	Ray bool `json:"ray"`
-
-	// ConfigMap optionally mounts a ConfigMap into the workload.
-	ConfigMap *corev1.ConfigMap `json:"configmap,omitempty"`
 }
 
-// CommonContainer defines the container specifications within a workload.
-type CommonContainer struct {
-	// Name is the name of the container.
-	Name string `json:"name"`
+// StorageSpec defines the storage configuration for the workload.
+type StorageSpec struct {
+	// Whether to enable persistent storage.
+	StorageEnabled bool `json:"storageEnabled,omitempty"`
 
-	// Image specifies the container image to be used.
-	Image string `json:"image"`
+	// StorageClassName specifies the storage class used for PVC.
+	StorageClassName string `json:"storageClassName,omitempty"`
 
-	// ImagePullPolicy defines when Kubernetes should pull the container image.
-	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
-
-	// Command specifies the entrypoint commands executed within the container.
-	Command []string `json:"command,omitempty"`
-
-	// Env defines environment variables for the container.
-	Env []corev1.EnvVar `json:"env,omitempty"`
-
-	// Resources specifies CPU, memory, and GPU requirements.
-	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
-
-	// VolumeMounts defines the volumes mounted to the container.
-	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
+	// Quantity of storage requested (e.g., "100Gi").
+	StorageSize string `json:"storageSize,omitempty"`
 }
 
-// CommonVolume defines simplified volume configurations.
-type CommonVolume struct {
-	// Name is the name of the volume.
-	Name string `json:"name"`
+// ConfigSource defines the source of configuration files for the workload.
+type ConfigSource struct {
+	// Type specifies the type of configuration source. Valid values are:
+	// - "ConfigMap": Configuration is stored in a Kubernetes ConfigMap.
+	// - "S3": Configuration is stored in an S3-compatible object storage bucket.
+	Type string `json:"type,omitempty"`
 
-	// Secret defines a volume sourced from a Kubernetes Secret.
-	Secret *corev1.SecretVolumeSource `json:"secret,omitempty"`
+	// ConfigMapName specifies the name of the ConfigMap to be mounted.
+	// This field is only relevant if Type is "ConfigMap".
+	ConfigMapName string `json:"configMapName,omitempty"`
 
-	// ConfigMap defines a volume sourced from a Kubernetes ConfigMap.
-	ConfigMap *corev1.ConfigMapVolumeSource `json:"configMap,omitempty"`
+	// S3BucketName specifies the name of the S3 bucket where configuration files are stored.
+	// This field is only relevant if Type is "S3".
+	S3BucketName string `json:"s3BucketName,omitempty"`
 
-	// EmptyDir defines an ephemeral volume backed by node storage.
-	EmptyDir *corev1.EmptyDirVolumeSource `json:"emptyDir,omitempty"`
-}
+	// S3Path specifies an optional path within the S3 bucket where the configuration files reside.
+	// This field is only relevant if Type is "S3".
+	S3Path string `json:"s3Path,omitempty"`
 
-// CommonPodSpec captures essential fields from the Pod specification.
-type CommonPodSpec struct {
-	// RestartPolicy defines the restart behavior of the pod.
-	RestartPolicy corev1.RestartPolicy `json:"restartPolicy,omitempty"`
-
-	// ImagePullSecrets contains secrets used to pull container images.
-	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
-
-	// Containers lists the primary containers in the pod.
-	Containers []CommonContainer `json:"containers"`
-
-	// Volumes lists the volumes mounted to the pod.
-	Volumes []CommonVolume `json:"volumes,omitempty"`
-}
-
-// RayServiceSpec defines fields specific to a RayService workload.
-type RayServiceSpec struct {
-	// ServeConfig specifies the Ray Serve configuration.
-	ServeConfig string `json:"serveConfig,omitempty"`
-
-	// RayClusterConfig contains the configuration for the underlying Ray cluster.
-	RayClusterConfig RayClusterSpec `json:"rayClusterConfig"`
-}
-
-// RayJobSpec defines fields specific to a RayJob workload.
-type RayJobSpec struct {
-	// EntryPoint specifies the command or script that starts the Ray job.
-	EntryPoint string `json:"entryPoint,omitempty"`
-
-	// RayClusterSpec defines the Ray cluster that executes the job.
-	RayClusterSpec RayClusterSpec `json:"rayClusterSpec"`
-}
-
-// RayClusterSpec defines the configuration of a Ray cluster.
-type RayClusterSpec struct {
-	// HeadGroupSpec specifies the configuration for the Ray cluster head node.
-	HeadGroupSpec HeadGroupSpec `json:"headGroupSpec"`
-
-	// WorkerGroupSpecs defines the configurations for Ray worker nodes.
-	WorkerGroupSpecs []WorkerGroupSpec `json:"workerGroupSpecs,omitempty"`
-}
-
-// HeadGroupSpec defines the configuration for the Ray head node.
-type HeadGroupSpec struct {
-	// RayStartParams specifies startup parameters for the Ray head node.
-	RayStartParams map[string]string `json:"rayStartParams,omitempty"`
-
-	// Template defines the pod specifications for the Ray head node.
-	Template CommonPodSpec `json:"template"`
-}
-
-// WorkerGroupSpec defines the configuration for a Ray worker node group.
-type WorkerGroupSpec struct {
-	// GroupName specifies the name of the worker group.
-	GroupName string `json:"groupName"`
-
-	// Replicas defines the desired number of worker nodes in the group.
-	Replicas *int32 `json:"replicas,omitempty"`
-
-	// MinReplicas defines the minimum number of worker nodes.
-	MinReplicas *int32 `json:"minReplicas,omitempty"`
-
-	// MaxReplicas defines the maximum number of worker nodes.
-	MaxReplicas *int32 `json:"maxReplicas,omitempty"`
-
-	// RayStartParams specifies startup parameters for Ray worker nodes.
-	RayStartParams map[string]string `json:"rayStartParams,omitempty"`
-
-	// Template defines the pod specifications for Ray worker nodes.
-	Template CommonPodSpec `json:"template"`
-}
-
-// DeploymentSpec defines fields specific to Kubernetes Deployment workloads.
-type DeploymentSpec struct {
-	// Replicas defines the number of pod replicas for the deployment.
-	Replicas int32 `json:"replicas"`
-
-	// Template defines the pod specifications for the deployment.
-	Template CommonPodSpec `json:"template"`
-}
-
-// JobSpec defines fields specific to Kubernetes Job workloads.
-type JobSpec struct {
-	// TTLSecondsAfterFinished specifies how long a job should persist after completion.
-	TTLSecondsAfterFinished *int32 `json:"ttlSecondsAfterFinished,omitempty"`
-
-	// Template defines the pod specifications for the job.
-	Template CommonPodSpec `json:"template"`
+	// S3Credentials references a Kubernetes Secret containing credentials for accessing the S3 bucket.
+	// The Secret should have standard AWS credential keys (e.g., "AWS_ACCESS_KEY_ID" and "AWS_SECRET_ACCESS_KEY").
+	// This field is only relevant if Type is "S3".
+	S3Credentials *corev1.SecretReference `json:"s3Credentials,omitempty"`
 }
