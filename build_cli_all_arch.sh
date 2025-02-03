@@ -8,11 +8,11 @@ BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 # List of target platforms and architectures
 targets=(
     "linux/amd64"
-    "linux/arm64"
-    "darwin/amd64"
-    "darwin/arm64"
-    "windows/amd64"
-    "windows/arm64"
+#    "linux/arm64"
+#    "darwin/amd64"
+#    "darwin/arm64"
+#    "windows/amd64"
+#    "windows/arm64"
 )
 
 mkdir -p builds/
