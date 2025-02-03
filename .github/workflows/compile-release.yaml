@@ -68,6 +68,16 @@ jobs:
         run: |
           zip -r workloads.zip ./workloads
 
+      - name: Upload workloads
+        shell: bash
+        run: |
+          set -e
+          echo "Uploading workloads..."
+          curl --fail -s --data-binary @"workloads.zip" \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Content-Type: application/octet-stream" \
+            "${UPLOAD_URL}?name=workloads.zip"
+
       - name: Upload workloads asset
         uses: actions/upload-release-asset@v1
         env:
