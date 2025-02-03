@@ -157,7 +157,7 @@ func generatePvcManifest(templateContext WorkloadTemplateConfig) *corev1.Persist
 		Spec: corev1.PersistentVolumeClaimSpec{
 			VolumeMode: &v,
 			AccessModes: []corev1.PersistentVolumeAccessMode{
-				corev1.ReadWriteMany,
+				corev1.ReadWriteOnce,
 			},
 			Resources: corev1.VolumeResourceRequirements{
 				Requests: corev1.ResourceList{
