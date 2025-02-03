@@ -119,7 +119,7 @@ func AddSchedulingFlags(cmd *cobra.Command) {
 		"storage",
 		"",
 		"default",
-		fmt.Sprintf("Storage requested for the workload, use: --storage=storageQuantity,storageClassName, --storage=storageQuantity to use the default storage class, or --storage=default (the default) to use defaults for both storage class and amount. ")+
+		"Storage requested for the workload, use: --storage=storageQuantity,storageClassName, --storage=storageQuantity to use the default storage class, or --storage=default (the default) to use defaults for both storage class and amount. "+
 			fmt.Sprintf("The default storage class and amount can be configured in the namespace's labels (keys %s and %s). ", workloads.KaiwoDefaultStorageClassNameLabel, workloads.KaiwoDefaultStorageQuantityLabel)+
 			"If you do not want to include storage, you must pass --no-storage explicitly.",
 	)
