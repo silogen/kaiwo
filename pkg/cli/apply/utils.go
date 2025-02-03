@@ -109,10 +109,6 @@ var (
 	noStorage      bool
 )
 
-const (
-	defaultStorageAmount = "10Gi"
-)
-
 // AddSchedulingFlags adds flags related to (Kueue) scheduling
 func AddSchedulingFlags(cmd *cobra.Command) {
 	cmd.Flags().IntVarP(&gpus, "gpus", "g", 0, "Number of GPUs requested for the workload")
@@ -122,9 +118,10 @@ func AddSchedulingFlags(cmd *cobra.Command) {
 		&storage,
 		"storage",
 		"",
-		defaultStorageAmount,
-		fmt.Sprintf("Storage requested for the workload, use: --storage=%s,storageClassName or --storage=%s to use the default storage class. ", defaultStorageAmount, defaultStorageAmount)+
-			fmt.Sprintf("If not provided, --storage=%s is implied. If you do not want to include storage, use the --no-storage flag", defaultStorageAmount),
+		"default",
+		fmt.Sprintf("Storage requested for the workload, use: --storage=storageQuantity,storageClassName, --storage=storageQuantity to use the default storage class, or --storage=default (the default) to use defaults for both storage class and amount. ")+
+			fmt.Sprintf("The default storage class and amount can be configured in the namespace's labels (keys %s and %s). ", workloads.KaiwoDefaultStorageClassNameLabel, workloads.KaiwoDefaultStorageQuantityLabel)+
+			"If you do not want to include storage, you must pass --no-storage explicitly.",
 	)
 	cmd.Flags().BoolVarP(&noStorage, "no-storage", "", false, "Don't use storage for the workload")
 }
@@ -137,39 +134,49 @@ func GetSchedulingFlags() (*workloads.SchedulingFlags, error) {
 		RequestedGPUsPerReplica: gpusPerReplica,
 	}
 
+	if storage != "default" && noStorage {
+		return nil, fmt.Errorf("you must specify --storage or --no-storage, not both")
+	}
+
 	if noStorage {
 		logrus.Info("No storage (PVC) requested for workload")
 		return flags, nil
 	}
 
-	requestedStorage := defaultStorageAmount
+	if storage == "" {
+		return nil, fmt.Errorf("you must specify --storage or --no-storage")
+	}
+
+	requestedStorage := ""
 	storageClassName := ""
 
-	split := strings.Split(storage, ",")
+	if storage != "default" {
+		split := strings.Split(storage, ",")
 
-	if len(split) > 2 {
-		return nil, fmt.Errorf("invalid storage specifier %s", storage)
-	}
-	if len(split) > 1 {
-		storageClassName = split[1]
-		logrus.Infof("Requested storage class name %s", storageClassName)
-	} else {
-		logrus.Info("You did not pass a storage class name, the default storage class will be used if it exists")
-	}
-	if len(split) > 0 {
-		requestedStorage = split[0]
-
-		if _, err := resource.ParseQuantity(requestedStorage); err != nil {
-			return nil, fmt.Errorf("invalid storage quantity %s", requestedStorage)
+		if len(split) > 2 {
+			return nil, fmt.Errorf("invalid storage specifier %s", storage)
 		}
+		if len(split) > 1 {
+			storageClassName = split[1]
+			logrus.Infof("Requested storage class name %s", storageClassName)
+		} else {
+			logrus.Info("You did not pass a storage class name, the default storage class will be used if it exists")
+		}
+		if len(split) > 0 {
+			requestedStorage = split[0]
 
-		logrus.Infof("Requested storage %s", requestedStorage)
-	} else {
-		logrus.Infof("You did not pass a storage quantity, the default amount (%s) will be used", requestedStorage)
+			if _, err := resource.ParseQuantity(requestedStorage); err != nil {
+				return nil, fmt.Errorf("invalid storage quantity %s", requestedStorage)
+			}
+
+			logrus.Infof("Requested storage %s", requestedStorage)
+		} else {
+			logrus.Infof("You did not pass a storage quantity, the default amount (%s) will be used", requestedStorage)
+		}
 	}
 
 	flags.Storage = &workloads.StorageSchedulingFlags{
-		RequestedStorage: requestedStorage,
+		Quantity:         requestedStorage,
 		StorageClassName: storageClassName,
 	}
 

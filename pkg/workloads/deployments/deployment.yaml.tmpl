@@ -84,11 +84,6 @@ spec:
           persistentVolumeClaim:
             claimName: {{ .Meta.Name }}
       {{- end }}
-      {{- if .Scheduling.Storage }}
-        - name: {{ .Name }}-pv
-          persistentVolumeClaim:
-            claimName: {{ .Name }}
-      {{- end }}
       {{- if .Meta.SecretVolumes }}
       {{- range .Meta.SecretVolumes }}
         - name: {{ .Name }}

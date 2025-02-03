@@ -161,7 +161,7 @@ func generatePvcManifest(templateContext WorkloadTemplateConfig) *corev1.Persist
 			},
 			Resources: corev1.VolumeResourceRequirements{
 				Requests: corev1.ResourceList{
-					"storage": resource.MustParse(templateContext.Scheduling.Storage.RequestedStorage),
+					"storage": resource.MustParse(templateContext.Scheduling.Storage.Quantity),
 				},
 			},
 		},

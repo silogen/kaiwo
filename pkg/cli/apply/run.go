@@ -22,6 +22,8 @@ import (
 	"strconv"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/api/errors"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
@@ -98,18 +100,35 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 		return fmt.Errorf("error getting scheduling flags: %w", err)
 	}
 
-	if schedulingFlags.Storage != nil && schedulingFlags.Storage.StorageClassName == "" {
-		logrus.Debugf("Storage requested but no storage class name provided, checking if a default storage class exists")
-		defaultExists, err := defaultStorageClassExists(*clients.Clientset)
-		if err != nil {
-			return fmt.Errorf("error checking if default storage class exists: %w", err)
+	if schedulingFlags.Storage != nil {
+		if schedulingFlags.Storage.StorageClassName == "" || schedulingFlags.Storage.Quantity == "" {
+			logrus.Info("Storage requested but storage class name and / or quantity not provided, checking namespace labels for defaults")
+
+			defaultStorageFlags, err := findDefaultStorageFlags(ctx, *clients.Clientset, metaFlags.Namespace)
+			if err != nil {
+				return fmt.Errorf("error checking for storage defaults: %w", err)
+			}
+
+			if schedulingFlags.Storage.StorageClassName == "" {
+				if defaultStorageFlags.StorageClassName == "" {
+					return fmt.Errorf("storage requested, but no storage class name provided and no default exists in the namespace label '%s'", workloads.KaiwoDefaultStorageClassNameLabel)
+				}
+				schedulingFlags.Storage.StorageClassName = defaultStorageFlags.StorageClassName
+			}
+			if schedulingFlags.Storage.Quantity == "" {
+				if defaultStorageFlags.Quantity == "" {
+					return fmt.Errorf("storage requested, but no quantity provided and no default exists in the namespace label '%s'", workloads.KaiwoDefaultStorageQuantityLabel)
+				}
+				schedulingFlags.Storage.Quantity = defaultStorageFlags.Quantity
+			}
 		}
-		if defaultExists {
-			logrus.Debugf("Default storage class exists")
-		} else {
-			logrus.Warn("Default storage class does not exist. You must either explicitly provide the name of the storage class, or ensure a default one exists. " +
-				"For example you can run `kubectl patch storageclass mystorageclassname -p '{\"metadata\": {\"annotations\":{\"storageclass.kubernetes.io/is-default-class\":\"true\"}}}'`")
-			return fmt.Errorf("storage class not specified and default storage class does not exists")
+
+		storageClassExists, err := doesStorageClassExist(ctx, *clients.Clientset, schedulingFlags.Storage.StorageClassName)
+		if err != nil {
+			return fmt.Errorf("error checking if storage class exists: %w", err)
+		}
+		if !storageClassExists {
+			logrus.Warnf("Requested storage class '%s' does not exist, applying this workload will likely fail", schedulingFlags.Storage.StorageClassName)
 		}
 	}
 
@@ -139,19 +158,45 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 	return nil
 }
 
-func defaultStorageClassExists(clientset kubernetes.Clientset) (bool, error) {
-	scList, err := clientset.StorageV1().StorageClasses().List(context.TODO(), metav1.ListOptions{})
+func findDefaultStorageFlags(ctx context.Context, clientset kubernetes.Clientset, namespace string) (*workloads.StorageSchedulingFlags, error) {
+	namespaceObject, err := clientset.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
 	if err != nil {
-		return false, fmt.Errorf("error listing storage classes: %w", err)
-	}
-
-	for _, sc := range scList.Items {
-		if isDefault, ok := sc.Annotations["storageclass.kubernetes.io/is-default-class"]; ok && isDefault == "true" {
-			return true, nil
+		if errors.IsNotFound(err) {
+			logrus.Warnf("Namespace does not exist, cannot check for storage defaults. Either ensure that the namespace exists and has default values, specify the storage class and amount explicitly, or specify --no-storage to skip adding storage.")
+			return nil, fmt.Errorf("failed to find default storage class or quantity for namespace that does not exist: %s", namespace)
 		}
+		return nil, fmt.Errorf("error getting namespace: %w", err)
 	}
 
-	return false, nil
+	flags := &workloads.StorageSchedulingFlags{}
+
+	defaultStorageClassName, ok := namespaceObject.Labels[workloads.KaiwoDefaultStorageClassNameLabel]
+	if ok {
+		logrus.Debugf("Default storage class discovered: %s", defaultStorageClassName)
+		flags.StorageClassName = defaultStorageClassName
+	} else {
+		logrus.Debugf("Default storage class not found")
+	}
+	defaultStorageQuantity, ok := namespaceObject.Labels[workloads.KaiwoDefaultStorageQuantityLabel]
+	if ok {
+		logrus.Debugf("Default storage quantity discovered: %s", defaultStorageQuantity)
+		flags.Quantity = defaultStorageQuantity
+	} else {
+		logrus.Debugf("Default storage quantity not found")
+	}
+
+	return flags, nil
+}
+
+func doesStorageClassExist(ctx context.Context, clientset kubernetes.Clientset, storageClassName string) (bool, error) {
+	_, err := clientset.StorageV1().StorageClasses().Get(ctx, storageClassName, metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("error getting storage class %s: %w", storageClassName, err)
+	}
+	return true, nil
 }
 
 // loadCustomConfig loads custom configuration data from a file

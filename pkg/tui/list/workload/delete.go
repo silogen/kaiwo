@@ -32,7 +32,9 @@ import (
 
 func runDeleteWorkload(ctx context.Context, clients k8s.KubernetesClients, state *tuicomponents.RunState) (tuicomponents.StepResult, tuicomponents.RunStep[tuicomponents.RunState], error) {
 	confirmDelete := false
-	resourceDescription := fmt.Sprintf("Confirm that you want to delete the %s workload '%s' in namespace %s", state.WorkloadType, state.WorkloadReference.GetName(), state.Namespace)
+	resourceDescription := fmt.Sprintf("Confirm that you want to delete the %s workload '%s' in namespace %s. "+
+		"This will also remove any linked resources, such as automatically created PVCs and ConfigMaps",
+		state.WorkloadType, state.WorkloadReference.GetName(), state.Namespace)
 
 	f := huh.NewForm(huh.NewGroup(huh.NewConfirm().Title(resourceDescription).Value(&confirmDelete)))
 

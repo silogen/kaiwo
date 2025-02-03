@@ -243,6 +243,22 @@ You can access this in the template via
 {{ .Custom.parent.child }}
 ```
 
+### Storage
+
+You can use the Kaiwo CLI to instruct a workload to use storage from a given storage class. If you do not provide any input for the CLI, the following default values is used:
+
+* The storage class name is read from the specified namespace's label `kaiwo-cli/default-storage-class-name`
+* The storage amount is read from the specified namespace's label `kaiwo-cli/default-storage-quantity`
+
+If these values do not exist, an exception is raised. If you want to skip adding storage, you must explicitly add the `--no-storage` flag.
+
+To specify storage, you can use the flags:
+
+* `--storage=2Gi` to specify the amount of storage and to use the default storage class name from the namespace labels
+* `--storage=2Gi,mystorageclass` to specify both the amount of storage and the storage class name 
+
+Note that the storage creates a persistent volume claim (PVC), which is linked to the workload object via an owner reference. If you remove the workload with a deletion propagation policy (background or foreground), the PVC will also get removed. This is the default behavior when using the `kaiwo list` feature. 
+
 ## Interacting with workloads
 
 While Kaiwo's primary purpose is to deploy workloads, it can also be used as a light tool to discover and interact with running workloads.

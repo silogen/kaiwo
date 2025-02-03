@@ -21,9 +21,11 @@ import (
 )
 
 const (
-	KaiwoconfigFilename = "kaiwoconfig"
-	EnvFilename         = "env"
-	KaiwoUsernameLabel  = "kaiwo-cli/username"
+	KaiwoconfigFilename               = "kaiwoconfig"
+	EnvFilename                       = "env"
+	KaiwoUsernameLabel                = "kaiwo-cli/username"
+	KaiwoDefaultStorageClassNameLabel = "kaiwo-cli/default-storage-class-name"
+	KaiwoDefaultStorageQuantityLabel  = "kaiwo-cli/default-storage-quantity"
 )
 
 // WorkloadTemplateConfig is the config context that is passed to the workload templates
@@ -66,7 +68,7 @@ type SchedulingFlags struct {
 }
 
 type StorageSchedulingFlags struct {
-	RequestedStorage string
+	Quantity         string
 	StorageClassName string
 }
 
