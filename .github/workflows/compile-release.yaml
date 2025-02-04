@@ -1,0 +1,46 @@
+name: compile-release
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Extract version from tag
+        shell: bash
+        run: |
+          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+          echo "Using version: ${VERSION}"
+
+      - name: Run build script
+        shell: bash
+        run: |
+          set -e
+          chmod +x build_cli_all_arch.sh
+          ./build_cli_all_arch.sh "$VERSION"
+
+      - name: Compress workloads
+        shell: bash
+        run: |
+          zip -r workloads.zip ./workloads
+
+      - name: Create draft release and upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            builds/*
+            workloads.zip
+          token: '${{ secrets.GITHUB_TOKEN }}'
+          draft: true
+          prerelease: true
