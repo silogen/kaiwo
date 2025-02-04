@@ -68,7 +68,7 @@ func (job Job) DefaultTemplate() ([]byte, error) {
 	return JobTemplate, nil
 }
 
-func (job Job) ConvertObject(object runtime.Object) (runtime.Object, bool) {
+func (job Job) ConvertObject(object runtime.Object) (client.Object, bool) {
 	obj, ok := object.(*batchv1.Job)
 	return obj, ok
 }

@@ -1,7 +1,7 @@
 applications:
 - name: llm
   route_prefix: /
-  import_path: app:deployment
+  import_path: mounted:deployment
   deployments:
   - name: VLLMDeployment
     autoscaling_config:

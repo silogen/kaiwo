@@ -243,6 +243,22 @@ You can access this in the template via
 {{ .Custom.parent.child }}
 ```
 
+### Storage
+
+You can use the Kaiwo CLI to instruct a workload to use storage from a given storage class. If you do not provide any input for the CLI, the following default values are used:
+
+* The storage class name is read from the specified namespace's label `kaiwo-cli/default-storage-class`
+* The storage amount is read from the specified namespace's label `kaiwo-cli/default-storage-quantity`
+
+If these values do not exist, an exception is raised. If you are using the cluster-admins examples from this repository, you can modify the namespace at [cluster-admins/kueue/cluster-queue.yaml](cluster-admins/kueue/cluster-queue.yaml) and add these values. If you want to skip adding storage, you must explicitly add the `--no-storage` flag.
+
+To specify storage, you can use the flags:
+
+* `--storage=2Gi` to specify the amount of storage and to use the default storage class name from the namespace labels
+* `--storage=2Gi,mystorageclass` to specify both the amount of storage and the storage class name 
+
+Note that the storage created is ephemeral and meant for caching, which means that it gets removed when the underlying pods get removed. However, the ephemeral storage is provisioned via a storage class, which ensures that the space requested is available and reserved for all pods before the workload starts.
+
 ## Interacting with workloads
 
 While Kaiwo's primary purpose is to deploy workloads, it can also be used as a light tool to discover and interact with running workloads.

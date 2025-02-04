@@ -5,7 +5,7 @@ metadata:
 spec:
   namespaceSelector: {} # match all.
   resourceGroups:
-  - coveredResources: ["cpu", "memory", "amd.com/gpu", "ephemeral-storage"]
+  - coveredResources: ["cpu", "memory", "amd.com/gpu"]
     flavors:
     - name: base-gpu-flavour
       resources:
@@ -15,5 +15,3 @@ spec:
         nominalQuota: 1800Gi
       - name: "amd.com/gpu"
         nominalQuota: 16
-      - name: "ephemeral-storage"
-        nominalQuota: 2000Gi

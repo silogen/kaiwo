@@ -148,7 +148,7 @@ func runSelectAndDoAction(_ context.Context, _ k8s.KubernetesClients, state *tui
 
 	var (
 		viewLogsAction runAction = "View logs"
-		monitorAction  runAction = "Monitor"
+		monitorAction  runAction = "Monitor GPUs"
 		commandAction  runAction = "Run command"
 	)
 

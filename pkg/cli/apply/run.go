@@ -22,6 +22,11 @@ import (
 	"strconv"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/api/errors"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -84,15 +89,50 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 	}
 
 	// Prepare scheduling flags
-	dynamicClient, err := k8s.GetClient()
+	clients, err := k8s.GetKubernetesClients()
 	if err != nil {
-		return fmt.Errorf("error fetching Kubernetes client: %w", err)
+		return fmt.Errorf("error getting k8s clients: %w", err)
 	}
 
 	ctx := context.TODO()
-	schedulingFlags := GetSchedulingFlags()
+	schedulingFlags, err := GetSchedulingFlags()
+	if err != nil {
+		return fmt.Errorf("error getting scheduling flags: %w", err)
+	}
 
-	if err := fillSchedulingFlags(ctx, dynamicClient, &schedulingFlags, execFlags.ResourceFlavorGpuNodeLabelKey, metaFlags.EnvVars); err != nil {
+	if schedulingFlags.Storage != nil {
+		if schedulingFlags.Storage.StorageClassName == "" || schedulingFlags.Storage.Quantity == "" {
+			logrus.Info("Storage class name and / or quantity not provided, checking namespace labels for defaults")
+
+			defaultStorageFlags, err := findDefaultStorageFlags(ctx, *clients.Clientset, metaFlags.Namespace)
+			if err != nil {
+				return fmt.Errorf("error checking for storage defaults: %w", err)
+			}
+
+			if schedulingFlags.Storage.StorageClassName == "" {
+				if defaultStorageFlags.StorageClassName == "" {
+					return fmt.Errorf("storage requested, but no storage class name provided and no default exists in the namespace '%s' label '%s'", metaFlags.Namespace, workloads.KaiwoDefaultStorageClassNameLabel)
+				}
+				schedulingFlags.Storage.StorageClassName = defaultStorageFlags.StorageClassName
+			}
+			if schedulingFlags.Storage.Quantity == "" {
+				if defaultStorageFlags.Quantity == "" {
+					return fmt.Errorf("storage requested, but no quantity provided and no default exists in the namespace '%s' label '%s'", metaFlags.Namespace, workloads.KaiwoDefaultStorageQuantityLabel)
+				}
+				schedulingFlags.Storage.Quantity = defaultStorageFlags.Quantity
+			}
+		}
+
+		storageClassExists, err := doesStorageClassExist(ctx, *clients.Clientset, schedulingFlags.Storage.StorageClassName)
+		if err != nil {
+			return fmt.Errorf("error checking if storage class exists: %w", err)
+		}
+		if !storageClassExists {
+			return fmt.Errorf("storage class '%s' does not exist", schedulingFlags.Storage.StorageClassName)
+		}
+	}
+
+	if err := fillSchedulingFlags(ctx, clients.Client, schedulingFlags, execFlags.ResourceFlavorGpuNodeLabelKey, metaFlags.EnvVars); err != nil {
 		return fmt.Errorf("error filling scheduling flags: %w", err)
 	}
 	logrus.Debugf("Successfully loaded scheduling info from Kubernetes")
@@ -106,16 +146,57 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 		WorkloadMeta: workloadMeta,
 		Workload:     workloadConfig,
 		Meta:         metaFlags,
-		Scheduling:   schedulingFlags,
+		Scheduling:   *schedulingFlags,
 		Custom:       customConfig,
 	}
 
 	// Apply the workload
-	if err := workloads.ApplyWorkload(ctx, dynamicClient, workload, execFlags, templateContext); err != nil {
+	if err := workloads.ApplyWorkload(ctx, clients.Client, workload, execFlags, templateContext); err != nil {
 		return fmt.Errorf("error applying workload: %w", err)
 	}
 
 	return nil
+}
+
+func findDefaultStorageFlags(ctx context.Context, clientset kubernetes.Clientset, namespace string) (*workloads.StorageSchedulingFlags, error) {
+	namespaceObject, err := clientset.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			logrus.Warnf("Namespace does not exist, cannot check for storage defaults. Either ensure that the namespace exists and has default values, specify the storage class and amount explicitly, or specify --no-storage to skip adding storage.")
+			return nil, fmt.Errorf("failed to find default storage class or quantity for namespace that does not exist: %s", namespace)
+		}
+		return nil, fmt.Errorf("error getting namespace: %w", err)
+	}
+
+	flags := &workloads.StorageSchedulingFlags{}
+
+	defaultStorageClassName, ok := namespaceObject.Labels[workloads.KaiwoDefaultStorageClassNameLabel]
+	if ok {
+		logrus.Debugf("Default storage class discovered: %s", defaultStorageClassName)
+		flags.StorageClassName = defaultStorageClassName
+	} else {
+		logrus.Debugf("Default storage class not found")
+	}
+	defaultStorageQuantity, ok := namespaceObject.Labels[workloads.KaiwoDefaultStorageQuantityLabel]
+	if ok {
+		logrus.Debugf("Default storage quantity discovered: %s", defaultStorageQuantity)
+		flags.Quantity = defaultStorageQuantity
+	} else {
+		logrus.Debugf("Default storage quantity not found")
+	}
+
+	return flags, nil
+}
+
+func doesStorageClassExist(ctx context.Context, clientset kubernetes.Clientset, storageClassName string) (bool, error) {
+	_, err := clientset.StorageV1().StorageClasses().Get(ctx, storageClassName, metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("error getting storage class %s: %w", storageClassName, err)
+	}
+	return true, nil
 }
 
 // loadCustomConfig loads custom configuration data from a file
@@ -196,11 +277,11 @@ func fillSchedulingFlags(
 
 	if schedulingFlags.RequestedReplicas > 0 && schedulingFlags.RequestedGPUsPerReplica > 0 {
 		if schedulingFlags.RequestedGPUsPerReplica > schedulingFlags.GPUsAvailablePerNode {
-			return fmt.Errorf("You requested %d GPUs per replica, but there are only %d GPUs available per node",
+			return fmt.Errorf("you requested %d GPUs per replica, but there are only %d GPUs available per node",
 				schedulingFlags.RequestedGPUsPerReplica, schedulingFlags.GPUsAvailablePerNode)
 		}
 		if schedulingFlags.TotalRequestedGPUs > 0 {
-			return fmt.Errorf("Cannot set requested gpus with --gpus when --replicas and --gpus-per-replica are set")
+			return fmt.Errorf("cannot set requested gpus with --gpus when --replicas and --gpus-per-replica are set")
 		}
 		schedulingFlags.CalculatedNumReplicas = schedulingFlags.RequestedReplicas
 		schedulingFlags.CalculatedGPUsPerReplica = schedulingFlags.RequestedGPUsPerReplica

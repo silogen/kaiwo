@@ -35,6 +35,9 @@ func BuildSubmitCmd() *cobra.Command {
 		Use:   "submit",
 		Short: "Submit a job",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if err := cmd.Parent().PersistentPreRunE(cmd, args); err != nil {
+				return err
+			}
 			return PreRunLoadConfig(cmd, args)
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {

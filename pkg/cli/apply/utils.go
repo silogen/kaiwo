@@ -18,6 +18,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -67,7 +70,7 @@ func GetExecFlags() workloads.ExecFlags {
 
 const (
 	defaultNamespace = "kaiwo"
-	defaultImage     = "ghcr.io/silogen/rocm-ray:v0.5"
+	defaultImage     = "ghcr.io/silogen/rocm-ray:v0.6"
 )
 
 var (
@@ -103,6 +106,8 @@ var (
 	gpus           int
 	replicas       int
 	gpusPerReplica int
+	storage        string
+	noStorage      bool
 )
 
 // AddSchedulingFlags adds flags related to (Kueue) scheduling
@@ -110,15 +115,73 @@ func AddSchedulingFlags(cmd *cobra.Command) {
 	cmd.Flags().IntVarP(&gpus, "gpus", "g", 0, "Number of GPUs requested for the workload")
 	cmd.Flags().IntVarP(&replicas, "replicas", "", 0, "Number of replicas requested for the workload")
 	cmd.Flags().IntVarP(&gpusPerReplica, "gpus-per-replica", "", 0, "Number of GPUs requested per replica")
+	cmd.Flags().StringVarP(
+		&storage,
+		"storage",
+		"",
+		"default",
+		"Storage requested for the workload, use: --storage=storageQuantity,storageClassName, --storage=storageQuantity to use the default storage class, or --storage=default (the default) to use defaults for both storage class and amount. "+
+			fmt.Sprintf("The default storage class and amount can be configured in the namespace's labels (keys %s and %s). ", workloads.KaiwoDefaultStorageClassNameLabel, workloads.KaiwoDefaultStorageQuantityLabel)+
+			"If you do not want to include storage, you must pass --no-storage explicitly.",
+	)
+	cmd.Flags().BoolVarP(&noStorage, "no-storage", "", false, "Don't use storage for the workload")
 }
 
 // GetSchedulingFlags initializes the scheduling flags with the number of GPUs requested
-func GetSchedulingFlags() workloads.SchedulingFlags {
-	return workloads.SchedulingFlags{
+func GetSchedulingFlags() (*workloads.SchedulingFlags, error) {
+	flags := &workloads.SchedulingFlags{
 		TotalRequestedGPUs:      gpus,
 		RequestedReplicas:       replicas,
 		RequestedGPUsPerReplica: gpusPerReplica,
 	}
+
+	if storage != "default" && noStorage {
+		return nil, fmt.Errorf("you must specify --storage or --no-storage, not both")
+	}
+
+	if noStorage {
+		logrus.Info("No storage requested for workload")
+		return flags, nil
+	}
+
+	if storage == "" {
+		return nil, fmt.Errorf("you must specify --storage or --no-storage")
+	}
+
+	requestedStorage := ""
+	storageClassName := ""
+
+	if storage != "default" {
+		split := strings.Split(storage, ",")
+
+		if len(split) > 2 {
+			return nil, fmt.Errorf("invalid storage specifier %s", storage)
+		}
+		if len(split) > 1 {
+			storageClassName = split[1]
+			logrus.Infof("Requested storage class name %s", storageClassName)
+		} else {
+			logrus.Info("You did not pass a storage class name, the default storage class will be used if it exists")
+		}
+		if len(split) > 0 {
+			requestedStorage = split[0]
+
+			if _, err := resource.ParseQuantity(requestedStorage); err != nil {
+				return nil, fmt.Errorf("invalid storage quantity %s", requestedStorage)
+			}
+
+			logrus.Infof("Requested storage %s", requestedStorage)
+		} else {
+			logrus.Infof("You did not pass a storage quantity, the default amount (%s) will be used", requestedStorage)
+		}
+	}
+
+	flags.Storage = &workloads.StorageSchedulingFlags{
+		Quantity:         requestedStorage,
+		StorageClassName: storageClassName,
+	}
+
+	return flags, nil
 }
 
 type Config struct {
@@ -192,7 +255,7 @@ func ApplyConfigToFlags(cmd *cobra.Command, config *Config) {
 	setFlag("gpus-per-replica", fmt.Sprintf("%d", config.RequestedGPUsPerReplica))
 }
 
-func PreRunLoadConfig(cmd *cobra.Command, args []string) error {
+func PreRunLoadConfig(cmd *cobra.Command, _ []string) error {
 	if path == "" {
 		return nil
 	}

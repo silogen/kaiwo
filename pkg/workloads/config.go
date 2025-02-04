@@ -21,9 +21,11 @@ import (
 )
 
 const (
-	KaiwoconfigFilename = "kaiwoconfig"
-	EnvFilename         = "env"
-	KaiwoUsernameLabel  = "kaiwo-cli/username"
+	KaiwoconfigFilename               = "kaiwoconfig"
+	EnvFilename                       = "env"
+	KaiwoUsernameLabel                = "kaiwo-cli/username"
+	KaiwoDefaultStorageClassNameLabel = "kaiwo-cli/default-storage-class-name"
+	KaiwoDefaultStorageQuantityLabel  = "kaiwo-cli/default-storage-quantity"
 )
 
 // WorkloadTemplateConfig is the config context that is passed to the workload templates
@@ -61,6 +63,13 @@ type SchedulingFlags struct {
 
 	// CalculatedNumReplicas refers to the number of replicas, calculated from the available GPUs per node
 	CalculatedNumReplicas int
+
+	Storage *StorageSchedulingFlags
+}
+
+type StorageSchedulingFlags struct {
+	Quantity         string
+	StorageClassName string
 }
 
 // MetaFlags contain flags that are shared by all workloads

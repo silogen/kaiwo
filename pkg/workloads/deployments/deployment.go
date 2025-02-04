@@ -62,7 +62,7 @@ func (deployment Deployment) GenerateTemplateContext(execFlags workloads.ExecFla
 	return DeploymentFlags{Entrypoint: entrypoint}, nil
 }
 
-func (deployment Deployment) ConvertObject(object runtime.Object) (runtime.Object, bool) {
+func (deployment Deployment) ConvertObject(object runtime.Object) (client.Object, bool) {
 	obj, ok := object.(*appsv1.Deployment)
 	return obj, ok
 }

@@ -57,7 +57,7 @@ func (job Job) DefaultTemplate() ([]byte, error) {
 	return JobTemplate, nil
 }
 
-func (job Job) ConvertObject(object runtime.Object) (runtime.Object, bool) {
+func (job Job) ConvertObject(object runtime.Object) (client.Object, bool) {
 	obj, ok := object.(*rayv1.RayJob)
 	return obj, ok
 }

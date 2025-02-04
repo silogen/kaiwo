@@ -33,7 +33,7 @@ type Workload interface {
 	// DefaultTemplate returns a default template to use for this workload
 	DefaultTemplate() ([]byte, error)
 
-	ConvertObject(object runtime.Object) (runtime.Object, bool)
+	ConvertObject(object runtime.Object) (client.Object, bool)
 
 	// IgnoreFiles lists the files that should be ignored in the ConfigMap
 	IgnoreFiles() []string

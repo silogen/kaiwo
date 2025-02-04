@@ -17,7 +17,7 @@ Please delete options that are not relevant.
 # Checklist:
 
 - [ ] My code follows the style guidelines of this project. See [contributing-guidelines.md](./../contributing-guidelines.md)
-- [ ] Existing workload examples run after my changes (if applicable)
+- [ ] Existing workload examples run to completion after my changes (if applicable)
 - [ ] I have performed a self-review of my code
 - [ ] I have commented my code, particularly in hard-to-understand areas
 - [ ] I have made corresponding changes to the documentation
