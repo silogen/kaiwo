@@ -285,7 +285,7 @@ func makeWorkloadName(path string, image string, version string, currentUser str
 		components = append(components, version)
 	}
 
-	return strings.Join(components, "-")
+	return baseutils.MakeRFC1123Compliant(strings.Join(components, "-"))
 }
 
 func sanitizeStringForKubernetes(path string) string {
