@@ -240,6 +240,48 @@ func doesStorageClassExist(ctx context.Context, clientset kubernetes.Clientset, 
 	return true, nil
 }
 
+func loadFileList(execFlags *workloads.ExecFlags) error {
+	if execFlags.Path == "" && execFlags.OverlayPath != "" {
+		return fmt.Errorf("cannot load workload with an overlay path without base path")
+	}
+	if execFlags.Path == "" {
+		return nil
+	}
+
+	files := map[string]string{}
+
+	entries, err := os.ReadDir(execFlags.Path)
+	if err != nil {
+		return fmt.Errorf("error reading directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			files[entry.Name()] = filepath.Join(execFlags.Path, entry.Name())
+		}
+	}
+
+	if execFlags.OverlayPath != "" {
+		overlayFiles, err := os.ReadDir(execFlags.OverlayPath)
+		if err != nil {
+			return fmt.Errorf("error reading directory: %w", err)
+		}
+		for _, overlayFile := range overlayFiles {
+			if !overlayFile.IsDir() {
+				files[overlayFile.Name()] = filepath.Join(execFlags.OverlayPath, overlayFile.Name())
+			}
+		}
+	}
+
+	for k, v := range files {
+		logrus.Debugf("Discovered file %s from %s", k, v)
+	}
+
+	execFlags.WorkloadFiles = files
+
+	return nil
+}
+
 // loadCustomConfig loads custom configuration data from a file
 func loadCustomConfig(path string) (any, error) {
 	logrus.Debugln("Loading custom config")
