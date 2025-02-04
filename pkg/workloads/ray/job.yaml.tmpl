@@ -61,10 +61,8 @@ spec:
                 - containerPort: 10001
                   name: client
               volumeMounts:
-              {{- if .Scheduling.Storage }}
                 - mountPath: /workload
-                  name: {{ .Meta.Name }}-pv
-              {{- end }}
+                  name: {{ .Meta.Name }}-main
               {{- if .Meta.SecretVolumes }}
               {{- range .Meta.SecretVolumes }}
                 - name: {{ .Name }}
@@ -80,17 +78,17 @@ spec:
                   name: dshm
           volumes:
           {{- if .Scheduling.Storage }}
-            - name: {{ .Meta.Name }}-pv
+            - name: {{ .Meta.Name }}-main
               ephemeral:
-                  volumeClaimTemplate:
-                    spec:
-                      accessModes: [ "ReadWriteOnce" ]
-                      storageClassName: longhorn
-                      resources:
-                        requests:
-                          storage: "100Gi"
+                volumeClaimTemplate:
+                  spec:
+                    accessModes: [ "ReadWriteOnce" ]
+                    storageClassName: {{ .Scheduling.Storage.StorageClassName }}
+                    resources:
+                      requests:
+                        storage: 10Mi
           {{- else }}
-            - name: {{ .Meta.Name }}-pv
+            - name: {{ .Meta.Name }}-main
               emptyDir:
                 medium: Memory
                 sizeLimit: 10Mi
@@ -169,10 +167,8 @@ spec:
                         memory: "{{ mul .Scheduling.CalculatedGPUsPerReplica 32 }}Gi"
                         amd.com/gpu: "{{ .Scheduling.CalculatedGPUsPerReplica }}"
                 volumeMounts:
-                {{- if .Scheduling.Storage }}
                   - mountPath: /workload
-                    name: {{ .Meta.Name }}-pv
-                {{- end }}
+                    name: {{ .Meta.Name }}-main
                 {{- if .Meta.SecretVolumes }}
                 {{- range .Meta.SecretVolumes }}
                   - name: {{ .Name }}
@@ -188,17 +184,17 @@ spec:
                     name: dshm
             volumes:
             {{- if .Scheduling.Storage }}
-              - name: {{ .Meta.Name }}-pv
+              - name: {{ .Meta.Name }}-main
                 ephemeral:
                   volumeClaimTemplate:
                     spec:
                       accessModes: [ "ReadWriteOnce" ]
-                      storageClassName: longhorn
+                      storageClassName: {{ .Scheduling.Storage.StorageClassName }}
                       resources:
                         requests:
-                          storage: "100Gi"
+                          storage: {{ .Scheduling.Storage.Quantity }}
             {{- else }}
-              - name: {{ .Meta.Name }}-pv
+              - name: {{ .Meta.Name }}-main
                 emptyDir:
                   medium: Memory
                   sizeLimit: 10Mi

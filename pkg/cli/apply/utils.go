@@ -139,7 +139,7 @@ func GetSchedulingFlags() (*workloads.SchedulingFlags, error) {
 	}
 
 	if noStorage {
-		logrus.Info("No storage (PVC) requested for workload")
+		logrus.Info("No storage requested for workload")
 		return flags, nil
 	}
 

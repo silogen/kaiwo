@@ -23,8 +23,6 @@ import (
 	"strings"
 	"text/template"
 
-	"k8s.io/apimachinery/pkg/api/resource"
-
 	"github.com/Masterminds/sprig/v3"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
@@ -51,7 +49,6 @@ func ApplyWorkload(
 ) error {
 	var resources []runtime.Object
 
-	var pvc *corev1.PersistentVolumeClaim
 	var namespaceResource *corev1.Namespace
 	var configMapResource *corev1.ConfigMap
 	var err error
@@ -64,11 +61,6 @@ func ApplyWorkload(
 		if namespaceResource != nil {
 			resources = append(resources, namespaceResource)
 		}
-	}
-
-	if templateContext.Scheduling.Storage != nil {
-		pvc = generatePvcManifest(templateContext)
-		resources = append(resources, pvc)
 	}
 
 	if execFlags.Path != "" {
@@ -118,8 +110,8 @@ func ApplyWorkload(
 		return fmt.Errorf("failed to get k8s scheme: %w", err)
 	}
 
-	if configMapResource != nil || pvc != nil {
-		logrus.Debug("Config map and / or PVC are set, linking them to the workload")
+	if configMapResource != nil {
+		logrus.Debug("Config map is set, linking it to the workload")
 
 		owner := workloadResource.DeepCopyObject().(client.Object)
 		err := k8sClient.Get(ctx, client.ObjectKey{Name: owner.GetName(), Namespace: owner.GetNamespace()}, owner)
@@ -141,41 +133,8 @@ func ApplyWorkload(
 			return fmt.Errorf("failed to update owner reference of config map: %w", err)
 		}
 	}
-	if pvc != nil {
-		logrus.Debug("Updating the PVC's owner reference")
-		if err := updateOwnerReference(ctx, k8sClient, pvc, workloadResource, &scheme); err != nil {
-			return fmt.Errorf("failed to update owner reference of persistent volume claim: %w", err)
-		}
-	}
 
 	return nil
-}
-
-func generatePvcManifest(templateContext WorkloadTemplateConfig) *corev1.PersistentVolumeClaim {
-	v := corev1.PersistentVolumeFilesystem
-	pvc := &corev1.PersistentVolumeClaim{
-		Spec: corev1.PersistentVolumeClaimSpec{
-			VolumeMode: &v,
-			AccessModes: []corev1.PersistentVolumeAccessMode{
-				corev1.ReadWriteOnce,
-			},
-			Resources: corev1.VolumeResourceRequirements{
-				Requests: corev1.ResourceList{
-					"storage": resource.MustParse(templateContext.Scheduling.Storage.Quantity),
-				},
-			},
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      templateContext.Meta.Name,
-			Namespace: templateContext.Meta.Namespace,
-		},
-	}
-
-	if templateContext.Scheduling.Storage.StorageClassName != "" {
-		pvc.Spec.StorageClassName = &templateContext.Scheduling.Storage.StorageClassName
-	}
-
-	return pvc
 }
 
 func getWorkloadTemplate(execFlags ExecFlags, workload Workload) ([]byte, error) {
