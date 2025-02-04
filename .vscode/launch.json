@@ -6,8 +6,8 @@
 	    "type": "go",
 	    "request": "launch",
 	    "mode": "debug",
-	    "program": "${workspaceFolder}",
-	    "args": ["submit", "-p", "workloads/training/LLMs/lora-supervised-finetuning/lora-sft-zero3-single-multinode", "--ray", "-g", "4", "--dry-run"],
+	    "program": "${workspaceFolder}/cmd/cli/main.go",
+	    "args": ["submit", "-p", "${workspaceFolder}/workloads/training/LLMs/lora-supervised-finetuning/lora-sft-zero3-single-multinode", "--ray", "-g", "4", "--dry-run", "--storage=100Gi,longhorn"],
 	    "env": {
 	      "GO111MODULE": "on"
 	    },
@@ -18,8 +18,8 @@
 		"type": "go",
 		"request": "launch",
 		"mode": "debug",
-		"program": "${workspaceFolder}",
-		"args": ["serve", "-p", "workloads/inference/LLMs/online-inference/vllm-online-single-multinode", "--ray", "--replicas", "1", "--gpus-per-replica", "4", "--dry-run"],
+		"program": "${workspaceFolder}/cmd/cli/main.go",
+		"args": ["serve", "-p", "${workspaceFolder}/workloads/inference/LLMs/online-inference/vllm-online-single-multinode", "--ray", "--replicas", "1", "--gpus-per-replica", "4", "--dry-run"],
 		"env": {
 		  "GO111MODULE": "on"
 		},
@@ -30,8 +30,8 @@
 		"type": "go",
 		"request": "launch",
 		"mode": "debug",
-		"program": "${workspaceFolder}",
-		"args": ["submit", "-p", "workloads/training/LLMs/bert/hf-accelerate-bert", "-g", "4", "--dry-run"],
+		"program": "${workspaceFolder}/cmd/cli/main.go",
+		"args": ["submit", "-p", "${workspaceFolder}/workloads/training/LLMs/bert/hf-accelerate-bert", "-g", "4", "--dry-run"],
 		"env": {
 		  "GO111MODULE": "on"
 		},
@@ -42,7 +42,7 @@
 		"type": "go",
 		"request": "launch",
 		"mode": "debug",
-		"program": "${workspaceFolder}",
+		"program": "${workspaceFolder}/cmd/cli/main.go",
 		"args": ["submit", "-i", "ghcr.io/silogen/rocm-ray:v0.4", "-g", "4"],
 		"env": {
 		  "GO111MODULE": "on"
@@ -54,8 +54,8 @@
 		"type": "go",
 		"request": "launch",
 		"mode": "debug",
-		"program": "${workspaceFolder}",
-		"args": ["submit", "-p", "workloads/training/LLMs/lora-supervised-finetuning/ds-zero3-single-multinode", "--ray", "-g", "4"],
+		"program": "${workspaceFolder}/cmd/cli/main.go",
+		"args": ["submit", "-p", "${workspaceFolder}/workloads/training/LLMs/lora-supervised-finetuning/ds-zero3-single-multinode", "--ray", "-g", "4"],
 		"env": {
 		  "GO111MODULE": "on"
 		},
@@ -66,7 +66,7 @@
 		"type": "go",
 		"request": "launch",
 		"mode": "debug",
-		"program": "${workspaceFolder}",
+		"program": "${workspaceFolder}/cmd/cli/main.go",
 		"args": ["monitor", "deployment/avsuni-gpu-monitoring", "-n", "av-test"],
 		"env": {
 		  "GO111MODULE": "on"

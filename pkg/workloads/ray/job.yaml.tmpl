@@ -17,6 +17,10 @@ spec:
       rayStartParams: {}
       template:
         spec:
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
           {{- if .Meta.ImagePullSecret }}
           imagePullSecrets:
           - name: {{ .Meta.ImagePullSecret }}
@@ -77,8 +81,14 @@ spec:
           volumes:
           {{- if .Scheduling.Storage }}
             - name: {{ .Meta.Name }}-pv
-              persistentVolumeClaim:
-                claimName: {{ .Meta.Name }}
+              ephemeral:
+                  volumeClaimTemplate:
+                    spec:
+                      accessModes: [ "ReadWriteOnce" ]
+                      storageClassName: longhorn
+                      resources:
+                        requests:
+                          storage: "100Gi"
           {{- else }}
             - name: {{ .Meta.Name }}-pv
               emptyDir:
@@ -113,6 +123,10 @@ spec:
         rayStartParams: {}
         template:
           spec:
+            securityContext:
+              runAsUser: 1000
+              runAsGroup: 1000
+              fsGroup: 1000
             {{- if .Meta.ImagePullSecret }}
             imagePullSecrets:
             - name: {{ .Meta.ImagePullSecret }}
@@ -175,8 +189,14 @@ spec:
             volumes:
             {{- if .Scheduling.Storage }}
               - name: {{ .Meta.Name }}-pv
-                persistentVolumeClaim:
-                  claimName: {{ .Meta.Name }}
+                ephemeral:
+                  volumeClaimTemplate:
+                    spec:
+                      accessModes: [ "ReadWriteOnce" ]
+                      storageClassName: longhorn
+                      resources:
+                        requests:
+                          storage: "100Gi"
             {{- else }}
               - name: {{ .Meta.Name }}-pv
                 emptyDir:
