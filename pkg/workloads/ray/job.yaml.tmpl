@@ -86,7 +86,7 @@ spec:
                     storageClassName: {{ .Scheduling.Storage.StorageClassName }}
                     resources:
                       requests:
-                        storage: 10Mi
+                        storage: 1Gi
           {{- else }}
             - name: {{ .Meta.Name }}-main
               emptyDir:

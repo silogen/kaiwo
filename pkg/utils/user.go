@@ -40,7 +40,7 @@ func GetCurrentUser() (string, error) {
 		parts := strings.Split(userEmail, "@")
 		username := strings.Split(parts[0], "-")[0]
 		domain := strings.ReplaceAll(parts[1], ".", "-")
-		return makeRFC1123Compliant(fmt.Sprintf("%s-%s", username, domain)), nil
+		return MakeRFC1123Compliant(fmt.Sprintf("%s-%s", username, domain)), nil
 	}
 
 	logrus.Warn("USER_EMAIL not set. Falling back to UNIX username and hostname")
@@ -55,10 +55,10 @@ func GetCurrentUser() (string, error) {
 
 	k8sCompatibleHostname := strings.ReplaceAll(hostname, ".", "-")
 
-	return makeRFC1123Compliant(fmt.Sprintf("%s-%s", currentUser.Username, k8sCompatibleHostname)), nil
+	return MakeRFC1123Compliant(fmt.Sprintf("%s-%s", currentUser.Username, k8sCompatibleHostname)), nil
 }
 
-func makeRFC1123Compliant(input string) string {
+func MakeRFC1123Compliant(input string) string {
 	input = strings.ToLower(input)
 
 	rfc1123Regex := regexp.MustCompile(`[^a-z0-9.-]`)
