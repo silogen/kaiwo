@@ -15,6 +15,10 @@ spec:
         dashboard-host: "0.0.0.0"
       template:
         spec:
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
           {{- if .Meta.ImagePullSecret }}
           imagePullSecrets:
           - name: {{ .Meta.ImagePullSecret }}
@@ -116,6 +120,10 @@ spec:
         rayStartParams: {}
         template:
           spec:
+            securityContext:
+              runAsUser: 1000
+              runAsGroup: 1000
+              fsGroup: 1000
             {{- if .Meta.ImagePullSecret }}
             imagePullSecrets:
             - name: {{ .Meta.ImagePullSecret }}
