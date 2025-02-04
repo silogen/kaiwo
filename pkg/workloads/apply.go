@@ -15,11 +15,13 @@
 package workloads
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"os"
 	"path"
+	"slices"
 	"strings"
 	"text/template"
 
@@ -64,7 +66,7 @@ func ApplyWorkload(
 	}
 
 	if execFlags.Path != "" {
-		configMapResource, err = generateConfigMapManifest(execFlags.Path, workload, templateContext.Meta)
+		configMapResource, err = generateConfigMapManifest(execFlags.WorkloadFiles, workload, templateContext.Meta)
 		if err != nil {
 			return fmt.Errorf("failed to generate configmap resource: %w", err)
 		}
@@ -72,6 +74,8 @@ func ApplyWorkload(
 			resources = append(resources, configMapResource)
 			templateContext.Meta.HasConfigMap = true
 		}
+	} else if execFlags.OverlayPath != "" {
+		return fmt.Errorf("overlay path set without setting the path")
 	}
 
 	workloadTemplate, err := getWorkloadTemplate(execFlags, workload)
@@ -199,15 +203,54 @@ func generateNamespaceManifestIfNotExists(
 	}, nil
 }
 
+func isBinaryFile(content []byte) bool {
+	return bytes.Contains(content, []byte{0})
+}
+
 // generateConfigMapManifest adds a config map resource
-func generateConfigMapManifest(path string, workload Workload, metaConfig MetaFlags) (*corev1.ConfigMap, error) {
-	configMap, err := k8s.GenerateConfigMapFromDir(path, metaConfig.Name, metaConfig.Namespace, workload.IgnoreFiles())
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate ConfigMap: %w", err)
+func generateConfigMapManifest(files map[string]string, workload Workload, metaConfig MetaFlags) (*corev1.ConfigMap, error) {
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      metaConfig.Name,
+			Namespace: metaConfig.Namespace,
+		},
+		Data: map[string]string{},
 	}
-	if configMap != nil {
+
+	skipFiles := workload.IgnoreFiles()
+
+	for fileName, filePath := range files {
+		if slices.Contains(skipFiles, fileName) {
+			continue
+		}
+
+		info, err := os.Stat(filePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to stat file %s: %w", filePath, err)
+		}
+
+		if info.Size() > 950e3 {
+			logrus.Warnf("Skipping file %s in %s as it is too large", fileName, filePath)
+			continue
+		}
+
+		content, err := os.ReadFile(filePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read file %s: %w", filePath, err)
+		}
+
+		// Skip binary files
+		if isBinaryFile(content) {
+			logrus.Warnf("Skipping binary file %s in %s", fileName, filePath)
+			continue
+		}
+		configMap.Data[fileName] = string(content)
+	}
+
+	if len(configMap.Data) > 0 {
 		return configMap, nil
 	}
+
 	return nil, nil
 }
 

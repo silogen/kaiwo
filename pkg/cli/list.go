@@ -32,9 +32,9 @@ var (
 
 func BuildListCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "list [workloadType] [workloadName]",
+		Use:   "manage [workloadType] [workloadName]",
 		Args:  cobra.MaximumNArgs(2),
-		Short: "List workloads",
+		Short: "Manage workloads",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			workloadType := ""
 			workloadName := ""

@@ -33,13 +33,12 @@ const defaultGpuNodeLabelKey = "beta.amd.com/gpu.family.AI"
 
 // Exec flags
 var (
-	dryRun           bool
-	createNamespace  bool
-	template         string
-	path             string
-	gpuNodeLabelKey  string
-	customConfigPath string
-	envFilePath      string
+	dryRun          bool
+	createNamespace bool
+	template        string
+	path            string
+	overlayPath     string
+	gpuNodeLabelKey string
 )
 
 // AddExecFlags adds flags that are needed for the execution of apply functions
@@ -47,11 +46,10 @@ func AddExecFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolVarP(&createNamespace, "create-namespace", "", false, "Create namespace if it does not exist")
 	cmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "Print the generated workload manifest without submitting it")
 	cmd.Flags().StringVarP(&path, "path", "p", "", "Path to directory for workload code, entrypoint/serveconfig, env-file, etc. Either image or path is mandatory")
+	cmd.Flags().StringVarP(&overlayPath, "overlay-path", "o", "", "Additional overlay path. Files from both path and overlay-path are combined, if the file exists in both, the one from overlay-path is used")
 	// TODO: remove gpuNodeLabelKey and have this logic be handled by the operator
 	cmd.Flags().StringVarP(&gpuNodeLabelKey, "gpu-node-label-key", "", defaultGpuNodeLabelKey, fmt.Sprintf("Optional node label key used to specify the resource flavor GPU count. Defaults to %s", defaultGpuNodeLabelKey))
 	cmd.Flags().StringVarP(&template, "template", "t", "", "Optional path to a custom template to use for the workload. If not provided, a default template will be used unless template file found in workload directory")
-	cmd.Flags().StringVarP(&customConfigPath, "custom-config", "c", "", "Optional path to a custom YAML configuration file whose contents are made available in the template")
-	cmd.Flags().StringVarP(&envFilePath, "env-file", "", "", "Optional path to env file. Defaults to 'env' in workload code directory")
 }
 
 func GetExecFlags() workloads.ExecFlags {
@@ -60,9 +58,8 @@ func GetExecFlags() workloads.ExecFlags {
 		DryRun:                        dryRun,
 		Template:                      template,
 		Path:                          path,
+		OverlayPath:                   overlayPath,
 		ResourceFlavorGpuNodeLabelKey: gpuNodeLabelKey,
-		CustomConfigPath:              customConfigPath,
-		EnvFilePath:                   envFilePath,
 	}
 }
 
@@ -188,10 +185,9 @@ type Config struct {
 	DryRun                  bool   `yaml:"dryRun"`
 	CreateNamespace         bool   `yaml:"createNamespace"`
 	Path                    string `yaml:"path"`
+	OverlayPath             string `yaml:"overlayPath"`
 	GpuNodeLabelKey         string `yaml:"gpuNodeLabelKey"`
 	Template                string `yaml:"template"`
-	CustomConfig            string `yaml:"customConfig"`
-	EnvFile                 string `yaml:"envFile"`
 	Name                    string `yaml:"name"`
 	Namespace               string `yaml:"namespace"`
 	Image                   string `yaml:"image"`
@@ -237,10 +233,9 @@ func ApplyConfigToFlags(cmd *cobra.Command, config *Config) {
 	setFlag("dry-run", fmt.Sprintf("%v", config.DryRun))
 	setFlag("create-namespace", fmt.Sprintf("%v", config.CreateNamespace))
 	setFlag("path", config.Path)
+	setFlag("overlay-path", config.OverlayPath)
 	setFlag("gpu-node-label-key", config.GpuNodeLabelKey)
 	setFlag("template", config.Template)
-	setFlag("custom-config", config.CustomConfig)
-	setFlag("env-file", config.EnvFile)
 
 	// MetaFlags
 	setFlag("name", config.Name)
@@ -256,13 +251,23 @@ func ApplyConfigToFlags(cmd *cobra.Command, config *Config) {
 }
 
 func PreRunLoadConfig(cmd *cobra.Command, _ []string) error {
-	if path == "" {
+	if path == "" && overlayPath == "" {
 		return nil
 	}
 
-	config, err := LoadConfigFromPath(path)
+	// First try to load config from the overlay path
+	config, err := LoadConfigFromPath(overlayPath)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	if config == nil {
+		// If no overlay, try the main path
+		config, err = LoadConfigFromPath(path)
+		if err != nil {
+			return fmt.Errorf("failed to load config: %w", err)
+		}
+		logrus.Infof("Loaded config from %s", path)
 	}
 
 	if config != nil {

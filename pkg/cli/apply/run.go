@@ -50,16 +50,21 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 		return nil
 	}
 
+	// Discover workload files
+	if err := loadFileList(&execFlags); err != nil {
+		return fmt.Errorf("error loading file list: %w", err)
+	}
+
 	// Generate workload configuration
 	workloadConfig, err := workload.GenerateTemplateContext(execFlags)
 	if err != nil {
 		return fmt.Errorf("error generating workload config: %w", err)
 	}
 
-	// Load custom configuration, if provided
+	// Load custom configuration, if available
 	var customConfig any
-	if execFlags.CustomConfigPath != "" {
-		customConfig, err = loadCustomConfig(execFlags.CustomConfigPath)
+	if customConfigFile, ok := execFlags.WorkloadFiles[workloads.CustomTemplateValuesFilename]; ok {
+		customConfig, err = loadCustomConfig(customConfigFile)
 		if err != nil {
 			return fmt.Errorf("error loading custom config: %w", err)
 		}
@@ -77,14 +82,8 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 		logrus.Debugf("No explicit name provided, using name: %s", metaFlags.Name)
 	}
 
-	// Parse environment variables
-	if execFlags.EnvFilePath == "" {
-		envFilePath = filepath.Join(execFlags.Path, workloads.EnvFilename)
-	} else {
-		envFilePath = execFlags.EnvFilePath
-	}
-
-	if err := parseEnvFile(envFilePath, &metaFlags); err != nil {
+	// Parse environment variables, if any
+	if err := parseEnvFile(execFlags.WorkloadFiles[workloads.EnvFilename], &metaFlags); err != nil {
 		return fmt.Errorf("error parsing environment: %w", err)
 	}
 
@@ -154,6 +153,48 @@ func RunApply(workload workloads.Workload, workloadMeta any) error {
 	if err := workloads.ApplyWorkload(ctx, clients.Client, workload, execFlags, templateContext); err != nil {
 		return fmt.Errorf("error applying workload: %w", err)
 	}
+
+	return nil
+}
+
+func loadFileList(execFlags *workloads.ExecFlags) error {
+	if execFlags.Path == "" && execFlags.OverlayPath != "" {
+		return fmt.Errorf("cannot load workload with an overlay path without base path")
+	}
+	if execFlags.Path == "" {
+		return nil
+	}
+
+	files := map[string]string{}
+
+	entries, err := os.ReadDir(execFlags.Path)
+	if err != nil {
+		return fmt.Errorf("error reading directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			files[entry.Name()] = filepath.Join(execFlags.Path, entry.Name())
+		}
+	}
+
+	if execFlags.OverlayPath != "" {
+		overlayFiles, err := os.ReadDir(execFlags.OverlayPath)
+		if err != nil {
+			return fmt.Errorf("error reading directory: %w", err)
+		}
+		for _, overlayFile := range overlayFiles {
+			if !overlayFile.IsDir() {
+				files[overlayFile.Name()] = filepath.Join(execFlags.OverlayPath, overlayFile.Name())
+			}
+		}
+	}
+
+	for k, v := range files {
+		logrus.Debugf("Discovered file %s from %s", k, v)
+	}
+
+	execFlags.WorkloadFiles = files
 
 	return nil
 }
