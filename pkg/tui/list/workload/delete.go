@@ -34,7 +34,7 @@ func runDeleteWorkload(ctx context.Context, clients k8s.KubernetesClients, state
 	confirmDelete := false
 	resourceDescription := fmt.Sprintf("Confirm that you want to delete the %s workload '%s' in namespace %s. "+
 		"This will also remove any linked resources, such as automatically created PVCs and ConfigMaps",
-		state.WorkloadType, state.WorkloadReference.GetName(), state.Namespace)
+		state.WorkloadType, state.Workload.GetName(), state.Namespace)
 
 	f := huh.NewForm(huh.NewGroup(huh.NewConfirm().Title(resourceDescription).Value(&confirmDelete)))
 
@@ -51,7 +51,7 @@ func runDeleteWorkload(ctx context.Context, clients k8s.KubernetesClients, state
 	deletePropagationPolicy := client.PropagationPolicy(metav1.DeletePropagationBackground)
 
 	deleteWorkload := func() {
-		err = clients.Client.Delete(ctx, state.WorkloadReference.GetObject(), deletePropagationPolicy)
+		err = clients.Client.Delete(ctx, state.Workload.GetObject(), deletePropagationPolicy)
 	}
 
 	if spinnerErr := spinner.New().Title("Deleting workload").Action(deleteWorkload).Run(); spinnerErr != nil {
@@ -62,7 +62,7 @@ func runDeleteWorkload(ctx context.Context, clients k8s.KubernetesClients, state
 		return tuicomponents.StepResultErr, nil, fmt.Errorf("failed to delete workload: %w", err)
 	}
 
-	logrus.Infof("Successfully deleted workload %s/%s", state.WorkloadType, state.WorkloadReference.GetName())
+	logrus.Infof("Successfully deleted workload %s/%s", state.WorkloadType, state.Workload.GetName())
 
 	// Quit as otherwise would need to return two screens, TODO make it possible to implement a custom number of return steps later
 	return tuicomponents.StepResultQuit, nil, nil

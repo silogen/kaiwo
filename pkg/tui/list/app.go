@@ -38,7 +38,7 @@ func RunList(workloadType string, workloadName string, namespace string, user st
 
 	ctx := context.Background()
 
-	var workloadReference workloads.WorkloadReference
+	var workloadReference workloads.Workload
 
 	if workloadName != "" {
 		// If the workload name is set, attempt to load the workload reference
@@ -46,17 +46,17 @@ func RunList(workloadType string, workloadName string, namespace string, user st
 		if err != nil {
 			return fmt.Errorf("failed to get workload: %w", err)
 		}
-		workloadReference, err = workload.BuildReference(ctx, k8sClient, objectKey)
-		if err != nil {
+
+		if err := workload.LoadFromObjectKey(ctx, k8sClient, objectKey); err != nil {
 			return fmt.Errorf("failed to build workload reference: %w", err)
 		}
 	}
 
 	runState := &tuicomponents.RunState{
-		WorkloadType:      workloadType,
-		WorkloadReference: workloadReference,
-		User:              user,
-		Namespace:         namespace,
+		WorkloadType: workloadType,
+		Workload:     workloadReference,
+		User:         user,
+		Namespace:    namespace,
 	}
 
 	clients, err := k8s.GetKubernetesClients()

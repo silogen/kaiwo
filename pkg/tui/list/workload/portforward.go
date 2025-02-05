@@ -43,12 +43,12 @@ import (
 // runPortForward runs the main target selection and port forwarding routine
 // TODO remove container ports if they are defined by a service
 func runPortForward(ctx context.Context, clients k8s.KubernetesClients, state *tuicomponents.RunState) (tuicomponents.StepResult, tuicomponents.RunStep[tuicomponents.RunState], error) {
-	workloadReference := state.WorkloadReference
+	workloadReference := state.Workload
 
 	var err error
 
 	loadWorkload := func() {
-		err = workloadReference.Load(ctx, clients.Client)
+		err = workloadReference.Reload(ctx, clients.Client)
 	}
 
 	if spinnerErr := spinner.New().Title("Loading workload").Action(loadWorkload).Run(); spinnerErr != nil {
@@ -82,7 +82,7 @@ func runPortForward(ctx context.Context, clients k8s.KubernetesClients, state *t
 		}
 	}
 
-	for _, pod := range workloadReference.GetPods() {
+	for _, pod := range workloadReference.ListKnownPods() {
 		for _, container := range pod.Pod.Spec.Containers {
 			for _, port := range container.Ports {
 				targets = append(targets, ContainerPortForwardTarget{
