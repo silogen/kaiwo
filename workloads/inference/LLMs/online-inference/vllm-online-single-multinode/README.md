@@ -12,11 +12,11 @@ To run this workload on 16 GPUs in `kaiwo` namespace, you can let Kaiwo automati
 
 Run with:
 
-`kaiwo serve -p workloads/inference/LLMs/online-inference/vllm-online-single-multinode -g 16 --ray`
+`kaiwo serve -p workloads/inference/LLMs/online-inference/vllm-online-single-multinode -g 16 --ray --storage=100Gi,nameofyourstorageclass`
 
 Or set these variables yourself with the following command:
 
-`kaiwo serve -p workloads/inference/LLMs/online-inference/vllm-online-single-multinode --replicas 2 --gpus-per-replica 8 --ray`
+`kaiwo serve -p workloads/inference/LLMs/online-inference/vllm-online-single-multinode --replicas 2 --gpus-per-replica 8 --ray --storage=100Gi,nameofyourstorageclass`
 
 ## Dependencies
 - Secret `hf-token`: Hugging Face API token for model download

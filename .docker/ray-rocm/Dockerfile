@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /
 
-RUN sudo useradd -m -s /bin/bash kaiwo && \
+RUN sudo useradd -m -u 1000 -s /bin/bash kaiwo && \
     sudo usermod -a -G render,video kaiwo && \
     chown -R kaiwo:kaiwo /home/kaiwo && \
     chmod 700 /home/kaiwo && \
@@ -36,6 +36,7 @@ USER kaiwo
 WORKDIR /workload
 
 ENV VLLM_USE_TRITON_FLASH_ATTN=0
+ENV RAY_EXPERIMENTAL_NOSET_ROCR_VISIBLE_DEVICES=0
 ENV TORCH_NCCL_HIGH_PRIORITY="1"
 # Use only when absolutely necessary (may cause performance degradation)
 ENV NCCL_DISABLE_P2P=0

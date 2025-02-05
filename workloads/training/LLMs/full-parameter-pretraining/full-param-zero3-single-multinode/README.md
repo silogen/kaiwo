@@ -11,7 +11,7 @@ Note! this workload expects existing secrets. Have a look at `env` file for the 
 
 To run this workload on 16 GPUs in `kaiwo` namespace, set `num_devices` in `entrypoint` to `16` and use the following command:
 
-`kaiwo submit -p workloads/training/LLMs/full-parameter-pretraining/full-param-zero3-single-multinode -g 16 --ray`
+`kaiwo submit -p workloads/training/LLMs/full-parameter-pretraining/full-param-zero3-single-multinode -g 16 --ray --storage=100Gi,nameofyourstorageclass`
 
 ## Dependencies
 - hf-token: Hugging Face API token for model download
