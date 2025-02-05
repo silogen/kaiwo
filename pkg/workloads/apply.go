@@ -23,17 +23,13 @@ import (
 	"path"
 	"reflect"
 	"slices"
-	"strings"
-	"text/template"
 
-	"github.com/Masterminds/sprig/v3"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
 
 	"github.com/silogen/kaiwo/pkg/k8s"
 
@@ -50,7 +46,7 @@ func ApplyWorkload(
 	execFlags ExecFlags,
 	templateContext WorkloadTemplateConfig,
 ) error {
-	var resources []runtime.Object
+	var resources []client.Object
 
 	var namespaceResource *corev1.Namespace
 	var configMapResource *corev1.ConfigMap
@@ -84,15 +80,17 @@ func ApplyWorkload(
 		return fmt.Errorf("failed to get workload template: %w", err)
 	}
 
-	workloadResource, err := generateWorkloadManifest(workloadTemplate, templateContext, workload)
-	if err != nil {
-		return fmt.Errorf("check workload type, failed to generate manifests: %w", err)
+	if err := workload.SetFromTemplate(workloadTemplate, templateContext); err != nil {
+		return fmt.Errorf("failed to set from workload template: %w", err)
 	}
 
-	additionalWorkloadManifests, err := workload.GenerateAdditionalResourceManifests(k8sClient, templateContext)
+	workloadResource := workload.GetObject()
+
+	additionalWorkloadManifests, err := workload.GenerateAdditionalResourceManifests(ctx, k8sClient, templateContext)
 	if err != nil {
 		return fmt.Errorf("failed to generate additional resource manifests: %w", err)
 	}
+
 	resources = append(resources, workloadResource)
 	resources = append(resources, additionalWorkloadManifests...)
 
@@ -118,21 +116,17 @@ func ApplyWorkload(
 	if configMapResource != nil {
 		logrus.Debug("Config map is set, linking it to the workload")
 
-		owner := workloadResource.DeepCopyObject().(client.Object)
-		err := k8sClient.Get(ctx, client.ObjectKey{Name: owner.GetName(), Namespace: owner.GetNamespace()}, owner)
-		if err != nil {
-			return fmt.Errorf("failed to fetch owner resource %s/%s: %w", owner.GetNamespace(), owner.GetName(), err)
+		// Reload to ensure UID is set
+		if err := workload.Reload(ctx, k8sClient); err != nil {
+			return fmt.Errorf("failed to reload resource: %w", err)
 		}
+		workloadResource := workload.GetObject()
 
 		// Ensure the UID is available
-		if owner.GetUID() == "" {
-			return fmt.Errorf("owner resource %s/%s has no valid UID", owner.GetNamespace(), owner.GetName())
+		if workloadResource.GetUID() == "" {
+			return fmt.Errorf("owner resource %s/%s has no valid UID", workloadResource.GetNamespace(), workloadResource.GetName())
 		}
-		workloadResource = owner
-	}
 
-	// Attach config map and PVC to the workload, if they are defined
-	if configMapResource != nil {
 		logrus.Debug("Updating the config map's owner reference")
 		if err := updateOwnerReference(ctx, k8sClient, configMapResource, workloadResource, &scheme); err != nil {
 			return fmt.Errorf("failed to update owner reference of config map: %w", err)
@@ -255,47 +249,46 @@ func generateConfigMapManifest(files map[string]string, workload Workload, metaC
 	return nil, nil
 }
 
-// generateWorkloadManifest prepares the main workload manifest
-func generateWorkloadManifest(workloadTemplate []byte, templateContext WorkloadTemplateConfig, workload Workload) (client.Object, error) {
-	parsedTemplate, err := template.New("main").Funcs(sprig.TxtFuncMap()).Parse(string(workloadTemplate))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse template: %w", err)
-	}
-
-	var renderedYAML strings.Builder
-	err = parsedTemplate.Execute(&renderedYAML, templateContext)
-	if err != nil {
-		return nil, fmt.Errorf("failed to render template: %w", err)
-	}
-
-	scheme, err := k8s.GetScheme()
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch scheme: %w", err)
-	}
-
-	decoder := serializer.NewCodecFactory(&scheme).UniversalDeserializer()
-
-	obj, _, err := decoder.Decode([]byte(renderedYAML.String()), nil, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode manifest: %w", err)
-	}
-
-	converted, ok := workload.ConvertObject(obj)
-	if !ok {
-		return nil, fmt.Errorf("failed to convert manifest, ensure it is of the correct type")
-	}
-
-	return converted, nil
-}
+//// generateWorkloadManifest prepares the main workload manifest
+//func generateWorkloadManifest(workloadTemplate []byte, templateContext WorkloadTemplateConfig, workload Workload) (client.Object, error) {
+//	parsedTemplate, err := template.New("main").Funcs(sprig.TxtFuncMap()).Parse(string(workloadTemplate))
+//	if err != nil {
+//		return nil, fmt.Errorf("failed to parse template: %w", err)
+//	}
+//
+//	var renderedYAML strings.Builder
+//	err = parsedTemplate.Execute(&renderedYAML, templateContext)
+//	if err != nil {
+//		return nil, fmt.Errorf("failed to render template: %w", err)
+//	}
+//
+//	scheme, err := k8s.GetScheme()
+//	if err != nil {
+//		return nil, fmt.Errorf("failed to fetch scheme: %w", err)
+//	}
+//
+//	decoder := serializer.NewCodecFactory(&scheme).UniversalDeserializer()
+//
+//	obj, _, err := decoder.Decode([]byte(renderedYAML.String()), nil, nil)
+//	if err != nil {
+//		return nil, fmt.Errorf("failed to decode manifest: %w", err)
+//	}
+//
+//	converted, ok := workload.ConvertObject(obj)
+//	if !ok {
+//		return nil, fmt.Errorf("failed to convert manifest, ensure it is of the correct type")
+//	}
+//
+//	return converted, nil
+//}
 
 // printResources prints each Kubernetes manifest in an array
-func printResources(s *runtime.Scheme, resources []runtime.Object) {
+func printResources(s *runtime.Scheme, resources []client.Object) {
 	for _, resource_ := range resources {
-		clientObject := resource_.(client.Object)
 
-		cleanedResource, err := k8s.MinimalizeAndConvertToYAML(s, clientObject)
+		cleanedResource, err := k8s.MinimalizeAndConvertToYAML(s, resource_)
 		if err != nil {
-			logrus.Errorf("Failed to marshal object to YAML %s: %v", clientObject.GetName(), err)
+			logrus.Errorf("Failed to marshal object to YAML %s: %v", resource_.GetName(), err)
 			continue
 		}
 
@@ -305,16 +298,10 @@ func printResources(s *runtime.Scheme, resources []runtime.Object) {
 }
 
 // applyResources applies (creates or updates if possible) each Kubernetes object within an array
-func applyResources(resources []runtime.Object, ctx context.Context, k8sClient client.Client) error {
+func applyResources(resources []client.Object, ctx context.Context, k8sClient client.Client) error {
 	for _, resource_ := range resources {
-		// Ensure the resource implements client.Object
-		obj, ok := resource_.(client.Object)
-		if !ok {
-			return fmt.Errorf("resource does not implement client.Object: %T", resource_)
-		}
-
 		// Access metadata for logging
-		objMeta, err := meta.Accessor(obj)
+		objMeta, err := meta.Accessor(resource_)
 		if err != nil {
 			return fmt.Errorf("failed to access metadata for resource: %w", err)
 		}
@@ -343,7 +330,7 @@ func applyResources(resources []runtime.Object, ctx context.Context, k8sClient c
 			return fmt.Errorf("failed to get resource %s/%s: %w", objMeta.GetNamespace(), objMeta.GetName(), err)
 		}
 
-		if err := k8sClient.Create(ctx, obj); err != nil {
+		if err := k8sClient.Create(ctx, resource_); err != nil {
 			return fmt.Errorf("failed to create resource %s/%s: %w", objMeta.GetNamespace(), objMeta.GetName(), err)
 		}
 

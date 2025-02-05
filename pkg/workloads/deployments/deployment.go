@@ -24,7 +24,6 @@ import (
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/silogen/kaiwo/pkg/workloads"
@@ -35,13 +34,38 @@ var DeploymentTemplate []byte
 
 const EntrypointFilename = "entrypoint"
 
-type Deployment struct{}
+// Deployment is a workload wrapper around the basic Kubernetes Deployment
+type Deployment struct {
+	workloads.WorkloadBase
+	Deployment appsv1.Deployment
+
+	// ReplicaSets caches the replica sets linked to this deployment
+	ReplicaSets []ReplicaSetReference
+}
+
+type ReplicaSetReference struct {
+	ReplicaSet appsv1.ReplicaSet
+
+	// Pods caches the pods linked to this replica set
+	Pods []corev1.Pod
+}
 
 type DeploymentFlags struct {
 	Entrypoint string
 }
 
-func (deployment Deployment) GenerateTemplateContext(execFlags workloads.ExecFlags) (any, error) {
+func (d *Deployment) DefaultTemplate() ([]byte, error) {
+	if DeploymentTemplate == nil {
+		return nil, fmt.Errorf("deployment template is empty")
+	}
+	return DeploymentTemplate, nil
+}
+
+func (d *Deployment) IgnoreFiles() []string {
+	return []string{EntrypointFilename, workloads.KaiwoconfigFilename, workloads.EnvFilename, workloads.TemplateFileName}
+}
+
+func (d *Deployment) GenerateTemplateContext(execFlags workloads.ExecFlags) (any, error) {
 	contents, err := os.ReadFile(execFlags.WorkloadFiles[EntrypointFilename])
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -61,72 +85,29 @@ func (deployment Deployment) GenerateTemplateContext(execFlags workloads.ExecFla
 	return DeploymentFlags{Entrypoint: entrypoint}, nil
 }
 
-func (deployment Deployment) ConvertObject(object runtime.Object) (client.Object, bool) {
-	obj, ok := object.(*appsv1.Deployment)
-	return obj, ok
+func (d *Deployment) GetObject() client.Object {
+	return &d.Deployment
 }
 
-func (deployment Deployment) DefaultTemplate() ([]byte, error) {
-	if DeploymentTemplate == nil {
-		return nil, fmt.Errorf("deployment template is empty")
+func (d *Deployment) SetFromObject(obj client.Object) error {
+	converted, ok := obj.(*appsv1.Deployment)
+	if !ok {
+		return fmt.Errorf("expected Deployment, got %T", obj)
 	}
-	return DeploymentTemplate, nil
+	d.Deployment = *converted
+	return nil
 }
 
-func (deployment Deployment) IgnoreFiles() []string {
-	return []string{EntrypointFilename, workloads.KaiwoconfigFilename, workloads.EnvFilename, workloads.TemplateFileName}
-}
-
-func (deployment Deployment) GetPods() ([]corev1.Pod, error) {
-	return []corev1.Pod{}, nil
-}
-
-func (deployment Deployment) GetServices() ([]corev1.Service, error) {
-	return []corev1.Service{}, nil
-}
-
-func (deployment Deployment) GenerateAdditionalResourceManifests(_ client.Client, _ workloads.WorkloadTemplateConfig) ([]runtime.Object, error) {
-	return []runtime.Object{}, nil
-}
-
-func (deployment Deployment) BuildReference(ctx context.Context, k8sClient client.Client, key client.ObjectKey) (workloads.WorkloadReference, error) {
-	obj := &appsv1.Deployment{}
-	if err := k8sClient.Get(ctx, key, obj); err != nil {
-		return nil, fmt.Errorf("could not get deployment: %w", err)
-	}
-	deploymentRef := &DeploymentReference{
-		Deployment: *obj,
-		WorkloadReferenceBase: workloads.WorkloadReferenceBase{
-			WorkloadObject: obj,
-		},
-	}
-	if err := deploymentRef.Load(ctx, k8sClient); err != nil {
-		return nil, fmt.Errorf("could not load deployment: %w", err)
-	}
-	return deploymentRef, nil
-}
-
-type DeploymentReference struct {
-	workloads.WorkloadReferenceBase
-	Deployment  appsv1.Deployment
-	ReplicaSets []ReplicaSetReference
-}
-
-type ReplicaSetReference struct {
-	ReplicaSet appsv1.ReplicaSet
-	Pods       []corev1.Pod
-}
-
-func (deploymentRef *DeploymentReference) Load(ctx context.Context, k8sClient client.Client) error {
-	logrus.Debugf("Loading deployment reference %s", deploymentRef.Deployment.Name)
+func (d *Deployment) ResolveStructure(ctx context.Context, k8sClient client.Client) error {
+	logrus.Debugf("Loading deployment reference %s", d.Deployment.Name)
 	replicaSets := &appsv1.ReplicaSetList{}
-	labelSelector := client.MatchingLabels(deploymentRef.Deployment.Spec.Selector.MatchLabels)
+	labelSelector := client.MatchingLabels(d.Deployment.Spec.Selector.MatchLabels)
 
-	if err := k8sClient.List(ctx, replicaSets, client.InNamespace(deploymentRef.Deployment.Namespace), labelSelector); err != nil {
+	if err := k8sClient.List(ctx, replicaSets, client.InNamespace(d.Deployment.Namespace), labelSelector); err != nil {
 		return fmt.Errorf("could not list replicasets: %w", err)
 	}
 
-	deploymentRef.ReplicaSets = nil
+	d.ReplicaSets = nil
 
 	for _, replicaSet := range replicaSets.Items {
 
@@ -137,7 +118,7 @@ func (deploymentRef *DeploymentReference) Load(ctx context.Context, k8sClient cl
 		}
 
 		pods := &corev1.PodList{}
-		if err := k8sClient.List(ctx, pods, client.InNamespace(deploymentRef.Deployment.Namespace), client.MatchingLabels(replicaSet.Spec.Selector.MatchLabels)); err != nil {
+		if err := k8sClient.List(ctx, pods, client.InNamespace(d.Deployment.Namespace), client.MatchingLabels(replicaSet.Spec.Selector.MatchLabels)); err != nil {
 			return fmt.Errorf("could not list pods: %w", err)
 		}
 
@@ -146,18 +127,18 @@ func (deploymentRef *DeploymentReference) Load(ctx context.Context, k8sClient cl
 			replicaSetRef.Pods = append(replicaSetRef.Pods, pod)
 		}
 
-		deploymentRef.ReplicaSets = append(deploymentRef.ReplicaSets, replicaSetRef)
+		d.ReplicaSets = append(d.ReplicaSets, replicaSetRef)
 	}
 
 	return nil
 }
 
-func (deploymentRef *DeploymentReference) GetPods() []workloads.WorkloadPod {
+func (d *Deployment) ListKnownPods() []workloads.WorkloadPod {
 	var workloadPods []workloads.WorkloadPod
 
-	logrus.Debugf("Getting pods for deployment %s", deploymentRef.Deployment.Name)
+	logrus.Debugf("Getting pods for deployment %s", d.Deployment.Name)
 
-	for _, replicaSet := range deploymentRef.ReplicaSets {
+	for _, replicaSet := range d.ReplicaSets {
 		logrus.Debugf("Found replica set %s", replicaSet.ReplicaSet.Name)
 		for _, pod := range replicaSet.Pods {
 			logrus.Debugf("Found pod %s", pod.Name)
@@ -171,6 +152,6 @@ func (deploymentRef *DeploymentReference) GetPods() []workloads.WorkloadPod {
 	return workloadPods
 }
 
-func (deploymentRef *DeploymentReference) GetStatus() string {
+func (d *Deployment) GetStatus() string {
 	return "N/A (TODO)"
 }

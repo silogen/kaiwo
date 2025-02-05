@@ -21,7 +21,7 @@ import (
 
 type RunState struct {
 	WorkloadType           string
-	WorkloadReference      workloads.WorkloadReference
+	Workload               workloads.Workload
 	User                   string
 	Namespace              string
 	PodName                string

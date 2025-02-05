@@ -33,13 +33,13 @@ import (
 func GetWorkload(workloadType string) (workloads.Workload, error) {
 	switch workloadType {
 	case "rayjob":
-		return ray.Job{}, nil
+		return &ray.Job{}, nil
 	case "rayservice":
-		return ray.Deployment{}, nil
+		return &ray.Deployment{}, nil
 	case "job":
-		return jobs.Job{}, nil
+		return &jobs.Job{}, nil
 	case "deployment":
-		return deployments.Deployment{}, nil
+		return &deployments.Deployment{}, nil
 	default:
 		return nil, fmt.Errorf("unknown workload type: %s", workloadType)
 	}
@@ -63,8 +63,8 @@ func GetWorkloadAndObjectKey(workloadDescriptor string, namespace string) (workl
 	return workload, key, nil
 }
 
-func ListObjects(ctx context.Context, k8sClient client.Client, workloadType string, opts ...client.ListOption) ([]workloads.WorkloadReference, error) {
-	var workloadReferences []workloads.WorkloadReference
+func ListObjects(ctx context.Context, k8sClient client.Client, workloadType string, opts ...client.ListOption) ([]workloads.Workload, error) {
+	var workloadReferences []workloads.Workload
 
 	// TODO refactor
 	switch workloadType {
@@ -74,12 +74,7 @@ func ListObjects(ctx context.Context, k8sClient client.Client, workloadType stri
 			return nil, err
 		}
 		for _, rayJob := range rayJobList.Items {
-			workloadReferences = append(workloadReferences, &ray.JobReference{
-				RayJob: rayJob,
-				WorkloadReferenceBase: workloads.WorkloadReferenceBase{
-					WorkloadObject: &rayJob,
-				},
-			})
+			workloadReferences = append(workloadReferences, &ray.Job{RayJob: rayJob})
 		}
 	case "rayservice":
 		rayServiceList := &rayv1.RayServiceList{}
@@ -87,12 +82,7 @@ func ListObjects(ctx context.Context, k8sClient client.Client, workloadType stri
 			return nil, err
 		}
 		for _, rayService := range rayServiceList.Items {
-			workloadReferences = append(workloadReferences, &ray.ServiceReference{
-				RayService: rayService,
-				WorkloadReferenceBase: workloads.WorkloadReferenceBase{
-					WorkloadObject: &rayService,
-				},
-			})
+			workloadReferences = append(workloadReferences, &ray.Deployment{RayService: rayService})
 		}
 	case "job":
 		jobList := &batchv1.JobList{}
@@ -100,12 +90,7 @@ func ListObjects(ctx context.Context, k8sClient client.Client, workloadType stri
 			return nil, err
 		}
 		for _, job := range jobList.Items {
-			workloadReferences = append(workloadReferences, &jobs.JobReference{
-				Job: job,
-				WorkloadReferenceBase: workloads.WorkloadReferenceBase{
-					WorkloadObject: &job,
-				},
-			})
+			workloadReferences = append(workloadReferences, &jobs.Job{Job: job})
 		}
 	case "deployment":
 		deploymentList := &appsv1.DeploymentList{}
@@ -113,12 +98,7 @@ func ListObjects(ctx context.Context, k8sClient client.Client, workloadType stri
 			return nil, err
 		}
 		for _, deployment := range deploymentList.Items {
-			workloadReferences = append(workloadReferences, &deployments.DeploymentReference{
-				Deployment: deployment,
-				WorkloadReferenceBase: workloads.WorkloadReferenceBase{
-					WorkloadObject: &deployment,
-				},
-			})
+			workloadReferences = append(workloadReferences, &deployments.Deployment{Deployment: deployment})
 		}
 	default:
 		return nil, fmt.Errorf("unknown workload type: %s", workloadType)
