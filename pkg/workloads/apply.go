@@ -25,7 +25,6 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/Masterminds/sprig/v3"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -256,7 +255,7 @@ func generateConfigMapManifest(files map[string]string, workload Workload, metaC
 
 // generateWorkloadManifest prepares the main workload manifest
 func generateWorkloadManifest(workloadTemplate []byte, templateContext WorkloadTemplateConfig, workload Workload) (client.Object, error) {
-	parsedTemplate, err := template.New("main").Funcs(sprig.TxtFuncMap()).Parse(string(workloadTemplate))
+	parsedTemplate, err := template.New("main").Funcs(GetTemplateFuncMap()).Parse(string(workloadTemplate))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse template: %w", err)
 	}
