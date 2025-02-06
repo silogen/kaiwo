@@ -31,7 +31,7 @@ func GetCurrentUser() (string, error) {
 		emailRegex := `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
 		matched, err := regexp.MatchString(emailRegex, userEmail)
 		if err != nil {
-			return "", fmt.Errorf("failed to validate USER_EMAIL: %w", err)
+			return "", fmt.Errorf("failed to validate KAIWO_USER_EMAIL: %w", err)
 		}
 		if !matched {
 			return "", fmt.Errorf("invalid email format: %s", userEmail)
@@ -43,7 +43,7 @@ func GetCurrentUser() (string, error) {
 		return MakeRFC1123Compliant(fmt.Sprintf("%s-%s", username, domain)), nil
 	}
 
-	logrus.Warn("USER_EMAIL not set. Falling back to UNIX username and hostname")
+	logrus.Warn("KAIWO_USER_EMAIL not set. Falling back to UNIX username and hostname")
 	currentUser, err := user.Current()
 	if err != nil {
 		return "", fmt.Errorf("failed to retrieve current user: %w", err)

@@ -331,7 +331,7 @@ func applyResources(resources []runtime.Object, ctx context.Context, k8sClient c
 		err = k8sClient.Get(ctx, key, existing)
 
 		if err == nil {
-			logrus.Warnf("%s/%s already exists. Skipping submit. Use --version flag if you really want to create another resource of this kind", objMeta.GetNamespace(), objMeta.GetName())
+			logrus.Warnf("%T: %s/%s already exists. Skipping submit. Use --version flag if you really want to create another resource of this kind", resource_, objMeta.GetNamespace(), objMeta.GetName())
 			continue
 		}
 
@@ -346,7 +346,7 @@ func applyResources(resources []runtime.Object, ctx context.Context, k8sClient c
 		logrus.Infof("resource %T: %s/%s created successfully", resource_, objMeta.GetNamespace(), objMeta.GetName())
 
 	}
-	logrus.Info("To monitor and manage your workloads interactively, run $ kaiwo list -n mynamespace")
+	logrus.Info("To monitor and manage your workloads interactively, run $ kaiwo manage -n mynamespace")
 
 	return nil
 }
