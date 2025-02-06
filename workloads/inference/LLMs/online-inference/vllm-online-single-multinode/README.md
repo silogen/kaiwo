@@ -20,3 +20,24 @@ Or set these variables yourself with the following command:
 
 ## Dependencies
 - Secret `hf-token`: Hugging Face API token for model download
+
+
+## Testing the workload
+
+RayService typically starts a service called `yourworkloadname-serve-svc` at port 8000. For production, you should add an ingress to the service. For testing, you can use `kubectl port-forward` to access the service.
+
+`kubectl port-forward svc/yourworkloadname-multi-serve-svc 8000:8000 -n yournamespace`
+
+Then you can send a request to the service with curl:
+
+```
+
+curl http://localhost:8000/v1/chat/completions -H "Content-Type: application/json" -d '{
+      "model": "meta-llama/Llama-3.1-8B-Instruct",
+      "messages": [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Provide a brief sentence describing the Ray open-source project."}
+      ],
+      "temperature": 0.7
+    }'
+```
