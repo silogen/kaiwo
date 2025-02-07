@@ -24,13 +24,18 @@ import (
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/silogen/kaiwo/pkg/workloads"
 )
 
-type Deployment struct{}
+type Deployment struct {
+	workloads.WorkloadBase
+	RayService rayv1.RayService
+	RayCluster *rayv1.RayCluster
+	HeadPod    *corev1.Pod
+	WorkerPods []*corev1.Pod
+}
 
 type DeploymentFlags struct {
 	Serveconfig string
@@ -41,7 +46,18 @@ var DeploymentTemplate []byte
 
 const ServeconfigFilename = "serveconfig"
 
-func (deployment Deployment) GenerateTemplateContext(execFlags workloads.ExecFlags) (any, error) {
+func (d *Deployment) DefaultTemplate() ([]byte, error) {
+	if DeploymentTemplate == nil {
+		return nil, fmt.Errorf("job template is empty")
+	}
+	return DeploymentTemplate, nil
+}
+
+func (d *Deployment) IgnoreFiles() []string {
+	return []string{ServeconfigFilename, workloads.KaiwoconfigFilename, workloads.EnvFilename, workloads.TemplateFileName}
+}
+
+func (d *Deployment) GenerateTemplateContext(execFlags workloads.ExecFlags) (any, error) {
 	contents, err := os.ReadFile(execFlags.WorkloadFiles[ServeconfigFilename])
 	if err != nil {
 		return nil, fmt.Errorf("failed to read serveconfig file: %w", err)
@@ -50,98 +66,24 @@ func (deployment Deployment) GenerateTemplateContext(execFlags workloads.ExecFla
 	return DeploymentFlags{Serveconfig: strings.TrimSpace(string(contents))}, nil
 }
 
-//func (deployment Deployment) BuildObject(flags workloads.WorkloadTemplateConfig) (client.Object, error) {
-//	obj := &rayv1.RayService{
-//		ObjectMeta: metav1.ObjectMeta{
-//			Name:      flags.Meta.Name,
-//			Namespace: flags.Meta.Namespace,
-//			Labels: map[string]string{
-//				"kaiwo-cli/username": flags.Meta.User,
-//			},
-//		},
-//		Spec: rayv1.RayServiceSpec{
-//			ServeConfigV2: "",
-//			RayClusterSpec: rayv1.RayClusterSpec{
-//				// EnableInTreeAutoscaling: true,
-//				HeadGroupSpec: rayv1.HeadGroupSpec{
-//					RayStartParams: map[string]string{
-//						"dashboard-host": "0.0.0.0",
-//					},
-//					Template: corev1.PodTemplateSpec{},
-//				},
-//			},
-//		},
-//	}
-//	return obj, nil
-//}
-//
-//func buildPodSpec(metaFlags workloads.MetaFlags, ports []corev1.ContainerPort) corev1.PodSpec {
-//	return corev1.PodSpec{}
-//}
-
-func (deployment Deployment) ConvertObject(object runtime.Object) (client.Object, bool) {
-	obj, ok := object.(*rayv1.RayService)
-
-	return obj, ok
+func (d *Deployment) GetObject() client.Object {
+	return &d.RayService
 }
 
-func (deployment Deployment) DefaultTemplate() ([]byte, error) {
-	if DeploymentTemplate == nil {
-		return nil, fmt.Errorf("job template is empty")
+func (d *Deployment) SetFromObject(obj client.Object) error {
+	converted, ok := obj.(*rayv1.RayService)
+	if !ok {
+		return fmt.Errorf("expected Deployment, got %T", obj)
 	}
-	return DeploymentTemplate, nil
+	d.RayService = *converted
+	return nil
 }
 
-//func (service Deployment) GenerateName() string {
-//	return utils.BuildWorkloadName(service.Shared.Name, service.Shared.Path, service.Deployment.Image)
-//}
-
-func (deployment Deployment) IgnoreFiles() []string {
-	return []string{ServeconfigFilename, workloads.KaiwoconfigFilename, workloads.EnvFilename, workloads.TemplateFileName}
-}
-
-func (deployment Deployment) GetPods() ([]corev1.Pod, error) {
-	return []corev1.Pod{}, nil
-}
-
-func (deployment Deployment) GetServices() ([]corev1.Service, error) {
-	return []corev1.Service{}, nil
-}
-
-func (deployment Deployment) GenerateAdditionalResourceManifests(_ client.Client, _ workloads.WorkloadTemplateConfig) ([]runtime.Object, error) {
-	return []runtime.Object{}, nil
-}
-
-func (deployment Deployment) BuildReference(ctx context.Context, k8sClient client.Client, key client.ObjectKey) (workloads.WorkloadReference, error) {
-	obj := &rayv1.RayService{}
-	if err := k8sClient.Get(ctx, key, obj); err != nil {
-		return nil, fmt.Errorf("could not get job: %w", err)
-	}
-	deploymentRef := &ServiceReference{
-		RayService: *obj,
-		WorkloadReferenceBase: workloads.WorkloadReferenceBase{
-			WorkloadObject: obj,
-		},
-	}
-	if err := deploymentRef.Load(ctx, k8sClient); err != nil {
-		return nil, fmt.Errorf("could not load service: %w", err)
-	}
-	return deploymentRef, nil
-}
-
-type ServiceReference struct {
-	workloads.WorkloadReferenceBase
-	RayService rayv1.RayService
-	RayCluster *rayv1.RayCluster
-	HeadPod    *corev1.Pod
-	WorkerPods []*corev1.Pod
-}
-
-func (serviceRef *ServiceReference) Load(ctx context.Context, k8sClient client.Client) error {
+func (d *Deployment) ResolveStructure(ctx context.Context, k8sClient client.Client) error {
 	// Fetch ray cluster
 
 	clusterLabelSelector := client.MatchingLabels{
-		"ray.io/originated-from-cr-name": serviceRef.RayService.Name,
+		"ray.io/originated-from-cr-name": d.RayService.Name,
 		"ray.io/originated-from-crd":     "RayService",
 	}
 
@@ -157,10 +99,10 @@ func (serviceRef *ServiceReference) Load(ctx context.Context, k8sClient client.C
 	if len(clusterList.Items) > 1 {
 		return fmt.Errorf("more than one clusters found")
 	}
-	serviceRef.RayCluster = &clusterList.Items[0]
+	d.RayCluster = &clusterList.Items[0]
 
 	clusterPodLabelSelector := client.MatchingLabels{
-		"ray.io/cluster": serviceRef.RayCluster.Name,
+		"ray.io/cluster": d.RayCluster.Name,
 	}
 
 	clusterPodList := &corev1.PodList{}
@@ -169,16 +111,16 @@ func (serviceRef *ServiceReference) Load(ctx context.Context, k8sClient client.C
 	}
 
 	// Clear
-	serviceRef.HeadPod = nil
-	serviceRef.WorkerPods = []*corev1.Pod{}
+	d.HeadPod = nil
+	d.WorkerPods = []*corev1.Pod{}
 
 	for _, pod := range clusterPodList.Items {
 		nodeType := pod.Labels["ray.io/node-type"]
 		if nodeType == "worker" {
-			serviceRef.WorkerPods = append(serviceRef.WorkerPods, &pod)
+			d.WorkerPods = append(d.WorkerPods, &pod)
 		} else if nodeType == "head" {
-			if serviceRef.HeadPod == nil {
-				serviceRef.HeadPod = &pod
+			if d.HeadPod == nil {
+				d.HeadPod = &pod
 			} else {
 				logrus.Warn("More than one head pod encountered")
 			}
@@ -190,19 +132,19 @@ func (serviceRef *ServiceReference) Load(ctx context.Context, k8sClient client.C
 	return nil
 }
 
-func (serviceRef *ServiceReference) GetPods() []workloads.WorkloadPod {
+func (d *Deployment) ListKnownPods() []workloads.WorkloadPod {
 	var pods []workloads.WorkloadPod
 
-	if serviceRef.HeadPod != nil {
+	if d.HeadPod != nil {
 		pods = append(pods, workloads.WorkloadPod{
-			Pod:          *serviceRef.HeadPod,
+			Pod:          *d.HeadPod,
 			LogicalGroup: "head",
 		})
 	} else {
 		logrus.Debug("No head pod")
 	}
 
-	for _, pod := range serviceRef.WorkerPods {
+	for _, pod := range d.WorkerPods {
 		pods = append(pods, workloads.WorkloadPod{
 			Pod:          *pod,
 			LogicalGroup: "worker",
@@ -211,17 +153,17 @@ func (serviceRef *ServiceReference) GetPods() []workloads.WorkloadPod {
 	return pods
 }
 
-func (serviceRef *ServiceReference) GetStatus() string {
+func (d *Deployment) GetStatus() string {
 	return "N/A (TODO)"
 }
 
-func (serviceRef *ServiceReference) GetServices(ctx context.Context, k8sClient client.Client) ([]corev1.Service, error) {
-	if serviceRef.RayCluster == nil {
+func (d *Deployment) GetServices(ctx context.Context, k8sClient client.Client) ([]corev1.Service, error) {
+	if d.RayCluster == nil {
 		return []corev1.Service{}, fmt.Errorf("no ray cluster set, run ServiceReference.Load() first")
 	}
 
 	serviceLabelSelector := client.MatchingLabels{
-		"ray.io/cluster": serviceRef.RayCluster.Name,
+		"ray.io/cluster": d.RayCluster.Name,
 	}
 	serviceList := &corev1.ServiceList{}
 	if err := k8sClient.List(ctx, serviceList, serviceLabelSelector); err != nil {

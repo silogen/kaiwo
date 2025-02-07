@@ -72,12 +72,11 @@ func executeLogsCommand(_ *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get k8s clients: %w", err)
 	}
 
-	workloadReference, err := workload.BuildReference(ctx, clients.Client, objectKey)
-	if err != nil {
+	if err := workload.LoadFromObjectKey(ctx, clients.Client, objectKey); err != nil {
 		return fmt.Errorf("failed to build workload reference: %w", err)
 	}
 
-	podName, containerName, err, cancelled := list.ChoosePodAndContainer(ctx, *clients, workloadReference)
+	podName, containerName, err, cancelled := list.ChoosePodAndContainer(ctx, *clients, workload)
 
 	if err != nil {
 		return fmt.Errorf("failed to choose pod and container: %w", err)

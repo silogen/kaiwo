@@ -98,12 +98,11 @@ func executeContainerCommand(args []string, command []string, gpuPodsOnly bool) 
 		return fmt.Errorf("failed to get k8s clients: %w", err)
 	}
 
-	reference, err := workload.BuildReference(ctx, clients.Client, objectKey)
-	if err != nil {
+	if err := workload.LoadFromObjectKey(ctx, clients.Client, objectKey); err != nil {
 		return fmt.Errorf("failed to build workload reference: %w", err)
 	}
 
-	allPods := reference.GetPods()
+	allPods := workload.ListKnownPods()
 	if len(allPods) == 0 {
 		return fmt.Errorf("no pods found for workload %s", args[0])
 	}
@@ -114,7 +113,7 @@ func executeContainerCommand(args []string, command []string, gpuPodsOnly bool) 
 		predicates = []utils.PodSelectionPredicate{utils.IsGPUPod}
 	}
 
-	podName, containerName, err, cancelled := list.ChoosePodAndContainer(ctx, *clients, reference, predicates...)
+	podName, containerName, err, cancelled := list.ChoosePodAndContainer(ctx, *clients, workload, predicates...)
 	if err != nil {
 		return fmt.Errorf("failed to choose pod and container: %w", err)
 	}

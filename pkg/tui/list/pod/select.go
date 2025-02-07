@@ -38,9 +38,9 @@ var containerSelectColumns = []string{
 
 // ChoosePodAndContainer allows the User to choose the pod and the container they want to interact with
 // predicates define an optional list of predicates that must be matched in order to include the pod in the list
-func ChoosePodAndContainer(ctx context.Context, clients k8s.KubernetesClients, reference workloads.WorkloadReference, predicates ...utils.PodSelectionPredicate) (string, string, error, bool) {
+func ChoosePodAndContainer(ctx context.Context, clients k8s.KubernetesClients, reference workloads.Workload, predicates ...utils.PodSelectionPredicate) (string, string, error, bool) {
 	state := &tuicomponents.RunState{
-		WorkloadReference:      reference,
+		Workload:               reference,
 		PodSelectionPredicates: predicates,
 	}
 
@@ -57,7 +57,7 @@ func RunSelectPodAndContainer(ctx context.Context, clients k8s.KubernetesClients
 	var err error
 
 	loadReference := func() {
-		err = state.WorkloadReference.Load(ctx, clients.Client)
+		err = state.Workload.Reload(ctx, clients.Client)
 	}
 
 	if spinnerErr := spinner.New().Title("Loading workload").Action(loadReference).Run(); spinnerErr != nil {
@@ -68,7 +68,7 @@ func RunSelectPodAndContainer(ctx context.Context, clients k8s.KubernetesClients
 		return tuicomponents.StepResultErr, nil, fmt.Errorf("failed to load workload: %w", err)
 	}
 
-	allPods := state.WorkloadReference.GetPods()
+	allPods := state.Workload.ListKnownPods()
 
 	data := gatherPodData(allPods, state.PodSelectionPredicates)
 
@@ -158,7 +158,7 @@ func runSelectAndDoAction(_ context.Context, _ k8s.KubernetesClients, state *tui
 		{string(commandAction)},
 	}
 
-	title := fmt.Sprintf("Select action to perform on %s/%s, pod: %s, container %s", state.WorkloadType, state.WorkloadReference.GetName(), state.PodName, state.ContainerName)
+	title := fmt.Sprintf("Select action to perform on %s/%s, pod: %s, container %s", state.WorkloadType, state.Workload.GetName(), state.PodName, state.ContainerName)
 	selectedRow, result, err := tuicomponents.RunSelectTable(data, columns, title, true)
 	if err != nil {
 		return result, nil, fmt.Errorf("failed to select the pod: %w", err)
