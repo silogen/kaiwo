@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"reflect"
 	"slices"
 	"strings"
 	"text/template"
@@ -331,6 +332,9 @@ func applyResources(resources []runtime.Object, ctx context.Context, k8sClient c
 		err = k8sClient.Get(ctx, key, existing)
 
 		if err == nil {
+			if reflect.TypeOf(resource_).String() == "*v1beta1.LocalQueue" {
+				continue
+			}
 			logrus.Warnf("%T: %s/%s already exists. Skipping submit. Use --version flag if you really want to create another resource of this kind", resource_, objMeta.GetNamespace(), objMeta.GetName())
 			continue
 		}
