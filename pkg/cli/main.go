@@ -87,26 +87,12 @@ func RunCli() {
 	rootCmd.AddCommand(cli.BuildSubmitCmd())
 	rootCmd.AddCommand(cli.BuildServeCmd())
 
-	rootCmd.AddCommand(&cobra.Command{
-		Use:   "attach",
-		Short: "Attach to a workload",
-		Run: func(cmd *cobra.Command, args []string) {
-			logrus.Info("Attach command placeholder")
-		},
-	})
 	rootCmd.AddCommand(
 		BuildLogCmd(),
 		BuildListCmd(),
 		BuildMonitorCmd("monitor", utils.DefaultMonitorCommand),
 		BuildExecCommand(),
 	)
-	rootCmd.AddCommand(&cobra.Command{
-		Use:   "port-forward",
-		Short: "Port-forward a workload",
-		Run: func(cmd *cobra.Command, args []string) {
-			logrus.Info("Port-forward command placeholder")
-		},
-	})
 
 	deleteCmd := &cobra.Command{
 		Use:   "delete -n [namespace] [workload-type]/[workload-name]",

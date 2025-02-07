@@ -81,10 +81,15 @@ The installation of Kaiwo CLI tool is easy as it's a single binary. The only req
 To do both steps in one command for Linux (AMD64), edit `v.x.x.x` in the following and run it
 
 ```bash
-wget https://github.com/silogen/kaiwo/releases/download/v.x.x.x/kaiwo_linux_amd64 && \
+export KAIWO_VERSION=v.x.x.x && \
+wget https://github.com/silogen/kaiwo/releases/download/$KAIWO_VERSION/kaiwo_linux_amd64 && \
 mv kaiwo_linux_amd64 kaiwo && \
 chmod +x kaiwo && \
-sudo mv kaiwo /usr/local/bin/
+sudo mv kaiwo /usr/local/bin/ && \
+wget https://github.com/silogen/kaiwo/releases/download/$KAIWO_VERSION/workloads.zip && \
+unzip workloads.zip && \
+kaiwo version && \
+kaiwo help
 ```
 
 3. You're off to the races!
