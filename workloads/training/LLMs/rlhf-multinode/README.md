@@ -1,0 +1,1 @@
+`kaiwo submit -p workloads/training/LLMs/rlhf-multinode -g 12 --ray --storage=100Gi,nameofyourstorageclass`

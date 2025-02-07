@@ -67,7 +67,7 @@ func GetExecFlags() workloads.ExecFlags {
 
 const (
 	defaultNamespace = "kaiwo"
-	defaultImage     = "ghcr.io/silogen/rocm-ray:v0.7"
+	defaultImage     = "ghcr.io/silogen/rocm-ray:v0.8"
 )
 
 var (

@@ -31,6 +31,10 @@ RUN pip install --force-reinstall \
 
 RUN sudo sysctl kernel.numa_balancing=0
 
+RUN pip install --no-deps jsonlines loralib optimum transformers_stream_generator && \
+    git clone https://github.com/OpenRLHF/OpenRLHF.git && cd OpenRLHF && \
+    python setup.py bdist_wheel && pip install --no-deps dist/*.whl
+
 USER kaiwo
 
 WORKDIR /workload
