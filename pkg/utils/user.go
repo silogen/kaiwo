@@ -57,14 +57,3 @@ func GetCurrentUser() (string, error) {
 
 	return MakeRFC1123Compliant(fmt.Sprintf("%s-%s", currentUser.Username, k8sCompatibleHostname)), nil
 }
-
-func MakeRFC1123Compliant(input string) string {
-	input = strings.ToLower(input)
-
-	rfc1123Regex := regexp.MustCompile(`[^a-z0-9.-]`)
-	input = rfc1123Regex.ReplaceAllString(input, "-")
-
-	input = strings.Trim(input, "-.")
-
-	return input
-}

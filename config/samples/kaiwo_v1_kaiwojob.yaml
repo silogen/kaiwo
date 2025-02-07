@@ -1,9 +1,28 @@
 apiVersion: kaiwo.silogen.ai/v1alpha1
 kind: KaiwoJob
 metadata:
-  labels:
-    app.kubernetes.io/name: kaiwo
-    app.kubernetes.io/managed-by: kustomize
-  name: kaiwojob-sample
+  name: example-kaiwojob
+  namespace: default
 spec:
-  # TODO(user): Add fields here
+  user: anttsuni@amd.com
+  image: "ghcr.io/silogen/rocm-ray:v0.7"
+  entryPoint: "watch rocm-smi"
+  gpus: 2
+  gpuVendor: "AMD"
+  storage:
+    storageEnabled: true
+    storageClassName: "longhorn"
+    storageSize: "10Gi"
+  configSource:
+    type: "S3"
+    s3BucketName: "my-bucket"
+    s3Path: "datasets/"
+    s3Credentials:
+      name: "s3-secret"
+  # jobSpec:
+  #   template:
+  #     spec:
+  #       containers:
+  #         - name: workload
+  #           image: "my-container-image:latest"
+  #           command: ["python", "train.py"]

@@ -85,7 +85,7 @@ func (job Job) GetServices() ([]corev1.Service, error) {
 }
 
 func (job Job) GenerateAdditionalResourceManifests(k8sClient client.Client, templateContext workloads.WorkloadTemplateConfig) ([]runtime.Object, error) {
-	localClusterQueueManifest, err := workloads.CreateLocalClusterQueueManifest(k8sClient, templateContext)
+	localClusterQueueManifest, err := workloads.CreateLocalQueueManifest(k8sClient, templateContext)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create local cluster queue manifest: %w", err)
 	}

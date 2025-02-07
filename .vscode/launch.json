@@ -72,6 +72,17 @@
 		  "GO111MODULE": "on"
 		},
 		"buildFlags": "-tags=debug"
+	      },
+	      {
+		"name": "Debug operator",
+		"type": "go",
+		"request": "launch",
+		"mode": "debug",
+		"program": "${workspaceFolder}/cmd/operator/main.go",
+		"env": {
+		  "GO111MODULE": "on"
+		},
+		"buildFlags": "-tags=debug"
 	      }
 	]
       }
