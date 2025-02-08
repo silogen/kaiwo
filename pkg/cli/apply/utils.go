@@ -66,11 +66,6 @@ func GetExecFlags() workloads.ExecFlags {
 
 // Kubernetes meta flags
 
-const (
-	defaultNamespace = "kaiwo"
-	defaultImage     = "ghcr.io/silogen/rocm-ray:v0.8"
-)
-
 var (
 	name            string
 	namespace       string
