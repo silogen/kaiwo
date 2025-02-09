@@ -1,9 +1,9 @@
-from typing import List, Union
+from typing import List
 
-from kaiwo.downloader.handlers.base import CloudDownloadTaskConfigBase
 from pydantic import BaseModel, Field
 
 from kaiwo.downloader.handlers.azure import AzureBlobDownloadTaskConfig
+from kaiwo.downloader.handlers.base import CloudDownloadTaskConfigBase
 from kaiwo.downloader.handlers.gcs import GCSDownloadTaskConfig
 from kaiwo.downloader.handlers.huggingface import HuggingFaceDownloadTaskConfig
 from kaiwo.downloader.handlers.s3 import S3DownloadTaskConfig

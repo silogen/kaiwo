@@ -1,13 +1,11 @@
-from typing import List, Literal, Union
+from typing import List, Literal
 
 from cloudpathlib import CloudPath, GSClient
-from pydantic import BaseModel
 
 from kaiwo.downloader.handlers.base import (
-    CloudDownloadFile,
-    CloudDownloadFolder,
+    CloudDownloadBucket,
     CloudDownloadTask,
-    CloudDownloadTaskConfigBase, CloudDownloadBucket,
+    CloudDownloadTaskConfigBase,
 )
 
 
