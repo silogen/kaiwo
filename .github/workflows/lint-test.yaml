@@ -43,6 +43,9 @@ jobs:
   lint-python:
     name: Lint Python code
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./python
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -51,13 +54,13 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r python/requirements-dev.txt
+          pip install -r requirements-dev.txt
       - name: Run flake8
-        run: flake8 python/kaiwo
+        run: flake8 kaiwo
       - name: Run Black
-        run : black python/kaiwo
+        run : black kaiwo
       - name: Run isort
-        run: isort python/kaiwo
+        run: isort kaiwo
 
   # test-e2e:
   #   name: Run e2e tests
