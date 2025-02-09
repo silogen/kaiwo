@@ -9,22 +9,17 @@ gcs:
     project: test-project
     buckets:
       - name: test
-        items:
-          - folder: .
+        folders:
+          - path: .
             target_path: gcs/all
-      - name: test
-        items:
-          - folder: subdir
+          - path: subdir
             target_path: gcs/sub
-      - name: test
-        items:
-          - file: subdir/file02.txt
-            target_path: gcs/single.txt
-      - name: test
-        items:
-          - folder: .
+          - path: .
             glob: "**/*.md"
             target_path: gcs/glob
+        files:
+          - path: subdir/file02.txt
+            target_path: gcs/single.txt
 s3:
   - name: Test Minio
     endpoint_url_file: test/secrets/s3/endpoint
@@ -32,30 +27,24 @@ s3:
     secret_key_file: test/secrets/s3/secret_key
     buckets:
       - name: test
-        items:
-          - folder: .
+        folders:
+          - path: .
             target_path: s3/all
-      - name: test
-        items:
-          - folder: subdir
+          - path: subdir
             target_path: s3/sub
-      - name: test
-        items:
-          - file: subdir/file02.txt
+        files:
+          - path: subdir/file02.txt
             target_path: s3/single.txt
 azure_blob:
   - name: Test Azurite
     connection_string_file: test/secrets/azure/connection_string
     containers:
       - name: test
-        items:
-          - folder: .
+        folders:
+          - path: .
             target_path: azure/all
-      - name: test
-        items:
-          - folder: subdir
+          - path: subdir
             target_path: azure/sub
-      - name: test
-        items:
-          - file: subdir/file02.txt
+        files:
+          - path: subdir/file02.txt
             target_path: azure/single.txt
