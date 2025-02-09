@@ -1,0 +1,62 @@
+download_root: test/output
+download_items:
+  - type: hf
+    name: Hugging Face download example
+    repo_id: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+    files:
+      - README.md
+  - type: gcs
+    name: Test GCS
+    project: test-project
+    items:
+      - bucket: test
+        items:
+          - folder: .
+            target_path: gcs/all
+      - bucket: test
+        items:
+          - folder: subdir
+            target_path: gcs/sub
+      - bucket: test
+        items:
+          - file: subdir/file02.txt
+            target_path: gcs/single.txt
+      - bucket: test
+        items:
+          - folder: .
+            glob: "**/*.md"
+            target_path: gcs/glob
+  - type: s3
+    name: Test Minio
+    endpoint_url_file: test/secrets/s3/endpoint
+    access_key_id_file: test/secrets/s3/access_key_id
+    secret_key_file: test/secrets/s3/secret_key
+    items:
+      - bucket: test
+        items:
+          - folder: .
+            target_path: s3/all
+      - bucket: test
+        items:
+          - folder: subdir
+            target_path: s3/sub
+      - bucket: test
+        items:
+          - file: subdir/file02.txt
+            target_path: s3/single.txt
+  - type: azure-blob
+    name: Test Azurite
+    connection_string_file: test/secrets/azure/connection_string
+    items:
+      - container: test
+        items:
+          - folder: .
+            target_path: azure/all
+      - container: test
+        items:
+          - folder: subdir
+            target_path: azure/sub
+      - container: test
+        items:
+          - file: subdir/file02.txt
+            target_path: azure/single.txt
