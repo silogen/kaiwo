@@ -194,3 +194,8 @@ You can build a Docker image with the downloader by running:
 cd <project_root>
 docker build -t kaiwo-downloader -f .docker/kaiwo-python/Dockerfile python
 ```
+
+## TODO
+
+- [ ] Share parallel executor between tasks
+- [ ] Enable HF_HUB_ENABLE_HF_TRANSFER option
