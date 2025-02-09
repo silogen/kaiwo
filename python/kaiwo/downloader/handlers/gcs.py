@@ -7,13 +7,8 @@ from kaiwo.downloader.handlers.base import (
     CloudDownloadFile,
     CloudDownloadFolder,
     CloudDownloadTask,
-    CloudDownloadTaskConfigBase,
+    CloudDownloadTaskConfigBase, CloudDownloadBucket,
 )
-
-
-class GCSFileDownloadBucket(BaseModel):
-    bucket: str
-    items: List[Union[CloudDownloadFolder, CloudDownloadFile]]
 
 
 class GCSDownloadTaskConfig(CloudDownloadTaskConfigBase):
@@ -21,7 +16,7 @@ class GCSDownloadTaskConfig(CloudDownloadTaskConfigBase):
 
     application_credentials_file: str = None
     project: str = None
-    items: List[GCSFileDownloadBucket]
+    buckets: List[CloudDownloadBucket]
 
     def get_client(self) -> GSClient:
         return GSClient(
@@ -32,8 +27,8 @@ class GCSDownloadTaskConfig(CloudDownloadTaskConfigBase):
     def get_items(self) -> List[CloudDownloadTask]:
         arr = []
         client = self.get_client()
-        for bucket in self.items:
-            container_root = CloudPath(f"gs://{bucket.bucket}", client=client)
+        for bucket in self.buckets:
+            container_root = CloudPath(f"gs://{bucket.name}", client=client)
             for item in bucket.items:
                 arr.extend(item.get_download_tasks(container_root))
         return arr

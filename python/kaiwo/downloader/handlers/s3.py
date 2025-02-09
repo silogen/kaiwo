@@ -7,14 +7,9 @@ from kaiwo.downloader.handlers.base import (
     CloudDownloadFile,
     CloudDownloadFolder,
     CloudDownloadTask,
-    CloudDownloadTaskConfigBase,
+    CloudDownloadTaskConfigBase, CloudDownloadBucket,
 )
 from kaiwo.downloader.utils import read_value_or_from_file
-
-
-class S3FileDownloadBucket(BaseModel):
-    bucket: str
-    items: List[Union[CloudDownloadFolder, CloudDownloadFile]]
 
 
 class S3DownloadTaskConfig(CloudDownloadTaskConfigBase):
@@ -29,7 +24,7 @@ class S3DownloadTaskConfig(CloudDownloadTaskConfigBase):
     secret_key: str = None
     secret_key_file: str = None
 
-    items: List[S3FileDownloadBucket]
+    buckets: List[CloudDownloadBucket]
 
     def get_client(self) -> S3Client:
         endpoint_url = read_value_or_from_file(self.endpoint_url, self.endpoint_url_file)
@@ -48,8 +43,8 @@ class S3DownloadTaskConfig(CloudDownloadTaskConfigBase):
     def get_items(self) -> List[CloudDownloadTask]:
         arr = []
         client = self.get_client()
-        for bucket in self.items:
-            container_root = CloudPath(f"s3://{bucket.bucket}", client=client)
+        for bucket in self.buckets:
+            container_root = CloudPath(f"s3://{bucket.name}", client=client)
             for item in bucket.items:
                 arr.extend(item.get_download_tasks(container_root))
         return arr

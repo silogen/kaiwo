@@ -1,7 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import List
+from typing import List, Union
 
 from cloudpathlib import CloudPath
 from pydantic import BaseModel
@@ -92,3 +92,8 @@ class CloudDownloadFile(CloudDownloadSource):
                 target_path=Path(self.target_path),
             )
         ]
+
+
+class CloudDownloadBucket(BaseModel):
+    name: str
+    items: List[Union[CloudDownloadFolder, CloudDownloadFile]]

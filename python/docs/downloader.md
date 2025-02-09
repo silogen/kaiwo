@@ -51,8 +51,8 @@ download_items:
     endpoint_url: "https://s3.amazonaws.com"
     access_key_id: "YOUR_ACCESS_KEY_ID"
     secret_key: "YOUR_SECRET_KEY"
-    items:
-      - bucket: "my-s3-bucket"
+    buckets:
+      - name: "my-s3-bucket"
         items:
           - folder: "data"
             target_path: "local/data"
@@ -62,15 +62,15 @@ download_items:
   - type: gcs
     name: "Google Cloud Storage"
     application_credentials_file: "/path/to/file"
-    items:
-      - bucket: "my-gcs-bucket"
+    buckets:
+      - name: "my-gcs-bucket"
         items:
           - file: "readme.txt"
             target_path: "local/readme.txt"
   - type: azure-blob
     connection_string: "connection_string"
-    items:
-      - container: "my-azure-blob-container"
+    containers:
+      - name: "my-azure-blob-container"
         items:
           - file: "readme.txt"
             target_path: "local/readme.txt"
