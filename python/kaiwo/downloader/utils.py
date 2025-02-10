@@ -57,10 +57,3 @@ def parallel_downloads(tasks: List[DownloadTask], max_workers: int = 5) -> None:
         except Exception as e:
             logger.critical(f"Download process aborted due to error: {e}")
             raise e  # Exit with failure
-
-
-def read_value_or_from_file(value: str, path: str) -> str:
-    if path is None:
-        return value
-    with open(path) as f:
-        return f.read().strip()

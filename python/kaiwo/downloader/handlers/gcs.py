@@ -5,7 +5,8 @@ from cloudpathlib import CloudPath, GSClient
 from kaiwo.downloader.handlers.base import (
     CloudDownloadBucket,
     CloudDownloadTask,
-    CloudDownloadTaskConfigBase, ValueReference,
+    CloudDownloadTaskConfigBase,
+    ValueReference,
 )
 
 
@@ -18,7 +19,9 @@ class GCSDownloadTaskConfig(CloudDownloadTaskConfigBase):
 
     def get_client(self) -> GSClient:
         return GSClient(
-            application_credentials=self.application_credentials.get_value() if self.application_credentials is not None else None,
+            application_credentials=(
+                self.application_credentials.get_value() if self.application_credentials is not None else None
+            ),
             project=self.project,
         )
 

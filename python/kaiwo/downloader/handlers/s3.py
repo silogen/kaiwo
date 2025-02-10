@@ -5,9 +5,9 @@ from cloudpathlib import CloudPath, S3Client
 from kaiwo.downloader.handlers.base import (
     CloudDownloadBucket,
     CloudDownloadTask,
-    CloudDownloadTaskConfigBase, ValueReference,
+    CloudDownloadTaskConfigBase,
+    ValueReference,
 )
-from kaiwo.downloader.utils import read_value_or_from_file
 
 
 class S3DownloadTaskConfig(CloudDownloadTaskConfigBase):
