@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gcs-deployment
+  namespace: kaiwo-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gcs
+  template:
+    metadata:
+      labels:
+        app: gcs
+    spec:
+      containers:
+        - name: gcs
+          image: oittaa/gcp-storage-emulator
+          env:
+            - name: PORT
+              value: "9023"
+          ports:
+            - containerPort: 9023
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gcs-service
+  namespace: kaiwo-test
+spec:
+  selector:
+    app: gcs
+  ports:
+    - protocol: TCP
+      port: 9023
+      targetPort: 9023
+      name: gcs-endpoint
+  type: ClusterIP

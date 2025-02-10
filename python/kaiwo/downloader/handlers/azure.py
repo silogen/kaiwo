@@ -5,7 +5,7 @@ from cloudpathlib import AzureBlobClient, CloudPath
 from kaiwo.downloader.handlers.base import (
     CloudDownloadBucket,
     CloudDownloadTask,
-    CloudDownloadTaskConfigBase,
+    CloudDownloadTaskConfigBase, ValueReference,
 )
 from kaiwo.downloader.utils import read_value_or_from_file
 
@@ -14,13 +14,12 @@ class AzureBlobDownloadTaskConfig(CloudDownloadTaskConfigBase):
 
     type: Literal["azure-blob"] = "azure-blob"
 
-    connection_string: str = None
-    connection_string_file: str = None
+    connection_string: ValueReference
 
     containers: List[CloudDownloadBucket]
 
     def get_client(self) -> AzureBlobClient:
-        connection_string = read_value_or_from_file(self.connection_string, self.connection_string_file)
+        connection_string = self.connection_string.get_value()
         return AzureBlobClient(connection_string=connection_string)
 
     def get_items(self) -> List[CloudDownloadTask]:

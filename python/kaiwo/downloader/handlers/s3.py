@@ -5,7 +5,7 @@ from cloudpathlib import CloudPath, S3Client
 from kaiwo.downloader.handlers.base import (
     CloudDownloadBucket,
     CloudDownloadTask,
-    CloudDownloadTaskConfigBase,
+    CloudDownloadTaskConfigBase, ValueReference,
 )
 from kaiwo.downloader.utils import read_value_or_from_file
 
@@ -13,28 +13,23 @@ from kaiwo.downloader.utils import read_value_or_from_file
 class S3DownloadTaskConfig(CloudDownloadTaskConfigBase):
     type: Literal["s3"] = "s3"
 
-    endpoint_url: str = None
-    endpoint_url_file: str = None
-
-    access_key_id: str = None
-    access_key_id_file: str = None
-
-    secret_key: str = None
-    secret_key_file: str = None
+    endpoint_url: ValueReference
+    access_key_id: ValueReference
+    secret_key: ValueReference
 
     buckets: List[CloudDownloadBucket]
 
     def get_client(self) -> S3Client:
-        endpoint_url = read_value_or_from_file(self.endpoint_url, self.endpoint_url_file)
-        access_key_id = read_value_or_from_file(self.access_key_id, self.access_key_id_file)
-        secret_access_key = read_value_or_from_file(self.secret_key, self.secret_key_file)
+        endpoint_url = self.endpoint_url.get_value()
+        access_key_id = self.access_key_id.get_value()
+        secret_access_key = self.secret_key.get_value()
 
         is_public = access_key_id is None and secret_access_key is None
 
         return S3Client(
+            endpoint_url=endpoint_url,
             aws_access_key_id=access_key_id,
             aws_secret_access_key=secret_access_key,
-            endpoint_url=endpoint_url,
             no_sign_request=is_public,
         )
 

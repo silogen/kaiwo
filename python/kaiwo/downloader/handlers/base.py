@@ -103,3 +103,16 @@ class CloudDownloadBucket(BaseModel):
     @property
     def items(self) -> List[CloudDownloadSource]:
         return self.folders + self.files
+
+
+class ValueReference(BaseModel):
+    value: str = None
+    file: str = None
+
+    def get_value(self) -> str:
+        if self.value is not None:
+            return self.value
+        if self.file is None:
+            raise ValueError("Must provide either value or file")
+        with open(self.file) as f:
+            return f.read().strip()
