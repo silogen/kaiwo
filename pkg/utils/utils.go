@@ -21,7 +21,7 @@ import (
 
 const (
 	DefaultNamespace = "kaiwo"
-	DefaultRayImage  = "ghcr.io/silogen/rocm-ray:v0.7"
+	DefaultRayImage  = "ghcr.io/silogen/rocm-ray:v0.8"
 )
 
 func SanitizeStringForKubernetes(str string) string {
@@ -50,6 +50,8 @@ func MakeRFC1123Compliant(input string) string {
 	if len(input) > 63 {
 		input = input[:63]
 	}
+
+	input = strings.TrimRight(input, "-")
 
 	return input
 }
