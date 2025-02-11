@@ -149,6 +149,8 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 		})
 	}
 
+	resourceFlavors = RemoveDuplicateResourceFlavors(resourceFlavors)
+
 	// Label each node in the nodepool
 	for flavorName, nodeNames := range nodePools {
 		for _, nodeName := range nodeNames {
@@ -175,6 +177,19 @@ func MapGPUDeviceIDToName(gpuID string, vendor string) string {
 		return fmt.Sprintf("amd-%s", gpuID)
 	}
 	return gpuID
+}
+
+func RemoveDuplicateResourceFlavors(flavors []kaiwov1alpha1.ResourceFlavorSpec) []kaiwov1alpha1.ResourceFlavorSpec {
+	uniqueMap := make(map[string]kaiwov1alpha1.ResourceFlavorSpec)
+	for _, flavor := range flavors {
+		uniqueMap[flavor.Name] = flavor
+	}
+
+	uniqueFlavors := make([]kaiwov1alpha1.ResourceFlavorSpec, 0, len(uniqueMap))
+	for _, flavor := range uniqueMap {
+		uniqueFlavors = append(uniqueFlavors, flavor)
+	}
+	return uniqueFlavors
 }
 
 func LabelNode(ctx context.Context, c client.Client, nodeName, key, value string) error {
