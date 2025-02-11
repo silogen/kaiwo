@@ -29,7 +29,7 @@ import (
 	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
 )
 
-const DefaultKaiwoQueueConfigName = "kaiwo"
+const DefaultKaiwoQueueConfigName = "kaiwo2"
 
 // KaiwoQueueConfigReconciler reconciles a KaiwoQueueConfig object
 type KaiwoQueueConfigReconciler struct {
@@ -87,7 +87,7 @@ func (r *KaiwoQueueConfigReconciler) CreateDefaultKaiwoQueueConfig(ctx context.C
 	// Define the default KaiwoQueueConfig (Cluster-scoped) using Kaiwo ResourceFlavors
 	defaultQueueConfig := kaiwov1alpha1.KaiwoQueueConfig{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "kaiwo",
+			Name: name,
 		},
 		Spec: kaiwov1alpha1.KaiwoQueueConfigSpec{
 			ClusterQueues:   []kaiwov1alpha1.ClusterQueue{clusterQueue},

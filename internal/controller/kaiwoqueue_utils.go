@@ -203,8 +203,8 @@ func CreateClusterQueue(nodePoolResources map[string]kueuev1beta1.FlavorQuotas, 
 		flavorQuotas = append(flavorQuotas, quota)
 
 		// Extract resources dynamically
-		for _, quotaResource := range quota.Resources { // quotaResource is of type kueuev1beta1.ResourceQuota
-			resourceName := quotaResource.Name // Extract name field from struct
+		for _, quotaResource := range quota.Resources {
+			resourceName := quotaResource.Name
 			normalizedResourceName := corev1.ResourceName(strings.TrimSpace(string(resourceName)))
 			coveredResources[normalizedResourceName] = struct{}{}
 		}
