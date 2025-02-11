@@ -82,7 +82,7 @@ spec:
               ephemeral:
                 volumeClaimTemplate:
                   spec:
-                    accessModes: [ "ReadWriteOnce" ]
+                    accessModes: [ "ReadWriteMany" ]
                     storageClassName: {{ .Scheduling.Storage.StorageClassName }}
                     resources:
                       requests:
@@ -188,7 +188,7 @@ spec:
                 ephemeral:
                   volumeClaimTemplate:
                     spec:
-                      accessModes: [ "ReadWriteOnce" ]
+                      accessModes: [ "ReadWriteMany" ]
                       storageClassName: {{ .Scheduling.Storage.StorageClassName }}
                       resources:
                         requests:
