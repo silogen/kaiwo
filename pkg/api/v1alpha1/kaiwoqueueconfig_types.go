@@ -20,26 +20,39 @@ import (
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 )
 
-// ResourceFlavorSpec defines the configuration for a specific resource flavor.
-type ResourceFlavorSpec struct {
-	Name        string              `json:"name"`
-	NodeLabels  map[string]string   `json:"nodeLabels"`
-	Taints      []corev1.Taint      `json:"taints,omitempty"`
-	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
-}
-
-// WorkloadPriorityClassSpec defines the priority class configuration for workloads.
-type WorkloadPriorityClassSpec struct {
-	Name        string `json:"name"`
-	Value       int32  `json:"value"`
-	Description string `json:"description"`
-}
-
 // KaiwoQueueConfigSpec defines the desired configuration for Kaiwo.
 type KaiwoQueueConfigSpec struct {
-	ClusterQueues           []kueuev1beta1.ClusterQueue   `json:"clusterQueues,omitempty"`
-	ResourceFlavors         []kueuev1beta1.ResourceFlavor `json:"resourceFlavors,omitempty"`
-	WorkloadPriorityClasses []WorkloadPriorityClassSpec   `json:"workloadPriorityClasses,omitempty"`
+	// Limit the number of ClusterQueues to avoid excessive validation rules
+	// +kubebuilder:validation:MaxItems=10
+	ClusterQueues []ClusterQueue `json:"clusterQueues,omitempty"`
+
+	ResourceFlavors []ResourceFlavorSpec `json:"resourceFlavors,omitempty"`
+
+	// Limit workload priority classes
+	// +kubebuilder:validation:MaxItems=5
+	WorkloadPriorityClasses []kueuev1beta1.WorkloadPriorityClass `json:"workloadPriorityClasses,omitempty"`
+}
+
+type ClusterQueue struct {
+	Name string `json:"name"`
+
+	Spec kueuev1beta1.ClusterQueueSpec `json:"spec,omitempty"`
+}
+
+// ResourceFlavorSpec defines the configuration for a specific resource flavor.
+type ResourceFlavorSpec struct {
+	Name string `json:"name"`
+	// NodeLabels must not exceed a reasonable limit to prevent CRD validation failures
+	// +kubebuilder:validation:MaxProperties=10
+	NodeLabels map[string]string `json:"nodeLabels,omitempty"`
+
+	// Limit number of taints to prevent validation cost overrun
+	// +kubebuilder:validation:MaxItems=5
+	Taints []corev1.Taint `json:"taints,omitempty"`
+
+	// // Limit number of tolerations for validation efficiency
+	// // +kubebuilder:validation:MaxItems=5
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
 }
 
 // KaiwoQueueConfigStatus represents the observed state of KaiwoQueueConfig.

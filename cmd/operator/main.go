@@ -39,7 +39,10 @@ import (
 
 	"github.com/silogen/kaiwo/internal/controller"
 	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
+
 	// +kubebuilder:scaffold:imports
+
+	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 )
 
 var (
@@ -52,6 +55,8 @@ func init() {
 
 	utilruntime.Must(kaiwov1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
+
+	utilruntime.Must(kueuev1beta1.AddToScheme(scheme))
 }
 
 // nolint:gocyclo

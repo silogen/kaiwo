@@ -28,6 +28,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
+
+	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
 )
 
 const (
@@ -64,17 +66,16 @@ func GetNodeResources(ctx context.Context, c client.Client) []NodeResourceInfo {
 	return nodes
 }
 
-func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kueuev1beta1.ResourceFlavor, map[string]kueuev1beta1.FlavorQuotas, error) {
-	resourceFlavors := []kueuev1beta1.ResourceFlavor{}
-	nodePoolResources := make(map[string]kueuev1beta1.FlavorQuotas) // Store computed quotas
-	nodePools := make(map[string][]string)                          // Maps nodepool names to node names
+func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwov1alpha1.ResourceFlavorSpec, map[string]kueuev1beta1.FlavorQuotas, error) {
+	var resourceFlavors []kaiwov1alpha1.ResourceFlavorSpec
+	nodePoolResources := make(map[string]kueuev1beta1.FlavorQuotas)
+	nodePools := make(map[string][]string)
 
 	// Get node list dynamically
 	nodeList := GetNodeResources(ctx, c)
 
 	for _, node := range nodeList {
 		// **Skip Control Plane Nodes**
-		// TODO: make this configurable because control planes may be all that exists
 		if _, exists := node.Labels["node-role.kubernetes.io/control-plane"]; exists {
 			continue
 		}
@@ -82,13 +83,12 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kueue
 			continue
 		}
 
-		var flavorName string
 		gpuType := "cpu-only"
 		gpuCount := 0
 
 		// Identify AMD GPU Nodes
 		if gpuID, exists := node.Labels["amd.com/gpu.device-id"]; exists {
-			gpuType = fmt.Sprintf("amd-%s", gpuID)
+			gpuType = MapGPUDeviceIDToName(gpuID, "amd")
 			if count, ok := node.Labels["beta.amd.com/gpu.family.AI"]; ok {
 				gpuCount, _ = strconv.Atoi(count)
 			}
@@ -106,8 +106,7 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kueue
 		nominalCPU := resource.NewQuantity(int64(float64(node.CPU)*cpuMemoryDiscountFactor), resource.DecimalSI)
 		nominalMemory := resource.NewQuantity(int64(float64(node.Memory)*cpuMemoryDiscountFactor*1024*1024*1024), resource.BinarySI)
 
-		// Define a unique flavor name (GPU type included)
-		flavorName = fmt.Sprintf("%s-%dcore-%dGi", gpuType, nominalCPU.Value(), nominalMemory.Value()/(1024*1024*1024))
+		flavorName := fmt.Sprintf("%s-%dgpu-%dcore-%dgi", gpuType, gpuCount, nominalCPU.Value(), nominalMemory.Value()/(1024*1024*1024))
 
 		// Track node membership in the nodepool
 		nodePools[flavorName] = append(nodePools[flavorName], node.Name)
@@ -141,22 +140,17 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kueue
 			Name:      kueuev1beta1.ResourceFlavorReference(flavorName),
 			Resources: resourceQuotas,
 		}
-	}
 
-	// Create ResourceFlavors and label nodes
-	for flavorName, nodeNames := range nodePools {
-		resourceFlavors = append(resourceFlavors, kueuev1beta1.ResourceFlavor{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: flavorName,
-			},
-			Spec: kueuev1beta1.ResourceFlavorSpec{
-				NodeLabels: map[string]string{
-					"kaiwo/nodepool": flavorName,
-				},
+		resourceFlavors = append(resourceFlavors, kaiwov1alpha1.ResourceFlavorSpec{
+			Name: flavorName,
+			NodeLabels: map[string]string{
+				"kaiwo/nodepool": flavorName,
 			},
 		})
+	}
 
-		// Label each node in the nodepool
+	// Label each node in the nodepool
+	for flavorName, nodeNames := range nodePools {
 		for _, nodeName := range nodeNames {
 			err := LabelNode(ctx, c, nodeName, "kaiwo/nodepool", flavorName)
 			if err != nil {
@@ -166,6 +160,21 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kueue
 	}
 
 	return resourceFlavors, nodePoolResources, nil
+}
+
+func MapGPUDeviceIDToName(gpuID string, vendor string) string {
+	knownGPUs := map[string]string{
+		"740c": "mi250",
+		"74a1": "mi300",
+	}
+
+	if vendor == "amd" {
+		if name, exists := knownGPUs[gpuID]; exists {
+			return name
+		}
+		return fmt.Sprintf("amd-%s", gpuID)
+	}
+	return gpuID
 }
 
 func LabelNode(ctx context.Context, c client.Client, nodeName, key, value string) error {
@@ -184,18 +193,25 @@ func LabelNode(ctx context.Context, c client.Client, nodeName, key, value string
 	return c.Update(ctx, &node)
 }
 
-func CreateClusterQueue(nodePoolResources map[string]kueuev1beta1.FlavorQuotas) kueuev1beta1.ClusterQueue {
+func CreateClusterQueue(nodePoolResources map[string]kueuev1beta1.FlavorQuotas, name string) kaiwov1alpha1.ClusterQueue {
 	var resourceGroups []kueuev1beta1.ResourceGroup
+	coveredResources := make(map[corev1.ResourceName]struct{})
 
-	// Convert map to a sortable slice
+	// Convert map to slice
 	var flavorQuotas []kueuev1beta1.FlavorQuotas
 	for _, quota := range nodePoolResources {
 		flavorQuotas = append(flavorQuotas, quota)
+
+		// Extract resources dynamically
+		for _, quotaResource := range quota.Resources { // quotaResource is of type kueuev1beta1.ResourceQuota
+			resourceName := quotaResource.Name // Extract name field from struct
+			normalizedResourceName := corev1.ResourceName(strings.TrimSpace(string(resourceName)))
+			coveredResources[normalizedResourceName] = struct{}{}
+		}
 	}
 
 	// Sort flavors: CPU-only nodes first, then GPU nodes by GPU count, then CPU, then memory
 	sort.Slice(flavorQuotas, func(i, j int) bool {
-		// Extract resource values
 		gpuCountI := getGPUCount(string(flavorQuotas[i].Name))
 		gpuCountJ := getGPUCount(string(flavorQuotas[j].Name))
 		cpuI := getCPUCount(string(flavorQuotas[i].Name))
@@ -203,40 +219,36 @@ func CreateClusterQueue(nodePoolResources map[string]kueuev1beta1.FlavorQuotas) 
 		memoryI := getMemoryCount(string(flavorQuotas[i].Name))
 		memoryJ := getMemoryCount(string(flavorQuotas[j].Name))
 
-		// Sorting order:
-		// 1. CPU-only nodes come first
 		if gpuCountI == 0 && gpuCountJ > 0 {
 			return true
 		}
 		if gpuCountJ == 0 && gpuCountI > 0 {
 			return false
 		}
-
-		// 2. GPU nodes: sort by GPU count (lower count = cheaper)
 		if gpuCountI != gpuCountJ {
 			return gpuCountI < gpuCountJ
 		}
-
-		// 3. If same GPU count, sort by CPU (lower count = cheaper)
 		if cpuI != cpuJ {
 			return cpuI < cpuJ
 		}
-
-		// 4. If same CPU count, sort by memory (lower count = cheaper)
 		return memoryI < memoryJ
 	})
 
-	// Define a resource group containing the sorted flavors
+	// Convert collected resources to a slice for `CoveredResources`
+	var coveredResourcesSlice []corev1.ResourceName
+	for resource := range coveredResources {
+		coveredResourcesSlice = append(coveredResourcesSlice, resource)
+	}
+
+	// Define the resource group dynamically based on collected resources
 	resourceGroups = append(resourceGroups, kueuev1beta1.ResourceGroup{
-		CoveredResources: []corev1.ResourceName{"cpu", "memory", "nvidia.com/gpu", "amd.com/gpu"},
+		CoveredResources: coveredResourcesSlice,
 		Flavors:          flavorQuotas,
 	})
 
 	// Create ClusterQueue
-	return kueuev1beta1.ClusterQueue{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "kaiwo-cluster-queue",
-		},
+	return kaiwov1alpha1.ClusterQueue{
+		Name: name,
 		Spec: kueuev1beta1.ClusterQueueSpec{
 			NamespaceSelector: &metav1.LabelSelector{},
 			ResourceGroups:    resourceGroups,
@@ -277,4 +289,31 @@ func getMemoryCount(flavorName string) int {
 		}
 	}
 	return 0
+}
+
+func ConvertKaiwoToKueueResourceFlavors(kaiwoFlavors []kaiwov1alpha1.ResourceFlavorSpec) []kueuev1beta1.ResourceFlavor {
+	var kueueFlavors []kueuev1beta1.ResourceFlavor
+	for _, rf := range kaiwoFlavors {
+		kueueFlavors = append(kueueFlavors, ConvertKaiwoToKueueResourceFlavor(rf))
+	}
+	return kueueFlavors
+}
+
+func ConvertKaiwoToKueueResourceFlavor(kaiwoFlavor kaiwov1alpha1.ResourceFlavorSpec) kueuev1beta1.ResourceFlavor {
+	return kueuev1beta1.ResourceFlavor{
+		ObjectMeta: metav1.ObjectMeta{Name: kaiwoFlavor.Name},
+		Spec: kueuev1beta1.ResourceFlavorSpec{
+			NodeLabels: kaiwoFlavor.NodeLabels,
+			// Copy other fields if needed
+		},
+	}
+}
+
+func ConvertKaiwoToKueueClusterQueue(kaiwoQueue kaiwov1alpha1.ClusterQueue) kueuev1beta1.ClusterQueue {
+	return kueuev1beta1.ClusterQueue{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: kaiwoQueue.Name,
+		},
+		Spec: kaiwoQueue.Spec,
+	}
 }

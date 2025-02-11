@@ -29,6 +29,8 @@ import (
 	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
 )
 
+const DefaultKaiwoQueueConfigName = "kaiwo"
+
 // KaiwoQueueConfigReconciler reconciles a KaiwoQueueConfig object
 type KaiwoQueueConfigReconciler struct {
 	client.Client
@@ -44,10 +46,10 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Check if the default KaiwoQueueConfig exists
 	var queueConfig kaiwov1alpha1.KaiwoQueueConfig
-	err := r.Get(ctx, client.ObjectKey{Name: "kaiwo"}, &queueConfig)
+	err := r.Get(ctx, client.ObjectKey{Name: DefaultKaiwoQueueConfigName}, &queueConfig)
 	if err != nil && errors.IsNotFound(err) {
 		logger.Info("Default KaiwoQueueConfig does not exist, creating it...")
-		err = r.CreateDefaultKaiwoQueueConfig(ctx)
+		err = r.CreateDefaultKaiwoQueueConfig(ctx, DefaultKaiwoQueueConfigName)
 		if err != nil {
 			logger.Error(err, "Failed to create default KaiwoQueueConfig")
 			return ctrl.Result{}, err
@@ -69,7 +71,7 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	return ctrl.Result{}, nil
 }
 
-func (r *KaiwoQueueConfigReconciler) CreateDefaultKaiwoQueueConfig(ctx context.Context) error {
+func (r *KaiwoQueueConfigReconciler) CreateDefaultKaiwoQueueConfig(ctx context.Context, name string) error {
 	logger := log.FromContext(ctx)
 
 	// Generate resource flavors and nodepool quotas
@@ -79,30 +81,17 @@ func (r *KaiwoQueueConfigReconciler) CreateDefaultKaiwoQueueConfig(ctx context.C
 		return err
 	}
 
-	// Convert Kaiwo `ResourceFlavorSpec` to Kueue `ResourceFlavor`
-	var kueueResourceFlavors []kueuev1beta1.ResourceFlavor
-	for _, rf := range resourceFlavors {
-		kueueResourceFlavors = append(kueueResourceFlavors, kueuev1beta1.ResourceFlavor{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: rf.Name,
-			},
-			Spec: kueuev1beta1.ResourceFlavorSpec{
-				NodeLabels: rf.Spec.NodeLabels,
-			},
-		})
-	}
+	// Create the default ClusterQueue using nodePoolResources
+	clusterQueue := CreateClusterQueue(nodePoolResources, name)
 
-	// Create the default ClusterQueue using nodePoolResources instead of passing incorrect data
-	clusterQueue := CreateClusterQueue(nodePoolResources)
-
-	// Define the default KaiwoQueueConfig (Cluster-scoped)
+	// Define the default KaiwoQueueConfig (Cluster-scoped) using Kaiwo ResourceFlavors
 	defaultQueueConfig := kaiwov1alpha1.KaiwoQueueConfig{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "kaiwo",
 		},
 		Spec: kaiwov1alpha1.KaiwoQueueConfigSpec{
-			ClusterQueues:   []kueuev1beta1.ClusterQueue{clusterQueue},
-			ResourceFlavors: kueueResourceFlavors,
+			ClusterQueues:   []kaiwov1alpha1.ClusterQueue{clusterQueue},
+			ResourceFlavors: resourceFlavors,
 		},
 	}
 
@@ -119,65 +108,73 @@ func (r *KaiwoQueueConfigReconciler) CreateDefaultKaiwoQueueConfig(ctx context.C
 func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, queueConfig *kaiwov1alpha1.KaiwoQueueConfig) error {
 	logger := log.FromContext(ctx)
 
-	// Sync ResourceFlavors from Kueue
-	for _, flavorSpec := range queueConfig.Spec.ResourceFlavors {
-		resourceFlavor := &kueuev1beta1.ResourceFlavor{}
-		err := r.Get(ctx, client.ObjectKey{Name: flavorSpec.Name}, resourceFlavor)
+	// Sync ResourceFlavors
+	kueueFlavors := ConvertKaiwoToKueueResourceFlavors(queueConfig.Spec.ResourceFlavors)
+	for _, kueueFlavor := range kueueFlavors {
+		existingFlavor := &kueuev1beta1.ResourceFlavor{}
+		err := r.Get(ctx, client.ObjectKey{Name: kueueFlavor.Name}, existingFlavor)
 
-		if err != nil && errors.IsNotFound(err) {
-			logger.Info("ResourceFlavor does not exist, skipping ownership claim", "name", flavorSpec.Name)
-			continue
+		if errors.IsNotFound(err) {
+			logger.Info("Creating missing ResourceFlavor", "name", kueueFlavor.Name)
+			if err := r.Create(ctx, &kueueFlavor); err != nil {
+				logger.Error(err, "Failed to create ResourceFlavor", "name", kueueFlavor.Name)
+				return err
+			}
 		} else if err != nil {
-			logger.Error(err, "Failed to get ResourceFlavor", "name", flavorSpec.Name)
+			logger.Error(err, "Failed to get ResourceFlavor", "name", kueueFlavor.Name)
 			return err
 		}
 
-		// Ensure ownership
-		if err := ctrl.SetControllerReference(queueConfig, resourceFlavor, r.Scheme); err != nil {
-			logger.Error(err, "Failed to set ownership for ResourceFlavor", "name", flavorSpec.Name)
+		if err := ctrl.SetControllerReference(queueConfig, existingFlavor, r.Scheme); err != nil {
+			logger.Error(err, "Failed to set ownership for ResourceFlavor", "name", kueueFlavor.Name)
 			return err
 		}
 
-		logger.Info("Kaiwo now owns ResourceFlavor", "name", flavorSpec.Name)
+		logger.Info("Kaiwo now owns ResourceFlavor", "name", kueueFlavor.Name)
 	}
 
-	// Sync ClusterQueues from Kueue
-	for _, clusterQueueSpec := range queueConfig.Spec.ClusterQueues {
-		clusterQueue := &kueuev1beta1.ClusterQueue{}
-		err := r.Get(ctx, client.ObjectKey{Name: clusterQueueSpec.Name}, clusterQueue)
+	// Sync ClusterQueues
+	for _, kaiwoQueue := range queueConfig.Spec.ClusterQueues {
+		kueueQueue := ConvertKaiwoToKueueClusterQueue(kaiwoQueue)
+		existingQueue := &kueuev1beta1.ClusterQueue{}
+		err := r.Get(ctx, client.ObjectKey{Name: kueueQueue.Name}, existingQueue)
 
-		if err != nil && errors.IsNotFound(err) {
-			logger.Info("ClusterQueue does not exist, skipping ownership claim", "name", clusterQueueSpec.Name)
-			continue
+		if errors.IsNotFound(err) {
+			logger.Info("Creating missing ClusterQueue", "name", kueueQueue.Name)
+			if err := r.Create(ctx, &kueueQueue); err != nil {
+				logger.Error(err, "Failed to create ClusterQueue", "name", kueueQueue.Name)
+				return err
+			}
 		} else if err != nil {
-			logger.Error(err, "Failed to get ClusterQueue", "name", clusterQueueSpec.Name)
+			logger.Error(err, "Failed to get ClusterQueue", "name", kueueQueue.Name)
 			return err
 		}
 
-		// Ensure ownership
-		if err := ctrl.SetControllerReference(queueConfig, clusterQueue, r.Scheme); err != nil {
-			logger.Error(err, "Failed to set ownership for ClusterQueue", "name", clusterQueueSpec.Name)
+		if err := ctrl.SetControllerReference(queueConfig, existingQueue, r.Scheme); err != nil {
+			logger.Error(err, "Failed to set ownership for ClusterQueue", "name", kueueQueue.Name)
 			return err
 		}
 
-		logger.Info("Kaiwo now owns ClusterQueue", "name", clusterQueueSpec.Name)
+		logger.Info("Kaiwo now owns ClusterQueue", "name", kueueQueue.Name)
 	}
 
-	// Sync WorkloadPriorityClasses (assuming they are Kueue objects)
+	// Sync WorkloadPriorityClasses
 	for _, priorityClassSpec := range queueConfig.Spec.WorkloadPriorityClasses {
-		priorityClass := &kueuev1beta1.WorkloadPriorityClass{}
-		err := r.Get(ctx, client.ObjectKey{Name: priorityClassSpec.Name}, priorityClass)
+		existingPriorityClass := &kueuev1beta1.WorkloadPriorityClass{}
+		err := r.Get(ctx, client.ObjectKey{Name: priorityClassSpec.Name}, existingPriorityClass)
 
-		if err != nil && errors.IsNotFound(err) {
-			logger.Info("WorkloadPriorityClass does not exist, skipping ownership claim", "name", priorityClassSpec.Name)
-			continue
+		if errors.IsNotFound(err) {
+			logger.Info("Creating missing WorkloadPriorityClass", "name", priorityClassSpec.Name)
+			if err := r.Create(ctx, &priorityClassSpec); err != nil {
+				logger.Error(err, "Failed to create WorkloadPriorityClass", "name", priorityClassSpec.Name)
+				return err
+			}
 		} else if err != nil {
 			logger.Error(err, "Failed to get WorkloadPriorityClass", "name", priorityClassSpec.Name)
 			return err
 		}
 
-		// Ensure ownership
-		if err := ctrl.SetControllerReference(queueConfig, priorityClass, r.Scheme); err != nil {
+		if err := ctrl.SetControllerReference(queueConfig, existingPriorityClass, r.Scheme); err != nil {
 			logger.Error(err, "Failed to set ownership for WorkloadPriorityClass", "name", priorityClassSpec.Name)
 			return err
 		}
@@ -185,7 +182,7 @@ func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, que
 		logger.Info("Kaiwo now owns WorkloadPriorityClass", "name", priorityClassSpec.Name)
 	}
 
-	logger.Info("Successfully synced ownership for Kueue resources")
+	logger.Info("Successfully synced all Kueue resources")
 	return nil
 }
 

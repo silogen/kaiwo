@@ -41,26 +41,12 @@ spec:
               Kaiwo.
             properties:
               clusterQueues:
+                description: Limit the number of ClusterQueues to avoid excessive
+                  validation rules
                 items:
-                  description: ClusterQueue is the Schema for the clusterQueue API.
                   properties:
-                    apiVersion:
-                      description: |-
-                        APIVersion defines the versioned schema of this representation of an object.
-                        Servers should convert recognized schemas to the latest internal value, and
-                        may reject unrecognized values.
-                        More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+                    name:
                       type: string
-                    kind:
-                      description: |-
-                        Kind is a string value representing the REST resource this object represents.
-                        Servers may infer this from the endpoint the client submits requests to.
-                        Cannot be updated.
-                        In CamelCase.
-                        More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-                      type: string
-                    metadata:
-                      type: object
                     spec:
                       description: ClusterQueueSpec defines the desired state of ClusterQueue
                       properties:
@@ -466,261 +452,109 @@ spec:
                         rule: '!has(self.cohort) && has(self.resourceGroups) ? self.resourceGroups.all(rg,
                           rg.flavors.all(f, f.resources.all(r, !has(r.borrowingLimit))))
                           : true'
-                    status:
-                      description: ClusterQueueStatus defines the observed state of
-                        ClusterQueue
-                      properties:
-                        admittedWorkloads:
-                          description: |-
-                            admittedWorkloads is the number of workloads currently admitted to this
-                            clusterQueue and haven't finished yet.
-                          format: int32
-                          type: integer
-                        conditions:
-                          description: |-
-                            conditions hold the latest available observations of the ClusterQueue
-                            current state.
-                          items:
-                            description: Condition contains details for one aspect
-                              of the current state of this API Resource.
-                            properties:
-                              lastTransitionTime:
-                                description: |-
-                                  lastTransitionTime is the last time the condition transitioned from one status to another.
-                                  This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
-                                format: date-time
-                                type: string
-                              message:
-                                description: |-
-                                  message is a human readable message indicating details about the transition.
-                                  This may be an empty string.
-                                maxLength: 32768
-                                type: string
-                              observedGeneration:
-                                description: |-
-                                  observedGeneration represents the .metadata.generation that the condition was set based upon.
-                                  For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
-                                  with respect to the current state of the instance.
-                                format: int64
-                                minimum: 0
-                                type: integer
-                              reason:
-                                description: |-
-                                  reason contains a programmatic identifier indicating the reason for the condition's last transition.
-                                  Producers of specific condition types may define expected values and meanings for this field,
-                                  and whether the values are considered a guaranteed API.
-                                  The value should be a CamelCase string.
-                                  This field may not be empty.
-                                maxLength: 1024
-                                minLength: 1
-                                pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
-                                type: string
-                              status:
-                                description: status of the condition, one of True,
-                                  False, Unknown.
-                                enum:
-                                - "True"
-                                - "False"
-                                - Unknown
-                                type: string
-                              type:
-                                description: type of condition in CamelCase or in
-                                  foo.example.com/CamelCase.
-                                maxLength: 316
-                                pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
-                                type: string
-                            required:
-                            - lastTransitionTime
-                            - message
-                            - reason
-                            - status
-                            - type
-                            type: object
-                          type: array
-                          x-kubernetes-list-map-keys:
-                          - type
-                          x-kubernetes-list-type: map
-                        fairSharing:
-                          description: FairSharing contains the information about
-                            the current status of fair sharing.
-                          properties:
-                            weightedShare:
-                              description: |-
-                                WeightedShare represent the maximum of the ratios of usage above nominal
-                                quota to the lendable resources in the cohort, among all the resources
-                                provided by the ClusterQueue, and divided by the weight.
-                                If zero, it means that the usage of the ClusterQueue is below the nominal quota.
-                                If the ClusterQueue has a weight of zero, this will return 9223372036854775807,
-                                the maximum possible share value.
-                              format: int64
-                              type: integer
-                          required:
-                          - weightedShare
-                          type: object
-                        flavorsReservation:
-                          description: |-
-                            flavorsReservation are the reserved quotas, by flavor, currently in use by the
-                            workloads assigned to this ClusterQueue.
-                          items:
-                            properties:
-                              name:
-                                description: name of the flavor.
-                                maxLength: 253
-                                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
-                                type: string
-                              resources:
-                                description: resources lists the quota usage for the
-                                  resources in this flavor.
-                                items:
-                                  properties:
-                                    borrowed:
-                                      anyOf:
-                                      - type: integer
-                                      - type: string
-                                      description: |-
-                                        Borrowed is quantity of quota that is borrowed from the cohort. In other
-                                        words, it's the used quota that is over the nominalQuota.
-                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                                      x-kubernetes-int-or-string: true
-                                    name:
-                                      description: name of the resource
-                                      type: string
-                                    total:
-                                      anyOf:
-                                      - type: integer
-                                      - type: string
-                                      description: |-
-                                        total is the total quantity of used quota, including the amount borrowed
-                                        from the cohort.
-                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                                      x-kubernetes-int-or-string: true
-                                  required:
-                                  - name
-                                  type: object
-                                maxItems: 16
-                                type: array
-                                x-kubernetes-list-map-keys:
-                                - name
-                                x-kubernetes-list-type: map
-                            required:
-                            - name
-                            - resources
-                            type: object
-                          maxItems: 16
-                          type: array
-                          x-kubernetes-list-map-keys:
-                          - name
-                          x-kubernetes-list-type: map
-                        flavorsUsage:
-                          description: |-
-                            flavorsUsage are the used quotas, by flavor, currently in use by the
-                            workloads admitted in this ClusterQueue.
-                          items:
-                            properties:
-                              name:
-                                description: name of the flavor.
-                                maxLength: 253
-                                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
-                                type: string
-                              resources:
-                                description: resources lists the quota usage for the
-                                  resources in this flavor.
-                                items:
-                                  properties:
-                                    borrowed:
-                                      anyOf:
-                                      - type: integer
-                                      - type: string
-                                      description: |-
-                                        Borrowed is quantity of quota that is borrowed from the cohort. In other
-                                        words, it's the used quota that is over the nominalQuota.
-                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                                      x-kubernetes-int-or-string: true
-                                    name:
-                                      description: name of the resource
-                                      type: string
-                                    total:
-                                      anyOf:
-                                      - type: integer
-                                      - type: string
-                                      description: |-
-                                        total is the total quantity of used quota, including the amount borrowed
-                                        from the cohort.
-                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                                      x-kubernetes-int-or-string: true
-                                  required:
-                                  - name
-                                  type: object
-                                maxItems: 16
-                                type: array
-                                x-kubernetes-list-map-keys:
-                                - name
-                                x-kubernetes-list-type: map
-                            required:
-                            - name
-                            - resources
-                            type: object
-                          maxItems: 16
-                          type: array
-                          x-kubernetes-list-map-keys:
-                          - name
-                          x-kubernetes-list-type: map
-                        pendingWorkloads:
-                          description: |-
-                            pendingWorkloads is the number of workloads currently waiting to be
-                            admitted to this clusterQueue.
-                          format: int32
-                          type: integer
-                        pendingWorkloadsStatus:
-                          description: |-
-                            PendingWorkloadsStatus contains the information exposed about the current
-                            status of the pending workloads in the cluster queue.
-                            Deprecated: This field will be removed on v1beta2, use VisibilityOnDemand
-                            (https://kueue.sigs.k8s.io/docs/tasks/manage/monitor_pending_workloads/pending_workloads_on_demand/)
-                            instead.
-                          properties:
-                            clusterQueuePendingWorkload:
-                              description: Head contains the list of top pending workloads.
-                              items:
-                                description: |-
-                                  ClusterQueuePendingWorkload contains the information identifying a pending workload
-                                  in the cluster queue.
-                                properties:
-                                  name:
-                                    description: Name indicates the name of the pending
-                                      workload.
-                                    type: string
-                                  namespace:
-                                    description: Namespace indicates the name of the
-                                      pending workload.
-                                    type: string
-                                required:
-                                - name
-                                - namespace
-                                type: object
-                              type: array
-                              x-kubernetes-list-type: atomic
-                            lastChangeTime:
-                              description: LastChangeTime indicates the time of the
-                                last change of the structure.
-                              format: date-time
-                              type: string
-                          required:
-                          - lastChangeTime
-                          type: object
-                        reservingWorkloads:
-                          description: |-
-                            reservingWorkloads is the number of workloads currently reserving quota in this
-                            clusterQueue.
-                          format: int32
-                          type: integer
-                      type: object
+                  required:
+                  - name
                   type: object
+                maxItems: 10
                 type: array
               resourceFlavors:
                 items:
-                  description: ResourceFlavor is the Schema for the resourceflavors
-                    API.
+                  description: ResourceFlavorSpec defines the configuration for a
+                    specific resource flavor.
+                  properties:
+                    name:
+                      type: string
+                    nodeLabels:
+                      additionalProperties:
+                        type: string
+                      description: NodeLabels must not exceed a reasonable limit to
+                        prevent CRD validation failures
+                      maxProperties: 10
+                      type: object
+                    taints:
+                      description: Limit number of taints to prevent validation cost
+                        overrun
+                      items:
+                        description: |-
+                          The node this Taint is attached to has the "effect" on
+                          any pod that does not tolerate the Taint.
+                        properties:
+                          effect:
+                            description: |-
+                              Required. The effect of the taint on pods
+                              that do not tolerate the taint.
+                              Valid effects are NoSchedule, PreferNoSchedule and NoExecute.
+                            type: string
+                          key:
+                            description: Required. The taint key to be applied to
+                              a node.
+                            type: string
+                          timeAdded:
+                            description: |-
+                              TimeAdded represents the time at which the taint was added.
+                              It is only written for NoExecute taints.
+                            format: date-time
+                            type: string
+                          value:
+                            description: The taint value corresponding to the taint
+                              key.
+                            type: string
+                        required:
+                        - effect
+                        - key
+                        type: object
+                      maxItems: 5
+                      type: array
+                    tolerations:
+                      description: |-
+                        // Limit number of tolerations for validation efficiency
+                        // +kubebuilder:validation:MaxItems=5
+                      items:
+                        description: |-
+                          The pod this Toleration is attached to tolerates any taint that matches
+                          the triple <key,value,effect> using the matching operator <operator>.
+                        properties:
+                          effect:
+                            description: |-
+                              Effect indicates the taint effect to match. Empty means match all taint effects.
+                              When specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.
+                            type: string
+                          key:
+                            description: |-
+                              Key is the taint key that the toleration applies to. Empty means match all taint keys.
+                              If the key is empty, operator must be Exists; this combination means to match all values and all keys.
+                            type: string
+                          operator:
+                            description: |-
+                              Operator represents a key's relationship to the value.
+                              Valid operators are Exists and Equal. Defaults to Equal.
+                              Exists is equivalent to wildcard for value, so that a pod can
+                              tolerate all taints of a particular category.
+                            type: string
+                          tolerationSeconds:
+                            description: |-
+                              TolerationSeconds represents the period of time the toleration (which must be
+                              of effect NoExecute, otherwise this field is ignored) tolerates the taint. By default,
+                              it is not set, which means tolerate the taint forever (do not evict). Zero and
+                              negative values will be treated as 0 (evict immediately) by the system.
+                            format: int64
+                            type: integer
+                          value:
+                            description: |-
+                              Value is the taint value the toleration matches to.
+                              If the operator is Exists, the value should be empty, otherwise just a regular string.
+                            type: string
+                        type: object
+                      type: array
+                  required:
+                  - name
+                  type: object
+                type: array
+              workloadPriorityClasses:
+                description: Limit workload priority classes
+                items:
+                  description: WorkloadPriorityClass is the Schema for the workloadPriorityClass
+                    API
                   properties:
                     apiVersion:
                       description: |-
@@ -728,6 +562,11 @@ spec:
                         Servers should convert recognized schemas to the latest internal value, and
                         may reject unrecognized values.
                         More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+                      type: string
+                    description:
+                      description: |-
+                        description is an arbitrary string that usually provides guidelines on
+                        when this workloadPriorityClass should be used.
                       type: string
                     kind:
                       description: |-
@@ -739,179 +578,17 @@ spec:
                       type: string
                     metadata:
                       type: object
-                    spec:
-                      description: ResourceFlavorSpec defines the desired state of
-                        the ResourceFlavor
-                      properties:
-                        nodeLabels:
-                          additionalProperties:
-                            type: string
-                          description: |-
-                            nodeLabels are labels that associate the ResourceFlavor with Nodes that
-                            have the same labels.
-                            When a Workload is admitted, its podsets can only get assigned
-                            ResourceFlavors whose nodeLabels match the nodeSelector and nodeAffinity
-                            fields.
-                            Once a ResourceFlavor is assigned to a podSet, the ResourceFlavor's
-                            nodeLabels should be injected into the pods of the Workload by the
-                            controller that integrates with the Workload object.
-
-                            nodeLabels can be up to 8 elements.
-                          maxProperties: 8
-                          type: object
-                          x-kubernetes-map-type: atomic
-                        nodeTaints:
-                          description: |-
-                            nodeTaints are taints that the nodes associated with this ResourceFlavor
-                            have.
-                            Workloads' podsets must have tolerations for these nodeTaints in order to
-                            get assigned this ResourceFlavor during admission.
-
-                            An example of a nodeTaint is
-                            cloud.provider.com/preemptible="true":NoSchedule
-
-                            nodeTaints can be up to 8 elements.
-                          items:
-                            description: |-
-                              The node this Taint is attached to has the "effect" on
-                              any pod that does not tolerate the Taint.
-                            properties:
-                              effect:
-                                description: |-
-                                  Required. The effect of the taint on pods
-                                  that do not tolerate the taint.
-                                  Valid effects are NoSchedule, PreferNoSchedule and NoExecute.
-                                type: string
-                              key:
-                                description: Required. The taint key to be applied
-                                  to a node.
-                                type: string
-                              timeAdded:
-                                description: |-
-                                  TimeAdded represents the time at which the taint was added.
-                                  It is only written for NoExecute taints.
-                                format: date-time
-                                type: string
-                              value:
-                                description: The taint value corresponding to the
-                                  taint key.
-                                type: string
-                            required:
-                            - effect
-                            - key
-                            type: object
-                          maxItems: 8
-                          type: array
-                          x-kubernetes-list-type: atomic
-                          x-kubernetes-validations:
-                          - message: 'supported taint effect values: ''NoSchedule'',
-                              ''PreferNoSchedule'', ''NoExecute'''
-                            rule: self.all(x, x.effect in ['NoSchedule', 'PreferNoSchedule',
-                              'NoExecute'])
-                        tolerations:
-                          description: |-
-                            tolerations are extra tolerations that will be added to the pods admitted in
-                            the quota associated with this resource flavor.
-
-                            An example of a toleration is
-                            cloud.provider.com/preemptible="true":NoSchedule
-
-                            tolerations can be up to 8 elements.
-                          items:
-                            description: |-
-                              The pod this Toleration is attached to tolerates any taint that matches
-                              the triple <key,value,effect> using the matching operator <operator>.
-                            properties:
-                              effect:
-                                description: |-
-                                  Effect indicates the taint effect to match. Empty means match all taint effects.
-                                  When specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.
-                                type: string
-                              key:
-                                description: |-
-                                  Key is the taint key that the toleration applies to. Empty means match all taint keys.
-                                  If the key is empty, operator must be Exists; this combination means to match all values and all keys.
-                                type: string
-                              operator:
-                                description: |-
-                                  Operator represents a key's relationship to the value.
-                                  Valid operators are Exists and Equal. Defaults to Equal.
-                                  Exists is equivalent to wildcard for value, so that a pod can
-                                  tolerate all taints of a particular category.
-                                type: string
-                              tolerationSeconds:
-                                description: |-
-                                  TolerationSeconds represents the period of time the toleration (which must be
-                                  of effect NoExecute, otherwise this field is ignored) tolerates the taint. By default,
-                                  it is not set, which means tolerate the taint forever (do not evict). Zero and
-                                  negative values will be treated as 0 (evict immediately) by the system.
-                                format: int64
-                                type: integer
-                              value:
-                                description: |-
-                                  Value is the taint value the toleration matches to.
-                                  If the operator is Exists, the value should be empty, otherwise just a regular string.
-                                type: string
-                            type: object
-                          maxItems: 8
-                          type: array
-                          x-kubernetes-list-type: atomic
-                          x-kubernetes-validations:
-                          - message: operator must be Exists when 'key' is empty,
-                              which means 'match all values and all keys'
-                            rule: 'self.all(x, !has(x.key) ? x.operator == ''Exists''
-                              : true)'
-                          - message: effect must be 'NoExecute' when 'tolerationSeconds'
-                              is set
-                            rule: 'self.all(x, has(x.tolerationSeconds) ? x.effect
-                              == ''NoExecute'' : true)'
-                          - message: 'supported toleration values: ''Equal''(default),
-                              ''Exists'''
-                            rule: self.all(x, !has(x.operator) || x.operator in ['Equal',
-                              'Exists'])
-                          - message: a value must be empty when 'operator' is 'Exists'
-                            rule: 'self.all(x, has(x.operator) && x.operator == ''Exists''
-                              ? !has(x.value) : true)'
-                          - message: 'supported taint effect values: ''NoSchedule'',
-                              ''PreferNoSchedule'', ''NoExecute'''
-                            rule: self.all(x, !has(x.effect) || x.effect in ['NoSchedule',
-                              'PreferNoSchedule', 'NoExecute'])
-                        topologyName:
-                          description: |-
-                            topologyName indicates topology for the TAS ResourceFlavor.
-                            When specified, it enables scraping of the topology information from the
-                            nodes matching to the Resource Flavor node labels.
-                          maxLength: 253
-                          pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
-                          type: string
-                      type: object
-                      x-kubernetes-validations:
-                      - message: at least one nodeLabel is required when topology
-                          is set
-                        rule: '!has(self.topologyName) || self.nodeLabels.size() >=
-                          1'
-                      - message: resourceFlavorSpec are immutable when topologyName
-                          is set
-                        rule: '!has(oldSelf.topologyName) || self == oldSelf'
-                  type: object
-                type: array
-              workloadPriorityClasses:
-                items:
-                  description: WorkloadPriorityClassSpec defines the priority class
-                    configuration for workloads.
-                  properties:
-                    description:
-                      type: string
-                    name:
-                      type: string
                     value:
+                      description: |-
+                        value represents the integer value of this workloadPriorityClass. This is the actual priority that workloads
+                        receive when jobs have the name of this class in their workloadPriorityClass label.
+                        Changing the value of workloadPriorityClass doesn't affect the priority of workloads that were already created.
                       format: int32
                       type: integer
                   required:
-                  - description
-                  - name
                   - value
                   type: object
+                maxItems: 5
                 type: array
             type: object
           status:
