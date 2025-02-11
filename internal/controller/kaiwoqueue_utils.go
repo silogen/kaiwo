@@ -74,6 +74,7 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kueue
 
 	for _, node := range nodeList {
 		// **Skip Control Plane Nodes**
+		// TODO: make this configurable because control planes may be all that exists
 		if _, exists := node.Labels["node-role.kubernetes.io/control-plane"]; exists {
 			continue
 		}

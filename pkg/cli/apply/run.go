@@ -285,7 +285,7 @@ func makeWorkloadName(path string, image string, version string, currentUser str
 		components = append(components, version)
 	}
 
-	return strings.Join(components, "-")
+	return baseutils.SanitizeStringForKubernetes(strings.Join(components, "-"))
 }
 
 // fillSchedulingFlags fills in the GPU scheduling flags based on the Kubernetes cluster state

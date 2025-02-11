@@ -21,7 +21,7 @@ import (
 
 const (
 	DefaultNamespace = "kaiwo"
-	DefaultRayImage  = "ghcr.io/silogen/rocm-ray:v0.7"
+	DefaultRayImage  = "ghcr.io/silogen/rocm-ray:v0.8"
 )
 
 func SanitizeStringForKubernetes(str string) string {
