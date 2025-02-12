@@ -1,6 +1,9 @@
 # Python utils
 
-This folder contains the Python utils for Kaiwo. Please see the following for documentation on the available tools:
+This folder contains the Python utils for Kaiwo. Note that these are internal tools used by the Kaiwo operator,
+and that this documentation is primarily intended for maintainers of this repository.
+
+Please see the following for documentation on the available tools:
 
 * [Kaiwo downloader](./docs/downloader.md), a tool to facilitate downloading data from various object storage backends and Hugging Face Hub 
 
