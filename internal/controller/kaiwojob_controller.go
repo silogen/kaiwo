@@ -87,9 +87,9 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return r.reconcileRayJob(ctx, &kaiwoJob)
 	}
 
-	err = fmt.Errorf("KaiwoJob does not specify a valid Job or RayJob")
-	logger.Error(err, "KaiwoJob is misconfigured", "KaiwoJob", kaiwoJob.Name)
-	return ctrl.Result{}, err
+	jobInvalidErr := fmt.Errorf("KaiwoJob does not specify a valid Job or RayJob")
+	logger.Error(jobInvalidErr, "KaiwoJob is misconfigured", "KaiwoJob", kaiwoJob.Name)
+	return ctrl.Result{}, jobInvalidErr
 }
 
 func (r *KaiwoJobReconciler) reconcileK8sJob(ctx context.Context, kaiwoJob *kaiwov1alpha1.KaiwoJob) (ctrl.Result, error) {
