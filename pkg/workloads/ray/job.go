@@ -35,13 +35,19 @@ var JobTemplate []byte
 
 const EntrypointFilename = "entrypoint"
 
-type Job struct{}
+type Job struct {
+	workloads.WorkloadBase
+	RayJob       rayv1.RayJob
+	SubmitterPod *corev1.Pod
+	HeadPod      *corev1.Pod
+	WorkerPods   []*corev1.Pod
+}
 
 type JobFlags struct {
 	Entrypoint string
 }
 
-func (job Job) GenerateTemplateContext(execFlags workloads.ExecFlags) (any, error) {
+func (j *Job) GenerateTemplateContext(execFlags workloads.ExecFlags) (any, error) {
 	contents, err := os.ReadFile(execFlags.WorkloadFiles[EntrypointFilename])
 	if err != nil {
 		return nil, fmt.Errorf("failed to read entrypoint file: %w", err)
@@ -50,72 +56,47 @@ func (job Job) GenerateTemplateContext(execFlags workloads.ExecFlags) (any, erro
 	return JobFlags{Entrypoint: string(contents)}, nil
 }
 
-func (job Job) DefaultTemplate() ([]byte, error) {
+func (j *Job) DefaultTemplate() ([]byte, error) {
 	if JobTemplate == nil {
 		return nil, fmt.Errorf("job template is empty")
 	}
 	return JobTemplate, nil
 }
 
-func (job Job) ConvertObject(object runtime.Object) (client.Object, bool) {
+func (j *Job) GetObject() client.Object {
+	return &j.RayJob
+}
+
+func (j *Job) ConvertObject(object runtime.Object) (client.Object, bool) {
 	obj, ok := object.(*rayv1.RayJob)
 	return obj, ok
 }
 
-//func (job Job) GenerateName() string {
-//	return utils.BuildWorkloadName(job.Shared.Name, job.Shared.Path, job.Job.Image)
-//}
+func (j *Job) SetFromObject(obj client.Object) error {
+	converted, ok := obj.(*rayv1.RayJob)
+	if !ok {
+		return fmt.Errorf("expected Deployment, got %T", obj)
+	}
+	j.RayJob = *converted
+	return nil
+}
 
-func (job Job) IgnoreFiles() []string {
+func (j *Job) IgnoreFiles() []string {
 	return []string{EntrypointFilename, workloads.KaiwoconfigFilename, workloads.EnvFilename, workloads.TemplateFileName}
 }
 
-func (job Job) GetPods() ([]corev1.Pod, error) {
-	return []corev1.Pod{}, nil
-}
-
-func (job Job) GetServices() ([]corev1.Service, error) {
-	return []corev1.Service{}, nil
-}
-
-func (job Job) GenerateAdditionalResourceManifests(k8sClient client.Client, templateContext workloads.WorkloadTemplateConfig) ([]runtime.Object, error) {
-	localClusterQueueManifest, err := workloads.CreateLocalQueueManifest(k8sClient, templateContext)
+func (j *Job) GenerateAdditionalResourceManifests(ctx context.Context, k8sClient client.Client, templateContext workloads.WorkloadTemplateConfig) ([]client.Object, error) {
+	localClusterQueueManifest, err := workloads.CreateLocalClusterQueueManifest(ctx, k8sClient, templateContext)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create local cluster queue manifest: %w", err)
 	}
 
-	return []runtime.Object{localClusterQueueManifest}, nil
+	return []client.Object{localClusterQueueManifest}, nil
 }
 
-func (job Job) BuildReference(ctx context.Context, k8sClient client.Client, key client.ObjectKey) (workloads.WorkloadReference, error) {
-	obj := &rayv1.RayJob{}
-
-	if err := k8sClient.Get(ctx, key, obj); err != nil {
-		return nil, fmt.Errorf("could not get job: %w", err)
-	}
-	jobRef := &JobReference{
-		RayJob: *obj,
-		WorkloadReferenceBase: workloads.WorkloadReferenceBase{
-			WorkloadObject: obj,
-		},
-	}
-	if err := jobRef.Load(ctx, k8sClient); err != nil {
-		return nil, fmt.Errorf("could not load job: %w", err)
-	}
-	return jobRef, nil
-}
-
-type JobReference struct {
-	workloads.WorkloadReferenceBase
-	RayJob       rayv1.RayJob
-	SubmitterPod *corev1.Pod
-	HeadPod      *corev1.Pod
-	WorkerPods   []*corev1.Pod
-}
-
-func (jobRef *JobReference) GetServices(ctx context.Context, k8sClient client.Client) ([]corev1.Service, error) {
+func (j *Job) GetServices(ctx context.Context, k8sClient client.Client) ([]corev1.Service, error) {
 	serviceLabelSelector := client.MatchingLabels{
-		"ray.io/cluster": jobRef.RayJob.Status.RayClusterName,
+		"ray.io/cluster": j.RayJob.Status.RayClusterName,
 	}
 	serviceList := &corev1.ServiceList{}
 	if err := k8sClient.List(ctx, serviceList, serviceLabelSelector); err != nil {
@@ -124,10 +105,10 @@ func (jobRef *JobReference) GetServices(ctx context.Context, k8sClient client.Cl
 	return serviceList.Items, nil
 }
 
-func (jobRef *JobReference) Load(ctx context.Context, k8sClient client.Client) error {
+func (j *Job) ResolveStructure(ctx context.Context, k8sClient client.Client) error {
 	// Find cluster pods
 	clusterPodLabelSelector := client.MatchingLabels{
-		"ray.io/cluster": jobRef.RayJob.Status.RayClusterName,
+		"ray.io/cluster": j.RayJob.Status.RayClusterName,
 	}
 
 	clusterPodList := &corev1.PodList{}
@@ -136,16 +117,16 @@ func (jobRef *JobReference) Load(ctx context.Context, k8sClient client.Client) e
 	}
 
 	// Clear
-	jobRef.HeadPod = nil
-	jobRef.WorkerPods = []*corev1.Pod{}
+	j.HeadPod = nil
+	j.WorkerPods = []*corev1.Pod{}
 
 	for _, pod := range clusterPodList.Items {
 		nodeType := pod.Labels["ray.io/node-type"]
 		if nodeType == "worker" {
-			jobRef.WorkerPods = append(jobRef.WorkerPods, &pod)
+			j.WorkerPods = append(j.WorkerPods, &pod)
 		} else if nodeType == "head" {
-			if jobRef.HeadPod == nil {
-				jobRef.HeadPod = &pod
+			if j.HeadPod == nil {
+				j.HeadPod = &pod
 			} else {
 				logrus.Warn("More than one head pod encountered")
 			}
@@ -156,8 +137,8 @@ func (jobRef *JobReference) Load(ctx context.Context, k8sClient client.Client) e
 
 	// Find submitter pod
 	submitterPodLabelSelector := client.MatchingLabels{
-		"batch.kubernetes.io/job-name": jobRef.RayJob.GetName(),
-		"job-name":                     jobRef.RayJob.GetName(),
+		"batch.kubernetes.io/job-name": j.RayJob.GetName(),
+		"job-name":                     j.RayJob.GetName(),
 	}
 
 	submitterPodList := &corev1.PodList{}
@@ -169,7 +150,7 @@ func (jobRef *JobReference) Load(ctx context.Context, k8sClient client.Client) e
 	case 0:
 		logrus.Warn("No submitter pods found")
 	case 1:
-		jobRef.SubmitterPod = &submitterPodList.Items[0]
+		j.SubmitterPod = &submitterPodList.Items[0]
 	default:
 		logrus.Warn("More than one submitter pods found")
 	}
@@ -177,24 +158,24 @@ func (jobRef *JobReference) Load(ctx context.Context, k8sClient client.Client) e
 	return nil
 }
 
-func (jobRef *JobReference) GetPods() []workloads.WorkloadPod {
+func (j *Job) ListKnownPods() []workloads.WorkloadPod {
 	var pods []workloads.WorkloadPod
 
-	if jobRef.SubmitterPod != nil {
+	if j.SubmitterPod != nil {
 		pods = append(pods, workloads.WorkloadPod{
-			Pod:          *jobRef.SubmitterPod,
+			Pod:          *j.SubmitterPod,
 			LogicalGroup: "submitter",
 		})
 	}
 
-	if jobRef.HeadPod != nil {
+	if j.HeadPod != nil {
 		pods = append(pods, workloads.WorkloadPod{
-			Pod:          *jobRef.HeadPod,
+			Pod:          *j.HeadPod,
 			LogicalGroup: "head",
 		})
 	}
 
-	for _, pod := range jobRef.WorkerPods {
+	for _, pod := range j.WorkerPods {
 		pods = append(pods, workloads.WorkloadPod{
 			Pod:          *pod,
 			LogicalGroup: "worker",
@@ -203,6 +184,6 @@ func (jobRef *JobReference) GetPods() []workloads.WorkloadPod {
 	return pods
 }
 
-func (jobRef *JobReference) GetStatus() string {
+func (j *Job) GetStatus() string {
 	return "N/A (TODO)"
 }

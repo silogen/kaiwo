@@ -15,6 +15,7 @@
 package workloads
 
 import (
+	"context"
 	"fmt"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -29,7 +30,7 @@ type JobFlags struct {
 	Queue string
 }
 
-func CreateLocalQueueManifest(k8sClient client.Client, templateContext WorkloadTemplateConfig) (*kueuev1beta1.LocalQueue, error) {
+func CreateLocalClusterQueueManifest(ctx context.Context, k8sClient client.Client, templateContext WorkloadTemplateConfig) (*kueuev1beta1.LocalQueue, error) {
 	jobMeta, ok := templateContext.WorkloadMeta.(JobFlags)
 
 	if !ok {
@@ -37,7 +38,7 @@ func CreateLocalQueueManifest(k8sClient client.Client, templateContext WorkloadT
 	}
 
 	// Handle jobs local queue
-	localQueue, err := k8s.PrepareLocalQueue(jobMeta.Queue, templateContext.Meta.Namespace, k8sClient)
+	localQueue, err := k8s.PrepareLocalClusterQueue(ctx, jobMeta.Queue, templateContext.Meta.Namespace, k8sClient)
 	if err != nil {
 		return nil, fmt.Errorf("error preparing local cluster queue: %v", err)
 	}

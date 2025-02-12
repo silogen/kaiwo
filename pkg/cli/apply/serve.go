@@ -46,10 +46,10 @@ func BuildServeCmd() *cobra.Command {
 			}
 
 			if useRayForServe {
-				deployment = ray.Deployment{}
+				deployment = &ray.Deployment{}
 				logrus.Debugln("Using RayService for deployment")
 			} else {
-				deployment = deployments.Deployment{}
+				deployment = &deployments.Deployment{}
 			}
 
 			return RunApply(deployment, deploymentFlags)

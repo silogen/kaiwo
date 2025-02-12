@@ -24,7 +24,6 @@ import (
 	"github.com/sirupsen/logrus"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/silogen/kaiwo/pkg/workloads"
@@ -35,13 +34,24 @@ var JobTemplate []byte
 
 const EntrypointFilename = "entrypoint"
 
-type Job struct{}
+type Job struct {
+	workloads.WorkloadBase
+	Job  batchv1.Job
+	Pods []corev1.Pod
+}
 
 type JobFlags struct {
 	Entrypoint string
 }
 
-func (job Job) GenerateTemplateContext(execFlags workloads.ExecFlags) (any, error) {
+func (j *Job) DefaultTemplate() ([]byte, error) {
+	if JobTemplate == nil {
+		return nil, fmt.Errorf("job template is empty")
+	}
+	return JobTemplate, nil
+}
+
+func (j *Job) GenerateTemplateContext(execFlags workloads.ExecFlags) (any, error) {
 	contents, err := os.ReadFile(execFlags.WorkloadFiles[EntrypointFilename])
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -60,68 +70,38 @@ func (job Job) GenerateTemplateContext(execFlags workloads.ExecFlags) (any, erro
 	return JobFlags{Entrypoint: entrypoint}, nil
 }
 
-func (job Job) DefaultTemplate() ([]byte, error) {
-	if JobTemplate == nil {
-		return nil, fmt.Errorf("job template is empty")
+func (j *Job) GetObject() client.Object {
+	return &j.Job
+}
+
+func (j *Job) SetFromObject(obj client.Object) error {
+	converted, ok := obj.(*batchv1.Job)
+	if !ok {
+		return fmt.Errorf("expected Job, got %T", obj)
 	}
-	return JobTemplate, nil
+	j.Job = *converted
+	return nil
 }
 
-func (job Job) ConvertObject(object runtime.Object) (client.Object, bool) {
-	obj, ok := object.(*batchv1.Job)
-	return obj, ok
-}
-
-func (job Job) IgnoreFiles() []string {
+func (j *Job) IgnoreFiles() []string {
 	return []string{EntrypointFilename, workloads.KaiwoconfigFilename, workloads.EnvFilename, workloads.TemplateFileName}
 }
 
-func (job Job) GetPods() ([]corev1.Pod, error) {
-	return []corev1.Pod{}, nil
-}
-
-func (job Job) GetServices() ([]corev1.Service, error) {
-	return []corev1.Service{}, nil
-}
-
-func (job Job) GenerateAdditionalResourceManifests(k8sClient client.Client, templateContext workloads.WorkloadTemplateConfig) ([]runtime.Object, error) {
-	localClusterQueueManifest, err := workloads.CreateLocalQueueManifest(k8sClient, templateContext)
+func (j *Job) GenerateAdditionalResourceManifests(ctx context.Context, k8sClient client.Client, templateContext workloads.WorkloadTemplateConfig) ([]client.Object, error) {
+	localClusterQueueManifest, err := workloads.CreateLocalClusterQueueManifest(ctx, k8sClient, templateContext)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create local cluster queue manifest: %w", err)
 	}
 
-	return []runtime.Object{localClusterQueueManifest}, nil
+	return []client.Object{localClusterQueueManifest}, nil
 }
 
-func (job Job) BuildReference(ctx context.Context, k8sClient client.Client, key client.ObjectKey) (workloads.WorkloadReference, error) {
-	obj := &batchv1.Job{}
-	if err := k8sClient.Get(ctx, key, obj); err != nil {
-		return nil, fmt.Errorf("could not get job: %w", err)
-	}
-	jobRef := &JobReference{
-		Job: *obj,
-		WorkloadReferenceBase: workloads.WorkloadReferenceBase{
-			WorkloadObject: obj,
-		},
-	}
-	if err := jobRef.Load(ctx, k8sClient); err != nil {
-		return nil, fmt.Errorf("could not load job: %w", err)
-	}
-	return jobRef, nil
-}
-
-type JobReference struct {
-	workloads.WorkloadReferenceBase
-	Job  batchv1.Job
-	Pods []corev1.Pod
-}
-
-func (jobRef *JobReference) Load(ctx context.Context, k8sClient client.Client) error {
-	logrus.Debugf("loading job reference %s", jobRef.Job.Name)
+func (j *Job) ResolveStructure(ctx context.Context, k8sClient client.Client) error {
+	logrus.Debugf("loading job reference %s", j.Job.Name)
 
 	pods := &corev1.PodList{}
 
-	controllerUID, exists := jobRef.Job.Spec.Template.Labels["batch.kubernetes.io/controller-uid"]
+	controllerUID, exists := j.Job.Spec.Template.Labels["batch.kubernetes.io/controller-uid"]
 
 	if !exists {
 		return fmt.Errorf("controller-uid label is missing in the Job's pod template")
@@ -132,25 +112,25 @@ func (jobRef *JobReference) Load(ctx context.Context, k8sClient client.Client) e
 	labelSelector := client.MatchingLabels{
 		"batch.kubernetes.io/controller-uid": controllerUID,
 		"controller-uid":                     controllerUID,
-		"batch.kubernetes.io/job-name":       jobRef.Job.GetName(),
-		"job-name":                           jobRef.Job.GetName(),
+		"batch.kubernetes.io/job-name":       j.Job.GetName(),
+		"job-name":                           j.Job.GetName(),
 	}
-	if err := k8sClient.List(ctx, pods, client.InNamespace(jobRef.Job.Namespace), labelSelector); err != nil {
+	if err := k8sClient.List(ctx, pods, client.InNamespace(j.Job.Namespace), labelSelector); err != nil {
 		return fmt.Errorf("could not list pods: %w", err)
 	}
 
 	logrus.Debugf("Found %d pods", len(pods.Items))
 
 	// Clear existing pods and append the new ones
-	jobRef.Pods = nil
-	jobRef.Pods = append(jobRef.Pods, pods.Items...)
+	j.Pods = nil
+	j.Pods = append(j.Pods, pods.Items...)
 
 	return nil
 }
 
-func (jobRef *JobReference) GetPods() []workloads.WorkloadPod {
-	workloadPods := make([]workloads.WorkloadPod, len(jobRef.Pods))
-	for i, pod := range jobRef.Pods {
+func (j *Job) ListKnownPods() []workloads.WorkloadPod {
+	workloadPods := make([]workloads.WorkloadPod, len(j.Pods))
+	for i, pod := range j.Pods {
 		workloadPods[i] = workloads.WorkloadPod{
 			Pod: pod,
 		}
@@ -158,6 +138,6 @@ func (jobRef *JobReference) GetPods() []workloads.WorkloadPod {
 	return workloadPods
 }
 
-func (jobRef *JobReference) GetStatus() string {
+func (j *Job) GetStatus() string {
 	return "N/A (TODO)"
 }

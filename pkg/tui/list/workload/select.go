@@ -58,7 +58,7 @@ func runSelectWorkload(ctx context.Context, clients k8s.KubernetesClients, state
 
 	var err error
 
-	var workloadReferences []workloads.WorkloadReference
+	var workloadReferences []workloads.Workload
 
 	loadReferences := func() {
 		workloadReferences, err = factory.ListObjects(ctx, clients.Client, state.WorkloadType, labelSelector, client.InNamespace(state.Namespace))
@@ -80,7 +80,7 @@ func runSelectWorkload(ctx context.Context, clients k8s.KubernetesClients, state
 
 	var data [][]string
 
-	dataMap := map[string]workloads.WorkloadReference{}
+	dataMap := map[string]workloads.Workload{}
 
 	for _, workloadReference := range workloadReferences {
 		data = append(data, []string{
@@ -102,9 +102,9 @@ func runSelectWorkload(ctx context.Context, clients k8s.KubernetesClients, state
 		return result, nil, fmt.Errorf("failed to select the workload: %w", err)
 	}
 	if result == tuicomponents.StepResultOk {
-		state.WorkloadReference = workloadReferences[selectedRow]
+		state.Workload = workloadReferences[selectedRow]
 	} else {
-		state.WorkloadReference = nil
+		state.Workload = nil
 	}
 
 	return result, runSelectWorkloadAction, nil
