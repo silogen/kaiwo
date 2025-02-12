@@ -15,21 +15,18 @@
 package controller
 
 import (
-	"context"
 	"fmt"
-	"strings"
 
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	pkgk8s "github.com/silogen/kaiwo/pkg/k8s"
 )
 
 // FillRayClusterPodSpec fills PodSpec for RayCluster head and worker nodes
-func FillRayClusterPodSpec(ctx context.Context, client client.Client, kaiwoJob *kaiwov1alpha1.KaiwoJob, rayCluster *rayv1.RayClusterSpec) error {
+func FillRayClusterPodSpec(kaiwoJob *kaiwov1alpha1.KaiwoJob, rayCluster *rayv1.RayClusterSpec) error {
 	gpusPerNode := int32(8) // Default, should be fetched dynamically
 	numReplicas, nodeGpuRequest := pkgk8s.CalculateNumberOfReplicas(kaiwoJob.Spec.Gpus, int(gpusPerNode), nil)
 
@@ -69,74 +66,28 @@ func configureRayContainer(name string, podSpec *corev1.PodSpec, kaiwoJob *kaiwo
 		FSGroup:    Int64Ptr(1000),
 	}
 
-	addS3InitContainer(podSpec, kaiwoJob)
-
 	container := &corev1.Container{
 		Name:            name,
 		Image:           kaiwoJob.Spec.Image,
 		ImagePullPolicy: corev1.PullAlways,
-		Env: append([]corev1.EnvVar{
-			{Name: "HF_HOME", Value: "/workload/.cache/huggingface"},
-		}, kaiwoJob.Spec.EnvVars...),
+		Env:             kaiwoJob.Spec.EnvVars,
 		Ports: []corev1.ContainerPort{
 			{ContainerPort: 6379, Name: "gcs-server"},
 			{ContainerPort: 8265, Name: "dashboard"},
 			{ContainerPort: 10001, Name: "client"},
 		},
-		Resources: getGpuResourceRequests(kaiwoJob, gpuResourceKey, gpuCount),
-		VolumeMounts: getVolumeMounts(
-			kaiwoJob,
-			"/workload/mounted",
-		),
+		Resources:    getGpuResourceRequests(kaiwoJob, gpuResourceKey, gpuCount),
+		VolumeMounts: getVolumeMounts(),
 	}
 
 	podSpec.Containers = []corev1.Container{*container}
-	podSpec.Volumes = getVolumes(kaiwoJob)
-}
-
-// addS3InitContainer adds an init container to pre-download S3 data
-func addS3InitContainer(podSpec *corev1.PodSpec, kaiwoJob *kaiwov1alpha1.KaiwoJob) {
-	if kaiwoJob.Spec.ConfigSource == nil || strings.ToLower(kaiwoJob.Spec.ConfigSource.Type) != "s3" {
-		return
-	}
-
-	secretRef := kaiwoJob.Spec.ConfigSource.S3Credentials
-	envVars := []corev1.EnvVar{}
-
-	if secretRef != nil {
-		envVars = append(envVars,
-			corev1.EnvVar{Name: "AWS_ACCESS_KEY_ID", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: secretRef.Name}, Key: "access-key"}}},
-			corev1.EnvVar{Name: "AWS_SECRET_ACCESS_KEY", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: secretRef.Name}, Key: "secret-key"}}},
-			corev1.EnvVar{Name: "S3_ENDPOINT", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: secretRef.Name}, Key: "endpoint"}}},
-		)
-	}
-
-	initContainer := corev1.Container{
-		Name:  "s3-downloader",
-		Image: "minio/mc",
-		Command: []string{
-			"sh", "-c",
-			fmt.Sprintf(`
-				mc alias set myminio $S3_ENDPOINT $AWS_ACCESS_KEY_ID $AWS_SECRET_ACCESS_KEY &&
-				mc cp --recursive myminio/%s/%s /workload
-			`, kaiwoJob.Spec.ConfigSource.S3BucketName, kaiwoJob.Spec.ConfigSource.S3Path),
-		},
-		VolumeMounts: []corev1.VolumeMount{
-			{Name: "workload", MountPath: "/workload"},
-		},
-		Env: envVars,
-	}
-
-	podSpec.InitContainers = append(podSpec.InitContainers, initContainer)
+	podSpec.Volumes = getVolumes()
 }
 
 // FillPodSpec configures the PodSpec for Jobs & Deployments.
-func FillPodSpec(ctx context.Context, client client.Client, kaiwoJob *kaiwov1alpha1.KaiwoJob, podSpec *corev1.PodSpec) error {
+func FillPodSpec(kaiwoJob *kaiwov1alpha1.KaiwoJob, podSpec *corev1.PodSpec) error {
 	// Determine GPU resource key
 	gpuResourceKey := getGpuResourceKey(kaiwoJob.Spec.GpuVendor)
-
-	// Add S3 init container if necessary
-	// addS3InitContainer(podSpec, kaiwoJob)
 
 	// Configure the main container
 	container := &corev1.Container{
@@ -152,7 +103,7 @@ func FillPodSpec(ctx context.Context, client client.Client, kaiwoJob *kaiwov1alp
 	}
 
 	podSpec.Containers = []corev1.Container{*container}
-	podSpec.Volumes = getVolumes(kaiwoJob)
+	podSpec.Volumes = getVolumes()
 	podSpec.RestartPolicy = corev1.RestartPolicyNever
 
 	return nil
@@ -188,22 +139,15 @@ func getGpuResourceRequests(kaiwoJob *kaiwov1alpha1.KaiwoJob, gpuResourceKey str
 	}
 }
 
-func getVolumeMounts(kaiwoJob *kaiwov1alpha1.KaiwoJob, mountedPath string) []corev1.VolumeMount {
+func getVolumeMounts() []corev1.VolumeMount {
 	volumeMounts := []corev1.VolumeMount{
 		{Name: "dshm", MountPath: "/dev/shm"},
-	}
-
-	if kaiwoJob.Spec.Storage.StorageEnabled {
-		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			Name:      kaiwoJob.Name + "-main",
-			MountPath: mountedPath,
-		})
 	}
 
 	return volumeMounts
 }
 
-func getVolumes(kaiwoJob *kaiwov1alpha1.KaiwoJob) []corev1.Volume {
+func getVolumes() []corev1.Volume {
 	volumes := []corev1.Volume{
 		{
 			Name: "dshm",
@@ -212,30 +156,6 @@ func getVolumes(kaiwoJob *kaiwov1alpha1.KaiwoJob) []corev1.Volume {
 			},
 		},
 	}
-
-	//if kaiwoJob.Spec.Storage.StorageEnabled {
-	//	storageRequest := resource.MustParse(kaiwoJob.Spec.Storage.StorageSize)
-	//
-	//	volumes = append(volumes, corev1.Volume{
-	//		Name: kaiwoJob.Name + "-main",
-	//		VolumeSource: corev1.VolumeSource{
-	//			Ephemeral: &corev1.EphemeralVolumeSource{
-	//				VolumeClaimTemplate: &corev1.PersistentVolumeClaimTemplate{
-	//					Spec: corev1.PersistentVolumeClaimSpec{
-	//						AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-	//						StorageClassName: &kaiwoJob.Spec.Storage.StorageClassName,
-	//						Resources: corev1.VolumeResourceRequirements{
-	//							Requests: corev1.ResourceList{
-	//								corev1.ResourceStorage: storageRequest,
-	//							},
-	//						},
-	//					},
-	//				},
-	//			},
-	//		},
-	//	})
-	//}
-
 	return volumes
 }
 

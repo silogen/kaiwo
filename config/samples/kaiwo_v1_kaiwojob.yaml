@@ -2,15 +2,17 @@ apiVersion: kaiwo.silogen.ai/v1alpha1
 kind: KaiwoJob
 metadata:
   name: example-kaiwojob
-  namespace: alex-test
+  namespace: kaiwo-test
 spec:
-  user: alex.saliniemi@amd.com
+  user: test@amd.com
   gpus: 0
   storage:
     storageEnabled: true
     storageClassName: "local-path"
+    accessMode: "ReadWriteOnce"
     data:
       storageSize: "2Gi"
+      mountPath: "/workload"
       download:
         s3:
           - endpointUrl:
@@ -44,6 +46,7 @@ spec:
                     targetPath: azure/all
     huggingFace:
       storageSize: "2Gi"
+      mountPath: "/.cache/huggingface"  # Also sets the env var HF_HOME to this value in each container
       preCacheRepos:
         - repoId: TinyLlama/TinyLlama-1.1B-Chat-v1.0
           files:

@@ -47,6 +47,10 @@ type StorageSpec struct {
 	// StorageClassName specifies the storage class used for PVC.
 	StorageClassName string `json:"storageClassName,omitempty"`
 
+	// AccessMode determines the access mode for the storage
+	// +kubebuilder:default=ReadWriteMany
+	AccessMode corev1.PersistentVolumeAccessMode `json:"accessMode"`
+
 	// Data specifies the main workload PVC and optional object storage pre-downloads
 	Data DataStorageSpec `json:"data,omitempty"`
 
@@ -58,7 +62,7 @@ type DownloadTaskConfig struct {
 	// DownloadRoot specifies the common root for all the downloads
 	DownloadRoot string `json:"downloadRoot" yaml:"downloadRoot"`
 
-	// HfHome specifies
+	// HfHome specifies path for $HF_HOME env variable
 	HfHome string `json:"hfHome" yaml:"hfHome"`
 
 	S3        []S3DownloadItem               `json:"s3,omitempty" yaml:"s3,omitempty"`
@@ -172,7 +176,8 @@ type ObjectStorageDownloadSpec struct {
 }
 
 type HfStorageSpec struct {
-	// MountPath specifies where the data HF will be mounted to in each pod
+	// MountPath specifies where the data HF will be mounted to in each pod.
+	// This is also used to set the HF_HOME environmental variable into each container.
 	MountPath string `json:"mountPath,omitempty"`
 
 	// StorageSize specifies the amount of storage allocated to the HF PVC

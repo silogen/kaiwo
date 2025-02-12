@@ -38,6 +38,8 @@ issues:
       linters:
         - dupl
         - lll
+  exclude-dirs:
+    - python
 linters-settings:
   goimports:
     local-prefixes: github.com/silogen/kaiwo

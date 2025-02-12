@@ -25268,6 +25268,10 @@ spec:
               storage:
                 description: Storage configuration for the workload.
                 properties:
+                  accessMode:
+                    default: ReadWriteMany
+                    description: AccessMode determines the access mode for the storage
+                    type: string
                   data:
                     description: Data specifies the main workload PVC and optional
                       object storage pre-downloads
@@ -25502,8 +25506,9 @@ spec:
                       should be cached before the workload starts
                     properties:
                       mountPath:
-                        description: MountPath specifies where the data HF will be
-                          mounted to in each pod
+                        description: |-
+                          MountPath specifies where the data HF will be mounted to in each pod.
+                          This is also used to set the HF_HOME environmental variable into each container.
                         type: string
                       preCacheRepos:
                         description: PreCacheRepos is a list of repositories (and
@@ -25534,6 +25539,8 @@ spec:
                     description: StorageEnabled tells whether to enable persistent
                       storage.
                     type: boolean
+                required:
+                - accessMode
                 type: object
               user:
                 description: |-
