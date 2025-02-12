@@ -71,6 +71,8 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 	nodePoolResources := make(map[string]kueuev1beta1.FlavorQuotas)
 	nodePools := make(map[string][]string)
 
+	resourceAggregates := make(map[string]map[corev1.ResourceName]*resource.Quantity)
+
 	// Get node list dynamically
 	nodeList := GetNodeResources(ctx, c)
 
@@ -111,27 +113,51 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 		// Track node membership in the nodepool
 		nodePools[flavorName] = append(nodePools[flavorName], node.Name)
 
-		// Define ResourceQuota for this nodepool
-		resourceQuotas := []kueuev1beta1.ResourceQuota{
-			{
-				Name:         corev1.ResourceCPU,
-				NominalQuota: *nominalCPU,
-			},
-			{
-				Name:         corev1.ResourceMemory,
-				NominalQuota: *nominalMemory,
-			},
+		if _, exists := resourceAggregates[flavorName]; !exists {
+			resourceAggregates[flavorName] = map[corev1.ResourceName]*resource.Quantity{
+				corev1.ResourceCPU:    resource.NewQuantity(0, resource.DecimalSI),
+				corev1.ResourceMemory: resource.NewQuantity(0, resource.BinarySI),
+			}
+			if gpuCount > 0 {
+				gpuResource := corev1.ResourceName("amd.com/gpu")
+				if strings.HasPrefix(gpuType, "nvidia") {
+					gpuResource = corev1.ResourceName("nvidia.com/gpu")
+				}
+				resourceAggregates[flavorName][gpuResource] = resource.NewQuantity(0, resource.DecimalSI)
+			}
 		}
 
-		// If the node has GPUs, add GPU quotas
+		resourceAggregates[flavorName][corev1.ResourceCPU].Add(*nominalCPU)
+		resourceAggregates[flavorName][corev1.ResourceMemory].Add(*nominalMemory)
+
 		if gpuCount > 0 {
 			gpuResource := corev1.ResourceName("amd.com/gpu")
 			if strings.HasPrefix(gpuType, "nvidia") {
 				gpuResource = corev1.ResourceName("nvidia.com/gpu")
 			}
+			resourceAggregates[flavorName][gpuResource].Add(*resource.NewQuantity(int64(gpuCount), resource.DecimalSI))
+		}
+	}
+
+	for flavorName := range nodePools {
+		resourceQuotas := []kueuev1beta1.ResourceQuota{
+			{
+				Name:         corev1.ResourceCPU,
+				NominalQuota: *resourceAggregates[flavorName][corev1.ResourceCPU],
+			},
+			{
+				Name:         corev1.ResourceMemory,
+				NominalQuota: *resourceAggregates[flavorName][corev1.ResourceMemory],
+			},
+		}
+
+		for resourceName, quota := range resourceAggregates[flavorName] {
+			if resourceName == corev1.ResourceCPU || resourceName == corev1.ResourceMemory {
+				continue
+			}
 			resourceQuotas = append(resourceQuotas, kueuev1beta1.ResourceQuota{
-				Name:         gpuResource,
-				NominalQuota: *resource.NewQuantity(int64(gpuCount), resource.DecimalSI),
+				Name:         resourceName,
+				NominalQuota: *quota,
 			})
 		}
 
@@ -141,6 +167,7 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 			Resources: resourceQuotas,
 		}
 
+		// Define ResourceFlavor
 		resourceFlavors = append(resourceFlavors, kaiwov1alpha1.ResourceFlavorSpec{
 			Name: flavorName,
 			NodeLabels: map[string]string{
@@ -151,7 +178,6 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 
 	resourceFlavors = RemoveDuplicateResourceFlavors(resourceFlavors)
 
-	// Label each node in the nodepool
 	for flavorName, nodeNames := range nodePools {
 		for _, nodeName := range nodeNames {
 			err := LabelNode(ctx, c, nodeName, "kaiwo/nodepool", flavorName)
