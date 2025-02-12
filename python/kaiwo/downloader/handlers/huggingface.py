@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class HuggingFaceDownloadTaskConfig(DownloadTaskConfigBase):
     type: Literal["hf"] = "hf"
 
-    repo_id: str
+    repo_id: str = Field(alias="repoId")
     files: List[str] = Field(default_factory=list)
 
     def run(self, download_root: str = None, max_workers: int = 5) -> None:

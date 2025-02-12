@@ -75,10 +75,10 @@ def upload_test_data(root: CloudPath) -> None:
 
 
 if __name__ == "__main__":
-    print("Uploading GCP test data to local emulator")
-    upload_test_data(get_gcp_test_root())
-    print("Uploading S3 test data to local Minio")
-    upload_test_data(get_s3_test_root())
+    # print("Uploading GCP test data to local emulator")
+    # upload_test_data(get_gcp_test_root())
+    # print("Uploading S3 test data to local Minio")
+    # upload_test_data(get_s3_test_root())
     print("Uploading Azure test data to local azurite")
     upload_test_data(get_azure_test_root())
     print("Done!")

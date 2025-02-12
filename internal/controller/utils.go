@@ -143,15 +143,8 @@ func FillPodSpec(ctx context.Context, client client.Client, kaiwoJob *kaiwov1alp
 		Name:            kaiwoJob.Name,
 		Image:           kaiwoJob.Spec.Image,
 		ImagePullPolicy: corev1.PullAlways,
-		Env: append([]corev1.EnvVar{
-			{Name: "HF_HOME", Value: "/workload/.cache/huggingface"},
-		}, kaiwoJob.Spec.EnvVars...),
-		Ports:     []corev1.ContainerPort{},
-		Resources: getGpuResourceRequests(kaiwoJob, gpuResourceKey, int32(kaiwoJob.Spec.Gpus)),
-		VolumeMounts: getVolumeMounts(
-			kaiwoJob,
-			"/workload/mounted",
-		),
+		Ports:           []corev1.ContainerPort{},
+		Resources:       getGpuResourceRequests(kaiwoJob, gpuResourceKey, int32(kaiwoJob.Spec.Gpus)),
 	}
 
 	if kaiwoJob.Spec.EntryPoint != "" {
@@ -220,28 +213,28 @@ func getVolumes(kaiwoJob *kaiwov1alpha1.KaiwoJob) []corev1.Volume {
 		},
 	}
 
-	if kaiwoJob.Spec.Storage.StorageEnabled {
-		storageRequest := resource.MustParse(kaiwoJob.Spec.Storage.StorageSize)
-
-		volumes = append(volumes, corev1.Volume{
-			Name: kaiwoJob.Name + "-main",
-			VolumeSource: corev1.VolumeSource{
-				Ephemeral: &corev1.EphemeralVolumeSource{
-					VolumeClaimTemplate: &corev1.PersistentVolumeClaimTemplate{
-						Spec: corev1.PersistentVolumeClaimSpec{
-							AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany},
-							StorageClassName: &kaiwoJob.Spec.Storage.StorageClassName,
-							Resources: corev1.VolumeResourceRequirements{
-								Requests: corev1.ResourceList{
-									corev1.ResourceStorage: storageRequest,
-								},
-							},
-						},
-					},
-				},
-			},
-		})
-	}
+	//if kaiwoJob.Spec.Storage.StorageEnabled {
+	//	storageRequest := resource.MustParse(kaiwoJob.Spec.Storage.StorageSize)
+	//
+	//	volumes = append(volumes, corev1.Volume{
+	//		Name: kaiwoJob.Name + "-main",
+	//		VolumeSource: corev1.VolumeSource{
+	//			Ephemeral: &corev1.EphemeralVolumeSource{
+	//				VolumeClaimTemplate: &corev1.PersistentVolumeClaimTemplate{
+	//					Spec: corev1.PersistentVolumeClaimSpec{
+	//						AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+	//						StorageClassName: &kaiwoJob.Spec.Storage.StorageClassName,
+	//						Resources: corev1.VolumeResourceRequirements{
+	//							Requests: corev1.ResourceList{
+	//								corev1.ResourceStorage: storageRequest,
+	//							},
+	//						},
+	//					},
+	//				},
+	//			},
+	//		},
+	//	})
+	//}
 
 	return volumes
 }

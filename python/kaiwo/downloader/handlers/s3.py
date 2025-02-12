@@ -1,6 +1,7 @@
 from typing import List, Literal
 
 from cloudpathlib import CloudPath, S3Client
+from pydantic import Field
 
 from kaiwo.downloader.handlers.base import (
     CloudDownloadBucket,
@@ -13,9 +14,9 @@ from kaiwo.downloader.handlers.base import (
 class S3DownloadTaskConfig(CloudDownloadTaskConfigBase):
     type: Literal["s3"] = "s3"
 
-    endpoint_url: ValueReference
-    access_key_id: ValueReference
-    secret_key: ValueReference
+    endpoint_url: ValueReference = Field(alias="endpointUrl")
+    access_key_id: ValueReference = Field(alias="accessKeyId")
+    secret_key: ValueReference = Field(alias="secretKey")
 
     buckets: List[CloudDownloadBucket]
 

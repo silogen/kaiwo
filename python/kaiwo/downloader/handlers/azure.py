@@ -1,6 +1,7 @@
 from typing import List, Literal
 
 from cloudpathlib import AzureBlobClient, CloudPath
+from pydantic import Field
 
 from kaiwo.downloader.handlers.base import (
     CloudDownloadBucket,
@@ -14,7 +15,7 @@ class AzureBlobDownloadTaskConfig(CloudDownloadTaskConfigBase):
 
     type: Literal["azure-blob"] = "azure-blob"
 
-    connection_string: ValueReference
+    connection_string: ValueReference = Field(alias="connectionString")
 
     containers: List[CloudDownloadBucket]
 

@@ -1,6 +1,7 @@
 from typing import List, Literal
 
 from cloudpathlib import CloudPath, GSClient
+from pydantic import Field
 
 from kaiwo.downloader.handlers.base import (
     CloudDownloadBucket,
@@ -13,7 +14,7 @@ from kaiwo.downloader.handlers.base import (
 class GCSDownloadTaskConfig(CloudDownloadTaskConfigBase):
     type: Literal["gcs"] = "gcs"
 
-    application_credentials: ValueReference = None
+    application_credentials: ValueReference = Field(None, alias="applicationCredentials")
     project: str = None
     buckets: List[CloudDownloadBucket]
 

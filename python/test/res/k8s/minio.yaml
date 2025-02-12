@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: minio-deployment
-  namespace: kaiwo-test
+  namespace: alex-test
 spec:
   replicas: 1
   selector:
@@ -29,7 +29,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: minio-service
-  namespace: kaiwo-test
+  namespace: alex-test
 spec:
   selector:
     app: minio
@@ -44,7 +44,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: minio-secret
-  namespace: kaiwo-test
+  namespace: alex-test
 data:
   access_key_id: bWluaW8=
   secret_key: bWluaW8xMjM=

@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: azurite-deployment
-  namespace: kaiwo-test
+  namespace: alex-test
 spec:
   replicas: 1
   selector:
@@ -25,7 +25,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: azurite-service
-  namespace: kaiwo-test
+  namespace: alex-test
 spec:
   selector:
     app: azurite
@@ -48,7 +48,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: azure-secret
-  namespace: kaiwo-test
+  namespace: alex-test
 data:
   # DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite-service:10000/devstoreaccount1;QueueEndpoint=http://azurite-service:10001/devstoreaccount1;TableEndpoint=http://azurite-service:10002/devstoreaccount1;
   connection_string: RGVmYXVsdEVuZHBvaW50c1Byb3RvY29sPWh0dHA7QWNjb3VudE5hbWU9ZGV2c3RvcmVhY2NvdW50MTtBY2NvdW50S2V5PUVieTh2ZE0wMnhOT2NxRmxxVXdKUExsbUV0bENEWEoxT1V6RlQ1MHVTUlo2SUZzdUZxMlVWRXJDejRJNnRxL0sxU1pGUFRPdHIvS0JIQmVrc29HTUd3PT07QmxvYkVuZHBvaW50PWh0dHA6Ly9henVyaXRlLXNlcnZpY2U6MTAwMDAvZGV2c3RvcmVhY2NvdW50MTtRdWV1ZUVuZHBvaW50PWh0dHA6Ly9henVyaXRlLXNlcnZpY2U6MTAwMDEvZGV2c3RvcmVhY2NvdW50MTtUYWJsZUVuZHBvaW50PWh0dHA6Ly9henVyaXRlLXNlcnZpY2U6MTAwMDIvZGV2c3RvcmVhY2NvdW50MTs=

@@ -12,9 +12,9 @@ from kaiwo.downloader.handlers.s3 import S3DownloadTaskConfig
 class DownloadTaskConfig(BaseModel):
     s3: List[S3DownloadTaskConfig] = Field(default_factory=list)
     gcs: List[GCSDownloadTaskConfig] = Field(default_factory=list)
-    azure_blob: List[AzureBlobDownloadTaskConfig] = Field(default_factory=list)
+    azure_blob: List[AzureBlobDownloadTaskConfig] = Field(default_factory=list, alias="azureBlob")
     hf: List[HuggingFaceDownloadTaskConfig] = Field(default_factory=list)
-    download_root: str = None
+    download_root: str = Field(default=None, alias="downloadRoot")
 
     @property
     def download_items(self) -> List[CloudDownloadTaskConfigBase]:

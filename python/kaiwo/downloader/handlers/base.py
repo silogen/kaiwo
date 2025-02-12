@@ -63,7 +63,7 @@ class CloudDownloadSource(BaseModel):
 
 class CloudDownloadFolder(CloudDownloadSource):
     path: str
-    target_path: str
+    target_path: str = Field(alias="targetPath")
     glob: str = "**/*"
 
     def get_download_tasks(self, root: CloudPath) -> List[CloudDownloadTask]:
@@ -83,7 +83,7 @@ class CloudDownloadFolder(CloudDownloadSource):
 
 class CloudDownloadFile(CloudDownloadSource):
     path: str
-    target_path: str
+    target_path: str = Field(alias="targetPath")
 
     def get_download_tasks(self, root: CloudPath) -> List[CloudDownloadTask]:
         return [
