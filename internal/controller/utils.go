@@ -229,7 +229,7 @@ func getVolumes(kaiwoJob *kaiwov1alpha1.KaiwoJob) []corev1.Volume {
 				Ephemeral: &corev1.EphemeralVolumeSource{
 					VolumeClaimTemplate: &corev1.PersistentVolumeClaimTemplate{
 						Spec: corev1.PersistentVolumeClaimSpec{
-							AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+							AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany},
 							StorageClassName: &kaiwoJob.Spec.Storage.StorageClassName,
 							Resources: corev1.VolumeResourceRequirements{
 								Requests: corev1.ResourceList{

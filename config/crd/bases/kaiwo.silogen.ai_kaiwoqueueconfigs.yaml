@@ -12,14 +12,12 @@ spec:
     listKind: KaiwoQueueConfigList
     plural: kaiwoqueueconfigs
     singular: kaiwoqueueconfig
-  scope: Namespaced
+  scope: Cluster
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: |-
-          KaiwoQueueConfig is the API resource that defines the configuration for queue management
-          within the Kaiwo Operator. It specifies cluster queues, resource flavors, and priority classes.
+        description: KaiwoQueueConfig manages Kueue resources.
         properties:
           apiVersion:
             description: |-
@@ -39,106 +37,443 @@ spec:
           metadata:
             type: object
           spec:
-            description: Spec defines the desired configuration for the queue system.
+            description: KaiwoQueueConfigSpec defines the desired configuration for
+              Kaiwo.
             properties:
               clusterQueues:
-                description: ClusterQueues is a list of ClusterQueue specifications
-                  that define scheduling policies.
+                description: Limit the number of ClusterQueues to avoid excessive
+                  validation rules
                 items:
-                  description: |-
-                    ClusterQueueSpec defines the configuration for a ClusterQueue.
-                    A ClusterQueue determines how workloads are scheduled across available resources.
                   properties:
                     name:
-                      description: Name specifies the name of the cluster queue.
                       type: string
-                    namespaceSelector:
-                      additionalProperties:
-                        type: string
-                      description: NamespaceSelector defines which namespaces are
-                        eligible for scheduling in this cluster queue.
-                      type: object
-                    resourceGroups:
-                      description: ResourceGroups contains definitions for resource
-                        allocations within the cluster queue.
-                      items:
-                        description: ResourceGroup defines a grouping of resources
-                          and their associated flavors within a cluster queue.
-                        properties:
-                          coveredResources:
-                            description: CoveredResources lists the types of resources
-                              managed in this group (e.g., ["cpu", "memory"]).
-                            items:
+                    spec:
+                      description: ClusterQueueSpec defines the desired state of ClusterQueue
+                      properties:
+                        admissionChecks:
+                          description: |-
+                            admissionChecks lists the AdmissionChecks required by this ClusterQueue.
+                            Cannot be used along with AdmissionCheckStrategy.
+                          items:
+                            type: string
+                          type: array
+                        admissionChecksStrategy:
+                          description: |-
+                            admissionCheckStrategy defines a list of strategies to determine which ResourceFlavors require AdmissionChecks.
+                            This property cannot be used in conjunction with the 'admissionChecks' property.
+                          properties:
+                            admissionChecks:
+                              description: admissionChecks is a list of strategies
+                                for AdmissionChecks
+                              items:
+                                description: AdmissionCheckStrategyRule defines rules
+                                  for a single AdmissionCheck
+                                properties:
+                                  name:
+                                    description: name is an AdmissionCheck's name.
+                                    type: string
+                                  onFlavors:
+                                    description: |-
+                                      onFlavors is a list of ResourceFlavors' names that this AdmissionCheck should run for.
+                                      If empty, the AdmissionCheck will run for all workloads submitted to the ClusterQueue.
+                                    items:
+                                      description: ResourceFlavorReference is the
+                                        name of the ResourceFlavor.
+                                      maxLength: 253
+                                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                                      type: string
+                                    type: array
+                                required:
+                                - name
+                                type: object
+                              type: array
+                          type: object
+                        cohort:
+                          description: |-
+                            cohort that this ClusterQueue belongs to. CQs that belong to the
+                            same cohort can borrow unused resources from each other.
+
+                            A CQ can be a member of a single borrowing cohort. A workload submitted
+                            to a queue referencing this CQ can borrow quota from any CQ in the cohort.
+                            Only quota for the [resource, flavor] pairs listed in the CQ can be
+                            borrowed.
+                            If empty, this ClusterQueue cannot borrow from any other ClusterQueue and
+                            vice versa.
+                          maxLength: 253
+                          pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                          type: string
+                        fairSharing:
+                          description: |-
+                            fairSharing defines the properties of the ClusterQueue when participating in fair sharing.
+                            The values are only relevant if fair sharing is enabled in the Kueue configuration.
+                          properties:
+                            weight:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              default: 1
+                              description: |-
+                                weight gives a comparative advantage to this ClusterQueue when competing for unused
+                                resources in the cohort against other ClusterQueues.
+                                The share of a ClusterQueue is based on the dominant resource usage above nominal
+                                quotas for each resource, divided by the weight.
+                                Admission prioritizes scheduling workloads from ClusterQueues with the lowest share
+                                and preempting workloads from the ClusterQueues with the highest share.
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                          type: object
+                        flavorFungibility:
+                          default: {}
+                          description: |-
+                            flavorFungibility defines whether a workload should try the next flavor
+                            before borrowing or preempting in the flavor being evaluated.
+                          properties:
+                            whenCanBorrow:
+                              default: Borrow
+                              description: |-
+                                whenCanBorrow determines whether a workload should try the next flavor
+                                before borrowing in current flavor. The possible values are:
+
+                                - `Borrow` (default): allocate in current flavor if borrowing
+                                  is possible.
+                                - `TryNextFlavor`: try next flavor even if the current
+                                  flavor has enough resources to borrow.
+                              enum:
+                              - Borrow
+                              - TryNextFlavor
                               type: string
-                            type: array
-                          flavors:
-                            description: Flavors specifies the available resource
-                              flavors and their associated quotas.
-                            items:
-                              description: FlavorResourceQuota associates a resource
-                                flavor with specific quotas.
-                              properties:
-                                name:
-                                  description: Name specifies the name of the resource
-                                    flavor.
-                                  type: string
-                                resources:
-                                  description: Resources defines the resource quotas
-                                    allocated to this flavor.
-                                  items:
-                                    description: ResourceQuota defines the quota allocation
-                                      for a specific resource within a flavor or cluster
-                                      queue.
-                                    properties:
-                                      nominalQuota:
-                                        description: NominalQuota defines the quantity
-                                          of the resource allocated (e.g., "10", "50Gi").
-                                        type: string
-                                      resourceName:
-                                        description: ResourceName specifies the type
-                                          of resource (e.g., "cpu", "memory", "gpu").
-                                        type: string
-                                    required:
-                                    - nominalQuota
-                                    - resourceName
-                                    type: object
-                                  type: array
-                              required:
-                              - name
-                              - resources
+                            whenCanPreempt:
+                              default: TryNextFlavor
+                              description: |-
+                                whenCanPreempt determines whether a workload should try the next flavor
+                                before borrowing in current flavor. The possible values are:
+
+                                - `Preempt`: allocate in current flavor if it's possible to preempt some workloads.
+                                - `TryNextFlavor` (default): try next flavor even if there are enough
+                                  candidates for preemption in the current flavor.
+                              enum:
+                              - Preempt
+                              - TryNextFlavor
+                              type: string
+                          type: object
+                        namespaceSelector:
+                          description: |-
+                            namespaceSelector defines which namespaces are allowed to submit workloads to
+                            this clusterQueue. Beyond this basic support for policy, a policy agent like
+                            Gatekeeper should be used to enforce more advanced policies.
+                            Defaults to null which is a nothing selector (no namespaces eligible).
+                            If set to an empty selector `{}`, then all namespaces are eligible.
+                          properties:
+                            matchExpressions:
+                              description: matchExpressions is a list of label selector
+                                requirements. The requirements are ANDed.
+                              items:
+                                description: |-
+                                  A label selector requirement is a selector that contains values, a key, and an operator that
+                                  relates the key and values.
+                                properties:
+                                  key:
+                                    description: key is the label key that the selector
+                                      applies to.
+                                    type: string
+                                  operator:
+                                    description: |-
+                                      operator represents a key's relationship to a set of values.
+                                      Valid operators are In, NotIn, Exists and DoesNotExist.
+                                    type: string
+                                  values:
+                                    description: |-
+                                      values is an array of string values. If the operator is In or NotIn,
+                                      the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                      the values array must be empty. This array is replaced during a strategic
+                                      merge patch.
+                                    items:
+                                      type: string
+                                    type: array
+                                    x-kubernetes-list-type: atomic
+                                required:
+                                - key
+                                - operator
+                                type: object
+                              type: array
+                              x-kubernetes-list-type: atomic
+                            matchLabels:
+                              additionalProperties:
+                                type: string
+                              description: |-
+                                matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                operator is "In", and the values array contains only "value". The requirements are ANDed.
                               type: object
-                            type: array
-                        required:
-                        - coveredResources
-                        - flavors
-                        type: object
-                      type: array
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        preemption:
+                          default: {}
+                          description: |-
+                            preemption describes policies to preempt Workloads from this ClusterQueue
+                            or the ClusterQueue's cohort.
+
+                            Preemption can happen in two scenarios:
+
+                            - When a Workload fits within the nominal quota of the ClusterQueue, but
+                              the quota is currently borrowed by other ClusterQueues in the cohort.
+                              Preempting Workloads in other ClusterQueues allows this ClusterQueue to
+                              reclaim its nominal quota.
+                          properties:
+                            borrowWithinCohort:
+                              default: {}
+                              description: |-
+                                borrowWithinCohort provides configuration to allow preemption within
+                                cohort while borrowing.
+                              properties:
+                                maxPriorityThreshold:
+                                  description: |-
+                                    maxPriorityThreshold allows to restrict the set of workloads which
+                                    might be preempted by a borrowing workload, to only workloads with
+                                    priority less than or equal to the specified threshold priority.
+                                    When the threshold is not specified, then any workload satisfying the
+                                    policy can be preempted by the borrowing workload.
+                                  format: int32
+                                  type: integer
+                                policy:
+                                  default: Never
+                                  description: |-
+                                    policy determines the policy for preemption to reclaim quota within cohort while borrowing.
+                                    Possible values are:
+                                    - `Never` (default): do not allow for preemption, in other
+                                       ClusterQueues within the cohort, for a borrowing workload.
+                                    - `LowerPriority`: allow preemption, in other ClusterQueues
+                                       within the cohort, for a borrowing workload, but only if
+                                       the preempted workloads are of lower priority.
+                                  enum:
+                                  - Never
+                                  - LowerPriority
+                                  type: string
+                              type: object
+                            reclaimWithinCohort:
+                              default: Never
+                              description: |-
+                                reclaimWithinCohort determines whether a pending Workload can preempt
+                                Workloads from other ClusterQueues in the cohort that are using more than
+                                their nominal quota. The possible values are:
+
+                                - `Never` (default): do not preempt Workloads in the cohort.
+                                - `LowerPriority`: **Classic Preemption** if the pending Workload
+                                  fits within the nominal quota of its ClusterQueue, only preempt
+                                  Workloads in the cohort that have lower priority than the pending
+                                  Workload.
+                              enum:
+                              - Never
+                              - LowerPriority
+                              - Any
+                              type: string
+                            withinClusterQueue:
+                              default: Never
+                              description: |-
+                                withinClusterQueue determines whether a pending Workload that doesn't fit
+                                within the nominal quota for its ClusterQueue, can preempt active Workloads in
+                                the ClusterQueue. The possible values are:
+
+                                - `Never` (default): do not preempt Workloads in the ClusterQueue.
+                                - `LowerPriority`: only preempt Workloads in the ClusterQueue that have
+                                  lower priority than the pending Workload.
+                              enum:
+                              - Never
+                              - LowerPriority
+                              - LowerOrNewerEqualPriority
+                              type: string
+                          type: object
+                          x-kubernetes-validations:
+                          - message: reclaimWithinCohort=Never and borrowWithinCohort.Policy!=Never
+                            rule: '!(self.reclaimWithinCohort == ''Never'' && has(self.borrowWithinCohort)
+                              &&  self.borrowWithinCohort.policy != ''Never'')'
+                        queueingStrategy:
+                          default: BestEffortFIFO
+                          description: |-
+                            QueueingStrategy indicates the queueing strategy of the workloads
+                            across the queues in this ClusterQueue.
+                            Current Supported Strategies:
+
+                            - StrictFIFO: workloads are ordered strictly by creation time.
+                            Older workloads that can't be admitted will block admitting newer
+                            workloads even if they fit available quota.
+                            - BestEffortFIFO: workloads are ordered by creation time,
+                            however older workloads that can't be admitted will not block
+                            admitting newer workloads that fit existing quota.
+                          enum:
+                          - StrictFIFO
+                          - BestEffortFIFO
+                          type: string
+                        resourceGroups:
+                          description: |-
+                            resourceGroups describes groups of resources.
+                            Each resource group defines the list of resources and a list of flavors
+                            that provide quotas for these resources.
+                            Each resource and each flavor can only form part of one resource group.
+                            resourceGroups can be up to 16.
+                          items:
+                            properties:
+                              coveredResources:
+                                description: |-
+                                  coveredResources is the list of resources covered by the flavors in this
+                                  group.
+                                  Examples: cpu, memory, vendor.com/gpu.
+                                  The list cannot be empty and it can contain up to 16 resources.
+                                items:
+                                  description: ResourceName is the name identifying
+                                    various resources in a ResourceList.
+                                  type: string
+                                maxItems: 16
+                                minItems: 1
+                                type: array
+                              flavors:
+                                description: |-
+                                  flavors is the list of flavors that provide the resources of this group.
+                                  Typically, different flavors represent different hardware models
+                                  (e.g., gpu models, cpu architectures) or pricing models (on-demand vs spot
+                                  cpus).
+                                  Each flavor MUST list all the resources listed for this group in the same
+                                  order as the .resources field.
+                                  The list cannot be empty and it can contain up to 16 flavors.
+                                items:
+                                  properties:
+                                    name:
+                                      description: |-
+                                        name of this flavor. The name should match the .metadata.name of a
+                                        ResourceFlavor. If a matching ResourceFlavor does not exist, the
+                                        ClusterQueue will have an Active condition set to False.
+                                      maxLength: 253
+                                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                                      type: string
+                                    resources:
+                                      description: |-
+                                        resources is the list of quotas for this flavor per resource.
+                                        There could be up to 16 resources.
+                                      items:
+                                        properties:
+                                          borrowingLimit:
+                                            anyOf:
+                                            - type: integer
+                                            - type: string
+                                            description: |-
+                                              borrowingLimit is the maximum amount of quota for the [flavor, resource]
+                                              combination that this ClusterQueue is allowed to borrow from the unused
+                                              quota of other ClusterQueues in the same cohort.
+                                              In total, at a given time, Workloads in a ClusterQueue can consume a
+                                              quantity of quota equal to nominalQuota+borrowingLimit, assuming the other
+                                              ClusterQueues in the cohort have enough unused quota.
+                                              If null, it means that there is no borrowing limit.
+                                              If not null, it must be non-negative.
+                                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                            x-kubernetes-int-or-string: true
+                                          lendingLimit:
+                                            anyOf:
+                                            - type: integer
+                                            - type: string
+                                            description: |-
+                                              lendingLimit is the maximum amount of unused quota for the [flavor, resource]
+                                              combination that this ClusterQueue can lend to other ClusterQueues in the same cohort.
+                                              In total, at a given time, ClusterQueue reserves for its exclusive use
+                                              a quantity of quota equals to nominalQuota - lendingLimit.
+                                              If null, it means that there is no lending limit, meaning that
+                                              all the nominalQuota can be borrowed by other clusterQueues in the cohort.
+                                              If not null, it must be non-negative.
+                                              lendingLimit must be null if spec.
+                                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                            x-kubernetes-int-or-string: true
+                                          name:
+                                            description: name of this resource.
+                                            type: string
+                                          nominalQuota:
+                                            anyOf:
+                                            - type: integer
+                                            - type: string
+                                            description: |-
+                                              nominalQuota is the quantity of this resource that is available for
+                                              Workloads admitted by this ClusterQueue at a point in time.
+                                              The nominalQuota must be non-negative.
+                                              nominalQuota should represent the resources in the cluster available for
+                                              running jobs (after discounting resources consumed by system components
+                                              and pods not managed by kueue). In an autoscaled cluster, nominalQuota
+                                              should account for resources that can be provided by a component such as
+                                              Kubernetes cluster-autoscaler.
+                                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                            x-kubernetes-int-or-string: true
+                                        required:
+                                        - name
+                                        - nominalQuota
+                                        type: object
+                                      maxItems: 16
+                                      minItems: 1
+                                      type: array
+                                      x-kubernetes-list-map-keys:
+                                      - name
+                                      x-kubernetes-list-type: map
+                                  required:
+                                  - name
+                                  - resources
+                                  type: object
+                                maxItems: 16
+                                minItems: 1
+                                type: array
+                                x-kubernetes-list-map-keys:
+                                - name
+                                x-kubernetes-list-type: map
+                            required:
+                            - coveredResources
+                            - flavors
+                            type: object
+                            x-kubernetes-validations:
+                            - message: flavors must have the same number of resources
+                                as the coveredResources
+                              rule: self.flavors.all(x, size(x.resources) == size(self.coveredResources))
+                          maxItems: 16
+                          type: array
+                          x-kubernetes-list-type: atomic
+                        stopPolicy:
+                          default: None
+                          description: |-
+                            stopPolicy - if set to a value different from None, the ClusterQueue is considered Inactive, no new reservation being
+                            made.
+
+                            Depending on its value, its associated workloads will:
+
+                            - None - Workloads are admitted
+                            - HoldAndDrain - Admitted workloads are evicted and Reserving workloads will cancel the reservation.
+                            - Hold - Admitted workloads will run to completion and Reserving workloads will cancel the reservation.
+                          enum:
+                          - None
+                          - Hold
+                          - HoldAndDrain
+                          type: string
+                      type: object
+                      x-kubernetes-validations:
+                      - message: borrowingLimit must be nil when cohort is empty
+                        rule: '!has(self.cohort) && has(self.resourceGroups) ? self.resourceGroups.all(rg,
+                          rg.flavors.all(f, f.resources.all(r, !has(r.borrowingLimit))))
+                          : true'
                   required:
                   - name
-                  - resourceGroups
                   type: object
+                maxItems: 10
                 type: array
               resourceFlavors:
-                description: ResourceFlavors specifies the different node flavors
-                  available in the cluster.
                 items:
-                  description: |-
-                    ResourceFlavorSpec defines the configuration for a specific resource flavor.
-                    A resource flavor describes a particular type of node with specific labels,
-                    taints, and tolerations.
+                  description: ResourceFlavorSpec defines the configuration for a
+                    specific resource flavor.
                   properties:
                     name:
-                      description: Name specifies the name of the resource flavor.
                       type: string
                     nodeLabels:
                       additionalProperties:
                         type: string
-                      description: NodeLabels defines labels associated with nodes
-                        that match this flavor.
+                      description: NodeLabels must not exceed a reasonable limit to
+                        prevent CRD validation failures
+                      maxProperties: 10
                       type: object
                     taints:
-                      description: Taints lists taints applied to nodes with this
-                        flavor.
+                      description: Limit number of taints to prevent validation cost
+                        overrun
                       items:
                         description: |-
                           The node this Taint is attached to has the "effect" on
@@ -168,10 +503,12 @@ spec:
                         - effect
                         - key
                         type: object
+                      maxItems: 5
                       type: array
                     tolerations:
-                      description: Tolerations defines the tolerations required for
-                        workloads to be scheduled on nodes with this flavor.
+                      description: |-
+                        // Limit number of tolerations for validation efficiency
+                        // +kubebuilder:validation:MaxItems=5
                       items:
                         description: |-
                           The pod this Toleration is attached to tolerates any taint that matches
@@ -211,41 +548,53 @@ spec:
                       type: array
                   required:
                   - name
-                  - nodeLabels
                   type: object
                 type: array
               workloadPriorityClasses:
-                description: WorkloadPriorityClasses defines the priority classes
-                  available for workloads.
+                description: Limit workload priority classes
                 items:
-                  description: |-
-                    WorkloadPriorityClassSpec defines the priority class configuration for workloads.
-                    Priority classes influence the scheduling order of workloads.
+                  description: WorkloadPriorityClass is the Schema for the workloadPriorityClass
+                    API
                   properties:
+                    apiVersion:
+                      description: |-
+                        APIVersion defines the versioned schema of this representation of an object.
+                        Servers should convert recognized schemas to the latest internal value, and
+                        may reject unrecognized values.
+                        More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+                      type: string
                     description:
-                      description: Description provides an optional explanation for
-                        this priority class.
+                      description: |-
+                        description is an arbitrary string that usually provides guidelines on
+                        when this workloadPriorityClass should be used.
                       type: string
-                    name:
-                      description: Name is the name of the priority class.
+                    kind:
+                      description: |-
+                        Kind is a string value representing the REST resource this object represents.
+                        Servers may infer this from the endpoint the client submits requests to.
+                        Cannot be updated.
+                        In CamelCase.
+                        More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
                       type: string
+                    metadata:
+                      type: object
                     value:
-                      description: Value represents the numeric priority value assigned
-                        to this priority class.
+                      description: |-
+                        value represents the integer value of this workloadPriorityClass. This is the actual priority that workloads
+                        receive when jobs have the name of this class in their workloadPriorityClass label.
+                        Changing the value of workloadPriorityClass doesn't affect the priority of workloads that were already created.
                       format: int32
                       type: integer
                   required:
-                  - description
-                  - name
                   - value
                   type: object
+                maxItems: 5
                 type: array
             type: object
           status:
-            description: Status represents the observed state of the queue configuration.
+            description: KaiwoQueueConfigStatus represents the observed state of KaiwoQueueConfig.
             properties:
               conditions:
-                description: Conditions provide information on the status of the KaiwoQueueConfig.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -305,5 +654,3 @@ spec:
         type: object
     served: true
     storage: true
-    subresources:
-      status: {}

@@ -56,7 +56,7 @@ Kaiwo supports a wide range of AI workloads, including distributed multi-node pr
 Kaiwo requires 4-5 components installed on Kubernetes:
 
 1. Cert-Manager
-2. AMD Operator (with AMD-Device-Config) or Nvidia Operator
+2. AMD Operator (with AMD-Device-Config and Node Labeller) or Nvidia Operator and Feature Discovery
 3. Kueue Operator
 4. KubeRay Operator
 5. Prometheus (not strictly necessary but recommended)
