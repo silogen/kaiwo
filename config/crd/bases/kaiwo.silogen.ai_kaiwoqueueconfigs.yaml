@@ -41,8 +41,6 @@ spec:
               Kaiwo.
             properties:
               clusterQueues:
-                description: Limit the number of ClusterQueues to avoid excessive
-                  validation rules
                 items:
                   properties:
                     name:
@@ -472,8 +470,6 @@ spec:
                       maxProperties: 10
                       type: object
                     taints:
-                      description: Limit number of taints to prevent validation cost
-                        overrun
                       items:
                         description: |-
                           The node this Taint is attached to has the "effect" on
@@ -506,9 +502,7 @@ spec:
                       maxItems: 5
                       type: array
                     tolerations:
-                      description: |-
-                        // Limit number of tolerations for validation efficiency
-                        // +kubebuilder:validation:MaxItems=5
+                      description: // +kubebuilder:validation:MaxItems=5
                       items:
                         description: |-
                           The pod this Toleration is attached to tolerates any taint that matches
@@ -551,7 +545,6 @@ spec:
                   type: object
                 type: array
               workloadPriorityClasses:
-                description: Limit workload priority classes
                 items:
                   description: WorkloadPriorityClass is the Schema for the workloadPriorityClass
                     API
