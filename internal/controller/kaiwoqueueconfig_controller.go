@@ -108,6 +108,7 @@ func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, que
 				logger.Error(err, "Failed to create ClusterQueue", "name", kueueQueue.Name)
 				return err
 			}
+			existingQueue = &kueueQueue
 		} else if err != nil {
 			logger.Error(err, "Failed to get ClusterQueue", "name", kueueQueue.Name)
 			return err

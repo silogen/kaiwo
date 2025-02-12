@@ -22,13 +22,11 @@ import (
 
 // KaiwoQueueConfigSpec defines the desired configuration for Kaiwo.
 type KaiwoQueueConfigSpec struct {
-	// Limit the number of ClusterQueues to avoid excessive validation rules
 	// +kubebuilder:validation:MaxItems=10
 	ClusterQueues []ClusterQueue `json:"clusterQueues,omitempty"`
 
 	ResourceFlavors []ResourceFlavorSpec `json:"resourceFlavors,omitempty"`
 
-	// Limit workload priority classes
 	// +kubebuilder:validation:MaxItems=5
 	WorkloadPriorityClasses []kueuev1beta1.WorkloadPriorityClass `json:"workloadPriorityClasses,omitempty"`
 }
@@ -46,11 +44,9 @@ type ResourceFlavorSpec struct {
 	// +kubebuilder:validation:MaxProperties=10
 	NodeLabels map[string]string `json:"nodeLabels,omitempty"`
 
-	// Limit number of taints to prevent validation cost overrun
 	// +kubebuilder:validation:MaxItems=5
 	Taints []corev1.Taint `json:"taints,omitempty"`
 
-	// // Limit number of tolerations for validation efficiency
 	// // +kubebuilder:validation:MaxItems=5
 	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
 }
