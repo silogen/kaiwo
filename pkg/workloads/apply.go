@@ -249,39 +249,6 @@ func generateConfigMapManifest(files map[string]string, workload Workload, metaC
 	return nil, nil
 }
 
-//// generateWorkloadManifest prepares the main workload manifest
-//func generateWorkloadManifest(workloadTemplate []byte, templateContext WorkloadTemplateConfig, workload Workload) (client.Object, error) {
-//	parsedTemplate, err := template.New("main").Funcs(sprig.TxtFuncMap()).Parse(string(workloadTemplate))
-//	if err != nil {
-//		return nil, fmt.Errorf("failed to parse template: %w", err)
-//	}
-//
-//	var renderedYAML strings.Builder
-//	err = parsedTemplate.Execute(&renderedYAML, templateContext)
-//	if err != nil {
-//		return nil, fmt.Errorf("failed to render template: %w", err)
-//	}
-//
-//	scheme, err := k8s.GetScheme()
-//	if err != nil {
-//		return nil, fmt.Errorf("failed to fetch scheme: %w", err)
-//	}
-//
-//	decoder := serializer.NewCodecFactory(&scheme).UniversalDeserializer()
-//
-//	obj, _, err := decoder.Decode([]byte(renderedYAML.String()), nil, nil)
-//	if err != nil {
-//		return nil, fmt.Errorf("failed to decode manifest: %w", err)
-//	}
-//
-//	converted, ok := workload.ConvertObject(obj)
-//	if !ok {
-//		return nil, fmt.Errorf("failed to convert manifest, ensure it is of the correct type")
-//	}
-//
-//	return converted, nil
-//}
-
 // printResources prints each Kubernetes manifest in an array
 func printResources(s *runtime.Scheme, resources []client.Object) {
 	for _, resource_ := range resources {
