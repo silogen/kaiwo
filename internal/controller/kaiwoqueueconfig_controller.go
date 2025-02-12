@@ -83,6 +83,7 @@ func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, que
 				logger.Error(err, "Failed to create ResourceFlavor", "name", kueueFlavor.Name)
 				return err
 			}
+			existingFlavor = &kueueFlavor
 		} else if err != nil {
 			logger.Error(err, "Failed to get ResourceFlavor", "name", kueueFlavor.Name)
 			return err
@@ -133,6 +134,7 @@ func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, que
 				logger.Error(err, "Failed to create WorkloadPriorityClass", "name", priorityClassSpec.Name)
 				return err
 			}
+			existingPriorityClass = &priorityClassSpec
 		} else if err != nil {
 			logger.Error(err, "Failed to get WorkloadPriorityClass", "name", priorityClassSpec.Name)
 			return err
