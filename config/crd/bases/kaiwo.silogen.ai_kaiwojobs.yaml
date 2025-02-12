@@ -25268,16 +25268,279 @@ spec:
               storage:
                 description: Storage configuration for the workload.
                 properties:
+                  accessMode:
+                    default: ReadWriteMany
+                    description: AccessMode determines the access mode for the storage
+                    type: string
+                  data:
+                    description: Data specifies the main workload PVC and optional
+                      object storage pre-downloads
+                    properties:
+                      download:
+                        description: Download optional object storage pre-downloads
+                        properties:
+                          azureBlob:
+                            description: AzureBlob lists any Azure Blob Storage downloads
+                            items:
+                              properties:
+                                connectionString:
+                                  properties:
+                                    file:
+                                      description: File determines the location of
+                                        the secret value mounted on the disk
+                                      type: string
+                                    secretKey:
+                                      description: SecretKey is the name of the key
+                                        within the secret where the value is kept
+                                      type: string
+                                    secretName:
+                                      description: SecretName is the name of the secret
+                                        where the value is kept
+                                      type: string
+                                  type: object
+                                containers:
+                                  items:
+                                    properties:
+                                      files:
+                                        items:
+                                          properties:
+                                            path:
+                                              type: string
+                                            targetPath:
+                                              type: string
+                                          required:
+                                          - path
+                                          - targetPath
+                                          type: object
+                                        type: array
+                                      folders:
+                                        items:
+                                          properties:
+                                            glob:
+                                              type: string
+                                            path:
+                                              type: string
+                                            targetPath:
+                                              type: string
+                                          required:
+                                          - path
+                                          - targetPath
+                                          type: object
+                                        type: array
+                                      name:
+                                        type: string
+                                    required:
+                                    - name
+                                    type: object
+                                  type: array
+                              required:
+                              - connectionString
+                              - containers
+                              type: object
+                            type: array
+                          gcs:
+                            description: GCS lists and Google Cloud Storage downloads
+                            items:
+                              properties:
+                                applicationCredentials:
+                                  properties:
+                                    file:
+                                      description: File determines the location of
+                                        the secret value mounted on the disk
+                                      type: string
+                                    secretKey:
+                                      description: SecretKey is the name of the key
+                                        within the secret where the value is kept
+                                      type: string
+                                    secretName:
+                                      description: SecretName is the name of the secret
+                                        where the value is kept
+                                      type: string
+                                  type: object
+                                buckets:
+                                  items:
+                                    properties:
+                                      files:
+                                        items:
+                                          properties:
+                                            path:
+                                              type: string
+                                            targetPath:
+                                              type: string
+                                          required:
+                                          - path
+                                          - targetPath
+                                          type: object
+                                        type: array
+                                      folders:
+                                        items:
+                                          properties:
+                                            glob:
+                                              type: string
+                                            path:
+                                              type: string
+                                            targetPath:
+                                              type: string
+                                          required:
+                                          - path
+                                          - targetPath
+                                          type: object
+                                        type: array
+                                      name:
+                                        type: string
+                                    required:
+                                    - name
+                                    type: object
+                                  type: array
+                              required:
+                              - applicationCredentials
+                              - buckets
+                              type: object
+                            type: array
+                          s3:
+                            description: S3 lists any S3 downloads
+                            items:
+                              properties:
+                                accessKeyId:
+                                  description: AccessKeyId
+                                  properties:
+                                    file:
+                                      description: File determines the location of
+                                        the secret value mounted on the disk
+                                      type: string
+                                    secretKey:
+                                      description: SecretKey is the name of the key
+                                        within the secret where the value is kept
+                                      type: string
+                                    secretName:
+                                      description: SecretName is the name of the secret
+                                        where the value is kept
+                                      type: string
+                                  type: object
+                                buckets:
+                                  items:
+                                    properties:
+                                      files:
+                                        items:
+                                          properties:
+                                            path:
+                                              type: string
+                                            targetPath:
+                                              type: string
+                                          required:
+                                          - path
+                                          - targetPath
+                                          type: object
+                                        type: array
+                                      folders:
+                                        items:
+                                          properties:
+                                            glob:
+                                              type: string
+                                            path:
+                                              type: string
+                                            targetPath:
+                                              type: string
+                                          required:
+                                          - path
+                                          - targetPath
+                                          type: object
+                                        type: array
+                                      name:
+                                        type: string
+                                    required:
+                                    - name
+                                    type: object
+                                  type: array
+                                endpointUrl:
+                                  description: EndpointUrl is the endpoint of the
+                                    S3 API
+                                  properties:
+                                    file:
+                                      description: File determines the location of
+                                        the secret value mounted on the disk
+                                      type: string
+                                    secretKey:
+                                      description: SecretKey is the name of the key
+                                        within the secret where the value is kept
+                                      type: string
+                                    secretName:
+                                      description: SecretName is the name of the secret
+                                        where the value is kept
+                                      type: string
+                                  type: object
+                                secretKey:
+                                  properties:
+                                    file:
+                                      description: File determines the location of
+                                        the secret value mounted on the disk
+                                      type: string
+                                    secretKey:
+                                      description: SecretKey is the name of the key
+                                        within the secret where the value is kept
+                                      type: string
+                                    secretName:
+                                      description: SecretName is the name of the secret
+                                        where the value is kept
+                                      type: string
+                                  type: object
+                              required:
+                              - accessKeyId
+                              - buckets
+                              - endpointUrl
+                              - secretKey
+                              type: object
+                            type: array
+                        type: object
+                      mountPath:
+                        description: MountPath specifies where the data PVC will be
+                          mounted to in each pod
+                        type: string
+                      storageSize:
+                        description: StorageSize specifies the amount of storage allocated
+                          to the data PVC
+                        type: string
+                    type: object
+                  huggingFace:
+                    description: HuggingFace specifies any hugging face models that
+                      should be cached before the workload starts
+                    properties:
+                      mountPath:
+                        description: |-
+                          MountPath specifies where the data HF will be mounted to in each pod.
+                          This is also used to set the HF_HOME environmental variable into each container.
+                        type: string
+                      preCacheRepos:
+                        description: PreCacheRepos is a list of repositories (and
+                          their files) that should be cached before the workload starts
+                        items:
+                          properties:
+                            files:
+                              items:
+                                type: string
+                              type: array
+                            repoId:
+                              type: string
+                          required:
+                          - files
+                          - repoId
+                          type: object
+                        type: array
+                      storageSize:
+                        description: StorageSize specifies the amount of storage allocated
+                          to the HF PVC
+                        type: string
+                    type: object
                   storageClassName:
                     description: StorageClassName specifies the storage class used
                       for PVC.
                     type: string
                   storageEnabled:
-                    description: Whether to enable persistent storage.
+                    description: StorageEnabled tells whether to enable persistent
+                      storage.
                     type: boolean
-                  storageSize:
-                    description: Quantity of storage requested (e.g., "100Gi").
-                    type: string
+                required:
+                - accessMode
                 type: object
               user:
                 description: |-

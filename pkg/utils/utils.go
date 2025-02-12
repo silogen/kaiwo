@@ -15,6 +15,7 @@
 package baseutils
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -54,4 +55,8 @@ func MakeRFC1123Compliant(input string) string {
 	input = strings.TrimRight(input, "-")
 
 	return input
+}
+
+func FormatNameWithPostfix(name string, postfix string) string {
+	return MakeRFC1123Compliant(fmt.Sprintf("%s-%s", name, postfix))
 }

@@ -39,6 +39,29 @@ jobs:
         run: |
           go mod tidy
           make test
+
+  lint-python:
+    name: Lint Python code
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+      - name: Run flake8
+        run: flake8 kaiwo
+      - name: Run Black
+        run : black kaiwo
+      - name: Run isort
+        run: isort kaiwo
+
   # test-e2e:
   #   name: Run e2e tests
   #   runs-on: ubuntu-latest

@@ -1,0 +1,6 @@
+pydantic==2.10.6
+cloudpathlib[s3,gs,azure]==0.20.0
+huggingface-hub[hf_transfer]==0.28.1
+PyYAML==6.0.2
+rich==13.9.4
+tenacity==9.0.0

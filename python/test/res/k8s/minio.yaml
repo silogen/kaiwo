@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio-deployment
+  namespace: alex-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+        - name: minio
+          image: minio/minio
+          args: ["server", "/data"]
+          env:
+            - name: MINIO_ACCESS_KEY
+              value: "minio"
+            - name: MINIO_SECRET_KEY
+              value: "minio123"
+          ports:
+            - containerPort: 9000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio-service
+  namespace: alex-test
+spec:
+  selector:
+    app: minio
+  ports:
+    - protocol: TCP
+      port: 9000
+      targetPort: 9000
+      name: minio-endpoint
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-secret
+  namespace: alex-test
+data:
+  access_key_id: bWluaW8=
+  secret_key: bWluaW8xMjM=
+  endpoint: aHR0cDovL21pbmlvLXNlcnZpY2U6OTAwMA==

@@ -20,6 +20,8 @@ import (
 	"context"
 	"fmt"
 
+	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
+
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -54,7 +56,21 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			logger.Error(err, "Failed to get KaiwoJob")
 			return ctrl.Result{}, err
 		}
+		logger.Info("Job does not exist, it might have been deleted")
 		return ctrl.Result{}, nil
+	}
+
+	if err := controllerutils.ReconcileStorage(r.Client, r.Scheme, ctx, &kaiwoJob, &kaiwoJob.Spec.Storage); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	result, err := controllerutils.ReconcileDownloadJob(r.Client, r.Scheme, ctx, &kaiwoJob, &kaiwoJob.Spec.Storage)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	// If the download job has not completed, a re-reconciliation request may be returned
+	if result != nil {
+		return *result, nil
 	}
 
 	if kaiwoJob.Spec.Image == "" {
@@ -71,9 +87,9 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return r.reconcileRayJob(ctx, &kaiwoJob)
 	}
 
-	err := fmt.Errorf("KaiwoJob does not specify a valid Job or RayJob")
-	logger.Error(err, "KaiwoJob is misconfigured", "KaiwoJob", kaiwoJob.Name)
-	return ctrl.Result{}, err
+	jobInvalidErr := fmt.Errorf("KaiwoJob does not specify a valid Job or RayJob")
+	logger.Error(jobInvalidErr, "KaiwoJob is misconfigured", "KaiwoJob", kaiwoJob.Name)
+	return ctrl.Result{}, jobInvalidErr
 }
 
 func (r *KaiwoJobReconciler) reconcileK8sJob(ctx context.Context, kaiwoJob *kaiwov1alpha1.KaiwoJob) (ctrl.Result, error) {
@@ -92,6 +108,7 @@ func (r *KaiwoJobReconciler) reconcileK8sJob(ctx context.Context, kaiwoJob *kaiw
 	jobSpec := kaiwoJob.Spec.JobSpec
 	if jobSpec == nil {
 		logger.Info("JobSpec is nil, using default JobSpec", "KaiwoJob", kaiwoJob.Name)
+
 		jobSpec = &batchv1.JobSpec{
 			TTLSecondsAfterFinished: Int32Ptr(43200),
 			Template: corev1.PodTemplateSpec{
@@ -99,6 +116,11 @@ func (r *KaiwoJobReconciler) reconcileK8sJob(ctx context.Context, kaiwoJob *kaiw
 					RestartPolicy: corev1.RestartPolicyNever,
 				},
 			},
+		}
+
+		if err := FillPodSpec(kaiwoJob, &jobSpec.Template.Spec); err != nil {
+			logger.Error(err, "Failed to fill PodSpec")
+			return ctrl.Result{}, err
 		}
 	}
 
@@ -118,8 +140,7 @@ func (r *KaiwoJobReconciler) reconcileK8sJob(ctx context.Context, kaiwoJob *kaiw
 		Spec: *jobSpec,
 	}
 
-	if err := FillPodSpec(ctx, r.Client, kaiwoJob, &job.Spec.Template.Spec); err != nil {
-		logger.Error(err, "Failed to fill PodSpec")
+	if err := controllerutils.UpdatePodSpecStorage(ctx, &job.Spec.Template.Spec, kaiwoJob.Spec.Storage, kaiwoJob.Name); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -177,7 +198,7 @@ func (r *KaiwoJobReconciler) reconcileRayJob(ctx context.Context, kaiwoJob *kaiw
 		}
 	}
 
-	if err := FillRayClusterPodSpec(ctx, r.Client, kaiwoJob, rayCluster); err != nil {
+	if err := FillRayClusterPodSpec(kaiwoJob, rayCluster); err != nil {
 		logger.Error(err, "Failed to fill RayClusterPodSpec")
 		return ctrl.Result{}, err
 	}
@@ -191,6 +212,20 @@ func (r *KaiwoJobReconciler) reconcileRayJob(ctx context.Context, kaiwoJob *kaiw
 			Entrypoint:     kaiwoJob.Spec.EntryPoint,
 			RayClusterSpec: rayCluster,
 		},
+	}
+
+	// Attach storage to head pod
+	if err := controllerutils.UpdatePodSpecStorage(ctx, &rayJob.Spec.RayClusterSpec.HeadGroupSpec.Template.Spec, kaiwoJob.Spec.Storage, kaiwoJob.Name); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Attach storage to worker pods
+	for i := range rayJob.Spec.RayClusterSpec.WorkerGroupSpecs {
+		workerSpec := rayJob.Spec.RayClusterSpec.WorkerGroupSpecs[i].Template.Spec
+		if err := controllerutils.UpdatePodSpecStorage(ctx, &workerSpec, kaiwoJob.Spec.Storage, kaiwoJob.Name); err != nil {
+			return ctrl.Result{}, err
+		}
+		rayJob.Spec.RayClusterSpec.WorkerGroupSpecs[i].Template.Spec = workerSpec
 	}
 
 	if err := ctrl.SetControllerReference(kaiwoJob, rayJob, r.Scheme); err != nil {

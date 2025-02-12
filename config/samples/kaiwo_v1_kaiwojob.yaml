@@ -2,27 +2,70 @@ apiVersion: kaiwo.silogen.ai/v1alpha1
 kind: KaiwoJob
 metadata:
   name: example-kaiwojob
-  namespace: default
+  namespace: kaiwo-test
 spec:
-  user: anttsuni@amd.com
-  image: "ghcr.io/silogen/rocm-ray:v0.7"
-  entryPoint: "watch rocm-smi"
-  gpus: 2
-  gpuVendor: "AMD"
+  user: test@amd.com
+  gpus: 0
   storage:
     storageEnabled: true
-    storageClassName: "longhorn"
-    storageSize: "10Gi"
-  configSource:
-    type: "S3"
-    s3BucketName: "my-bucket"
-    s3Path: "datasets/"
-    s3Credentials:
-      name: "s3-secret"
-  # jobSpec:
-  #   template:
-  #     spec:
-  #       containers:
-  #         - name: workload
-  #           image: "my-container-image:latest"
-  #           command: ["python", "train.py"]
+    storageClassName: "local-path"
+    accessMode: "ReadWriteOnce"
+    data:
+      storageSize: "2Gi"
+      mountPath: "/workload"
+      download:
+        s3:
+          - endpointUrl:
+              secretName: minio-secret
+              secretKey: endpoint
+            accessKeyId:
+              secretName: minio-secret
+              secretKey: access_key_id
+            secretKey:
+              secretName: minio-secret
+              secretKey: secret_key
+            buckets:
+              - name: test
+                files:
+                  - path: file01.txt
+                    targetPath: s3/file01.txt
+                folders:
+                  - path: .
+                    targetPath: s3/all
+        azureBlob:
+          - connectionString:
+              secretName: azure-secret
+              secretKey: connection_string
+            containers:
+              - name: test
+                files:
+                  - path: file01.txt
+                    targetPath: azure/file01.txt
+                folders:
+                  - path: .
+                    targetPath: azure/all
+    huggingFace:
+      storageSize: "2Gi"
+      mountPath: "/.cache/huggingface"  # Also sets the env var HF_HOME to this value in each container
+      preCacheRepos:
+        - repoId: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+          files:
+            - "README.md"
+#  config:
+#    mountPath: "/workload/config"
+#    files:
+#      - path: "config.json"
+#        value: "{'val': 42}"
+#      - path: "dir/config.json"
+#        value: "{}"
+  jobSpec:
+    template:
+      spec:
+        restartPolicy: Never
+        containers:
+        - name: ubuntu
+          image: ubuntu:latest
+          imagePullPolicy: Always
+          # Just spin & wait forever
+          command: [ "/bin/bash", "-c", "--" ]
+          args: [ "while true; do sleep 5; done;" ]

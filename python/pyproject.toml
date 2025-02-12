@@ -1,0 +1,23 @@
+[tool.black]
+line-length = 120
+target-version = ['py312']
+
+[tool.isort]
+profile = "black"
+line_length = 120
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+
+[tool.flake8]
+max-line-length = 120
+extend-ignore = [
+    "E203", # Whitespace before (for black)
+    "W503", # Line breaks should occur after the binary operator (for black)
+    "D100", # Missing docstring in public module
+    "D101", # Missing docstring in public class
+    "D102", # Missing docstring in public method
+    "D103", # Missing docstring in public function
+    "D104", # Missing docstring in public package
+]
