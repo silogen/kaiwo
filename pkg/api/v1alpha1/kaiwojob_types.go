@@ -29,16 +29,20 @@ type KaiwoJobSpec struct {
 	// If authentication is enabled, this must be email address which is checked against authenticated user for match.
 	User string `json:"user"`
 
-	// EntryPoint specifies the command or script executed in the job.
-	EntryPoint string `json:"entryPoint,omitempty"`
-
 	// ClusterQueue is the Kueue ClusterQueue name.
 	ClusterQueue string `json:"clusterQueue,omitempty"`
 
 	// PriorityClass specifies the Kubernetes PriorityClass for scheduling.
 	PriorityClass string `json:"priorityClass,omitempty"`
 
+	// EntryPoint specifies the command or script executed in a Job or RayJob.
+	// Can also be defined inside Job struct as Command in the form of string array or
+	// inside RayJob struct as Entrypoint in the form of string
+	EntryPoint string `json:"entrypoint,omitempty"`
+
 	// Gpus specifies the total number of GPUs allocated to the workload.
+	// Default is 0.
+	// +kubebuilder:default=0
 	Gpus int `json:"gpus,omitempty"`
 
 	// GpuVendor specifies the GPU vendor (e.g., AMD, NVIDIA, etc.).
@@ -51,6 +55,8 @@ type KaiwoJobSpec struct {
 
 	// Replicas specifies the number of replicas for the workload.
 	// If greater than one, the workload must use Ray.
+	// Default is 1.
+	// +kubebuilder:default=0
 	Replicas int `json:"replicas,omitempty"`
 
 	// GpusPerReplica specifies the number of GPUs allocated per replica.
@@ -70,17 +76,17 @@ type KaiwoJobSpec struct {
 	// +kubebuilder:default=false
 	Ray bool `json:"ray"`
 
-	// ConfigSource allows mounting from ConfigMap or S3
+	// ConfigSource allows mounting from Git
 	ConfigSource *ConfigSource `json:"configSource,omitempty"`
 
 	// Storage configuration for the workload.
 	Storage StorageSpec `json:"storage,omitempty"`
 
-	// RayClusterSpec defines the Ray cluster configuration.
-	RayClusterSpec *rayv1.RayClusterSpec `json:"rayClusterSpec,omitempty"`
+	// RayJob defines the RayJob configuration.
+	RayJob *rayv1.RayJob `json:"rayJob,omitempty"`
 
-	// JobSpec defines the Kubernetes Job configuration.
-	JobSpec *batchv1.JobSpec `json:"jobSpec,omitempty"`
+	// Job defines the Kubernetes Job configuration.
+	Job *batchv1.Job `json:"job,omitempty"`
 }
 
 // KaiwoJobStatus defines the observed state of KaiwoJob.

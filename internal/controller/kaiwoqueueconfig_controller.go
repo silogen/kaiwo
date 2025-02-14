@@ -27,6 +27,8 @@ import (
 
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
+	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
+
 	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
 )
 
@@ -72,7 +74,7 @@ func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, que
 	logger := log.FromContext(ctx)
 
 	// Sync ResourceFlavors
-	kueueFlavors := ConvertKaiwoToKueueResourceFlavors(queueConfig.Spec.ResourceFlavors)
+	kueueFlavors := controllerutils.ConvertKaiwoToKueueResourceFlavors(queueConfig.Spec.ResourceFlavors)
 	for _, kueueFlavor := range kueueFlavors {
 		existingFlavor := &kueuev1beta1.ResourceFlavor{}
 		err := r.Get(ctx, client.ObjectKey{Name: kueueFlavor.Name}, existingFlavor)
@@ -99,7 +101,7 @@ func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, que
 
 	// Sync ClusterQueues
 	for _, kaiwoQueue := range queueConfig.Spec.ClusterQueues {
-		kueueQueue := ConvertKaiwoToKueueClusterQueue(kaiwoQueue)
+		kueueQueue := controllerutils.ConvertKaiwoToKueueClusterQueue(kaiwoQueue)
 		existingQueue := &kueuev1beta1.ClusterQueue{}
 		err := r.Get(ctx, client.ObjectKey{Name: kueueQueue.Name}, existingQueue)
 
@@ -203,13 +205,13 @@ func (r *KaiwoQueueConfigReconciler) EnsureDefaultKaiwoQueueConfig(ctx context.C
 func (r *KaiwoQueueConfigReconciler) CreateDefaultKaiwoQueueConfig(ctx context.Context, name string) error {
 	logger := log.FromContext(ctx)
 
-	resourceFlavors, nodePoolResources, err := CreateDefaultResourceFlavors(ctx, r.Client)
+	resourceFlavors, nodePoolResources, err := controllerutils.CreateDefaultResourceFlavors(ctx, r.Client)
 	if err != nil {
 		logger.Error(err, "Failed to create default resource flavors")
 		return err
 	}
 
-	clusterQueue := CreateClusterQueue(nodePoolResources, name)
+	clusterQueue := controllerutils.CreateClusterQueue(nodePoolResources, name)
 
 	defaultQueueConfig := kaiwov1alpha1.KaiwoQueueConfig{
 		ObjectMeta: metav1.ObjectMeta{
