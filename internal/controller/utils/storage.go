@@ -17,6 +17,7 @@ package controllerutils
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"k8s.io/apimachinery/pkg/runtime"
 
@@ -45,8 +46,15 @@ func ReconcileStorage(r client.Client, s *runtime.Scheme, ctx context.Context, o
 		return nil
 	}
 
+	var storageclass string
+
 	if spec.StorageClassName == "" {
-		return fmt.Errorf("storage class name is empty")
+		storageclass = os.Getenv("STORAGECLASS")
+		if storageclass == "" {
+			return fmt.Errorf("storage class name is empty")
+		}
+	} else {
+		storageclass = spec.StorageClassName
 	}
 
 	logger := log.FromContext(ctx)
@@ -75,7 +83,7 @@ func ReconcileStorage(r client.Client, s *runtime.Scheme, ctx context.Context, o
 				AccessModes: []corev1.PersistentVolumeAccessMode{
 					spec.AccessMode,
 				},
-				StorageClassName: &spec.StorageClassName,
+				StorageClassName: &storageclass,
 				Resources: corev1.VolumeResourceRequirements{
 					Requests: corev1.ResourceList{
 						corev1.ResourceStorage: storageQuantity,

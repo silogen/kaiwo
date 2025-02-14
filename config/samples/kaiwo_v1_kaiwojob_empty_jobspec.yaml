@@ -6,10 +6,9 @@ metadata:
 spec:
   user: test@amd.com
   gpus: 0
-  entrypoint: "echo foo"
   storage:
     storageEnabled: true
-    storageClassName: "longhorn"
+    # storageClassName: "local-path"
     accessMode: "ReadWriteOnce"
     data:
       storageSize: "2Gi"
@@ -59,14 +58,14 @@ spec:
 #        value: "{'val': 42}"
 #      - path: "dir/config.json"
 #        value: "{}"
-  job:
-    apiVersion: batch/v1
-    kind: Job
-    spec:
-      template:
-        spec:
-          containers:
-          - name: hello-world
-            image: busybox
-            command: ["echo", "Hello, Kubernetes!"]
-          restartPolicy: Never
+  jobSpec:
+    template:
+      spec:
+        restartPolicy: Never
+        containers:
+        - name: ubuntu
+          image: ubuntu:latest
+          imagePullPolicy: Always
+          # Just spin & wait forever
+          command: [ "/bin/bash", "-c", "--" ]
+          args: [ "while true; do sleep 5; done;" ]

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package controller
+package controllerutils
 
 import (
 	"context"
@@ -29,42 +29,10 @@ import (
 
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
 	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
 )
-
-const (
-	cpuMemoryDiscountFactor = 0.9
-)
-
-type NodeResourceInfo struct {
-	Name   string
-	CPU    int
-	Memory int
-	Labels map[string]string
-}
-
-func GetNodeResources(ctx context.Context, c client.Client) []NodeResourceInfo {
-	var nodeList corev1.NodeList
-	err := c.List(ctx, &nodeList)
-	if err != nil {
-		return []NodeResourceInfo{}
-	}
-
-	var nodes []NodeResourceInfo
-	for _, node := range nodeList.Items {
-		cpu := node.Status.Capacity.Cpu().Value()
-		memory := node.Status.Capacity.Memory().Value() / (1024 * 1024 * 1024) // Convert to Gi
-
-		nodes = append(nodes, NodeResourceInfo{
-			Name:   node.Name,
-			CPU:    int(cpu),
-			Memory: int(memory),
-			Labels: node.Labels,
-		})
-	}
-
-	return nodes
-}
 
 func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwov1alpha1.ResourceFlavorSpec, map[string]kueuev1beta1.FlavorQuotas, error) {
 	var resourceFlavors []kaiwov1alpha1.ResourceFlavorSpec
@@ -87,12 +55,14 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 
 		gpuType := "cpu-only"
 		gpuCount := 0
+		var gpuVendor string
 
 		// Identify AMD GPU Nodes
 		if gpuID, exists := node.Labels["amd.com/gpu.device-id"]; exists {
 			gpuType = MapGPUDeviceIDToName(gpuID, "amd")
 			if count, ok := node.Labels["beta.amd.com/gpu.family.AI"]; ok {
 				gpuCount, _ = strconv.Atoi(count)
+				gpuVendor = "amd"
 			}
 		}
 
@@ -101,6 +71,7 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 			gpuType = fmt.Sprintf("nvidia-%s", gpuProduct)
 			if count, ok := node.Labels["nvidia.com/gpu.count"]; ok {
 				gpuCount, _ = strconv.Atoi(count)
+				gpuVendor = "nvidia"
 			}
 		}
 
@@ -108,7 +79,7 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 		nominalCPU := resource.NewQuantity(int64(float64(node.CPU)*cpuMemoryDiscountFactor), resource.DecimalSI)
 		nominalMemory := resource.NewQuantity(int64(float64(node.Memory)*cpuMemoryDiscountFactor*1024*1024*1024), resource.BinarySI)
 
-		flavorName := fmt.Sprintf("%s-%dgpu-%dcore-%dgi", gpuType, gpuCount, nominalCPU.Value(), nominalMemory.Value()/(1024*1024*1024))
+		flavorName := fmt.Sprintf("%s-%s-%dgpu-%dcore-%dgi", gpuVendor, gpuType, gpuCount, nominalCPU.Value(), nominalMemory.Value()/(1024*1024*1024))
 
 		// Track node membership in the nodepool
 		nodePools[flavorName] = append(nodePools[flavorName], node.Name)
@@ -190,21 +161,6 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 	return resourceFlavors, nodePoolResources, nil
 }
 
-func MapGPUDeviceIDToName(gpuID string, vendor string) string {
-	knownGPUs := map[string]string{
-		"740c": "mi250",
-		"74a1": "mi300",
-	}
-
-	if vendor == "amd" {
-		if name, exists := knownGPUs[gpuID]; exists {
-			return name
-		}
-		return fmt.Sprintf("amd-%s", gpuID)
-	}
-	return gpuID
-}
-
 func RemoveDuplicateResourceFlavors(flavors []kaiwov1alpha1.ResourceFlavorSpec) []kaiwov1alpha1.ResourceFlavorSpec {
 	uniqueMap := make(map[string]kaiwov1alpha1.ResourceFlavorSpec)
 	for _, flavor := range flavors {
@@ -216,22 +172,6 @@ func RemoveDuplicateResourceFlavors(flavors []kaiwov1alpha1.ResourceFlavorSpec) 
 		uniqueFlavors = append(uniqueFlavors, flavor)
 	}
 	return uniqueFlavors
-}
-
-func LabelNode(ctx context.Context, c client.Client, nodeName, key, value string) error {
-	var node corev1.Node
-	err := c.Get(ctx, client.ObjectKey{Name: nodeName}, &node)
-	if err != nil {
-		return err
-	}
-
-	// Add or update the label
-	if node.Labels == nil {
-		node.Labels = make(map[string]string)
-	}
-	node.Labels[key] = value
-
-	return c.Update(ctx, &node)
 }
 
 func CreateClusterQueue(nodePoolResources map[string]kueuev1beta1.FlavorQuotas, name string) kaiwov1alpha1.ClusterQueue {
@@ -297,41 +237,6 @@ func CreateClusterQueue(nodePoolResources map[string]kueuev1beta1.FlavorQuotas, 
 	}
 }
 
-func getGPUCount(flavorName string) int {
-	if strings.Contains(flavorName, "nvidia") || strings.Contains(flavorName, "amd") {
-		parts := strings.Split(flavorName, "-")
-		for _, p := range parts {
-			if strings.HasSuffix(p, "gpu") {
-				count, _ := strconv.Atoi(strings.TrimSuffix(p, "gpu"))
-				return count
-			}
-		}
-	}
-	return 0
-}
-
-func getCPUCount(flavorName string) int {
-	parts := strings.Split(flavorName, "-")
-	for _, p := range parts {
-		if strings.HasSuffix(p, "core") {
-			count, _ := strconv.Atoi(strings.TrimSuffix(p, "core"))
-			return count
-		}
-	}
-	return 0
-}
-
-func getMemoryCount(flavorName string) int {
-	parts := strings.Split(flavorName, "-")
-	for _, p := range parts {
-		if strings.HasSuffix(p, "Gi") {
-			count, _ := strconv.Atoi(strings.TrimSuffix(p, "Gi"))
-			return count
-		}
-	}
-	return 0
-}
-
 func ConvertKaiwoToKueueResourceFlavors(kaiwoFlavors []kaiwov1alpha1.ResourceFlavorSpec) []kueuev1beta1.ResourceFlavor {
 	var kueueFlavors []kueuev1beta1.ResourceFlavor
 	for _, rf := range kaiwoFlavors {
@@ -357,4 +262,38 @@ func ConvertKaiwoToKueueClusterQueue(kaiwoQueue kaiwov1alpha1.ClusterQueue) kueu
 		},
 		Spec: kaiwoQueue.Spec,
 	}
+}
+
+// CreateLocalQueue creates a LocalQueue in the given namespace.
+func CreateLocalQueue(ctx context.Context, c client.Client, name string, namespace string) error {
+	logger := log.FromContext(ctx)
+
+	// Define the LocalQueue object
+	localQueue := &kueuev1beta1.LocalQueue{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: kueuev1beta1.LocalQueueSpec{
+			ClusterQueue: kueuev1beta1.ClusterQueueReference(name),
+		},
+	}
+
+	// Check if the LocalQueue already exists
+	existingQueue := &kueuev1beta1.LocalQueue{}
+	err := c.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, existingQueue)
+	if err == nil {
+		logger.Info("LocalQueue already exists", "Name", name, "Namespace", namespace)
+		return nil
+	}
+
+	// Create the LocalQueue
+	err = c.Create(ctx, localQueue)
+	if err != nil {
+		logger.Error(err, "Failed to create LocalQueue", "Name", name, "Namespace", namespace)
+		return fmt.Errorf("failed to create LocalQueue %s in namespace %s: %w", name, namespace, err)
+	}
+
+	logger.Info("Successfully created LocalQueue", "Name", name, "Namespace", namespace)
+	return nil
 }

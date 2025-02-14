@@ -29,19 +29,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
-const (
-	defaultDataMountPath = "/workload"
-	defaultHfMountPath   = "/.cache/huggingface"
+var (
+	defaultDataMountPath = baseutils.GetEnv("DEFAULTDATAMOUNTPATH", "/workload")
+	defaultHfMountPath   = baseutils.GetEnv("DEFAULTHFMOUNTPATH", "/.cache/huggingface")
 )
 
 // ReconcileDownloadJob ensures that if there is data to download to the PVC(s) before the main workload runs,
 // that the job is scheduled and has completed successfully before the main workload should be scheduled
-func ReconcileDownloadJob(r client.Client, s *runtime.Scheme, ctx context.Context, owner client.Object, spec *v1alpha1.StorageSpec) (*ctrl.Result, error) {
+func ReconcileDownloadJob(r client.Client, s *runtime.Scheme, ctx context.Context, owner client.Object, spec *kaiwov1alpha1.StorageSpec) (*ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
 	if !spec.StorageEnabled {
@@ -224,7 +223,7 @@ func ReconcileDownloadJob(r client.Client, s *runtime.Scheme, ctx context.Contex
 						Spec: corev1.PodSpec{
 							RestartPolicy: corev1.RestartPolicyNever,
 							Containers: []corev1.Container{
-								{
+								{ // TODO: Consider making these env variables
 									Image: "ghcr.io/silogen/kaiwo-python:0.2",
 									Name:  "data-downloader",
 									Command: []string{
