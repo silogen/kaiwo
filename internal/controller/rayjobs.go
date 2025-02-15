@@ -63,6 +63,8 @@ func (r *KaiwoJobReconciler) reconcileRayJob(ctx context.Context, kaiwoJob *kaiw
 		return ctrl.Result{}, err
 	}
 
+	kaiwoJob.Spec.Ray = true
+
 	// Use DefaultRayJobSpec if none is provided
 	var rayJobSpec rayv1.RayJobSpec
 	if kaiwoJob.Spec.RayJob == nil {
@@ -70,6 +72,18 @@ func (r *KaiwoJobReconciler) reconcileRayJob(ctx context.Context, kaiwoJob *kaiw
 		rayJobSpec = DefaultRayJobSpec
 	} else {
 		rayJobSpec = kaiwoJob.Spec.RayJob.Spec
+	}
+
+	if rayJobSpec.RayClusterSpec.HeadGroupSpec.Template.Labels == nil {
+		rayJobSpec.RayClusterSpec.HeadGroupSpec.Template.Labels = make(map[string]string)
+	}
+	rayJobSpec.RayClusterSpec.HeadGroupSpec.Template.Labels["job-name"] = kaiwoJob.Name
+
+	for i := range rayJobSpec.RayClusterSpec.WorkerGroupSpecs {
+		if rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Template.Labels == nil {
+			rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Template.Labels = make(map[string]string)
+		}
+		rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Template.Labels["job-name"] = kaiwoJob.Name
 	}
 
 	// Apply entrypoint

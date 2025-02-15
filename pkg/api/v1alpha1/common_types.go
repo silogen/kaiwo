@@ -24,6 +24,18 @@ const (
 	QueueLabel = "kueue.x-k8s.io/queue-name"
 )
 
+type Status string
+
+const (
+	StatusNew      Status = ""
+	StatusPending  Status = "PENDING"
+	StatusStarting Status = "STARTING"
+	StatusReady    Status = "READY"
+	StatusRunning  Status = "RUNNING"
+	StatusComplete Status = "COMPLETE"
+	StatusFailed   Status = "FAILED"
+)
+
 // CommonMetaSpec defines reusable metadata fields for workloads.
 type CommonMetaSpec struct {
 	// Name is the name of the workload.

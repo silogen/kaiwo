@@ -91,14 +91,20 @@ type KaiwoJobSpec struct {
 
 // KaiwoJobStatus defines the observed state of KaiwoJob.
 type KaiwoJobStatus struct {
-	StartTime       *metav1.Time       `json:"startTime,omitempty"`
-	CompletionTime  *metav1.Time       `json:"completionTime,omitempty"`
-	Conditions      []metav1.Condition `json:"conditions,omitempty"`
-	ReplicaStatuses map[string]int32   `json:"replicaStatuses,omitempty"`
+	StartTime          *metav1.Time       `json:"startTime,omitempty"`
+	CompletionTime     *metav1.Time       `json:"completionTime,omitempty"`
+	Conditions         []metav1.Condition `json:"conditions,omitempty"`
+	Status             Status             `json:"Status,omitempty"`
+	Duration           int64              `json:"duration,omitempty"`
+	ObservedGeneration int64              `json:"observedGeneration,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.Status"
+// +kubebuilder:printcolumn:name="StartTime",type="string",JSONPath=".status.startTime"
+// +kubebuilder:printcolumn:name="CompletionTime",type="string",JSONPath=".status.completionTime"
+// +kubebuilder:printcolumn:name="Duration(s)",type="integer",JSONPath=".status.duration"
 type KaiwoJob struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

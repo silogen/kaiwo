@@ -54,10 +54,13 @@ type ResourceFlavorSpec struct {
 // KaiwoQueueConfigStatus represents the observed state of KaiwoQueueConfig.
 type KaiwoQueueConfigStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	Status     Status             `json:"Status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:scope=Cluster
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.Status"
 // KaiwoQueueConfig manages Kueue resources.
 type KaiwoQueueConfig struct {
 	metav1.TypeMeta   `json:",inline"`
