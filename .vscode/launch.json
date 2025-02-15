@@ -82,6 +82,7 @@
 		"env": {
 		  "GO111MODULE": "on"
 		},
+		"envFile": "${workspaceFolder}/.env",
 		"buildFlags": "-tags=debug"
 	      }
 	]

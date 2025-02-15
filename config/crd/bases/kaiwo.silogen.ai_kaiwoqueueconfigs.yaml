@@ -587,6 +587,8 @@ spec:
           status:
             description: KaiwoQueueConfigStatus represents the observed state of KaiwoQueueConfig.
             properties:
+              Status:
+                type: string
               conditions:
                 items:
                   description: Condition contains details for one aspect of the current

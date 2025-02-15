@@ -54,6 +54,7 @@ type ResourceFlavorSpec struct {
 // KaiwoQueueConfigStatus represents the observed state of KaiwoQueueConfig.
 type KaiwoQueueConfigStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	Status     Status             `json:"Status,omitempty"`
 }
 
 // +kubebuilder:object:root=true

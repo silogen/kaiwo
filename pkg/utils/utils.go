@@ -16,13 +16,14 @@ package baseutils
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 )
 
-const (
-	DefaultNamespace = "kaiwo"
-	DefaultRayImage  = "ghcr.io/silogen/rocm-ray:v0.8"
+var (
+	DefaultNamespace = GetEnv("DEFAULTWORKLOADNAMESPACE", "kaiwo")
+	DefaultRayImage  = GetEnv("DEFAULTWORKLOADIMAGE", "ghcr.io/silogen/rocm-ray:v0.8")
 )
 
 func SanitizeStringForKubernetes(str string) string {
@@ -59,4 +60,12 @@ func MakeRFC1123Compliant(input string) string {
 
 func FormatNameWithPostfix(name string, postfix string) string {
 	return MakeRFC1123Compliant(fmt.Sprintf("%s-%s", name, postfix))
+}
+
+func GetEnv(key, defaultValue string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+	return value
 }
