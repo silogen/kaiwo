@@ -92,8 +92,8 @@ type KaiwoServiceSpec struct {
 
 // KaiwoServiceStatus defines the observed state of KaiwoService.
 type KaiwoServiceStatus struct {
-	Conditions      []metav1.Condition `json:"conditions,omitempty"`
-	ReplicaStatuses map[string]int32   `json:"replicaStatuses,omitempty"`
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	Status     Status             `json:"Status,omitempty"`
 }
 
 // +kubebuilder:object:root=true

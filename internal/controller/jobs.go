@@ -59,6 +59,11 @@ func (r *KaiwoJobReconciler) reconcileK8sJob(ctx context.Context, kaiwoJob *kaiw
 		jobSpec = kaiwoJob.Spec.Job.Spec
 	}
 
+	if jobSpec.Template.ObjectMeta.Labels == nil {
+		jobSpec.Template.ObjectMeta.Labels = make(map[string]string)
+	}
+	jobSpec.Template.ObjectMeta.Labels["job-name"] = kaiwoJob.Name
+
 	if err := controllerutils.AddEntrypoint(ctx, kaiwoJob.Spec.EntryPoint, &jobSpec.Template); err != nil {
 		return ctrl.Result{}, err
 	}

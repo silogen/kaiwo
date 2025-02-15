@@ -22,10 +22,18 @@ import (
 
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
@@ -83,6 +91,12 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, err
 	}
 
+	// **Update Status based on RayJob, Kubernetes Job, or Pods**
+	if err := r.updateKaiwoJobStatus(ctx, &kaiwoJob); err != nil {
+		logger.Error(err, "Failed to update KaiwoJob status")
+		return ctrl.Result{}, err
+	}
+
 	if kaiwoJob.Spec.RayJob == nil || !kaiwoJob.Spec.Ray {
 		return r.reconcileK8sJob(ctx, &kaiwoJob)
 	} else if kaiwoJob.Spec.RayJob != nil || kaiwoJob.Spec.Ray {
@@ -94,9 +108,162 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	return ctrl.Result{}, jobInvalidErr
 }
 
+func (r *KaiwoJobReconciler) updateKaiwoJobStatus(ctx context.Context, kaiwoJob *kaiwov1alpha1.KaiwoJob) error {
+	logger := log.FromContext(ctx)
+
+	var jobFailed, jobSucceeded bool
+
+	if !kaiwoJob.Spec.Ray {
+		var job batchv1.Job
+		err := r.Get(ctx, client.ObjectKey{Name: kaiwoJob.Name, Namespace: kaiwoJob.Namespace}, &job)
+		if err == nil {
+			jobFailed = job.Status.Failed > 0
+			jobSucceeded = job.Status.Succeeded > 0
+		} else if !errors.IsNotFound(err) {
+			logger.Error(err, "Failed to get Kubernetes Job status")
+			return err
+		}
+	} else {
+		var rayJob rayv1.RayJob
+		err := r.Get(ctx, client.ObjectKey{Name: kaiwoJob.Name, Namespace: kaiwoJob.Namespace}, &rayJob)
+		if err == nil {
+			switch rayJob.Status.JobStatus {
+			case rayv1.JobStatusFailed:
+				jobFailed = true
+			case rayv1.JobStatusSucceeded:
+				jobSucceeded = true
+			case rayv1.JobStatusPending, rayv1.JobStatusStopped:
+				kaiwoJob.Status.Status = kaiwov1alpha1.StatusPending
+			}
+		} else if !errors.IsNotFound(err) {
+			logger.Error(err, "Failed to get RayJob status")
+			return err
+		}
+	}
+
+	if jobSucceeded {
+		now := metav1.Now()
+		kaiwoJob.Status.Status = kaiwov1alpha1.StatusComplete
+		kaiwoJob.Status.CompletionTime = &now
+
+		if kaiwoJob.Status.StartTime != nil {
+			kaiwoJob.Status.Duration = int64(kaiwoJob.Status.CompletionTime.Time.Sub(kaiwoJob.Status.StartTime.Time).Seconds())
+		}
+		if err := r.Status().Update(ctx, kaiwoJob); err != nil {
+			logger.Error(err, "Failed to update KaiwoJob status to Complete")
+			return err
+		}
+		logger.Info("Updated KaiwoJob to Complete", "KaiwoJob", kaiwoJob.Name, "StartTime", kaiwoJob.Status.StartTime, "CompletionTime", kaiwoJob.Status.CompletionTime)
+		return nil
+	}
+
+	if jobFailed {
+		now := metav1.Now()
+		kaiwoJob.Status.Status = kaiwov1alpha1.StatusFailed
+		kaiwoJob.Status.CompletionTime = &now
+
+		if kaiwoJob.Status.StartTime != nil {
+			kaiwoJob.Status.Duration = int64(kaiwoJob.Status.CompletionTime.Time.Sub(kaiwoJob.Status.StartTime.Time).Seconds())
+		}
+
+		if err := r.Status().Update(ctx, kaiwoJob); err != nil {
+			logger.Error(err, "Failed to update KaiwoJob status to Failed")
+			return err
+		}
+		logger.Info("Updated KaiwoJob to Failed", "KaiwoJob", kaiwoJob.Name, "StartTime", kaiwoJob.Status.StartTime, "CompletionTime", kaiwoJob.Status.CompletionTime)
+		return nil
+	}
+
+	var runningPods, pendingPods []corev1.Pod
+	podList := &corev1.PodList{}
+
+	err := r.List(ctx, podList, client.InNamespace(kaiwoJob.Namespace), client.MatchingLabels{"job-name": kaiwoJob.Name})
+	if err != nil {
+		logger.Error(err, "Failed to list pods for job", "KaiwoJob", kaiwoJob.Name)
+		return err
+	}
+
+	var earliestRunningTime *metav1.Time
+	for _, pod := range podList.Items {
+		switch pod.Status.Phase {
+		case corev1.PodRunning:
+			runningPods = append(runningPods, pod)
+
+			if pod.Status.StartTime != nil {
+				if earliestRunningTime == nil || pod.Status.StartTime.Before(earliestRunningTime) {
+					earliestRunningTime = pod.Status.StartTime
+				}
+			}
+		case corev1.PodPending:
+			pendingPods = append(pendingPods, pod)
+		}
+	}
+
+	if earliestRunningTime != nil && kaiwoJob.Status.StartTime == nil {
+		kaiwoJob.Status.StartTime = earliestRunningTime
+		logger.Info("Set KaiwoJob StartTime", "KaiwoJob", kaiwoJob.Name, "StartTime", earliestRunningTime)
+	}
+
+	if len(runningPods) > 0 {
+		kaiwoJob.Status.Status = kaiwov1alpha1.StatusRunning
+	} else if len(pendingPods) > 0 {
+		kaiwoJob.Status.Status = kaiwov1alpha1.StatusStarting
+	} else {
+		kaiwoJob.Status.Status = kaiwov1alpha1.StatusPending
+	}
+
+	if err := r.Status().Update(ctx, kaiwoJob); err != nil {
+		logger.Error(err, "Failed to update KaiwoJob status")
+		return err
+	}
+
+	logger.Info("Updated KaiwoJob status", "KaiwoJob", kaiwoJob.Name, "Status", kaiwoJob.Status.Status, "StartTime", kaiwoJob.Status.StartTime)
+	return nil
+}
+
 func (r *KaiwoJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kaiwov1alpha1.KaiwoJob{}).
+		Watches(
+			&batchv1.Job{}, // Watching batchv1.Job
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				return r.mapJobToKaiwoJob(obj)
+			}),
+		).
+		Watches(
+			&rayv1.RayJob{}, // Watching RayJob
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				return r.mapRayJobToKaiwoJob(obj)
+			}),
+		).
 		Named("kaiwojob").
 		Complete(r)
+}
+
+func (r *KaiwoJobReconciler) mapJobToKaiwoJob(obj client.Object) []reconcile.Request {
+	job, ok := obj.(*batchv1.Job)
+	if !ok {
+		return nil
+	}
+
+	return []reconcile.Request{
+		{NamespacedName: client.ObjectKey{
+			Name:      job.Name,
+			Namespace: job.Namespace,
+		}},
+	}
+}
+
+func (r *KaiwoJobReconciler) mapRayJobToKaiwoJob(obj client.Object) []reconcile.Request {
+	rayJob, ok := obj.(*rayv1.RayJob)
+	if !ok {
+		return nil
+	}
+
+	return []reconcile.Request{
+		{NamespacedName: client.ObjectKey{
+			Name:      rayJob.Name,
+			Namespace: rayJob.Namespace,
+		}},
+	}
 }
