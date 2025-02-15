@@ -47,11 +47,7 @@ spec:
                 description: ClusterQueue is the Kueue ClusterQueue name.
                 type: string
               configSource:
-<<<<<<< HEAD
                 description: ConfigSource allows mounting from Git repository
-=======
-                description: ConfigSource allows mounting from Git reposity
->>>>>>> 969de27 (add working kaiwojob controller)
                 properties:
                   configMapName:
                     description: |-
@@ -26648,10 +26644,14 @@ spec:
                 type: object
               replicas:
 <<<<<<< HEAD
+<<<<<<< HEAD
                 default: 0
 =======
                 default: 1
 >>>>>>> 969de27 (add working kaiwojob controller)
+=======
+                default: 0
+>>>>>>> 6e4f911 (add status)
                 description: |-
                   Replicas specifies the number of replicas for the workload.
                   If greater than one, the workload must use Ray.
