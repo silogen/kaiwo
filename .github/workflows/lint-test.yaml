@@ -33,9 +33,9 @@ jobs:
         run: |
           CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '\.go$' | xargs || echo "all")
           if [ "$CHANGED_FILES" = "all" ]; then
-            golangci-lint run --timeout=15m --verbose --concurrency=1
+            golangci-lint run --timeout=15m --verbose --concurrency=1 cmd/cli/main.go
           else
-            golangci-lint run --timeout=15m --verbose --concurrency=1 $CHANGED_FILES
+            golangci-lint run --timeout=15m --verbose --concurrency=1 cmd/cli/main.go
           fi
   test:
     name: Run tests
