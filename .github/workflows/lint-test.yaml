@@ -18,6 +18,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
+      - name: Enable Debug Logging
+        run: echo "RUNNER_DEBUG=1" >> $GITHUB_ENV
       - name: Install golangci-lint manually
         run: |
           echo "Installing golangci-lint..."
