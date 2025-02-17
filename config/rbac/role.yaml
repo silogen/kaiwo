@@ -18,6 +18,11 @@ rules:
       - namespaces
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
+  - apiGroups: [""]
+    resources:
+      - nodes
+    verbs: ["get", "list", "watch", "update", "patch"]
+
   - apiGroups: ["kaiwo.silogen.ai"]
     resources: 
       - "kaiwojobs"
