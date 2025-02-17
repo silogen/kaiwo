@@ -24,7 +24,9 @@ jobs:
         uses: golangci/golangci-lint-action@v6
         with:
           version: v1.63.4
-          args: --timeout=10m --verbose
+          args: --timeout=15m --verbose
+          skip-cache: true
+          skip-save-cache: true
   test:
     name: Run tests
     runs-on: ubuntu-latest
