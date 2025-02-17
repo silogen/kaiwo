@@ -17,7 +17,7 @@ package workloads
 import (
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/silogen/kaiwo/pkg/k8s"
+	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 )
 
 const (
@@ -94,7 +94,7 @@ type MetaFlags struct {
 	EnvVars []corev1.EnvVar
 
 	// Secret volumes
-	SecretVolumes []k8s.SecretVolume
+	SecretVolumes []v1alpha1.SecretVolume
 
 	// Whether there is associated config map data
 	HasConfigMap bool

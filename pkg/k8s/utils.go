@@ -17,22 +17,11 @@ package k8s
 import (
 	"bytes"
 	"fmt"
-	"os"
-	"path/filepath"
 
-	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-type SecretVolume struct {
-	Name       string
-	SecretName string
-	Key        string
-	SubPath    string
-	MountPath  string
-}
 type EnvVarInput struct {
 	Name       string `yaml:"name,omitempty"`
 	Value      string `yaml:"value,omitempty"`
@@ -49,68 +38,68 @@ type EnvVarInput struct {
 	} `yaml:"mountSecret,omitempty"`
 }
 
-type EnvFile struct {
-	EnvVars []EnvVarInput `yaml:"envVars"`
-}
-
-func ReadEnvFile(filePath string) ([]corev1.EnvVar, []SecretVolume, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to open env file: %w", err)
-	}
-	defer func() {
-		if cerr := file.Close(); cerr != nil {
-			// Log the error, as defer cannot modify the return values of the outer function
-			logrus.Warnf("failed to close file: %v", cerr)
-		}
-	}()
-
-	var envFile EnvFile
-	if err := yaml.NewDecoder(file).Decode(&envFile); err != nil {
-		return nil, nil, fmt.Errorf("failed to parse YAML: %w", err)
-	}
-
-	var envVars []corev1.EnvVar
-	var secretVolumes []SecretVolume
-
-	for _, input := range envFile.EnvVars {
-		if input.Value != "" {
-			// Normal environment variable
-			envVars = append(envVars, corev1.EnvVar{
-				Name:  input.Name,
-				Value: input.Value,
-			})
-		} else if input.FromSecret != nil {
-			// Secret-based environment variable
-			envVars = append(envVars, corev1.EnvVar{
-				Name: input.FromSecret.Name,
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: input.FromSecret.Secret,
-						},
-						Key: input.FromSecret.Key,
-					},
-				},
-			})
-		} else if input.MountSecret != nil {
-			// Secret-based volume mount
-			secretVolumes = append(secretVolumes, SecretVolume{
-				Name:       fmt.Sprintf("%s-volume", input.MountSecret.Secret),
-				SecretName: input.MountSecret.Secret,
-				Key:        input.MountSecret.Key,
-				SubPath:    filepath.Base(input.MountSecret.Path), // File name to mount
-				MountPath:  input.MountSecret.Path,
-			})
-			envVars = append(envVars, corev1.EnvVar{
-				Name:  input.MountSecret.Name,
-				Value: input.MountSecret.Path, // Set the mount path as an environment variable
-			})
-		}
-	}
-
-	return envVars, secretVolumes, nil
-}
+//type EnvFile struct {
+//	EnvVars []EnvVarInput `yaml:"envVars"`
+//}
+//
+//func ReadEnvFile(filePath string) ([]corev1.EnvVar, []SecretVolume, error) {
+//	file, err := os.Open(filePath)
+//	if err != nil {
+//		return nil, nil, fmt.Errorf("failed to open env file: %w", err)
+//	}
+//	defer func() {
+//		if cerr := file.Close(); cerr != nil {
+//			// Log the error, as defer cannot modify the return values of the outer function
+//			logrus.Warnf("failed to close file: %v", cerr)
+//		}
+//	}()
+//
+//	var envFile EnvFile
+//	if err := yaml.NewDecoder(file).Decode(&envFile); err != nil {
+//		return nil, nil, fmt.Errorf("failed to parse YAML: %w", err)
+//	}
+//
+//	var envVars []corev1.EnvVar
+//	var secretVolumes []SecretVolume
+//
+//	for _, input := range envFile.EnvVars {
+//		if input.Value != "" {
+//			// Normal environment variable
+//			envVars = append(envVars, corev1.EnvVar{
+//				Name:  input.Name,
+//				Value: input.Value,
+//			})
+//		} else if input.FromSecret != nil {
+//			// Secret-based environment variable
+//			envVars = append(envVars, corev1.EnvVar{
+//				Name: input.FromSecret.Name,
+//				ValueFrom: &corev1.EnvVarSource{
+//					SecretKeyRef: &corev1.SecretKeySelector{
+//						LocalObjectReference: corev1.LocalObjectReference{
+//							Name: input.FromSecret.Secret,
+//						},
+//						Key: input.FromSecret.Key,
+//					},
+//				},
+//			})
+//		} else if input.MountSecret != nil {
+//			// Secret-based volume mount
+//			secretVolumes = append(secretVolumes, SecretVolume{
+//				Name:       fmt.Sprintf("%s-volume", input.MountSecret.Secret),
+//				SecretName: input.MountSecret.Secret,
+//				Key:        input.MountSecret.Key,
+//				SubPath:    filepath.Base(input.MountSecret.Path), // File name to mount
+//				MountPath:  input.MountSecret.Path,
+//			})
+//			envVars = append(envVars, corev1.EnvVar{
+//				Name:  input.MountSecret.Name,
+//				Value: input.MountSecret.Path, // Set the mount path as an environment variable
+//			})
+//		}
+//	}
+//
+//	return envVars, secretVolumes, nil
+//}
 
 // MinimalizeAndConvertToYAML converts a runtime.Object or client.Object to its YAML representation
 // while removing read-only fields like `metadata.creationTimestamp`, `status`, and others.

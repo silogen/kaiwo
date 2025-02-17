@@ -64,10 +64,18 @@ type StorageSpec struct {
 	AccessMode corev1.PersistentVolumeAccessMode `json:"accessMode"`
 
 	// Data specifies the main workload PVC and optional object storage pre-downloads
-	Data DataStorageSpec `json:"data,omitempty"`
+	Data *DataStorageSpec `json:"data,omitempty"`
 
 	// HuggingFace specifies any hugging face models that should be cached before the workload starts
-	HuggingFace HfStorageSpec `json:"huggingFace,omitempty"`
+	HuggingFace *HfStorageSpec `json:"huggingFace,omitempty"`
+}
+
+func (spec *StorageSpec) HasObjectStorageDownloads() bool {
+	return len(spec.Data.Download.S3) > 0 || len(spec.Data.Download.GCS) > 0 || len(spec.Data.Download.AzureBlob) > 0
+}
+
+func (spec *StorageSpec) HasHfDownloads() bool {
+	return len(spec.HuggingFace.PreCacheRepos) > 0
 }
 
 type DownloadTaskConfig struct {
@@ -84,25 +92,25 @@ type DownloadTaskConfig struct {
 }
 
 // CreateConfig creates the config required for the data downloader
-func (s *StorageSpec) CreateConfig() DownloadTaskConfig {
+func (spec *StorageSpec) CreateConfig() DownloadTaskConfig {
 	config := DownloadTaskConfig{}
 
-	if s.Data.StorageSize != "" {
-		if s.Data.MountPath != "" {
-			config.DownloadRoot = s.Data.MountPath
+	if spec.Data.StorageSize != "" {
+		if spec.Data.MountPath != "" {
+			config.DownloadRoot = spec.Data.MountPath
 		} else {
 			config.DownloadRoot = "/workload"
 		}
 
-		config.GCS = s.Data.Download.GCS
-		config.S3 = s.Data.Download.S3
-		config.AzureBlob = s.Data.Download.AzureBlob
+		config.GCS = spec.Data.Download.GCS
+		config.S3 = spec.Data.Download.S3
+		config.AzureBlob = spec.Data.Download.AzureBlob
 
 	}
 
-	if s.HuggingFace.StorageSize != "" {
-		config.HfHome = s.HuggingFace.MountPath
-		config.HF = s.HuggingFace.PreCacheRepos
+	if spec.HuggingFace.StorageSize != "" {
+		config.HfHome = spec.HuggingFace.MountPath
+		config.HF = spec.HuggingFace.PreCacheRepos
 	}
 
 	return config
@@ -203,32 +211,10 @@ func (spec *HfStorageSpec) IsRequested() bool {
 	return spec.StorageSize != ""
 }
 
-// ConfigSource defines the source of configuration files for the workload.
-type ConfigSource struct {
-	// Type specifies the type of configuration source. Valid values are:
-	// - "ConfigMap": Configuration is stored in a Kubernetes ConfigMap.
-	// - "S3": Configuration is stored in an S3-compatible object storage bucket.
-	Type string `json:"type,omitempty"`
-
-	// ConfigMapName specifies the name of the ConfigMap to be mounted.
-	// This field is only relevant if Type is "ConfigMap".
-	ConfigMapName string `json:"configMapName,omitempty"`
-
-	// S3BucketName specifies the name of the S3 bucket where configuration files are stored.
-	// This field is only relevant if Type is "S3".
-	S3BucketName string `json:"s3BucketName,omitempty"`
-
-	// S3Path specifies an optional path within the S3 bucket where the configuration files reside.
-	// This field is only relevant if Type is "S3".
-	S3Path string `json:"s3Path,omitempty"`
-
-	// S3Credentials references a Kubernetes Secret containing credentials for accessing the S3 bucket.
-	// The Secret should have standard AWS credential keys (e.g., "AWS_ACCESS_KEY_ID" and "AWS_SECRET_ACCESS_KEY").
-	// This field is only relevant if Type is "S3".
-	S3Credentials *corev1.SecretReference `json:"s3Credentials,omitempty"`
-}
-
-type ConfigSourceItem struct {
-	Path  string `json:"mountPath,omitempty"`
-	Value string `json:"value,omitempty"`
+type SecretVolume struct {
+	Name       string `json:"name,omitempty"`
+	SecretName string `json:"secretName,omitempty"`
+	Key        string `json:"key,omitempty"`
+	SubPath    string `json:"subPath,omitempty"`
+	MountPath  string `json:"mountPath,omitempty"`
 }
