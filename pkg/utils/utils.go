@@ -22,8 +22,8 @@ import (
 )
 
 var (
-	DefaultNamespace = GetEnv("DEFAULTWORKLOADNAMESPACE", "kaiwo")
-	DefaultRayImage  = GetEnv("DEFAULTWORKLOADIMAGE", "ghcr.io/silogen/rocm-ray:v0.8")
+	DefaultNamespace = GetEnv("DEFAULT_WORKLOAD_NAMESPACE", "kaiwo")
+	DefaultRayImage  = GetEnv("DEFAULT_WORKLOAD_IMAGE", "ghcr.io/silogen/rocm-ray:v0.8")
 )
 
 func SanitizeStringForKubernetes(str string) string {

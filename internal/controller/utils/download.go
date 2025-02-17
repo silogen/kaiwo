@@ -34,8 +34,8 @@ import (
 )
 
 var (
-	defaultDataMountPath = baseutils.GetEnv("DEFAULTDATAMOUNTPATH", "/workload")
-	defaultHfMountPath   = baseutils.GetEnv("DEFAULTHFMOUNTPATH", "/.cache/huggingface")
+	defaultDataMountPath = baseutils.GetEnv("DEFAULT_DATA_MOUNT_PATH", "/workload")
+	defaultHfMountPath   = baseutils.GetEnv("DEFAULT_HF_MOUNT_PATH", "/.cache/huggingface")
 )
 
 // ReconcileDownloadJob ensures that if there is data to download to the PVC(s) before the main workload runs,

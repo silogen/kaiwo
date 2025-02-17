@@ -25,7 +25,7 @@ import (
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
-var DefaultGpuResourceKey = baseutils.GetEnv("DEFAULTGPURESOURCEKEY", "amd.com/gpu")
+var DefaultGpuResourceKey = baseutils.GetEnv("DEFAULT_GPU_RESOURCE_KEY", "amd.com/gpu")
 
 // DefaultPodTemplateSpec defines a reusable Pod template with security and resource settings.
 var DefaultPodTemplateSpec = corev1.PodTemplateSpec{
