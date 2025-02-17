@@ -26643,19 +26643,11 @@ spec:
                     type: object
                 type: object
               replicas:
-<<<<<<< HEAD
-<<<<<<< HEAD
                 default: 0
-=======
-                default: 1
->>>>>>> 969de27 (add working kaiwojob controller)
-=======
-                default: 0
->>>>>>> 6e4f911 (add status)
                 description: |-
                   Replicas specifies the number of replicas for the workload.
                   If greater than one, the workload must use Ray.
-                  Default is 1.
+                  Default is 0.
                 type: integer
               serveConfigV2:
                 description: |-
