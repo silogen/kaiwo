@@ -12,21 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package controller
+package workloadshared
 
 import (
-	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
-	baseutils "github.com/silogen/kaiwo/pkg/utils"
-
-	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads2/utils"
 )
 
-var DefaultDeploymentSpec = appsv1.DeploymentSpec{
-	Replicas: baseutils.Pointer(int32(1)),
-	Selector: &metav1.LabelSelector{
-		MatchLabels: map[string]string{"app": "default-app"},
-	},
-	Template: controllerutils.DefaultPodTemplateSpec,
+type KaiwoLocalQueueCommand struct {
+	workloadutils.CommandBase[workloadutils.CommandStateBase]
+	Name      string
+	Namespace string
+}
+
+func (k *KaiwoLocalQueueCommand) Build() (client.Object, error) {
+	return &kueuev1beta1.LocalQueue{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      k.Name,
+			Namespace: k.Namespace,
+		},
+		Spec: kueuev1beta1.LocalQueueSpec{
+			ClusterQueue: kueuev1beta1.ClusterQueueReference(k.Name),
+		},
+	}, nil
 }

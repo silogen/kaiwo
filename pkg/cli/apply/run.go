@@ -47,7 +47,7 @@ type WorkloadApplier interface {
 
 	GetObject() client.Object
 
-	GetInvoker(ctx context.Context, scheme *runtime.Scheme) (workloadutils.CommandInvoker, error)
+	GetInvoker(ctx context.Context, scheme *runtime.Scheme, k8sClient client.Client) (workloadutils.CommandInvoker, error)
 }
 
 func Apply(applier WorkloadApplier, flags workloads2.CLIFlags) error {
@@ -97,7 +97,7 @@ func Apply(applier WorkloadApplier, flags workloads2.CLIFlags) error {
 			return fmt.Errorf("error applying local-print: %v", err)
 		}
 	} else if flags.Preview {
-		invoker, err := applier.GetInvoker(ctx, &scheme)
+		invoker, err := applier.GetInvoker(ctx, &scheme, k8sClient)
 		if err != nil {
 			return fmt.Errorf("failed to get invoker: %w", err)
 		}

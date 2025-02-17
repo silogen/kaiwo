@@ -59,47 +59,11 @@ spec:
               clusterQueue:
                 description: ClusterQueue is the Kueue ClusterQueue name.
                 type: string
-              configSource:
-                description: ConfigSource allows mounting from Git
-                properties:
-                  configMapName:
-                    description: |-
-                      ConfigMapName specifies the name of the ConfigMap to be mounted.
-                      This field is only relevant if Type is "ConfigMap".
-                    type: string
-                  s3BucketName:
-                    description: |-
-                      S3BucketName specifies the name of the S3 bucket where configuration files are stored.
-                      This field is only relevant if Type is "S3".
-                    type: string
-                  s3Credentials:
-                    description: |-
-                      S3Credentials references a Kubernetes Secret containing credentials for accessing the S3 bucket.
-                      The Secret should have standard AWS credential keys (e.g., "AWS_ACCESS_KEY_ID" and "AWS_SECRET_ACCESS_KEY").
-                      This field is only relevant if Type is "S3".
-                    properties:
-                      name:
-                        description: name is unique within a namespace to reference
-                          a secret resource.
-                        type: string
-                      namespace:
-                        description: namespace defines the space within which the
-                          secret name must be unique.
-                        type: string
-                    type: object
-                    x-kubernetes-map-type: atomic
-                  s3Path:
-                    description: |-
-                      S3Path specifies an optional path within the S3 bucket where the configuration files reside.
-                      This field is only relevant if Type is "S3".
-                    type: string
-                  type:
-                    description: |-
-                      Type specifies the type of configuration source. Valid values are:
-                      - "ConfigMap": Configuration is stored in a Kubernetes ConfigMap.
-                      - "S3": Configuration is stored in an S3-compatible object storage bucket.
-                    type: string
-                type: object
+              dangerous:
+                default: false
+                description: Dangerous disables adding the default security context
+                  to the containers
+                type: boolean
               entrypoint:
                 description: |-
                   EntryPoint specifies the command or script executed in a Job or RayJob.
@@ -34224,6 +34188,23 @@ spec:
                   If greater than one, the workload must use Ray.
                   Default is 0.
                 type: integer
+              secretVolumes:
+                description: SecretVolumes list the secret volumes that should be
+                  mounted
+                items:
+                  properties:
+                    key:
+                      type: string
+                    mountPath:
+                      type: string
+                    name:
+                      type: string
+                    secretName:
+                      type: string
+                    subPath:
+                      type: string
+                  type: object
+                type: array
               storage:
                 description: Storage configuration for the workload.
                 properties:
@@ -34512,7 +34493,6 @@ spec:
                 type: string
             required:
             - ray
-            - user
             type: object
           status:
             description: KaiwoJobStatus defines the observed state of KaiwoJob.

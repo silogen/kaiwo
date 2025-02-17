@@ -20,9 +20,10 @@ import (
 	"os"
 	"path/filepath"
 
+	"k8s.io/apimachinery/pkg/runtime"
+
 	workloadjob "github.com/silogen/kaiwo/pkg/workloads2/job"
 	workloadutils "github.com/silogen/kaiwo/pkg/workloads2/utils"
-	"k8s.io/apimachinery/pkg/runtime"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -64,8 +65,8 @@ func (k *KaiwoJobSubmitter) LoadFromPath(path string) error {
 	return nil
 }
 
-func (k *KaiwoJobSubmitter) GetInvoker(ctx context.Context, scheme *runtime.Scheme) (workloadutils.CommandInvoker, error) {
-	invoker, err := workloadjob.BuildKaiwoJobInvoker(ctx, scheme, k.Job)
+func (k *KaiwoJobSubmitter) GetInvoker(ctx context.Context, scheme *runtime.Scheme, k8sClient client.Client) (workloadutils.CommandInvoker, error) {
+	invoker, err := workloadjob.BuildKaiwoJobInvoker(ctx, scheme, k8sClient, k.Job)
 	if err != nil {
 		return workloadutils.CommandInvoker{}, fmt.Errorf("failed to build invoker: %w", err)
 	}
@@ -91,7 +92,7 @@ func (k *KaiwoJobSubmitter) FromCliFlags(flags workloads2.CLIFlags) {
 	}
 
 	if flags.ImagePullSecret != nil {
-		job.Spec.ImagePullSecrets = []v1.LocalObjectReference{
+		job.Spec.ImagePullSecrets = &[]v1.LocalObjectReference{
 			{
 				Name: *flags.ImagePullSecret,
 			},
