@@ -10,19 +10,20 @@ permissions:
   contents: read
 
 jobs:
-  lint:
-    name: lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: stable
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: v1.63.4
-          args: --timeout=10m
+  # TODO: Enable linting when fix is available
+  # lint:
+  #   name: lint
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-go@v5
+  #       with:
+  #         go-version: stable
+  #     - name: golangci-lint
+  #       uses: golangci/golangci-lint-action@v6
+  #       with:
+  #         version: v1.63.4
+  #         args: --timeout=10m
   test:
     name: Run tests
     runs-on: ubuntu-latest

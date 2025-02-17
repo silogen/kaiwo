@@ -34,7 +34,7 @@ import (
 	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
 )
 
-const DefaultKaiwoQueueConfigName = "kaiwo2"
+const DefaultKaiwoQueueConfigName = "kaiwo"
 
 // KaiwoQueueConfigReconciler reconciles a KaiwoQueueConfig object
 type KaiwoQueueConfigReconciler struct {

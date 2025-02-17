@@ -55,7 +55,7 @@ type KaiwoJobSpec struct {
 
 	// Replicas specifies the number of replicas for the workload.
 	// If greater than one, the workload must use Ray.
-	// Default is 1.
+	// Default is 0.
 	// +kubebuilder:default=0
 	Replicas int `json:"replicas,omitempty"`
 

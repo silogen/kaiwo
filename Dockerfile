@@ -13,7 +13,7 @@ RUN go mod download
 
 # Copy the go source
 COPY cmd/operator/main.go cmd/operator/main.go
-COPY pkg/api/ pkg/api/
+COPY pkg/ pkg/
 COPY internal/ internal/
 
 # Build

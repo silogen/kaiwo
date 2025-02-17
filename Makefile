@@ -1,5 +1,5 @@
 # Image URL to use for all building/pushing image targets
-IMG ?= controller:latest
+IMG ?= ghcr.io/silogen/kaiwo-operator:${TAG}
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
