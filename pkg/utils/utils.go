@@ -73,3 +73,10 @@ func GetEnv(key, defaultValue string) string {
 func Pointer[T any](d T) *T {
 	return &d
 }
+
+func ValueOrDefault[T any](d *T) T {
+	if d == nil {
+		return *new(T)
+	}
+	return *d
+}

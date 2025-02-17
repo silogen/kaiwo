@@ -1,3 +1,17 @@
+// Copyright 2025 Advanced Micro Devices, Inc.  All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package workloadshared
 
 import (
@@ -5,16 +19,19 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/sirupsen/logrus"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	workloadutils "github.com/silogen/kaiwo/pkg/workloads2/utils"
 
-	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
-	baseutils "github.com/silogen/kaiwo/pkg/utils"
 	"gopkg.in/yaml.v3"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -27,6 +44,11 @@ type DownloadJobConfigMapCommand struct {
 const (
 	configMapFilename = "config.yaml"
 	secretsMount      = "/app/secrets"
+)
+
+var (
+	DefaultDataMountPath = baseutils.GetEnv("DEFAULT_DATA_MOUNT_PATH", "/workload")
+	DefaultHfMountPath   = baseutils.GetEnv("DEFAULT_HF_MOUNT_PATH", "/.cache/huggingface")
 )
 
 func (cmd *DownloadJobConfigMapCommand) Build() (client.Object, error) {
@@ -227,9 +249,11 @@ func (cmd *DownloadJobCommand) GetCurrentReconcileResult() *ctrl.Result {
 		// logger.Info("Download job completed successfully")
 		return nil
 	} else if cmd.State.DownloadJob.Status.Failed >= 1 {
+		logrus.Debugf("Download job failed")
 		// logger.Info("Download job failed")
 		// return nil, fmt.Errorf("download job failed")
 	} else {
+		logrus.Debugf("Download job running, waiting")
 		// logger.Info("Download job is running, waiting for it to finish")
 	}
 

@@ -1,3 +1,17 @@
+// Copyright 2025 Advanced Micro Devices, Inc.  All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package workloadutils
 
 import (
@@ -28,8 +42,13 @@ func (i *CommandInvoker) Run(ctx context.Context, k8sClient client.Client, schem
 		}
 		i.Commands[j].SetObject(obj)
 
-		localContext := context.WithValue(ctx, "object", obj.GetObjectKind())
+		localContext := ctx // .WithValue(ctx, "object", obj.GetObjectKind())
 		logger := log.FromContext(localContext)
+
+		isOwner := false
+		if obj == i.Commands[j].GetOwner() {
+			isOwner = true
+		}
 
 		exists, err := i.Commands[j].ResourceExists(localContext, k8sClient)
 		if err != nil {
@@ -37,20 +56,21 @@ func (i *CommandInvoker) Run(ctx context.Context, k8sClient client.Client, schem
 			return nil, err
 		}
 
-		if !exists {
+		if !exists && !isOwner {
+			// Create if object doesn't exist, and it is a dependent object (don't try to recreate the owner custom resource)
 			if err := i.Commands[j].Create(localContext, k8sClient); err != nil {
 				logger.Error(err, "failed to create resource")
 				return nil, err
 			}
 
-			if obj != nil {
-				if err := ctrl.SetControllerReference(i.Commands[j].GetOwner(), obj, scheme); err != nil {
-				} else {
-					if err := i.Commands[j].Update(localContext, k8sClient); err != nil {
-						logger.Error(err, "failed to update resource")
-						return nil, err
-					}
-				}
+			if err := ctrl.SetControllerReference(i.Commands[j].GetOwner(), obj, scheme); err != nil {
+				return nil, fmt.Errorf("failed to set controller reference on resource: %v", err)
+			}
+		} else if exists {
+			// Update all objects
+			if err := i.Commands[j].Update(localContext, k8sClient); err != nil {
+				logger.Error(err, "failed to update resource")
+				return nil, err
 			}
 		}
 

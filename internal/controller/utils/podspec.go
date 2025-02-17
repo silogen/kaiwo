@@ -32,9 +32,9 @@ var DefaultGpuResourceKey = baseutils.GetEnv("DEFAULT_GPU_RESOURCE_KEY", "amd.co
 var DefaultPodTemplateSpec = corev1.PodTemplateSpec{
 	Spec: corev1.PodSpec{
 		SecurityContext: &corev1.PodSecurityContext{
-			RunAsUser:  Int64Ptr(1000),
-			RunAsGroup: Int64Ptr(1000),
-			FSGroup:    func(i int64) *int64 { return &i }(1000),
+			RunAsUser:  baseutils.Pointer(int64(1000)),
+			RunAsGroup: baseutils.Pointer(int64(1000)),
+			FSGroup:    baseutils.Pointer(int64(1000)),
 		},
 		RestartPolicy: corev1.RestartPolicyNever,
 		Containers: []corev1.Container{
@@ -195,16 +195,4 @@ func getResourceRequestsAndLimits(gpuResourceKey string, gpuCount int32) corev1.
 			corev1.ResourceName(gpuResourceKey): resource.MustParse(fmt.Sprintf("%d", gpuCount)),
 		},
 	}
-}
-
-func Int32Ptr(i int32) *int32 {
-	return &i
-}
-
-func Int64Ptr(i int64) *int64 {
-	return &i
-}
-
-func BoolPtr(b bool) *bool {
-	return &b
 }

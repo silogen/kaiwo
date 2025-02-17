@@ -79,9 +79,6 @@ type KaiwoServiceSpec struct {
 	// +kubebuilder:default=false
 	Ray bool `json:"ray"`
 
-	// ConfigSource allows mounting from Git repository
-	ConfigSource *ConfigSource `json:"configSource,omitempty"`
-
 	// Storage configuration for the workload.
 	Storage StorageSpec `json:"storage,omitempty"`
 
