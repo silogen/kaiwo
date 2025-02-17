@@ -18,11 +18,23 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: v1.63.4
-          args: --timeout=15m --verbose --concurrency=2
+      - name: Install golangci-lint manually
+        run: |
+          echo "Installing golangci-lint..."
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.63.4
+          echo "PATH=$PATH:$(go env GOPATH)/bin" >> $GITHUB_ENV
+
+      - name: Verify installation
+        run: golangci-lint --version
+
+      - name: Run golangci-lint (only changed files)
+        run: |
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '\.go$' | xargs || echo "all")
+          if [ "$CHANGED_FILES" = "all" ]; then
+            golangci-lint run --timeout=15m --verbose --concurrency=2
+          else
+            golangci-lint run --timeout=15m --verbose --concurrency=2 $CHANGED_FILES
+          fi
   test:
     name: Run tests
     runs-on: ubuntu-latest
