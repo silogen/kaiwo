@@ -18,11 +18,13 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
+      - name: Clear golangci-lint Cache
+        run: rm -rf ~/.cache/golangci-lint
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
           version: v1.63.4
-          args: --timeout=10m
+          args: --timeout=10m --verbose
   test:
     name: Run tests
     runs-on: ubuntu-latest
