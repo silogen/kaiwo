@@ -52,7 +52,7 @@ jobs:
 
       - name: Generate install.yaml
         run: |
-          make build-installer IMG=$IMAGE_NAME:${{ env.VERSION }}
+          make build-installer TAG=${{ env.VERSION }}
           cp dist/install.yaml install.yaml
 
       - name: Create draft release and upload assets

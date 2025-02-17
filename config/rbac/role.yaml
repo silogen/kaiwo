@@ -6,6 +6,57 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: manager-role
 rules:
-- apiGroups: [""]
-  resources: ["pods"]
-  verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources:
+      - pods
+      - pods/log
+      - services
+      - configmaps
+      - secrets
+      - events
+      - persistentvolumeclaims
+      - namespaces
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  - apiGroups: ["kaiwo.silogen.ai"]
+    resources: 
+      - "kaiwojobs"
+      - "kaiwoqueueconfigs"
+      - "kaiwoservices"
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  - apiGroups: ["kaiwo.silogen.ai"]
+    resources: 
+      - "kaiwojobs/status"
+      - "kaiwoservices/status"
+      - "kaiwoqueueconfigs/status"
+    verbs: ["get", "update", "patch"]
+
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  - apiGroups: ["ray.io"]
+    resources: ["rayjobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  - apiGroups: ["kueue.x-k8s.io"]
+    resources: 
+      - "resourceflavors"
+      - "clusterqueues"
+      - "localqueues"
+      - "workloads"
+      - "admissionchecks"
+      - "workloadpriorityclasses"
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources:
+      - customresourcedefinitions
+    verbs: ["get", "list", "watch"]
+
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources:
+      - roles
+      - rolebindings
+    verbs: ["get", "list", "watch"]
