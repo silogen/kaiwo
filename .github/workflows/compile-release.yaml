@@ -23,7 +23,7 @@ jobs:
           echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
           echo "Using version: ${VERSION}"
 
-      - name: Run build script
+      - name: Run build script for CLI
         shell: bash
         run: |
           set -e
@@ -35,12 +35,33 @@ jobs:
         run: |
           zip -r workloads.zip ./workloads
 
+      - name: Log in to GitHub Container Registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $GITHUB_ACTOR --password-stdin
+
+      - name: Build and push operator image
+        run: |
+          IMAGE_NAME=ghcr.io/${{ github.repository_owner }}/kaiwo-operator
+          TAG=${{ env.VERSION }}
+
+          # Build the Docker image
+          make docker-build IMG=$IMAGE_NAME:$TAG
+
+          # Push the image
+          make docker-push IMG=$IMAGE_NAME:$TAG
+
+      - name: Generate install.yaml
+        run: |
+          make build-installer IMG=$IMAGE_NAME:${{ env.VERSION }}
+          cp dist/install.yaml install.yaml
+
       - name: Create draft release and upload assets
         uses: softprops/action-gh-release@v2
         with:
           files: |
             builds/*
             workloads.zip
+            install.yaml
           token: '${{ secrets.GITHUB_TOKEN }}'
           draft: true
           prerelease: true

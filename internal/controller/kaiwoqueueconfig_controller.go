@@ -16,6 +16,8 @@ package controller
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -26,6 +28,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
+
+	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 
 	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
 )
@@ -57,12 +61,35 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
-	// Sync the Kueue resources based on this KaiwoQueueConfig
-	logger.Info("Handling KaiwoQueueConfig update", "name", queueConfig.Name)
+	// **Check if Status is already correct before updating**
+	previousStatus := queueConfig.Status.Status
+	if previousStatus == "" {
+		queueConfig.Status.Status = kaiwov1alpha1.StatusPending
+	}
+
+	// **Sync Kueue Resources**
+	logger.Info("Syncing Kueue resources for KaiwoQueueConfig", "name", queueConfig.Name)
 	err = r.SyncKueueResources(ctx, &queueConfig)
+
 	if err != nil {
 		logger.Error(err, "Failed to sync Kueue resources for KaiwoQueueConfig")
-		return ctrl.Result{}, err
+		queueConfig.Status.Status = kaiwov1alpha1.StatusFailed
+	} else {
+		queueConfig.Status.Status = kaiwov1alpha1.StatusReady
+	}
+
+	// **Only Update Status If It Has Changed**
+	if previousStatus != queueConfig.Status.Status {
+		if err := r.Status().Update(ctx, &queueConfig); err != nil {
+			logger.Error(err, "Failed to update KaiwoQueueConfig status")
+			return ctrl.Result{}, err
+		}
+		logger.Info("Updated KaiwoQueueConfig status", "name", queueConfig.Name, "Status", queueConfig.Status.Status)
+	}
+
+	// Requeue only if status is still pending
+	if queueConfig.Status.Status == kaiwov1alpha1.StatusPending {
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	return ctrl.Result{}, nil
@@ -71,56 +98,42 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, queueConfig *kaiwov1alpha1.KaiwoQueueConfig) error {
 	logger := log.FromContext(ctx)
 
+	success := true
+
 	// Sync ResourceFlavors
-	kueueFlavors := ConvertKaiwoToKueueResourceFlavors(queueConfig.Spec.ResourceFlavors)
+	kueueFlavors := controllerutils.ConvertKaiwoToKueueResourceFlavors(queueConfig.Spec.ResourceFlavors)
 	for _, kueueFlavor := range kueueFlavors {
 		existingFlavor := &kueuev1beta1.ResourceFlavor{}
 		err := r.Get(ctx, client.ObjectKey{Name: kueueFlavor.Name}, existingFlavor)
 
 		if errors.IsNotFound(err) {
-			logger.Info("Creating missing ResourceFlavor", "name", kueueFlavor.Name)
+			logger.Info("Creating ResourceFlavor", "name", kueueFlavor.Name)
 			if err := r.Create(ctx, &kueueFlavor); err != nil {
 				logger.Error(err, "Failed to create ResourceFlavor", "name", kueueFlavor.Name)
-				return err
+				success = false
 			}
-			existingFlavor = &kueueFlavor
 		} else if err != nil {
 			logger.Error(err, "Failed to get ResourceFlavor", "name", kueueFlavor.Name)
-			return err
+			success = false
 		}
-
-		if err := ctrl.SetControllerReference(queueConfig, existingFlavor, r.Scheme); err != nil {
-			logger.Error(err, "Failed to set ownership for ResourceFlavor", "name", kueueFlavor.Name)
-			return err
-		}
-
-		logger.Info("Kaiwo now owns ResourceFlavor", "name", kueueFlavor.Name)
 	}
 
 	// Sync ClusterQueues
 	for _, kaiwoQueue := range queueConfig.Spec.ClusterQueues {
-		kueueQueue := ConvertKaiwoToKueueClusterQueue(kaiwoQueue)
+		kueueQueue := controllerutils.ConvertKaiwoToKueueClusterQueue(kaiwoQueue)
 		existingQueue := &kueuev1beta1.ClusterQueue{}
 		err := r.Get(ctx, client.ObjectKey{Name: kueueQueue.Name}, existingQueue)
 
 		if errors.IsNotFound(err) {
-			logger.Info("Creating missing ClusterQueue", "name", kueueQueue.Name)
+			logger.Info("Creating ClusterQueue", "name", kueueQueue.Name)
 			if err := r.Create(ctx, &kueueQueue); err != nil {
 				logger.Error(err, "Failed to create ClusterQueue", "name", kueueQueue.Name)
-				return err
+				success = false
 			}
-			existingQueue = &kueueQueue
 		} else if err != nil {
 			logger.Error(err, "Failed to get ClusterQueue", "name", kueueQueue.Name)
-			return err
+			success = false
 		}
-
-		if err := ctrl.SetControllerReference(queueConfig, existingQueue, r.Scheme); err != nil {
-			logger.Error(err, "Failed to set ownership for ClusterQueue", "name", kueueQueue.Name)
-			return err
-		}
-
-		logger.Info("Kaiwo now owns ClusterQueue", "name", kueueQueue.Name)
 	}
 
 	// Sync WorkloadPriorityClasses
@@ -129,27 +142,23 @@ func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, que
 		err := r.Get(ctx, client.ObjectKey{Name: priorityClassSpec.Name}, existingPriorityClass)
 
 		if errors.IsNotFound(err) {
-			logger.Info("Creating missing WorkloadPriorityClass", "name", priorityClassSpec.Name)
+			logger.Info("Creating WorkloadPriorityClass", "name", priorityClassSpec.Name)
 			if err := r.Create(ctx, &priorityClassSpec); err != nil {
 				logger.Error(err, "Failed to create WorkloadPriorityClass", "name", priorityClassSpec.Name)
-				return err
+				success = false
 			}
-			existingPriorityClass = &priorityClassSpec
 		} else if err != nil {
 			logger.Error(err, "Failed to get WorkloadPriorityClass", "name", priorityClassSpec.Name)
-			return err
+			success = false
 		}
-
-		if err := ctrl.SetControllerReference(queueConfig, existingPriorityClass, r.Scheme); err != nil {
-			logger.Error(err, "Failed to set ownership for WorkloadPriorityClass", "name", priorityClassSpec.Name)
-			return err
-		}
-
-		logger.Info("Kaiwo now owns WorkloadPriorityClass", "name", priorityClassSpec.Name)
 	}
 
-	logger.Info("Successfully synced all Kueue resources")
-	return nil
+	if success {
+		logger.Info("Successfully synced all Kueue resources")
+		return nil
+	} else {
+		return fmt.Errorf("failed to sync some Kueue resources")
+	}
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -203,13 +212,13 @@ func (r *KaiwoQueueConfigReconciler) EnsureDefaultKaiwoQueueConfig(ctx context.C
 func (r *KaiwoQueueConfigReconciler) CreateDefaultKaiwoQueueConfig(ctx context.Context, name string) error {
 	logger := log.FromContext(ctx)
 
-	resourceFlavors, nodePoolResources, err := CreateDefaultResourceFlavors(ctx, r.Client)
+	resourceFlavors, nodePoolResources, err := controllerutils.CreateDefaultResourceFlavors(ctx, r.Client)
 	if err != nil {
 		logger.Error(err, "Failed to create default resource flavors")
 		return err
 	}
 
-	clusterQueue := CreateClusterQueue(nodePoolResources, name)
+	clusterQueue := controllerutils.CreateClusterQueue(nodePoolResources, name)
 
 	defaultQueueConfig := kaiwov1alpha1.KaiwoQueueConfig{
 		ObjectMeta: metav1.ObjectMeta{

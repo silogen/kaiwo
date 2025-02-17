@@ -42,6 +42,7 @@ import (
 
 	// +kubebuilder:scaffold:imports
 
+	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 )
 
@@ -57,6 +58,7 @@ func init() {
 	// +kubebuilder:scaffold:scheme
 
 	utilruntime.Must(kueuev1beta1.AddToScheme(scheme))
+	utilruntime.Must(rayv1.AddToScheme(scheme))
 }
 
 // nolint:gocyclo

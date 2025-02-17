@@ -14,7 +14,11 @@ spec:
     singular: kaiwoqueueconfig
   scope: Cluster
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.Status
+      name: Status
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: KaiwoQueueConfig manages Kueue resources.
@@ -587,6 +591,8 @@ spec:
           status:
             description: KaiwoQueueConfigStatus represents the observed state of KaiwoQueueConfig.
             properties:
+              Status:
+                type: string
               conditions:
                 items:
                   description: Condition contains details for one aspect of the current
@@ -647,3 +653,5 @@ spec:
         type: object
     served: true
     storage: true
+    subresources:
+      status: {}
