@@ -69,3 +69,7 @@ func GetEnv(key, defaultValue string) string {
 	}
 	return value
 }
+
+func Pointer[T any](d T) *T {
+	return &d
+}

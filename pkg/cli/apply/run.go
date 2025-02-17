@@ -18,327 +18,178 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
-	"strconv"
 	"strings"
 
-	"k8s.io/apimachinery/pkg/api/errors"
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads2/utils"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
+
+	"github.com/imdario/mergo"
+
+	"github.com/silogen/kaiwo/pkg/workloads2"
 
 	"github.com/sirupsen/logrus"
-	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/yaml"
 
 	"github.com/silogen/kaiwo/pkg/k8s"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	"github.com/silogen/kaiwo/pkg/workloads"
 )
 
-// RunApply prepares the workload and applies it
-func RunApply(workload workloads.Workload, workloadMeta any) error {
-	logrus.Debugln("Applying workload")
+type WorkloadApplier interface {
+	// LoadFromPath loads supplementary information from path, which is a local path
+	LoadFromPath(path string) error
 
-	// Fetch flags
-	execFlags := GetExecFlags()
-	metaFlags := GetMetaFlags()
+	// FromCliFlags initializes the applier from CLI flags
+	FromCliFlags(flags workloads2.CLIFlags)
 
-	if execFlags.Path == "" && metaFlags.Image == baseutils.DefaultRayImage {
-		logrus.Error("Cannot run workload without image or path")
-		return nil
-	}
+	GetObject() client.Object
 
-	// Discover workload files
-	if err := loadFileList(&execFlags); err != nil {
-		return fmt.Errorf("error loading file list: %w", err)
-	}
-
-	// Generate workload configuration
-	workloadConfig, err := workload.GenerateTemplateContext(execFlags)
-	if err != nil {
-		return fmt.Errorf("error generating workload config: %w", err)
-	}
-
-	// Load custom configuration, if available
-	var customConfig any
-	if customConfigFile, ok := execFlags.WorkloadFiles[workloads.CustomTemplateValuesFilename]; ok {
-		customConfig, err = loadCustomConfig(customConfigFile)
-		if err != nil {
-			return fmt.Errorf("error loading custom config: %w", err)
-		}
-	}
-
-	// Finalize metadata flags
-
-	metaFlags.User, err = baseutils.GetCurrentUser()
-	if err != nil {
-		return fmt.Errorf("failed to fetch the current user: %v", err)
-	}
-
-	if metaFlags.Name == "" {
-		metaFlags.Name = makeWorkloadName(execFlags.Path, metaFlags.Image, metaFlags.Version, metaFlags.User)
-		logrus.Debugf("No explicit name provided, using name: %s", metaFlags.Name)
-	}
-
-	// Parse environment variables, if any
-	if err := parseEnvFile(execFlags.WorkloadFiles[workloads.EnvFilename], &metaFlags); err != nil {
-		return fmt.Errorf("error parsing environment: %w", err)
-	}
-
-	// Prepare scheduling flags
-	clients, err := k8s.GetKubernetesClients()
-	if err != nil {
-		return fmt.Errorf("error getting k8s clients: %w", err)
-	}
-
-	ctx := context.TODO()
-	schedulingFlags, err := GetSchedulingFlags()
-	if err != nil {
-		return fmt.Errorf("error getting scheduling flags: %w", err)
-	}
-
-	if schedulingFlags.Storage != nil {
-		if schedulingFlags.Storage.StorageClassName == "" || schedulingFlags.Storage.Quantity == "" {
-			logrus.Info("Storage class name and / or quantity not provided, checking namespace labels for defaults")
-
-			defaultStorageFlags, err := findDefaultStorageFlags(ctx, *clients.Clientset, metaFlags.Namespace)
-			if err != nil {
-				return fmt.Errorf("error checking for storage defaults: %w", err)
-			}
-
-			if schedulingFlags.Storage.StorageClassName == "" {
-				if defaultStorageFlags.StorageClassName == "" {
-					return fmt.Errorf("storage requested, but no storage class name provided and no default exists in the namespace '%s' label '%s'", metaFlags.Namespace, workloads.KaiwoDefaultStorageClassNameLabel)
-				}
-				schedulingFlags.Storage.StorageClassName = defaultStorageFlags.StorageClassName
-			}
-			if schedulingFlags.Storage.Quantity == "" {
-				if defaultStorageFlags.Quantity == "" {
-					return fmt.Errorf("storage requested, but no quantity provided and no default exists in the namespace '%s' label '%s'", metaFlags.Namespace, workloads.KaiwoDefaultStorageQuantityLabel)
-				}
-				schedulingFlags.Storage.Quantity = defaultStorageFlags.Quantity
-			}
-		}
-
-		storageClassExists, err := doesStorageClassExist(ctx, *clients.Clientset, schedulingFlags.Storage.StorageClassName)
-		if err != nil {
-			return fmt.Errorf("error checking if storage class exists: %w", err)
-		}
-		if !storageClassExists {
-			return fmt.Errorf("storage class '%s' does not exist", schedulingFlags.Storage.StorageClassName)
-		}
-	}
-
-	if err := fillSchedulingFlags(ctx, clients.Client, schedulingFlags, execFlags.ResourceFlavorGpuNodeLabelKey, metaFlags.EnvVars); err != nil {
-		return fmt.Errorf("error filling scheduling flags: %w", err)
-	}
-	logrus.Debugf("Successfully loaded scheduling info from Kubernetes")
-
-	metaFlags.EnvVars = append(metaFlags.EnvVars, corev1.EnvVar{Name: "NUM_GPUS", Value: strconv.Itoa(schedulingFlags.TotalRequestedGPUs)})
-	metaFlags.EnvVars = append(metaFlags.EnvVars, corev1.EnvVar{Name: "NUM_REPLICAS", Value: strconv.Itoa(schedulingFlags.CalculatedNumReplicas)})
-	metaFlags.EnvVars = append(metaFlags.EnvVars, corev1.EnvVar{Name: "NUM_GPUS_PER_REPLICA", Value: strconv.Itoa(schedulingFlags.CalculatedGPUsPerReplica)})
-
-	// Create the workload template context
-	templateContext := workloads.WorkloadTemplateConfig{
-		WorkloadMeta: workloadMeta,
-		Workload:     workloadConfig,
-		Meta:         metaFlags,
-		Scheduling:   *schedulingFlags,
-		Custom:       customConfig,
-	}
-
-	// Apply the workload
-	if err := workloads.ApplyWorkload(ctx, clients.Client, workload, execFlags, templateContext); err != nil {
-		return fmt.Errorf("error applying workload: %w", err)
-	}
-
-	return nil
+	GetInvoker(ctx context.Context, scheme *runtime.Scheme) (workloadutils.CommandInvoker, error)
 }
 
-func loadFileList(execFlags *workloads.ExecFlags) error {
-	if execFlags.Path == "" && execFlags.OverlayPath != "" {
-		return fmt.Errorf("cannot load workload with an overlay path without base path")
-	}
-	if execFlags.Path == "" {
-		return nil
-	}
+func Apply(applier WorkloadApplier, flags workloads2.CLIFlags) error {
+	var baseManifest client.Object = nil
 
-	files := map[string]string{}
-
-	entries, err := os.ReadDir(execFlags.Path)
-	if err != nil {
-		return fmt.Errorf("error reading directory: %w", err)
-	}
-
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			files[entry.Name()] = filepath.Join(execFlags.Path, entry.Name())
-		}
-	}
-
-	if execFlags.OverlayPath != "" {
-		overlayFiles, err := os.ReadDir(execFlags.OverlayPath)
-		if err != nil {
-			return fmt.Errorf("error reading directory: %w", err)
-		}
-		for _, overlayFile := range overlayFiles {
-			if !overlayFile.IsDir() {
-				files[overlayFile.Name()] = filepath.Join(execFlags.OverlayPath, overlayFile.Name())
-			}
-		}
-	}
-
-	for k, v := range files {
-		logrus.Debugf("Discovered file %s from %s", k, v)
-	}
-
-	execFlags.WorkloadFiles = files
-
-	return nil
-}
-
-func findDefaultStorageFlags(ctx context.Context, clientset kubernetes.Clientset, namespace string) (*workloads.StorageSchedulingFlags, error) {
-	namespaceObject, err := clientset.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
-	if err != nil {
-		if errors.IsNotFound(err) {
-			logrus.Warnf("Namespace does not exist, cannot check for storage defaults. Either ensure that the namespace exists and has default values, specify the storage class and amount explicitly, or specify --no-storage to skip adding storage.")
-			return nil, fmt.Errorf("failed to find default storage class or quantity for namespace that does not exist: %s", namespace)
-		}
-		return nil, fmt.Errorf("error getting namespace: %w", err)
-	}
-
-	flags := &workloads.StorageSchedulingFlags{}
-
-	defaultStorageClassName, ok := namespaceObject.Labels[workloads.KaiwoDefaultStorageClassNameLabel]
-	if ok {
-		logrus.Debugf("Default storage class discovered: %s", defaultStorageClassName)
-		flags.StorageClassName = defaultStorageClassName
-	} else {
-		logrus.Debugf("Default storage class not found")
-	}
-	defaultStorageQuantity, ok := namespaceObject.Labels[workloads.KaiwoDefaultStorageQuantityLabel]
-	if ok {
-		logrus.Debugf("Default storage quantity discovered: %s", defaultStorageQuantity)
-		flags.Quantity = defaultStorageQuantity
-	} else {
-		logrus.Debugf("Default storage quantity not found")
-	}
-
-	return flags, nil
-}
-
-func doesStorageClassExist(ctx context.Context, clientset kubernetes.Clientset, storageClassName string) (bool, error) {
-	_, err := clientset.StorageV1().StorageClasses().Get(ctx, storageClassName, metav1.GetOptions{})
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return false, nil
-		}
-		return false, fmt.Errorf("error getting storage class %s: %w", storageClassName, err)
-	}
-	return true, nil
-}
-
-// loadCustomConfig loads custom configuration data from a file
-func loadCustomConfig(path string) (any, error) {
-	logrus.Debugln("Loading custom config")
-	customConfigContents, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read custom config file: %w", err)
-	}
-
-	customConfig := make(map[string]any)
-
-	if err := yaml.Unmarshal(customConfigContents, &customConfig); err != nil {
-		return nil, fmt.Errorf("failed to marshal custom config file: %w", err)
-	}
-
-	return customConfig, nil
-}
-
-func makeWorkloadName(path string, image string, version string, currentUser string) string {
-	var appendix string
-
-	if path != "" {
-		appendix = baseutils.SanitizeStringForKubernetes(filepath.Base(path))
-	} else {
-		appendix = baseutils.SanitizeStringForKubernetes(image)
-	}
-
-	// Calculate the max allowed length for the appendix
-	separatorCount := 1 // At least one "-" between username and appendix
-	if version != "" {
-		version = baseutils.SanitizeStringForKubernetes(version)
-		separatorCount = 2 // Include one more "-" for the version
-	}
-	maxAppendixLength := 45 - len(currentUser) - len(version) - separatorCount
-
-	// Truncate appendix if necessary
-	if len(appendix) > maxAppendixLength {
-		appendix = appendix[:maxAppendixLength]
-	}
-
-	// Combine components
-	components := []string{currentUser, appendix}
-	if version != "" {
-		components = append(components, version)
-	}
-
-	return baseutils.SanitizeStringForKubernetes(strings.Join(components, "-"))
-}
-
-// fillSchedulingFlags fills in the GPU scheduling flags based on the Kubernetes cluster state
-func fillSchedulingFlags(
-	ctx context.Context,
-	client client.Client,
-	schedulingFlags *workloads.SchedulingFlags,
-	resourceFlavorGpuNodeLabelKey string,
-	envVars []corev1.EnvVar,
-) error {
-	logrus.Debugf("Connecting to Kubernetes cluster to fetch resource flavor")
-	gpuCount, err := k8s.GetDefaultResourceFlavorGpuCount(ctx, client, resourceFlavorGpuNodeLabelKey)
-	logrus.Debugf("Found a resource flavor with %d GPUs per node", gpuCount)
-	schedulingFlags.GPUsAvailablePerNode = gpuCount
-
+	scheme, err := k8s.GetScheme()
 	if err != nil {
 		return err
 	}
 
-	if schedulingFlags.RequestedReplicas > 0 && schedulingFlags.RequestedGPUsPerReplica > 0 {
-		if schedulingFlags.RequestedGPUsPerReplica > schedulingFlags.GPUsAvailablePerNode {
-			return fmt.Errorf("you requested %d GPUs per replica, but there are only %d GPUs available per node",
-				schedulingFlags.RequestedGPUsPerReplica, schedulingFlags.GPUsAvailablePerNode)
+	applier.FromCliFlags(flags)
+
+	if flags.BaseManifestPath != "" {
+		baseManifest = applier.GetObject().DeepCopyObject().(client.Object)
+		if err := ReadBaseManifest(flags.BaseManifestPath, &scheme, baseManifest); err != nil {
+			return fmt.Errorf("error reading base manifest: %v", err)
 		}
-		if schedulingFlags.TotalRequestedGPUs > 0 {
-			return fmt.Errorf("cannot set requested gpus with --gpus when --replicas and --gpus-per-replica are set")
-		}
-		schedulingFlags.CalculatedNumReplicas = schedulingFlags.RequestedReplicas
-		schedulingFlags.CalculatedGPUsPerReplica = schedulingFlags.RequestedGPUsPerReplica
-		schedulingFlags.TotalRequestedGPUs = schedulingFlags.RequestedReplicas * schedulingFlags.RequestedGPUsPerReplica
-		return nil
 	}
 
-	numReplicas, nodeGpuRequest := k8s.CalculateNumberOfReplicas(schedulingFlags.TotalRequestedGPUs, gpuCount, envVars)
-	schedulingFlags.CalculatedNumReplicas = numReplicas
-	schedulingFlags.CalculatedGPUsPerReplica = nodeGpuRequest
+	if flags.Path != "" {
+		// TODO resolve if path points to a git repository?
+		if err := applier.LoadFromPath(flags.Path); err != nil {
+			return fmt.Errorf("error loading manifest: %v", err)
+		}
+	}
+
+	manifest := applier.GetObject()
+
+	if baseManifest != nil {
+		if err := mergo.Merge(manifest, baseManifest); err != nil {
+			return fmt.Errorf("failed to merge generated manifest with base manifest: %w", err)
+		}
+	}
+
+	ctx := context.TODO()
+	k8sClient, err := k8s.GetClient()
+	if err != nil {
+		return fmt.Errorf("error getting k8s client: %v", err)
+	}
+
+	if flags.DryRun {
+		if err := ApplyServerSideDryRun(ctx, k8sClient, manifest); err != nil {
+			return fmt.Errorf("error applying server side dry-run: %v", err)
+		}
+	} else if flags.PrintOutput {
+		if err := ApplyLocalPrint(manifest, scheme); err != nil {
+			return fmt.Errorf("error applying local-print: %v", err)
+		}
+	} else if flags.Preview {
+		invoker, err := applier.GetInvoker(ctx, &scheme)
+		if err != nil {
+			return fmt.Errorf("failed to get invoker: %w", err)
+		}
+		resources, err := invoker.BuildAllResources()
+		if err != nil {
+			return fmt.Errorf("failed to build resources: %w", err)
+		}
+		for _, resource := range resources {
+			if err := ApplyLocalPrint(resource, scheme); err != nil {
+				return fmt.Errorf("failed to apply resource %s: %w", resource.GetName(), err)
+			}
+			fmt.Println("---")
+		}
+	} else {
+		if err := ApplyCreate(ctx, k8sClient, manifest); err != nil {
+			return fmt.Errorf("error creating resource: %v", err)
+		}
+	}
 
 	return nil
 }
 
-// parseEnvFile parses values from an environmental file and adds them to the meta flags
-func parseEnvFile(envFilePath string, flags *workloads.MetaFlags) error {
-	var envVars []corev1.EnvVar
-	var secretVolumes []k8s.SecretVolume
-	if _, err := os.Stat(envFilePath); err == nil {
-		logrus.Infof("Found env file at %s, parsing environment variables and secret volumes", envFilePath)
-		envVars, secretVolumes, err = k8s.ReadEnvFile(envFilePath)
+func ReadBaseManifest(uri string, scheme *runtime.Scheme, into client.Object) error {
+	var contents []byte
+
+	if strings.HasPrefix(uri, "git:") {
+		return fmt.Errorf("git remotes not supported yet") // TODO implement
+	} else if strings.HasPrefix(uri, "http://") || strings.HasPrefix(uri, "https://") {
+		return fmt.Errorf("http remotes not supported yet") // TODO implement
+	} else {
+		fileContents, err := os.ReadFile(uri)
 		if err != nil {
-			return fmt.Errorf("failed to parse env file: %w", err)
+			return fmt.Errorf("failed to read base manifest: %v", err)
 		}
-		logrus.Infof("Parsed %d environment variables and %d secret volumes from env file", len(envVars), len(secretVolumes))
-		flags.EnvVars = envVars
-		flags.SecretVolumes = secretVolumes
+		contents = fileContents
 	}
+
+	decoder := serializer.NewCodecFactory(scheme).UniversalDeserializer()
+
+	if _, _, err := decoder.Decode(contents, nil, into); err != nil {
+		return fmt.Errorf("failed to decode manifest: %w", err)
+	}
+
+	return nil
+}
+
+func ApplyServerSideDryRun(ctx context.Context, k8sClient client.Client, manifest client.Object) error {
+	if manifest.GetName() == "" || manifest.GetNamespace() == "" {
+		return fmt.Errorf("manifest must have a name and namespace")
+	}
+
+	options := &client.PatchOptions{
+		Force:        baseutils.Pointer(true),
+		FieldManager: "dry-run-manager",
+	}
+
+	err := k8sClient.Patch(ctx, manifest, client.Apply, options, &client.DryRunAll)
+	if err != nil {
+		return fmt.Errorf("failed to apply dry-run: %w", err)
+	}
+
+	logrus.Infof("manifest '%s' dry run succeeded", manifest.GetName())
+
+	return nil
+}
+
+func ApplyCreate(ctx context.Context, k8sClient client.Client, manifest client.Object) error {
+	obj := manifest.DeepCopyObject().(client.Object)
+
+	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("failed to get object: %w", err)
+		}
+	} else {
+		logrus.Info("Resource already exists, skipping apply")
+		return nil
+	}
+
+	if err := k8sClient.Create(ctx, manifest); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func ApplyLocalPrint(manifest client.Object, scheme runtime.Scheme) error {
+	cleanedResource, err := k8s.MinimalizeAndConvertToYAML(&scheme, manifest)
+	if err != nil {
+		return err
+	}
+
+	fmt.Print(cleanedResource)
+
 	return nil
 }

@@ -71,6 +71,9 @@ type KaiwoJobSpec struct {
 	// EnvVars specifies the environment variables to be passed to the container.
 	EnvVars []corev1.EnvVar `json:"envVars,omitempty"`
 
+	// SecretVolumes list the secret volumes that should be mounted
+	SecretVolumes []SecretVolume `json:"secretVolumes,omitempty"`
+
 	// Ray determines whether the operator should use RayCluster for workload execution.
 	// Default is false.
 	// +kubebuilder:default=false
@@ -80,11 +83,17 @@ type KaiwoJobSpec struct {
 	ConfigSource *ConfigSource `json:"configSource,omitempty"`
 
 	// Storage configuration for the workload.
-	Storage StorageSpec `json:"storage,omitempty"`
+	Storage *StorageSpec `json:"storage,omitempty"`
 
 	// RayJob defines the RayJob configuration.
 	RayJob *rayv1.RayJob `json:"rayJob,omitempty"`
 
+	// JobSpec defines the Kubernetes Job configuration.
+	JobSpec *batchv1.JobSpec `json:"jobSpec,omitempty"`
+
+	// Dangerous disables adding the default security context to the containers
+	// +kubebuilder:default=false
+	Dangerous *bool `json:"dangerous,omitempty"`
 	// Job defines the Kubernetes Job configuration.
 	Job *batchv1.Job `json:"job,omitempty"`
 }
