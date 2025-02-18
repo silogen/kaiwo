@@ -17,6 +17,7 @@ package controllerutils
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -55,12 +56,39 @@ var DefaultPodTemplateSpec = corev1.PodTemplateSpec{
 					},
 				},
 				VolumeMounts: []corev1.VolumeMount{
-					{Name: "main-storage", MountPath: "/workload"},
 					{Name: "dshm", MountPath: "/dev/shm"},
 				},
 			},
 		},
+		Volumes: []corev1.Volume{
+			{
+				Name: "dshm",
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{
+						Medium: corev1.StorageMediumMemory,
+						// Default size limit, can be overridden in `getPodTemplate`
+						SizeLimit: resource.NewQuantity(1*1024*1024*1024, resource.BinarySI), // 1Gi
+					},
+				},
+			},
+		},
 	},
+}
+
+func GetPodTemplate(dshmSize resource.Quantity) corev1.PodTemplateSpec {
+	podTemplate := *DefaultPodTemplateSpec.DeepCopy()
+
+	for i, v := range podTemplate.Spec.Volumes {
+		if v.Name == "dshm" {
+			podTemplate.Spec.Volumes[i].VolumeSource.EmptyDir = &corev1.EmptyDirVolumeSource{
+				Medium:    corev1.StorageMediumMemory,
+				SizeLimit: &dshmSize,
+			}
+			break
+		}
+	}
+
+	return podTemplate
 }
 
 func AdjustResourceRequestsAndLimits(ctx context.Context, gpuVendor string, gpuCount int, replicas int, gpusPerReplica int, podTemplateSpec *corev1.PodTemplateSpec) error {
@@ -143,6 +171,7 @@ func AddEnvVars(ctx context.Context, UserEnvVars []corev1.EnvVar, podTemplateSpe
 }
 
 func GetGpuResourceKey(vendor string) string {
+	vendor = strings.ToUpper(vendor)
 	switch vendor {
 	case "NVIDIA":
 		return "nvidia.com/gpu"
