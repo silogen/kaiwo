@@ -33,106 +33,105 @@ import (
 	"k8s.io/client-go/transport/spdy"
 
 	"github.com/charmbracelet/huh"
-	"github.com/sirupsen/logrus"
-	v1 "k8s.io/api/core/v1"
-
 	"github.com/silogen/kaiwo/pkg/k8s"
 	tuicomponents "github.com/silogen/kaiwo/pkg/tui/components"
+	"github.com/sirupsen/logrus"
 )
 
 // runPortForward runs the main target selection and port forwarding routine
 // TODO remove container ports if they are defined by a service
 func runPortForward(ctx context.Context, clients k8s.KubernetesClients, state *tuicomponents.RunState) (tuicomponents.StepResult, tuicomponents.RunStep[tuicomponents.RunState], error) {
-	workloadReference := state.Workload
-
-	var err error
-
-	loadWorkload := func() {
-		err = workloadReference.Reload(ctx, clients.Client)
-	}
-
-	if spinnerErr := spinner.New().Title("Loading workload").Action(loadWorkload).Run(); spinnerErr != nil {
-		return tuicomponents.StepResultErr, nil, spinnerErr
-	}
-
-	if err != nil {
-		return tuicomponents.StepResultErr, nil, fmt.Errorf("failed to load workload: %w", err)
-	}
-
-	var services []v1.Service
-
-	loadServices := func() {
-		services, err = workloadReference.GetServices(ctx, clients.Client)
-	}
-
-	if spinnerErr := spinner.New().Title("Discovering services").Action(loadServices).Run(); spinnerErr != nil {
-		return tuicomponents.StepResultErr, nil, spinnerErr
-	}
-
-	if err != nil {
-		return tuicomponents.StepResultErr, nil, fmt.Errorf("failed to get services for workload %v", err)
-	}
-
-	var targets []PortForwardTarget
-	var containerAnyPortTargets []PortForwardTarget
-
-	for _, service := range services {
-		for _, port := range service.Spec.Ports {
-			targets = append(targets, ServicePortForwardTarget{service: service, servicePort: port})
-		}
-	}
-
-	for _, pod := range workloadReference.ListKnownPods() {
-		for _, container := range pod.Pod.Spec.Containers {
-			for _, port := range container.Ports {
-				targets = append(targets, ContainerPortForwardTarget{
-					containerName: container.Name,
-					podName:       pod.Pod.Name,
-					port:          int(port.ContainerPort),
-					portName:      port.Name,
-					protocol:      string(port.Protocol),
-				})
-			}
-			containerAnyPortTargets = append(containerAnyPortTargets, ContainerAnyPortForwardTarget{podName: pod.Pod.Name, containerName: container.Name})
-		}
-	}
-
-	targets = append(targets, containerAnyPortTargets...)
-
-	var data [][]string
-
-	for _, target := range targets {
-		row := target.GetTableRow()
-		data = append(data, []string{
-			row.Type,
-			row.Name,
-			row.PortName,
-			row.Port,
-			row.Protocol,
-		})
-	}
-
-	columns := []string{
-		"Type",
-		"Name",
-		"Port name",
-		"Port",
-		"Protocol",
-	}
-
-	index, result, err := tuicomponents.RunSelectTable(data, columns, "Select the target", true)
-	if err != nil {
-		return tuicomponents.StepResultErr, nil, err
-	}
-	if result == tuicomponents.StepResultOk {
-		var cancelled bool
-		cancelled, err = doPortForward(ctx, clients, state, targets[index])
-		if cancelled {
-			return tuicomponents.StepResultPrevious, nil, err
-		}
-		return result, nil, nil
-	}
-	return result, nil, nil
+	panic("")
+	//workloadReference := state.Workload
+	//
+	//var err error
+	//
+	//loadWorkload := func() {
+	//	err = workloadReference.Reload(ctx, clients.Client)
+	//}
+	//
+	//if spinnerErr := spinner.New().Title("Loading workload").Action(loadWorkload).Run(); spinnerErr != nil {
+	//	return tuicomponents.StepResultErr, nil, spinnerErr
+	//}
+	//
+	//if err != nil {
+	//	return tuicomponents.StepResultErr, nil, fmt.Errorf("failed to load workload: %w", err)
+	//}
+	//
+	//var services []v1.Service
+	//
+	//loadServices := func() {
+	//	services, err = workloadReference.GetServices(ctx, clients.Client)
+	//}
+	//
+	//if spinnerErr := spinner.New().Title("Discovering services").Action(loadServices).Run(); spinnerErr != nil {
+	//	return tuicomponents.StepResultErr, nil, spinnerErr
+	//}
+	//
+	//if err != nil {
+	//	return tuicomponents.StepResultErr, nil, fmt.Errorf("failed to get services for workload %v", err)
+	//}
+	//
+	//var targets []PortForwardTarget
+	//var containerAnyPortTargets []PortForwardTarget
+	//
+	//for _, service := range services {
+	//	for _, port := range service.Spec.Ports {
+	//		targets = append(targets, ServicePortForwardTarget{service: service, servicePort: port})
+	//	}
+	//}
+	//
+	//for _, pod := range workloadReference.ListKnownPods() {
+	//	for _, container := range pod.Pod.Spec.Containers {
+	//		for _, port := range container.Ports {
+	//			targets = append(targets, ContainerPortForwardTarget{
+	//				containerName: container.Name,
+	//				podName:       pod.Pod.Name,
+	//				port:          int(port.ContainerPort),
+	//				portName:      port.Name,
+	//				protocol:      string(port.Protocol),
+	//			})
+	//		}
+	//		containerAnyPortTargets = append(containerAnyPortTargets, ContainerAnyPortForwardTarget{podName: pod.Pod.Name, containerName: container.Name})
+	//	}
+	//}
+	//
+	//targets = append(targets, containerAnyPortTargets...)
+	//
+	//var data [][]string
+	//
+	//for _, target := range targets {
+	//	row := target.GetTableRow()
+	//	data = append(data, []string{
+	//		row.Type,
+	//		row.Name,
+	//		row.PortName,
+	//		row.Port,
+	//		row.Protocol,
+	//	})
+	//}
+	//
+	//columns := []string{
+	//	"Type",
+	//	"Name",
+	//	"Port name",
+	//	"Port",
+	//	"Protocol",
+	//}
+	//
+	//index, result, err := tuicomponents.RunSelectTable(data, columns, "Select the target", true)
+	//if err != nil {
+	//	return tuicomponents.StepResultErr, nil, err
+	//}
+	//if result == tuicomponents.StepResultOk {
+	//	var cancelled bool
+	//	cancelled, err = doPortForward(ctx, clients, state, targets[index])
+	//	if cancelled {
+	//		return tuicomponents.StepResultPrevious, nil, err
+	//	}
+	//	return result, nil, nil
+	//}
+	//return result, nil, nil
 }
 
 func promptForLocalPort(info PortForwardInfo) (int, string, bool, error) {

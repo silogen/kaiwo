@@ -25,7 +25,7 @@ import (
 
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	workloadutils "github.com/silogen/kaiwo/pkg/workloads2/utils"
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 
 	"gopkg.in/yaml.v3"
 	batchv1 "k8s.io/api/batch/v1"

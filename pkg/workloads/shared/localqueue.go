@@ -22,7 +22,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
-	workloadutils "github.com/silogen/kaiwo/pkg/workloads2/utils"
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 )
 
 type KaiwoLocalQueueCommand struct {

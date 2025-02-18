@@ -24,7 +24,6 @@ import (
 
 	"github.com/silogen/kaiwo/pkg/k8s"
 	tuicomponents "github.com/silogen/kaiwo/pkg/tui/components"
-	"github.com/silogen/kaiwo/pkg/workloads/utils"
 )
 
 func runViewLogsAction(ctx context.Context, clients k8s.KubernetesClients, state *tuicomponents.RunState) (tuicomponents.StepResult, tuicomponents.RunStep[tuicomponents.RunState], error) {
@@ -54,9 +53,10 @@ func runViewLogsAction(ctx context.Context, clients k8s.KubernetesClients, state
 		break
 	}
 
-	if err := utils.OutputLogs(ctx, clients.Clientset, state.PodName, state.ContainerName, int64(numLines), state.Workload.GetNamespace(), follow); err != nil {
-		return tuicomponents.StepResultErr, nil, fmt.Errorf("failed to output the logs: %w", err)
-	}
+	panic("")
+	//if err := cliutils.OutputLogs(ctx, clients.Clientset, state.PodName, state.ContainerName, int64(numLines), state.Workload.GetNamespace(), follow); err != nil {
+	//	return tuicomponents.StepResultErr, nil, fmt.Errorf("failed to output the logs: %w", err)
+	//}
 
 	return tuicomponents.StepResultOk, nil, nil
 }

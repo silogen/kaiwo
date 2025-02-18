@@ -22,7 +22,7 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	workloadutils "github.com/silogen/kaiwo/pkg/workloads2/utils"
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
@@ -31,7 +31,7 @@ import (
 
 	"github.com/imdario/mergo"
 
-	"github.com/silogen/kaiwo/pkg/workloads2"
+	"github.com/silogen/kaiwo/pkg/workloads"
 
 	"github.com/sirupsen/logrus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -48,14 +48,14 @@ type WorkloadApplier interface {
 	LoadFromPath(path string) error
 
 	// FromCliFlags initializes the applier from CLI flags
-	FromCliFlags(flags workloads2.CLIFlags)
+	FromCliFlags(flags workloads.CLIFlags)
 
 	GetObject() client.Object
 
 	GetInvoker(ctx context.Context, scheme *runtime.Scheme, k8sClient client.Client) (workloadutils.CommandInvoker, error)
 }
 
-func Apply(applier WorkloadApplier, flags workloads2.CLIFlags) error {
+func Apply(applier WorkloadApplier, flags workloads.CLIFlags) error {
 	ctx := context.Background()
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 

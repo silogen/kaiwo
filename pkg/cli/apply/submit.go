@@ -20,10 +20,12 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/silogen/kaiwo/pkg/workloads"
+
 	"k8s.io/apimachinery/pkg/runtime"
 
-	workloadjob "github.com/silogen/kaiwo/pkg/workloads2/job"
-	workloadutils "github.com/silogen/kaiwo/pkg/workloads2/utils"
+	workloadjob "github.com/silogen/kaiwo/pkg/workloads/job"
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -31,8 +33,6 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"github.com/silogen/kaiwo/pkg/workloads2"
 
 	"github.com/spf13/cobra"
 
@@ -73,7 +73,7 @@ func (k *KaiwoJobSubmitter) GetInvoker(ctx context.Context, scheme *runtime.Sche
 	return invoker, nil
 }
 
-func (k *KaiwoJobSubmitter) FromCliFlags(flags workloads2.CLIFlags) {
+func (k *KaiwoJobSubmitter) FromCliFlags(flags workloads.CLIFlags) {
 	job := v1alpha1.KaiwoJob{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      flags.Name,

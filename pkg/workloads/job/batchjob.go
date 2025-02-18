@@ -25,7 +25,7 @@ import (
 
 	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 
-	workloadutils "github.com/silogen/kaiwo/pkg/workloads2/utils"
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
