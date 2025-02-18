@@ -35,7 +35,7 @@ func UpdatePodSpecStorage(ctx context.Context, podSpec *corev1.PodSpec, storageS
 	}
 
 	addStorageVolume := func(name string, claimName string) {
-		logger.Info(fmt.Sprintf("Adding %s volume", name))
+		logger.Info("Adding volume", "volumeName", name)
 		podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
 			Name: name,
 			VolumeSource: corev1.VolumeSource{

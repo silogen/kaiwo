@@ -34,47 +34,71 @@ func (i *CommandInvoker) AddCommand(cmd Command) {
 }
 
 func (i *CommandInvoker) Run(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme) (*ctrl.Result, error) {
+	logger := log.FromContext(ctx)
 	for j := 0; j < len(i.Commands); j++ {
-
-		obj, err := i.Commands[j].Build()
+		kind, err := i.Commands[j].GetGVK(scheme)
 		if err != nil {
-			return nil, fmt.Errorf("error building object: %v", err)
+			return nil, fmt.Errorf("error getting GVK: %w", err)
 		}
-		i.Commands[j].SetObject(obj)
 
-		localContext := ctx // .WithValue(ctx, "object", obj.GetObjectKind())
-		logger := log.FromContext(localContext)
+		localLogger := logger.WithValues(
+			"kind", kind.Kind,
+			"version", kind.Version,
+			"group", kind.Group,
+		)
+
+		localCtx := log.IntoContext(ctx, localLogger)
+
+		localLogger.Info("Building")
+
+		obj, err := i.Commands[j].Build(localCtx, k8sClient)
+		i.Commands[j].SetDesired(obj)
+
+		localLogger = logger.WithValues(
+			"kind", kind.Kind,
+			"version", kind.Version,
+			"group", kind.Group,
+			"name", obj.GetName(),
+			"namespace", obj.GetNamespace(),
+		)
+
+		localLogger.Info("Built")
+
+		if err != nil {
+			return nil, fmt.Errorf("error building object: %w", err)
+		}
+		i.Commands[j].SetDesired(obj)
 
 		isOwner := false
 		if obj == i.Commands[j].GetOwner() {
 			isOwner = true
 		}
 
-		exists, err := i.Commands[j].ResourceExists(localContext, k8sClient)
+		localCtx = log.IntoContext(ctx, localLogger)
+
+		exists, err := i.Commands[j].ResourceExists(localCtx, k8sClient)
 		if err != nil {
-			logger.Error(err, "failed to check if resource exists")
-			return nil, err
+			return nil, fmt.Errorf("error checking if resource exists: %w", err)
 		}
 
 		if !exists && !isOwner {
 			// Create if object doesn't exist, and it is a dependent object (don't try to recreate the owner custom resource)
-			if err := i.Commands[j].Create(localContext, k8sClient); err != nil {
-				logger.Error(err, "failed to create resource")
+			if err := i.Commands[j].Create(localCtx, k8sClient); err != nil {
+				localLogger.Error(err, "failed to create resource")
 				return nil, err
 			}
 
 			if err := ctrl.SetControllerReference(i.Commands[j].GetOwner(), obj, scheme); err != nil {
-				return nil, fmt.Errorf("failed to set controller reference on resource: %v", err)
+				return nil, fmt.Errorf("failed to set controller reference on resource: %w", err)
 			}
 		} else if exists {
 			// Update all objects
-			if err := i.Commands[j].Update(localContext, k8sClient); err != nil {
-				logger.Error(err, "failed to update resource")
-				return nil, err
+			if err := i.Commands[j].Update(localCtx, k8sClient); err != nil {
+				return nil, fmt.Errorf("failed to update resource: %w", err)
 			}
 		}
 
-		currentResult := i.Commands[j].GetCurrentReconcileResult()
+		currentResult := i.Commands[j].GetCurrentReconcileResult(ctx)
 		if currentResult != nil {
 			// If a command needs to interrupt with a result, return it
 			return currentResult, nil
@@ -83,17 +107,36 @@ func (i *CommandInvoker) Run(ctx context.Context, k8sClient client.Client, schem
 	return nil, nil
 }
 
-func (i *CommandInvoker) BuildAllResources() ([]client.Object, error) {
+func (i *CommandInvoker) BuildAllResources(ctx context.Context, scheme *runtime.Scheme, k8sClient client.Client) ([]client.Object, error) {
 	var resources []client.Object
+	logger := log.FromContext(ctx)
 	for j := 0; j < len(i.Commands); j++ {
-		obj, err := i.Commands[j].Build()
+
+		kind, err := i.Commands[j].GetGVK(scheme)
 		if err != nil {
-			return resources, fmt.Errorf("error building: %v", err)
+			return nil, fmt.Errorf("error getting GVK: %w", err)
+		}
+
+		localLogger := logger.WithValues(
+			"gvk", kind,
+			"objectKey", i.Commands[j].GetObjectKey(),
+		)
+
+		localCtx := log.IntoContext(ctx, localLogger)
+
+		localLogger.Info("Building")
+
+		obj, err := i.Commands[j].Build(localCtx, k8sClient)
+		if err != nil {
+			return resources, fmt.Errorf("error building: %w", err)
 		}
 		if obj == nil {
 			continue
 		}
-		i.Commands[j].SetObject(obj)
+
+		localLogger.Info("Built successfully")
+
+		i.Commands[j].SetDesired(obj)
 		resources = append(resources, obj)
 	}
 	return resources, nil

@@ -94,7 +94,7 @@ type KaiwoJobSpec struct {
 }
 
 func (spec *KaiwoJobSpec) IsBatchJob() bool {
-	return spec.RayJob == nil && (spec.Ray != nil && !*spec.Ray)
+	return spec.RayJob == nil || (spec.Ray != nil && !*spec.Ray)
 }
 
 func (spec *KaiwoJobSpec) IsRayJob() bool {

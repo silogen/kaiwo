@@ -34,6 +34,9 @@ import (
 	"github.com/sirupsen/logrus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
 	"github.com/silogen/kaiwo/pkg/k8s"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
@@ -82,7 +85,9 @@ func Apply(applier WorkloadApplier, flags workloads2.CLIFlags) error {
 		}
 	}
 
-	ctx := context.TODO()
+	ctx := context.Background()
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+
 	k8sClient, err := k8s.GetClient()
 	if err != nil {
 		return fmt.Errorf("error getting k8s client: %v", err)
@@ -101,7 +106,7 @@ func Apply(applier WorkloadApplier, flags workloads2.CLIFlags) error {
 		if err != nil {
 			return fmt.Errorf("failed to get invoker: %w", err)
 		}
-		resources, err := invoker.BuildAllResources()
+		resources, err := invoker.BuildAllResources(ctx, &scheme, k8sClient)
 		if err != nil {
 			return fmt.Errorf("failed to build resources: %w", err)
 		}

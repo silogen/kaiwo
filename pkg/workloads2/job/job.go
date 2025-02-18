@@ -57,20 +57,18 @@ func BuildKaiwoJobInvoker(ctx context.Context, scheme *runtime.Scheme, k8sClient
 		manifest.Spec.Labels[kaiwov1alpha1.QueueLabel] = *manifest.Spec.ClusterQueue
 	}
 
+	state := &workloadutils.CommandStateBase{}
+
+	base := workloadutils.CommandBase[workloadutils.CommandStateBase]{
+		Owner:  manifest,
+		Scheme: scheme,
+		State:  state,
+	}
+
 	// Build invoker
 	invoker := workloadutils.CommandInvoker{}
 
-	state := &workloadutils.CommandStateBase{}
-
-	invoker.AddCommand(&KaiwoJobManifestCommand{KaiwoJob: manifest})
-
-	base := workloadutils.CommandBase[workloadutils.CommandStateBase]{
-		Owner:   manifest,
-		Scheme:  scheme,
-		State:   state,
-		Context: ctx,
-		Client:  k8sClient,
-	}
+	invoker.AddCommand(NewKaiwoJobCommand(base, manifest))
 
 	storageSpec := manifest.Spec.Storage
 
@@ -88,39 +86,30 @@ func BuildKaiwoJobInvoker(ctx context.Context, scheme *runtime.Scheme, k8sClient
 
 		if storageSpec.Data != nil {
 			// Add data PVC
-			invoker.AddCommand(&workloadshared.StorageCommand[workloadutils.CommandStateBase]{
-				StoreInto:        state.DataPvc,
-				AccessMode:       storageSpec.AccessMode,
-				Amount:           storageSpec.Data.StorageSize,
-				StorageClassName: storageSpec.StorageClassName,
-				PvcNamePostfix:   "data",
-				CommandBase:      base,
-				StoreCallback:    workloadshared.SetStorage,
-			})
+			invoker.AddCommand(workloadshared.NewStorageCommand(
+				base,
+				workloadshared.DataStoragePostfix,
+				storageSpec.AccessMode,
+				storageSpec.StorageClassName,
+				storageSpec.Data.StorageSize,
+				workloadshared.SetStorage,
+			))
 		}
 		if storageSpec.HuggingFace != nil {
 			// Add HuggingFace PVC
-			invoker.AddCommand(&workloadshared.StorageCommand[workloadutils.CommandStateBase]{
-				StoreInto:        state.DataPvc,
-				AccessMode:       storageSpec.AccessMode,
-				Amount:           storageSpec.Data.StorageSize,
-				StorageClassName: storageSpec.StorageClassName,
-				PvcNamePostfix:   "hf",
-				CommandBase:      base,
-				StoreCallback:    workloadshared.SetStorage,
-			})
+			invoker.AddCommand(workloadshared.NewStorageCommand(
+				base,
+				workloadshared.HfStoragePostfix,
+				storageSpec.AccessMode,
+				storageSpec.StorageClassName,
+				storageSpec.HuggingFace.StorageSize,
+				workloadshared.SetStorage,
+			))
 		}
 
 		if storageSpec.HasObjectStorageDownloads() || storageSpec.HasHfDownloads() {
-			// Add download job
-			invoker.AddCommand(&workloadshared.DownloadJobConfigMapCommand{
-				StorageSpec: storageSpec,
-				CommandBase: base,
-			})
-			invoker.AddCommand(&workloadshared.DownloadJobCommand{
-				StorageSpec: storageSpec,
-				CommandBase: base,
-			})
+			invoker.AddCommand(workloadshared.NewDownloadJobConfigMapCommand(base, storageSpec))
+			invoker.AddCommand(workloadshared.NewDownloadJobCommand(base, storageSpec))
 		}
 	}
 
@@ -128,22 +117,12 @@ func BuildKaiwoJobInvoker(ctx context.Context, scheme *runtime.Scheme, k8sClient
 		manifest.Spec.Image = baseutils.Pointer(baseutils.DefaultRayImage)
 	}
 
-	invoker.AddCommand(&workloadshared.KaiwoLocalQueueCommand{
-		Name:        manifest.Spec.Labels[kaiwov1alpha1.QueueLabel],
-		Namespace:   manifest.Namespace,
-		CommandBase: base,
-	})
+	invoker.AddCommand(workloadshared.NewKaiwoLocalQueueCommand(base, manifest.Spec.Labels[kaiwov1alpha1.QueueLabel], manifest.Namespace))
 
 	if manifest.Spec.IsBatchJob() {
-		invoker.AddCommand(&BatchJobCommand{
-			CommandBase: base,
-			KaiwoJob:    manifest,
-		})
+		invoker.AddCommand(NewBatchJobCommand(base, manifest))
 	} else if manifest.Spec.IsRayJob() {
-		invoker.AddCommand(&RayJobCommand{
-			CommandBase: base,
-			KaiwoJob:    manifest,
-		})
+		invoker.AddCommand(NewRayJobCommand(base, manifest))
 	} else {
 		return workloadutils.CommandInvoker{}, fmt.Errorf("KaiwoJob does not specify a valid Job or RayJob. You must either set ray to true or false, or provide a rayClusterSpec")
 	}
@@ -161,8 +140,24 @@ type KaiwoJobManifestCommand struct {
 	KaiwoJob *kaiwov1alpha1.KaiwoJob
 }
 
-func (k *KaiwoJobManifestCommand) Build() (client.Object, error) {
+func NewKaiwoJobCommand(base workloadutils.CommandBase[workloadutils.CommandStateBase], kaiwoJob *kaiwov1alpha1.KaiwoJob) *KaiwoJobManifestCommand {
+	cmd := &KaiwoJobManifestCommand{
+		CommandBase: base,
+		KaiwoJob:    kaiwoJob,
+	}
+	cmd.Self = cmd
+	return cmd
+}
+
+func (k *KaiwoJobManifestCommand) Build(ctx context.Context, k8sClient client.Client) (client.Object, error) {
 	return nil, nil
+}
+
+func (k *KaiwoJobManifestCommand) GetObjectKey() client.ObjectKey {
+	return client.ObjectKey{
+		Namespace: k.KaiwoJob.Namespace,
+		Name:      k.KaiwoJob.Name,
+	}
 }
 
 func (k *KaiwoJobManifestCommand) Update(ctx context.Context, k8sClient client.Client) error {
@@ -202,6 +197,10 @@ func (k *KaiwoJobManifestCommand) Update(ctx context.Context, k8sClient client.C
 
 	logger.Info("Updated KaiwoJob status", "KaiwoJob", kaiwoJob.Name, "Status", kaiwoJob.Status.Status)
 	return nil
+}
+
+func (k *KaiwoJobManifestCommand) GetEmptyObject() client.Object {
+	return &kaiwov1alpha1.KaiwoJob{}
 }
 
 func checkJobCompletion(ctx context.Context, k8sClient client.Client, kaiwoJob *kaiwov1alpha1.KaiwoJob) (bool, bool, error) {
