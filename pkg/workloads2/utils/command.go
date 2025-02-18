@@ -16,18 +16,23 @@ package workloadutils
 
 import (
 	"context"
+	"fmt"
 
-	ctrl "sigs.k8s.io/controller-runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type CommandBase[T any] struct {
-	// Object is the object which would be created by running this command
-	Object client.Object
+	// Desired is the object which would be created by running this command
+	Desired client.Object
+
+	// Actual is the object that exists on in the cluster
+	Actual client.Object
 
 	// Owner is object that owns the object that would be created by this command.
 	Owner client.Object
@@ -35,19 +40,46 @@ type CommandBase[T any] struct {
 	// State holds a shared state struct that each command can use
 	State *T
 
-	Client client.Client
+	// Client client.Client
 
-	Context context.Context
-	Scheme  *runtime.Scheme
+	// Context context.Context
+	Scheme *runtime.Scheme
+
+	// Self holds a reference to the concrete command implementing Command.
+	Self Command
 }
 
-func (cb *CommandBase[T]) SetObject(object client.Object) {
-	cb.Object = object
+func (cb *CommandBase[T]) GetGVK(scheme *runtime.Scheme) (schema.GroupVersionKind, error) {
+	var obj client.Object
+	if cb.Desired != nil {
+		obj = cb.Desired
+	} else {
+		if cb.Self == nil {
+			return schema.GroupVersionKind{}, fmt.Errorf("self is not set in CommandBase")
+		}
+		obj = cb.Self.GetEmptyObject()
+		if obj == nil {
+			return schema.GroupVersionKind{}, fmt.Errorf("GetEmptyObject returned nil")
+		}
+	}
+
+	gvks, _, err := scheme.ObjectKinds(obj)
+	if err != nil {
+		return schema.GroupVersionKind{}, fmt.Errorf("failed to determine GVK for %T: %w", obj, err)
+	}
+	if len(gvks) == 0 {
+		return schema.GroupVersionKind{}, fmt.Errorf("no GVK found for object type %T", obj)
+	}
+	return gvks[0], nil
+}
+
+func (cb *CommandBase[T]) SetDesired(object client.Object) {
+	cb.Desired = object
 }
 
 func (cb *CommandBase[T]) Create(ctx context.Context, k8sClient client.Client) error {
 	log.FromContext(ctx).Info("Creating object")
-	return k8sClient.Create(ctx, cb.Object)
+	return k8sClient.Create(ctx, cb.Desired)
 }
 
 func (cb *CommandBase[T]) Update(ctx context.Context, _ client.Client) error {
@@ -57,13 +89,14 @@ func (cb *CommandBase[T]) Update(ctx context.Context, _ client.Client) error {
 }
 
 func (cb *CommandBase[T]) ResourceExists(ctx context.Context, k8sClient client.Client) (bool, error) {
-	existingObject := cb.Object.DeepCopyObject().(client.Object)
-	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(cb.Object), existingObject); err != nil {
+	existingObject := cb.Desired.DeepCopyObject().(client.Object)
+	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(cb.Desired), existingObject); err != nil {
 		if errors.IsNotFound(err) {
 			return false, nil
 		}
 		return false, err
 	}
+	cb.Actual = existingObject
 	return true, nil
 }
 
@@ -71,15 +104,15 @@ func (cb *CommandBase[T]) GetOwner() client.Object {
 	return cb.Owner
 }
 
-func (cb *CommandBase[T]) GetCurrentReconcileResult() *ctrl.Result {
+func (cb *CommandBase[T]) GetCurrentReconcileResult(context.Context) *ctrl.Result {
 	return nil
 }
 
 type Command interface {
 	// Build creates the Kubernetes manifest that this command would create. If nil is returned, assuming nothing would be created
-	Build() (client.Object, error)
+	Build(ctx context.Context, k8sClient client.Client) (client.Object, error)
 
-	SetObject(object client.Object)
+	SetDesired(object client.Object)
 
 	// ResourceExists checks if the resource exists. Must be run after Build().
 	ResourceExists(ctx context.Context, k8sClient client.Client) (bool, error)
@@ -95,5 +128,11 @@ type Command interface {
 
 	// GetCurrentReconcileResult returns an optional reconciliation result, which can be used to force a reconciliation
 	// request in the middle of invoking a list of commands, in which case the rest of the commands do not get invoked.
-	GetCurrentReconcileResult() *ctrl.Result
+	GetCurrentReconcileResult(ctx context.Context) *ctrl.Result
+
+	GetObjectKey() client.ObjectKey
+
+	GetEmptyObject() client.Object
+
+	GetGVK(*runtime.Scheme) (schema.GroupVersionKind, error)
 }

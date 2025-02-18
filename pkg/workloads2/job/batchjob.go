@@ -15,7 +15,12 @@
 package workloadjob
 
 import (
+	"context"
 	"fmt"
+
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 
@@ -24,7 +29,6 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
@@ -40,15 +44,27 @@ type BatchJobCommand struct {
 	KaiwoJob *v1alpha1.KaiwoJob
 }
 
-func (k *BatchJobCommand) Build() (client.Object, error) {
+func NewBatchJobCommand(base workloadutils.CommandBase[workloadutils.CommandStateBase], kaiwoJob *v1alpha1.KaiwoJob) *BatchJobCommand {
+	cmd := &BatchJobCommand{
+		CommandBase: base,
+		KaiwoJob:    kaiwoJob,
+	}
+	cmd.Self = cmd
+	return cmd
+}
+
+func (k *BatchJobCommand) Build(ctx context.Context, k8sClient client.Client) (client.Object, error) {
+	logger := log.FromContext(ctx)
+
 	kaiwoJob := k.KaiwoJob
 
 	var jobSpec batchv1.JobSpec
 
 	if kaiwoJob.Spec.Job == nil {
-		// logger.Info("JobSpec is nil, using default JobSpec", "KaiwoJob", kaiwoJob.Name)
+		logger.Info("JobSpec is nil, using default JobSpec", "KaiwoJob", kaiwoJob.Name)
 		jobSpec = DefaultJobSpec
 	} else {
+		logger.Info("JobSpec is provided", "KaiwoJob", kaiwoJob.Name)
 		jobSpec = kaiwoJob.Spec.Job.Spec
 	}
 
@@ -58,7 +74,7 @@ func (k *BatchJobCommand) Build() (client.Object, error) {
 
 	jobSpec.Template.ObjectMeta.Labels["job-name"] = kaiwoJob.Name
 
-	if err := controllerutils.AddEntrypoint(k.Context, baseutils.ValueOrDefault(kaiwoJob.Spec.EntryPoint), &jobSpec.Template); err != nil {
+	if err := controllerutils.AddEntrypoint(ctx, baseutils.ValueOrDefault(kaiwoJob.Spec.EntryPoint), &jobSpec.Template); err != nil {
 		return nil, fmt.Errorf("failed to add entrypoint: %v", err)
 	}
 
@@ -66,19 +82,21 @@ func (k *BatchJobCommand) Build() (client.Object, error) {
 	if kaiwoJob.Spec.GpuVendor != nil {
 		vendor = *kaiwoJob.Spec.GpuVendor
 	}
+	logger.Info("GPU Vendor", "vendor", vendor)
 
 	if baseutils.ValueOrDefault(kaiwoJob.Spec.Gpus) == 0 {
 		gpuResourceKey := corev1.ResourceName(controllerutils.GetGpuResourceKey(vendor))
 		if gpuQuantity, exists := jobSpec.Template.Spec.Containers[0].Resources.Requests[gpuResourceKey]; exists {
 			kaiwoJob.Spec.Gpus = baseutils.Pointer(int(gpuQuantity.Value()))
 		}
+		logger.Info("GPU resource request", "resource", gpuResourceKey.String())
 	}
 
-	if err := controllerutils.AdjustResourceRequestsAndLimits(k.Context, vendor, baseutils.ValueOrDefault(kaiwoJob.Spec.Gpus), 1, baseutils.ValueOrDefault(kaiwoJob.Spec.Gpus), &jobSpec.Template); err != nil {
+	if err := controllerutils.AdjustResourceRequestsAndLimits(ctx, vendor, baseutils.ValueOrDefault(kaiwoJob.Spec.Gpus), 1, baseutils.ValueOrDefault(kaiwoJob.Spec.Gpus), &jobSpec.Template); err != nil {
 		return nil, fmt.Errorf("failed to adjust resource requests and limits: %v", err)
 	}
 
-	if err := controllerutils.AddEnvVars(k.Context, baseutils.ValueOrDefault(kaiwoJob.Spec.EnvVars), &jobSpec.Template); err != nil {
+	if err := controllerutils.AddEnvVars(ctx, baseutils.ValueOrDefault(kaiwoJob.Spec.EnvVars), &jobSpec.Template); err != nil {
 		return nil, fmt.Errorf("failed to add env vars: %v", err)
 	}
 
@@ -92,10 +110,21 @@ func (k *BatchJobCommand) Build() (client.Object, error) {
 	}
 
 	if kaiwoJob.Spec.Storage != nil && kaiwoJob.Spec.Storage.StorageEnabled {
-		if err := controllerutils.UpdatePodSpecStorage(k.Context, &job.Spec.Template.Spec, *kaiwoJob.Spec.Storage, kaiwoJob.Name); err != nil {
+		if err := controllerutils.UpdatePodSpecStorage(ctx, &job.Spec.Template.Spec, *kaiwoJob.Spec.Storage, kaiwoJob.Name); err != nil {
 			return nil, err
 		}
 	}
 
 	return job, nil
+}
+
+func (k *BatchJobCommand) GetEmptyObject() client.Object {
+	return &batchv1.Job{}
+}
+
+func (k *BatchJobCommand) GetObjectKey() client.ObjectKey {
+	return client.ObjectKey{
+		Namespace: k.KaiwoJob.Namespace,
+		Name:      k.KaiwoJob.Name,
+	}
 }

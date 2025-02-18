@@ -15,8 +15,11 @@
 package workloadshared
 
 import (
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"context"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
 	workloadutils "github.com/silogen/kaiwo/pkg/workloads2/utils"
@@ -28,14 +31,36 @@ type KaiwoLocalQueueCommand struct {
 	Namespace string
 }
 
-func (k *KaiwoLocalQueueCommand) Build() (client.Object, error) {
+func NewKaiwoLocalQueueCommand(base workloadutils.CommandBase[workloadutils.CommandStateBase], name, namespace string) *KaiwoLocalQueueCommand {
+	cmd := &KaiwoLocalQueueCommand{
+		CommandBase: base,
+		Name:        name,
+		Namespace:   namespace,
+	}
+	cmd.Self = cmd
+	return cmd
+}
+
+func (k *KaiwoLocalQueueCommand) Build(_ context.Context, _ client.Client) (client.Object, error) {
+	objectKey := k.GetObjectKey()
 	return &kueuev1beta1.LocalQueue{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      k.Name,
-			Namespace: k.Namespace,
+			Name:      objectKey.Name,
+			Namespace: objectKey.Namespace,
 		},
 		Spec: kueuev1beta1.LocalQueueSpec{
 			ClusterQueue: kueuev1beta1.ClusterQueueReference(k.Name),
 		},
 	}, nil
+}
+
+func (k *KaiwoLocalQueueCommand) GetEmptyObject() client.Object {
+	return &kueuev1beta1.LocalQueue{}
+}
+
+func (k *KaiwoLocalQueueCommand) GetObjectKey() client.ObjectKey {
+	return client.ObjectKey{
+		Namespace: k.Namespace,
+		Name:      k.Name,
+	}
 }
