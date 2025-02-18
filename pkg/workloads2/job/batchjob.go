@@ -17,6 +17,8 @@ package workloadjob
 import (
 	"context"
 
+	"k8s.io/apimachinery/pkg/api/resource"
+
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -33,9 +35,11 @@ import (
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
-var DefaultJobSpec = batchv1.JobSpec{
-	TTLSecondsAfterFinished: baseutils.Pointer(int32(3600)),
-	Template:                controllerutils.DefaultPodTemplateSpec,
+func GetDefaultJobSpec(dangerous bool) batchv1.JobSpec {
+	return batchv1.JobSpec{
+		TTLSecondsAfterFinished: baseutils.Pointer(int32(3600)),
+		Template:                controllerutils.GetPodTemplate(*resource.NewQuantity(1*1024*1024*1024, resource.BinarySI), dangerous),
+	}
 }
 
 type BatchJobCommand struct {
@@ -61,7 +65,7 @@ func (k *BatchJobCommand) Build(ctx context.Context, k8sClient client.Client) (c
 
 	if kaiwoJob.Spec.Job == nil {
 		logger.Info("JobSpec is nil, using default JobSpec", "KaiwoJob", kaiwoJob.Name)
-		jobSpec = DefaultJobSpec
+		jobSpec = GetDefaultJobSpec(baseutils.ValueOrDefault(kaiwoJob.Spec.Dangerous))
 	} else {
 		logger.Info("JobSpec is provided", "KaiwoJob", kaiwoJob.Name)
 		jobSpec = kaiwoJob.Spec.Job.Spec

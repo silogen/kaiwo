@@ -43,9 +43,10 @@ type CLIFlags struct {
 	BaseManifestPath string
 
 	// Run without modifying resources
-	DryRun      bool
-	PrintOutput bool
-	Preview     bool
+	DryRun       bool
+	PrintOutput  bool
+	Preview      bool
+	DevReconcile bool
 
 	// Create namespace if it doesn't already exist
 	CreateNamespace bool

@@ -20,6 +20,8 @@ import (
 	"os"
 	"strings"
 
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
 	workloadutils "github.com/silogen/kaiwo/pkg/workloads2/utils"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -54,6 +56,11 @@ type WorkloadApplier interface {
 }
 
 func Apply(applier WorkloadApplier, flags workloads2.CLIFlags) error {
+	ctx := context.Background()
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+
+	logger := log.FromContext(ctx)
+
 	var baseManifest client.Object = nil
 
 	scheme, err := k8s.GetScheme()
@@ -64,6 +71,7 @@ func Apply(applier WorkloadApplier, flags workloads2.CLIFlags) error {
 	applier.FromCliFlags(flags)
 
 	if flags.BaseManifestPath != "" {
+		logger.Info("Loading base manifest", "path", flags.BaseManifestPath)
 		baseManifest = applier.GetObject().DeepCopyObject().(client.Object)
 		if err := ReadBaseManifest(flags.BaseManifestPath, &scheme, baseManifest); err != nil {
 			return fmt.Errorf("error reading base manifest: %v", err)
@@ -71,6 +79,7 @@ func Apply(applier WorkloadApplier, flags workloads2.CLIFlags) error {
 	}
 
 	if flags.Path != "" {
+		logger.Info("Loading workload", "path", flags.Path)
 		// TODO resolve if path points to a git repository?
 		if err := applier.LoadFromPath(flags.Path); err != nil {
 			return fmt.Errorf("error loading manifest: %v", err)
@@ -85,15 +94,18 @@ func Apply(applier WorkloadApplier, flags workloads2.CLIFlags) error {
 		}
 	}
 
-	ctx := context.Background()
-	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
-
 	k8sClient, err := k8s.GetClient()
 	if err != nil {
 		return fmt.Errorf("error getting k8s client: %v", err)
 	}
 
+	invoker, err := applier.GetInvoker(ctx, &scheme, k8sClient)
+	if err != nil {
+		return fmt.Errorf("failed to get invoker: %w", err)
+	}
+
 	if flags.DryRun {
+		logger.Info("Performing server-side dry run")
 		if err := ApplyServerSideDryRun(ctx, k8sClient, manifest); err != nil {
 			return fmt.Errorf("error applying server side dry-run: %v", err)
 		}
@@ -102,10 +114,7 @@ func Apply(applier WorkloadApplier, flags workloads2.CLIFlags) error {
 			return fmt.Errorf("error applying local-print: %v", err)
 		}
 	} else if flags.Preview {
-		invoker, err := applier.GetInvoker(ctx, &scheme, k8sClient)
-		if err != nil {
-			return fmt.Errorf("failed to get invoker: %w", err)
-		}
+		logger.Info("Previewing manifests that the Kaiwo resource would create. Please note that the output is intended for limited debugging only.")
 		resources, err := invoker.BuildAllResources(ctx, &scheme, k8sClient)
 		if err != nil {
 			return fmt.Errorf("failed to build resources: %w", err)
@@ -117,8 +126,15 @@ func Apply(applier WorkloadApplier, flags workloads2.CLIFlags) error {
 			fmt.Println("---")
 		}
 	} else {
-		if err := ApplyCreate(ctx, k8sClient, manifest); err != nil {
+		logger.Info("Creating Kaiwo resource on cluster")
+		if err := ApplyCreate(ctx, k8sClient, scheme, manifest); err != nil {
 			return fmt.Errorf("error creating resource: %v", err)
+		}
+		if flags.DevReconcile {
+			logger.Info("Running a dev reconcile loop")
+			if _, err := invoker.Run(ctx, k8sClient, &scheme); err != nil {
+				return fmt.Errorf("error running invoker: %v", err)
+			}
 		}
 	}
 
@@ -169,7 +185,8 @@ func ApplyServerSideDryRun(ctx context.Context, k8sClient client.Client, manifes
 	return nil
 }
 
-func ApplyCreate(ctx context.Context, k8sClient client.Client, manifest client.Object) error {
+func ApplyCreate(ctx context.Context, k8sClient client.Client, scheme runtime.Scheme, manifest client.Object) error {
+	logger := log.FromContext(ctx)
 	obj := manifest.DeepCopyObject().(client.Object)
 
 	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
@@ -177,13 +194,20 @@ func ApplyCreate(ctx context.Context, k8sClient client.Client, manifest client.O
 			return fmt.Errorf("failed to get object: %w", err)
 		}
 	} else {
-		logrus.Info("Resource already exists, skipping apply")
+		logger.Info("Resource already exists, skipping apply")
 		return nil
 	}
 
 	if err := k8sClient.Create(ctx, manifest); err != nil {
 		return err
 	}
+
+	gvk, err := baseutils.GetGVK(scheme, obj)
+	if err != nil {
+		return fmt.Errorf("failed to get GVK: %w", err)
+	}
+
+	logger.Info("Resource created", "objectKey", client.ObjectKeyFromObject(obj), "gvk", gvk)
 
 	return nil
 }

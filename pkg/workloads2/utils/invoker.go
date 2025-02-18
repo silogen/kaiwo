@@ -61,13 +61,12 @@ func (i *CommandInvoker) Run(ctx context.Context, k8sClient client.Client, schem
 		}
 		i.Commands[j].SetDesired(obj)
 
-		localLogger = logger.WithValues(
-			"kind", kind.Kind,
-			"version", kind.Version,
-			"group", kind.Group,
-			"name", obj.GetName(),
-			"namespace", obj.GetNamespace(),
-		)
+		descriptor, err := baseutils.GetObjectDescriptor(*scheme, obj)
+		if err != nil {
+			return nil, baseutils.LogErrorf(logger, "error getting object descriptor", err)
+		}
+
+		localLogger = logger.WithValues("object", descriptor)
 
 		localLogger.Info("Built")
 
@@ -87,14 +86,22 @@ func (i *CommandInvoker) Run(ctx context.Context, k8sClient client.Client, schem
 
 		if !exists && !isOwner {
 			// Create if object doesn't exist, and it is a dependent object (don't try to recreate the owner custom resource)
+
+			owner := i.Commands[j].GetOwner()
+			ownerDescriptor, err := baseutils.GetObjectDescriptor(*scheme, owner)
+			if err != nil {
+				return nil, baseutils.LogErrorf(logger, "error getting object descriptor", err)
+			}
+			logger.Info("Setting controller reference", "owner", ownerDescriptor)
+			if err := ctrl.SetControllerReference(owner, obj, scheme); err != nil {
+				return nil, baseutils.LogErrorf(logger, "failed to set controller reference on resource", err)
+			}
+
 			if err := i.Commands[j].Create(localCtx, k8sClient); err != nil {
 				localLogger.Error(err, "failed to create resource")
 				return nil, err
 			}
-
-			if err := ctrl.SetControllerReference(i.Commands[j].GetOwner(), obj, scheme); err != nil {
-				return nil, baseutils.LogErrorf(logger, "failed to set controller reference on resource", err)
-			}
+			logger.Info("Resource created", "resource", descriptor)
 		} else if exists {
 			// Update all objects
 			if err := i.Commands[j].Update(localCtx, k8sClient); err != nil {

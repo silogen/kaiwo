@@ -14,19 +14,10 @@
 
 package controller
 
-import (
-	appsv1 "k8s.io/api/apps/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	baseutils "github.com/silogen/kaiwo/pkg/utils"
-
-	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
-)
-
-var DefaultDeploymentSpec = appsv1.DeploymentSpec{
-	Replicas: baseutils.Pointer(int32(1)),
-	Selector: &metav1.LabelSelector{
-		MatchLabels: map[string]string{"app": "default-app"},
-	},
-	Template: controllerutils.DefaultPodTemplateSpec,
-}
+//var DefaultDeploymentSpec = appsv1.DeploymentSpec{
+//	Replicas: baseutils.Pointer(int32(1)),
+//	Selector: &metav1.LabelSelector{
+//		MatchLabels: map[string]string{"app": "default-app"},
+//	},
+//	Template: controllerutils.DefaultPodTemplateSpec,
+//}

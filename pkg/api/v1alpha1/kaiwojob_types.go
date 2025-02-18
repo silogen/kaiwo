@@ -77,7 +77,7 @@ type KaiwoJobSpec struct {
 	// Ray determines whether the operator should use RayCluster for workload execution.
 	// Default is false.
 	// +kubebuilder:default=false
-	Ray *bool `json:"ray"`
+	Ray *bool `json:"ray,omitempty"`
 
 	// Storage configuration for the workload.
 	Storage *StorageSpec `json:"storage,omitempty"`

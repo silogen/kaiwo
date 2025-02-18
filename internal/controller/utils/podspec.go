@@ -28,63 +28,57 @@ import (
 
 var DefaultGpuResourceKey = baseutils.GetEnv("DEFAULT_GPU_RESOURCE_KEY", "amd.com/gpu")
 
-// DefaultPodTemplateSpec defines a reusable Pod template with security and resource settings.
-var DefaultPodTemplateSpec = corev1.PodTemplateSpec{
-	Spec: corev1.PodSpec{
-		SecurityContext: &corev1.PodSecurityContext{
+// GetDefaultPodTemplate defines a reusable Pod template with security and resource settings.
+func GetDefaultPodTemplate() corev1.PodTemplateSpec {
+	return GetPodTemplate(*resource.NewQuantity(1*1024*1024*1024, resource.BinarySI), false)
+}
+
+func GetPodTemplate(dshmSize resource.Quantity, dangerous bool) corev1.PodTemplateSpec {
+	podTemplate := corev1.PodTemplateSpec{
+		Spec: corev1.PodSpec{
+			RestartPolicy: corev1.RestartPolicyNever,
+			Containers: []corev1.Container{
+				{
+					Name:            "workload",
+					Image:           baseutils.DefaultRayImage,
+					ImagePullPolicy: corev1.PullAlways,
+					Env: []corev1.EnvVar{
+						{Name: "HF_HOME", Value: "/workload/.cache/huggingface"},
+					},
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceMemory: *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI), // Minimum requirement for Ray Head pod
+							corev1.ResourceCPU:    *resource.NewQuantity(2, resource.DecimalSI),                // Minimum requirement for Ray Head pod
+						},
+						Limits: corev1.ResourceList{
+							corev1.ResourceMemory: *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI),
+							corev1.ResourceCPU:    *resource.NewQuantity(2, resource.DecimalSI),
+						},
+					},
+					VolumeMounts: []corev1.VolumeMount{
+						{Name: "dshm", MountPath: "/dev/shm"},
+					},
+				},
+			},
+			Volumes: []corev1.Volume{
+				{
+					Name: "dshm",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{
+							Medium: corev1.StorageMediumMemory,
+							// Default size limit, can be overridden in `getPodTemplate`
+							SizeLimit: &dshmSize,
+						},
+					},
+				},
+			},
+		},
+	}
+	if !dangerous {
+		podTemplate.Spec.SecurityContext = &corev1.PodSecurityContext{
 			RunAsUser:  baseutils.Pointer(int64(1000)),
 			RunAsGroup: baseutils.Pointer(int64(1000)),
 			FSGroup:    baseutils.Pointer(int64(1000)),
-		},
-		RestartPolicy: corev1.RestartPolicyNever,
-		Containers: []corev1.Container{
-			{
-				Name:            "workload",
-				Image:           baseutils.DefaultRayImage,
-				ImagePullPolicy: corev1.PullAlways,
-				Env: []corev1.EnvVar{
-					{Name: "HF_HOME", Value: "/workload/.cache/huggingface"},
-				},
-				Resources: corev1.ResourceRequirements{
-					Requests: corev1.ResourceList{
-						corev1.ResourceMemory: *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI), // Minimum requirement for Ray Head pod
-						corev1.ResourceCPU:    *resource.NewQuantity(2, resource.DecimalSI),                // Minimum requirement for Ray Head pod
-					},
-					Limits: corev1.ResourceList{
-						corev1.ResourceMemory: *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI),
-						corev1.ResourceCPU:    *resource.NewQuantity(2, resource.DecimalSI),
-					},
-				},
-				VolumeMounts: []corev1.VolumeMount{
-					{Name: "dshm", MountPath: "/dev/shm"},
-				},
-			},
-		},
-		Volumes: []corev1.Volume{
-			{
-				Name: "dshm",
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{
-						Medium: corev1.StorageMediumMemory,
-						// Default size limit, can be overridden in `getPodTemplate`
-						SizeLimit: resource.NewQuantity(1*1024*1024*1024, resource.BinarySI), // 1Gi
-					},
-				},
-			},
-		},
-	},
-}
-
-func GetPodTemplate(dshmSize resource.Quantity) corev1.PodTemplateSpec {
-	podTemplate := *DefaultPodTemplateSpec.DeepCopy()
-
-	for i, v := range podTemplate.Spec.Volumes {
-		if v.Name == "dshm" {
-			podTemplate.Spec.Volumes[i].VolumeSource.EmptyDir = &corev1.EmptyDirVolumeSource{
-				Medium:    corev1.StorageMediumMemory,
-				SizeLimit: &dshmSize,
-			}
-			break
 		}
 	}
 
