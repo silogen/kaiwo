@@ -1,57 +1,95 @@
 apiVersion: kaiwo.silogen.ai/v1alpha1
 kind: KaiwoJob
 metadata:
-  name: example-kaiwojob
-  namespace: kaiwo-test
+  name: av-test-rlhf
+  namespace: av-test
 spec:
   user: test@amd.com
-  gpus: 0
-  entrypoint: "echo foo"
+  ray: true
+  gpus: 12
+  entrypoint: |
+    python3 -m openrlhf.cli.train_ppo_ray 
+    --ref_num_nodes 1 
+    --ref_num_gpus_per_node 2 
+    --reward_num_nodes 1 
+    --reward_num_gpus_per_node 2 
+    --critic_num_nodes 1 
+    --critic_num_gpus_per_node 2 
+    --actor_num_nodes 1 
+    --actor_num_gpus_per_node 2 
+    --vllm_num_engines 2 
+    --vllm_tensor_parallel_size 2 
+    --colocate_critic_reward 
+    --colocate_actor_ref 
+    --pretrain OpenRLHF/Llama-3-8b-sft-mixture 
+    --reward_pretrain OpenRLHF/Llama-3-8b-rm-mixture 
+    --save_path checkpoint/llama3-8b-rlhf 
+    --micro_train_batch_size 4 
+    --train_batch_size 8
+    --micro_rollout_batch_size 8
+    --rollout_batch_size 64 
+    --max_samples 100000 
+    --max_epochs 1 
+    --prompt_max_len 1024 
+    --generate_max_len 1024 
+    --zero_stage 3 
+    --bf16 
+    --actor_learning_rate 5e-7 
+    --critic_learning_rate 9e-6 
+    --init_kl_coef 0.01 
+    --prompt_data OpenRLHF/prompt-collection-v0.1 
+    --input_key context_messages 
+    --apply_chat_template 
+    --packing_samples 
+    --normalize_reward 
+    --adam_offload 
+    --flash_attn 
+    --gradient_checkpointing
   storage:
     storageEnabled: true
     storageClassName: "longhorn"
     accessMode: "ReadWriteOnce"
     data:
-      storageSize: "2Gi"
+      storageSize: "100Gi"
       mountPath: "/workload"
-      download:
-        s3:
-          - endpointUrl:
-              secretName: minio-secret
-              secretKey: endpoint
-            accessKeyId:
-              secretName: minio-secret
-              secretKey: access_key_id
-            secretKey:
-              secretName: minio-secret
-              secretKey: secret_key
-            buckets:
-              - name: test
-                files:
-                  - path: file01.txt
-                    targetPath: s3/file01.txt
-                folders:
-                  - path: .
-                    targetPath: s3/all
-        azureBlob:
-          - connectionString:
-              secretName: azure-secret
-              secretKey: connection_string
-            containers:
-              - name: test
-                files:
-                  - path: file01.txt
-                    targetPath: azure/file01.txt
-                folders:
-                  - path: .
-                    targetPath: azure/all
-    huggingFace:
-      storageSize: "2Gi"
-      mountPath: "/.cache/huggingface"  # Also sets the env var HF_HOME to this value in each container
-      preCacheRepos:
-        - repoId: TinyLlama/TinyLlama-1.1B-Chat-v1.0
-          files:
-            - "README.md"
+      # download:
+      #   s3:
+      #     - endpointUrl:
+      #         secretName: minio-secret
+      #         secretKey: endpoint
+      #       accessKeyId:
+      #         secretName: minio-secret
+      #         secretKey: access_key_id
+      #       secretKey:
+      #         secretName: minio-secret
+      #         secretKey: secret_key
+      #       buckets:
+      #         - name: test
+      #           files:
+      #             - path: file01.txt
+      #               targetPath: s3/file01.txt
+      #           folders:
+      #             - path: .
+      #               targetPath: s3/all
+      #   azureBlob:
+      #     - connectionString:
+      #         secretName: azure-secret
+      #         secretKey: connection_string
+      #       containers:
+      #         - name: test
+      #           files:
+      #             - path: file01.txt
+      #               targetPath: azure/file01.txt
+      #           folders:
+      #             - path: .
+      #               targetPath: azure/all
+    # huggingFace:
+    #   storageSize: "2Gi"
+    #   mountPath: "/.cache/huggingface"  # Also sets the env var HF_HOME to this value in each container
+    #   preCacheRepos:
+    #     - repoId: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+    #       files:
+    #         - "README.md"
 #  config:
 #    mountPath: "/workload/config"
 #    files:
@@ -59,14 +97,14 @@ spec:
 #        value: "{'val': 42}"
 #      - path: "dir/config.json"
 #        value: "{}"
-  job:
-    apiVersion: batch/v1
-    kind: Job
-    spec:
-      template:
-        spec:
-          containers:
-          - name: hello-world
-            image: busybox
-            command: ["sh", "-c", "echo 'Hello, Kubernetes!'; sleep 360"]
-          restartPolicy: Never
+  # job:
+  #   apiVersion: batch/v1
+  #   kind: Job
+  #   spec:
+  #     template:
+  #       spec:
+  #         containers:
+  #         - name: hello-world
+  #           image: busybox
+  #           command: ["sh", "-c", "echo 'Hello, Kubernetes!'; sleep 360"]
+  #         restartPolicy: Never

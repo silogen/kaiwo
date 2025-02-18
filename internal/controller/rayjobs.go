@@ -16,8 +16,10 @@ package controller
 
 import (
 	"context"
+	"strings"
 
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,16 +37,17 @@ var DefaultRayJobSpec = rayv1.RayJobSpec{
 	RayClusterSpec: &rayv1.RayClusterSpec{
 		EnableInTreeAutoscaling: controllerutils.BoolPtr(false),
 		HeadGroupSpec: rayv1.HeadGroupSpec{
-			Template: controllerutils.DefaultPodTemplateSpec,
+			RayStartParams: map[string]string{},
+			Template:       controllerutils.GetPodTemplate(resource.MustParse("1Gi")),
 		},
 		WorkerGroupSpecs: []rayv1.WorkerGroupSpec{
 			{
-				GroupName:   "default-worker-group",
-				Replicas:    controllerutils.Int32Ptr(1),
-				MinReplicas: controllerutils.Int32Ptr(1),
-				MaxReplicas: controllerutils.Int32Ptr(1),
-
-				Template: controllerutils.DefaultPodTemplateSpec,
+				GroupName:      "default-worker-group",
+				Replicas:       controllerutils.Int32Ptr(1),
+				MinReplicas:    controllerutils.Int32Ptr(1),
+				MaxReplicas:    controllerutils.Int32Ptr(1),
+				RayStartParams: map[string]string{},
+				Template:       controllerutils.GetPodTemplate(resource.MustParse("200Gi")), // TODO: add to CRD as configurable field
 			},
 		},
 	},
@@ -91,7 +94,7 @@ func (r *KaiwoJobReconciler) reconcileRayJob(ctx context.Context, kaiwoJob *kaiw
 		rayJobSpec.Entrypoint = kaiwoJob.Spec.EntryPoint
 	}
 
-	replicas, gpusPerReplica, err := controllerutils.CalculateNumberOfReplicas(ctx, r.Client, kaiwoJob.Spec.GpuVendor, kaiwoJob.Spec.Gpus, kaiwoJob.Spec.Replicas, kaiwoJob.Spec.GpusPerReplica, true)
+	replicas, gpusPerReplica, err := controllerutils.CalculateNumberOfReplicas(ctx, r.Client, strings.ToLower(kaiwoJob.Spec.GpuVendor), kaiwoJob.Spec.Gpus, kaiwoJob.Spec.Replicas, kaiwoJob.Spec.GpusPerReplica, true)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -102,6 +105,8 @@ func (r *KaiwoJobReconciler) reconcileRayJob(ctx context.Context, kaiwoJob *kaiw
 	// Adjust resource requests & limits
 	for i := range rayJobSpec.RayClusterSpec.WorkerGroupSpecs {
 		rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Replicas = controllerutils.Int32Ptr(int32(replicas))
+		rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].MinReplicas = controllerutils.Int32Ptr(int32(replicas))
+		rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].MaxReplicas = controllerutils.Int32Ptr(int32(replicas))
 		if err := controllerutils.AdjustResourceRequestsAndLimits(ctx, kaiwoJob.Spec.GpuVendor, kaiwoJob.Spec.Gpus, kaiwoJob.Spec.Replicas, kaiwoJob.Spec.GpusPerReplica, &rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Template); err != nil {
 			return ctrl.Result{}, err
 		}

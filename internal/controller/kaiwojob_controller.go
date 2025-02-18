@@ -96,10 +96,10 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, err
 	}
 
-	if kaiwoJob.Spec.RayJob == nil || !kaiwoJob.Spec.Ray {
-		return r.reconcileK8sJob(ctx, &kaiwoJob)
-	} else if kaiwoJob.Spec.RayJob != nil || kaiwoJob.Spec.Ray {
+	if kaiwoJob.Spec.RayJob != nil || kaiwoJob.Spec.Ray {
 		return r.reconcileRayJob(ctx, &kaiwoJob)
+	} else if kaiwoJob.Spec.Job != nil || !kaiwoJob.Spec.Ray {
+		return r.reconcileK8sJob(ctx, &kaiwoJob)
 	}
 
 	jobInvalidErr := fmt.Errorf("KaiwoJob does not specify a valid Job or RayJob")
