@@ -33,25 +33,27 @@ import (
 	workloadutils "github.com/silogen/kaiwo/pkg/workloads2/utils"
 )
 
-var DefaultRayJobSpec = rayv1.RayJobSpec{
-	ShutdownAfterJobFinishes: true,
-	RayClusterSpec: &rayv1.RayClusterSpec{
-		EnableInTreeAutoscaling: baseutils.Pointer(false),
-		HeadGroupSpec: rayv1.HeadGroupSpec{
-			RayStartParams: map[string]string{},
-			Template:       controllerutils.GetPodTemplate(resource.MustParse("1Gi")),
-		},
-		WorkerGroupSpecs: []rayv1.WorkerGroupSpec{
-			{
-				GroupName:      "default-worker-group",
-				Replicas:       baseutils.Pointer(int32(1)),
-				MinReplicas:    baseutils.Pointer(int32(1)),
-				MaxReplicas:    baseutils.Pointer(int32(1)),
+func GetDefaultRayJobSpec(dangerous bool) rayv1.RayJobSpec {
+	return rayv1.RayJobSpec{
+		ShutdownAfterJobFinishes: true,
+		RayClusterSpec: &rayv1.RayClusterSpec{
+			EnableInTreeAutoscaling: baseutils.Pointer(false),
+			HeadGroupSpec: rayv1.HeadGroupSpec{
 				RayStartParams: map[string]string{},
-				Template:       controllerutils.GetPodTemplate(resource.MustParse("200Gi")), // TODO: add to CRD as configurable field
+				Template:       controllerutils.GetPodTemplate(resource.MustParse("1Gi"), dangerous),
+			},
+			WorkerGroupSpecs: []rayv1.WorkerGroupSpec{
+				{
+					GroupName:      "default-worker-group",
+					Replicas:       baseutils.Pointer(int32(1)),
+					MinReplicas:    baseutils.Pointer(int32(1)),
+					MaxReplicas:    baseutils.Pointer(int32(1)),
+					RayStartParams: map[string]string{},
+					Template:       controllerutils.GetPodTemplate(resource.MustParse("200Gi"), dangerous), // TODO: add to CRD as configurable field
+				},
 			},
 		},
-	},
+	}
 }
 
 type RayJobCommand struct {
@@ -78,7 +80,7 @@ func (k *RayJobCommand) Build(ctx context.Context, k8sClient client.Client) (cli
 	var rayJobSpec rayv1.RayJobSpec
 	if kaiwoJob.Spec.RayJob == nil {
 		logger.Info("RayJobSpec is nil, using DefaultRayJobSpec", "KaiwoJob", kaiwoJob.Name)
-		rayJobSpec = *DefaultRayJobSpec.DeepCopy()
+		rayJobSpec = GetDefaultRayJobSpec(baseutils.ValueOrDefault(kaiwoJob.Spec.Dangerous))
 	} else {
 		rayJobSpec = kaiwoJob.Spec.RayJob.Spec
 	}

@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
+
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -63,14 +65,7 @@ func (cb *CommandBase[T]) GetGVK(scheme *runtime.Scheme) (schema.GroupVersionKin
 		}
 	}
 
-	gvks, _, err := scheme.ObjectKinds(obj)
-	if err != nil {
-		return schema.GroupVersionKind{}, fmt.Errorf("failed to determine GVK for %T: %w", obj, err)
-	}
-	if len(gvks) == 0 {
-		return schema.GroupVersionKind{}, fmt.Errorf("no GVK found for object type %T", obj)
-	}
-	return gvks[0], nil
+	return baseutils.GetGVK(*scheme, obj)
 }
 
 func (cb *CommandBase[T]) SetDesired(object client.Object) {

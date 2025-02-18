@@ -24,11 +24,12 @@ import (
 )
 
 var (
-	dryRun      bool
-	printOutput bool
-	preview     bool
+	dryRun       bool
+	printOutput  bool
+	preview      bool
+	devReconcile bool
 
-	createNamespace  bool
+	// createNamespace  bool
 	baseManifestPath string
 	path             string
 
@@ -44,15 +45,18 @@ var (
 
 	dangerous = baseutils.Pointer(false)
 	useRay    = baseutils.Pointer(false)
+
+	user = baseutils.Pointer("")
 )
 
 // AddCliFlags adds flags that are needed for the execution of apply functions
 func AddCliFlags(cmd *cobra.Command) {
-	cmd.Flags().BoolVarP(&createNamespace, "create-namespace", "", false, "Create namespace if it does not exist")
+	// cmd.Flags().BoolVarP(&createNamespace, "create-namespace", "", false, "Create namespace if it does not exist")
 	cmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "Run a server-side dry run without creating any actual resources")
 	cmd.Flags().BoolVarP(&printOutput, "print", "", false, "Print the generated workload manifest without submitting it")
 	cmd.Flags().BoolVarP(&preview, "preview", "", false, "Preview all the resources that the Kaiwo operator would create from this manifest")
 	cmd.MarkFlagsMutuallyExclusive("dry-run", "print", "preview")
+	cmd.Flags().BoolVarP(&devReconcile, "dev-reconcile", "", false, "Create the resource and then run a single reconciliation loop")
 
 	cmd.Flags().StringVarP(&path, "path", "p", "", "Path to directory for workload code, entrypoint/serveconfig, env-file, etc. Either image or path is mandatory")
 	cmd.Flags().StringVarP(&baseManifestPath, "base-manifest", "", "", "Optional path to a base manifest file")
@@ -62,12 +66,13 @@ func AddCliFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(image, "image", "i", baseutils.DefaultRayImage, fmt.Sprintf("Optional Image to use for the workload. Defaults to %s. Either image or workload path is mandatory", baseutils.DefaultRayImage))
 	cmd.Flags().StringVarP(imagePullSecret, "imagepullsecret", "", "", "ImagePullSecret name for job/service if private registry")
 	cmd.Flags().StringVarP(version, "version", "", "", "Optional version for job/service")
+	cmd.Flags().StringVarP(user, "user", "", "", "The user to run as")
 
 	cmd.Flags().IntVarP(gpus, "gpus", "g", 0, "Number of GPUs requested for the workload")
 	cmd.Flags().IntVarP(replicas, "replicas", "", 0, "Number of replicas requested for the workload")
 	cmd.Flags().IntVarP(gpusPerReplica, "gpus-per-replica", "", 0, "Number of GPUs requested per replica")
 	cmd.Flags().BoolVarP(useRay, "ray", "", false, "Use ray for submitting the workload")
-	cmd.Flags().BoolVarP(useRay, "dangerous", "", false, "Skip adding the default security context to containers")
+	cmd.Flags().BoolVarP(dangerous, "dangerous", "", false, "Skip adding the default security context to containers")
 }
 
 func GetCLIFlags(cmd *cobra.Command) workloads2.CLIFlags {
@@ -96,9 +101,18 @@ func GetCLIFlags(cmd *cobra.Command) workloads2.CLIFlags {
 	if !cmd.Flags().Changed("dangerous") {
 		dangerous = nil
 	}
+	if !cmd.Flags().Changed("user") {
+		currentUser, err := baseutils.GetCurrentUser()
+		if err != nil {
+			panic(fmt.Errorf("error getting current user: %v", err))
+		}
+		user = &currentUser
+	}
+
+	// GetCurrentUser
 
 	return workloads2.CLIFlags{
-		CreateNamespace:  createNamespace,
+		// CreateNamespace:  createNamespace,
 		DryRun:           dryRun,
 		PrintOutput:      printOutput,
 		Preview:          preview,
@@ -114,5 +128,7 @@ func GetCLIFlags(cmd *cobra.Command) workloads2.CLIFlags {
 		GPUsPerReplica:   gpusPerReplica,
 		UseRay:           useRay,
 		Dangerous:        dangerous,
+		User:             user,
+		DevReconcile:     devReconcile,
 	}
 }

@@ -151,7 +151,7 @@ func NewKaiwoJobCommand(base workloadutils.CommandBase[workloadutils.CommandStat
 }
 
 func (k *KaiwoJobManifestCommand) Build(ctx context.Context, k8sClient client.Client) (client.Object, error) {
-	return nil, nil
+	return k.KaiwoJob, nil
 }
 
 func (k *KaiwoJobManifestCommand) GetObjectKey() client.ObjectKey {

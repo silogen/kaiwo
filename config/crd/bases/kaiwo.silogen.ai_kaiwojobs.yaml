@@ -34491,8 +34491,6 @@ spec:
                 description: Version is an optional field specifying the version of
                   the workload.
                 type: string
-            required:
-            - ray
             type: object
           status:
             description: KaiwoJobStatus defines the observed state of KaiwoJob.
