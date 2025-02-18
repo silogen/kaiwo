@@ -283,7 +283,6 @@ func CreateLocalQueue(ctx context.Context, c client.Client, name string, namespa
 	existingQueue := &kueuev1beta1.LocalQueue{}
 	err := c.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, existingQueue)
 	if err == nil {
-		logger.Info("LocalQueue already exists", "Name", name, "Namespace", namespace)
 		return nil
 	}
 

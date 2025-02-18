@@ -42,7 +42,6 @@ func (r *KaiwoJobReconciler) reconcileK8sJob(ctx context.Context, kaiwoJob *kaiw
 	var existingJob batchv1.Job
 	err := r.Get(ctx, client.ObjectKey{Name: kaiwoJob.Name, Namespace: kaiwoJob.Namespace}, &existingJob)
 	if err == nil {
-		logger.Info("Kubernetes Job already exists", "Job", existingJob.Name)
 		return ctrl.Result{}, nil
 	} else if !errors.IsNotFound(err) {
 		logger.Error(err, "Failed to get existing Job")

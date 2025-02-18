@@ -191,7 +191,6 @@ func (r *KaiwoQueueConfigReconciler) EnsureDefaultKaiwoQueueConfig(ctx context.C
 	var queueConfig kaiwov1alpha1.KaiwoQueueConfig
 	err := r.Get(ctx, client.ObjectKey{Name: DefaultKaiwoQueueConfigName}, &queueConfig)
 	if err == nil {
-		logger.Info("Default KaiwoQueueConfig already exists", "name", queueConfig.Name)
 		return nil
 	} else if !errors.IsNotFound(err) {
 		logger.Error(err, "Failed to check for existing KaiwoQueueConfig")
