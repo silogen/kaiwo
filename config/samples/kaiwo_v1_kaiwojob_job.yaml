@@ -1,14 +1,14 @@
 apiVersion: kaiwo.silogen.ai/v1alpha1
 kind: KaiwoJob
 metadata:
-  name: example-kaiwojob
-  namespace: kaiwo-test
+  name: test-job-kaiwojob
+  namespace: kaiwo
 spec:
   user: test@amd.com
   gpus: 0
   storage:
     storageEnabled: true
-    # storageClassName: "local-path"
+    storageClassName: "longhorn"
     accessMode: "ReadWriteOnce"
     data:
       storageSize: "2Gi"
@@ -51,21 +51,17 @@ spec:
         - repoId: TinyLlama/TinyLlama-1.1B-Chat-v1.0
           files:
             - "README.md"
-#  config:
-#    mountPath: "/workload/config"
-#    files:
-#      - path: "config.json"
-#        value: "{'val': 42}"
-#      - path: "dir/config.json"
-#        value: "{}"
-  jobSpec:
-    template:
-      spec:
-        restartPolicy: Never
-        containers:
-        - name: ubuntu
-          image: ubuntu:latest
-          imagePullPolicy: Always
-          # Just spin & wait forever
-          command: [ "/bin/bash", "-c", "--" ]
-          args: [ "while true; do sleep 5; done;" ]
+  job:
+    apiVersion: batch/v1
+    kind: Job
+    spec:
+      template:
+        spec:
+          containers:
+          - name: hello-world
+            image: ubuntu:latest
+            imagePullPolicy: Always
+            # Just spin & wait forever
+            command: [ "/bin/bash", "-c", "--" ]
+            args: [ "while true; do sleep 5; done;" ]
+          restartPolicy: Never

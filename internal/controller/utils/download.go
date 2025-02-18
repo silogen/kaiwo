@@ -270,8 +270,6 @@ func ReconcileDownloadJob(r client.Client, s *runtime.Scheme, ctx context.Contex
 		// Requeue after some time to check again if the job has completed
 		logger.Info("Download job is running, waiting for it to finish")
 		return &ctrl.Result{RequeueAfter: 5 * time.Second}, nil
-	} else {
-		logger.Info("No download job to reconcile")
 	}
 	return nil, nil
 }

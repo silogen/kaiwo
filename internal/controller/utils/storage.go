@@ -61,7 +61,6 @@ func ReconcileStorage(r client.Client, s *runtime.Scheme, ctx context.Context, o
 
 	createStorage := func(amount string, postfix string) error {
 		pvcName := baseutils.FormatNameWithPostfix(owner.GetName(), postfix)
-		logger.Info(fmt.Sprintf("Creating PVC %s", pvcName))
 		storageQuantity := resource.MustParse(amount)
 
 		pvc := &corev1.PersistentVolumeClaim{}
@@ -70,9 +69,10 @@ func ReconcileStorage(r client.Client, s *runtime.Scheme, ctx context.Context, o
 				return err
 			}
 		} else {
-			logger.Info(fmt.Sprintf("PVC %s already exists", pvcName))
 			return nil
 		}
+
+		logger.Info(fmt.Sprintf("Creating PVC %s", pvcName))
 
 		pvc = &corev1.PersistentVolumeClaim{
 			ObjectMeta: metav1.ObjectMeta{

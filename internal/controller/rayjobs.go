@@ -59,7 +59,6 @@ func (r *KaiwoJobReconciler) reconcileRayJob(ctx context.Context, kaiwoJob *kaiw
 	var existingRayJob rayv1.RayJob
 	err := r.Get(ctx, client.ObjectKey{Name: kaiwoJob.Name, Namespace: kaiwoJob.Namespace}, &existingRayJob)
 	if err == nil {
-		logger.Info("RayJob already exists", "RayJob", existingRayJob.Name)
 		return ctrl.Result{}, nil
 	} else if !errors.IsNotFound(err) {
 		logger.Error(err, "Failed to get existing RayJob")
@@ -72,7 +71,7 @@ func (r *KaiwoJobReconciler) reconcileRayJob(ctx context.Context, kaiwoJob *kaiw
 	var rayJobSpec rayv1.RayJobSpec
 	if kaiwoJob.Spec.RayJob == nil {
 		logger.Info("RayJobSpec is nil, using DefaultRayJobSpec", "KaiwoJob", kaiwoJob.Name)
-		rayJobSpec = DefaultRayJobSpec
+		rayJobSpec = *DefaultRayJobSpec.DeepCopy()
 	} else {
 		rayJobSpec = kaiwoJob.Spec.RayJob.Spec
 	}
@@ -141,7 +140,7 @@ func (r *KaiwoJobReconciler) reconcileRayJob(ctx context.Context, kaiwoJob *kaiw
 			Namespace: kaiwoJob.Namespace,
 			Labels:    kaiwoJob.Spec.Labels,
 		},
-		Spec: rayJobSpec,
+		Spec: *rayJobSpec.DeepCopy(),
 	}
 
 	// Set owner reference
