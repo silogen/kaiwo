@@ -16,7 +16,6 @@ package workloadshared
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 	"time"
 
@@ -95,7 +94,7 @@ func (cmd *DownloadJobConfigMapCommand) Build(ctx context.Context, k8sClient cli
 	downloadConfig := cmd.StorageSpec.CreateConfig()
 	yamlData, err := yaml.Marshal(downloadConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal download job config to yaml: %w", err)
+		return nil, baseutils.LogErrorf(logger, "failed to marshal download job config to yaml", err)
 	}
 	objectKey := cmd.GetObjectKey()
 

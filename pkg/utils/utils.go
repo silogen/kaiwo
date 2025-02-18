@@ -19,6 +19,8 @@ import (
 	"os"
 	"regexp"
 	"strings"
+
+	"github.com/go-logr/logr"
 )
 
 var (
@@ -79,4 +81,10 @@ func ValueOrDefault[T any](d *T) T {
 		return *new(T)
 	}
 	return *d
+}
+
+// LogErrorf takes care of logging the error message with logr, as well as creating the error object to return
+func LogErrorf(logger logr.Logger, message string, err error) error {
+	logger.Error(err, message)
+	return fmt.Errorf("%s: %w", message, err)
 }

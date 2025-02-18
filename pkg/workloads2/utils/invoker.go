@@ -16,7 +16,8 @@ package workloadutils
 
 import (
 	"context"
-	"fmt"
+
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -38,7 +39,7 @@ func (i *CommandInvoker) Run(ctx context.Context, k8sClient client.Client, schem
 	for j := 0; j < len(i.Commands); j++ {
 		kind, err := i.Commands[j].GetGVK(scheme)
 		if err != nil {
-			return nil, fmt.Errorf("error getting GVK: %w", err)
+			return nil, baseutils.LogErrorf(logger, "error getting GVK: %w", err)
 		}
 
 		localLogger := logger.WithValues(
@@ -52,6 +53,12 @@ func (i *CommandInvoker) Run(ctx context.Context, k8sClient client.Client, schem
 		localLogger.Info("Building")
 
 		obj, err := i.Commands[j].Build(localCtx, k8sClient)
+		if err != nil {
+			return nil, baseutils.LogErrorf(logger, "error building object", err)
+		}
+		if obj == nil {
+			return nil, baseutils.LogErrorf(logger, "error building object", err)
+		}
 		i.Commands[j].SetDesired(obj)
 
 		localLogger = logger.WithValues(
@@ -64,9 +71,6 @@ func (i *CommandInvoker) Run(ctx context.Context, k8sClient client.Client, schem
 
 		localLogger.Info("Built")
 
-		if err != nil {
-			return nil, fmt.Errorf("error building object: %w", err)
-		}
 		i.Commands[j].SetDesired(obj)
 
 		isOwner := false
@@ -78,7 +82,7 @@ func (i *CommandInvoker) Run(ctx context.Context, k8sClient client.Client, schem
 
 		exists, err := i.Commands[j].ResourceExists(localCtx, k8sClient)
 		if err != nil {
-			return nil, fmt.Errorf("error checking if resource exists: %w", err)
+			return nil, baseutils.LogErrorf(logger, "error checking if resource exists", err)
 		}
 
 		if !exists && !isOwner {
@@ -89,12 +93,12 @@ func (i *CommandInvoker) Run(ctx context.Context, k8sClient client.Client, schem
 			}
 
 			if err := ctrl.SetControllerReference(i.Commands[j].GetOwner(), obj, scheme); err != nil {
-				return nil, fmt.Errorf("failed to set controller reference on resource: %w", err)
+				return nil, baseutils.LogErrorf(logger, "failed to set controller reference on resource", err)
 			}
 		} else if exists {
 			// Update all objects
 			if err := i.Commands[j].Update(localCtx, k8sClient); err != nil {
-				return nil, fmt.Errorf("failed to update resource: %w", err)
+				return nil, baseutils.LogErrorf(logger, "failed to update resource", err)
 			}
 		}
 
@@ -114,7 +118,7 @@ func (i *CommandInvoker) BuildAllResources(ctx context.Context, scheme *runtime.
 
 		kind, err := i.Commands[j].GetGVK(scheme)
 		if err != nil {
-			return nil, fmt.Errorf("error getting GVK: %w", err)
+			return nil, baseutils.LogErrorf(logger, "error getting GVK", err)
 		}
 
 		localLogger := logger.WithValues(
@@ -128,7 +132,7 @@ func (i *CommandInvoker) BuildAllResources(ctx context.Context, scheme *runtime.
 
 		obj, err := i.Commands[j].Build(localCtx, k8sClient)
 		if err != nil {
-			return resources, fmt.Errorf("error building: %w", err)
+			return resources, baseutils.LogErrorf(logger, "error building", err)
 		}
 		if obj == nil {
 			continue
