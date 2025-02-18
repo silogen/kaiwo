@@ -16,7 +16,6 @@ package workloadjob
 
 import (
 	"context"
-	"fmt"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -75,7 +74,7 @@ func (k *BatchJobCommand) Build(ctx context.Context, k8sClient client.Client) (c
 	jobSpec.Template.ObjectMeta.Labels["job-name"] = kaiwoJob.Name
 
 	if err := controllerutils.AddEntrypoint(ctx, baseutils.ValueOrDefault(kaiwoJob.Spec.EntryPoint), &jobSpec.Template); err != nil {
-		return nil, fmt.Errorf("failed to add entrypoint: %v", err)
+		return nil, baseutils.LogErrorf(logger, "failed to add entrypoint: %v", err)
 	}
 
 	vendor := "AMD"
@@ -93,11 +92,11 @@ func (k *BatchJobCommand) Build(ctx context.Context, k8sClient client.Client) (c
 	}
 
 	if err := controllerutils.AdjustResourceRequestsAndLimits(ctx, vendor, baseutils.ValueOrDefault(kaiwoJob.Spec.Gpus), 1, baseutils.ValueOrDefault(kaiwoJob.Spec.Gpus), &jobSpec.Template); err != nil {
-		return nil, fmt.Errorf("failed to adjust resource requests and limits: %v", err)
+		return nil, baseutils.LogErrorf(logger, "failed to adjust resource requests and limits", err)
 	}
 
 	if err := controllerutils.AddEnvVars(ctx, baseutils.ValueOrDefault(kaiwoJob.Spec.EnvVars), &jobSpec.Template); err != nil {
-		return nil, fmt.Errorf("failed to add env vars: %v", err)
+		return nil, baseutils.LogErrorf(logger, "failed to add env vars", err)
 	}
 
 	job := &batchv1.Job{

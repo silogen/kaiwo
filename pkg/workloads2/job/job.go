@@ -16,7 +16,6 @@ package workloadjob
 
 import (
 	"context"
-	"fmt"
 
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -39,6 +38,8 @@ const DefaultKaiwoQueueConfigName = "kaiwo2"
 
 // BuildKaiwoJobInvoker builds the invoker required to construct the Kaiwo job resources
 func BuildKaiwoJobInvoker(ctx context.Context, scheme *runtime.Scheme, k8sClient client.Client, manifest *kaiwov1alpha1.KaiwoJob) (workloadutils.CommandInvoker, error) {
+	logger := log.FromContext(ctx)
+
 	// Ensure labels are set
 	if manifest.Spec.Labels == nil {
 		manifest.Spec.Labels = make(map[string]string)
@@ -124,7 +125,7 @@ func BuildKaiwoJobInvoker(ctx context.Context, scheme *runtime.Scheme, k8sClient
 	} else if manifest.Spec.IsRayJob() {
 		invoker.AddCommand(NewRayJobCommand(base, manifest))
 	} else {
-		return workloadutils.CommandInvoker{}, fmt.Errorf("KaiwoJob does not specify a valid Job or RayJob. You must either set ray to true or false, or provide a rayClusterSpec")
+		return workloadutils.CommandInvoker{}, baseutils.LogErrorf(logger, "KaiwoJob does not specify a valid Job or RayJob. You must either set ray to true or false, or provide a rayClusterSpec", nil)
 	}
 
 	return invoker, nil
@@ -167,7 +168,7 @@ func (k *KaiwoJobManifestCommand) Update(ctx context.Context, k8sClient client.C
 
 	jobSucceeded, jobFailed, err := checkJobCompletion(ctx, k8sClient, kaiwoJob)
 	if err != nil {
-		return err
+		return baseutils.LogErrorf(logger, "failed to check job completion", err)
 	}
 
 	if kaiwoJob.Status.StartTime == nil {
@@ -183,7 +184,7 @@ func (k *KaiwoJobManifestCommand) Update(ctx context.Context, k8sClient client.C
 
 	startTimeUpdated, err := checkPodStatus(ctx, k8sClient, kaiwoJob)
 	if err != nil {
-		return err
+		return baseutils.LogErrorf(logger, "failed to check pod status", err)
 	}
 
 	if startTimeUpdated && kaiwoJob.Status.CompletionTime != nil {
@@ -191,8 +192,7 @@ func (k *KaiwoJobManifestCommand) Update(ctx context.Context, k8sClient client.C
 	}
 
 	if err := k8sClient.Status().Update(ctx, kaiwoJob); err != nil {
-		logger.Error(err, "Failed to update KaiwoJob status")
-		return err
+		return baseutils.LogErrorf(logger, "failed to update KaiwoJob status", err)
 	}
 
 	logger.Info("Updated KaiwoJob status", "KaiwoJob", kaiwoJob.Name, "Status", kaiwoJob.Status.Status)
@@ -213,8 +213,7 @@ func checkJobCompletion(ctx context.Context, k8sClient client.Client, kaiwoJob *
 			jobFailed = job.Status.Failed > 0
 			jobSucceeded = job.Status.Succeeded > 0
 		} else if !errors.IsNotFound(err) {
-			logger.Error(err, "Failed to get Kubernetes Job status")
-			return false, false, err
+			return false, false, baseutils.LogErrorf(logger, "failed to check job status", err)
 		}
 	} else if kaiwoJob.Spec.IsRayJob() {
 		var rayJob rayv1.RayJob
@@ -226,11 +225,10 @@ func checkJobCompletion(ctx context.Context, k8sClient client.Client, kaiwoJob *
 				jobSucceeded = true
 			}
 		} else if !errors.IsNotFound(err) {
-			logger.Error(err, "Failed to get RayJob status")
-			return false, false, err
+			return false, false, baseutils.LogErrorf(logger, "failed to check ray job status", err)
 		}
 	} else {
-		return false, false, fmt.Errorf("KaiwoJob does not specify a valid Job or RayJob")
+		return false, false, baseutils.LogErrorf(logger, "KaiwoJob does not specify a valid Job or RayJob", nil)
 	}
 
 	return jobSucceeded, jobFailed, nil
@@ -253,8 +251,7 @@ func handleJobCompletion(ctx context.Context, k8sClient client.Client, kaiwoJob 
 	}
 
 	if err := k8sClient.Status().Update(ctx, kaiwoJob); err != nil {
-		logger.Error(err, "Failed to update KaiwoJob status on completion")
-		return err
+		return baseutils.LogErrorf(logger, "failed to update KaiwoJob status on completion", err)
 	}
 
 	logger.Info("Updated KaiwoJob on completion", "KaiwoJob", kaiwoJob.Name, "Status", kaiwoJob.Status.Status)
@@ -267,8 +264,7 @@ func checkPodStatus(ctx context.Context, k8sClient client.Client, kaiwoJob *kaiw
 	podList := &corev1.PodList{}
 	err := k8sClient.List(ctx, podList, client.InNamespace(kaiwoJob.Namespace), client.MatchingLabels{"job-name": kaiwoJob.Name})
 	if err != nil {
-		logger.Error(err, "Failed to list pods for job", "KaiwoJob", kaiwoJob.Name)
-		return false, err
+		return false, baseutils.LogErrorf(logger, "failed to list pods for job", err)
 	}
 
 	var runningPods, pendingPods []corev1.Pod
