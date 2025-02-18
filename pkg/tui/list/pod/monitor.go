@@ -18,30 +18,33 @@ import (
 	"context"
 	"fmt"
 
+	cliutils "github.com/silogen/kaiwo/pkg/cli/utils"
+
 	"github.com/silogen/kaiwo/pkg/k8s"
 	tuicomponents "github.com/silogen/kaiwo/pkg/tui/components"
-	"github.com/silogen/kaiwo/pkg/workloads/utils"
 )
 
 func runMonitorAction(ctx context.Context, clients k8s.KubernetesClients, state *tuicomponents.RunState) (tuicomponents.StepResult, tuicomponents.RunStep[tuicomponents.RunState], error) {
-	command := utils.ParseCommand(utils.DefaultMonitorCommand)
-	if err := utils.ValidateCommand(command[0]); err != nil {
+	command := cliutils.ParseCommand(cliutils.DefaultMonitorCommand)
+	if err := cliutils.ValidateCommand(command[0]); err != nil {
 		return tuicomponents.StepResultErr, nil, fmt.Errorf("failed to validate command: %w", err)
 	}
 
-	if err := utils.ExecInContainer(
-		ctx,
-		clients.Clientset,
-		clients.Kubeconfig,
-		state.PodName,
-		state.ContainerName,
-		state.Workload.GetNamespace(),
-		command,
-		true,
-		true,
-	); err != nil {
-		return tuicomponents.StepResultErr, nil, fmt.Errorf("failed to run monitor command: %w", err)
-	}
+	panic("")
+
+	//if err := cliutils.ExecInContainer(
+	//	ctx,
+	//	clients.Clientset,
+	//	clients.Kubeconfig,
+	//	state.PodName,
+	//	state.ContainerName,
+	//	state.Workload.GetNamespace(),
+	//	command,
+	//	true,
+	//	true,
+	//); err != nil {
+	//	return tuicomponents.StepResultErr, nil, fmt.Errorf("failed to run monitor command: %w", err)
+	//}
 
 	return tuicomponents.StepResultOk, nil, nil
 }

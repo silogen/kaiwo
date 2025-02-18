@@ -12,10 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package kaiwo
+package cliutils
 
-import "github.com/silogen/kaiwo/pkg/workloads"
+import (
+	corev1 "k8s.io/api/core/v1"
+)
 
-type Job struct {
-	workloads.WorkloadBase
+type PodSelectionPredicate func(pod corev1.Pod) bool
+
+func IsGPUPod(pod corev1.Pod) bool {
+	for _, container := range pod.Spec.Containers {
+		for resourceName := range container.Resources.Limits {
+			if resourceName == "nvidia.com/gpu" || resourceName == "amd.com/gpu" {
+				return true
+			}
+		}
+	}
+	return false
 }

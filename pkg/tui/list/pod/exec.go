@@ -18,11 +18,12 @@ import (
 	"context"
 	"fmt"
 
+	cliutils "github.com/silogen/kaiwo/pkg/cli/utils"
+
 	"github.com/charmbracelet/huh"
 
 	"github.com/silogen/kaiwo/pkg/k8s"
 	tuicomponents "github.com/silogen/kaiwo/pkg/tui/components"
-	"github.com/silogen/kaiwo/pkg/workloads/utils"
 )
 
 func runCommandAction(ctx context.Context, clients k8s.KubernetesClients, state *tuicomponents.RunState) (tuicomponents.StepResult, tuicomponents.RunStep[tuicomponents.RunState], error) {
@@ -51,26 +52,26 @@ func runCommandAction(ctx context.Context, clients k8s.KubernetesClients, state 
 			continue
 		}
 
-		command = utils.ParseCommand(execCommand)
-		if err := utils.ValidateCommand(command[0]); err != nil {
+		command = cliutils.ParseCommand(execCommand)
+		if err := cliutils.ValidateCommand(command[0]); err != nil {
 			return tuicomponents.StepResultErr, nil, fmt.Errorf("failed to validate command: %w", err)
 		}
 
 		break
 	}
-
-	if err := utils.ExecInContainer(
-		ctx,
-		clients.Clientset,
-		clients.Kubeconfig,
-		state.PodName,
-		state.ContainerName,
-		state.Workload.GetNamespace(),
-		command,
-		execInteractive,
-		execTTY,
-	); err != nil {
-		return tuicomponents.StepResultErr, nil, fmt.Errorf("failed to run command: %w", err)
-	}
-	return tuicomponents.StepResultOk, nil, nil
+	panic("Not implemented yet")
+	//if err := cliutils.ExecInContainer(
+	//	ctx,
+	//	clients.Clientset,
+	//	clients.Kubeconfig,
+	//	state.PodName,
+	//	state.ContainerName,
+	//	state.Workload.GetNamespace(),
+	//	command,
+	//	execInteractive,
+	//	execTTY,
+	//); err != nil {
+	//	return tuicomponents.StepResultErr, nil, fmt.Errorf("failed to run command: %w", err)
+	//}
+	//return tuicomponents.StepResultOk, nil, nil
 }

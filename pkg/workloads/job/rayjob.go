@@ -30,7 +30,7 @@ import (
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	workloadutils "github.com/silogen/kaiwo/pkg/workloads2/utils"
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 )
 
 func GetDefaultRayJobSpec(dangerous bool) rayv1.RayJobSpec {

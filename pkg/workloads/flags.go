@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package workloads2
+package workloads
 
 const (
 	KaiwoconfigFilename               = "kaiwoconfig"

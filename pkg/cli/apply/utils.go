@@ -20,7 +20,7 @@ import (
 	"github.com/spf13/cobra"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	"github.com/silogen/kaiwo/pkg/workloads2"
+	"github.com/silogen/kaiwo/pkg/workloads"
 )
 
 var (
@@ -75,7 +75,7 @@ func AddCliFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolVarP(dangerous, "dangerous", "", false, "Skip adding the default security context to containers")
 }
 
-func GetCLIFlags(cmd *cobra.Command) workloads2.CLIFlags {
+func GetCLIFlags(cmd *cobra.Command) workloads.CLIFlags {
 	if !cmd.Flags().Changed("image") {
 		image = nil
 	}
@@ -111,7 +111,7 @@ func GetCLIFlags(cmd *cobra.Command) workloads2.CLIFlags {
 
 	// GetCurrentUser
 
-	return workloads2.CLIFlags{
+	return workloads.CLIFlags{
 		// CreateNamespace:  createNamespace,
 		DryRun:           dryRun,
 		PrintOutput:      printOutput,

@@ -22,7 +22,7 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	workloadutils "github.com/silogen/kaiwo/pkg/workloads2/utils"
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"

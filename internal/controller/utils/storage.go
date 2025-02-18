@@ -19,7 +19,7 @@ import (
 	"fmt"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	workloadshared "github.com/silogen/kaiwo/pkg/workloads2/shared"
+	workloadshared "github.com/silogen/kaiwo/pkg/workloads/shared"
 
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/log"

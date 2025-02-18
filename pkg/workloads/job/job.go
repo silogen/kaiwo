@@ -24,8 +24,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	workloadshared "github.com/silogen/kaiwo/pkg/workloads2/shared"
-	workloadutils "github.com/silogen/kaiwo/pkg/workloads2/utils"
+	workloadshared "github.com/silogen/kaiwo/pkg/workloads/shared"
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
