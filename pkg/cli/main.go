@@ -15,16 +15,12 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
-	"strings"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	cli "github.com/silogen/kaiwo/pkg/cli/apply"
-	"github.com/silogen/kaiwo/pkg/workloads"
-	"github.com/silogen/kaiwo/pkg/workloads/utils"
 )
 
 // Build-time variables (set with -ldflags). Do not touch
@@ -85,40 +81,16 @@ func RunCli() {
 	})
 
 	rootCmd.AddCommand(cli.BuildSubmitCmd())
-	rootCmd.AddCommand(cli.BuildServeCmd())
+	// TODO re-enable
+	// rootCmd.AddCommand(cli.BuildServeCmd())
 
-	rootCmd.AddCommand(
-		BuildLogCmd(),
-		BuildListCmd(),
-		BuildMonitorCmd("monitor", utils.DefaultMonitorCommand),
-		BuildExecCommand(),
-	)
-
-	deleteCmd := &cobra.Command{
-		Use:   "delete -n [namespace] [workload-type]/[workload-name]",
-		Short: "Delete a workload. Workload type must be one of [kaiwojob, kaiwoservice]",
-		Args:  cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
-			split := strings.Split(args[0], "/")
-
-			if len(split) != 2 {
-				logrus.Fatalf("Invalid input format. Expected format: [workload-type]/[workload-name].")
-				return
-			}
-
-			workloadType := split[0]
-			name := split[1]
-
-			err := workloads.Cleanup(context.TODO(), workloadType, name, namespace, true)
-			if err != nil {
-				logrus.Errorf("Failed to delete workload: %v", err)
-			}
-		},
-	}
-
-	deleteCmd.Flags().StringVarP(&namespace, "namespace", "n", "kaiwo", "Kubenetes namespace to use. Defaults to `kaiwo`")
-
-	rootCmd.AddCommand(deleteCmd)
+	// TODO re-enable
+	//rootCmd.AddCommand(
+	//BuildLogCmd(),
+	//BuildListCmd(),
+	//BuildMonitorCmd("monitor", utils.DefaultMonitorCommand),
+	//BuildExecCommand(),
+	//)
 
 	if err := rootCmd.Execute(); err != nil {
 		logrus.Fatal(err)
