@@ -34,8 +34,6 @@ import (
 	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
 )
 
-const DefaultKaiwoQueueConfigName = "kaiwo"
-
 // KaiwoQueueConfigReconciler reconciles a KaiwoQueueConfig object
 type KaiwoQueueConfigReconciler struct {
 	client.Client
@@ -189,7 +187,7 @@ func (r *KaiwoQueueConfigReconciler) EnsureDefaultKaiwoQueueConfig(ctx context.C
 	logger := log.FromContext(ctx)
 
 	var queueConfig kaiwov1alpha1.KaiwoQueueConfig
-	err := r.Get(ctx, client.ObjectKey{Name: DefaultKaiwoQueueConfigName}, &queueConfig)
+	err := r.Get(ctx, client.ObjectKey{Name: controllerutils.DefaultKaiwoQueueConfigName}, &queueConfig)
 	if err == nil {
 		return nil
 	} else if !errors.IsNotFound(err) {
@@ -199,7 +197,7 @@ func (r *KaiwoQueueConfigReconciler) EnsureDefaultKaiwoQueueConfig(ctx context.C
 
 	logger.Info("Default KaiwoQueueConfig does not exist. Creating it now...")
 
-	if err := r.CreateDefaultKaiwoQueueConfig(ctx, DefaultKaiwoQueueConfigName); err != nil {
+	if err := r.CreateDefaultKaiwoQueueConfig(ctx, controllerutils.DefaultKaiwoQueueConfigName); err != nil {
 		logger.Error(err, "Failed to create default KaiwoQueueConfig")
 		return err
 	}
@@ -228,6 +226,8 @@ func (r *KaiwoQueueConfigReconciler) CreateDefaultKaiwoQueueConfig(ctx context.C
 			ResourceFlavors: resourceFlavors,
 		},
 	}
+
+	logger.Info("Creating the following kaiwoQueueConfig", name, defaultQueueConfig)
 
 	if err := r.Create(ctx, &defaultQueueConfig); err != nil {
 		logger.Error(err, "Failed to create default KaiwoQueueConfig")

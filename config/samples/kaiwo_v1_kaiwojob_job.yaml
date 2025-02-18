@@ -1,7 +1,7 @@
 apiVersion: kaiwo.silogen.ai/v1alpha1
 kind: KaiwoJob
 metadata:
-  name: test-job-kaiwojob
+  name: test-av-job-kaiwojob
   namespace: kaiwo
 spec:
   user: test@amd.com
@@ -63,5 +63,5 @@ spec:
             imagePullPolicy: Always
             # Just spin & wait forever
             command: [ "/bin/bash", "-c", "--" ]
-            args: [ "while true; do sleep 5; done;" ]
+            args: [ "sleep 30" ]
           restartPolicy: Never

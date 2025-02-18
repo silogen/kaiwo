@@ -34,6 +34,11 @@ import (
 var DefaultJobSpec = batchv1.JobSpec{
 	TTLSecondsAfterFinished: func(i int32) *int32 { return &i }(3600),
 	Template:                controllerutils.DefaultPodTemplateSpec,
+	Selector: &metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			"job-name": "PLACEHOLDER",
+		},
+	},
 }
 
 func (r *KaiwoJobReconciler) reconcileK8sJob(ctx context.Context, kaiwoJob *kaiwov1alpha1.KaiwoJob) (ctrl.Result, error) {
@@ -42,6 +47,22 @@ func (r *KaiwoJobReconciler) reconcileK8sJob(ctx context.Context, kaiwoJob *kaiw
 	var existingJob batchv1.Job
 	err := r.Get(ctx, client.ObjectKey{Name: kaiwoJob.Name, Namespace: kaiwoJob.Namespace}, &existingJob)
 	if err == nil {
+		logger.Info("Job already exists, ensuring owner reference is correct", "JobName", existingJob.Name)
+
+		if !metav1.IsControlledBy(&existingJob, kaiwoJob) {
+			if err := ctrl.SetControllerReference(kaiwoJob, &existingJob, r.Scheme); err != nil {
+				logger.Error(err, "Failed to set controller reference on existing Job")
+				return ctrl.Result{}, err
+			}
+
+			if err := r.Update(ctx, &existingJob); err != nil {
+				logger.Error(err, "Failed to update existing Job with correct owner reference")
+				return ctrl.Result{}, err
+			}
+
+			logger.Info("Updated owner reference for existing Job", "JobName", existingJob.Name)
+		}
+
 		return ctrl.Result{}, nil
 	} else if !errors.IsNotFound(err) {
 		logger.Error(err, "Failed to get existing Job")
@@ -82,11 +103,13 @@ func (r *KaiwoJobReconciler) reconcileK8sJob(ctx context.Context, kaiwoJob *kaiw
 		return ctrl.Result{}, err
 	}
 
+	jobSpec.Suspend = controllerutils.BoolPtr(true)
+
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      kaiwoJob.Name,
 			Namespace: kaiwoJob.Namespace,
-			Labels:    kaiwoJob.Spec.Labels,
+			Labels:    kaiwoJob.Labels,
 		},
 		Spec: jobSpec,
 	}

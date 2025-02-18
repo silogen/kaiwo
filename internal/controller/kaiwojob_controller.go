@@ -81,18 +81,18 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return *result, nil
 	}
 
-	if kaiwoJob.Spec.Labels == nil {
-		kaiwoJob.Spec.Labels = make(map[string]string)
+	if kaiwoJob.Labels == nil {
+		kaiwoJob.Labels = make(map[string]string)
 	}
 
-	kaiwoJob.Spec.Labels[kaiwov1alpha1.UserLabel] = baseutils.SanitizeStringForKubernetes(kaiwoJob.Spec.User)
+	kaiwoJob.Labels[kaiwov1alpha1.UserLabel] = baseutils.SanitizeStringForKubernetes(kaiwoJob.Spec.User)
 	if kaiwoJob.Spec.ClusterQueue == "" {
-		kaiwoJob.Spec.Labels[kaiwov1alpha1.QueueLabel] = DefaultKaiwoQueueConfigName
+		kaiwoJob.Labels[kaiwov1alpha1.QueueLabel] = controllerutils.DefaultKaiwoQueueConfigName
 	} else {
-		kaiwoJob.Spec.Labels[kaiwov1alpha1.QueueLabel] = kaiwoJob.Spec.ClusterQueue
+		kaiwoJob.Labels[kaiwov1alpha1.QueueLabel] = kaiwoJob.Spec.ClusterQueue
 	}
 
-	if err := controllerutils.CreateLocalQueue(ctx, r.Client, kaiwoJob.Spec.Labels[kaiwov1alpha1.QueueLabel], kaiwoJob.ObjectMeta.Namespace); err != nil {
+	if err := controllerutils.CreateLocalQueue(ctx, r.Client, kaiwoJob.Labels[kaiwov1alpha1.QueueLabel], kaiwoJob.ObjectMeta.Namespace); err != nil {
 		return ctrl.Result{}, err
 	}
 

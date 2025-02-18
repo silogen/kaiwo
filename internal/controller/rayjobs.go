@@ -138,7 +138,7 @@ func (r *KaiwoJobReconciler) reconcileRayJob(ctx context.Context, kaiwoJob *kaiw
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      kaiwoJob.Name,
 			Namespace: kaiwoJob.Namespace,
-			Labels:    kaiwoJob.Spec.Labels,
+			Labels:    kaiwoJob.Labels,
 		},
 		Spec: *rayJobSpec.DeepCopy(),
 	}
