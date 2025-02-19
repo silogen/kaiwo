@@ -71,11 +71,11 @@ type StorageSpec struct {
 }
 
 func (spec *StorageSpec) HasObjectStorageDownloads() bool {
-	return len(spec.Data.Download.S3) > 0 || len(spec.Data.Download.GCS) > 0 || len(spec.Data.Download.AzureBlob) > 0
+	return spec.Data != nil && (len(spec.Data.Download.S3) > 0 || len(spec.Data.Download.GCS) > 0 || len(spec.Data.Download.AzureBlob) > 0)
 }
 
 func (spec *StorageSpec) HasHfDownloads() bool {
-	return len(spec.HuggingFace.PreCacheRepos) > 0
+	return spec.HuggingFace != nil && len(spec.HuggingFace.PreCacheRepos) > 0
 }
 
 type DownloadTaskConfig struct {

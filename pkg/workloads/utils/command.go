@@ -68,13 +68,30 @@ func (cb *CommandBase[T]) GetGVK(scheme *runtime.Scheme) (schema.GroupVersionKin
 	return baseutils.GetGVK(*scheme, obj)
 }
 
+func (cb *CommandBase[T]) Get(ctx context.Context, k8sClient client.Client) (client.Object, error) {
+	obj := cb.Self.GetEmptyObject()
+	if err := k8sClient.Get(ctx, cb.Self.GetObjectKey(), obj); err != nil {
+		return nil, err
+	}
+	return obj, nil
+}
+
 func (cb *CommandBase[T]) SetDesired(object client.Object) {
 	cb.Desired = object
 }
 
+func (cb *CommandBase[T]) SetActual(object client.Object) {
+	cb.Actual = object
+}
+
 func (cb *CommandBase[T]) Create(ctx context.Context, k8sClient client.Client) error {
 	log.FromContext(ctx).Info("Creating object")
-	return k8sClient.Create(ctx, cb.Desired)
+	toCreate := cb.Desired.DeepCopyObject().(client.Object)
+
+	if err := k8sClient.Create(ctx, toCreate); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (cb *CommandBase[T]) Update(ctx context.Context, _ client.Client) error {
@@ -109,7 +126,10 @@ type Command interface {
 
 	SetDesired(object client.Object)
 
+	SetActual(object client.Object)
+
 	// ResourceExists checks if the resource exists. Must be run after Build().
+	// TODO refactor
 	ResourceExists(ctx context.Context, k8sClient client.Client) (bool, error)
 
 	// Create creates the object inside the Kubernetes cluster. Must be run after Build().

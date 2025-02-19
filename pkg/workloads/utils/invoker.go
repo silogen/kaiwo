@@ -97,6 +97,7 @@ func (i *CommandInvoker) Run(ctx context.Context, k8sClient client.Client, schem
 				localLogger.Error(err, "failed to create resource")
 				return nil, err
 			}
+
 			// logger.Info("Resource created", "resource", descriptor)
 		} else if exists {
 			// Update all objects

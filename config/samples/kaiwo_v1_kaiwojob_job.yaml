@@ -2,12 +2,12 @@ apiVersion: kaiwo.silogen.ai/v1alpha1
 kind: KaiwoJob
 metadata:
   name: test-job-kaiwojob
-  namespace: kaiwo-test
+  namespace: kaiwo
 spec:
   user: test@amd.com
   gpus: 0
   storage:
-    storageEnabled: false
+    storageEnabled: true
     storageClassName: "longhorn"
     accessMode: "ReadWriteOnce"
     data:

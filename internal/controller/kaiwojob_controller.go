@@ -47,6 +47,7 @@ type KaiwoJobReconciler struct {
 
 func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
+	logger.Info("Running reconciliation")
 
 	// Fetch the KaiwoJob instance
 	var kaiwoJob kaiwov1alpha1.KaiwoJob
