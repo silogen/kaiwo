@@ -18,8 +18,6 @@ import (
 	"context"
 	"fmt"
 
-	"sigs.k8s.io/controller-runtime/pkg/log"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
@@ -66,9 +64,9 @@ func NewStorageCommand[T any](
 }
 
 func (cmd *StorageCommand[T]) Build(ctx context.Context, k8sClient client.Client) (client.Object, error) {
-	logger := log.FromContext(ctx)
+	// logger := log.FromContext(ctx)
 
-	logger.Info(fmt.Sprintf("Building with amount: %s, access mode: %s", cmd.Amount, cmd.AccessMode))
+	// logger.Info(fmt.Sprintf("Building with amount: %s, access mode: %s", cmd.Amount, cmd.AccessMode))
 
 	objectKey := cmd.GetObjectKey()
 

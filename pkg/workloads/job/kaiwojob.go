@@ -76,7 +76,7 @@ func BuildKaiwoJobInvoker(ctx context.Context, scheme *runtime.Scheme, k8sClient
 	if storageSpec != nil && storageSpec.StorageEnabled {
 
 		// Ensure mount paths are set
-		if storageSpec.Data.IsRequested() && storageSpec.Data.MountPath == "" {
+		if storageSpec.Data != nil && storageSpec.Data.IsRequested() && storageSpec.Data.MountPath == "" {
 			// logger.Info("Data storage mount path not set, using default:" + defaultDataMountPath)
 			storageSpec.Data.MountPath = workloadshared.DefaultDataMountPath
 		}
@@ -121,10 +121,10 @@ func BuildKaiwoJobInvoker(ctx context.Context, scheme *runtime.Scheme, k8sClient
 	invoker.AddCommand(workloadshared.NewKaiwoLocalQueueCommand(base, manifest.Spec.Labels[kaiwov1alpha1.QueueLabel], manifest.Namespace))
 
 	if manifest.Spec.IsBatchJob() {
-		logger.Info("Manifest describes a batch job")
+		// logger.Info("Manifest describes a batch job")
 		invoker.AddCommand(NewBatchJobCommand(base, manifest))
 	} else if manifest.Spec.IsRayJob() {
-		logger.Info("Manifest describes a Ray job")
+		// logger.Info("Manifest describes a Ray job")
 		invoker.AddCommand(NewRayJobCommand(base, manifest))
 	} else {
 		return workloadutils.CommandInvoker{}, baseutils.LogErrorf(logger, "KaiwoJob does not specify a valid Job or RayJob. You must either set ray to true or false, or provide a rayClusterSpec", nil)
@@ -176,7 +176,7 @@ func (k *KaiwoJobManifestCommand) Update(ctx context.Context, k8sClient client.C
 	if kaiwoJob.Status.StartTime == nil {
 		if startTime := getEarliestPodStartTime(ctx, k8sClient, kaiwoJob); startTime != nil {
 			kaiwoJob.Status.StartTime = startTime
-			logger.Info("Set KaiwoJob StartTime", "KaiwoJob", kaiwoJob.Name, "StartTime", startTime)
+			// logger.Info("Set KaiwoJob StartTime", "KaiwoJob", kaiwoJob.Name, "StartTime", startTime)
 		}
 	}
 
@@ -288,7 +288,7 @@ func checkPodStatus(ctx context.Context, k8sClient client.Client, kaiwoJob *kaiw
 
 	if earliestRunningTime != nil && kaiwoJob.Status.StartTime == nil {
 		kaiwoJob.Status.StartTime = earliestRunningTime
-		logger.Info("Set KaiwoJob StartTime", "KaiwoJob", kaiwoJob.Name, "StartTime", earliestRunningTime)
+		// logger.Info("Set KaiwoJob StartTime", "KaiwoJob", kaiwoJob.Name, "StartTime", earliestRunningTime)
 		return true, nil
 	}
 

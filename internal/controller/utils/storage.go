@@ -16,26 +16,24 @@ package controllerutils
 
 import (
 	"context"
-	"fmt"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 	workloadshared "github.com/silogen/kaiwo/pkg/workloads/shared"
 
 	corev1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 )
 
 func UpdatePodSpecStorage(ctx context.Context, podSpec *corev1.PodSpec, storageSpec v1alpha1.StorageSpec, ownerName string) error {
-	logger := log.FromContext(ctx)
+	// logger := log.FromContext(ctx)
 
 	if !storageSpec.StorageEnabled || storageSpec.Data == nil {
 		return nil
 	}
 
 	addStorageVolume := func(name string, claimName string) {
-		logger.Info("Adding volume", "volumeName", name)
+		// logger.Info("Adding volume", "volumeName", name)
 		podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
 			Name: name,
 			VolumeSource: corev1.VolumeSource{
@@ -56,7 +54,7 @@ func UpdatePodSpecStorage(ctx context.Context, podSpec *corev1.PodSpec, storageS
 	}
 
 	addVolumeMount := func(container *corev1.Container, name string, path string) {
-		logger.Info(fmt.Sprintf("Adding %s volume mount to %s", name, container.Name))
+		// logger.Info(fmt.Sprintf("Adding %s volume mount to %s", name, container.Name))
 		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
 			Name:      name,
 			MountPath: path,
@@ -64,7 +62,7 @@ func UpdatePodSpecStorage(ctx context.Context, podSpec *corev1.PodSpec, storageS
 	}
 
 	addEnvVar := func(container *corev1.Container, name string, value string) {
-		logger.Info(fmt.Sprintf("Adding %s env var to %s", name, container.Name))
+		// logger.Info(fmt.Sprintf("Adding %s env var to %s", name, container.Name))
 		container.Env = append(container.Env, corev1.EnvVar{
 			Name:  name,
 			Value: value,

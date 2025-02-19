@@ -79,7 +79,7 @@ func (k *RayJobCommand) Build(ctx context.Context, k8sClient client.Client) (cli
 
 	var rayJobSpec rayv1.RayJobSpec
 	if kaiwoJob.Spec.RayJob == nil {
-		logger.Info("RayJobSpec is nil, using DefaultRayJobSpec", "KaiwoJob", kaiwoJob.Name)
+		// logger.Info("RayJobSpec is nil, using DefaultRayJobSpec", "KaiwoJob", kaiwoJob.Name)
 		rayJobSpec = GetDefaultRayJobSpec(baseutils.ValueOrDefault(kaiwoJob.Spec.Dangerous))
 	} else {
 		rayJobSpec = kaiwoJob.Spec.RayJob.Spec

@@ -78,8 +78,8 @@ func (cb *CommandBase[T]) Create(ctx context.Context, k8sClient client.Client) e
 }
 
 func (cb *CommandBase[T]) Update(ctx context.Context, _ client.Client) error {
-	logger := log.FromContext(ctx)
-	logger.Info("Object exists, skipping update")
+	// logger := log.FromContext(ctx)
+	// logger.Info("Object exists, skipping update")
 	return nil
 }
 
