@@ -16,6 +16,10 @@ package cli
 
 import (
 	"fmt"
+	"path/filepath"
+	"strings"
+
+	"github.com/silogen/kaiwo/internal/controller"
 
 	"github.com/spf13/cobra"
 
@@ -42,6 +46,8 @@ var (
 	gpus           = baseutils.Pointer(0)
 	replicas       = baseutils.Pointer(0)
 	gpusPerReplica = baseutils.Pointer(0)
+
+	queue = baseutils.Pointer("")
 
 	dangerous = baseutils.Pointer(false)
 	useRay    = baseutils.Pointer(false)
@@ -73,6 +79,8 @@ func AddCliFlags(cmd *cobra.Command) {
 	cmd.Flags().IntVarP(gpusPerReplica, "gpus-per-replica", "", 0, "Number of GPUs requested per replica")
 	cmd.Flags().BoolVarP(useRay, "ray", "", false, "Use ray for submitting the workload")
 	cmd.Flags().BoolVarP(dangerous, "dangerous", "", false, "Skip adding the default security context to containers")
+
+	cmd.Flags().StringVarP(queue, "queue", "", controller.DefaultKaiwoQueueConfigName, "The local queue to use for jobs")
 }
 
 func GetCLIFlags(cmd *cobra.Command) workloads.CLIFlags {
@@ -108,6 +116,9 @@ func GetCLIFlags(cmd *cobra.Command) workloads.CLIFlags {
 		}
 		user = &currentUser
 	}
+	if name == "" {
+		name = makeWorkloadName(path, baseutils.ValueOrDefault(image), baseutils.ValueOrDefault(version), *user)
+	}
 
 	// GetCurrentUser
 
@@ -130,5 +141,39 @@ func GetCLIFlags(cmd *cobra.Command) workloads.CLIFlags {
 		Dangerous:        dangerous,
 		User:             user,
 		DevReconcile:     devReconcile,
+		Queue:            queue,
 	}
+}
+
+func makeWorkloadName(path string, image string, version string, currentUser string) string {
+	var appendix string
+
+	if path != "" {
+		appendix = baseutils.SanitizeStringForKubernetes(filepath.Base(path))
+	} else if image != "" {
+		appendix = baseutils.SanitizeStringForKubernetes(image)
+	} else {
+		appendix = ""
+	}
+
+	// Calculate the max allowed length for the appendix
+	separatorCount := 1 // At least one "-" between username and appendix
+	if version != "" {
+		version = baseutils.SanitizeStringForKubernetes(version)
+		separatorCount = 2 // Include one more "-" for the version
+	}
+	maxAppendixLength := 45 - len(currentUser) - len(version) - separatorCount
+
+	// Truncate appendix if necessary
+	if len(appendix) > maxAppendixLength {
+		appendix = appendix[:maxAppendixLength]
+	}
+
+	// Combine components
+	components := []string{currentUser, appendix}
+	if version != "" {
+		components = append(components, version)
+	}
+
+	return baseutils.SanitizeStringForKubernetes(strings.Join(components, "-"))
 }

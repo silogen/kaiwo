@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
-	workloadjob "github.com/silogen/kaiwo/pkg/workloads2/job"
+	workloadjob "github.com/silogen/kaiwo/pkg/workloads/job"
 )
 
 // KaiwoJobReconciler reconciles a KaiwoJob object
