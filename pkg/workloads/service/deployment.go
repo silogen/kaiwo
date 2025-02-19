@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package controller
+package service
 
 //var DefaultDeploymentSpec = appsv1.DeploymentSpec{
 //	Replicas: baseutils.Pointer(int32(1)),
