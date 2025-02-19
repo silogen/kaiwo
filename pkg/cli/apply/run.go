@@ -99,11 +99,6 @@ func Apply(applier WorkloadApplier, flags workloads.CLIFlags) error {
 		return fmt.Errorf("error getting k8s client: %v", err)
 	}
 
-	invoker, err := applier.GetInvoker(ctx, &scheme, k8sClient)
-	if err != nil {
-		return fmt.Errorf("failed to get invoker: %w", err)
-	}
-
 	if flags.DryRun {
 		logger.Info("Performing server-side dry run")
 		if err := ApplyServerSideDryRun(ctx, k8sClient, manifest); err != nil {
@@ -115,6 +110,12 @@ func Apply(applier WorkloadApplier, flags workloads.CLIFlags) error {
 		}
 	} else if flags.Preview {
 		logger.Info("Previewing manifests that the Kaiwo resource would create. Please note that the output is intended for limited debugging only.")
+
+		invoker, err := applier.GetInvoker(ctx, &scheme, k8sClient)
+		if err != nil {
+			return fmt.Errorf("failed to get invoker: %w", err)
+		}
+
 		resources, err := invoker.BuildAllResources(ctx, &scheme, k8sClient)
 		if err != nil {
 			return fmt.Errorf("failed to build resources: %w", err)
@@ -129,12 +130,6 @@ func Apply(applier WorkloadApplier, flags workloads.CLIFlags) error {
 		logger.Info("Creating Kaiwo resource on cluster")
 		if err := ApplyCreate(ctx, k8sClient, scheme, manifest); err != nil {
 			return fmt.Errorf("error creating resource: %v", err)
-		}
-		if flags.DevReconcile {
-			logger.Info("Running a dev reconcile loop")
-			if _, err := invoker.Run(ctx, k8sClient, &scheme); err != nil {
-				return fmt.Errorf("error running invoker: %v", err)
-			}
 		}
 	}
 
