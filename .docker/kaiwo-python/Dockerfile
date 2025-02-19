@@ -19,4 +19,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY kaiwo /app/kaiwo
+COPY test /app/test
 WORKDIR /app

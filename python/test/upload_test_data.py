@@ -13,7 +13,7 @@ TEST_BUCKET_NAME = "test"
 def get_gcp_test_root() -> CloudPath:
     # Set the environment variable for the emulator
 
-    os.environ["STORAGE_EMULATOR_HOST"] = "http://localhost:9023"
+    os.environ["STORAGE_EMULATOR_HOST"] = "http://gcs-service:9023"
     client = storage.Client(project="test-project")
 
     bucket_name = TEST_BUCKET_NAME
@@ -32,7 +32,7 @@ def get_s3_test_root() -> CloudPath:
         "s3",
         aws_access_key_id="minio",
         aws_secret_access_key="minio123",
-        endpoint_url="http://localhost:9000",
+        endpoint_url="http://minio-service:9000",
     )
 
     bucket_name = TEST_BUCKET_NAME
@@ -48,14 +48,14 @@ def get_s3_test_root() -> CloudPath:
         client=S3Client(
             aws_access_key_id="minio",
             aws_secret_access_key="minio123",
-            endpoint_url="http://localhost:9000",
+            endpoint_url="http://minio-service:9000",
         ),
     )
 
 
 def get_azure_test_root() -> CloudPath:
     container_name = TEST_BUCKET_NAME
-    connection_string = "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;QueueEndpoint=http://127.0.0.1:10001/devstoreaccount1;TableEndpoint=http://127.0.0.1:10002/devstoreaccount1;"
+    connection_string = "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite-service:10000/devstoreaccount1;QueueEndpoint=http://azurite-service:10001/devstoreaccount1;TableEndpoint=http://azurite-service:10002/devstoreaccount1;"
 
     blob_service_client = BlobServiceClient.from_connection_string(connection_string)
     client = AzureBlobClient(blob_service_client=blob_service_client)
@@ -75,10 +75,10 @@ def upload_test_data(root: CloudPath) -> None:
 
 
 if __name__ == "__main__":
-    # print("Uploading GCP test data to local emulator")
-    # upload_test_data(get_gcp_test_root())
-    # print("Uploading S3 test data to local Minio")
-    # upload_test_data(get_s3_test_root())
+    print("Uploading GCP test data to local emulator")
+    upload_test_data(get_gcp_test_root())
+    print("Uploading S3 test data to local Minio")
+    upload_test_data(get_s3_test_root())
     print("Uploading Azure test data to local azurite")
     upload_test_data(get_azure_test_root())
     print("Done!")
