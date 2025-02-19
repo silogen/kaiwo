@@ -15,7 +15,7 @@
 package tuicomponents
 
 import (
-	"github.com/silogen/kaiwo/pkg/cli/utils"
+	cliutils "github.com/silogen/kaiwo/pkg/cli/utils"
 )
 
 type RunState struct {

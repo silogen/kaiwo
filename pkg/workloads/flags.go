@@ -42,6 +42,8 @@ type CLIFlags struct {
 
 	BaseManifestPath string
 
+	Queue *string
+
 	// Run without modifying resources
 	DryRun       bool
 	PrintOutput  bool

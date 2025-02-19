@@ -121,8 +121,10 @@ func BuildKaiwoJobInvoker(ctx context.Context, scheme *runtime.Scheme, k8sClient
 	invoker.AddCommand(workloadshared.NewKaiwoLocalQueueCommand(base, manifest.Spec.Labels[kaiwov1alpha1.QueueLabel], manifest.Namespace))
 
 	if manifest.Spec.IsBatchJob() {
+		logger.Info("Manifest describes a batch job")
 		invoker.AddCommand(NewBatchJobCommand(base, manifest))
 	} else if manifest.Spec.IsRayJob() {
+		logger.Info("Manifest describes a Ray job")
 		invoker.AddCommand(NewRayJobCommand(base, manifest))
 	} else {
 		return workloadutils.CommandInvoker{}, baseutils.LogErrorf(logger, "KaiwoJob does not specify a valid Job or RayJob. You must either set ray to true or false, or provide a rayClusterSpec", nil)

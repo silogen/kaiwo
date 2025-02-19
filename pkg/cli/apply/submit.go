@@ -80,6 +80,7 @@ func (k *KaiwoJobSubmitter) FromCliFlags(flags workloads.CLIFlags) {
 			Namespace: flags.Namespace,
 		},
 		Spec: v1alpha1.KaiwoJobSpec{
+			ClusterQueue:   flags.Queue,
 			Image:          flags.Image,
 			User:           flags.User,
 			Gpus:           flags.GPUs,

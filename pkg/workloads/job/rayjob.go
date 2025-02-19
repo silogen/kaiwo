@@ -104,7 +104,7 @@ func (k *RayJobCommand) Build(ctx context.Context, k8sClient client.Client) (cli
 	replicas := baseutils.ValueOrDefault(kaiwoJob.Spec.Replicas)
 	gpusPerReplica := baseutils.ValueOrDefault(kaiwoJob.Spec.GpusPerReplica)
 
-	if replicas == 0 || gpusPerReplica == 0 {
+	if baseutils.ValueOrDefault(kaiwoJob.Spec.Gpus) > 0 || gpusPerReplica > 0 {
 		// Only calculate if it is needed, otherwise avoid interacting with the cluster
 		var err error
 		replicas, gpusPerReplica, err = controllerutils.CalculateNumberOfReplicas(

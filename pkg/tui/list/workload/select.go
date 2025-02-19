@@ -20,7 +20,6 @@ import (
 
 	"github.com/silogen/kaiwo/pkg/k8s"
 	tuicomponents "github.com/silogen/kaiwo/pkg/tui/components"
-	podlist "github.com/silogen/kaiwo/pkg/tui/list/pod"
 )
 
 func RunSelectWorkloadType(_ context.Context, _ k8s.KubernetesClients, state *tuicomponents.RunState) (tuicomponents.StepResult, tuicomponents.RunStep[tuicomponents.RunState], error) {
@@ -105,35 +104,35 @@ func runSelectWorkload(ctx context.Context, clients k8s.KubernetesClients, state
 	//return result, runSelectWorkloadAction, nil
 }
 
-func runSelectWorkloadAction(_ context.Context, _ k8s.KubernetesClients, _ *tuicomponents.RunState) (tuicomponents.StepResult, tuicomponents.RunStep[tuicomponents.RunState], error) {
-	type workloadAction string
-	var (
-		viewPods       workloadAction = "View pods"
-		portForward    workloadAction = "Port-forward"
-		deleteWorkload workloadAction = "Delete workload"
-	)
-
-	data := [][]string{
-		{string(viewPods)},
-		{string(portForward)},
-		{string(deleteWorkload)},
-	}
-	title := "Select the action you wish to take on the workload"
-	selectedRow, result, err := tuicomponents.RunSelectTable(data, []string{"Action"}, title, true)
-	if err != nil {
-		return result, nil, fmt.Errorf("failed to select the action: %w", err)
-	}
-
-	actionMap := map[workloadAction]tuicomponents.RunStep[tuicomponents.RunState]{
-		viewPods:       podlist.RunSelectPodAndContainer,
-		portForward:    runPortForward,
-		deleteWorkload: runDeleteWorkload,
-	}
-
-	if result == tuicomponents.StepResultOk {
-		selectedAction := workloadAction(data[selectedRow][0])
-		return result, actionMap[selectedAction], nil
-	}
-
-	return result, nil, nil
-}
+//func runSelectWorkloadAction(_ context.Context, _ k8s.KubernetesClients, _ *tuicomponents.RunState) (tuicomponents.StepResult, tuicomponents.RunStep[tuicomponents.RunState], error) {
+//	type workloadAction string
+//	var (
+//		viewPods       workloadAction = "View pods"
+//		portForward    workloadAction = "Port-forward"
+//		deleteWorkload workloadAction = "Delete workload"
+//	)
+//
+//	data := [][]string{
+//		{string(viewPods)},
+//		{string(portForward)},
+//		{string(deleteWorkload)},
+//	}
+//	title := "Select the action you wish to take on the workload"
+//	selectedRow, result, err := tuicomponents.RunSelectTable(data, []string{"Action"}, title, true)
+//	if err != nil {
+//		return result, nil, fmt.Errorf("failed to select the action: %w", err)
+//	}
+//
+//	actionMap := map[workloadAction]tuicomponents.RunStep[tuicomponents.RunState]{
+//		viewPods: podlist.RunSelectPodAndContainer,
+//		portForward:    runPortForward,
+//		deleteWorkload: runDeleteWorkload,
+//	}
+//
+//	if result == tuicomponents.StepResultOk {
+//		selectedAction := workloadAction(data[selectedRow][0])
+//		return result, actionMap[selectedAction], nil
+//	}
+//
+//	return result, nil, nil
+//}

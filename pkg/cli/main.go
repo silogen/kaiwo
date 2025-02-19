@@ -31,7 +31,6 @@ var (
 )
 
 var (
-	namespace string
 	verbosity int
 	quiet     int
 )

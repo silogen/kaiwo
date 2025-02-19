@@ -21,13 +21,13 @@ import (
 	tuicomponents "github.com/silogen/kaiwo/pkg/tui/components"
 )
 
-var containerSelectColumns = []string{
-	"Logical group",
-	"Pod name",
-	"Pod phase",
-	"Container name",
-	"Container status",
-}
+//var containerSelectColumns = []string{
+//	"Logical group",
+//	"Pod name",
+//	"Pod phase",
+//	"Container name",
+//	"Container status",
+//}
 
 //// ChoosePodAndContainer allows the User to choose the pod and the container they want to interact with
 //// predicates define an optional list of predicates that must be matched in order to include the pod in the list
