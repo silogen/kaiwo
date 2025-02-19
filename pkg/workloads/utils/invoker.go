@@ -50,8 +50,6 @@ func (i *CommandInvoker) Run(ctx context.Context, k8sClient client.Client, schem
 
 		localCtx := log.IntoContext(ctx, localLogger)
 
-		localLogger.Info("Building")
-
 		obj, err := i.Commands[j].Build(localCtx, k8sClient)
 		if err != nil {
 			return nil, baseutils.LogErrorf(logger, "error building object", err)
@@ -67,8 +65,6 @@ func (i *CommandInvoker) Run(ctx context.Context, k8sClient client.Client, schem
 		}
 
 		localLogger = logger.WithValues("object", descriptor)
-
-		localLogger.Info("Built")
 
 		i.Commands[j].SetDesired(obj)
 
@@ -88,20 +84,20 @@ func (i *CommandInvoker) Run(ctx context.Context, k8sClient client.Client, schem
 			// Create if object doesn't exist, and it is a dependent object (don't try to recreate the owner custom resource)
 
 			owner := i.Commands[j].GetOwner()
-			ownerDescriptor, err := baseutils.GetObjectDescriptor(*scheme, owner)
-			if err != nil {
-				return nil, baseutils.LogErrorf(logger, "error getting object descriptor", err)
-			}
-			logger.Info("Setting controller reference", "owner", ownerDescriptor)
+			// ownerDescriptor, err := baseutils.GetObjectDescriptor(*scheme, owner)
+			//if err != nil {
+			//	return nil, baseutils.LogErrorf(logger, "error getting object descriptor", err)
+			//}
+			// logger.Info("Setting controller reference", "owner", ownerDescriptor)
 			if err := ctrl.SetControllerReference(owner, obj, scheme); err != nil {
 				return nil, baseutils.LogErrorf(logger, "failed to set controller reference on resource", err)
 			}
-
+			logger.Info("Creating resource", "resource", descriptor)
 			if err := i.Commands[j].Create(localCtx, k8sClient); err != nil {
 				localLogger.Error(err, "failed to create resource")
 				return nil, err
 			}
-			logger.Info("Resource created", "resource", descriptor)
+			// logger.Info("Resource created", "resource", descriptor)
 		} else if exists {
 			// Update all objects
 			if err := i.Commands[j].Update(localCtx, k8sClient); err != nil {
@@ -135,8 +131,6 @@ func (i *CommandInvoker) BuildAllResources(ctx context.Context, scheme *runtime.
 
 		localCtx := log.IntoContext(ctx, localLogger)
 
-		localLogger.Info("Building")
-
 		obj, err := i.Commands[j].Build(localCtx, k8sClient)
 		if err != nil {
 			return resources, baseutils.LogErrorf(logger, "error building", err)
@@ -144,8 +138,6 @@ func (i *CommandInvoker) BuildAllResources(ctx context.Context, scheme *runtime.
 		if obj == nil {
 			continue
 		}
-
-		localLogger.Info("Built successfully")
 
 		i.Commands[j].SetDesired(obj)
 		resources = append(resources, obj)

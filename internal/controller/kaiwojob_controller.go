@@ -20,6 +20,8 @@ import (
 	"context"
 	"fmt"
 
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
+
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -50,8 +52,7 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	var kaiwoJob kaiwov1alpha1.KaiwoJob
 	if err := r.Get(ctx, req.NamespacedName, &kaiwoJob); err != nil {
 		if client.IgnoreNotFound(err) != nil {
-			logger.Error(err, "Failed to get KaiwoJob")
-			return ctrl.Result{}, err
+			return ctrl.Result{}, baseutils.LogErrorf(logger, "failed to get KaiwoJob", err)
 		}
 		return ctrl.Result{}, nil
 	}

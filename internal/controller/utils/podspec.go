@@ -99,8 +99,8 @@ func AdjustResourceRequestsAndLimits(ctx context.Context, gpuVendor string, gpuC
 	// Modify resource requests/limits only if GPUs are requested
 	if gpuCount > 0 {
 		podTemplateSpec.Spec.Containers[0].Resources = getResourceRequestsAndLimits(gpuResourceKey, int32(gpuCount))
-		logger.Info("Successfully adjusted resource requests and limits",
-			"Container", podTemplateSpec.Spec.Containers[0].Name)
+		// logger.Info("Successfully adjusted resource requests and limits",
+		// 	"Container", podTemplateSpec.Spec.Containers[0].Name)
 	}
 
 	// Append new GPU-related environment variables to the container
@@ -113,9 +113,9 @@ func AdjustResourceRequestsAndLimits(ctx context.Context, gpuVendor string, gpuC
 	// Append to existing environment variables
 	podTemplateSpec.Spec.Containers[0].Env = append(podTemplateSpec.Spec.Containers[0].Env, envVarsToAppend...)
 
-	logger.Info("Successfully added GPU environment variables",
-		"Container", podTemplateSpec.Spec.Containers[0].Name,
-		"Total Env Vars", len(podTemplateSpec.Spec.Containers[0].Env))
+	// logger.Info("Successfully added GPU environment variables",
+	// 	"Container", podTemplateSpec.Spec.Containers[0].Name,
+	// 	"Total Env Vars", len(podTemplateSpec.Spec.Containers[0].Env))
 
 	return nil
 }
@@ -125,7 +125,7 @@ func AddEntrypoint(ctx context.Context, entrypoint string, podTemplateSpec *core
 	logger := log.FromContext(ctx)
 
 	if entrypoint == "" {
-		logger.Info("Entrypoint is empty, skipping modification")
+		// logger.Info("Entrypoint is empty, skipping modification")
 		return nil
 	}
 
@@ -135,10 +135,10 @@ func AddEntrypoint(ctx context.Context, entrypoint string, podTemplateSpec *core
 		return err
 	}
 
-	logger.Info("Adding entrypoint to container", "Entrypoint", entrypoint, "Container", podTemplateSpec.Spec.Containers[0].Name)
+	// logger.Info("Adding entrypoint to container", "Entrypoint", entrypoint, "Container", podTemplateSpec.Spec.Containers[0].Name)
 	podTemplateSpec.Spec.Containers[0].Command = []string{"sh", "-c", entrypoint}
 
-	logger.Info("Successfully added entrypoint", "Entrypoint", entrypoint)
+	// logger.Info("Successfully added entrypoint", "Entrypoint", entrypoint)
 	return nil
 }
 
@@ -153,14 +153,14 @@ func AddEnvVars(ctx context.Context, UserEnvVars []corev1.EnvVar, podTemplateSpe
 
 	container := &podTemplateSpec.Spec.Containers[0]
 
-	logger.Info("Appending user environment variables", "Container", container.Name, "ExistingVars", len(container.Env), "NewVars", len(UserEnvVars))
+	// logger.Info("Appending user environment variables", "Container", container.Name, "ExistingVars", len(container.Env), "NewVars", len(UserEnvVars))
 
 	// Append UserEnvVars without overriding existing ones
 	container.Env = append(container.Env, UserEnvVars...)
 
-	logger.Info("Updated container environment variables", "Container", container.Name, "TotalVars", len(container.Env))
+	// logger.Info("Updated container environment variables", "Container", container.Name, "TotalVars", len(container.Env))
 
-	logger.Info("Successfully added environment variables")
+	// logger.Info("Successfully added environment variables")
 	return nil
 }
 

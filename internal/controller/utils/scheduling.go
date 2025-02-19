@@ -132,7 +132,7 @@ func CalculateNumberOfReplicas(ctx context.Context, k8sClient client.Client, gpu
 
 	// If user has already set these values, use those
 	if userReplicas > 0 && userGpusPerReplica > 0 {
-		logger.Info("User-defined replicas and GPUs per replica provided", "Replicas", userReplicas, "GPUs per Replica", userGpusPerReplica)
+		// logger.Info("User-defined replicas and GPUs per replica provided", "Replicas", userReplicas, "GPUs per Replica", userGpusPerReplica)
 		return userReplicas, userGpusPerReplica, nil
 	}
 
@@ -199,6 +199,6 @@ func CalculateNumberOfReplicas(ctx context.Context, k8sClient client.Client, gpu
 	replicas := (totalGpus + minGpusPerNode - 1) / minGpusPerNode // Round up
 	gpusPerReplica := totalGpus / replicas
 
-	logger.Info("Calculated replicas and GPUs per replica", "Replicas", replicas, "GPUs per Replica", gpusPerReplica)
+	// logger.Info("Calculated replicas and GPUs per replica", "Replicas", replicas, "GPUs per Replica", gpusPerReplica)
 	return replicas, gpusPerReplica, nil
 }

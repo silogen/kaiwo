@@ -64,10 +64,10 @@ func (k *BatchJobCommand) Build(ctx context.Context, k8sClient client.Client) (c
 	var jobSpec batchv1.JobSpec
 
 	if kaiwoJob.Spec.Job == nil {
-		logger.Info("JobSpec is nil, using default JobSpec", "KaiwoJob", kaiwoJob.Name)
+		// logger.Info("JobSpec is nil, using default JobSpec", "KaiwoJob", kaiwoJob.Name)
 		jobSpec = GetDefaultJobSpec(baseutils.ValueOrDefault(kaiwoJob.Spec.Dangerous))
 	} else {
-		logger.Info("JobSpec is provided", "KaiwoJob", kaiwoJob.Name)
+		// logger.Info("JobSpec is provided", "KaiwoJob", kaiwoJob.Name)
 		jobSpec = kaiwoJob.Spec.Job.Spec
 	}
 
@@ -85,14 +85,14 @@ func (k *BatchJobCommand) Build(ctx context.Context, k8sClient client.Client) (c
 	if kaiwoJob.Spec.GpuVendor != nil {
 		vendor = *kaiwoJob.Spec.GpuVendor
 	}
-	logger.Info("GPU Vendor", "vendor", vendor)
+	// logger.Info("GPU Vendor", "vendor", vendor)
 
 	if baseutils.ValueOrDefault(kaiwoJob.Spec.Gpus) == 0 {
 		gpuResourceKey := corev1.ResourceName(controllerutils.GetGpuResourceKey(vendor))
 		if gpuQuantity, exists := jobSpec.Template.Spec.Containers[0].Resources.Requests[gpuResourceKey]; exists {
 			kaiwoJob.Spec.Gpus = baseutils.Pointer(int(gpuQuantity.Value()))
 		}
-		logger.Info("GPU resource request", "resource", gpuResourceKey.String())
+		// logger.Info("GPU resource request", "resource", gpuResourceKey.String())
 	}
 
 	if err := controllerutils.AdjustResourceRequestsAndLimits(ctx, vendor, baseutils.ValueOrDefault(kaiwoJob.Spec.Gpus), 1, baseutils.ValueOrDefault(kaiwoJob.Spec.Gpus), &jobSpec.Template); err != nil {

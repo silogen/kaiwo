@@ -68,9 +68,7 @@ func (cmd *DownloadJobConfigMapCommand) Build(ctx context.Context, k8sClient cli
 		if ref.File == "" {
 			// Path where the secret will be mounted on in the primary container
 			ref.File = filepath.Join(secretsMount, ref.SecretName, ref.SecretKey)
-			logger.Info("Setting secret path", "ref", ref)
-		} else {
-			logger.Info("Ignoring secret path, as file is set", "ref", ref)
+			// logger.Info("Setting secret path", "ref", ref)
 		}
 	}
 
@@ -137,7 +135,7 @@ func NewDownloadJobCommand(base workloadutils.CommandBase[workloadutils.CommandS
 }
 
 func (cmd *DownloadJobCommand) Build(ctx context.Context, k8sClient client.Client) (client.Object, error) {
-	logger := log.FromContext(ctx)
+	// logger := log.FromContext(ctx)
 
 	configMount := "/config"
 
@@ -174,7 +172,7 @@ func (cmd *DownloadJobCommand) Build(ctx context.Context, k8sClient client.Clien
 				},
 			},
 		}
-		logger.Info("Object storage downloads enabled", "pvc_name", volume.PersistentVolumeClaim.ClaimName, "mount_path", downloadConfig.DownloadRoot)
+		// logger.Info("Object storage downloads enabled", "pvc_name", volume.PersistentVolumeClaim.ClaimName, "mount_path", downloadConfig.DownloadRoot)
 
 		volumes = append(volumes, volume)
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
@@ -195,7 +193,7 @@ func (cmd *DownloadJobCommand) Build(ctx context.Context, k8sClient client.Clien
 						},
 					},
 				}
-				logger.Info("Added secret volume source", "secret_name", ref.SecretName)
+				// logger.Info("Added secret volume source", "secret_name", ref.SecretName)
 			}
 
 			path := ref.SecretKey
@@ -230,7 +228,7 @@ func (cmd *DownloadJobCommand) Build(ctx context.Context, k8sClient client.Clien
 			}
 			volumeMounts = append(volumeMounts, volumeMount)
 			volumes = append(volumes, *secretVolume)
-			logger.Info("Added secret mount", "secret_name", secretName, "mount_path", volumeMount.MountPath)
+			// logger.Info("Added secret mount", "secret_name", secretName, "mount_path", volumeMount.MountPath)
 		}
 	}
 
@@ -244,7 +242,7 @@ func (cmd *DownloadJobCommand) Build(ctx context.Context, k8sClient client.Clien
 			},
 		}
 		volumes = append(volumes, volume)
-		logger.Info("HF caching enabled", "pvc_name", volume.PersistentVolumeClaim.ClaimName, "mount_path", downloadConfig.HfHome)
+		// logger.Info("HF caching enabled", "pvc_name", volume.PersistentVolumeClaim.ClaimName, "mount_path", downloadConfig.HfHome)
 
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
 			Name:      "hf",
@@ -305,13 +303,17 @@ func (cmd *DownloadJobCommand) GetObjectKey() client.ObjectKey {
 
 func (cmd *DownloadJobCommand) GetCurrentReconcileResult(ctx context.Context) *ctrl.Result {
 	logger := log.FromContext(ctx)
+	actual, ok := cmd.Actual.(*batchv1.Job)
+	if !ok {
+		panic("expected batchv1.Job")
+	}
 	// If job has finished, return
-	if cmd.State.DownloadJob.Status.Succeeded >= 1 {
-		logger.Info("Download job completed successfully")
+	if actual.Status.Succeeded >= 1 {
+		// logger.Info("Download job completed successfully")
 		return nil
-	} else if cmd.State.DownloadJob.Status.Failed >= 1 {
+	} else if actual.Status.Failed >= 1 {
 		// TODO Update status?
-		logger.Info("Download job failed")
+		// logger.Info("Download job failed")
 		return &ctrl.Result{}
 	} else {
 		logger.Info("Download job still in progress, requeuing until it is complete")
