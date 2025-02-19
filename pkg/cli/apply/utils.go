@@ -28,10 +28,9 @@ import (
 )
 
 var (
-	dryRun       bool
-	printOutput  bool
-	preview      bool
-	devReconcile bool
+	dryRun      bool
+	printOutput bool
+	preview     bool
 
 	// createNamespace  bool
 	baseManifestPath string
@@ -62,7 +61,6 @@ func AddCliFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolVarP(&printOutput, "print", "", false, "Print the generated workload manifest without submitting it")
 	cmd.Flags().BoolVarP(&preview, "preview", "", false, "Preview all the resources that the Kaiwo operator would create from this manifest")
 	cmd.MarkFlagsMutuallyExclusive("dry-run", "print", "preview")
-	cmd.Flags().BoolVarP(&devReconcile, "dev-reconcile", "", false, "Create the resource and then run a single reconciliation loop")
 
 	cmd.Flags().StringVarP(&path, "path", "p", "", "Path to directory for workload code, entrypoint/serveconfig, env-file, etc. Either image or path is mandatory")
 	cmd.Flags().StringVarP(&baseManifestPath, "base-manifest", "", "", "Optional path to a base manifest file")
@@ -140,7 +138,6 @@ func GetCLIFlags(cmd *cobra.Command) workloads.CLIFlags {
 		UseRay:           useRay,
 		Dangerous:        dangerous,
 		User:             user,
-		DevReconcile:     devReconcile,
 		Queue:            queue,
 	}
 }
