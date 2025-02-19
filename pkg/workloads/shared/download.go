@@ -225,7 +225,7 @@ func (cmd *DownloadJobCommand) Build(ctx context.Context, k8sClient client.Clien
 
 		for secretName, secretVolume := range secretVolumes {
 			volumeMount := corev1.VolumeMount{
-				Name:      secretName,
+				Name:      "secret-" + secretName,
 				MountPath: secretsMount + "/" + secretName,
 			}
 			volumeMounts = append(volumeMounts, volumeMount)
