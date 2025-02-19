@@ -16,6 +16,7 @@ package workloadjob
 
 import (
 	"context"
+	"fmt"
 
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -80,7 +81,7 @@ func BuildKaiwoJobInvoker(ctx context.Context, scheme *runtime.Scheme, k8sClient
 			// logger.Info("Data storage mount path not set, using default:" + defaultDataMountPath)
 			storageSpec.Data.MountPath = workloadshared.DefaultDataMountPath
 		}
-		if storageSpec.HuggingFace.IsRequested() && storageSpec.HuggingFace.MountPath == "" {
+		if storageSpec.HuggingFace != nil && storageSpec.HuggingFace.IsRequested() && storageSpec.HuggingFace.MountPath == "" {
 			// logger.Info("Hugging Face storage mount path not set, using default:" + defaultHfMountPath)
 			storageSpec.HuggingFace.MountPath = workloadshared.DefaultHfMountPath
 		}
@@ -166,7 +167,14 @@ func (k *KaiwoJobManifestCommand) GetObjectKey() client.ObjectKey {
 func (k *KaiwoJobManifestCommand) Update(ctx context.Context, k8sClient client.Client) error {
 	logger := log.FromContext(ctx)
 
-	kaiwoJob := k.KaiwoJob
+	obj, err := k.Get(ctx, k8sClient)
+	if err != nil {
+		return fmt.Errorf("error fetching object: %w", err)
+	}
+	kaiwoJob, ok := obj.(*kaiwov1alpha1.KaiwoJob)
+	if !ok {
+		return fmt.Errorf("expected KaiwoJob got %T", kaiwoJob)
+	}
 
 	jobSucceeded, jobFailed, err := checkJobCompletion(ctx, k8sClient, kaiwoJob)
 	if err != nil {
@@ -193,7 +201,9 @@ func (k *KaiwoJobManifestCommand) Update(ctx context.Context, k8sClient client.C
 		kaiwoJob.Status.Duration = int64(kaiwoJob.Status.CompletionTime.Time.Sub(kaiwoJob.Status.StartTime.Time).Seconds())
 	}
 
-	if err := k8sClient.Status().Update(ctx, kaiwoJob); err != nil {
+	patch := client.MergeFrom(kaiwoJob.DeepCopy())
+
+	if err := k8sClient.Status().Patch(ctx, kaiwoJob, patch); err != nil {
 		return baseutils.LogErrorf(logger, "failed to update KaiwoJob status", err)
 	}
 
