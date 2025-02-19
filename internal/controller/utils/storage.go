@@ -30,7 +30,7 @@ import (
 func UpdatePodSpecStorage(ctx context.Context, podSpec *corev1.PodSpec, storageSpec v1alpha1.StorageSpec, ownerName string) error {
 	logger := log.FromContext(ctx)
 
-	if !storageSpec.StorageEnabled {
+	if !storageSpec.StorageEnabled || storageSpec.Data == nil {
 		return nil
 	}
 
