@@ -66,7 +66,7 @@ func (k *KaiwoJobSubmitter) LoadFromPath(path string) error {
 }
 
 func (k *KaiwoJobSubmitter) GetInvoker(ctx context.Context, scheme *runtime.Scheme, k8sClient client.Client) (workloadutils.CommandInvoker, error) {
-	invoker, err := workloadjob.BuildKaiwoJobInvoker(ctx, scheme, k8sClient, k.Job)
+	invoker, err := workloadjob.BuildKaiwoJobInvoker(ctx, scheme, k.Job)
 	if err != nil {
 		return workloadutils.CommandInvoker{}, fmt.Errorf("failed to build invoker: %w", err)
 	}

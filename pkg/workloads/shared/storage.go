@@ -96,11 +96,8 @@ func (cmd *StorageCommand[T]) GetEmptyObject() client.Object {
 	return &corev1.PersistentVolumeClaim{}
 }
 
-func (cmd *StorageCommand[T]) GetObjectKey() client.ObjectKey {
-	return client.ObjectKey{
-		Namespace: cmd.Owner.GetNamespace(),
-		Name:      baseutils.FormatNameWithPostfix(cmd.Owner.GetName(), cmd.PvcNamePostfix),
-	}
+func (cmd *StorageCommand[T]) GetName() string {
+	return baseutils.FormatNameWithPostfix(cmd.OwnerName, cmd.PvcNamePostfix)
 }
 
 func SetStorage(state *workloadutils.CommandStateBase, pvc *corev1.PersistentVolumeClaim, target string) {

@@ -184,9 +184,6 @@ func (k *RayJobCommand) GetEmptyObject() client.Object {
 	return &rayv1.RayJob{}
 }
 
-func (k *RayJobCommand) GetObjectKey() client.ObjectKey {
-	return client.ObjectKey{
-		Namespace: k.KaiwoJob.Namespace,
-		Name:      k.KaiwoJob.Name,
-	}
+func (k *RayJobCommand) GetName() string {
+	return k.KaiwoJob.Name
 }

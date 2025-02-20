@@ -38,7 +38,7 @@ import (
 const DefaultKaiwoQueueConfigName = "kaiwo2"
 
 // BuildKaiwoJobInvoker builds the invoker required to construct the Kaiwo job resources
-func BuildKaiwoJobInvoker(ctx context.Context, scheme *runtime.Scheme, k8sClient client.Client, manifest *kaiwov1alpha1.KaiwoJob) (workloadutils.CommandInvoker, error) {
+func BuildKaiwoJobInvoker(ctx context.Context, scheme *runtime.Scheme, manifest *kaiwov1alpha1.KaiwoJob) (workloadutils.CommandInvoker, error) {
 	logger := log.FromContext(ctx)
 
 	// Ensure labels are set
@@ -62,9 +62,8 @@ func BuildKaiwoJobInvoker(ctx context.Context, scheme *runtime.Scheme, k8sClient
 	state := &workloadutils.CommandStateBase{}
 
 	base := workloadutils.CommandBase[workloadutils.CommandStateBase]{
-		Owner:  manifest,
-		Scheme: scheme,
-		State:  state,
+		State:     state,
+		Namespace: manifest.Namespace,
 	}
 
 	// Build invoker
@@ -157,23 +156,63 @@ func (k *KaiwoJobManifestCommand) Build(ctx context.Context, k8sClient client.Cl
 	return k.KaiwoJob, nil
 }
 
-func (k *KaiwoJobManifestCommand) GetObjectKey() client.ObjectKey {
-	return client.ObjectKey{
-		Namespace: k.KaiwoJob.Namespace,
-		Name:      k.KaiwoJob.Name,
-	}
+func (k *KaiwoJobManifestCommand) GetName() string {
+	return k.KaiwoJob.Name
 }
 
-func (k *KaiwoJobManifestCommand) Update(ctx context.Context, k8sClient client.Client) error {
-	logger := log.FromContext(ctx)
-
-	obj, err := k.Get(ctx, k8sClient)
-	if err != nil {
-		return fmt.Errorf("error fetching object: %w", err)
+func GetObject[T client.Object](ctx context.Context, k8sClient client.Client, cmd workloadutils.Command) (T, error) {
+	obj, ok := cmd.GetEmptyObject().(T)
+	if !ok {
+		return obj, fmt.Errorf("object type mismatch")
 	}
+	if err := k8sClient.Get(ctx, cmd.GetObjectKey(), obj); err != nil {
+		return obj, fmt.Errorf("error fetching object: %w", err)
+	}
+	return obj, nil
+}
+
+func (k *KaiwoJobManifestCommand) GatherStatus(ctx context.Context, k8sClient client.Client, obj client.Object) (*kaiwov1alpha1.KaiwoJobStatus, error) {
 	kaiwoJob, ok := obj.(*kaiwov1alpha1.KaiwoJob)
 	if !ok {
-		return fmt.Errorf("expected KaiwoJob got %T", kaiwoJob)
+		return nil, fmt.Errorf("object is not KaiwoJob")
+	}
+
+	currentStatus := kaiwoJob.Status.DeepCopy()
+
+	jobSucceeded, jobFailed, err := checkJobCompletion(ctx, k8sClient, kaiwoJob)
+	if err != nil {
+		return nil, err
+	}
+
+	_, earliestStartTime, status, err := fetchStartTimeAndStatus(ctx, k8sClient, client.ObjectKeyFromObject(kaiwoJob))
+
+	if currentStatus.StartTime == nil {
+		currentStatus.StartTime = earliestStartTime
+	}
+
+	if jobSucceeded || jobFailed {
+	} else {
+
+		if err != nil {
+			return nil, fmt.Errorf("error fetching start time and status: %w", err)
+		}
+
+		if currentStatus.StartTime == nil {
+			currentStatus.StartTime = nil // startTime
+		}
+
+		currentStatus.Status = status
+	}
+
+	return currentStatus, nil
+}
+
+func (k *KaiwoJobManifestCommand) Update(ctx context.Context, k8sClient client.Client, obj client.Object) error {
+	logger := log.FromContext(ctx)
+
+	kaiwoJob, ok := obj.(*kaiwov1alpha1.KaiwoJob)
+	if !ok {
+		return fmt.Errorf("object is not KaiwoJob")
 	}
 
 	jobSucceeded, jobFailed, err := checkJobCompletion(ctx, k8sClient, kaiwoJob)
@@ -192,14 +231,14 @@ func (k *KaiwoJobManifestCommand) Update(ctx context.Context, k8sClient client.C
 		return handleJobCompletion(ctx, k8sClient, kaiwoJob, jobSucceeded)
 	}
 
-	startTimeUpdated, err := checkPodStatus(ctx, k8sClient, kaiwoJob)
-	if err != nil {
-		return baseutils.LogErrorf(logger, "failed to check pod status", err)
-	}
+	//startTimeUpdated, err := checkPodStatus(ctx, k8sClient, kaiwoJob)
+	//if err != nil {
+	//	return baseutils.LogErrorf(logger, "failed to check pod status", err)
+	//}
 
-	if startTimeUpdated && kaiwoJob.Status.CompletionTime != nil {
-		kaiwoJob.Status.Duration = int64(kaiwoJob.Status.CompletionTime.Time.Sub(kaiwoJob.Status.StartTime.Time).Seconds())
-	}
+	//if startTimeUpdated && k.KaiwoJob.Status.CompletionTime != nil {
+	//	kaiwoJob.Status.Duration = int64(k.KaiwoJob.Status.CompletionTime.Time.Sub(k.KaiwoJob.Status.StartTime.Time).Seconds())
+	//}
 
 	if err := k8sClient.Status().Update(ctx, kaiwoJob); err != nil {
 		return baseutils.LogErrorf(logger, "failed to update KaiwoJob status", err)
@@ -276,19 +315,26 @@ func handleJobCompletion(ctx context.Context, k8sClient client.Client, kaiwoJob 
 	return nil
 }
 
-func checkPodStatus(ctx context.Context, k8sClient client.Client, kaiwoJob *kaiwov1alpha1.KaiwoJob) (bool, error) {
+func fetchStartTimeAndStatus(ctx context.Context, k8sClient client.Client, objectKey client.ObjectKey) (*metav1.Time, *metav1.Time, kaiwov1alpha1.Status, error) {
 	logger := log.FromContext(ctx)
 
 	podList := &corev1.PodList{}
-	err := k8sClient.List(ctx, podList, client.InNamespace(kaiwoJob.Namespace), client.MatchingLabels{"job-name": kaiwoJob.Name})
+	err := k8sClient.List(ctx, podList, client.InNamespace(objectKey.Namespace), client.MatchingLabels{"job-name": objectKey.Name})
 	if err != nil {
-		return false, baseutils.LogErrorf(logger, "failed to list pods for job", err)
+		return nil, nil, kaiwov1alpha1.StatusNew, baseutils.LogErrorf(logger, "failed to list pods for job", err)
 	}
 
 	var runningPods, pendingPods []corev1.Pod
 	var earliestRunningTime *metav1.Time
+	var earliestStartTime *metav1.Time
 
 	for _, pod := range podList.Items {
+		if pod.Status.StartTime != nil {
+			if earliestStartTime == nil || pod.Status.StartTime.Before(earliestStartTime) {
+				earliestStartTime = pod.Status.StartTime
+			}
+		}
+
 		switch pod.Status.Phase {
 		case corev1.PodRunning:
 			runningPods = append(runningPods, pod)
@@ -302,21 +348,17 @@ func checkPodStatus(ctx context.Context, k8sClient client.Client, kaiwoJob *kaiw
 		}
 	}
 
-	if earliestRunningTime != nil && kaiwoJob.Status.StartTime == nil {
-		kaiwoJob.Status.StartTime = earliestRunningTime
-		// logger.Info("Set KaiwoJob StartTime", "KaiwoJob", kaiwoJob.Name, "StartTime", earliestRunningTime)
-		return true, nil
-	}
+	var status kaiwov1alpha1.Status
 
 	if len(runningPods) > 0 {
-		kaiwoJob.Status.Status = kaiwov1alpha1.StatusRunning
+		status = kaiwov1alpha1.StatusRunning
 	} else if len(pendingPods) > 0 {
-		kaiwoJob.Status.Status = kaiwov1alpha1.StatusStarting
+		status = kaiwov1alpha1.StatusStarting
 	} else {
-		kaiwoJob.Status.Status = kaiwov1alpha1.StatusPending
+		status = kaiwov1alpha1.StatusPending
 	}
 
-	return false, nil
+	return earliestRunningTime, earliestStartTime, status, nil
 }
 
 func getEarliestPodStartTime(ctx context.Context, k8sClient client.Client, kaiwoJob *kaiwov1alpha1.KaiwoJob) *metav1.Time {

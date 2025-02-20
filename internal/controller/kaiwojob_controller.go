@@ -58,7 +58,7 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, nil
 	}
 
-	invoker, err := workloadjob.BuildKaiwoJobInvoker(ctx, r.Scheme, r.Client, &kaiwoJob)
+	invoker, err := workloadjob.BuildKaiwoJobInvoker(ctx, r.Scheme, &kaiwoJob)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to build invoker: %v", err)
 	}

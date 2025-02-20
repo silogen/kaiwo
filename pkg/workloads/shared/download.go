@@ -113,11 +113,8 @@ func (cmd *DownloadJobConfigMapCommand) GetEmptyObject() client.Object {
 	return &corev1.ConfigMap{}
 }
 
-func (cmd *DownloadJobConfigMapCommand) GetObjectKey() client.ObjectKey {
-	return client.ObjectKey{
-		Namespace: cmd.Owner.GetNamespace(),
-		Name:      baseutils.FormatNameWithPostfix(cmd.Owner.GetName(), "download"),
-	}
+func (cmd *DownloadJobConfigMapCommand) GetName() string {
+	return baseutils.FormatNameWithPostfix(cmd.OwnerName, "download")
 }
 
 type DownloadJobCommand struct {
@@ -168,7 +165,7 @@ func (cmd *DownloadJobCommand) Build(ctx context.Context, k8sClient client.Clien
 			Name: "data",
 			VolumeSource: corev1.VolumeSource{
 				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-					ClaimName: baseutils.FormatNameWithPostfix(cmd.Owner.GetName(), "data"),
+					ClaimName: baseutils.FormatNameWithPostfix(cmd.OwnerName, "data"),
 				},
 			},
 		}
@@ -237,7 +234,7 @@ func (cmd *DownloadJobCommand) Build(ctx context.Context, k8sClient client.Clien
 			Name: "hf",
 			VolumeSource: corev1.VolumeSource{
 				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-					ClaimName: baseutils.FormatNameWithPostfix(cmd.Owner.GetName(), "hf"),
+					ClaimName: baseutils.FormatNameWithPostfix(cmd.OwnerName, "hf"),
 				},
 			},
 		}
@@ -294,11 +291,8 @@ func (cmd *DownloadJobCommand) GetEmptyObject() client.Object {
 	return &batchv1.Job{}
 }
 
-func (cmd *DownloadJobCommand) GetObjectKey() client.ObjectKey {
-	return client.ObjectKey{
-		Namespace: cmd.Owner.GetNamespace(),
-		Name:      baseutils.FormatNameWithPostfix(cmd.Owner.GetName(), "download"),
-	}
+func (cmd *DownloadJobCommand) GetName() string {
+	return baseutils.FormatNameWithPostfix(cmd.OwnerName, "download")
 }
 
 func (cmd *DownloadJobCommand) GetCurrentReconcileResult(ctx context.Context, k8sClient client.Client) (*ctrl.Result, error) {
