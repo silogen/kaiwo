@@ -86,7 +86,7 @@ func BuildKaiwoJobInvoker(ctx context.Context, scheme *runtime.Scheme, k8sClient
 			storageSpec.HuggingFace.MountPath = workloadshared.DefaultHfMountPath
 		}
 
-		if storageSpec.Data != nil {
+		if storageSpec.HasObjectStorageDownloads() {
 			// Add data PVC
 			invoker.AddCommand(workloadshared.NewStorageCommand(
 				base,
@@ -97,7 +97,7 @@ func BuildKaiwoJobInvoker(ctx context.Context, scheme *runtime.Scheme, k8sClient
 				workloadshared.SetStorage,
 			))
 		}
-		if storageSpec.HuggingFace != nil {
+		if storageSpec.HasHfDownloads() {
 			// Add HuggingFace PVC
 			invoker.AddCommand(workloadshared.NewStorageCommand(
 				base,
@@ -109,7 +109,7 @@ func BuildKaiwoJobInvoker(ctx context.Context, scheme *runtime.Scheme, k8sClient
 			))
 		}
 
-		if storageSpec.HasObjectStorageDownloads() || storageSpec.HasHfDownloads() {
+		if storageSpec.HasObjectStorageDownloads() {
 			invoker.AddCommand(workloadshared.NewDownloadJobConfigMapCommand(base, storageSpec))
 			invoker.AddCommand(workloadshared.NewDownloadJobCommand(base, storageSpec))
 		}
@@ -201,13 +201,11 @@ func (k *KaiwoJobManifestCommand) Update(ctx context.Context, k8sClient client.C
 		kaiwoJob.Status.Duration = int64(kaiwoJob.Status.CompletionTime.Time.Sub(kaiwoJob.Status.StartTime.Time).Seconds())
 	}
 
-	patch := client.MergeFrom(kaiwoJob.DeepCopy())
-
-	if err := k8sClient.Status().Patch(ctx, kaiwoJob, patch); err != nil {
+	if err := k8sClient.Status().Update(ctx, kaiwoJob); err != nil {
 		return baseutils.LogErrorf(logger, "failed to update KaiwoJob status", err)
 	}
 
-	logger.Info("Updated KaiwoJob status", "KaiwoJob", kaiwoJob.Name, "Status", kaiwoJob.Status.Status)
+	logger.Info(fmt.Sprintf("Updated KaiwoJob status: %s", kaiwoJob.Status.Status), "KaiwoJob", kaiwoJob.Name, "Status", kaiwoJob.Status.Status)
 	return nil
 }
 
@@ -222,8 +220,16 @@ func checkJobCompletion(ctx context.Context, k8sClient client.Client, kaiwoJob *
 	if kaiwoJob.Spec.IsBatchJob() {
 		var job batchv1.Job
 		if err := k8sClient.Get(ctx, client.ObjectKey{Name: kaiwoJob.Name, Namespace: kaiwoJob.Namespace}, &job); err == nil {
-			jobFailed = job.Status.Failed > 0
-			jobSucceeded = job.Status.Succeeded > 0
+			failedJobs := job.Status.Failed
+			succeededJobs := job.Status.Succeeded
+
+			if job.Status.UncountedTerminatedPods != nil {
+				failedJobs += int32(len((*job.Status.UncountedTerminatedPods).Failed))
+				succeededJobs += int32(len((*job.Status.UncountedTerminatedPods).Succeeded))
+			}
+
+			jobFailed = failedJobs > 0
+			jobSucceeded = succeededJobs > 0
 		} else if !errors.IsNotFound(err) {
 			return false, false, baseutils.LogErrorf(logger, "failed to check job status", err)
 		}

@@ -106,7 +106,7 @@ func (i *CommandInvoker) Run(ctx context.Context, k8sClient client.Client, schem
 			}
 		}
 
-		currentResult := i.Commands[j].GetCurrentReconcileResult(ctx)
+		currentResult, _ := i.Commands[j].GetCurrentReconcileResult(ctx, k8sClient)
 		if currentResult != nil {
 			// If a command needs to interrupt with a result, return it
 			return currentResult, nil
