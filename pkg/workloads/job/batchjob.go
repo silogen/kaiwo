@@ -125,9 +125,6 @@ func (k *BatchJobCommand) GetEmptyObject() client.Object {
 	return &batchv1.Job{}
 }
 
-func (k *BatchJobCommand) GetObjectKey() client.ObjectKey {
-	return client.ObjectKey{
-		Namespace: k.KaiwoJob.Namespace,
-		Name:      k.KaiwoJob.Name,
-	}
+func (k *BatchJobCommand) GetName() string {
+	return k.KaiwoJob.Name
 }

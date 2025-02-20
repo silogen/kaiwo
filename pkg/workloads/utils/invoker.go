@@ -17,6 +17,8 @@ package workloadutils
 import (
 	"context"
 
+	"k8s.io/apimachinery/pkg/api/errors"
+
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -36,76 +38,90 @@ func (i *CommandInvoker) AddCommand(cmd Command) {
 
 func (i *CommandInvoker) Run(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme) (*ctrl.Result, error) {
 	logger := log.FromContext(ctx)
+	var owner client.Object
+
 	for j := 0; j < len(i.Commands); j++ {
-		kind, err := i.Commands[j].GetGVK(scheme)
-		if err != nil {
-			return nil, baseutils.LogErrorf(logger, "error getting GVK: %w", err)
-		}
 
-		localLogger := logger.WithValues(
-			"kind", kind.Kind,
-			"version", kind.Version,
-			"group", kind.Group,
-		)
+		//kind, err := i.Commands[j].GetGVK(scheme)
+		//if err != nil {
+		//	return nil, baseutils.LogErrorf(logger, "error getting GVK: %w", err)
+		//}
 
-		localCtx := log.IntoContext(ctx, localLogger)
+		//localLogger := logger.WithValues(
+		//	"kind", kind.Kind,
+		//	"version", kind.Version,
+		//	"group", kind.Group,
+		//)
 
-		obj, err := i.Commands[j].Build(localCtx, k8sClient)
+		// localCtx := log.IntoContext(ctx, localLogger)
+
+		desired, err := i.Commands[j].Build(ctx, k8sClient)
 		if err != nil {
 			return nil, baseutils.LogErrorf(logger, "error building object", err)
 		}
-		if obj == nil {
+		if desired == nil {
 			return nil, baseutils.LogErrorf(logger, "error building object", err)
 		}
-		i.Commands[j].SetDesired(obj)
 
-		descriptor, err := baseutils.GetObjectDescriptor(*scheme, obj)
+		descriptor, err := baseutils.GetObjectDescriptor(*scheme, desired)
 		if err != nil {
 			return nil, baseutils.LogErrorf(logger, "error getting object descriptor", err)
 		}
 
-		localLogger = logger.WithValues("object", descriptor)
+		// localLogger = logger.WithValues("object", descriptor)
 
-		i.Commands[j].SetDesired(obj)
+		objectKey := i.Commands[j].GetObjectKey()
 
-		isOwner := false
-		if obj == i.Commands[j].GetOwner() {
-			isOwner = true
-		}
+		actual := i.Commands[j].GetEmptyObject()
+		exists := false
 
-		localCtx = log.IntoContext(ctx, localLogger)
-
-		exists, err := i.Commands[j].ResourceExists(localCtx, k8sClient)
-		if err != nil {
-			return nil, baseutils.LogErrorf(logger, "error checking if resource exists", err)
-		}
-
-		if !exists && !isOwner {
-			// Create if object doesn't exist, and it is a dependent object (don't try to recreate the owner custom resource)
-
-			owner := i.Commands[j].GetOwner()
-			// ownerDescriptor, err := baseutils.GetObjectDescriptor(*scheme, owner)
-			//if err != nil {
-			//	return nil, baseutils.LogErrorf(logger, "error getting object descriptor", err)
-			//}
-			// logger.Info("Setting controller reference", "owner", ownerDescriptor)
-			if err := ctrl.SetControllerReference(owner, obj, scheme); err != nil {
-				return nil, baseutils.LogErrorf(logger, "failed to set controller reference on resource", err)
+		if err := k8sClient.Get(ctx, objectKey, actual); err != nil {
+			// Try to fetch the object to retrieve the latest actual state
+			if !errors.IsNotFound(err) {
+				return nil, baseutils.LogErrorf(logger, "error getting object", err)
 			}
+		} else {
+			exists = true
+		}
+
+		if exists {
+			// Update the object
+			retries := 0
+			for {
+				if err := i.Commands[j].Update(ctx, k8sClient, actual); err == nil {
+					// Updated successfully
+					break
+				} else if !errors.IsConflict(err) || retries > 3 {
+					return nil, baseutils.LogErrorf(logger, "failed to update resource", err)
+				} else {
+					logger.Error(err, "Failed to update, retrying")
+					retries += 1
+					if err := k8sClient.Get(ctx, objectKey, actual); err != nil {
+						// Try to fetch the object to retrieve the latest actual state
+						if !errors.IsNotFound(err) {
+							return nil, baseutils.LogErrorf(logger, "error getting object", err)
+						}
+					}
+				}
+			}
+		} else {
+			// Create the object
+			if owner != nil {
+				// Set the owner
+				if err := ctrl.SetControllerReference(owner, desired, scheme); err != nil {
+					return nil, baseutils.LogErrorf(logger, "failed to set controller reference on resource", err)
+				}
+			}
+
 			logger.Info("Creating resource", "resource", descriptor)
-			if err := i.Commands[j].Create(localCtx, k8sClient); err != nil {
-				localLogger.Error(err, "failed to create resource")
-				return nil, err
-			}
-
-			// logger.Info("Resource created", "resource", descriptor)
-		} else if exists {
-			// Update all objects
-			if err := i.Commands[j].Update(localCtx, k8sClient); err != nil {
-				return nil, baseutils.LogErrorf(logger, "failed to update resource", err)
+			if err := k8sClient.Create(ctx, desired); err != nil {
+				return nil, baseutils.LogErrorf(logger, "error creating object", err)
 			}
 		}
 
+		if owner == nil && j == 0 {
+			owner = actual
+		}
 		currentResult, _ := i.Commands[j].GetCurrentReconcileResult(ctx, k8sClient)
 		if currentResult != nil {
 			// If a command needs to interrupt with a result, return it
@@ -120,19 +136,7 @@ func (i *CommandInvoker) BuildAllResources(ctx context.Context, scheme *runtime.
 	logger := log.FromContext(ctx)
 	for j := 0; j < len(i.Commands); j++ {
 
-		kind, err := i.Commands[j].GetGVK(scheme)
-		if err != nil {
-			return nil, baseutils.LogErrorf(logger, "error getting GVK", err)
-		}
-
-		localLogger := logger.WithValues(
-			"gvk", kind,
-			"objectKey", i.Commands[j].GetObjectKey(),
-		)
-
-		localCtx := log.IntoContext(ctx, localLogger)
-
-		obj, err := i.Commands[j].Build(localCtx, k8sClient)
+		obj, err := i.Commands[j].Build(ctx, k8sClient)
 		if err != nil {
 			return resources, baseutils.LogErrorf(logger, "error building", err)
 		}
@@ -140,7 +144,6 @@ func (i *CommandInvoker) BuildAllResources(ctx context.Context, scheme *runtime.
 			continue
 		}
 
-		i.Commands[j].SetDesired(obj)
 		resources = append(resources, obj)
 	}
 	return resources, nil

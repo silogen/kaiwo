@@ -58,9 +58,6 @@ func (k *KaiwoLocalQueueCommand) GetEmptyObject() client.Object {
 	return &kueuev1beta1.LocalQueue{}
 }
 
-func (k *KaiwoLocalQueueCommand) GetObjectKey() client.ObjectKey {
-	return client.ObjectKey{
-		Namespace: k.Namespace,
-		Name:      k.Name,
-	}
+func (k *KaiwoLocalQueueCommand) GetName() string {
+	return k.Name
 }
