@@ -116,8 +116,8 @@ func (cb *CommandBase[T]) GetOwner() client.Object {
 	return cb.Owner
 }
 
-func (cb *CommandBase[T]) GetCurrentReconcileResult(context.Context) *ctrl.Result {
-	return nil
+func (cb *CommandBase[T]) GetCurrentReconcileResult(context.Context, client.Client) (*ctrl.Result, error) {
+	return nil, nil
 }
 
 type Command interface {
@@ -143,7 +143,7 @@ type Command interface {
 
 	// GetCurrentReconcileResult returns an optional reconciliation result, which can be used to force a reconciliation
 	// request in the middle of invoking a list of commands, in which case the rest of the commands do not get invoked.
-	GetCurrentReconcileResult(ctx context.Context) *ctrl.Result
+	GetCurrentReconcileResult(ctx context.Context, k8sClient client.Client) (*ctrl.Result, error)
 
 	GetObjectKey() client.ObjectKey
 

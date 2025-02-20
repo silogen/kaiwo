@@ -301,24 +301,28 @@ func (cmd *DownloadJobCommand) GetObjectKey() client.ObjectKey {
 	}
 }
 
-func (cmd *DownloadJobCommand) GetCurrentReconcileResult(ctx context.Context) *ctrl.Result {
+func (cmd *DownloadJobCommand) GetCurrentReconcileResult(ctx context.Context, k8sClient client.Client) (*ctrl.Result, error) {
 	logger := log.FromContext(ctx)
-	actual, ok := cmd.Actual.(*batchv1.Job)
+	current, err := cmd.Get(ctx, k8sClient)
+	if err != nil {
+		return nil, baseutils.LogErrorf(logger, "failed to fetch download job", err)
+	}
+	actual, ok := current.(*batchv1.Job)
 	if !ok {
 		panic("expected batchv1.Job")
 	}
 	// If job has finished, return
 	if actual.Status.Succeeded >= 1 {
 		// logger.Info("Download job completed successfully")
-		return nil
+		return nil, nil
 	} else if actual.Status.Failed >= 1 {
 		// TODO Update status?
 		// logger.Info("Download job failed")
-		return &ctrl.Result{}
+		return &ctrl.Result{}, nil
 	} else {
 		logger.Info("Download job still in progress, requeuing until it is complete")
 	}
 
 	// Requeue after some time to check again if the job has completed
-	return &ctrl.Result{RequeueAfter: 5 * time.Second}
+	return &ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 }
