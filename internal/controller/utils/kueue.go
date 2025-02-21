@@ -60,12 +60,15 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 	for _, node := range nodeList {
 		// **Skip Control Plane Nodes**
 		if strings.ToLower(excludeMasterNodes) == "true" {
+			logger.Info("Excluding master/control-plane nodes from nodepools. Set EXCLUDE_MASTER_NODES_FROM_NODE_POOLS=false to include them")
 			if _, exists := node.Labels["node-role.kubernetes.io/control-plane"]; exists {
 				continue
 			}
 			if _, exists := node.Labels["node-role.kubernetes.io/master"]; exists {
 				continue
 			}
+		} else {
+			logger.Info("Including master/control-plane nodes in nodepools. Set EXCLUDE_MASTER_NODES_FROM_NODE_POOLS=true to exclude them")
 		}
 		gpuCount := 0
 		gpuVendor := "cpu"
