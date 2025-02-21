@@ -1,0 +1,12 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Operator" type="GoApplicationRunConfiguration" factoryName="Go Application">
+    <module name="ai-workload-orchestrator" />
+    <working_directory value="$PROJECT_DIR$" />
+    <parameters value="--zap-log-level=info" />
+    <kind value="FILE" />
+    <package value="github.com/silogen/kaiwo" />
+    <directory value="$PROJECT_DIR$" />
+    <filePath value="$PROJECT_DIR$/cmd/operator/main.go" />
+    <method v="2" />
+  </configuration>
+</component>

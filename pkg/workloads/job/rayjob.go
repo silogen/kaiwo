@@ -56,64 +56,64 @@ func GetDefaultRayJobSpec(dangerous bool) rayv1.RayJobSpec {
 	}
 }
 
-type RayJobCommand struct {
-	workloadutils.CommandBase[workloadutils.CommandStateBase]
-	KaiwoJob *v1alpha1.KaiwoJob
+type RayJobReconciler struct {
+	workloadutils.ResourceReconcilerBase[*rayv1.RayJob]
+	KaiwoJobSpec v1alpha1.KaiwoJobSpec
 }
 
-func NewRayJobCommand(base workloadutils.CommandBase[workloadutils.CommandStateBase], kaiwoJob *v1alpha1.KaiwoJob) *RayJobCommand {
-	cmd := &RayJobCommand{
-		CommandBase: base,
-		KaiwoJob:    kaiwoJob,
+func NewRayJobReconciler(kaiwoJob *v1alpha1.KaiwoJob) *RayJobReconciler {
+	reconciler := &RayJobReconciler{
+		ResourceReconcilerBase: workloadutils.ResourceReconcilerBase[*rayv1.RayJob]{
+			ObjectKey: client.ObjectKeyFromObject(kaiwoJob),
+		},
+		KaiwoJobSpec: kaiwoJob.Spec,
 	}
-	cmd.Self = cmd
-	return cmd
+	reconciler.Self = reconciler
+	return reconciler
 }
 
-func (k *RayJobCommand) Build(ctx context.Context, k8sClient client.Client) (client.Object, error) {
+func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (*rayv1.RayJob, error) {
 	logger := log.FromContext(ctx)
 
-	kaiwoJob := k.KaiwoJob
-
-	kaiwoJob.Spec.Ray = baseutils.Pointer(true)
+	spec := r.KaiwoJobSpec
 
 	var rayJobSpec rayv1.RayJobSpec
-	if kaiwoJob.Spec.RayJob == nil {
+	if spec.RayJob == nil {
 		// logger.Info("RayJobSpec is nil, using DefaultRayJobSpec", "KaiwoJob", kaiwoJob.Name)
-		rayJobSpec = GetDefaultRayJobSpec(baseutils.ValueOrDefault(kaiwoJob.Spec.Dangerous))
+		rayJobSpec = GetDefaultRayJobSpec(baseutils.ValueOrDefault(spec.Dangerous))
 	} else {
-		rayJobSpec = kaiwoJob.Spec.RayJob.Spec
+		rayJobSpec = spec.RayJob.Spec
 	}
 
 	if rayJobSpec.RayClusterSpec.HeadGroupSpec.Template.Labels == nil {
 		rayJobSpec.RayClusterSpec.HeadGroupSpec.Template.Labels = make(map[string]string)
 	}
-	rayJobSpec.RayClusterSpec.HeadGroupSpec.Template.Labels["job-name"] = kaiwoJob.Name
+	rayJobSpec.RayClusterSpec.HeadGroupSpec.Template.Labels["job-name"] = r.ObjectKey.Name
 
 	for i := range rayJobSpec.RayClusterSpec.WorkerGroupSpecs {
 		if rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Template.Labels == nil {
 			rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Template.Labels = make(map[string]string)
 		}
-		rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Template.Labels["job-name"] = kaiwoJob.Name
+		rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Template.Labels["job-name"] = r.ObjectKey.Name
 	}
 
-	if baseutils.ValueOrDefault(kaiwoJob.Spec.EntryPoint) != "" {
-		rayJobSpec.Entrypoint = *kaiwoJob.Spec.EntryPoint
+	if baseutils.ValueOrDefault(spec.EntryPoint) != "" {
+		rayJobSpec.Entrypoint = *spec.EntryPoint
 	}
 
-	replicas := baseutils.ValueOrDefault(kaiwoJob.Spec.Replicas)
-	gpusPerReplica := baseutils.ValueOrDefault(kaiwoJob.Spec.GpusPerReplica)
+	replicas := baseutils.ValueOrDefault(spec.Replicas)
+	gpusPerReplica := baseutils.ValueOrDefault(spec.GpusPerReplica)
 
-	if baseutils.ValueOrDefault(kaiwoJob.Spec.Gpus) > 0 || gpusPerReplica > 0 {
+	if baseutils.ValueOrDefault(spec.Gpus) > 0 || gpusPerReplica > 0 {
 		// Only calculate if it is needed, otherwise avoid interacting with the cluster
 		var err error
 		replicas, gpusPerReplica, err = controllerutils.CalculateNumberOfReplicas(
 			ctx,
 			k8sClient,
-			strings.ToLower(baseutils.ValueOrDefault(kaiwoJob.Spec.GpuVendor)),
-			baseutils.ValueOrDefault(kaiwoJob.Spec.Gpus),
-			baseutils.ValueOrDefault(kaiwoJob.Spec.Replicas),
-			baseutils.ValueOrDefault(kaiwoJob.Spec.GpusPerReplica),
+			strings.ToLower(baseutils.ValueOrDefault(spec.GpuVendor)),
+			baseutils.ValueOrDefault(spec.Gpus),
+			baseutils.ValueOrDefault(spec.Replicas),
+			baseutils.ValueOrDefault(spec.GpusPerReplica),
 			true,
 		)
 		if err != nil {
@@ -121,8 +121,8 @@ func (k *RayJobCommand) Build(ctx context.Context, k8sClient client.Client) (cli
 		}
 	}
 
-	kaiwoJob.Spec.Replicas = &replicas
-	kaiwoJob.Spec.GpusPerReplica = &gpusPerReplica
+	spec.Replicas = &replicas
+	spec.GpusPerReplica = &gpusPerReplica
 
 	// Adjust resource requests & limits
 	for i := range rayJobSpec.RayClusterSpec.WorkerGroupSpecs {
@@ -131,10 +131,10 @@ func (k *RayJobCommand) Build(ctx context.Context, k8sClient client.Client) (cli
 		rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].MaxReplicas = baseutils.Pointer(int32(replicas))
 		if err := controllerutils.AdjustResourceRequestsAndLimits(
 			ctx,
-			baseutils.ValueOrDefault(kaiwoJob.Spec.GpuVendor),
-			baseutils.ValueOrDefault(kaiwoJob.Spec.Gpus),
-			baseutils.ValueOrDefault(kaiwoJob.Spec.Replicas),
-			baseutils.ValueOrDefault(kaiwoJob.Spec.GpusPerReplica),
+			baseutils.ValueOrDefault(spec.GpuVendor),
+			baseutils.ValueOrDefault(spec.Gpus),
+			baseutils.ValueOrDefault(spec.Replicas),
+			baseutils.ValueOrDefault(spec.GpusPerReplica),
 			&rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Template,
 		); err != nil {
 			return nil, baseutils.LogErrorf(logger, "failed to adjust ray job spec", err)
@@ -142,37 +142,35 @@ func (k *RayJobCommand) Build(ctx context.Context, k8sClient client.Client) (cli
 	}
 
 	// Add environment variables
-	if err := controllerutils.AddEnvVars(ctx, baseutils.ValueOrDefault(kaiwoJob.Spec.EnvVars), &rayJobSpec.RayClusterSpec.HeadGroupSpec.Template); err != nil {
+	if err := controllerutils.AddEnvVars(ctx, baseutils.ValueOrDefault(spec.EnvVars), &rayJobSpec.RayClusterSpec.HeadGroupSpec.Template); err != nil {
 		return nil, baseutils.LogErrorf(logger, "failed to add env vars to head", err)
 	}
 	for i := range rayJobSpec.RayClusterSpec.WorkerGroupSpecs {
-		if err := controllerutils.AddEnvVars(ctx, baseutils.ValueOrDefault(kaiwoJob.Spec.EnvVars), &rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Template); err != nil {
+		if err := controllerutils.AddEnvVars(ctx, baseutils.ValueOrDefault(spec.EnvVars), &rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Template); err != nil {
 			return nil, baseutils.LogErrorf(logger, "failed to add env vars to worker group", err)
 		}
 	}
 
-	if kaiwoJob.Spec.Storage != nil && kaiwoJob.Spec.Storage.StorageEnabled {
+	if spec.Storage != nil && spec.Storage.StorageEnabled {
 		// Attach storage to head pod
-		if err := controllerutils.UpdatePodSpecStorage(ctx, &rayJobSpec.RayClusterSpec.HeadGroupSpec.Template.Spec, *kaiwoJob.Spec.Storage, kaiwoJob.Name); err != nil {
+		if err := controllerutils.UpdatePodSpecStorage(ctx, &rayJobSpec.RayClusterSpec.HeadGroupSpec.Template.Spec, *spec.Storage, r.ObjectKey.Name); err != nil {
 			return nil, err
 		}
 
 		// Attach storage to worker pods
 		for i := range rayJobSpec.RayClusterSpec.WorkerGroupSpecs {
-			if err := controllerutils.UpdatePodSpecStorage(ctx, &rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Template.Spec, *kaiwoJob.Spec.Storage, kaiwoJob.Name); err != nil {
+			if err := controllerutils.UpdatePodSpecStorage(ctx, &rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Template.Spec, *spec.Storage, r.ObjectKey.Name); err != nil {
 				return nil, err
 			}
 		}
 	}
 
-	objectKey := k.GetObjectKey()
-
 	// Construct the RayJob object
 	rayJob := &rayv1.RayJob{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      objectKey.Name,
-			Namespace: objectKey.Namespace,
-			Labels:    kaiwoJob.Spec.Labels,
+			Name:      r.ObjectKey.Name,
+			Namespace: r.ObjectKey.Namespace,
+			Labels:    spec.Labels,
 		},
 		Spec: rayJobSpec,
 	}
@@ -180,10 +178,6 @@ func (k *RayJobCommand) Build(ctx context.Context, k8sClient client.Client) (cli
 	return rayJob, nil
 }
 
-func (k *RayJobCommand) GetEmptyObject() client.Object {
+func (r *RayJobReconciler) GetEmptyObject() *rayv1.RayJob {
 	return &rayv1.RayJob{}
-}
-
-func (k *RayJobCommand) GetName() string {
-	return k.KaiwoJob.Name
 }

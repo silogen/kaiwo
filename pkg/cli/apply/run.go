@@ -43,19 +43,19 @@ import (
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
-type WorkloadApplier interface {
+type WorkloadApplier[T client.Object] interface {
 	// LoadFromPath loads supplementary information from path, which is a local path
 	LoadFromPath(path string) error
 
 	// FromCliFlags initializes the applier from CLI flags
 	FromCliFlags(flags workloads.CLIFlags)
 
-	GetObject() client.Object
+	GetObject() T
 
-	GetInvoker(ctx context.Context, scheme *runtime.Scheme, k8sClient client.Client) (workloadutils.CommandInvoker, error)
+	GetReconciler() workloadutils.Reconciler[T]
 }
 
-func Apply(applier WorkloadApplier, flags workloads.CLIFlags) error {
+func Apply[T client.Object](applier WorkloadApplier[T], flags workloads.CLIFlags) error {
 	ctx := context.Background()
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
@@ -111,12 +111,9 @@ func Apply(applier WorkloadApplier, flags workloads.CLIFlags) error {
 	} else if flags.Preview {
 		logger.Info("Previewing manifests that the Kaiwo resource would create. Please note that the output is intended for limited debugging only.")
 
-		invoker, err := applier.GetInvoker(ctx, &scheme, k8sClient)
-		if err != nil {
-			return fmt.Errorf("failed to get invoker: %w", err)
-		}
+		reconciler := applier.GetReconciler()
 
-		resources, err := invoker.BuildAllResources(ctx, &scheme, k8sClient)
+		resources, err := reconciler.GetManifests(ctx, k8sClient, &scheme)
 		if err != nil {
 			return fmt.Errorf("failed to build resources: %w", err)
 		}

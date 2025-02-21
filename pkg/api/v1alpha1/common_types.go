@@ -70,8 +70,12 @@ type StorageSpec struct {
 	HuggingFace *HfStorageSpec `json:"huggingFace,omitempty"`
 }
 
+func (spec *StorageSpec) HasData() bool {
+	return spec != nil && spec.Data != nil && spec.Data.StorageSize != ""
+}
+
 func (spec *StorageSpec) HasObjectStorageDownloads() bool {
-	return spec != nil && spec.Data != nil && (len(spec.Data.Download.S3) > 0 || len(spec.Data.Download.GCS) > 0 || len(spec.Data.Download.AzureBlob) > 0)
+	return spec.HasData() && (len(spec.Data.Download.S3) > 0 || len(spec.Data.Download.GCS) > 0 || len(spec.Data.Download.AzureBlob) > 0)
 }
 
 func (spec *StorageSpec) HasHfDownloads() bool {
@@ -132,7 +136,7 @@ type DataStorageSpec struct {
 }
 
 func (spec *DataStorageSpec) IsRequested() bool {
-	return spec.StorageSize != ""
+	return spec != nil && spec.StorageSize != ""
 }
 
 type ValueReference struct {
@@ -212,7 +216,7 @@ type HfStorageSpec struct {
 }
 
 func (spec *HfStorageSpec) IsRequested() bool {
-	return spec.StorageSize != ""
+	return spec != nil && spec.StorageSize != ""
 }
 
 type SecretVolume struct {
