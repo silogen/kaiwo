@@ -30,6 +30,18 @@ To ensure a smooth experience, we strongly recommend that users:
 
 - If you encounter any issues or have suggestions, feel free to open an issue in the [Issues section](https://github.com/silogen/kaiwo/issues).
 
+## Table of Contents
+
+The documentation is being moved under `./docs`, please see the table of contents below to find the most up-to-date information.
+
+* [Home](./docs/docs/index.md)
+* Getting started
+  * [Installation](./docs/docs/getting-started/installation.md)
+  * [Quickstart](./docs/docs/getting-started/quickstart.md)
+* Usage guide
+  * [CLI](./docs/docs/usage-guide/cli.md)
+  * [Troubleshooting](./docs/docs/usage-guide/troubleshooting.md)
+
 ## Description
 
 **Kaiwo** (pronunciation *"ky-voh"*) is a Kubernetes-native tool designed to optimize GPU resource utilization for AI workloads. The project is built primarily for AMD GPUs. Built on top of **Ray** and **Kueue** , Kaiwo minimizes GPU idleness and increases resource efficiency through intelligent job queueing, fair sharing of resources, guaranteed quotas and opportunistic gang scheduling.
