@@ -19,36 +19,18 @@ import (
 	"path/filepath"
 	"time"
 
-	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	ctrl "sigs.k8s.io/controller-runtime"
-
-	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
-
 	"gopkg.in/yaml.v3"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 )
-
-type DownloadJobConfigMapCommand struct {
-	workloadutils.CommandBase[workloadutils.CommandStateBase]
-	StorageSpec *kaiwov1alpha1.StorageSpec
-}
-
-func NewDownloadJobConfigMapCommand(base workloadutils.CommandBase[workloadutils.CommandStateBase], storageSpec *kaiwov1alpha1.StorageSpec) *DownloadJobConfigMapCommand {
-	cmd := &DownloadJobConfigMapCommand{
-		CommandBase: base,
-		StorageSpec: storageSpec,
-	}
-	cmd.Self = cmd
-	return cmd
-}
 
 const (
 	configMapFilename = "config.yaml"
@@ -60,7 +42,23 @@ var (
 	DefaultHfMountPath   = baseutils.GetEnv("DEFAULT_HF_MOUNT_PATH", "/.cache/huggingface")
 )
 
-func (cmd *DownloadJobConfigMapCommand) Build(ctx context.Context, k8sClient client.Client) (client.Object, error) {
+type DownloadJobConfigMapReconciler struct {
+	workloadutils.ResourceReconcilerBase[*corev1.ConfigMap]
+	StorageSpec *kaiwov1alpha1.StorageSpec
+}
+
+func NewDownloadJobConfigMapReconciler(objectKey client.ObjectKey, storageSpec *kaiwov1alpha1.StorageSpec) *DownloadJobConfigMapReconciler {
+	reconciler := &DownloadJobConfigMapReconciler{
+		ResourceReconcilerBase: workloadutils.ResourceReconcilerBase[*corev1.ConfigMap]{
+			ObjectKey: objectKey,
+		},
+		StorageSpec: storageSpec,
+	}
+	reconciler.Self = reconciler
+	return reconciler
+}
+
+func (r *DownloadJobConfigMapReconciler) Build(ctx context.Context, _ client.Client) (*corev1.ConfigMap, error) {
 	logger := log.FromContext(ctx)
 
 	// Update secret paths
@@ -68,33 +66,32 @@ func (cmd *DownloadJobConfigMapCommand) Build(ctx context.Context, k8sClient cli
 		if ref.File == "" {
 			// Path where the secret will be mounted on in the primary container
 			ref.File = filepath.Join(secretsMount, ref.SecretName, ref.SecretKey)
-			// logger.Info("Setting secret path", "ref", ref)
 		}
 	}
 
 	// Set secret paths
 
-	s3Downloads := cmd.StorageSpec.Data.Download.S3
-	for i := range cmd.StorageSpec.Data.Download.S3 {
+	s3Downloads := r.StorageSpec.Data.Download.S3
+	for i := range r.StorageSpec.Data.Download.S3 {
 		setSecretPath(&s3Downloads[i].EndpointUrl)
 		setSecretPath(&s3Downloads[i].AccessKeyId)
 		setSecretPath(&s3Downloads[i].SecretKey)
 	}
-	gcsDownloads := cmd.StorageSpec.Data.Download.GCS
+	gcsDownloads := r.StorageSpec.Data.Download.GCS
 	for i := range gcsDownloads {
 		setSecretPath(&gcsDownloads[i].ApplicationCredentials)
 	}
-	azureBlobDownloads := cmd.StorageSpec.Data.Download.AzureBlob
+	azureBlobDownloads := r.StorageSpec.Data.Download.AzureBlob
 	for i := range azureBlobDownloads {
 		setSecretPath(&azureBlobDownloads[i].ConnectionString)
 	}
 
-	downloadConfig := cmd.StorageSpec.CreateConfig()
+	downloadConfig := r.StorageSpec.CreateConfig()
 	yamlData, err := yaml.Marshal(downloadConfig)
 	if err != nil {
 		return nil, baseutils.LogErrorf(logger, "failed to marshal download job config to yaml", err)
 	}
-	objectKey := cmd.GetObjectKey()
+	objectKey := r.ObjectKey
 
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -105,38 +102,38 @@ func (cmd *DownloadJobConfigMapCommand) Build(ctx context.Context, k8sClient cli
 			configMapFilename: string(yamlData),
 		},
 	}
-	cmd.State.DownloadJobConfigMap = configMap
+
 	return configMap, nil
 }
 
-func (cmd *DownloadJobConfigMapCommand) GetEmptyObject() client.Object {
+func (r *DownloadJobConfigMapReconciler) GetEmptyObject() *corev1.ConfigMap {
 	return &corev1.ConfigMap{}
 }
 
-func (cmd *DownloadJobConfigMapCommand) GetName() string {
-	return baseutils.FormatNameWithPostfix(cmd.OwnerName, "download")
-}
-
-type DownloadJobCommand struct {
-	workloadutils.CommandBase[workloadutils.CommandStateBase]
+type DownloadJobReconciler struct {
+	workloadutils.ResourceReconcilerBase[*batchv1.Job]
 	StorageSpec *kaiwov1alpha1.StorageSpec
+	PvcBaseName string
 }
 
-func NewDownloadJobCommand(base workloadutils.CommandBase[workloadutils.CommandStateBase], storageSpec *kaiwov1alpha1.StorageSpec) *DownloadJobCommand {
-	cmd := &DownloadJobCommand{
-		CommandBase: base,
+func NewDownloadJobReconciler(objectKey client.ObjectKey, storageSpec *kaiwov1alpha1.StorageSpec, pvcBaseName string) *DownloadJobReconciler {
+	reconciler := &DownloadJobReconciler{
+		ResourceReconcilerBase: workloadutils.ResourceReconcilerBase[*batchv1.Job]{
+			ObjectKey: objectKey,
+		},
 		StorageSpec: storageSpec,
+		PvcBaseName: pvcBaseName,
 	}
-	cmd.Self = cmd
-	return cmd
+	reconciler.Self = reconciler
+	return reconciler
 }
 
-func (cmd *DownloadJobCommand) Build(ctx context.Context, k8sClient client.Client) (client.Object, error) {
+func (r *DownloadJobReconciler) Build(_ context.Context, _ client.Client) (*batchv1.Job, error) {
 	// logger := log.FromContext(ctx)
 
 	configMount := "/config"
 
-	downloadConfig := cmd.StorageSpec.CreateConfig()
+	downloadConfig := r.StorageSpec.CreateConfig()
 
 	volumes := []corev1.Volume{
 		{
@@ -144,7 +141,8 @@ func (cmd *DownloadJobCommand) Build(ctx context.Context, k8sClient client.Clien
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: cmd.State.DownloadJobConfigMap.Name,
+						// Use the same name as the job itself
+						Name: r.ObjectKey.Name,
 					},
 				},
 			},
@@ -160,16 +158,15 @@ func (cmd *DownloadJobCommand) Build(ctx context.Context, k8sClient client.Clien
 
 	var envs []corev1.EnvVar
 
-	if cmd.StorageSpec.HasObjectStorageDownloads() {
+	if r.StorageSpec.HasObjectStorageDownloads() {
 		volume := corev1.Volume{
 			Name: "data",
 			VolumeSource: corev1.VolumeSource{
 				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-					ClaimName: baseutils.FormatNameWithPostfix(cmd.OwnerName, "data"),
+					ClaimName: baseutils.FormatNameWithPostfix(r.PvcBaseName, DataStoragePostfix),
 				},
 			},
 		}
-		// logger.Info("Object storage downloads enabled", "pvc_name", volume.PersistentVolumeClaim.ClaimName, "mount_path", downloadConfig.DownloadRoot)
 
 		volumes = append(volumes, volume)
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
@@ -203,17 +200,17 @@ func (cmd *DownloadJobCommand) Build(ctx context.Context, k8sClient client.Clien
 
 		// Set secret paths
 
-		s3Downloads := cmd.StorageSpec.Data.Download.S3
+		s3Downloads := r.StorageSpec.Data.Download.S3
 		for i := range s3Downloads {
 			addSecret(&s3Downloads[i].EndpointUrl)
 			addSecret(&s3Downloads[i].AccessKeyId)
 			addSecret(&s3Downloads[i].SecretKey)
 		}
-		gcsDownloads := cmd.StorageSpec.Data.Download.GCS
+		gcsDownloads := r.StorageSpec.Data.Download.GCS
 		for i := range gcsDownloads {
 			addSecret(&gcsDownloads[i].ApplicationCredentials)
 		}
-		azureBlobDownloads := cmd.StorageSpec.Data.Download.AzureBlob
+		azureBlobDownloads := r.StorageSpec.Data.Download.AzureBlob
 		for i := range azureBlobDownloads {
 			addSecret(&azureBlobDownloads[i].ConnectionString)
 		}
@@ -229,12 +226,12 @@ func (cmd *DownloadJobCommand) Build(ctx context.Context, k8sClient client.Clien
 		}
 	}
 
-	if cmd.StorageSpec.HasHfDownloads() {
+	if r.StorageSpec.HasHfDownloads() {
 		volume := corev1.Volume{
 			Name: "hf",
 			VolumeSource: corev1.VolumeSource{
 				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-					ClaimName: baseutils.FormatNameWithPostfix(cmd.OwnerName, "hf"),
+					ClaimName: baseutils.FormatNameWithPostfix(r.PvcBaseName, HfStoragePostfix),
 				},
 			},
 		}
@@ -247,16 +244,14 @@ func (cmd *DownloadJobCommand) Build(ctx context.Context, k8sClient client.Clien
 		})
 		envs = append(envs, corev1.EnvVar{
 			Name:  "HF_HOME",
-			Value: cmd.StorageSpec.HuggingFace.MountPath,
+			Value: r.StorageSpec.HuggingFace.MountPath,
 		})
 	}
 
-	objectKey := cmd.GetObjectKey()
-
 	downloadJob := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      objectKey.Name,
-			Namespace: objectKey.Namespace,
+			Name:      r.ObjectKey.Name,
+			Namespace: r.ObjectKey.Namespace,
 		},
 		Spec: batchv1.JobSpec{
 			Template: corev1.PodTemplateSpec{
@@ -283,40 +278,26 @@ func (cmd *DownloadJobCommand) Build(ctx context.Context, k8sClient client.Clien
 		},
 	}
 
-	cmd.State.DownloadJob = downloadJob
 	return downloadJob, nil
 }
 
-func (cmd *DownloadJobCommand) GetEmptyObject() client.Object {
-	return &batchv1.Job{}
-}
-
-func (cmd *DownloadJobCommand) GetName() string {
-	return baseutils.FormatNameWithPostfix(cmd.OwnerName, "download")
-}
-
-func (cmd *DownloadJobCommand) GetCurrentReconcileResult(ctx context.Context, k8sClient client.Client) (*ctrl.Result, error) {
+func (r *DownloadJobReconciler) ShouldContinue(ctx context.Context, actual *batchv1.Job) *ctrl.Result {
 	logger := log.FromContext(ctx)
-	current, err := cmd.Get(ctx, k8sClient)
-	if err != nil {
-		return nil, baseutils.LogErrorf(logger, "failed to fetch download job", err)
-	}
-	actual, ok := current.(*batchv1.Job)
-	if !ok {
-		panic("expected batchv1.Job")
-	}
-	// If job has finished, return
 	if actual.Status.Succeeded >= 1 {
-		// logger.Info("Download job completed successfully")
-		return nil, nil
+		baseutils.Debug(logger, "Download job succeeded")
+		return nil
 	} else if actual.Status.Failed >= 1 {
-		// TODO Update status?
-		// logger.Info("Download job failed")
-		return &ctrl.Result{}, nil
+		baseutils.Debug(logger, "Download job failed")
+		// TODO handle
+		return &ctrl.Result{}
 	} else {
-		logger.Info("Download job still in progress, requeuing until it is complete")
+		baseutils.Debug(logger, "Download job still in progress, requeuing until it is complete")
 	}
 
 	// Requeue after some time to check again if the job has completed
-	return &ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	return &ctrl.Result{RequeueAfter: 5 * time.Second}
+}
+
+func (r *DownloadJobReconciler) GetEmptyObject() *batchv1.Job {
+	return &batchv1.Job{}
 }

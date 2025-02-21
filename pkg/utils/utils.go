@@ -28,6 +28,19 @@ import (
 	"github.com/go-logr/logr"
 )
 
+const (
+	DebugLogLevel = 1
+	TraceLogLevel = 2
+)
+
+func Debug(logger logr.Logger, msg string, keysAndValues ...any) {
+	logger.V(DebugLogLevel).Info(msg, keysAndValues...)
+}
+
+func Trace(logger logr.Logger, msg string, keysAndValues ...any) {
+	logger.V(TraceLogLevel).Info(msg, keysAndValues...)
+}
+
 var (
 	DefaultNamespace = GetEnv("DEFAULT_WORKLOAD_NAMESPACE", "kaiwo")
 	DefaultRayImage  = GetEnv("DEFAULT_WORKLOAD_IMAGE", "ghcr.io/silogen/rocm-ray:v0.8")

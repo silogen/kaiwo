@@ -18,7 +18,6 @@ import (
 	"context"
 
 	"k8s.io/apimachinery/pkg/api/resource"
-
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -42,78 +41,80 @@ func GetDefaultJobSpec(dangerous bool) batchv1.JobSpec {
 	}
 }
 
-type BatchJobCommand struct {
-	workloadutils.CommandBase[workloadutils.CommandStateBase]
-	KaiwoJob *v1alpha1.KaiwoJob
+type BatchJobReconciler struct {
+	workloadutils.ResourceReconcilerBase[*batchv1.Job]
+	KaiwoJobSpec v1alpha1.KaiwoJobSpec
 }
 
-func NewBatchJobCommand(base workloadutils.CommandBase[workloadutils.CommandStateBase], kaiwoJob *v1alpha1.KaiwoJob) *BatchJobCommand {
-	cmd := &BatchJobCommand{
-		CommandBase: base,
-		KaiwoJob:    kaiwoJob,
+func NewBatchJobReconciler(kaiwoJob *v1alpha1.KaiwoJob) *BatchJobReconciler {
+	reconciler := &BatchJobReconciler{
+		ResourceReconcilerBase: workloadutils.ResourceReconcilerBase[*batchv1.Job]{
+			ObjectKey: client.ObjectKeyFromObject(kaiwoJob),
+		},
+		KaiwoJobSpec: kaiwoJob.Spec,
 	}
-	cmd.Self = cmd
-	return cmd
+	reconciler.Self = reconciler
+	return reconciler
 }
 
-func (k *BatchJobCommand) Build(ctx context.Context, k8sClient client.Client) (client.Object, error) {
+func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batchv1.Job, error) {
 	logger := log.FromContext(ctx)
 
-	kaiwoJob := k.KaiwoJob
+	spec := r.KaiwoJobSpec
 
 	var jobSpec batchv1.JobSpec
 
-	if kaiwoJob.Spec.Job == nil {
-		// logger.Info("JobSpec is nil, using default JobSpec", "KaiwoJob", kaiwoJob.Name)
-		jobSpec = GetDefaultJobSpec(baseutils.ValueOrDefault(kaiwoJob.Spec.Dangerous))
+	if spec.Job == nil {
+		jobSpec = GetDefaultJobSpec(baseutils.ValueOrDefault(spec.Dangerous))
 	} else {
-		// logger.Info("JobSpec is provided", "KaiwoJob", kaiwoJob.Name)
-		jobSpec = kaiwoJob.Spec.Job.Spec
+		jobSpec = spec.Job.Spec
 	}
 
 	if jobSpec.Template.ObjectMeta.Labels == nil {
 		jobSpec.Template.ObjectMeta.Labels = make(map[string]string)
 	}
 
-	jobSpec.Template.ObjectMeta.Labels["job-name"] = kaiwoJob.Name
+	jobSpec.Template.ObjectMeta.Labels["job-name"] = r.ObjectKey.Name
 
-	if err := controllerutils.AddEntrypoint(ctx, baseutils.ValueOrDefault(kaiwoJob.Spec.EntryPoint), &jobSpec.Template); err != nil {
+	if err := controllerutils.AddEntrypoint(ctx, baseutils.ValueOrDefault(spec.EntryPoint), &jobSpec.Template); err != nil {
 		return nil, baseutils.LogErrorf(logger, "failed to add entrypoint: %v", err)
 	}
 
 	vendor := "AMD"
-	if kaiwoJob.Spec.GpuVendor != nil {
-		vendor = *kaiwoJob.Spec.GpuVendor
+	if spec.GpuVendor != nil {
+		vendor = *spec.GpuVendor
 	}
 	// logger.Info("GPU Vendor", "vendor", vendor)
 
-	if baseutils.ValueOrDefault(kaiwoJob.Spec.Gpus) == 0 {
+	gpus := spec.Gpus
+
+	if baseutils.ValueOrDefault(spec.Gpus) == 0 {
 		gpuResourceKey := corev1.ResourceName(controllerutils.GetGpuResourceKey(vendor))
 		if gpuQuantity, exists := jobSpec.Template.Spec.Containers[0].Resources.Requests[gpuResourceKey]; exists {
-			kaiwoJob.Spec.Gpus = baseutils.Pointer(int(gpuQuantity.Value()))
+			gpus = baseutils.Pointer(int(gpuQuantity.Value()))
 		}
 		// logger.Info("GPU resource request", "resource", gpuResourceKey.String())
 	}
 
-	if err := controllerutils.AdjustResourceRequestsAndLimits(ctx, vendor, baseutils.ValueOrDefault(kaiwoJob.Spec.Gpus), 1, baseutils.ValueOrDefault(kaiwoJob.Spec.Gpus), &jobSpec.Template); err != nil {
+	if err := controllerutils.AdjustResourceRequestsAndLimits(ctx, vendor, baseutils.ValueOrDefault(gpus), 1, baseutils.ValueOrDefault(gpus), &jobSpec.Template); err != nil {
 		return nil, baseutils.LogErrorf(logger, "failed to adjust resource requests and limits", err)
 	}
 
-	if err := controllerutils.AddEnvVars(ctx, baseutils.ValueOrDefault(kaiwoJob.Spec.EnvVars), &jobSpec.Template); err != nil {
+	if err := controllerutils.AddEnvVars(ctx, baseutils.ValueOrDefault(spec.EnvVars), &jobSpec.Template); err != nil {
 		return nil, baseutils.LogErrorf(logger, "failed to add env vars", err)
 	}
 
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      kaiwoJob.Name,
-			Namespace: kaiwoJob.Namespace,
-			Labels:    kaiwoJob.Spec.Labels,
+			Name:      r.ObjectKey.Name,
+			Namespace: r.ObjectKey.Namespace,
+			Labels:    spec.Labels,
 		},
 		Spec: jobSpec,
 	}
 
-	if kaiwoJob.Spec.Storage != nil && kaiwoJob.Spec.Storage.StorageEnabled {
-		if err := controllerutils.UpdatePodSpecStorage(ctx, &job.Spec.Template.Spec, *kaiwoJob.Spec.Storage, kaiwoJob.Name); err != nil {
+	if spec.Storage != nil && spec.Storage.StorageEnabled {
+		if err := controllerutils.UpdatePodSpecStorage(ctx, &job.Spec.Template.Spec, *spec.Storage, r.ObjectKey.Name); err != nil {
 			return nil, err
 		}
 	}
@@ -121,10 +122,6 @@ func (k *BatchJobCommand) Build(ctx context.Context, k8sClient client.Client) (c
 	return job, nil
 }
 
-func (k *BatchJobCommand) GetEmptyObject() client.Object {
+func (r *BatchJobReconciler) GetEmptyObject() *batchv1.Job {
 	return &batchv1.Job{}
-}
-
-func (k *BatchJobCommand) GetName() string {
-	return k.KaiwoJob.Name
 }

@@ -16,7 +16,6 @@ package workloadshared
 
 import (
 	"context"
-	"fmt"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -25,8 +24,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
 const (
@@ -34,78 +31,51 @@ const (
 	HfStoragePostfix   = "hf"
 )
 
-type StorageCommand[T any] struct {
-	workloadutils.CommandBase[T]
-	PvcNamePostfix   string
+type StorageReconciler struct {
+	workloadutils.ResourceReconcilerBase[*corev1.PersistentVolumeClaim]
 	Amount           string
 	StorageClassName string
 	AccessMode       corev1.PersistentVolumeAccessMode
-	StoreCallback    func(base *T, claim *corev1.PersistentVolumeClaim, target string)
 }
 
-func NewStorageCommand[T any](
-	base workloadutils.CommandBase[T],
-	pvcNamePostfix string,
+func NewStorageReconciler(objectKey client.ObjectKey,
 	accessMode corev1.PersistentVolumeAccessMode,
 	storageClassName string,
 	amount string,
-	storeCallback func(base *T, claim *corev1.PersistentVolumeClaim, target string),
-) *StorageCommand[T] {
-	cmd := &StorageCommand[T]{
-		PvcNamePostfix:   pvcNamePostfix,
-		CommandBase:      base,
-		AccessMode:       accessMode,
-		StorageClassName: storageClassName,
+) *StorageReconciler {
+	reconciler := &StorageReconciler{
+		ResourceReconcilerBase: workloadutils.ResourceReconcilerBase[*corev1.PersistentVolumeClaim]{
+			ObjectKey: objectKey,
+		},
 		Amount:           amount,
-		StoreCallback:    storeCallback,
+		StorageClassName: storageClassName,
+		AccessMode:       accessMode,
 	}
-	cmd.Self = cmd
-	return cmd
+	reconciler.Self = reconciler
+	return reconciler
 }
 
-func (cmd *StorageCommand[T]) Build(ctx context.Context, k8sClient client.Client) (client.Object, error) {
-	// logger := log.FromContext(ctx)
-
-	// logger.Info(fmt.Sprintf("Building with amount: %s, access mode: %s", cmd.Amount, cmd.AccessMode))
-
-	objectKey := cmd.GetObjectKey()
-
+func (r *StorageReconciler) Build(ctx context.Context, _ client.Client) (*corev1.PersistentVolumeClaim, error) {
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      objectKey.Name,
-			Namespace: objectKey.Namespace,
+			Name:      r.ObjectKey.Name,
+			Namespace: r.ObjectKey.Namespace,
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{
-				cmd.AccessMode,
+				r.AccessMode,
 			},
-			StorageClassName: &cmd.StorageClassName,
+			StorageClassName: &r.StorageClassName,
 			Resources: corev1.VolumeResourceRequirements{
 				Requests: corev1.ResourceList{
-					corev1.ResourceStorage: resource.MustParse(cmd.Amount),
+					corev1.ResourceStorage: resource.MustParse(r.Amount),
 				},
 			},
 		},
 	}
-
-	cmd.StoreCallback(cmd.State, pvc, cmd.PvcNamePostfix)
 	return pvc, nil
 }
 
-func (cmd *StorageCommand[T]) GetEmptyObject() client.Object {
+func (r *StorageReconciler) GetEmptyObject() *corev1.PersistentVolumeClaim {
 	return &corev1.PersistentVolumeClaim{}
-}
-
-func (cmd *StorageCommand[T]) GetName() string {
-	return baseutils.FormatNameWithPostfix(cmd.OwnerName, cmd.PvcNamePostfix)
-}
-
-func SetStorage(state *workloadutils.CommandStateBase, pvc *corev1.PersistentVolumeClaim, target string) {
-	if target == DataStoragePostfix {
-		state.DataPvc = pvc
-	} else if target == HfStoragePostfix {
-		state.HfPvc = pvc
-	} else {
-		panic(fmt.Sprintf("unknown target %s", target))
-	}
 }

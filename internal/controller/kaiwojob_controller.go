@@ -47,7 +47,7 @@ type KaiwoJobReconciler struct {
 
 func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
-	logger.Info("Running reconciliation")
+	baseutils.Debug(logger, "Running reconciliation")
 
 	// Fetch the KaiwoJob instance
 	var kaiwoJob kaiwov1alpha1.KaiwoJob
@@ -58,19 +58,13 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, nil
 	}
 
-	invoker, err := workloadjob.BuildKaiwoJobInvoker(ctx, r.Scheme, &kaiwoJob)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to build invoker: %v", err)
-	}
+	reconciler := workloadjob.NewKaiwoJobReconciler(&kaiwoJob)
 
-	result, err := invoker.Run(ctx, r.Client, r.Scheme)
+	result, _, err := reconciler.Reconcile(ctx, r.Client, r.Scheme, false)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to run invoker: %v", err)
+		return ctrl.Result{}, fmt.Errorf("failed to run reconciliation: %v", err)
 	}
-	if result == nil {
-		return ctrl.Result{}, nil
-	}
-	return *result, nil
+	return result, nil
 }
 
 func (r *KaiwoJobReconciler) SetupWithManager(mgr ctrl.Manager) error {

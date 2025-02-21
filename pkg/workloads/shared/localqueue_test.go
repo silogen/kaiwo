@@ -18,22 +18,29 @@ import (
 	"context"
 	"testing"
 
-	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func TestKaiwoLocalQueueCommand_Build(t *testing.T) {
 	t.Run("Test", func(t *testing.T) {
-		command := KaiwoLocalQueueCommand{CommandBase: workloadutils.CommandBase[workloadutils.CommandStateBase]{}, Namespace: "test-namespace", Name: "test-name"}
+		objectKey := client.ObjectKey{
+			Namespace: "test",
+			Name:      "test-name",
+		}
+		reconciler := NewLocalQueueReconciler(objectKey)
 
-		builtObject, err := command.Build(context.TODO(), nil)
+		builtObject, err := reconciler.Build(context.TODO(), nil)
 		if err != nil {
 			t.Fatalf("failed to build command: %v", err)
 		}
-		if command.Name != builtObject.GetName() {
+		if objectKey.Name != builtObject.GetName() {
 			t.Errorf("name does not match")
 		}
-		if command.Namespace != builtObject.GetNamespace() {
+		if objectKey.Namespace != builtObject.GetNamespace() {
 			t.Errorf("namespace does not match")
+		}
+		if objectKey.Name != string(builtObject.Spec.ClusterQueue) {
+			t.Errorf("cluster queue name does not match")
 		}
 	})
 }

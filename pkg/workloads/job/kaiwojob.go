@@ -17,6 +17,9 @@ package workloadjob
 import (
 	"context"
 	"fmt"
+	"reflect"
+
+	ctrl "sigs.k8s.io/controller-runtime"
 
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -35,43 +38,84 @@ import (
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
-const DefaultKaiwoQueueConfigName = "kaiwo2"
+type KaiwoJobReconciler struct {
+	workloadutils.ReconcilerBase[*kaiwov1alpha1.KaiwoJob]
+	DownloadJobConfigMap *workloadshared.DownloadJobConfigMapReconciler
+	DownloadJob          *workloadshared.DownloadJobReconciler
+	HuggingFacePVC       *workloadshared.StorageReconciler
+	DataPVC              *workloadshared.StorageReconciler
+	LocalQueue           *workloadshared.LocalQueueReconciler
+	BatchJob             *BatchJobReconciler
+	RayJob               *RayJobReconciler
+}
 
-// BuildKaiwoJobInvoker builds the invoker required to construct the Kaiwo job resources
-func BuildKaiwoJobInvoker(ctx context.Context, scheme *runtime.Scheme, manifest *kaiwov1alpha1.KaiwoJob) (workloadutils.CommandInvoker, error) {
-	logger := log.FromContext(ctx)
+func NewKaiwoJobReconciler(kaiwoJob *kaiwov1alpha1.KaiwoJob) KaiwoJobReconciler {
+	sanitize(kaiwoJob)
 
-	// Ensure labels are set
-	if manifest.Spec.Labels == nil {
-		manifest.Spec.Labels = make(map[string]string)
+	objectKey := client.ObjectKeyFromObject(kaiwoJob)
+
+	reconciler := KaiwoJobReconciler{
+		ReconcilerBase: workloadutils.ReconcilerBase[*kaiwov1alpha1.KaiwoJob]{
+			Object:    kaiwoJob,
+			ObjectKey: objectKey,
+		},
+	}
+	reconciler.Self = &reconciler
+
+	storageSpec := kaiwoJob.Spec.Storage
+
+	if storageSpec != nil && storageSpec.StorageEnabled {
+		if storageSpec.HasData() {
+			reconciler.DataPVC = workloadshared.NewStorageReconciler(
+				client.ObjectKey{
+					Name:      baseutils.FormatNameWithPostfix(objectKey.Name, workloadshared.DataStoragePostfix),
+					Namespace: objectKey.Namespace,
+				},
+				storageSpec.AccessMode,
+				storageSpec.StorageClassName,
+				storageSpec.Data.StorageSize,
+			)
+		}
+		if storageSpec.HasHfDownloads() {
+			reconciler.HuggingFacePVC = workloadshared.NewStorageReconciler(
+				client.ObjectKey{
+					Name:      baseutils.FormatNameWithPostfix(objectKey.Name, workloadshared.HfStoragePostfix),
+					Namespace: objectKey.Namespace,
+				},
+				storageSpec.AccessMode,
+				storageSpec.StorageClassName,
+				storageSpec.HuggingFace.StorageSize,
+			)
+		}
+		if storageSpec.HasDownloads() {
+			downloadObjectKey := client.ObjectKey{
+				Namespace: objectKey.Namespace,
+				Name:      baseutils.FormatNameWithPostfix(objectKey.Name, "download"),
+			}
+			reconciler.DownloadJobConfigMap = workloadshared.NewDownloadJobConfigMapReconciler(downloadObjectKey, storageSpec)
+			reconciler.DownloadJob = workloadshared.NewDownloadJobReconciler(downloadObjectKey, storageSpec, objectKey.Name)
+		}
 	}
 
-	user := ""
-	if manifest.Spec.User != nil {
-		user = *manifest.Spec.User
+	clusterQueue := baseutils.ValueOrDefault(kaiwoJob.Spec.ClusterQueue)
+	if clusterQueue == "" {
+		clusterQueue = workloadshared.DefaultLocalQueueName
 	}
+	reconciler.LocalQueue = workloadshared.NewLocalQueueReconciler(client.ObjectKey{Namespace: objectKey.Namespace, Name: clusterQueue})
 
-	manifest.Spec.Labels[kaiwov1alpha1.UserLabel] = baseutils.SanitizeStringForKubernetes(user)
-
-	if manifest.Spec.ClusterQueue == nil {
-		manifest.Spec.Labels[kaiwov1alpha1.QueueLabel] = DefaultKaiwoQueueConfigName
+	if kaiwoJob.Spec.IsBatchJob() {
+		reconciler.BatchJob = NewBatchJobReconciler(kaiwoJob)
+	} else if kaiwoJob.Spec.IsRayJob() {
+		reconciler.RayJob = NewRayJobReconciler(kaiwoJob)
 	} else {
-		manifest.Spec.Labels[kaiwov1alpha1.QueueLabel] = *manifest.Spec.ClusterQueue
+		panic("Unknown Kaiwo job spec")
 	}
 
-	state := &workloadutils.CommandStateBase{}
+	return reconciler
+}
 
-	base := workloadutils.CommandBase[workloadutils.CommandStateBase]{
-		State:     state,
-		Namespace: manifest.Namespace,
-	}
-
-	// Build invoker
-	invoker := workloadutils.CommandInvoker{}
-
-	invoker.AddCommand(NewKaiwoJobCommand(base, manifest))
-
-	storageSpec := manifest.Spec.Storage
+func sanitize(kaiwoJob *kaiwov1alpha1.KaiwoJob) {
+	storageSpec := kaiwoJob.Spec.Storage
 
 	if storageSpec != nil && storageSpec.StorageEnabled {
 
@@ -84,172 +128,178 @@ func BuildKaiwoJobInvoker(ctx context.Context, scheme *runtime.Scheme, manifest 
 			// logger.Info("Hugging Face storage mount path not set, using default:" + defaultHfMountPath)
 			storageSpec.HuggingFace.MountPath = workloadshared.DefaultHfMountPath
 		}
+	}
 
-		if storageSpec.HasObjectStorageDownloads() {
-			// Add data PVC
-			invoker.AddCommand(workloadshared.NewStorageCommand(
-				base,
-				workloadshared.DataStoragePostfix,
-				storageSpec.AccessMode,
-				storageSpec.StorageClassName,
-				storageSpec.Data.StorageSize,
-				workloadshared.SetStorage,
-			))
+	if baseutils.ValueOrDefault(kaiwoJob.Spec.Image) == "" {
+		kaiwoJob.Spec.Image = baseutils.Pointer(baseutils.DefaultRayImage)
+	}
+}
+
+// Reconcile reconciles the kaiwo job to ensure each resource exists and is in the desired state
+func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme, dryRun bool) (ctrl.Result, []client.Object, error) {
+	logger := log.FromContext(ctx)
+	baseutils.Debug(logger, "Running reconciliation")
+
+	kaiwoJob := r.Object
+	var manifests []client.Object
+
+	// Stop here if finished or error?
+	storageSpec := kaiwoJob.Spec.Storage
+
+	if storageSpec != nil && storageSpec.StorageEnabled {
+
+		if storageSpec.HasData() {
+			dataPvc, _, err := r.DataPVC.Reconcile(ctx, k8sClient, scheme, kaiwoJob, dryRun)
+			if err != nil {
+				return ctrl.Result{}, nil, fmt.Errorf("failed to reconcile data PVC: %w", err)
+			}
+			manifests = append(manifests, dataPvc)
 		}
+
 		if storageSpec.HasHfDownloads() {
 			// Add HuggingFace PVC
-			invoker.AddCommand(workloadshared.NewStorageCommand(
-				base,
-				workloadshared.HfStoragePostfix,
-				storageSpec.AccessMode,
-				storageSpec.StorageClassName,
-				storageSpec.HuggingFace.StorageSize,
-				workloadshared.SetStorage,
-			))
+			hfPvc, _, err := r.HuggingFacePVC.Reconcile(ctx, k8sClient, scheme, kaiwoJob, dryRun)
+			if err != nil {
+				return ctrl.Result{}, nil, fmt.Errorf("failed to reconcile HuggingFace PVC: %w", err)
+			}
+			manifests = append(manifests, hfPvc)
 		}
 
-		if storageSpec.HasObjectStorageDownloads() {
-			invoker.AddCommand(workloadshared.NewDownloadJobConfigMapCommand(base, storageSpec))
-			invoker.AddCommand(workloadshared.NewDownloadJobCommand(base, storageSpec))
+		if storageSpec.HasDownloads() {
+			downloadJobConfigMap, _, err := r.DownloadJobConfigMap.Reconcile(ctx, k8sClient, scheme, kaiwoJob, dryRun)
+			if err != nil {
+				return ctrl.Result{}, nil, fmt.Errorf("failed to reconcile DownloadJobConfigMap: %w", err)
+			}
+			manifests = append(manifests, downloadJobConfigMap)
+
+			downloadJob, downloadJobResult, err := r.DownloadJob.Reconcile(ctx, k8sClient, scheme, kaiwoJob, dryRun)
+			if err != nil {
+				return ctrl.Result{}, nil, fmt.Errorf("failed to reconcile DownloadJob: %w", err)
+			}
+			if downloadJobResult != nil {
+				return *downloadJobResult, nil, nil
+			}
+			manifests = append(manifests, downloadJob)
 		}
 	}
 
-	if manifest.Spec.Image == nil || *manifest.Spec.Image == "" {
-		manifest.Spec.Image = baseutils.Pointer(baseutils.DefaultRayImage)
+	localQueue, _, err := r.LocalQueue.Reconcile(ctx, k8sClient, scheme, kaiwoJob, dryRun)
+	if err != nil {
+		return ctrl.Result{}, nil, fmt.Errorf("failed to reconcile local queue: %w", err)
 	}
+	manifests = append(manifests, localQueue)
 
-	invoker.AddCommand(workloadshared.NewKaiwoLocalQueueCommand(base, manifest.Spec.Labels[kaiwov1alpha1.QueueLabel], manifest.Namespace))
-
-	if manifest.Spec.IsBatchJob() {
-		// logger.Info("Manifest describes a batch job")
-		invoker.AddCommand(NewBatchJobCommand(base, manifest))
-	} else if manifest.Spec.IsRayJob() {
-		// logger.Info("Manifest describes a Ray job")
-		invoker.AddCommand(NewRayJobCommand(base, manifest))
+	if kaiwoJob.Spec.IsBatchJob() {
+		batchJob, _, err := r.BatchJob.Reconcile(ctx, k8sClient, scheme, kaiwoJob, dryRun)
+		if err != nil {
+			return ctrl.Result{}, nil, fmt.Errorf("failed to reconcile BatchJob: %w", err)
+		}
+		manifests = append(manifests, batchJob)
+	} else if kaiwoJob.Spec.IsRayJob() {
+		rayJob, _, err := r.RayJob.Reconcile(ctx, k8sClient, scheme, kaiwoJob, dryRun)
+		if err != nil {
+			return ctrl.Result{}, nil, fmt.Errorf("failed to reconcile RayJob: %w", err)
+		}
+		manifests = append(manifests, rayJob)
 	} else {
-		return workloadutils.CommandInvoker{}, baseutils.LogErrorf(logger, "KaiwoJob does not specify a valid Job or RayJob. You must either set ray to true or false, or provide a rayClusterSpec", nil)
+		panic("Unsupported job configuration")
 	}
 
-	return invoker, nil
-}
-
-//type KaiwoJobCommandState struct {
-//	workloadutils.CommandStateBase
-//	KaiwoJob *kaiwov1alpha1.KaiwoJob
-//}
-
-type KaiwoJobManifestCommand struct {
-	workloadutils.CommandBase[workloadutils.CommandStateBase]
-	KaiwoJob *kaiwov1alpha1.KaiwoJob
-}
-
-func NewKaiwoJobCommand(base workloadutils.CommandBase[workloadutils.CommandStateBase], kaiwoJob *kaiwov1alpha1.KaiwoJob) *KaiwoJobManifestCommand {
-	cmd := &KaiwoJobManifestCommand{
-		CommandBase: base,
-		KaiwoJob:    kaiwoJob,
-	}
-	cmd.Self = cmd
-	return cmd
-}
-
-func (k *KaiwoJobManifestCommand) Build(ctx context.Context, k8sClient client.Client) (client.Object, error) {
-	return k.KaiwoJob, nil
-}
-
-func (k *KaiwoJobManifestCommand) GetName() string {
-	return k.KaiwoJob.Name
-}
-
-func GetObject[T client.Object](ctx context.Context, k8sClient client.Client, cmd workloadutils.Command) (T, error) {
-	obj, ok := cmd.GetEmptyObject().(T)
-	if !ok {
-		return obj, fmt.Errorf("object type mismatch")
-	}
-	if err := k8sClient.Get(ctx, cmd.GetObjectKey(), obj); err != nil {
-		return obj, fmt.Errorf("error fetching object: %w", err)
-	}
-	return obj, nil
-}
-
-func (k *KaiwoJobManifestCommand) GatherStatus(ctx context.Context, k8sClient client.Client, obj client.Object) (*kaiwov1alpha1.KaiwoJobStatus, error) {
-	kaiwoJob, ok := obj.(*kaiwov1alpha1.KaiwoJob)
-	if !ok {
-		return nil, fmt.Errorf("object is not KaiwoJob")
+	if dryRun {
+		return ctrl.Result{}, manifests, nil
 	}
 
-	currentStatus := kaiwoJob.Status.DeepCopy()
+	previousStatus := kaiwoJob.Status.DeepCopy()
+
+	status, err := r.GatherStatus(ctx, k8sClient, *previousStatus)
+	if err != nil {
+		return ctrl.Result{}, nil, fmt.Errorf("failed to gather status: %w", err)
+	}
+
+	if reflect.DeepEqual(previousStatus, status) {
+		// Nothing to update
+		return ctrl.Result{}, nil, nil
+	}
+
+	retryAttempts := 3
+	for i := 0; i < retryAttempts; i++ {
+		// Reload to fetch the latest state
+		if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(kaiwoJob), kaiwoJob); err != nil {
+			return ctrl.Result{}, nil, fmt.Errorf("failed to get kaiwoJob: %w", err)
+		}
+
+		kaiwoJob.Status = *status
+		logger.Info(fmt.Sprintf("Updating status to: %s", string(kaiwoJob.Status.Status)), "status", kaiwoJob.Status)
+
+		if err := k8sClient.Status().Update(ctx, kaiwoJob); err != nil {
+			if errors.IsConflict(err) {
+				baseutils.Debug(logger, "Conflict error during KaiwoJob update, retrying", "attempt", i+1)
+				continue
+			}
+			return ctrl.Result{}, nil, fmt.Errorf("failed to update kaiwoJob status: %w", err)
+		}
+
+		return ctrl.Result{}, nil, nil
+	}
+	return ctrl.Result{}, nil, fmt.Errorf("failed to update kaiwoJob status")
+}
+
+func (r *KaiwoJobReconciler) GatherStatus(ctx context.Context, k8sClient client.Client, previousStatus kaiwov1alpha1.KaiwoJobStatus) (*kaiwov1alpha1.KaiwoJobStatus, error) {
+	kaiwoJob := r.Object
+
+	currentStatus := previousStatus.DeepCopy()
 
 	jobSucceeded, jobFailed, err := checkJobCompletion(ctx, k8sClient, kaiwoJob)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to check job completion: %w", err)
 	}
 
-	_, earliestStartTime, status, err := fetchStartTimeAndStatus(ctx, k8sClient, client.ObjectKeyFromObject(kaiwoJob))
+	//	earliestRunningTime *metav1.Time
+	//	earliestStartTime   *metav1.Time
+	var status kaiwov1alpha1.Status
+
+	//if currentStatus.StartTime == nil || jobSucceeded || jobFailed {
+	//	// Only load if needed
+	//	earliestRunningTime, earliestStartTime, status, err = fetchStartTimeAndStatus(ctx, k8sClient, client.ObjectKeyFromObject(kaiwoJob))
+	//}
 
 	if currentStatus.StartTime == nil {
-		currentStatus.StartTime = earliestStartTime
+		if startTime := getEarliestPodStartTime(ctx, k8sClient, kaiwoJob); startTime != nil {
+			currentStatus.StartTime = startTime
+		}
 	}
 
 	if jobSucceeded || jobFailed {
+		if jobSucceeded {
+			status = kaiwov1alpha1.StatusComplete
+		} else {
+			status = kaiwov1alpha1.StatusFailed
+		}
+		if currentStatus.CompletionTime == nil {
+			currentStatus.CompletionTime = baseutils.Pointer(metav1.Now())
+		}
+		if currentStatus.StartTime != nil {
+			currentStatus.Duration = int64(currentStatus.CompletionTime.Time.Sub(currentStatus.StartTime.Time).Seconds())
+		}
 	} else {
-
+		startTime, latestStatus, err := checkPodStatus(ctx, k8sClient, kaiwoJob)
 		if err != nil {
 			return nil, fmt.Errorf("error fetching start time and status: %w", err)
 		}
-
-		if currentStatus.StartTime == nil {
-			currentStatus.StartTime = nil // startTime
+		if startTime != nil {
+			currentStatus.StartTime = startTime
+			if currentStatus.CompletionTime != nil {
+				currentStatus.Duration = int64(kaiwoJob.Status.CompletionTime.Time.Sub(kaiwoJob.Status.StartTime.Time).Seconds())
+			}
 		}
+		status = latestStatus
+	}
 
+	if status != kaiwov1alpha1.StatusNew {
 		currentStatus.Status = status
 	}
 
 	return currentStatus, nil
-}
-
-func (k *KaiwoJobManifestCommand) Update(ctx context.Context, k8sClient client.Client, obj client.Object) error {
-	logger := log.FromContext(ctx)
-
-	kaiwoJob, ok := obj.(*kaiwov1alpha1.KaiwoJob)
-	if !ok {
-		return fmt.Errorf("object is not KaiwoJob")
-	}
-
-	jobSucceeded, jobFailed, err := checkJobCompletion(ctx, k8sClient, kaiwoJob)
-	if err != nil {
-		return baseutils.LogErrorf(logger, "failed to check job completion", err)
-	}
-
-	if kaiwoJob.Status.StartTime == nil {
-		if startTime := getEarliestPodStartTime(ctx, k8sClient, kaiwoJob); startTime != nil {
-			kaiwoJob.Status.StartTime = startTime
-			// logger.Info("Set KaiwoJob StartTime", "KaiwoJob", kaiwoJob.Name, "StartTime", startTime)
-		}
-	}
-
-	if jobSucceeded || jobFailed {
-		return handleJobCompletion(ctx, k8sClient, kaiwoJob, jobSucceeded)
-	}
-
-	//startTimeUpdated, err := checkPodStatus(ctx, k8sClient, kaiwoJob)
-	//if err != nil {
-	//	return baseutils.LogErrorf(logger, "failed to check pod status", err)
-	//}
-
-	//if startTimeUpdated && k.KaiwoJob.Status.CompletionTime != nil {
-	//	kaiwoJob.Status.Duration = int64(k.KaiwoJob.Status.CompletionTime.Time.Sub(k.KaiwoJob.Status.StartTime.Time).Seconds())
-	//}
-
-	if err := k8sClient.Status().Update(ctx, kaiwoJob); err != nil {
-		return baseutils.LogErrorf(logger, "failed to update KaiwoJob status", err)
-	}
-
-	logger.Info(fmt.Sprintf("Updated KaiwoJob status: %s", kaiwoJob.Status.Status), "KaiwoJob", kaiwoJob.Name, "Status", kaiwoJob.Status.Status)
-	return nil
-}
-
-func (k *KaiwoJobManifestCommand) GetEmptyObject() client.Object {
-	return &kaiwov1alpha1.KaiwoJob{}
 }
 
 func checkJobCompletion(ctx context.Context, k8sClient client.Client, kaiwoJob *kaiwov1alpha1.KaiwoJob) (bool, bool, error) {
@@ -291,50 +341,69 @@ func checkJobCompletion(ctx context.Context, k8sClient client.Client, kaiwoJob *
 	return jobSucceeded, jobFailed, nil
 }
 
-func handleJobCompletion(ctx context.Context, k8sClient client.Client, kaiwoJob *kaiwov1alpha1.KaiwoJob, jobSucceeded bool) error {
-	logger := log.FromContext(ctx)
-	now := metav1.Now()
+//func fetchStartTimeAndStatus(
+//	ctx context.Context,
+//	k8sClient client.Client,
+//	objectKey client.ObjectKey,
+//) (
+//	earliestRunningTime *metav1.Time,
+//	earliestStartTime *metav1.Time,
+//	status kaiwov1alpha1.Status,
+//	err error,
+//) {
+//	logger := log.FromContext(ctx)
+//	podList := &corev1.PodList{}
+//	err = k8sClient.List(ctx, podList, client.InNamespace(objectKey.Namespace), client.MatchingLabels{"job-name": objectKey.Name})
+//	if err != nil {
+//		return nil, nil, kaiwov1alpha1.StatusNew, baseutils.LogErrorf(logger, "failed to list pods for job", err)
+//	}
+//
+//	var runningPods, pendingPods []corev1.Pod
+//
+//	for _, pod := range podList.Items {
+//		if pod.Status.StartTime != nil {
+//			if earliestStartTime == nil || pod.Status.StartTime.Before(earliestStartTime) {
+//				earliestStartTime = pod.Status.StartTime
+//			}
+//		}
+//
+//		switch pod.Status.Phase {
+//		case corev1.PodRunning:
+//			runningPods = append(runningPods, pod)
+//			if pod.Status.StartTime != nil {
+//				if earliestRunningTime == nil || pod.Status.StartTime.Before(earliestRunningTime) {
+//					earliestRunningTime = pod.Status.StartTime
+//				}
+//			}
+//		case corev1.PodPending:
+//			pendingPods = append(pendingPods, pod)
+//		}
+//	}
+//
+//	if len(runningPods) > 0 {
+//		status = kaiwov1alpha1.StatusRunning
+//	} else if len(pendingPods) > 0 {
+//		status = kaiwov1alpha1.StatusStarting
+//	} else {
+//		status = kaiwov1alpha1.StatusPending
+//	}
+//
+//	return earliestRunningTime, earliestStartTime, status, nil
+//}
 
-	if jobSucceeded {
-		kaiwoJob.Status.Status = kaiwov1alpha1.StatusComplete
-	} else {
-		kaiwoJob.Status.Status = kaiwov1alpha1.StatusFailed
-	}
-
-	kaiwoJob.Status.CompletionTime = &now
-
-	if kaiwoJob.Status.StartTime != nil {
-		kaiwoJob.Status.Duration = int64(kaiwoJob.Status.CompletionTime.Time.Sub(kaiwoJob.Status.StartTime.Time).Seconds())
-	}
-
-	if err := k8sClient.Status().Update(ctx, kaiwoJob); err != nil {
-		return baseutils.LogErrorf(logger, "failed to update KaiwoJob status on completion", err)
-	}
-
-	logger.Info("Updated KaiwoJob on completion", "KaiwoJob", kaiwoJob.Name, "Status", kaiwoJob.Status.Status)
-	return nil
-}
-
-func fetchStartTimeAndStatus(ctx context.Context, k8sClient client.Client, objectKey client.ObjectKey) (*metav1.Time, *metav1.Time, kaiwov1alpha1.Status, error) {
+func checkPodStatus(ctx context.Context, k8sClient client.Client, kaiwoJob *kaiwov1alpha1.KaiwoJob) (earliestRunningTime *metav1.Time, status kaiwov1alpha1.Status, err error) {
 	logger := log.FromContext(ctx)
 
 	podList := &corev1.PodList{}
-	err := k8sClient.List(ctx, podList, client.InNamespace(objectKey.Namespace), client.MatchingLabels{"job-name": objectKey.Name})
+	err = k8sClient.List(ctx, podList, client.InNamespace(kaiwoJob.Namespace), client.MatchingLabels{"job-name": kaiwoJob.Name})
 	if err != nil {
-		return nil, nil, kaiwov1alpha1.StatusNew, baseutils.LogErrorf(logger, "failed to list pods for job", err)
+		logger.Error(err, "Failed to list pods for job", "KaiwoJob", kaiwoJob.Name)
+		return nil, status, err
 	}
 
 	var runningPods, pendingPods []corev1.Pod
-	var earliestRunningTime *metav1.Time
-	var earliestStartTime *metav1.Time
 
 	for _, pod := range podList.Items {
-		if pod.Status.StartTime != nil {
-			if earliestStartTime == nil || pod.Status.StartTime.Before(earliestStartTime) {
-				earliestStartTime = pod.Status.StartTime
-			}
-		}
-
 		switch pod.Status.Phase {
 		case corev1.PodRunning:
 			runningPods = append(runningPods, pod)
@@ -348,7 +417,9 @@ func fetchStartTimeAndStatus(ctx context.Context, k8sClient client.Client, objec
 		}
 	}
 
-	var status kaiwov1alpha1.Status
+	if earliestRunningTime != nil && kaiwoJob.Status.StartTime == nil {
+		return earliestRunningTime, status, nil
+	}
 
 	if len(runningPods) > 0 {
 		status = kaiwov1alpha1.StatusRunning
@@ -358,7 +429,7 @@ func fetchStartTimeAndStatus(ctx context.Context, k8sClient client.Client, objec
 		status = kaiwov1alpha1.StatusPending
 	}
 
-	return earliestRunningTime, earliestStartTime, status, nil
+	return earliestRunningTime, status, nil
 }
 
 func getEarliestPodStartTime(ctx context.Context, k8sClient client.Client, kaiwoJob *kaiwov1alpha1.KaiwoJob) *metav1.Time {

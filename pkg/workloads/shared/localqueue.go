@@ -25,39 +25,37 @@ import (
 	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 )
 
-type KaiwoLocalQueueCommand struct {
-	workloadutils.CommandBase[workloadutils.CommandStateBase]
-	Name      string
-	Namespace string
+const (
+	DefaultLocalQueueName = "kaiwo"
+)
+
+type LocalQueueReconciler struct {
+	workloadutils.ResourceReconcilerBase[*kueuev1beta1.LocalQueue]
 }
 
-func NewKaiwoLocalQueueCommand(base workloadutils.CommandBase[workloadutils.CommandStateBase], name, namespace string) *KaiwoLocalQueueCommand {
-	cmd := &KaiwoLocalQueueCommand{
-		CommandBase: base,
-		Name:        name,
-		Namespace:   namespace,
+func NewLocalQueueReconciler(objectKey client.ObjectKey) *LocalQueueReconciler {
+	reconciler := &LocalQueueReconciler{
+		ResourceReconcilerBase: workloadutils.ResourceReconcilerBase[*kueuev1beta1.LocalQueue]{
+			ObjectKey: objectKey,
+		},
 	}
-	cmd.Self = cmd
-	return cmd
+	reconciler.Self = reconciler
+	return reconciler
 }
 
-func (k *KaiwoLocalQueueCommand) Build(_ context.Context, _ client.Client) (client.Object, error) {
-	objectKey := k.GetObjectKey()
+func (r *LocalQueueReconciler) Build(_ context.Context, _ client.Client) (*kueuev1beta1.LocalQueue, error) {
+	objectKey := r.ObjectKey
 	return &kueuev1beta1.LocalQueue{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      objectKey.Name,
 			Namespace: objectKey.Namespace,
 		},
 		Spec: kueuev1beta1.LocalQueueSpec{
-			ClusterQueue: kueuev1beta1.ClusterQueueReference(k.Name),
+			ClusterQueue: kueuev1beta1.ClusterQueueReference(r.ObjectKey.Name),
 		},
 	}, nil
 }
 
-func (k *KaiwoLocalQueueCommand) GetEmptyObject() client.Object {
+func (r *LocalQueueReconciler) GetEmptyObject() *kueuev1beta1.LocalQueue {
 	return &kueuev1beta1.LocalQueue{}
-}
-
-func (k *KaiwoLocalQueueCommand) GetName() string {
-	return k.Name
 }

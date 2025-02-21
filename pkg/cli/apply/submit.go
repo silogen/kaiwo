@@ -15,19 +15,14 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/silogen/kaiwo/pkg/workloads"
 
-	"k8s.io/apimachinery/pkg/runtime"
-
 	workloadjob "github.com/silogen/kaiwo/pkg/workloads/job"
 	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
-
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 
@@ -41,10 +36,6 @@ import (
 
 type KaiwoJobSubmitter struct {
 	Job *v1alpha1.KaiwoJob
-}
-
-func (k *KaiwoJobSubmitter) GetObject() client.Object {
-	return k.Job
 }
 
 func (k *KaiwoJobSubmitter) LoadFromPath(path string) error {
@@ -65,12 +56,13 @@ func (k *KaiwoJobSubmitter) LoadFromPath(path string) error {
 	return nil
 }
 
-func (k *KaiwoJobSubmitter) GetInvoker(ctx context.Context, scheme *runtime.Scheme, k8sClient client.Client) (workloadutils.CommandInvoker, error) {
-	invoker, err := workloadjob.BuildKaiwoJobInvoker(ctx, scheme, k.Job)
-	if err != nil {
-		return workloadutils.CommandInvoker{}, fmt.Errorf("failed to build invoker: %w", err)
-	}
-	return invoker, nil
+func (k *KaiwoJobSubmitter) GetObject() *v1alpha1.KaiwoJob {
+	return k.Job
+}
+
+func (k *KaiwoJobSubmitter) GetReconciler() workloadutils.Reconciler[*v1alpha1.KaiwoJob] {
+	reconciler := workloadjob.NewKaiwoJobReconciler(k.Job)
+	return &reconciler
 }
 
 func (k *KaiwoJobSubmitter) FromCliFlags(flags workloads.CLIFlags) {
@@ -109,8 +101,8 @@ func BuildSubmitCmd() *cobra.Command {
 		Short: "Submit a job",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			flags := GetCLIFlags(cmd)
-			submitter := &KaiwoJobSubmitter{}
-			return Apply(submitter, flags)
+			submitter := KaiwoJobSubmitter{}
+			return Apply(&submitter, flags)
 		},
 	}
 
