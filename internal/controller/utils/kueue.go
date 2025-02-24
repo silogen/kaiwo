@@ -32,9 +32,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
+const DefaultKaiwoQueueConfigName = "kaiwo"
+
+var excludeMasterNodes = baseutils.GetEnv("EXCLUDE_MASTER_NODES_FROM_NODE_POOLS", "false")
+
 func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwov1alpha1.ResourceFlavorSpec, map[string]kueuev1beta1.FlavorQuotas, error) {
+	logger := log.FromContext(ctx)
+
 	var resourceFlavors []kaiwov1alpha1.ResourceFlavorSpec
 	nodePoolResources := make(map[string]kueuev1beta1.FlavorQuotas)
 	nodePools := make(map[string][]string)
@@ -44,18 +51,25 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 	// Get node list dynamically
 	nodeList := GetNodeResources(ctx, c)
 
+	if strings.ToLower(excludeMasterNodes) == "true" {
+		logger.Info("Excluding master/control-plane nodes from nodepools. Set EXCLUDE_MASTER_NODES_FROM_NODE_POOLS=false to include them")
+	} else {
+		logger.Info("Including master/control-plane nodes in nodepools. Set EXCLUDE_MASTER_NODES_FROM_NODE_POOLS=true to exclude them")
+	}
+
 	for _, node := range nodeList {
 		// **Skip Control Plane Nodes**
-		if _, exists := node.Labels["node-role.kubernetes.io/control-plane"]; exists {
-			continue
+		if strings.ToLower(excludeMasterNodes) == "true" {
+			if _, exists := node.Labels["node-role.kubernetes.io/control-plane"]; exists {
+				continue
+			}
+			if _, exists := node.Labels["node-role.kubernetes.io/master"]; exists {
+				continue
+			}
 		}
-		if _, exists := node.Labels["node-role.kubernetes.io/master"]; exists {
-			continue
-		}
-
-		gpuType := "cpu-only"
 		gpuCount := 0
-		var gpuVendor string
+		gpuVendor := "cpu"
+		gpuType := "only"
 
 		// Identify AMD GPU Nodes
 		if gpuID, exists := node.Labels["amd.com/gpu.device-id"]; exists {
@@ -157,6 +171,8 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 			}
 		}
 	}
+	logger.Info("Final generated node pool resources", "nodePoolResources", nodePoolResources)
+	logger.Info("Final generated resource flavors", "resourceFlavors", resourceFlavors)
 
 	return resourceFlavors, nodePoolResources, nil
 }
@@ -219,6 +235,32 @@ func CreateClusterQueue(nodePoolResources map[string]kueuev1beta1.FlavorQuotas, 
 	var coveredResourcesSlice []corev1.ResourceName
 	for resource := range coveredResources {
 		coveredResourcesSlice = append(coveredResourcesSlice, resource)
+	}
+
+	// Ensure every flavor has the same set of resources as coveredResources
+	for i, flavor := range flavorQuotas {
+		missingResources := []corev1.ResourceName{}
+
+		for _, covered := range coveredResourcesSlice {
+			found := false
+			for _, quota := range flavor.Resources {
+				if quota.Name == covered {
+					found = true
+					break
+				}
+			}
+			if !found {
+				missingResources = append(missingResources, covered)
+			}
+		}
+
+		// If a resource is missing from a flavor, add it with zero quota
+		for _, missing := range missingResources {
+			flavorQuotas[i].Resources = append(flavorQuotas[i].Resources, kueuev1beta1.ResourceQuota{
+				Name:         missing,
+				NominalQuota: *resource.NewQuantity(0, resource.DecimalSI), // Set to zero
+			})
+		}
 	}
 
 	// Define the resource group dynamically based on collected resources

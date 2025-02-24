@@ -2,7 +2,7 @@ apiVersion: v1
 kind: Namespace
 metadata:
   labels:
-    control-plane: controller-manager
+    control-plane: kaiwo-controller-manager
     app.kubernetes.io/name: kaiwo
     app.kubernetes.io/managed-by: kustomize
   name: system
@@ -13,13 +13,13 @@ metadata:
   name: controller-manager
   namespace: system
   labels:
-    control-plane: controller-manager
+    control-plane: kaiwo-controller-manager
     app.kubernetes.io/name: kaiwo
     app.kubernetes.io/managed-by: kustomize
 spec:
   selector:
     matchLabels:
-      control-plane: controller-manager
+      control-plane: kaiwo-controller-manager
       app.kubernetes.io/name: kaiwo
   replicas: 1
   template:
@@ -27,7 +27,7 @@ spec:
       annotations:
         kubectl.kubernetes.io/default-container: manager
       labels:
-        control-plane: controller-manager
+        control-plane: kaiwo-controller-manager
         app.kubernetes.io/name: kaiwo
     spec:
       # TODO(user): Uncomment the following code to configure the nodeAffinity expression
@@ -61,9 +61,23 @@ spec:
       - command:
         - /manager
         args:
-          - --leader-elect
-          - --health-probe-bind-address=:8081
+        - --leader-elect
+        - --health-probe-bind-address=:8081
         image: controller:latest
+        imagePullPolicy: Always
+        env:
+          - name: STORAGECLASS
+            value: mlstorage
+          - name: DEFAULT_DATA_MOUNT_PATH
+            value: /workload
+          - name: DEFAULT_HF_MOUNT_PATH
+            value: /.cache/huggingface
+          - name: DEFAULT_GPU_RESOURCE_KEY
+            value: amd
+          - name: EXCLUDE_MASTER_NODES_FROM_NODE_POOLS
+            value: "false"
+          - name: ENFORCE_KAIWO_ON_GPU_WORKLOADS
+            value: "false"
         name: manager
         ports: []
         securityContext:
@@ -94,5 +108,5 @@ spec:
             memory: 64Mi
         volumeMounts: []
       volumes: []
-      serviceAccountName: controller-manager
+      serviceAccountName: kaiwo-controller-manager
       terminationGracePeriodSeconds: 10

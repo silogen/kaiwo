@@ -12,16 +12,16 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      control-plane: controller-manager
+      control-plane: kaiwo-controller-manager
       app.kubernetes.io/name: kaiwo
   policyTypes:
-    - Ingress
+  - Ingress
   ingress:
-    # This allows ingress traffic from any namespace with the label metrics: enabled
-    - from:
-      - namespaceSelector:
-          matchLabels:
-            metrics: enabled  # Only from namespaces with this label
-      ports:
-        - port: 8443
-          protocol: TCP
+  # This allows ingress traffic from any namespace with the label metrics: enabled
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          metrics: enabled # Only from namespaces with this label
+    ports:
+    - port: 8443
+      protocol: TCP
