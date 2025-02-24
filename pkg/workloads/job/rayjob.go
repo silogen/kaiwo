@@ -58,7 +58,7 @@ func GetDefaultRayJobSpec(dangerous bool) rayv1.RayJobSpec {
 
 type RayJobReconciler struct {
 	workloadutils.ResourceReconcilerBase[*rayv1.RayJob]
-	KaiwoJobSpec v1alpha1.KaiwoJobSpec
+	KaiwoJob *v1alpha1.KaiwoJob
 }
 
 func NewRayJobReconciler(kaiwoJob *v1alpha1.KaiwoJob) *RayJobReconciler {
@@ -66,7 +66,7 @@ func NewRayJobReconciler(kaiwoJob *v1alpha1.KaiwoJob) *RayJobReconciler {
 		ResourceReconcilerBase: workloadutils.ResourceReconcilerBase[*rayv1.RayJob]{
 			ObjectKey: client.ObjectKeyFromObject(kaiwoJob),
 		},
-		KaiwoJobSpec: kaiwoJob.Spec,
+		KaiwoJob: kaiwoJob,
 	}
 	reconciler.Self = reconciler
 	return reconciler
@@ -75,7 +75,7 @@ func NewRayJobReconciler(kaiwoJob *v1alpha1.KaiwoJob) *RayJobReconciler {
 func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (*rayv1.RayJob, error) {
 	logger := log.FromContext(ctx)
 
-	spec := r.KaiwoJobSpec
+	spec := r.KaiwoJob.Spec
 
 	var rayJobSpec rayv1.RayJobSpec
 	if spec.RayJob == nil {
@@ -170,7 +170,7 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      r.ObjectKey.Name,
 			Namespace: r.ObjectKey.Namespace,
-			Labels:    spec.Labels,
+			Labels:    r.KaiwoJob.Labels,
 		},
 		Spec: rayJobSpec,
 	}

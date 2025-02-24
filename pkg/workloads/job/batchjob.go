@@ -38,12 +38,17 @@ func GetDefaultJobSpec(dangerous bool) batchv1.JobSpec {
 	return batchv1.JobSpec{
 		TTLSecondsAfterFinished: baseutils.Pointer(int32(3600)),
 		Template:                controllerutils.GetPodTemplate(*resource.NewQuantity(1*1024*1024*1024, resource.BinarySI), dangerous),
+		Selector: &metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"job-name": "PLACEHOLDER",
+			},
+		},
 	}
 }
 
 type BatchJobReconciler struct {
 	workloadutils.ResourceReconcilerBase[*batchv1.Job]
-	KaiwoJobSpec v1alpha1.KaiwoJobSpec
+	KaiwoJob *v1alpha1.KaiwoJob
 }
 
 func NewBatchJobReconciler(kaiwoJob *v1alpha1.KaiwoJob) *BatchJobReconciler {
@@ -51,7 +56,7 @@ func NewBatchJobReconciler(kaiwoJob *v1alpha1.KaiwoJob) *BatchJobReconciler {
 		ResourceReconcilerBase: workloadutils.ResourceReconcilerBase[*batchv1.Job]{
 			ObjectKey: client.ObjectKeyFromObject(kaiwoJob),
 		},
-		KaiwoJobSpec: kaiwoJob.Spec,
+		KaiwoJob: kaiwoJob,
 	}
 	reconciler.Self = reconciler
 	return reconciler
@@ -60,7 +65,7 @@ func NewBatchJobReconciler(kaiwoJob *v1alpha1.KaiwoJob) *BatchJobReconciler {
 func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batchv1.Job, error) {
 	logger := log.FromContext(ctx)
 
-	spec := r.KaiwoJobSpec
+	spec := r.KaiwoJob.Spec
 
 	var jobSpec batchv1.JobSpec
 
@@ -104,11 +109,13 @@ func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batch
 		return nil, baseutils.LogErrorf(logger, "failed to add env vars", err)
 	}
 
+	jobSpec.Suspend = baseutils.Pointer(true)
+
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      r.ObjectKey.Name,
 			Namespace: r.ObjectKey.Namespace,
-			Labels:    spec.Labels,
+			Labels:    r.KaiwoJob.Labels,
 		},
 		Spec: jobSpec,
 	}
