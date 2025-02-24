@@ -19,7 +19,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/silogen/kaiwo/internal/controller"
+	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 
 	"github.com/spf13/cobra"
 
@@ -78,7 +78,7 @@ func AddCliFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolVarP(useRay, "ray", "", false, "Use ray for submitting the workload")
 	cmd.Flags().BoolVarP(dangerous, "dangerous", "", false, "Skip adding the default security context to containers")
 
-	cmd.Flags().StringVarP(queue, "queue", "", controller.DefaultKaiwoQueueConfigName, "The local queue to use for jobs")
+	cmd.Flags().StringVarP(queue, "queue", "", controllerutils.DefaultKaiwoQueueConfigName, "The local queue to use for jobs")
 }
 
 func GetCLIFlags(cmd *cobra.Command) workloads.CLIFlags {

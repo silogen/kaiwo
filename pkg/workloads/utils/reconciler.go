@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
@@ -95,6 +97,21 @@ func (d *ResourceReconcilerBase[T]) Reconcile(ctx context.Context, k8sClient cli
 	actual, err = d.Self.Get(ctx, k8sClient)
 	if err == nil {
 		// Object exists
+
+		if !metav1.IsControlledBy(actual, owner) {
+			// Ensure the ownership is up-to-date
+			logger.Info("Updating object owner")
+			if err := ctrl.SetControllerReference(owner, actual, scheme); err != nil {
+				logger.Error(err, "Failed to set controller reference on existing object")
+				return empty, nil, err
+			}
+
+			if err := k8sClient.Update(ctx, actual); err != nil {
+				logger.Error(err, "Failed to update existing Job with correct owner reference")
+				return empty, nil, err
+			}
+		}
+
 		err = d.Update(ctx, k8sClient, &desired, actual)
 		if err != nil {
 			return empty, nil, fmt.Errorf("failed to update object: %w", err)

@@ -78,7 +78,7 @@ func (j *JobWebhook) Default(ctx context.Context, obj runtime.Object) error {
 	if kaiwoManages(job) {
 		job.Labels[kaiwov1alpha1.QueueLabel] = controllerutils.DefaultKaiwoQueueConfigName
 		if job.Spec.Template.Spec.TerminationGracePeriodSeconds == nil {
-			job.Spec.Template.Spec.TerminationGracePeriodSeconds = controllerutils.Int64Ptr(0)
+			job.Spec.Template.Spec.TerminationGracePeriodSeconds = baseutils.Pointer(int64(0))
 		}
 		joblog.Info("Set terminationGracePeriodSeconds to 0", "JobName", job.Name)
 		if err := j.ensureKaiwoJob(ctx, job, authenticatedUser); err != nil {
@@ -121,7 +121,7 @@ func (j *JobWebhook) ensureKaiwoJob(ctx context.Context, job *batchv1.Job, authe
 		},
 		Spec: kaiwov1alpha1.KaiwoJobSpec{
 			Job:  job,
-			User: authenticatedUser,
+			User: baseutils.Pointer(authenticatedUser),
 		},
 	}
 
