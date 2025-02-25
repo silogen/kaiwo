@@ -47,13 +47,5 @@ kubectl create -k "$KUBERAY_MANIFESTS"
 kubectl rollout status deployment/kuberay-operator --timeout=1m
 echo "KubeRay deployed."
 
-# Ensure test namespace exists
-if ! kubectl get namespace "$TEST_NAME" >/dev/null 2>&1; then
-  echo "Creating test namespace '$TEST_NAME'"
-  kubectl create namespace "$TEST_NAME"
-else
-  echo "Test namespace '$TEST_NAME' already exists."
-fi
-
 echo "Cluster is ready!"
 

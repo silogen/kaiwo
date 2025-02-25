@@ -25,6 +25,8 @@ import (
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2" //nolint:golint,revive
+
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
 const (
@@ -167,7 +169,7 @@ func IsCertManagerCRDsInstalled() bool {
 
 // LoadImageToKindClusterWithName loads a local docker image to the kind cluster
 func LoadImageToKindClusterWithName(name string) error {
-	cluster := "kind"
+	cluster := baseutils.GetEnv("TEST_NAME", "kaiwo-test")
 	if v, ok := os.LookupEnv("KIND_CLUSTER"); ok {
 		cluster = v
 	}
