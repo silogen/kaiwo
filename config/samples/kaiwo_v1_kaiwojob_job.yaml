@@ -6,8 +6,15 @@ metadata:
 spec:
   user: test@amd.com
   gpus: 0
+  image: ubuntu:latest
+  entrypoint: |
+    set -e
+    echo "Job started, will sleep for 20 seconds..."
+    sleep 20
+    echo "Job finished"
+  ray: false
   storage:
-    storageEnabled: false
+    storageEnabled: true
     storageClassName: "longhorn"
     accessMode: "ReadWriteOnce"
     data:
@@ -51,17 +58,3 @@ spec:
         - repoId: TinyLlama/TinyLlama-1.1B-Chat-v1.0
           files:
             - "README.md"
-  job:
-    apiVersion: batch/v1
-    kind: Job
-    spec:
-      template:
-        spec:
-          containers:
-          - name: hello-world
-            image: ubuntu:latest
-            imagePullPolicy: Always
-            # Just spin & wait forever
-            command: [ "/bin/bash", "-c", "--" ]
-            args: [ "sleep 30" ]
-          restartPolicy: Never

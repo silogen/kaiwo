@@ -15,12 +15,7 @@
 package cli
 
 import (
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-
-	"github.com/silogen/kaiwo/pkg/workloads"
-	"github.com/silogen/kaiwo/pkg/workloads/deployments"
-	"github.com/silogen/kaiwo/pkg/workloads/ray"
 )
 
 var (
@@ -36,30 +31,12 @@ func BuildServeCmd() *cobra.Command {
 			if err := cmd.Parent().PersistentPreRunE(cmd, args); err != nil {
 				return err
 			}
-			return PreRunLoadConfig(cmd, args)
+			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			var deployment workloads.Workload
-
-			deploymentFlags := workloads.DeploymentFlags{
-				Model: model,
-			}
-
-			if useRayForServe {
-				deployment = &ray.Deployment{}
-				logrus.Debugln("Using RayService for deployment")
-			} else {
-				deployment = &deployments.Deployment{}
-			}
-
-			return RunApply(deployment, deploymentFlags)
+			return nil
 		},
 	}
-
-	// Common shared flags
-	AddExecFlags(cmd)
-	AddMetaFlags(cmd)
-	AddSchedulingFlags(cmd)
 
 	// Deployment-specific flags
 	cmd.Flags().BoolVarP(&useRayForServe, "ray", "", false, "use ray for submitting the job")

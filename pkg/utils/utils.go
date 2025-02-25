@@ -19,7 +19,27 @@ import (
 	"os"
 	"regexp"
 	"strings"
+
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/go-logr/logr"
 )
+
+const (
+	DebugLogLevel = 1
+	TraceLogLevel = 2
+)
+
+func Debug(logger logr.Logger, msg string, keysAndValues ...any) {
+	logger.V(DebugLogLevel).Info(msg, keysAndValues...)
+}
+
+func Trace(logger logr.Logger, msg string, keysAndValues ...any) {
+	logger.V(TraceLogLevel).Info(msg, keysAndValues...)
+}
 
 var (
 	DefaultNamespace = GetEnv("DEFAULT_WORKLOAD_NAMESPACE", "kaiwo")
@@ -68,4 +88,49 @@ func GetEnv(key, defaultValue string) string {
 		return defaultValue
 	}
 	return value
+}
+
+func Pointer[T any](d T) *T {
+	return &d
+}
+
+func ValueOrDefault[T any](d *T) T {
+	if d == nil {
+		return *new(T)
+	}
+	return *d
+}
+
+// LogErrorf takes care of logging the error message with logr, as well as creating the error object to return
+func LogErrorf(logger logr.Logger, message string, err error) error {
+	logger.Error(err, message)
+	return fmt.Errorf("%s: %w", message, err)
+}
+
+func GetGVK(scheme runtime.Scheme, object client.Object) (schema.GroupVersionKind, error) {
+	gvks, _, err := scheme.ObjectKinds(object)
+	if err != nil {
+		return schema.GroupVersionKind{}, fmt.Errorf("failed to determine GVK for %T: %w", object, err)
+	}
+	if len(gvks) == 0 {
+		return schema.GroupVersionKind{}, fmt.Errorf("no GVK found for object type %T", object)
+	}
+	return gvks[0], nil
+}
+
+func GetObjectDescriptor(scheme runtime.Scheme, object client.Object) (ObjectDescriptor, error) {
+	objectKey := client.ObjectKeyFromObject(object)
+	gvk, err := GetGVK(scheme, object)
+	if err != nil {
+		return ObjectDescriptor{}, err
+	}
+	return ObjectDescriptor{
+		GVK:       gvk,
+		ObjectKey: objectKey,
+	}, nil
+}
+
+type ObjectDescriptor struct {
+	GVK       schema.GroupVersionKind `json:"gvk"`
+	ObjectKey client.ObjectKey        `json:"objectKey"`
 }

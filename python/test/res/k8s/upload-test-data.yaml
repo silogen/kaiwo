@@ -1,0 +1,18 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: upload-test-data
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: "upload"
+          image: ghcr.io/silogen/kaiwo-python:0.3
+          workingDir: "/app/test"
+          command:
+            - python
+            - upload_test_data.py
+          env:
+            - name: STORAGE_EMULATOR_HOST
+              value: http://gcs-service:9023

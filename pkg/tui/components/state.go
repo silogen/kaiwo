@@ -15,16 +15,14 @@
 package tuicomponents
 
 import (
-	"github.com/silogen/kaiwo/pkg/workloads"
-	"github.com/silogen/kaiwo/pkg/workloads/utils"
+	cliutils "github.com/silogen/kaiwo/pkg/cli/utils"
 )
 
 type RunState struct {
 	WorkloadType           string
-	Workload               workloads.Workload
 	User                   string
 	Namespace              string
 	PodName                string
 	ContainerName          string
-	PodSelectionPredicates []utils.PodSelectionPredicate
+	PodSelectionPredicates []cliutils.PodSelectionPredicate
 }
