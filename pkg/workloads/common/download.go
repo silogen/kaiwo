@@ -60,29 +60,30 @@ func NewDownloadJobConfigMapReconciler(objectKey client.ObjectKey, storageSpec *
 func (r *DownloadJobConfigMapReconciler) Build(ctx context.Context, _ client.Client) (*corev1.ConfigMap, error) {
 	logger := log.FromContext(ctx)
 
-	// Update secret paths
-	setSecretPath := func(ref *kaiwov1alpha1.ValueReference) {
-		if ref.File == "" {
-			// Path where the secret will be mounted on in the primary container
-			ref.File = filepath.Join(secretsMount, ref.SecretName, ref.SecretKey)
+	if r.StorageSpec.HasObjectStorageDownloads() {
+		// Update secret paths
+		setSecretPath := func(ref *kaiwov1alpha1.ValueReference) {
+			if ref.File == "" {
+				// Path where the secret will be mounted on in the primary container
+				ref.File = filepath.Join(secretsMount, ref.SecretName, ref.SecretKey)
+			}
 		}
-	}
 
-	// Set secret paths
-
-	s3Downloads := r.StorageSpec.Data.Download.S3
-	for i := range r.StorageSpec.Data.Download.S3 {
-		setSecretPath(&s3Downloads[i].EndpointUrl)
-		setSecretPath(&s3Downloads[i].AccessKeyId)
-		setSecretPath(&s3Downloads[i].SecretKey)
-	}
-	gcsDownloads := r.StorageSpec.Data.Download.GCS
-	for i := range gcsDownloads {
-		setSecretPath(&gcsDownloads[i].ApplicationCredentials)
-	}
-	azureBlobDownloads := r.StorageSpec.Data.Download.AzureBlob
-	for i := range azureBlobDownloads {
-		setSecretPath(&azureBlobDownloads[i].ConnectionString)
+		// Set secret paths
+		s3Downloads := r.StorageSpec.Data.Download.S3
+		for i := range r.StorageSpec.Data.Download.S3 {
+			setSecretPath(&s3Downloads[i].EndpointUrl)
+			setSecretPath(&s3Downloads[i].AccessKeyId)
+			setSecretPath(&s3Downloads[i].SecretKey)
+		}
+		gcsDownloads := r.StorageSpec.Data.Download.GCS
+		for i := range gcsDownloads {
+			setSecretPath(&gcsDownloads[i].ApplicationCredentials)
+		}
+		azureBlobDownloads := r.StorageSpec.Data.Download.AzureBlob
+		for i := range azureBlobDownloads {
+			setSecretPath(&azureBlobDownloads[i].ConnectionString)
+		}
 	}
 
 	downloadConfig := r.StorageSpec.CreateConfig()
