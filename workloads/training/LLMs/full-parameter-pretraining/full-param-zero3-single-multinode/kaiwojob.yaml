@@ -1,0 +1,62 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoJob
+metadata:
+  name: zero3-multinode-pretraining
+  namespace: kaiwo
+spec:
+  user: test@amd.com
+  gpus: 6
+  ray: true
+  entrypoint: |
+    git clone https://github.com/silogen/kaiwo.git && \
+    python kaiwo/workloads/training/LLMs/full-parameter-pretraining/full-param-zero3-single-multinode/main.py --model-name=meta-llama/Llama-3.1-8B-Instruct --ds-config=./kaiwo/workloads/training/LLMs/full-parameter-pretraining/full-param-zero3-single-multinode/zero_3_offload_optim_param.json --bucket=silogen-dev-ray --num-epochs=2 --num-devices=8 --batch-size-per-device=32 --eval-batch-size-per-device=32 --ctx-len=1024
+  envVars:
+  - name: HF_TOKEN
+    valueFrom:
+      secretKeyRef: 
+        name: hf-token
+        key: hf-token
+  storage:
+    storageEnabled: true
+    storageClassName: mlstorage
+    accessMode: "ReadWriteOnce"
+    # data:
+    #   storageSize: "2Gi"
+    #   mountPath: "/workload"
+    #   download:
+    #     s3:
+    #       - endpointUrl:
+    #           secretName: minio-secret
+    #           secretKey: endpoint
+    #         accessKeyId:
+    #           secretName: minio-secret
+    #           secretKey: access_key_id
+    #         secretKey:
+    #           secretName: minio-secret
+    #           secretKey: secret_key
+    #         buckets:
+    #           - name: test
+    #             files:
+    #               - path: file01.txt
+    #                 targetPath: s3/file01.txt
+    #             folders:
+    #               - path: .
+    #                 targetPath: s3/all
+    #     azureBlob:
+    #       - connectionString:
+    #           secretName: azure-secret
+    #           secretKey: connection_string
+    #         containers:
+    #           - name: test
+    #             files:
+    #               - path: file01.txt
+    #                 targetPath: azure/file01.txt
+    #             folders:
+    #               - path: .
+    #                 targetPath: azure/all
+    huggingFace:
+      storageSize: "2Gi"
+      mountPath: "/.cache/huggingface"  # Also sets the env var HF_HOME to this value in each container
+      preCacheRepos:
+        - repoId: meta-llama/Llama-3.1-8B-Instruct
+          files: []
