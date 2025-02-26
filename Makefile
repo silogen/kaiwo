@@ -47,6 +47,7 @@ vet: ## Run go vet against code.
 test: manifests generate fmt vet setup-envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
 
+TEST_NAME ?= "kaiwo-test"
 
 .PHONY: test-e2e
 test-e2e: manifests generate fmt vet ## Run the e2e tests. Requires an isolated environment using Kind.
@@ -54,8 +55,8 @@ test-e2e: manifests generate fmt vet ## Run the e2e tests. Requires an isolated 
 		echo "Kind is not installed. Please install Kind manually."; \
 		exit 1; \
 	}
-	@kind get clusters | grep -q 'kind' || { \
-		echo "No Kind cluster is running. Please start a Kind cluster before running the e2e tests."; \
+	@kind get clusters | grep -q "$(TEST_NAME)" || { \
+		echo "No Kind cluster named '$(TEST_NAME)' is running. Please start a Kind cluster before running the e2e tests."; \
 		exit 1; \
 	}
 	go test ./test/e2e/ -v -ginkgo.v
@@ -127,7 +128,8 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 .PHONY: deploy
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	$(KUSTOMIZE) build config/default | $(KUBECTL) apply -f -
+	$(KUSTOMIZE) build config/default | $(KUBECTL) apply --server-side -f -
+	$(KUBECTL) rollout status deployment/kaiwo-controller-manager -n kaiwo-system --timeout=5m  
 
 .PHONY: undeploy
 undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
