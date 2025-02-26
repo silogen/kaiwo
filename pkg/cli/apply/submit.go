@@ -19,12 +19,12 @@ import (
 	"os"
 	"path/filepath"
 
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads/common"
+
 	"github.com/silogen/kaiwo/pkg/workloads"
 
-	workloadjob "github.com/silogen/kaiwo/pkg/workloads/job"
-	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
-
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
+	workloadjob "github.com/silogen/kaiwo/pkg/workloads/job"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

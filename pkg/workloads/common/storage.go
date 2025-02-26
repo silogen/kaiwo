@@ -12,14 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package workloadshared
+package workloadcommon
 
 import (
 	"context"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -32,7 +30,7 @@ const (
 )
 
 type StorageReconciler struct {
-	workloadutils.ResourceReconcilerBase[*corev1.PersistentVolumeClaim]
+	ResourceReconcilerBase[*corev1.PersistentVolumeClaim]
 	Amount           string
 	StorageClassName string
 	AccessMode       corev1.PersistentVolumeAccessMode
@@ -44,7 +42,7 @@ func NewStorageReconciler(objectKey client.ObjectKey,
 	amount string,
 ) *StorageReconciler {
 	reconciler := &StorageReconciler{
-		ResourceReconcilerBase: workloadutils.ResourceReconcilerBase[*corev1.PersistentVolumeClaim]{
+		ResourceReconcilerBase: ResourceReconcilerBase[*corev1.PersistentVolumeClaim]{
 			ObjectKey: objectKey,
 		},
 		Amount:           amount,

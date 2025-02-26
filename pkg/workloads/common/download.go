@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package workloadshared
+package workloadcommon
 
 import (
 	"context"
@@ -29,7 +29,6 @@ import (
 
 	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 )
 
 const (
@@ -43,13 +42,13 @@ var (
 )
 
 type DownloadJobConfigMapReconciler struct {
-	workloadutils.ResourceReconcilerBase[*corev1.ConfigMap]
+	ResourceReconcilerBase[*corev1.ConfigMap]
 	StorageSpec *kaiwov1alpha1.StorageSpec
 }
 
 func NewDownloadJobConfigMapReconciler(objectKey client.ObjectKey, storageSpec *kaiwov1alpha1.StorageSpec) *DownloadJobConfigMapReconciler {
 	reconciler := &DownloadJobConfigMapReconciler{
-		ResourceReconcilerBase: workloadutils.ResourceReconcilerBase[*corev1.ConfigMap]{
+		ResourceReconcilerBase: ResourceReconcilerBase[*corev1.ConfigMap]{
 			ObjectKey: objectKey,
 		},
 		StorageSpec: storageSpec,
@@ -111,14 +110,14 @@ func (r *DownloadJobConfigMapReconciler) GetEmptyObject() *corev1.ConfigMap {
 }
 
 type DownloadJobReconciler struct {
-	workloadutils.ResourceReconcilerBase[*batchv1.Job]
+	ResourceReconcilerBase[*batchv1.Job]
 	StorageSpec *kaiwov1alpha1.StorageSpec
 	PvcBaseName string
 }
 
 func NewDownloadJobReconciler(objectKey client.ObjectKey, storageSpec *kaiwov1alpha1.StorageSpec, pvcBaseName string) *DownloadJobReconciler {
 	reconciler := &DownloadJobReconciler{
-		ResourceReconcilerBase: workloadutils.ResourceReconcilerBase[*batchv1.Job]{
+		ResourceReconcilerBase: ResourceReconcilerBase[*batchv1.Job]{
 			ObjectKey: objectKey,
 		},
 		StorageSpec: storageSpec,

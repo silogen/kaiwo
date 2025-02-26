@@ -30,18 +30,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	workloadshared "github.com/silogen/kaiwo/pkg/workloads/shared"
-	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
-
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	workloadshared "github.com/silogen/kaiwo/pkg/workloads/common"
 
 	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
 type KaiwoJobReconciler struct {
-	workloadutils.ReconcilerBase[*kaiwov1alpha1.KaiwoJob]
+	workloadshared.ReconcilerBase[*kaiwov1alpha1.KaiwoJob]
 	DownloadJobConfigMap *workloadshared.DownloadJobConfigMapReconciler
 	DownloadJob          *workloadshared.DownloadJobReconciler
 	HuggingFacePVC       *workloadshared.StorageReconciler
@@ -57,7 +56,7 @@ func NewKaiwoJobReconciler(kaiwoJob *kaiwov1alpha1.KaiwoJob) KaiwoJobReconciler 
 	objectKey := client.ObjectKeyFromObject(kaiwoJob)
 
 	reconciler := KaiwoJobReconciler{
-		ReconcilerBase: workloadutils.ReconcilerBase[*kaiwov1alpha1.KaiwoJob]{
+		ReconcilerBase: workloadshared.ReconcilerBase[*kaiwov1alpha1.KaiwoJob]{
 			Object:    kaiwoJob,
 			ObjectKey: objectKey,
 		},

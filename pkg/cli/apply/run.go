@@ -20,9 +20,9 @@ import (
 	"os"
 	"strings"
 
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads/common"
 
-	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 

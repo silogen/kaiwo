@@ -18,7 +18,7 @@ import (
 	"context"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	workloadshared "github.com/silogen/kaiwo/pkg/workloads/shared"
+	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -46,11 +46,11 @@ func UpdatePodSpecStorage(ctx context.Context, podSpec *corev1.PodSpec, storageS
 
 	// Add volumes
 	if storageSpec.Data.IsRequested() {
-		addStorageVolume(workloadshared.DataStoragePostfix, baseutils.FormatNameWithPostfix(ownerName, workloadshared.DataStoragePostfix))
+		addStorageVolume(workloadcommon.DataStoragePostfix, baseutils.FormatNameWithPostfix(ownerName, workloadcommon.DataStoragePostfix))
 	}
 
 	if storageSpec.HuggingFace.IsRequested() {
-		addStorageVolume(workloadshared.HfStoragePostfix, baseutils.FormatNameWithPostfix(ownerName, workloadshared.HfStoragePostfix))
+		addStorageVolume(workloadcommon.HfStoragePostfix, baseutils.FormatNameWithPostfix(ownerName, workloadcommon.HfStoragePostfix))
 	}
 
 	addVolumeMount := func(container *corev1.Container, name string, path string) {
@@ -71,10 +71,10 @@ func UpdatePodSpecStorage(ctx context.Context, podSpec *corev1.PodSpec, storageS
 
 	addContainerInfo := func(container *corev1.Container) {
 		if storageSpec.Data.IsRequested() {
-			addVolumeMount(container, workloadshared.DataStoragePostfix, storageSpec.Data.MountPath)
+			addVolumeMount(container, workloadcommon.DataStoragePostfix, storageSpec.Data.MountPath)
 		}
 		if storageSpec.HuggingFace.IsRequested() {
-			addVolumeMount(container, workloadshared.HfStoragePostfix, storageSpec.HuggingFace.MountPath)
+			addVolumeMount(container, workloadcommon.HfStoragePostfix, storageSpec.HuggingFace.MountPath)
 			addEnvVar(container, "HF_HOME", storageSpec.HuggingFace.MountPath)
 		}
 	}

@@ -17,14 +17,14 @@ package workloadjob
 import (
 	"context"
 
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads/common"
+
 	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
-
-	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"

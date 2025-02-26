@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package workloadshared
+package workloadcommon
 
 import (
 	"context"
@@ -21,8 +21,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
-
-	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 )
 
 const (
@@ -30,12 +28,12 @@ const (
 )
 
 type LocalQueueReconciler struct {
-	workloadutils.ResourceReconcilerBase[*kueuev1beta1.LocalQueue]
+	ResourceReconcilerBase[*kueuev1beta1.LocalQueue]
 }
 
 func NewLocalQueueReconciler(objectKey client.ObjectKey) *LocalQueueReconciler {
 	reconciler := &LocalQueueReconciler{
-		ResourceReconcilerBase: workloadutils.ResourceReconcilerBase[*kueuev1beta1.LocalQueue]{
+		ResourceReconcilerBase: ResourceReconcilerBase[*kueuev1beta1.LocalQueue]{
 			ObjectKey: objectKey,
 		},
 	}
