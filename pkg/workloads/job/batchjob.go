@@ -38,11 +38,6 @@ func GetDefaultJobSpec(dangerous bool) batchv1.JobSpec {
 	return batchv1.JobSpec{
 		TTLSecondsAfterFinished: baseutils.Pointer(int32(3600)),
 		Template:                controllerutils.GetPodTemplate(*resource.NewQuantity(1*1024*1024*1024, resource.BinarySI), dangerous),
-		Selector: &metav1.LabelSelector{
-			MatchLabels: map[string]string{
-				"job-name": "PLACEHOLDER",
-			},
-		},
 	}
 }
 
@@ -73,6 +68,12 @@ func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batch
 		jobSpec = GetDefaultJobSpec(baseutils.ValueOrDefault(spec.Dangerous))
 	} else {
 		jobSpec = spec.Job.Spec
+	}
+
+	if baseutils.ValueOrDefault(spec.Image) != "" {
+		for i := range jobSpec.Template.Spec.Containers {
+			jobSpec.Template.Spec.Containers[i].Image = *spec.Image
+		}
 	}
 
 	if jobSpec.Template.ObjectMeta.Labels == nil {

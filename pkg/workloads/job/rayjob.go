@@ -101,6 +101,17 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 		rayJobSpec.Entrypoint = *spec.EntryPoint
 	}
 
+	if baseutils.ValueOrDefault(spec.Image) != "" {
+		for i := range rayJobSpec.RayClusterSpec.HeadGroupSpec.Template.Spec.Containers {
+			rayJobSpec.RayClusterSpec.HeadGroupSpec.Template.Spec.Containers[i].Image = *spec.Image
+		}
+		for i := range rayJobSpec.RayClusterSpec.WorkerGroupSpecs {
+			for j := range rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Template.Spec.Containers {
+				rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Template.Spec.Containers[j].Image = *spec.Image
+			}
+		}
+	}
+
 	replicas := baseutils.ValueOrDefault(spec.Replicas)
 	gpusPerReplica := baseutils.ValueOrDefault(spec.GpusPerReplica)
 

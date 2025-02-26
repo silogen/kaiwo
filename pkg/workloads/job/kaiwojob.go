@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"reflect"
 
+	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
@@ -132,6 +134,16 @@ func sanitize(kaiwoJob *kaiwov1alpha1.KaiwoJob) {
 
 	if baseutils.ValueOrDefault(kaiwoJob.Spec.Image) == "" {
 		kaiwoJob.Spec.Image = baseutils.Pointer(baseutils.DefaultRayImage)
+	}
+
+	if kaiwoJob.Labels == nil {
+		kaiwoJob.Labels = make(map[string]string)
+	}
+
+	if baseutils.ValueOrDefault(kaiwoJob.Spec.ClusterQueue) == "" {
+		kaiwoJob.Labels[kaiwov1alpha1.QueueLabel] = controllerutils.DefaultKaiwoQueueConfigName
+	} else {
+		kaiwoJob.Labels[kaiwov1alpha1.QueueLabel] = baseutils.ValueOrDefault(kaiwoJob.Spec.ClusterQueue)
 	}
 }
 
@@ -340,56 +352,6 @@ func checkJobCompletion(ctx context.Context, k8sClient client.Client, kaiwoJob *
 
 	return jobSucceeded, jobFailed, nil
 }
-
-//func fetchStartTimeAndStatus(
-//	ctx context.Context,
-//	k8sClient client.Client,
-//	objectKey client.ObjectKey,
-//) (
-//	earliestRunningTime *metav1.Time,
-//	earliestStartTime *metav1.Time,
-//	status kaiwov1alpha1.Status,
-//	err error,
-//) {
-//	logger := log.FromContext(ctx)
-//	podList := &corev1.PodList{}
-//	err = k8sClient.List(ctx, podList, client.InNamespace(objectKey.Namespace), client.MatchingLabels{"job-name": objectKey.Name})
-//	if err != nil {
-//		return nil, nil, kaiwov1alpha1.StatusNew, baseutils.LogErrorf(logger, "failed to list pods for job", err)
-//	}
-//
-//	var runningPods, pendingPods []corev1.Pod
-//
-//	for _, pod := range podList.Items {
-//		if pod.Status.StartTime != nil {
-//			if earliestStartTime == nil || pod.Status.StartTime.Before(earliestStartTime) {
-//				earliestStartTime = pod.Status.StartTime
-//			}
-//		}
-//
-//		switch pod.Status.Phase {
-//		case corev1.PodRunning:
-//			runningPods = append(runningPods, pod)
-//			if pod.Status.StartTime != nil {
-//				if earliestRunningTime == nil || pod.Status.StartTime.Before(earliestRunningTime) {
-//					earliestRunningTime = pod.Status.StartTime
-//				}
-//			}
-//		case corev1.PodPending:
-//			pendingPods = append(pendingPods, pod)
-//		}
-//	}
-//
-//	if len(runningPods) > 0 {
-//		status = kaiwov1alpha1.StatusRunning
-//	} else if len(pendingPods) > 0 {
-//		status = kaiwov1alpha1.StatusStarting
-//	} else {
-//		status = kaiwov1alpha1.StatusPending
-//	}
-//
-//	return earliestRunningTime, earliestStartTime, status, nil
-//}
 
 func checkPodStatus(ctx context.Context, k8sClient client.Client, kaiwoJob *kaiwov1alpha1.KaiwoJob) (earliestRunningTime *metav1.Time, status kaiwov1alpha1.Status, err error) {
 	logger := log.FromContext(ctx)
