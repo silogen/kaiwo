@@ -8209,7 +8209,7 @@ spec:
                   EntryPoint specifies the command or script executed in a Deployment.
                   Can also be defined inside Deployment struct as regular command in the form of string array
                 type: string
-              envVars:
+              env:
                 description: EnvVars specifies the environment variables to be passed
                   to the container.
                 items:

@@ -99,7 +99,7 @@ func (r *KaiwoJobReconciler) reconcileK8sJob(ctx context.Context, kaiwoJob *kaiw
 		return ctrl.Result{}, err
 	}
 
-	if err := controllerutils.AddEnvVars(ctx, kaiwoJob.Spec.EnvVars, &jobSpec.Template); err != nil {
+	if err := controllerutils.AddEnvVars(ctx, kaiwoJob.Spec.Env, &jobSpec.Template); err != nil {
 		return ctrl.Result{}, err
 	}
 

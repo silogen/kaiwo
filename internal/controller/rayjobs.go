@@ -112,11 +112,11 @@ func (r *KaiwoJobReconciler) reconcileRayJob(ctx context.Context, kaiwoJob *kaiw
 	}
 
 	// Add environment variables
-	if err := controllerutils.AddEnvVars(ctx, kaiwoJob.Spec.EnvVars, &rayJobSpec.RayClusterSpec.HeadGroupSpec.Template); err != nil {
+	if err := controllerutils.AddEnvVars(ctx, kaiwoJob.Spec.Env, &rayJobSpec.RayClusterSpec.HeadGroupSpec.Template); err != nil {
 		return ctrl.Result{}, err
 	}
 	for i := range rayJobSpec.RayClusterSpec.WorkerGroupSpecs {
-		if err := controllerutils.AddEnvVars(ctx, kaiwoJob.Spec.EnvVars, &rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Template); err != nil {
+		if err := controllerutils.AddEnvVars(ctx, kaiwoJob.Spec.Env, &rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Template); err != nil {
 			return ctrl.Result{}, err
 		}
 	}

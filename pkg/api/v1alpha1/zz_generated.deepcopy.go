@@ -378,8 +378,8 @@ func (in *KaiwoJobSpec) DeepCopyInto(out *KaiwoJobSpec) {
 		*out = make([]v1.LocalObjectReference, len(*in))
 		copy(*out, *in)
 	}
-	if in.EnvVars != nil {
-		in, out := &in.EnvVars, &out.EnvVars
+	if in.Env != nil {
+		in, out := &in.Env, &out.Env
 		*out = make([]v1.EnvVar, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
@@ -628,8 +628,8 @@ func (in *KaiwoServiceSpec) DeepCopyInto(out *KaiwoServiceSpec) {
 		*out = make([]v1.LocalObjectReference, len(*in))
 		copy(*out, *in)
 	}
-	if in.EnvVars != nil {
-		in, out := &in.EnvVars, &out.EnvVars
+	if in.Env != nil {
+		in, out := &in.Env, &out.Env
 		*out = make([]v1.EnvVar, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])

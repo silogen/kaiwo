@@ -106,7 +106,7 @@ spec:
                   Can also be defined inside Job struct as Command in the form of string array or
                   inside RayJob struct as Entrypoint in the form of string
                 type: string
-              envVars:
+              env:
                 description: EnvVars specifies the environment variables to be passed
                   to the container.
                 items:
