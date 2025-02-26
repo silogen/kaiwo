@@ -103,22 +103,24 @@ type DownloadTaskConfig struct {
 func (spec *StorageSpec) CreateConfig() DownloadTaskConfig {
 	config := DownloadTaskConfig{}
 
-	if spec.Data.StorageSize != "" {
-		if spec.Data.MountPath != "" {
-			config.DownloadRoot = spec.Data.MountPath
-		} else {
-			config.DownloadRoot = "/workload"
+	if spec.Data != nil {
+		if spec.Data.StorageSize != "" {
+			if spec.Data.MountPath != "" {
+				config.DownloadRoot = spec.Data.MountPath
+			} else {
+				config.DownloadRoot = "/workload"
+			}
+
+			config.GCS = spec.Data.Download.GCS
+			config.S3 = spec.Data.Download.S3
+			config.AzureBlob = spec.Data.Download.AzureBlob
 		}
-
-		config.GCS = spec.Data.Download.GCS
-		config.S3 = spec.Data.Download.S3
-		config.AzureBlob = spec.Data.Download.AzureBlob
-
 	}
-
-	if spec.HuggingFace.StorageSize != "" {
-		config.HfHome = spec.HuggingFace.MountPath
-		config.HF = spec.HuggingFace.PreCacheRepos
+	if spec.HuggingFace != nil {
+		if spec.HuggingFace.StorageSize != "" {
+			config.HfHome = spec.HuggingFace.MountPath
+			config.HF = spec.HuggingFace.PreCacheRepos
+		}
 	}
 
 	return config
