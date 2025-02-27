@@ -106,7 +106,7 @@ func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batch
 		return nil, baseutils.LogErrorf(logger, "failed to adjust resource requests and limits", err)
 	}
 
-	if err := controllerutils.AddEnvVars(ctx, baseutils.ValueOrDefault(spec.EnvVars), &jobSpec.Template); err != nil {
+	if err := controllerutils.AddEnvVars(ctx, baseutils.ValueOrDefault(spec.Env), &jobSpec.Template); err != nil {
 		return nil, baseutils.LogErrorf(logger, "failed to add env vars", err)
 	}
 

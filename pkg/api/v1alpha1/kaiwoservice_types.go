@@ -71,8 +71,8 @@ type KaiwoServiceSpec struct {
 	// ImagePullSecrets contains the list of secrets used to pull the container image.
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 
-	// EnvVars specifies the environment variables to be passed to the container.
-	EnvVars []corev1.EnvVar `json:"envVars,omitempty"`
+	// Env specifies the environment variables to be passed to the container.
+	Env []corev1.EnvVar `json:"env,omitempty"`
 
 	// Ray determines whether the operator should use RayCluster for workload execution.
 	// Default is false.

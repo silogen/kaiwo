@@ -154,11 +154,11 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 	}
 
 	// Add environment variables
-	if err := controllerutils.AddEnvVars(ctx, baseutils.ValueOrDefault(spec.EnvVars), &rayJobSpec.RayClusterSpec.HeadGroupSpec.Template); err != nil {
+	if err := controllerutils.AddEnvVars(ctx, baseutils.ValueOrDefault(spec.Env), &rayJobSpec.RayClusterSpec.HeadGroupSpec.Template); err != nil {
 		return nil, baseutils.LogErrorf(logger, "failed to add env vars to head", err)
 	}
 	for i := range rayJobSpec.RayClusterSpec.WorkerGroupSpecs {
-		if err := controllerutils.AddEnvVars(ctx, baseutils.ValueOrDefault(spec.EnvVars), &rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Template); err != nil {
+		if err := controllerutils.AddEnvVars(ctx, baseutils.ValueOrDefault(spec.Env), &rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Template); err != nil {
 			return nil, baseutils.LogErrorf(logger, "failed to add env vars to worker group", err)
 		}
 	}
