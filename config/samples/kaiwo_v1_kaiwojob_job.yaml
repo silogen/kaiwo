@@ -5,6 +5,7 @@ metadata:
 spec:
   user: test@amd.com
   gpus: 0
+  image: ubuntu:latest
   storage:
     storageEnabled: false
     storageClassName: "longhorn"
