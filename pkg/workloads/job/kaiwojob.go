@@ -147,6 +147,12 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, k8sClient client.Cli
 	logger := log.FromContext(ctx)
 
 	kaiwoJob := r.Object
+
+	if kaiwoJob.DeletionTimestamp != nil {
+		logger.Info("KaiwoJob is being deleted, skipping reconciliation", "KaiwoJob", kaiwoJob.Name)
+		return ctrl.Result{}, nil, nil
+	}
+
 	var manifests []client.Object
 
 	if kaiwoJob.Status.Status == kaiwov1alpha1.StatusFailed {

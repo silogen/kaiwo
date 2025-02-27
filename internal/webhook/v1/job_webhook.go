@@ -18,11 +18,13 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/wait"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -37,9 +39,9 @@ import (
 )
 
 var (
-	enforceKaiwoOnWorkloads = baseutils.GetEnv("ENFORCE_KAIWO_ON_GPU_WORKLOADS", "true")
+	enforceKaiwoOnWorkloads = baseutils.GetEnv("ENFORCE_KAIWO_ON_GPU_WORKLOADS", "false")
 	joblog                  = logf.Log.WithName("job-webhook")
-	gpuKeys                 = []corev1.ResourceName{"nvidia.com/gpu", "amd.com/gpu"}
+	gpuKeys                 = []corev1.ResourceName{"amd.com/gpu", "nvidia.com/gpu"}
 )
 
 type JobWebhook struct {
@@ -47,7 +49,7 @@ type JobWebhook struct {
 	decoder *admission.Decoder
 }
 
-// +kubebuilder:webhook:path=/mutate-batch-v1-job,mutating=true,failurePolicy=fail,sideEffects=None,groups=batch,resources=jobs,verbs=create;update,versions=v1,name=mjob.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/mutate-batch-v1-job,mutating=true,failurePolicy=fail,sideEffects=None,groups=batch,resources=jobs,verbs=create,versions=v1,name=mjob.kb.io,admissionReviewVersions=v1
 // +kubebuilder:webhook:path=/validate-batch-v1-job,validating=true,failurePolicy=fail,sideEffects=None,groups=batch,resources=jobs,verbs=create;update;delete,versions=v1,name=vjob.kb.io,admissionReviewVersions=v1
 
 var (
@@ -59,6 +61,10 @@ func (j *JobWebhook) Default(ctx context.Context, obj runtime.Object) error {
 	job, ok := obj.(*batchv1.Job)
 	if !ok {
 		return fmt.Errorf("expected a Job object but got %T", obj)
+	}
+
+	if job.DeletionTimestamp != nil {
+		return nil
 	}
 
 	authenticatedUser := getAuthenticatedUser(ctx)
@@ -76,7 +82,9 @@ func (j *JobWebhook) Default(ctx context.Context, obj runtime.Object) error {
 	}
 
 	if kaiwoManages(job) {
-		job.Labels[kaiwov1alpha1.QueueLabel] = controllerutils.DefaultKaiwoQueueConfigName
+		if job.Labels[kaiwov1alpha1.QueueLabel] == "" {
+			job.Labels[kaiwov1alpha1.QueueLabel] = controllerutils.DefaultKaiwoQueueConfigName
+		}
 		if job.Spec.Template.Spec.TerminationGracePeriodSeconds == nil {
 			job.Spec.Template.Spec.TerminationGracePeriodSeconds = baseutils.Pointer(int64(0))
 		}
@@ -84,6 +92,12 @@ func (j *JobWebhook) Default(ctx context.Context, obj runtime.Object) error {
 		if err := j.ensureKaiwoJob(ctx, job, authenticatedUser); err != nil {
 			return fmt.Errorf("failed to create KaiwoJob: %w", err)
 		}
+		finalizer := "kaiwo.silogen.ai/finalizer"
+		if !baseutils.ContainsString(job.Finalizers, finalizer) {
+			job.Finalizers = append(job.Finalizers, finalizer)
+			joblog.Info("Added finalizer to Job", "JobName", job.Name)
+		}
+
 	}
 
 	return nil
@@ -179,54 +193,81 @@ func (j *JobWebhook) ValidateCreate(ctx context.Context, obj runtime.Object) (ad
 }
 
 func (j *JobWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	newJob, ok := newObj.(*batchv1.Job)
-	if !ok {
-		return nil, fmt.Errorf("expected a Job object but got %T", newObj)
-	}
-	oldJob, ok := oldObj.(*batchv1.Job)
-	if !ok {
-		return nil, fmt.Errorf("expected a Job object but got %T", oldObj)
-	}
-
-	// Allow modification only if the update is from Kueue
-	req, err := admission.RequestFromContext(ctx)
-	if err == nil {
-		if strings.HasPrefix(req.UserInfo.Username, "system:serviceaccount:kueue-") {
-			return nil, nil
-		}
-	}
-
-	if len(newJob.Spec.Template.Spec.Containers) != len(oldJob.Spec.Template.Spec.Containers) {
-		return nil, fmt.Errorf("changing the number of containers is not allowed")
-	}
-	// Prevent increasing GPU requests/limits
-	for i, newContainer := range newJob.Spec.Template.Spec.Containers {
-		oldContainer := oldJob.Spec.Template.Spec.Containers[i]
-
-		for _, gpuKey := range gpuKeys {
-			if newLimit, newExists := newContainer.Resources.Limits[gpuKey]; newExists {
-				if oldLimit, oldExists := oldContainer.Resources.Limits[gpuKey]; oldExists {
-					if newLimit.Cmp(oldLimit) != 0 {
-						return nil, fmt.Errorf("increasing/decreasing GPU limits is not allowed")
-					}
-				}
-			}
-
-			if newRequest, newExists := newContainer.Resources.Requests[gpuKey]; newExists {
-				if oldRequest, oldExists := oldContainer.Resources.Requests[gpuKey]; oldExists {
-					if newRequest.Cmp(oldRequest) != 0 {
-						return nil, fmt.Errorf("increasing/decreasing GPU requests is not allowed")
-					}
-				}
-			}
-		}
-	}
-
-	joblog.Info("Job update validation passed", "JobName", newJob.Name)
 	return nil, nil
 }
 
 func (j *JobWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	job, ok := obj.(*batchv1.Job)
+	if !ok {
+		return nil, fmt.Errorf("expected a Job object but got %T", obj)
+	}
+
+	finalizer := "kaiwo.silogen.ai/finalizer"
+
+	// **Ensure the job has a finalizer before deletion starts**
+	if !baseutils.ContainsString(job.Finalizers, finalizer) {
+		joblog.Info("Finalizer not found, allowing deletion", "JobName", job.Name)
+		return nil, nil
+	}
+
+	// **Delete the associated KaiwoJob**
+	kaiwoJob := &kaiwov1alpha1.KaiwoJob{}
+	err := j.Client.Get(ctx, client.ObjectKey{Name: job.Name, Namespace: job.Namespace}, kaiwoJob)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			joblog.Info("No associated KaiwoJob found, proceeding with Job deletion", "JobName", job.Name)
+		} else {
+			return nil, fmt.Errorf("error retrieving KaiwoJob: %w", err)
+		}
+	} else {
+		if err := j.Client.Delete(ctx, kaiwoJob); err != nil && !errors.IsNotFound(err) {
+			return nil, fmt.Errorf("failed to delete associated KaiwoJob: %w", err)
+		}
+		joblog.Info("Deleted associated KaiwoJob", "KaiwoJob", job.Name)
+	}
+
+	// **Ensure KaiwoJob is fully deleted before removing finalizer**
+	timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	err = wait.PollUntilContextTimeout(timeoutCtx, time.Second, 10*time.Second, true, func(ctx context.Context) (bool, error) {
+		err := j.Client.Get(ctx, client.ObjectKey{Name: job.Name, Namespace: job.Namespace}, kaiwoJob)
+		if errors.IsNotFound(err) {
+			return true, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		return false, nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("KaiwoJob deletion timed out: %w", err)
+	}
+
+	// **Now that everything is cleaned up, remove the finalizer**
+	joblog.Info("Removing finalizer from Job", "JobName", job.Name)
+
+	// **Retry removing finalizer if there's a conflict**
+	retryAttempts := 3
+	for i := 0; i < retryAttempts; i++ {
+		// **Reload the latest version of the Job**
+		if err := j.Client.Get(ctx, client.ObjectKey{Name: job.Name, Namespace: job.Namespace}, job); err != nil {
+			return nil, fmt.Errorf("failed to refresh Job before removing finalizer: %w", err)
+		}
+
+		job.Finalizers = baseutils.RemoveString(job.Finalizers, finalizer)
+		if err := j.Client.Update(ctx, job); err != nil {
+			if errors.IsConflict(err) {
+				continue // Retry
+			}
+			joblog.Error(err, "Failed to remove finalizer from Job", "JobName", job.Name)
+			return nil, fmt.Errorf("failed to remove finalizer: %w", err)
+		}
+
+		joblog.Info("Finalizer successfully removed, Job can now be deleted", "JobName", job.Name)
+		break
+	}
+
 	return nil, nil
 }
 
