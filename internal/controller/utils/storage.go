@@ -16,121 +16,24 @@ package controllerutils
 
 import (
 	"context"
-	"fmt"
-	"os"
-
-	"k8s.io/apimachinery/pkg/runtime"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
+	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 )
 
-const (
-	dataStoragePostfix = "data"
-	hfStoragePostfix   = "hf"
-)
-
-// ReconcileStorage ensures that any requested PVCs are available and linked to the owner
-func ReconcileStorage(r client.Client, s *runtime.Scheme, ctx context.Context, owner client.Object, spec *v1alpha1.StorageSpec) error {
-	if !spec.StorageEnabled {
-		return nil
-	}
-
-	var storageclass string
-
-	if spec.StorageClassName == "" {
-		storageclass = os.Getenv("STORAGECLASS")
-		if storageclass == "" {
-			return fmt.Errorf("storage class name is empty")
-		}
-	} else {
-		storageclass = spec.StorageClassName
-	}
-
-	logger := log.FromContext(ctx)
-
-	createStorage := func(amount string, postfix string) error {
-		pvcName := baseutils.FormatNameWithPostfix(owner.GetName(), postfix)
-		storageQuantity := resource.MustParse(amount)
-
-		pvc := &corev1.PersistentVolumeClaim{}
-		if err := r.Get(ctx, client.ObjectKey{Name: pvcName, Namespace: owner.GetNamespace()}, pvc); err != nil {
-			if !errors.IsNotFound(err) {
-				return err
-			}
-		} else {
-			return nil
-		}
-
-		logger.Info(fmt.Sprintf("Creating PVC %s", pvcName))
-
-		pvc = &corev1.PersistentVolumeClaim{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      pvcName,
-				Namespace: owner.GetNamespace(),
-			},
-			Spec: corev1.PersistentVolumeClaimSpec{
-				AccessModes: []corev1.PersistentVolumeAccessMode{
-					spec.AccessMode,
-				},
-				StorageClassName: &storageclass,
-				Resources: corev1.VolumeResourceRequirements{
-					Requests: corev1.ResourceList{
-						corev1.ResourceStorage: storageQuantity,
-					},
-				},
-			},
-		}
-
-		// Ensure PVC is attached to the parent object
-		if err := ctrl.SetControllerReference(owner, pvc, s); err != nil {
-			logger.Error(err, "Failed to set PVC controller reference")
-			return err
-		}
-
-		if err := r.Create(ctx, pvc); err != nil {
-			return err
-		}
-
-		return nil
-	}
-
-	// Data storage
-	if spec.Data.IsRequested() {
-		if err := createStorage(spec.Data.StorageSize, dataStoragePostfix); err != nil {
-			return err
-		}
-	}
-
-	// HF storage
-	if spec.HuggingFace.IsRequested() {
-		if err := createStorage(spec.HuggingFace.StorageSize, hfStoragePostfix); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 func UpdatePodSpecStorage(ctx context.Context, podSpec *corev1.PodSpec, storageSpec v1alpha1.StorageSpec, ownerName string) error {
-	logger := log.FromContext(ctx)
+	// logger := log.FromContext(ctx)
 
-	if !storageSpec.StorageEnabled {
+	if !storageSpec.StorageEnabled || storageSpec.Data == nil {
 		return nil
 	}
 
 	addStorageVolume := func(name string, claimName string) {
-		logger.Info(fmt.Sprintf("Adding %s volume", name))
+		// logger.Info("Adding volume", "volumeName", name)
 		podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
 			Name: name,
 			VolumeSource: corev1.VolumeSource{
@@ -143,15 +46,15 @@ func UpdatePodSpecStorage(ctx context.Context, podSpec *corev1.PodSpec, storageS
 
 	// Add volumes
 	if storageSpec.Data.IsRequested() {
-		addStorageVolume(dataStoragePostfix, baseutils.FormatNameWithPostfix(ownerName, dataStoragePostfix))
+		addStorageVolume(workloadcommon.DataStoragePostfix, baseutils.FormatNameWithPostfix(ownerName, workloadcommon.DataStoragePostfix))
 	}
 
 	if storageSpec.HuggingFace.IsRequested() {
-		addStorageVolume(hfStoragePostfix, baseutils.FormatNameWithPostfix(ownerName, hfStoragePostfix))
+		addStorageVolume(workloadcommon.HfStoragePostfix, baseutils.FormatNameWithPostfix(ownerName, workloadcommon.HfStoragePostfix))
 	}
 
 	addVolumeMount := func(container *corev1.Container, name string, path string) {
-		logger.Info(fmt.Sprintf("Adding %s volume mount to %s", name, container.Name))
+		// logger.Info(fmt.Sprintf("Adding %s volume mount to %s", name, container.Name))
 		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
 			Name:      name,
 			MountPath: path,
@@ -159,7 +62,7 @@ func UpdatePodSpecStorage(ctx context.Context, podSpec *corev1.PodSpec, storageS
 	}
 
 	addEnvVar := func(container *corev1.Container, name string, value string) {
-		logger.Info(fmt.Sprintf("Adding %s env var to %s", name, container.Name))
+		// logger.Info(fmt.Sprintf("Adding %s env var to %s", name, container.Name))
 		container.Env = append(container.Env, corev1.EnvVar{
 			Name:  name,
 			Value: value,
@@ -168,10 +71,10 @@ func UpdatePodSpecStorage(ctx context.Context, podSpec *corev1.PodSpec, storageS
 
 	addContainerInfo := func(container *corev1.Container) {
 		if storageSpec.Data.IsRequested() {
-			addVolumeMount(container, dataStoragePostfix, storageSpec.Data.MountPath)
+			addVolumeMount(container, workloadcommon.DataStoragePostfix, storageSpec.Data.MountPath)
 		}
 		if storageSpec.HuggingFace.IsRequested() {
-			addVolumeMount(container, hfStoragePostfix, storageSpec.HuggingFace.MountPath)
+			addVolumeMount(container, workloadcommon.HfStoragePostfix, storageSpec.HuggingFace.MountPath)
 			addEnvVar(container, "HF_HOME", storageSpec.HuggingFace.MountPath)
 		}
 	}

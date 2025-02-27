@@ -34,6 +34,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
+
+	kaiwov1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
 )
 
 var (
@@ -129,6 +131,10 @@ func buildScheme() (*runtime.Scheme, error) {
 	// Add RayService custom resource API types
 	if err := rayv1.AddToScheme(scheme); err != nil {
 		return nil, fmt.Errorf("failed to add RayService types to scheme: %v", err)
+	}
+
+	if err := kaiwov1.AddToScheme(scheme); err != nil {
+		return nil, fmt.Errorf("failed to add Kaiwo types to scheme: %v", err)
 	}
 
 	return scheme, nil

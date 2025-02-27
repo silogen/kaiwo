@@ -17,6 +17,10 @@ ENV PYTHONUNBUFFERED=1
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy test data to enable uploading mock test data with this image
+COPY test/data /app/test/data
+COPY test/upload_test_data.py /app/test/upload_test_data.py
+
 # Copy application code
 COPY kaiwo /app/kaiwo
 WORKDIR /app

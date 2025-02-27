@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package workloads
+package service
 
-// DeploymentFlags contain flags specific to deployment-workloads
-type DeploymentFlags struct {
-	// The model to use
-	Model string
-}
+//var DefaultDeploymentSpec = appsv1.DeploymentSpec{
+//	Replicas: baseutils.Pointer(int32(1)),
+//	Selector: &metav1.LabelSelector{
+//		MatchLabels: map[string]string{"app": "default-app"},
+//	},
+//	Template: controllerutils.DefaultPodTemplateSpec,
+//}

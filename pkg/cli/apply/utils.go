@@ -16,262 +16,161 @@ package cli
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
-	"k8s.io/apimachinery/pkg/api/resource"
+	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 	"github.com/silogen/kaiwo/pkg/workloads"
 )
 
-const defaultGpuNodeLabelKey = "beta.amd.com/gpu.family.AI"
-
-// Exec flags
 var (
-	dryRun          bool
-	createNamespace bool
-	template        string
-	path            string
-	overlayPath     string
-	gpuNodeLabelKey string
-)
+	dryRun      bool
+	printOutput bool
+	preview     bool
 
-// AddExecFlags adds flags that are needed for the execution of apply functions
-func AddExecFlags(cmd *cobra.Command) {
-	cmd.Flags().BoolVarP(&createNamespace, "create-namespace", "", false, "Create namespace if it does not exist")
-	cmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "Print the generated workload manifest without submitting it")
-	cmd.Flags().StringVarP(&path, "path", "p", "", "Path to directory for workload code, entrypoint/serveconfig, env-file, etc. Either image or path is mandatory")
-	cmd.Flags().StringVarP(&overlayPath, "overlay-path", "o", "", "Additional overlay path. Files from both path and overlay-path are combined, if the file exists in both, the one from overlay-path is used")
-	// TODO: remove gpuNodeLabelKey and have this logic be handled by the operator
-	cmd.Flags().StringVarP(&gpuNodeLabelKey, "gpu-node-label-key", "", defaultGpuNodeLabelKey, fmt.Sprintf("Optional node label key used to specify the resource flavor GPU count. Defaults to %s", defaultGpuNodeLabelKey))
-	cmd.Flags().StringVarP(&template, "template", "t", "", "Optional path to a custom template to use for the workload. If not provided, a default template will be used unless template file found in workload directory")
-}
+	// createNamespace  bool
+	baseManifestPath string
+	path             string
 
-func GetExecFlags() workloads.ExecFlags {
-	return workloads.ExecFlags{
-		CreateNamespace:               createNamespace,
-		DryRun:                        dryRun,
-		Template:                      template,
-		Path:                          path,
-		OverlayPath:                   overlayPath,
-		ResourceFlavorGpuNodeLabelKey: gpuNodeLabelKey,
-	}
-}
-
-// Kubernetes meta flags
-
-var (
 	name            string
 	namespace       string
-	image           string
-	imagePullSecret string
-	version         string
+	image           = baseutils.Pointer("")
+	imagePullSecret = baseutils.Pointer("")
+	version         = baseutils.Pointer("")
+
+	gpus           = baseutils.Pointer(0)
+	replicas       = baseutils.Pointer(0)
+	gpusPerReplica = baseutils.Pointer(0)
+
+	queue = baseutils.Pointer("")
+
+	dangerous = baseutils.Pointer(false)
+	useRay    = baseutils.Pointer(false)
+
+	user = baseutils.Pointer("")
 )
 
-// AddMetaFlags adds flags that are needed for basic Kubernetes metadata
-func AddMetaFlags(cmd *cobra.Command) {
+// AddCliFlags adds flags that are needed for the execution of apply functions
+func AddCliFlags(cmd *cobra.Command) {
+	// cmd.Flags().BoolVarP(&createNamespace, "create-namespace", "", false, "Create namespace if it does not exist")
+	cmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "Run a server-side dry run without creating any actual resources")
+	cmd.Flags().BoolVarP(&printOutput, "print", "", false, "Print the generated workload manifest without submitting it")
+	cmd.Flags().BoolVarP(&preview, "preview", "", false, "Preview all the resources that the Kaiwo operator would create from this manifest")
+	cmd.MarkFlagsMutuallyExclusive("dry-run", "print", "preview")
+
+	cmd.Flags().StringVarP(&path, "path", "p", "", "Path to directory for workload code, entrypoint/serveconfig, env-file, etc. Either image or path is mandatory")
+	cmd.Flags().StringVarP(&baseManifestPath, "base-manifest", "", "", "Optional path to a base manifest file")
+
 	cmd.Flags().StringVarP(&name, "name", "", "", "Optional name for the workload")
 	cmd.Flags().StringVarP(&namespace, "namespace", "n", baseutils.DefaultNamespace, fmt.Sprintf("Namespace of the workload. Defaults to %s", baseutils.DefaultNamespace))
-	cmd.Flags().StringVarP(&image, "image", "i", baseutils.DefaultRayImage, fmt.Sprintf("Optional Image to use for the workload. Defaults to %s. Either image or workload path is mandatory", baseutils.DefaultRayImage))
-	cmd.Flags().StringVarP(&imagePullSecret, "imagepullsecret", "", "", "ImagePullSecret name for job/deployment if private registry")
-	cmd.Flags().StringVarP(&version, "version", "", "", "Optional version for job/deployment")
+	cmd.Flags().StringVarP(image, "image", "i", baseutils.DefaultRayImage, fmt.Sprintf("Optional Image to use for the workload. Defaults to %s. Either image or workload path is mandatory", baseutils.DefaultRayImage))
+	cmd.Flags().StringVarP(imagePullSecret, "imagepullsecret", "", "", "ImagePullSecret name for job/service if private registry")
+	cmd.Flags().StringVarP(version, "version", "", "", "Optional version for job/service")
+	cmd.Flags().StringVarP(user, "user", "", "", "The user to run as")
+
+	cmd.Flags().IntVarP(gpus, "gpus", "g", 0, "Number of GPUs requested for the workload")
+	cmd.Flags().IntVarP(replicas, "replicas", "", 0, "Number of replicas requested for the workload")
+	cmd.Flags().IntVarP(gpusPerReplica, "gpus-per-replica", "", 0, "Number of GPUs requested per replica")
+	cmd.Flags().BoolVarP(useRay, "ray", "", false, "Use ray for submitting the workload")
+	cmd.Flags().BoolVarP(dangerous, "dangerous", "", false, "Skip adding the default security context to containers")
+
+	cmd.Flags().StringVarP(queue, "queue", "", controllerutils.DefaultKaiwoQueueConfigName, "The local queue to use for jobs")
 }
 
-func GetMetaFlags() workloads.MetaFlags {
-	return workloads.MetaFlags{
-		Name:            name,
-		Namespace:       namespace,
-		Image:           image,
-		ImagePullSecret: imagePullSecret,
-		Version:         version,
+func GetCLIFlags(cmd *cobra.Command) workloads.CLIFlags {
+	if !cmd.Flags().Changed("image") {
+		image = nil
 	}
-}
-
-// Scheduling flags
-
-var (
-	gpus           int
-	replicas       int
-	gpusPerReplica int
-	storage        string
-	noStorage      bool
-)
-
-// AddSchedulingFlags adds flags related to (Kueue) scheduling
-func AddSchedulingFlags(cmd *cobra.Command) {
-	cmd.Flags().IntVarP(&gpus, "gpus", "g", 0, "Number of GPUs requested for the workload")
-	cmd.Flags().IntVarP(&replicas, "replicas", "", 0, "Number of replicas requested for the workload")
-	cmd.Flags().IntVarP(&gpusPerReplica, "gpus-per-replica", "", 0, "Number of GPUs requested per replica")
-	cmd.Flags().StringVarP(
-		&storage,
-		"storage",
-		"",
-		"default",
-		"Storage requested for the workload, use: --storage=storageQuantity,storageClassName, --storage=storageQuantity to use the default storage class, or --storage=default (the default) to use defaults for both storage class and amount. "+
-			fmt.Sprintf("The default storage class and amount can be configured in the namespace's labels (keys %s and %s). ", workloads.KaiwoDefaultStorageClassNameLabel, workloads.KaiwoDefaultStorageQuantityLabel)+
-			"If you do not want to include storage, you must pass --no-storage explicitly.",
-	)
-	cmd.Flags().BoolVarP(&noStorage, "no-storage", "", false, "Don't use storage for the workload")
-}
-
-// GetSchedulingFlags initializes the scheduling flags with the number of GPUs requested
-func GetSchedulingFlags() (*workloads.SchedulingFlags, error) {
-	flags := &workloads.SchedulingFlags{
-		TotalRequestedGPUs:      gpus,
-		RequestedReplicas:       replicas,
-		RequestedGPUsPerReplica: gpusPerReplica,
+	if !cmd.Flags().Changed("imagepullsecret") {
+		imagePullSecret = nil
+	}
+	if !cmd.Flags().Changed("version") {
+		version = nil
 	}
 
-	if storage != "default" && noStorage {
-		return nil, fmt.Errorf("you must specify --storage or --no-storage, not both")
+	if !cmd.Flags().Changed("gpus") {
+		gpus = nil
 	}
-
-	if noStorage {
-		logrus.Info("No storage requested for workload")
-		return flags, nil
+	if !cmd.Flags().Changed("replicas") {
+		replicas = nil
 	}
-
-	if storage == "" {
-		return nil, fmt.Errorf("you must specify --storage or --no-storage")
+	if !cmd.Flags().Changed("gpus-per-replica") {
+		gpusPerReplica = nil
 	}
-
-	requestedStorage := ""
-	storageClassName := ""
-
-	if storage != "default" {
-		split := strings.Split(storage, ",")
-
-		if len(split) > 2 {
-			return nil, fmt.Errorf("invalid storage specifier %s", storage)
-		}
-		if len(split) > 1 {
-			storageClassName = split[1]
-			logrus.Infof("Requested storage class name %s", storageClassName)
-		} else {
-			logrus.Info("You did not pass a storage class name, the default storage class will be used if it exists")
-		}
-		if len(split) > 0 {
-			requestedStorage = split[0]
-
-			if _, err := resource.ParseQuantity(requestedStorage); err != nil {
-				return nil, fmt.Errorf("invalid storage quantity %s", requestedStorage)
-			}
-
-			logrus.Infof("Requested storage %s", requestedStorage)
-		} else {
-			logrus.Infof("You did not pass a storage quantity, the default amount (%s) will be used", requestedStorage)
-		}
+	if !cmd.Flags().Changed("ray") {
+		useRay = nil
 	}
-
-	flags.Storage = &workloads.StorageSchedulingFlags{
-		Quantity:         requestedStorage,
-		StorageClassName: storageClassName,
+	if !cmd.Flags().Changed("dangerous") {
+		dangerous = nil
 	}
-
-	return flags, nil
-}
-
-type Config struct {
-	DryRun                  bool   `yaml:"dryRun"`
-	CreateNamespace         bool   `yaml:"createNamespace"`
-	Path                    string `yaml:"path"`
-	OverlayPath             string `yaml:"overlayPath"`
-	GpuNodeLabelKey         string `yaml:"gpuNodeLabelKey"`
-	Template                string `yaml:"template"`
-	Name                    string `yaml:"name"`
-	Namespace               string `yaml:"namespace"`
-	Image                   string `yaml:"image"`
-	ImagePullSecret         string `yaml:"imagePullSecret"`
-	Version                 string `yaml:"version"`
-	Gpus                    int    `yaml:"gpus"`
-	RequestedReplicas       int    `yaml:"requestedReplicas"`
-	RequestedGPUsPerReplica int    `yaml:"requestedGPUsPerReplica"`
-}
-
-func LoadConfigFromPath(path string) (*Config, error) {
-	configPath := filepath.Join(path, workloads.KaiwoconfigFilename)
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		return nil, nil
-	}
-
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read config file %s: %w", configPath, err)
-	}
-
-	var config Config
-	if err := yaml.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse config file %s: %w", configPath, err)
-	}
-
-	return &config, nil
-}
-
-func ApplyConfigToFlags(cmd *cobra.Command, config *Config) {
-	if config == nil {
-		return
-	}
-	setFlag := func(name, value string) {
-		if value != "" {
-			if err := cmd.Flags().Set(name, value); err != nil {
-				logrus.Errorf("Failed to set flag %s: %v", name, err)
-			}
-		}
-	}
-
-	// ExecFlags
-	setFlag("dry-run", fmt.Sprintf("%v", config.DryRun))
-	setFlag("create-namespace", fmt.Sprintf("%v", config.CreateNamespace))
-	setFlag("path", config.Path)
-	setFlag("overlay-path", config.OverlayPath)
-	setFlag("gpu-node-label-key", config.GpuNodeLabelKey)
-	setFlag("template", config.Template)
-
-	// MetaFlags
-	setFlag("name", config.Name)
-	setFlag("namespace", config.Namespace)
-	setFlag("image", config.Image)
-	setFlag("imagepullsecret", config.ImagePullSecret)
-	setFlag("version", config.Version)
-
-	// SchedulingFlags
-	setFlag("gpus", fmt.Sprintf("%d", config.Gpus))
-	setFlag("replicas", fmt.Sprintf("%d", config.RequestedReplicas))
-	setFlag("gpus-per-replica", fmt.Sprintf("%d", config.RequestedGPUsPerReplica))
-}
-
-func PreRunLoadConfig(cmd *cobra.Command, _ []string) error {
-	if path == "" && overlayPath == "" {
-		return nil
-	}
-
-	// First try to load config from the overlay path
-	config, err := LoadConfigFromPath(overlayPath)
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	if config == nil {
-		// If no overlay, try the main path
-		config, err = LoadConfigFromPath(path)
+	if !cmd.Flags().Changed("user") {
+		currentUser, err := baseutils.GetCurrentUser()
 		if err != nil {
-			return fmt.Errorf("failed to load config: %w", err)
+			panic(fmt.Errorf("error getting current user: %v", err))
 		}
-		logrus.Infof("Loaded config from %s", path)
+		user = &currentUser
+	}
+	if name == "" {
+		name = makeWorkloadName(path, baseutils.ValueOrDefault(image), baseutils.ValueOrDefault(version), *user)
 	}
 
-	if config != nil {
-		ApplyConfigToFlags(cmd, config)
-		logrus.Infof("Configuration loaded from %s", filepath.Join(path, workloads.KaiwoconfigFilename))
+	// GetCurrentUser
+
+	return workloads.CLIFlags{
+		// CreateNamespace:  createNamespace,
+		DryRun:           dryRun,
+		PrintOutput:      printOutput,
+		Preview:          preview,
+		Path:             path,
+		BaseManifestPath: baseManifestPath,
+		Name:             name,
+		Namespace:        namespace,
+		Image:            image,
+		ImagePullSecret:  imagePullSecret,
+		Version:          version,
+		GPUs:             gpus,
+		Replicas:         replicas,
+		GPUsPerReplica:   gpusPerReplica,
+		UseRay:           useRay,
+		Dangerous:        dangerous,
+		User:             user,
+		Queue:            queue,
+	}
+}
+
+func makeWorkloadName(path string, image string, version string, currentUser string) string {
+	var appendix string
+
+	if path != "" {
+		appendix = baseutils.SanitizeStringForKubernetes(filepath.Base(path))
+	} else if image != "" {
+		appendix = baseutils.SanitizeStringForKubernetes(image)
 	} else {
-		logrus.Debugf("No configuration file found in %s", path)
+		appendix = ""
 	}
 
-	return nil
+	// Calculate the max allowed length for the appendix
+	separatorCount := 1 // At least one "-" between username and appendix
+	if version != "" {
+		version = baseutils.SanitizeStringForKubernetes(version)
+		separatorCount = 2 // Include one more "-" for the version
+	}
+	maxAppendixLength := 45 - len(currentUser) - len(version) - separatorCount
+
+	// Truncate appendix if necessary
+	if len(appendix) > maxAppendixLength {
+		appendix = appendix[:maxAppendixLength]
+	}
+
+	// Combine components
+	components := []string{currentUser, appendix}
+	if version != "" {
+		components = append(components, version)
+	}
+
+	return baseutils.SanitizeStringForKubernetes(strings.Join(components, "-"))
 }

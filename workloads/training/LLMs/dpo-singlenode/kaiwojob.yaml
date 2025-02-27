@@ -1,0 +1,70 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoJob
+metadata:
+  name: dpo-singlenode
+  namespace: kaiwo
+spec:
+  user: test@amd.com
+  gpus: 2
+  entrypoint: |
+    git clone https://github.com/silogen/kaiwo.git 
+    accelerate launch kaiwo/workloads/training/LLMs/dpo-singlenode/dpo.py \
+    --dataset_name trl-lib/ultrafeedback_binarized \
+    --model_name_or_path Qwen/Qwen2-0.5B-Instruct \
+    --learning_rate 5.0e-6 \
+    --num_train_epochs 1 \
+    --per_device_train_batch_size 8 \
+    --logging_steps 25 \
+    --eval_strategy steps \
+    --eval_steps 50 \
+    --output_dir Qwen2-0.5B-DPO \
+    --no_remove_unused_columns \
+    --use_peft \
+    --lora_r 32 \
+    --lora_alpha 16 \
+    --bf16 \
+    --optim="adamw_torch" 
+  storage:
+    storageEnabled: true
+    storageClassName: mlstorage
+    accessMode: "ReadWriteOnce"
+    # data:
+    #   storageSize: "2Gi"
+    #   mountPath: "/workload"
+    #   download:
+    #     s3:
+    #       - endpointUrl:
+    #           secretName: minio-secret
+    #           secretKey: endpoint
+    #         accessKeyId:
+    #           secretName: minio-secret
+    #           secretKey: access_key_id
+    #         secretKey:
+    #           secretName: minio-secret
+    #           secretKey: secret_key
+    #         buckets:
+    #           - name: test
+    #             files:
+    #               - path: file01.txt
+    #                 targetPath: s3/file01.txt
+    #             folders:
+    #               - path: .
+    #                 targetPath: s3/all
+    #     azureBlob:
+    #       - connectionString:
+    #           secretName: azure-secret
+    #           secretKey: connection_string
+    #         containers:
+    #           - name: test
+    #             files:
+    #               - path: file01.txt
+    #                 targetPath: azure/file01.txt
+    #             folders:
+    #               - path: .
+    #                 targetPath: azure/all
+    huggingFace:
+      storageSize: "2Gi"
+      mountPath: "/.cache/huggingface"  # Also sets the env var HF_HOME to this value in each container
+      preCacheRepos:
+        - repoId: Qwen/Qwen2-0.5B-Instruct
+          files: []

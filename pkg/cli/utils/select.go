@@ -12,19 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package controller
+package cliutils
 
 import (
-	appsv1 "k8s.io/api/apps/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
+	corev1 "k8s.io/api/core/v1"
 )
 
-var DefaultDeploymentSpec = appsv1.DeploymentSpec{
-	Replicas: func(i int32) *int32 { return &i }(1),
-	Selector: &metav1.LabelSelector{
-		MatchLabels: map[string]string{"app": "default-app"},
-	},
-	Template: controllerutils.DefaultPodTemplateSpec,
+type PodSelectionPredicate func(pod corev1.Pod) bool
+
+func IsGPUPod(pod corev1.Pod) bool {
+	for _, container := range pod.Spec.Containers {
+		for resourceName := range container.Resources.Limits {
+			if resourceName == "nvidia.com/gpu" || resourceName == "amd.com/gpu" {
+				return true
+			}
+		}
+	}
+	return false
 }

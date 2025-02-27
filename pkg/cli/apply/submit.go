@@ -15,56 +15,99 @@
 package cli
 
 import (
-	"github.com/sirupsen/logrus"
-	"github.com/spf13/cobra"
+	"fmt"
+	"os"
+	"path/filepath"
+
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads/common"
 
 	"github.com/silogen/kaiwo/pkg/workloads"
-	"github.com/silogen/kaiwo/pkg/workloads/jobs"
-	"github.com/silogen/kaiwo/pkg/workloads/ray"
+
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
+	workloadjob "github.com/silogen/kaiwo/pkg/workloads/job"
+
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/spf13/cobra"
+
+	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 )
 
-var (
-	useRayForJob bool
-	queue        string
-)
+type KaiwoJobSubmitter struct {
+	Job *v1alpha1.KaiwoJob
+}
 
-const defaultQueue = "kaiwo"
+func (k *KaiwoJobSubmitter) LoadFromPath(path string) error {
+	// Load entrypoint
+	entrypointPath := filepath.Join(path, "entrypoint")
+	if _, err := os.Stat(entrypointPath); err == nil {
+		content, err := os.ReadFile(entrypointPath)
+		if err == nil {
+			k.Job.Spec.EntryPoint = baseutils.Pointer(string(content))
+		} else {
+			return fmt.Errorf("failed to read entrypoint: %w", err)
+		}
+
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("error checking if entrypoint file %s exists", entrypointPath)
+	}
+
+	return nil
+}
+
+func (k *KaiwoJobSubmitter) GetObject() *v1alpha1.KaiwoJob {
+	return k.Job
+}
+
+func (k *KaiwoJobSubmitter) GetReconciler() workloadutils.Reconciler[*v1alpha1.KaiwoJob] {
+	reconciler := workloadjob.NewKaiwoJobReconciler(k.Job)
+	return &reconciler
+}
+
+func (k *KaiwoJobSubmitter) FromCliFlags(flags workloads.CLIFlags) {
+	job := v1alpha1.KaiwoJob{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      flags.Name,
+			Namespace: flags.Namespace,
+		},
+		Spec: v1alpha1.KaiwoJobSpec{
+			ClusterQueue:   flags.Queue,
+			Image:          flags.Image,
+			User:           flags.User,
+			Gpus:           flags.GPUs,
+			Replicas:       flags.Replicas,
+			GpusPerReplica: flags.GPUsPerReplica,
+			Version:        flags.Version,
+			Ray:            flags.UseRay,
+			Dangerous:      flags.Dangerous,
+		},
+	}
+
+	if flags.ImagePullSecret != nil {
+		job.Spec.ImagePullSecrets = &[]v1.LocalObjectReference{
+			{
+				Name: *flags.ImagePullSecret,
+			},
+		}
+	}
+
+	k.Job = &job
+}
 
 func BuildSubmitCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "submit",
 		Short: "Submit a job",
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			if err := cmd.Parent().PersistentPreRunE(cmd, args); err != nil {
-				return err
-			}
-			return PreRunLoadConfig(cmd, args)
-		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			var job workloads.Workload
-
-			jobFlags := workloads.JobFlags{
-				Queue: queue,
-			}
-
-			if useRayForJob {
-				logrus.Debugln("Using RayJob for job")
-				job = &ray.Job{}
-			} else {
-				job = &jobs.Job{}
-			}
-			return RunApply(job, jobFlags)
+			flags := GetCLIFlags(cmd)
+			submitter := KaiwoJobSubmitter{}
+			return Apply(&submitter, flags)
 		},
 	}
 
 	// Common shared flags
-	AddExecFlags(cmd)
-	AddMetaFlags(cmd)
-	AddSchedulingFlags(cmd)
-
-	// Job-specific flags
-	cmd.Flags().BoolVarP(&useRayForJob, "ray", "", false, "use ray for submitting the job")
-	cmd.Flags().StringVarP(&queue, "queue", "", defaultQueue, "the queue to submit job to")
+	AddCliFlags(cmd)
 
 	return cmd
 }

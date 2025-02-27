@@ -27,66 +27,78 @@ type KaiwoJobSpec struct {
 
 	// User specifies the owner or creator of the workload.
 	// If authentication is enabled, this must be email address which is checked against authenticated user for match.
-	User string `json:"user"`
+	User *string `json:"user,omitempty"`
 
 	// ClusterQueue is the Kueue ClusterQueue name.
-	ClusterQueue string `json:"clusterQueue,omitempty"`
+	ClusterQueue *string `json:"clusterQueue,omitempty"`
 
 	// PriorityClass specifies the Kubernetes PriorityClass for scheduling.
-	PriorityClass string `json:"priorityClass,omitempty"`
+	PriorityClass *string `json:"priorityClass,omitempty"`
 
 	// EntryPoint specifies the command or script executed in a Job or RayJob.
 	// Can also be defined inside Job struct as Command in the form of string array or
 	// inside RayJob struct as Entrypoint in the form of string
-	EntryPoint string `json:"entrypoint,omitempty"`
+	EntryPoint *string `json:"entrypoint,omitempty"`
 
 	// Gpus specifies the total number of GPUs allocated to the workload.
 	// Default is 0.
 	// +kubebuilder:default=0
-	Gpus int `json:"gpus,omitempty"`
+	Gpus *int `json:"gpus,omitempty"`
 
 	// GpuVendor specifies the GPU vendor (e.g., AMD, NVIDIA, etc.).
 	// Default is AMD.
 	// +kubebuilder:default=AMD
-	GpuVendor string `json:"gpuVendor,omitempty"`
+	GpuVendor *string `json:"gpuVendor,omitempty"`
 
 	// Version is an optional field specifying the version of the workload.
-	Version string `json:"version,omitempty"`
+	Version *string `json:"version,omitempty"`
 
 	// Replicas specifies the number of replicas for the workload.
 	// If greater than one, the workload must use Ray.
 	// Default is 0.
 	// +kubebuilder:default=0
-	Replicas int `json:"replicas,omitempty"`
+	Replicas *int `json:"replicas,omitempty"`
 
 	// GpusPerReplica specifies the number of GPUs allocated per replica.
-	GpusPerReplica int `json:"gpus-per-replica,omitempty"`
+	GpusPerReplica *int `json:"gpus-per-replica,omitempty"`
 
 	// Image defines the container image used for the workload.
-	Image string `json:"image,omitempty"`
+	Image *string `json:"image,omitempty"`
 
 	// ImagePullSecrets contains the list of secrets used to pull the container image.
-	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+	ImagePullSecrets *[]corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 
 	// EnvVars specifies the environment variables to be passed to the container.
-	EnvVars []corev1.EnvVar `json:"envVars,omitempty"`
+	EnvVars *[]corev1.EnvVar `json:"envVars,omitempty"`
+
+	// SecretVolumes list the secret volumes that should be mounted
+	SecretVolumes *[]SecretVolume `json:"secretVolumes,omitempty"`
 
 	// Ray determines whether the operator should use RayCluster for workload execution.
 	// Default is false.
 	// +kubebuilder:default=false
-	Ray bool `json:"ray"`
-
-	// ConfigSource allows mounting from Git
-	ConfigSource *ConfigSource `json:"configSource,omitempty"`
+	Ray *bool `json:"ray,omitempty"`
 
 	// Storage configuration for the workload.
-	Storage StorageSpec `json:"storage,omitempty"`
+	Storage *StorageSpec `json:"storage,omitempty"`
 
 	// RayJob defines the RayJob configuration.
 	RayJob *rayv1.RayJob `json:"rayJob,omitempty"`
 
+	// Dangerous disables adding the default security context to the containers
+	// +kubebuilder:default=false
+	Dangerous *bool `json:"dangerous,omitempty"`
+
 	// Job defines the Kubernetes Job configuration.
 	Job *batchv1.Job `json:"job,omitempty"`
+}
+
+func (spec *KaiwoJobSpec) IsBatchJob() bool {
+	return !spec.IsRayJob()
+}
+
+func (spec *KaiwoJobSpec) IsRayJob() bool {
+	return spec.RayJob != nil || (spec.Ray != nil && *spec.Ray)
 }
 
 // KaiwoJobStatus defines the observed state of KaiwoJob.

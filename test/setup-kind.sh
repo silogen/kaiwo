@@ -39,12 +39,12 @@ echo "Cert-Manager deployed."
 echo "Deploying Kueue operator..."
 kubectl apply --server-side -f "$KUEUE_MANIFESTS"
 echo "Waiting for Kueue to be deployed..."
-kubectl rollout status deployment/kueue-controller-manager -n kueue-system --timeout=1m
+kubectl rollout status deployment/kueue-controller-manager -n kueue-system --timeout=5m
 echo "Kueue deployed."
 
 # Add KubeRay
 kubectl create -k "$KUBERAY_MANIFESTS"
-kubectl rollout status deployment/kuberay-operator --timeout=1m
+kubectl rollout status deployment/kuberay-operator --timeout=5m
 echo "KubeRay deployed."
 
 echo "Cluster is ready!"
