@@ -33,12 +33,12 @@ const (
 	TraceLogLevel = 2
 )
 
-func Debug(logger logr.Logger, msg string, keysAndValues ...any) {
-	logger.V(DebugLogLevel).Info(msg, keysAndValues...)
+func Debug(logger logr.Logger, fmt string, keysAndValues ...any) {
+	logger.V(DebugLogLevel).Info(fmt, keysAndValues...)
 }
 
-func Trace(logger logr.Logger, msg string, keysAndValues ...any) {
-	logger.V(TraceLogLevel).Info(msg, keysAndValues...)
+func Trace(logger logr.Logger, fmt string, keysAndValues ...any) {
+	logger.V(TraceLogLevel).Info(fmt, keysAndValues...)
 }
 
 var (

@@ -254,6 +254,7 @@ func (r *DownloadJobReconciler) Build(_ context.Context, _ client.Client) (*batc
 			Namespace: r.ObjectKey.Namespace,
 		},
 		Spec: batchv1.JobSpec{
+			BackoffLimit: baseutils.Pointer(int32(0)),
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					RestartPolicy: corev1.RestartPolicyNever,
@@ -288,7 +289,6 @@ func (r *DownloadJobReconciler) ShouldContinue(ctx context.Context, actual *batc
 		return nil
 	} else if actual.Status.Failed >= 1 {
 		baseutils.Debug(logger, "Download job failed")
-		// TODO handle
 		return &ctrl.Result{}
 	} else {
 		baseutils.Debug(logger, "Download job still in progress, requeuing until it is complete")

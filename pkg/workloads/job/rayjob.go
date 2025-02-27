@@ -80,10 +80,14 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 
 	var rayJobSpec rayv1.RayJobSpec
 	if spec.RayJob == nil {
-		// logger.Info("RayJobSpec is nil, using DefaultRayJobSpec", "KaiwoJob", kaiwoJob.Name)
 		rayJobSpec = GetDefaultRayJobSpec(baseutils.ValueOrDefault(spec.Dangerous))
 	} else {
 		rayJobSpec = spec.RayJob.Spec
+	}
+
+	if baseutils.ValueOrDefault(rayJobSpec.BackoffLimit) > 0 {
+		logger.Info("Warning! BackOffLimit can currently only be 0, overriding the given value")
+		rayJobSpec.BackoffLimit = baseutils.Pointer(int32(0))
 	}
 
 	if rayJobSpec.RayClusterSpec.HeadGroupSpec.Template.Labels == nil {

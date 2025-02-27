@@ -80,6 +80,11 @@ func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batch
 		jobSpec.Template.ObjectMeta.Labels = make(map[string]string)
 	}
 
+	if baseutils.ValueOrDefault(jobSpec.BackoffLimit) > 0 {
+		logger.Info("Warning! BackOffLimit can currently only be 0, overriding the given value")
+		jobSpec.BackoffLimit = baseutils.Pointer(int32(0))
+	}
+
 	jobSpec.Template.ObjectMeta.Labels["job-name"] = r.ObjectKey.Name
 
 	if err := controllerutils.AddEntrypoint(ctx, baseutils.ValueOrDefault(spec.EntryPoint), &jobSpec.Template); err != nil {

@@ -2,7 +2,10 @@
   <configuration default="false" name="Operator" type="GoApplicationRunConfiguration" factoryName="Go Application">
     <module name="ai-workload-orchestrator" />
     <working_directory value="$PROJECT_DIR$" />
-    <parameters value="--zap-log-level=info" />
+    <parameters value="--zap-log-level=debug" />
+    <envs>
+      <env name="WEBHOOK_CERT_DIRECTORY" value="certs" />
+    </envs>
     <kind value="FILE" />
     <package value="github.com/silogen/kaiwo" />
     <directory value="$PROJECT_DIR$" />
