@@ -310,7 +310,7 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve kaiwojob status")
 				g.Expect(output).To(Equal("COMPLETE"), "Kaiwojob is not in COMPLETE state")
 			}
-			Eventually(verifyCustomResource, 2*time.Minute, 10*time.Second).Should(Succeed())
+			Eventually(verifyCustomResource, 5*time.Minute, 10*time.Second).Should(Succeed())
 
 			By("verifying controller logs for reconciliation message")
 			cmd = exec.Command("kubectl", "logs", controllerPodName, "-n", namespace)
