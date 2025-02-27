@@ -131,10 +131,6 @@ func sanitize(kaiwoJob *kaiwov1alpha1.KaiwoJob) {
 		}
 	}
 
-	if baseutils.ValueOrDefault(kaiwoJob.Spec.Image) == "" {
-		kaiwoJob.Spec.Image = baseutils.Pointer(baseutils.DefaultRayImage)
-	}
-
 	if kaiwoJob.Labels == nil {
 		kaiwoJob.Labels = make(map[string]string)
 	}
