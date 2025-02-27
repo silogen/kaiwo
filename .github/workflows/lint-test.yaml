@@ -84,6 +84,9 @@ jobs:
       - name: Verify kind installation
         run: kind version
 
+      - name: Install Chainsaw
+        run: go install github.com/kyverno/chainsaw@latest
+
       - name: Create kind cluster
         run: test/setup-kind.sh
 
