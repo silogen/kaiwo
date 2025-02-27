@@ -1,0 +1,70 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: download-job-status-change
+spec:
+  steps:
+    - try:
+        - apply:
+            resource:
+              apiVersion: kaiwo.silogen.ai/v1alpha1
+              kind: KaiwoJob
+              metadata:
+                name: test-job-kaiwojob-positive
+              spec:
+                user: test@amd.com
+                gpus: 0
+                image: ubuntu:latest
+                entrypoint: |
+                  sleep 1
+                storage:
+                  storageEnabled: true
+                  storageClassName: "standard"
+                  accessMode: "ReadWriteOnce"
+                  huggingFace:
+                    storageSize: "1Gi"
+                    mountPath: "/.cache/huggingface"
+                    preCacheRepos:
+                      - repoId: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+                        files:
+                          - "README.md"
+        - assert:
+            resource:
+              apiVersion: kaiwo.silogen.ai/v1alpha1
+              kind: KaiwoJob
+              metadata:
+                name: test-job-kaiwojob-positive
+              status:
+                Status: COMPLETE
+    - try:
+        - apply:
+            resource:
+              apiVersion: kaiwo.silogen.ai/v1alpha1
+              kind: KaiwoJob
+              metadata:
+                name: test-job-kaiwojob-negative
+              spec:
+                user: test@amd.com
+                gpus: 0
+                image: ubuntu:latest
+                entrypoint: |
+                  sleep 1
+                storage:
+                  storageEnabled: true
+                  storageClassName: "standard"
+                  accessMode: "ReadWriteOnce"
+                  huggingFace:
+                    storageSize: "1Gi"
+                    mountPath: "/.cache/huggingface"
+                    preCacheRepos:
+                      - repoId: TinyLlama/TinyLlama-1.1B-Chat-v1.0-NOT-EXISTS # Non-existing repo ID
+                        files:
+                          - "README.md"
+        - assert:
+            resource:
+              apiVersion: kaiwo.silogen.ai/v1alpha1
+              kind: KaiwoJob
+              metadata:
+                name: test-job-kaiwojob-negative
+              status:
+                Status: FAILED
