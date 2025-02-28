@@ -8326,12 +8326,6 @@ spec:
                   type: object
                   x-kubernetes-map-type: atomic
                 type: array
-              labels:
-                additionalProperties:
-                  type: string
-                description: Labels is a map of key-value pairs used for organizing
-                  workloads.
-                type: object
               name:
                 description: Name is the name of the workload.
                 type: string

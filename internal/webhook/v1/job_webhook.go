@@ -141,8 +141,10 @@ func (j *JobWebhook) ensureKaiwoJob(ctx context.Context, job *batchv1.Job, authe
 			Labels:    kaiwoJobLabels,
 		},
 		Spec: kaiwov1alpha1.KaiwoJobSpec{
-			Job:  job,
-			User: baseutils.Pointer(authenticatedUser),
+			Job: job,
+			CommonMetaSpec: kaiwov1alpha1.CommonMetaSpec{
+				User: baseutils.Pointer(authenticatedUser),
+			},
 		},
 	}
 

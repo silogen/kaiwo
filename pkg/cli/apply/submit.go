@@ -72,15 +72,17 @@ func (k *KaiwoJobSubmitter) FromCliFlags(flags workloads.CLIFlags) {
 			Namespace: flags.Namespace,
 		},
 		Spec: v1alpha1.KaiwoJobSpec{
-			ClusterQueue:   flags.Queue,
-			Image:          flags.Image,
-			User:           flags.User,
-			Gpus:           flags.GPUs,
-			Replicas:       flags.Replicas,
-			GpusPerReplica: flags.GPUsPerReplica,
-			Version:        flags.Version,
-			Ray:            flags.UseRay,
-			Dangerous:      flags.Dangerous,
+			ClusterQueue: flags.Queue,
+			CommonMetaSpec: v1alpha1.CommonMetaSpec{
+				Image:          flags.Image,
+				User:           flags.User,
+				Gpus:           flags.GPUs,
+				Replicas:       flags.Replicas,
+				GpusPerReplica: flags.GPUsPerReplica,
+				Version:        flags.Version,
+				Ray:            flags.UseRay,
+				Dangerous:      flags.Dangerous,
+			},
 		},
 	}
 
