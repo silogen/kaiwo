@@ -94,24 +94,30 @@ var _ = Describe("Manager", Ordered, func() {
 	// After all tests have been executed, clean up by undeploying the controller, uninstalling CRDs,
 	// and deleting the namespace.
 	AfterAll(func() {
-		By("cleaning up the curl pod for metrics")
-		cmd := exec.Command("kubectl", "delete", "pod", "curl-metrics", "-n", namespace)
-		_, _ = utils.Run(cmd)
+		runCmd := func(description string, args ...string) {
+			By(description)
+			cmd := exec.Command("kubectl", args...)
+			_, _ = utils.Run(cmd)
+		}
 
-		By("deleting ClusterRoleBinding for the service account to allow access to metrics")
-		cmd = exec.Command("kubectl", "delete", "clusterrolebinding", metricsRoleBindingName,
-			"--clusterrole=kaiwo-metrics-reader",
-			fmt.Sprintf("--serviceaccount=%s:%s", namespace, serviceAccountName),
-		)
-		_, _ = utils.Run(cmd)
+		By("Removing finalizers from KaiwoJobs before deletion")
+		cmd := exec.Command("kubectl", "get", "kaiwojob", "-A", "-o", "json")
+		output, err := utils.Run(cmd)
+		if err == nil {
+			cmd = exec.Command("kubectl", "apply", "-f", "-")
+			cmd.Stdin = strings.NewReader(strings.ReplaceAll(output, `"finalizers":["kaiwo.silogen.ai/finalizer"]`, `"finalizers":[]`))
+			_, _ = utils.Run(cmd)
+		}
 
-		By("undeploying the kaiwo-controller-manager")
-		cmd = exec.Command("kubectl", "delete", "-f", "dist/install.yaml")
-		_, _ = utils.Run(cmd)
+		go runCmd("Deleting curl pod for metrics", "delete", "pod", "curl-metrics", "-n", namespace, "--force", "--grace-period=0", "--ignore-not-found")
+		go runCmd("Deleting ClusterRoleBinding for metrics", "delete", "clusterrolebinding", metricsRoleBindingName, "--ignore-not-found")
+		go runCmd("Deleting all KaiwoJobs", "delete", "kaiwojob", "-A", "--all", "--timeout=30s", "--force", "--grace-period=0")
+		go runCmd("Undeploying kaiwo-controller-manager", "delete", "-k", "test", "--force", "--grace-period=0")
+		go runCmd("Removing namespace for test workloads", "delete", "ns", test_namespace, "--force", "--grace-period=0", "--timeout=30s")
 
-		By("removing namespace for test workoads")
-		cmd = exec.Command("kubectl", "delete", "ns", test_namespace)
-		_, _ = utils.Run(cmd)
+		time.Sleep(5 * time.Second) // Small delay to start background deletions
+		By("Cleanup process started. Waiting for final cleanup.")
+		time.Sleep(30 * time.Second) // Ensure background jobs finish
 	})
 
 	// After each test, check for failures and collect logs, events,
@@ -342,6 +348,7 @@ var _ = Describe("Manager", Ordered, func() {
 			fmt.Println("Chainsaw stdout:\n\n" + outb.String())
 			fmt.Println("Chainsaw stderr:\n\n" + errb.String())
 			Expect(err).NotTo(HaveOccurred(), "Chainsaw test(s) failed")
+		})
 		It("create a job with kaiwo label and verify reconciliation of kaiwojob", func() {
 			testCRName := "job-with-label-1"
 
@@ -390,12 +397,24 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(err).To(HaveOccurred(), "KaiwoJob still exists after Job deletion")
 			}
 			Eventually(verifyKaiwoJobDeletion, 2*time.Minute, 10*time.Second).Should(Succeed())
+		})
 
-			By("verifying controller logs for reconciliation message")
-			cmd = exec.Command("kubectl", "logs", controllerPodName, "-n", namespace)
-			// logs, err := utils.Run(cmd)
-			// Expect(err).NotTo(HaveOccurred(), "Failed to retrieve controller logs")
-			// Expect(logs).To(ContainSubstring(fmt.Sprintf("Successfully reconciled %s", testCRName)))
+		It("should propagate labels from job to kaiwojob", func() {
+			testCRName := "job-with-label-2-label-propagation"
+
+			By("applying a job with labels")
+			cmd := exec.Command("kubectl", "apply", "-f", "test/test-manifests/job-with-label-2-label-propagation.yaml", "-n", test_namespace)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply test Job with labels")
+
+			By("waiting for the KaiwoJob to be created and reconciled")
+			verifyKaiwoJobCreated := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "kaiwojob", testCRName, "-n", test_namespace, "-o", "jsonpath={.metadata.labels.kaiwo\\.silogen\\.ai/managed}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve KaiwoJob labels")
+				g.Expect(output).To(Equal("true"), "Label propagation to KaiwoJob failed")
+			}
+			Eventually(verifyKaiwoJobCreated, 2*time.Minute, 10*time.Second).Should(Succeed())
 		})
 
 		// +kubebuilder:scaffold:e2e-webhooks-checks

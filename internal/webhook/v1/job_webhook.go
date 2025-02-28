@@ -125,11 +125,20 @@ func (j *JobWebhook) ensureKaiwoJob(ctx context.Context, job *batchv1.Job, authe
 		return fmt.Errorf("unexpected error retrieving KaiwoJob: %w", err)
 	}
 
+	kaiwoJobLabels := make(map[string]string)
+	for key, value := range job.Labels {
+		kaiwoJobLabels[key] = value
+	}
+
+	if _, exists := kaiwoJobLabels[kaiwov1alpha1.QueueLabel]; !exists {
+		kaiwoJobLabels[kaiwov1alpha1.QueueLabel] = controllerutils.DefaultKaiwoQueueConfigName
+	}
+
 	kaiwoJob = &kaiwov1alpha1.KaiwoJob{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      job.Name,
 			Namespace: job.Namespace,
-			Labels:    make(map[string]string),
+			Labels:    kaiwoJobLabels,
 		},
 		Spec: kaiwov1alpha1.KaiwoJobSpec{
 			Job:  job,
@@ -137,19 +146,16 @@ func (j *JobWebhook) ensureKaiwoJob(ctx context.Context, job *batchv1.Job, authe
 		},
 	}
 
-	kaiwoJob.Labels[kaiwov1alpha1.QueueLabel] = controllerutils.DefaultKaiwoQueueConfigName
-
-	if err := controllerutils.CreateLocalQueue(ctx, j.Client, kaiwoJob.Labels[kaiwov1alpha1.QueueLabel], kaiwoJob.ObjectMeta.Namespace); err != nil {
+	if err := controllerutils.CreateLocalQueue(ctx, j.Client, kaiwoJobLabels[kaiwov1alpha1.QueueLabel], kaiwoJob.Namespace); err != nil {
 		return fmt.Errorf("failed to create local queue: %w", err)
 	}
 
-	// Create the KaiwoJob in the cluster
 	if err := j.Client.Create(ctx, kaiwoJob); err != nil {
 		joblog.Error(err, "Failed to create KaiwoJob")
 		return fmt.Errorf("failed to create KaiwoJob: %w", err)
 	}
 
-	joblog.Info("Successfully created KaiwoJob", "KaiwoJob", kaiwoJob.Name)
+	joblog.Info("Successfully created KaiwoJob", "KaiwoJob", kaiwoJob.Name, "Labels", kaiwoJob.Labels)
 	return nil
 }
 

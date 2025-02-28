@@ -27,7 +27,6 @@ import (
 
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	batchv1 "k8s.io/api/batch/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,7 +35,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
-	common "github.com/silogen/kaiwo/pkg/workloads/common"
 	workloadjob "github.com/silogen/kaiwo/pkg/workloads/job"
 )
 
@@ -64,41 +62,12 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, nil
 	}
 
-	if !kaiwoJob.DeletionTimestamp.IsZero() {
-		logger.Info("KaiwoJob is being deleted, updating status to TERMINATING", "KaiwoJob", kaiwoJob.Name)
-		kaiwoJob.Status.Status = kaiwov1alpha1.StatusTerminating
-
-		retryAttempts := 3
-		for i := 0; i < retryAttempts; i++ {
-			logger.Info(fmt.Sprintf("Updating status to: %s", string(kaiwoJob.Status.Status)), "status", kaiwoJob.Status)
-
-			if err := r.Client.Status().Update(ctx, &kaiwoJob); err != nil {
-				if errors.IsConflict(err) {
-					logger.Error(err, "Conflict error during KaiwoJob update, retrying")
-					continue
-				}
-				return ctrl.Result{}, nil
-			}
-			break
-		}
-
-		if baseutils.ContainsString(kaiwoJob.Finalizers, common.Finalizer) {
-			logger.Info("Removing finalizer from KaiwoJob", "KaiwoJob", kaiwoJob.Name)
-			kaiwoJob.Finalizers = baseutils.RemoveString(kaiwoJob.Finalizers, common.Finalizer)
-
-			if err := r.Client.Update(ctx, &kaiwoJob); err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to remove finalizer from KaiwoJob: %w", err)
-			}
-		}
-
+	if kaiwoJob.Status.Status == kaiwov1alpha1.StatusFailed {
+		baseutils.Debug(logger, "Skipping reconciliation, as status is failed")
 		return ctrl.Result{}, nil
-	}
-
-	if !baseutils.ContainsString(kaiwoJob.Finalizers, common.Finalizer) {
-		kaiwoJob.Finalizers = append(kaiwoJob.Finalizers, common.Finalizer)
-		if err := r.Client.Update(ctx, &kaiwoJob); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to add finalizer to KaiwoJob: %w", err)
-		}
+	} else if kaiwoJob.Status.Status == kaiwov1alpha1.StatusComplete {
+		baseutils.Debug(logger, "Skipping reconciliation, as status is complete")
+		return ctrl.Result{}, nil
 	}
 
 	reconciler := workloadjob.NewKaiwoJobReconciler(&kaiwoJob)
