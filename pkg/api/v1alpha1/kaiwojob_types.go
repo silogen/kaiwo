@@ -62,6 +62,9 @@ type KaiwoJobSpec struct {
 	// GpusPerReplica specifies the number of GPUs allocated per replica.
 	GpusPerReplica *int `json:"gpus-per-replica,omitempty"`
 
+	// Resources specify the default resource requirements applied for all pods inside the workflow
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
 	// Image defines the container image used for the workload.
 	Image *string `json:"image,omitempty"`
 

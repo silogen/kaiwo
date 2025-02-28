@@ -19,6 +19,9 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
+
+	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 
@@ -55,9 +58,9 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if client.IgnoreNotFound(err) != nil {
 			return ctrl.Result{}, baseutils.LogErrorf(logger, "failed to get KaiwoJob", err)
 		}
+		baseutils.Debug(logger, "KaiwoJob resource %s/%s not found", kaiwoJob.Namespace, kaiwoJob.Name)
 		return ctrl.Result{}, nil
 	}
-
 	reconciler := workloadjob.NewKaiwoJobReconciler(&kaiwoJob)
 
 	result, _, err := reconciler.Reconcile(ctx, r.Client, r.Scheme, false)
@@ -92,9 +95,16 @@ func mapJobToKaiwoJob(obj client.Object) []reconcile.Request {
 		return nil
 	}
 
+	// If the job is a Download job, fetch the owning kaiwo job name
+	name := job.Name
+	if value, ok := job.Labels[workloadcommon.KaiwoTypeLabelKey]; ok && value == workloadcommon.KaiwoDownloadTypeLabelValue {
+		name = strings.TrimSuffix(name, "-download")
+	}
+
 	return []reconcile.Request{
 		{NamespacedName: client.ObjectKey{
-			Name:      job.Name,
+			// Map download jobs back to their owning Kaiwo Jobs
+			Name:      name,
 			Namespace: job.Namespace,
 		}},
 	}

@@ -119,6 +119,24 @@ func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, que
 	// Sync ClusterQueues
 	for _, kaiwoQueue := range queueConfig.Spec.ClusterQueues {
 		kueueQueue := controllerutils.ConvertKaiwoToKueueClusterQueue(kaiwoQueue)
+
+		// Ensure that the resources are in the same order as the covered resources array
+		for i, resourceGroup := range kueueQueue.Spec.ResourceGroups {
+			for j, flavor := range resourceGroup.Flavors {
+				resourceMap := make(map[string]kueuev1beta1.ResourceQuota)
+				for _, flavorResource := range flavor.Resources {
+					resourceMap[flavorResource.Name.String()] = flavorResource
+				}
+				var resources []kueuev1beta1.ResourceQuota
+				for _, resourceName := range resourceGroup.CoveredResources {
+					if resource, exists := resourceMap[resourceName.String()]; exists {
+						resources = append(resources, resource)
+					}
+				}
+				kueueQueue.Spec.ResourceGroups[i].Flavors[j].Resources = resources
+			}
+		}
+
 		existingQueue := &kueuev1beta1.ClusterQueue{}
 		err := r.Get(ctx, client.ObjectKey{Name: kueueQueue.Name}, existingQueue)
 

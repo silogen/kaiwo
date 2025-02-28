@@ -5,9 +5,16 @@ metadata:
 spec:
   user: test@amd.com
   gpus: 0
+  resources:
+    limits:
+      cpu: 1
+      memory: 2Gi
+    requests:
+      cpu: 1
+      memory: 2Gi
   storage:
     storageEnabled: false
-    storageClassName: "longhorn"
+    storageClassName: "standard"
     accessMode: "ReadWriteOnce"
     data:
       storageSize: "2Gi"

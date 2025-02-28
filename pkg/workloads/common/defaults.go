@@ -101,3 +101,35 @@ func GetVolumes() []corev1.Volume {
 	}
 	return volumes
 }
+
+// FillPodResources fills pod resources with a given template if they are not already set
+func FillPodResources(podSpec *corev1.PodSpec, resources *corev1.ResourceRequirements, override bool) {
+	for i := range podSpec.Containers {
+		FillContainerResources(&podSpec.Containers[i], resources, override)
+	}
+	for i := range podSpec.InitContainers {
+		FillContainerResources(&podSpec.InitContainers[i], resources, override)
+	}
+}
+
+// FillContainerResources fills container resources with a given template if they are not already set
+func FillContainerResources(container *corev1.Container, resources *corev1.ResourceRequirements, override bool) {
+	if resources != nil {
+		for k, v := range resources.Requests {
+			if _, ok := container.Resources.Requests[k]; !ok || override {
+				if container.Resources.Requests == nil {
+					container.Resources.Requests = corev1.ResourceList{}
+				}
+				container.Resources.Requests[k] = v
+			}
+		}
+		for k, v := range resources.Limits {
+			if _, ok := container.Resources.Limits[k]; !ok || override {
+				if container.Resources.Limits == nil {
+					container.Resources.Limits = corev1.ResourceList{}
+				}
+				container.Resources.Limits[k] = v
+			}
+		}
+	}
+}

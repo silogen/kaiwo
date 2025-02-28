@@ -32,8 +32,10 @@ import (
 )
 
 const (
-	configMapFilename = "config.yaml"
-	secretsMount      = "/app/secrets"
+	configMapFilename           = "config.yaml"
+	secretsMount                = "/app/secrets"
+	KaiwoTypeLabelKey           = "kaiwo/type"
+	KaiwoDownloadTypeLabelValue = "downloader"
 )
 
 var (
@@ -252,8 +254,12 @@ func (r *DownloadJobReconciler) Build(_ context.Context, _ client.Client) (*batc
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      r.ObjectKey.Name,
 			Namespace: r.ObjectKey.Namespace,
+			Labels: map[string]string{
+				KaiwoTypeLabelKey: KaiwoDownloadTypeLabelValue,
+			},
 		},
 		Spec: batchv1.JobSpec{
+			BackoffLimit: baseutils.Pointer(int32(0)),
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					RestartPolicy: corev1.RestartPolicyNever,
@@ -288,7 +294,6 @@ func (r *DownloadJobReconciler) ShouldContinue(ctx context.Context, actual *batc
 		return nil
 	} else if actual.Status.Failed >= 1 {
 		baseutils.Debug(logger, "Download job failed")
-		// TODO handle
 		return &ctrl.Result{}
 	} else {
 		baseutils.Debug(logger, "Download job still in progress, requeuing until it is complete")

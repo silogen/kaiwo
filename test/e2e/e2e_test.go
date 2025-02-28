@@ -17,6 +17,7 @@ limitations under the License.
 package e2e
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -317,6 +318,18 @@ var _ = Describe("Manager", Ordered, func() {
 			// logs, err := utils.Run(cmd)
 			// Expect(err).NotTo(HaveOccurred(), "Failed to retrieve controller logs")
 			// Expect(logs).To(ContainSubstring(fmt.Sprintf("Successfully reconciled %s", testCRName)))
+		})
+
+		It("should run all the chainsaw tests", func() {
+			By("executing chainsaw tests")
+			cmd := exec.Command("chainsaw", "test", "--test-dir", "test/chainsaw")
+			var outb, errb bytes.Buffer
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			err := cmd.Run()
+			fmt.Println("Chainsaw stdout:\n\n" + outb.String())
+			fmt.Println("Chainsaw stderr:\n\n" + errb.String())
+			Expect(err).NotTo(HaveOccurred(), "Chainsaw test(s) failed")
 		})
 
 		// +kubebuilder:scaffold:e2e-webhooks-checks

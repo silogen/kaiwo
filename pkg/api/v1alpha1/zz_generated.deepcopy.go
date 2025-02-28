@@ -383,6 +383,11 @@ func (in *KaiwoJobSpec) DeepCopyInto(out *KaiwoJobSpec) {
 		*out = new(int)
 		**out = **in
 	}
+	if in.Resources != nil {
+		in, out := &in.Resources, &out.Resources
+		*out = new(v1.ResourceRequirements)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.Image != nil {
 		in, out := &in.Image, &out.Image
 		*out = new(string)
