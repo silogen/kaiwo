@@ -31,6 +31,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
+	common "github.com/silogen/kaiwo/pkg/workloads/common"
 
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
@@ -90,9 +91,8 @@ func (j *JobWebhook) Default(ctx context.Context, obj runtime.Object) error {
 		if err := j.ensureKaiwoJob(ctx, job, authenticatedUser); err != nil {
 			return fmt.Errorf("failed to create KaiwoJob: %w", err)
 		}
-		finalizer := "kaiwo.silogen.ai/finalizer"
-		if !baseutils.ContainsString(job.Finalizers, finalizer) {
-			job.Finalizers = append(job.Finalizers, finalizer)
+		if !baseutils.ContainsString(job.Finalizers, common.Finalizer) {
+			job.Finalizers = append(job.Finalizers, common.Finalizer)
 			joblog.Info("Added finalizer to Job", "JobName", job.Name)
 		}
 
@@ -206,10 +206,8 @@ func (j *JobWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) (ad
 		return nil, fmt.Errorf("expected a Job object but got %T", obj)
 	}
 
-	finalizer := "kaiwo.silogen.ai/finalizer"
-
 	// **Ensure the job has a finalizer before deletion starts**
-	if !baseutils.ContainsString(job.Finalizers, finalizer) {
+	if !baseutils.ContainsString(job.Finalizers, common.Finalizer) {
 		return nil, nil
 	}
 
@@ -223,7 +221,7 @@ func (j *JobWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) (ad
 			return nil, fmt.Errorf("failed to refresh Job before removing finalizer: %w", err)
 		}
 
-		job.Finalizers = baseutils.RemoveString(job.Finalizers, finalizer)
+		job.Finalizers = baseutils.RemoveString(job.Finalizers, common.Finalizer)
 		if err := j.Client.Update(ctx, job); err != nil {
 			if errors.IsConflict(err) {
 				continue // Retry
@@ -242,8 +240,8 @@ func (j *JobWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) (ad
 		joblog.Info("Deleting associated KaiwoJob", "KaiwoJob", kaiwoJob.Name)
 
 		// Remove finalizer from KaiwoJob
-		if baseutils.ContainsString(kaiwoJob.Finalizers, finalizer) {
-			kaiwoJob.Finalizers = baseutils.RemoveString(kaiwoJob.Finalizers, finalizer)
+		if baseutils.ContainsString(kaiwoJob.Finalizers, common.Finalizer) {
+			kaiwoJob.Finalizers = baseutils.RemoveString(kaiwoJob.Finalizers, common.Finalizer)
 			if err := j.Client.Update(ctx, kaiwoJob); err != nil {
 				return nil, fmt.Errorf("failed to remove finalizer from KaiwoJob: %w", err)
 			}
