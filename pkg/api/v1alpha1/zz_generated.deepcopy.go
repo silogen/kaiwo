@@ -388,11 +388,6 @@ func (in *KaiwoJobSpec) DeepCopyInto(out *KaiwoJobSpec) {
 		*out = new(v1.ResourceRequirements)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.RayHeadPodMemory != nil {
-		in, out := &in.RayHeadPodMemory, &out.RayHeadPodMemory
-		x := (*in).DeepCopy()
-		*out = &x
-	}
 	if in.Image != nil {
 		in, out := &in.Image, &out.Image
 		*out = new(string)
