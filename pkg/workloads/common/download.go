@@ -32,8 +32,10 @@ import (
 )
 
 const (
-	configMapFilename = "config.yaml"
-	secretsMount      = "/app/secrets"
+	configMapFilename           = "config.yaml"
+	secretsMount                = "/app/secrets"
+	KaiwoTypeLabelKey           = "kaiwo/type"
+	KaiwoDownloadTypeLabelValue = "downloader"
 )
 
 var (
@@ -252,6 +254,9 @@ func (r *DownloadJobReconciler) Build(_ context.Context, _ client.Client) (*batc
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      r.ObjectKey.Name,
 			Namespace: r.ObjectKey.Namespace,
+			Labels: map[string]string{
+				KaiwoTypeLabelKey: KaiwoDownloadTypeLabelValue,
+			},
 		},
 		Spec: batchv1.JobSpec{
 			BackoffLimit: baseutils.Pointer(int32(0)),

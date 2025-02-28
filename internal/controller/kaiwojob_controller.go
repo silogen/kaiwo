@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"strings"
 
+	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
+
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
@@ -93,10 +95,16 @@ func mapJobToKaiwoJob(obj client.Object) []reconcile.Request {
 		return nil
 	}
 
+	// If the job is a Download job, fetch the owning kaiwo job name
+	name := job.Name
+	if value, ok := job.Labels[workloadcommon.KaiwoTypeLabelKey]; ok && value == workloadcommon.KaiwoDownloadTypeLabelValue {
+		name = strings.TrimSuffix(name, "-download")
+	}
+
 	return []reconcile.Request{
 		{NamespacedName: client.ObjectKey{
 			// Map download jobs back to their owning Kaiwo Jobs
-			Name:      strings.ReplaceAll(job.Name, "-download", ""),
+			Name:      name,
 			Namespace: job.Namespace,
 		}},
 	}
