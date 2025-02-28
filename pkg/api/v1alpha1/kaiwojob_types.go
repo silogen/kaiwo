@@ -18,6 +18,7 @@ import (
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -61,6 +62,12 @@ type KaiwoJobSpec struct {
 
 	// GpusPerReplica specifies the number of GPUs allocated per replica.
 	GpusPerReplica *int `json:"gpus-per-replica,omitempty"`
+
+	// Resources specify the default resource requirements applied for all pods inside the workflow
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// RayHeadPodMemory allows overriding the memory allocation for the ray head pod
+	RayHeadPodMemory *resource.Quantity `json:"rayHeadPodMemory,omitempty"`
 
 	// Image defines the container image used for the workload.
 	Image *string `json:"image,omitempty"`

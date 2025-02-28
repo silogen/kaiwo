@@ -28,12 +28,26 @@ import (
 
 var DefaultGpuResourceKey = baseutils.GetEnv("DEFAULT_GPU_RESOURCE_KEY", "amd.com/gpu")
 
-// GetDefaultPodTemplate defines a reusable Pod template with security and resource settings.
-func GetDefaultPodTemplate() corev1.PodTemplateSpec {
-	return GetPodTemplate(*resource.NewQuantity(1*1024*1024*1024, resource.BinarySI), false)
-}
-
-func GetPodTemplate(dshmSize resource.Quantity, dangerous bool) corev1.PodTemplateSpec {
+func GetPodTemplate(dshmSize resource.Quantity, dangerous bool, resources corev1.ResourceRequirements) corev1.PodTemplateSpec {
+	resourceRequirements := resources.DeepCopy()
+	if resourceRequirements.Requests == nil {
+		resourceRequirements.Requests = corev1.ResourceList{}
+	}
+	if resourceRequirements.Limits == nil {
+		resourceRequirements.Limits = corev1.ResourceList{}
+	}
+	if _, ok := resourceRequirements.Limits[corev1.ResourceMemory]; !ok {
+		resourceRequirements.Limits[corev1.ResourceMemory] = *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI)
+	}
+	if _, ok := resourceRequirements.Limits[corev1.ResourceCPU]; !ok {
+		resourceRequirements.Limits[corev1.ResourceCPU] = *resource.NewQuantity(2, resource.DecimalSI)
+	}
+	if _, ok := resourceRequirements.Requests[corev1.ResourceMemory]; !ok {
+		resourceRequirements.Requests[corev1.ResourceMemory] = *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI)
+	}
+	if _, ok := resourceRequirements.Requests[corev1.ResourceCPU]; !ok {
+		resourceRequirements.Requests[corev1.ResourceCPU] = *resource.NewQuantity(2, resource.DecimalSI)
+	}
 	podTemplate := corev1.PodTemplateSpec{
 		Spec: corev1.PodSpec{
 			RestartPolicy: corev1.RestartPolicyNever,
@@ -45,16 +59,7 @@ func GetPodTemplate(dshmSize resource.Quantity, dangerous bool) corev1.PodTempla
 					Env: []corev1.EnvVar{
 						{Name: "HF_HOME", Value: "/workload/.cache/huggingface"},
 					},
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceMemory: *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI), // Minimum requirement for Ray Head pod
-							corev1.ResourceCPU:    *resource.NewQuantity(2, resource.DecimalSI),                // Minimum requirement for Ray Head pod
-						},
-						Limits: corev1.ResourceList{
-							corev1.ResourceMemory: *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI),
-							corev1.ResourceCPU:    *resource.NewQuantity(2, resource.DecimalSI),
-						},
-					},
+					Resources: *resourceRequirements,
 					VolumeMounts: []corev1.VolumeMount{
 						{Name: "dshm", MountPath: "/dev/shm"},
 					},

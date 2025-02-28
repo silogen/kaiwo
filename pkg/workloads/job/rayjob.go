@@ -16,7 +16,11 @@ package workloadjob
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"strings"
+
+	v1 "k8s.io/api/core/v1"
 
 	workloadutils "github.com/silogen/kaiwo/pkg/workloads/common"
 
@@ -34,14 +38,14 @@ import (
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
-func GetDefaultRayJobSpec(dangerous bool) rayv1.RayJobSpec {
+func GetDefaultRayJobSpec(dangerous bool, resourceRequirements v1.ResourceRequirements) rayv1.RayJobSpec {
 	return rayv1.RayJobSpec{
 		ShutdownAfterJobFinishes: true,
 		RayClusterSpec: &rayv1.RayClusterSpec{
 			EnableInTreeAutoscaling: baseutils.Pointer(false),
 			HeadGroupSpec: rayv1.HeadGroupSpec{
 				RayStartParams: map[string]string{},
-				Template:       controllerutils.GetPodTemplate(resource.MustParse("1Gi"), dangerous),
+				Template:       controllerutils.GetPodTemplate(resource.MustParse("1Gi"), dangerous, resourceRequirements),
 			},
 			WorkerGroupSpecs: []rayv1.WorkerGroupSpec{
 				{
@@ -50,7 +54,7 @@ func GetDefaultRayJobSpec(dangerous bool) rayv1.RayJobSpec {
 					MinReplicas:    baseutils.Pointer(int32(1)),
 					MaxReplicas:    baseutils.Pointer(int32(1)),
 					RayStartParams: map[string]string{},
-					Template:       controllerutils.GetPodTemplate(resource.MustParse("200Gi"), dangerous), // TODO: add to CRD as configurable field
+					Template:       controllerutils.GetPodTemplate(resource.MustParse("200Gi"), dangerous, resourceRequirements), // TODO: add to CRD as configurable field
 				},
 			},
 		},
@@ -80,7 +84,9 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 
 	var rayJobSpec rayv1.RayJobSpec
 	if spec.RayJob == nil {
-		rayJobSpec = GetDefaultRayJobSpec(baseutils.ValueOrDefault(spec.Dangerous))
+		fmt.Println(spec.Resources)
+		rayJobSpec = GetDefaultRayJobSpec(baseutils.ValueOrDefault(spec.Dangerous), baseutils.ValueOrDefault(spec.Resources))
+		fmt.Println(spec.Resources)
 	} else {
 		rayJobSpec = spec.RayJob.Spec
 	}
@@ -115,6 +121,29 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 				rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Template.Spec.Containers[j].Image = *spec.Image
 			}
 		}
+	}
+
+	workloadutils.FillPodResources(&rayJobSpec.RayClusterSpec.HeadGroupSpec.Template.Spec, spec.Resources, false)
+	if headMemoryOverride := os.Getenv("RAY_HEAD_POD_MEMORY"); len(headMemoryOverride) > 0 {
+		// Override ray head pod memory, if the env var is set
+		quantity, err := resource.ParseQuantity(headMemoryOverride)
+		if err != nil {
+			msg := fmt.Sprintf("Failed to parse HEAD_POD_MEMORY %s", headMemoryOverride)
+			logger.Error(err, msg)
+			panic(msg)
+		}
+		workloadutils.FillPodResources(&rayJobSpec.RayClusterSpec.HeadGroupSpec.Template.Spec, &v1.ResourceRequirements{
+			Limits: v1.ResourceList{
+				v1.ResourceMemory: quantity,
+			},
+			Requests: v1.ResourceList{
+				v1.ResourceMemory: quantity,
+			},
+		}, true)
+	}
+	fmt.Println(spec.Resources)
+	for i := range rayJobSpec.RayClusterSpec.WorkerGroupSpecs {
+		workloadutils.FillPodResources(&rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Template.Spec, spec.Resources, false)
 	}
 
 	replicas := baseutils.ValueOrDefault(spec.Replicas)

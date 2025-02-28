@@ -14,6 +14,13 @@ spec:
               spec:
                 user: test@amd.com
                 gpus: 0
+                resources:
+                  limits:
+                    cpu: "1"
+                    memory: "2Gi"
+                  requests:
+                    cpu: "1"
+                    memory: "2Gi"
                 image: ubuntu:latest
                 entrypoint: |
                   sleep 1
@@ -39,6 +46,10 @@ spec:
       catch:
         - events: {}
         - podLogs: {}
+        - describe:
+            apiVersion: v1
+            kind: Pod
+            namespace: kaiwo-system
     - try:
         - apply:
             resource:
@@ -49,6 +60,13 @@ spec:
               spec:
                 user: test@amd.com
                 gpus: 0
+                resources:
+                  limits:
+                    cpu: "1"
+                    memory: "2Gi"
+                  requests:
+                    cpu: "1"
+                    memory: "2Gi"
                 image: ubuntu:latest
                 entrypoint: |
                   sleep 1
@@ -71,6 +89,3 @@ spec:
                 name: test-job-kaiwojob-negative
               status:
                 Status: FAILED
-      catch:
-        - events: {}
-        - podLogs: {}

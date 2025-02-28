@@ -34,10 +34,10 @@ import (
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
-func GetDefaultJobSpec(dangerous bool) batchv1.JobSpec {
+func GetDefaultJobSpec(dangerous bool, resourceRequirements corev1.ResourceRequirements) batchv1.JobSpec {
 	return batchv1.JobSpec{
 		TTLSecondsAfterFinished: baseutils.Pointer(int32(3600)),
-		Template:                controllerutils.GetPodTemplate(*resource.NewQuantity(1*1024*1024*1024, resource.BinarySI), dangerous),
+		Template:                controllerutils.GetPodTemplate(*resource.NewQuantity(1*1024*1024*1024, resource.BinarySI), dangerous, resourceRequirements),
 	}
 }
 
@@ -65,7 +65,7 @@ func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batch
 	var jobSpec batchv1.JobSpec
 
 	if spec.Job == nil {
-		jobSpec = GetDefaultJobSpec(baseutils.ValueOrDefault(spec.Dangerous))
+		jobSpec = GetDefaultJobSpec(baseutils.ValueOrDefault(spec.Dangerous), baseutils.ValueOrDefault(spec.Resources))
 	} else {
 		jobSpec = spec.Job.Spec
 	}
@@ -75,6 +75,8 @@ func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batch
 			jobSpec.Template.Spec.Containers[i].Image = *spec.Image
 		}
 	}
+
+	workloadutils.FillPodResources(&jobSpec.Template.Spec, spec.Resources, false)
 
 	if jobSpec.Template.ObjectMeta.Labels == nil {
 		jobSpec.Template.ObjectMeta.Labels = make(map[string]string)
