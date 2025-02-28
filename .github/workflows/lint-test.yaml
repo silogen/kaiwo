@@ -2,9 +2,10 @@ name: lint-and-test
 on:
   push:
     branches:
-      - main
-      - master
+    - main
+    - master
   pull_request:
+
 
 permissions:
   contents: read
@@ -28,18 +29,18 @@ jobs:
     name: Run tests
     runs-on: ubuntu-latest
     steps:
-      - name: Clone the code
-        uses: actions/checkout@v4
+    - name: Clone the code
+      uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
 
-      - name: Running Tests
-        run: |
-          go mod tidy
-          make test
+    - name: Running Tests
+      run: |
+        go mod tidy
+        make test
 
   lint-python:
     name: Lint Python code
@@ -48,51 +49,51 @@ jobs:
       run:
         working-directory: ./python
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: 3.12
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
-      - name: Run flake8
-        run: flake8 kaiwo
-      - name: Run Black
-        run : black kaiwo
-      - name: Run isort
-        run: isort kaiwo
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: 3.12
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements-dev.txt
+    - name: Run flake8
+      run: flake8 kaiwo
+    - name: Run Black
+      run: black kaiwo
+    - name: Run isort
+      run: isort kaiwo
 
   test-e2e:
     name: Run e2e tests
     runs-on: ubuntu-latest
     steps:
-      - name: Clone the code
-        uses: actions/checkout@v4
+    - name: Clone the code
+      uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
 
-      - name: Install the latest version of kind
-        run: |
-          curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-amd64
-          chmod +x ./kind
-          sudo mv ./kind /usr/local/bin/kind
+    - name: Install the latest version of kind
+      run: |
+        curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-amd64
+        chmod +x ./kind
+        sudo mv ./kind /usr/local/bin/kind
 
-      - name: Verify kind installation
-        run: kind version
+    - name: Verify kind installation
+      run: kind version
 
-      - name: Install Chainsaw
-        uses: kyverno/action-install-chainsaw@v0.2.12
-        with:
-          release: v0.2.12
+    - name: Install Chainsaw
+      uses: kyverno/action-install-chainsaw@v0.2.12
+      with:
+        release: v0.2.12
 
-      - name: Create kind cluster
-        run: test/setup-kind.sh
+    - name: Create kind cluster
+      run: test/setup_kind.sh
 
-      - name: Running Test e2e
-        run: |
-          go mod tidy
-          make test-e2e
+    - name: Running Test e2e
+      run: |
+        go mod tidy
+        make test-e2e
