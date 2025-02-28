@@ -19,18 +19,16 @@ import (
 	"fmt"
 	"testing"
 
-	batchv1 "k8s.io/api/batch/v1"
-
-	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
-
-	"github.com/silogen/kaiwo/pkg/k8s"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
+	"github.com/silogen/kaiwo/pkg/k8s"
+	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 func TestBatchJob(t *testing.T) {
@@ -38,34 +36,42 @@ func TestBatchJob(t *testing.T) {
 	RunSpecs(t, "Batch job suite")
 }
 
-var _ = Describe("Batch job suite", func() {
+func dryReconcile(kaiwoJob *v1alpha1.KaiwoJob) (KaiwoJobReconciler, error) {
 	scheme, err := k8s.GetScheme()
 	if err != nil {
 		panic(err)
 	}
+	reconciler := NewKaiwoJobReconciler(kaiwoJob)
+	_, _, err = reconciler.Reconcile(context.Background(), nil, &scheme, true)
+	return reconciler, err
+}
 
+var _ = Describe("Batch job suite", func() {
 	kaiwoJobSpec := v1alpha1.KaiwoJobSpec{
-		Resources: &v1.ResourceRequirements{
-			Requests: v1.ResourceList{v1.ResourceMemory: resource.MustParse("15Gi")},
-			Limits:   v1.ResourceList{v1.ResourceCPU: resource.MustParse("125m")},
+		CommonMetaSpec: v1alpha1.CommonMetaSpec{
+			Resources: &v1.ResourceRequirements{
+				Requests: v1.ResourceList{v1.ResourceMemory: resource.MustParse("15Gi")},
+				Limits:   v1.ResourceList{v1.ResourceCPU: resource.MustParse("125m")},
+			},
 		},
 	}
 
-	dryReconcile := func(job *batchv1.Job) KaiwoJobReconciler {
+	dryReconcileLocal := func(job *batchv1.Job) KaiwoJobReconciler {
 		spec := kaiwoJobSpec.DeepCopy()
 		spec.Job = job
 		kaiwoJob := &v1alpha1.KaiwoJob{
 			Spec: *spec,
 		}
-		reconciler := NewKaiwoJobReconciler(kaiwoJob)
-		_, _, err = reconciler.Reconcile(context.Background(), nil, &scheme, true)
-		Expect(err).NotTo(HaveOccurred())
-		return reconciler
+		r, err := dryReconcile(kaiwoJob)
+		if err != nil {
+			Expect(err).NotTo(HaveOccurred())
+		}
+		return r
 	}
 
 	When("the resources are specified in the kaiwo job spec", func() {
 		Context("and the job does not specify resources", func() {
-			reconciler := dryReconcile(nil)
+			reconciler := dryReconcileLocal(nil)
 
 			It("sets all of the given resources", func() {
 				Expect(reconciler.BatchJob.Desired.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceMemory]).To(Equal((*kaiwoJobSpec.Resources).Requests[v1.ResourceMemory]))
@@ -73,8 +79,8 @@ var _ = Describe("Batch job suite", func() {
 			})
 
 			It("uses the default values for those fields that are not set", func() {
-				Expect(reconciler.BatchJob.Desired.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]).To(Equal(controllerutils.DefaultCPU))
-				Expect(reconciler.BatchJob.Desired.Spec.Template.Spec.Containers[0].Resources.Limits[v1.ResourceMemory]).To(Equal(controllerutils.DefaultMemory))
+				Expect(reconciler.BatchJob.Desired.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]).To(Equal(workloadcommon.DefaultCPU))
+				Expect(reconciler.BatchJob.Desired.Spec.Template.Spec.Containers[0].Resources.Limits[v1.ResourceMemory]).To(Equal(workloadcommon.DefaultMemory))
 			})
 		})
 
@@ -82,7 +88,7 @@ var _ = Describe("Batch job suite", func() {
 			memoryLimit := resource.MustParse("14Gi")
 			cpuRequest := resource.MustParse("250m")
 
-			reconciler := dryReconcile(&batchv1.Job{
+			reconciler := dryReconcileLocal(&batchv1.Job{
 				Spec: batchv1.JobSpec{
 					Template: v1.PodTemplateSpec{
 						Spec: v1.PodSpec{
@@ -117,7 +123,7 @@ var _ = Describe("Batch job suite", func() {
 			memoryRequest := resource.MustParse("14Gi")
 			cpuLimit := resource.MustParse("500m")
 
-			reconciler := dryReconcile(&batchv1.Job{
+			reconciler := dryReconcileLocal(&batchv1.Job{
 				Spec: batchv1.JobSpec{
 					Template: v1.PodTemplateSpec{
 						Spec: v1.PodSpec{
@@ -152,5 +158,52 @@ var _ = Describe("Batch job suite", func() {
 				Expect(limitedMemory.Value()).To(Equal(int64(0)))
 			})
 		})
+	})
+
+	When("there is a label in the kaiwo job", func() {
+		kaiwoJob := &v1alpha1.KaiwoJob{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{
+					"key1": "value1",
+					"key2": "value2",
+				},
+			},
+			Spec: v1alpha1.KaiwoJobSpec{
+				Job: &batchv1.Job{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							"key2": "value2-override",
+							"key3": "value3",
+						},
+					},
+					Spec: GetDefaultJobSpec(false, v1.ResourceRequirements{}),
+				},
+			},
+		}
+		var reconciler *KaiwoJobReconciler
+
+		BeforeEach(func() {
+			r, err := dryReconcile(kaiwoJob)
+			Expect(err).NotTo(HaveOccurred())
+			reconciler = &r
+		})
+
+		Context("and the job does not specify that label", func() {
+			It("sets the label", func() {
+				Expect(reconciler.BatchJob.Desired.Labels["key1"]).To(Equal("value1"))
+			})
+		})
+
+		//Context("and the job does specify that label", func() {
+		//	It("keeps the job label without overwriting it", func() {
+		//		Expect(reconciler.BatchJob.Desired.Labels["key2"]).To(Equal("value2-override"))
+		//	})
+		//})
+		//
+		//Context("and the job has labels that the kaiwo job does not", func() {
+		//	It("keeps the job labels as is", func() {
+		//		Expect(reconciler.BatchJob.Desired.Labels["key3"]).To(Equal("value3"))
+		//	})
+		//})
 	})
 })
