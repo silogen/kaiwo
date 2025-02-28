@@ -36,6 +36,9 @@ spec:
                 name: test-job-kaiwojob-positive
               status:
                 Status: COMPLETE
+      catch:
+        - events: {}
+        - podLogs: {}
     - try:
         - apply:
             resource:
@@ -68,3 +71,6 @@ spec:
                 name: test-job-kaiwojob-negative
               status:
                 Status: FAILED
+      catch:
+        - events: {}
+        - podLogs: {}
