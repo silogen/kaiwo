@@ -29,7 +29,6 @@ spec:
                         files:
                           - "README.md"
         - assert:
-            timeout: 120s
             resource:
               apiVersion: kaiwo.silogen.ai/v1alpha1
               kind: KaiwoJob
@@ -62,7 +61,6 @@ spec:
                         files:
                           - "README.md"
         - assert:
-            timeout: 120s
             resource:
               apiVersion: kaiwo.silogen.ai/v1alpha1
               kind: KaiwoJob
