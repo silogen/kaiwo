@@ -28,6 +28,11 @@ import (
 
 var DefaultGpuResourceKey = baseutils.GetEnv("DEFAULT_GPU_RESOURCE_KEY", "amd.com/gpu")
 
+var (
+	DefaultMemory = resource.MustParse("16Gi")
+	DefaultCPU    = resource.MustParse("2")
+)
+
 func GetPodTemplate(dshmSize resource.Quantity, dangerous bool, resources corev1.ResourceRequirements) corev1.PodTemplateSpec {
 	resourceRequirements := resources.DeepCopy()
 	if resourceRequirements.Requests == nil {
@@ -37,16 +42,16 @@ func GetPodTemplate(dshmSize resource.Quantity, dangerous bool, resources corev1
 		resourceRequirements.Limits = corev1.ResourceList{}
 	}
 	if _, ok := resourceRequirements.Limits[corev1.ResourceMemory]; !ok {
-		resourceRequirements.Limits[corev1.ResourceMemory] = *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI)
+		resourceRequirements.Limits[corev1.ResourceMemory] = DefaultMemory
 	}
 	if _, ok := resourceRequirements.Limits[corev1.ResourceCPU]; !ok {
-		resourceRequirements.Limits[corev1.ResourceCPU] = *resource.NewQuantity(2, resource.DecimalSI)
+		resourceRequirements.Limits[corev1.ResourceCPU] = DefaultCPU
 	}
 	if _, ok := resourceRequirements.Requests[corev1.ResourceMemory]; !ok {
-		resourceRequirements.Requests[corev1.ResourceMemory] = *resource.NewQuantity(16*1024*1024*1024, resource.BinarySI)
+		resourceRequirements.Requests[corev1.ResourceMemory] = DefaultMemory
 	}
 	if _, ok := resourceRequirements.Requests[corev1.ResourceCPU]; !ok {
-		resourceRequirements.Requests[corev1.ResourceCPU] = *resource.NewQuantity(2, resource.DecimalSI)
+		resourceRequirements.Requests[corev1.ResourceCPU] = DefaultCPU
 	}
 	podTemplate := corev1.PodTemplateSpec{
 		Spec: corev1.PodSpec{

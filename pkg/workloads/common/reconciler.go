@@ -55,6 +55,7 @@ type Reconciler[T client.Object] interface {
 type ResourceReconcilerBase[T client.Object] struct {
 	ObjectKey client.ObjectKey
 	Self      ResourceReconciler[T]
+	Desired   T
 }
 
 func (d *ResourceReconcilerBase[T]) Create(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme, desired T, owner client.Object) error {
@@ -83,6 +84,8 @@ func (d *ResourceReconcilerBase[T]) Reconcile(ctx context.Context, k8sClient cli
 	if err != nil {
 		return empty, nil, fmt.Errorf("failed to build object: %w", err)
 	}
+
+	d.Desired = desired
 
 	if dryRun {
 		return desired, nil, nil
