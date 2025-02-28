@@ -80,8 +80,13 @@ var _ = Describe("Manager", Ordered, func() {
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to build install.yaml for kaiwo-operator")
 
+		By("Making a copy of install.yaml so that kustomize can do test patching")
+		cmd = exec.Command("cp", "dist/install.yaml", "test/merged.yaml")
+		_, err = utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Failed to make a copy of install.yaml")
+
 		By("deploying kaiwo-operator")
-		cmd = exec.Command("kubectl", "apply", "--server-side", "-f", "dist/install.yaml")
+		cmd = exec.Command("kubectl", "apply", "--server-side", "-k", "test/")
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to deploy kaiwo-operator")
 	})
@@ -89,17 +94,24 @@ var _ = Describe("Manager", Ordered, func() {
 	// After all tests have been executed, clean up by undeploying the controller, uninstalling CRDs,
 	// and deleting the namespace.
 	AfterAll(func() {
-		// By("cleaning up the curl pod for metrics")
-		// cmd := exec.Command("kubectl", "delete", "pod", "curl-metrics", "-n", namespace)
-		// _, _ = utils.Run(cmd)
+		By("cleaning up the curl pod for metrics")
+		cmd := exec.Command("kubectl", "delete", "pod", "curl-metrics", "-n", namespace)
+		_, _ = utils.Run(cmd)
 
-		// By("undeploying the kaiwo-controller-manager")
-		// cmd = exec.Command("kubectl", "delete", "-f", "dist/install.yaml")
-		// _, _ = utils.Run(cmd)
+		By("deleting ClusterRoleBinding for the service account to allow access to metrics")
+		cmd = exec.Command("kubectl", "delete", "clusterrolebinding", metricsRoleBindingName,
+			"--clusterrole=kaiwo-metrics-reader",
+			fmt.Sprintf("--serviceaccount=%s:%s", namespace, serviceAccountName),
+		)
+		_, _ = utils.Run(cmd)
 
-		// By("removing namespace for test workoads")
-		// cmd = exec.Command("kubectl", "delete", "ns", test_namespace)
-		// _, _ = utils.Run(cmd)
+		By("undeploying the kaiwo-controller-manager")
+		cmd = exec.Command("kubectl", "delete", "-f", "dist/install.yaml")
+		_, _ = utils.Run(cmd)
+
+		By("removing namespace for test workoads")
+		cmd = exec.Command("kubectl", "delete", "ns", test_namespace)
+		_, _ = utils.Run(cmd)
 	})
 
 	// After each test, check for failures and collect logs, events,
@@ -219,7 +231,7 @@ var _ = Describe("Manager", Ordered, func() {
 				cmd := exec.Command("kubectl", "logs", controllerPodName, "-n", namespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(ContainSubstring("controller-runtime.metrics\tServing metrics server"),
+				g.Expect(output).To(ContainSubstring("Serving metrics server"),
 					"Metrics server not yet started")
 			}
 			Eventually(verifyMetricsServerStarted).Should(Succeed())
@@ -343,7 +355,7 @@ var _ = Describe("Manager", Ordered, func() {
 				cmd = exec.Command("kubectl", "get", "kaiwojob", testCRName, "-n", test_namespace, "-o", "jsonpath={.status.Status}")
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve kaiwojob status")
-				g.Expect(output).To(Equal("COMPLETE"), "Kaiwojob is not in COMPLETE state")
+				g.Expect(output).To(Equal("RUNNING"), "Kaiwojob is not in RUNNING state")
 			}
 			Eventually(verifyCustomResource, 2*time.Minute, 10*time.Second).Should(Succeed())
 

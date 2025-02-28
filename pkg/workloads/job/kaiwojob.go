@@ -148,11 +148,6 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, k8sClient client.Cli
 
 	kaiwoJob := r.Object
 
-	if kaiwoJob.DeletionTimestamp != nil {
-		logger.Info("KaiwoJob is being deleted, skipping reconciliation", "KaiwoJob", kaiwoJob.Name)
-		return ctrl.Result{}, nil, nil
-	}
-
 	var manifests []client.Object
 
 	if kaiwoJob.Status.Status == kaiwov1alpha1.StatusFailed {
@@ -254,7 +249,7 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, k8sClient client.Cli
 
 		if err := k8sClient.Status().Update(ctx, kaiwoJob); err != nil {
 			if errors.IsConflict(err) {
-				baseutils.Debug(logger, "Conflict error during KaiwoJob update, retrying", "attempt", i+1)
+				logger.Error(err, "Conflict error during KaiwoJob update, retrying")
 				continue
 			}
 			return ctrl.Result{}, nil, fmt.Errorf("failed to update kaiwoJob status: %w", err)

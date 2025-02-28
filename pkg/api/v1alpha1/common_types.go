@@ -27,13 +27,14 @@ const (
 type Status string
 
 const (
-	StatusNew      Status = ""
-	StatusPending  Status = "PENDING"
-	StatusStarting Status = "STARTING"
-	StatusReady    Status = "READY"
-	StatusRunning  Status = "RUNNING"
-	StatusComplete Status = "COMPLETE"
-	StatusFailed   Status = "FAILED"
+	StatusNew         Status = ""
+	StatusPending     Status = "PENDING"
+	StatusStarting    Status = "STARTING"
+	StatusReady       Status = "READY"
+	StatusRunning     Status = "RUNNING"
+	StatusComplete    Status = "COMPLETE"
+	StatusFailed      Status = "FAILED"
+	StatusTerminating Status = "TERMINATING"
 )
 
 // CommonMetaSpec defines reusable metadata fields for workloads.

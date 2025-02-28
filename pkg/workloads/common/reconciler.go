@@ -20,6 +20,8 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
@@ -99,20 +101,24 @@ func (d *ResourceReconcilerBase[T]) Reconcile(ctx context.Context, k8sClient cli
 
 	actual, err = d.Self.Get(ctx, k8sClient)
 	if err == nil {
-		// Object exists
+		switch any(actual).(type) {
+		case *batchv1.Job, *rayv1.RayJob:
+			if !metav1.IsControlledBy(actual, owner) {
+				logger.Info("Updating object owner for BatchJob or RayJob", "Object", actual.GetObjectKind().GroupVersionKind().Kind)
 
-		if !metav1.IsControlledBy(actual, owner) {
-			// Ensure the ownership is up-to-date
-			logger.Info("Updating object owner")
-			if err := ctrl.SetControllerReference(owner, actual, scheme); err != nil {
-				logger.Error(err, "Failed to set controller reference on existing object")
-				return empty, nil, err
-			}
+				if err := ctrl.SetControllerReference(owner, actual, scheme); err != nil {
+					logger.Error(err, "Failed to set controller reference on existing object")
+					return empty, nil, err
+				}
 
-			if err := k8sClient.Update(ctx, actual); err != nil {
-				logger.Error(err, "Failed to update existing Job with correct owner reference")
-				return empty, nil, err
+				// Apply the update to the object in Kubernetes
+				if err := k8sClient.Update(ctx, actual); err != nil {
+					logger.Error(err, "Failed to update existing Job with correct owner reference")
+					return empty, nil, err
+				}
 			}
+		default:
+			baseutils.Debug(logger, "Skipping owner reference update since object is neither a BatchJob nor a RayJob", "ObjectType", fmt.Sprintf("%T", actual))
 		}
 
 		err = d.Update(ctx, k8sClient, &desired, actual)

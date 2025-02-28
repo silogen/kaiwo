@@ -18,13 +18,11 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -206,45 +204,9 @@ func (j *JobWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) (ad
 
 	// **Ensure the job has a finalizer before deletion starts**
 	if !baseutils.ContainsString(job.Finalizers, finalizer) {
-		joblog.Info("Finalizer not found, allowing deletion", "JobName", job.Name)
 		return nil, nil
 	}
 
-	// **Delete the associated KaiwoJob**
-	kaiwoJob := &kaiwov1alpha1.KaiwoJob{}
-	err := j.Client.Get(ctx, client.ObjectKey{Name: job.Name, Namespace: job.Namespace}, kaiwoJob)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			joblog.Info("No associated KaiwoJob found, proceeding with Job deletion", "JobName", job.Name)
-		} else {
-			return nil, fmt.Errorf("error retrieving KaiwoJob: %w", err)
-		}
-	} else {
-		if err := j.Client.Delete(ctx, kaiwoJob); err != nil && !errors.IsNotFound(err) {
-			return nil, fmt.Errorf("failed to delete associated KaiwoJob: %w", err)
-		}
-		joblog.Info("Deleted associated KaiwoJob", "KaiwoJob", job.Name)
-	}
-
-	// **Ensure KaiwoJob is fully deleted before removing finalizer**
-	timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
-	err = wait.PollUntilContextTimeout(timeoutCtx, time.Second, 10*time.Second, true, func(ctx context.Context) (bool, error) {
-		err := j.Client.Get(ctx, client.ObjectKey{Name: job.Name, Namespace: job.Namespace}, kaiwoJob)
-		if errors.IsNotFound(err) {
-			return true, nil
-		}
-		if err != nil {
-			return false, err
-		}
-		return false, nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("KaiwoJob deletion timed out: %w", err)
-	}
-
-	// **Now that everything is cleaned up, remove the finalizer**
 	joblog.Info("Removing finalizer from Job", "JobName", job.Name)
 
 	// **Retry removing finalizer if there's a conflict**
@@ -266,6 +228,25 @@ func (j *JobWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) (ad
 
 		joblog.Info("Finalizer successfully removed, Job can now be deleted", "JobName", job.Name)
 		break
+	}
+
+	kaiwoJob := &kaiwov1alpha1.KaiwoJob{}
+	err := j.Client.Get(ctx, client.ObjectKey{Name: job.Name, Namespace: job.Namespace}, kaiwoJob)
+	if err == nil {
+		joblog.Info("Deleting associated KaiwoJob", "KaiwoJob", kaiwoJob.Name)
+
+		// Remove finalizer from KaiwoJob
+		if baseutils.ContainsString(kaiwoJob.Finalizers, finalizer) {
+			kaiwoJob.Finalizers = baseutils.RemoveString(kaiwoJob.Finalizers, finalizer)
+			if err := j.Client.Update(ctx, kaiwoJob); err != nil {
+				return nil, fmt.Errorf("failed to remove finalizer from KaiwoJob: %w", err)
+			}
+		}
+
+		if err := j.Client.Delete(ctx, kaiwoJob); err != nil {
+			return nil, fmt.Errorf("failed to delete KaiwoJob: %w", err)
+		}
+		joblog.Info("KaiwoJob successfully deleted", "KaiwoJob", kaiwoJob.Name)
 	}
 
 	return nil, nil
