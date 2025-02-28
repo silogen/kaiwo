@@ -112,9 +112,16 @@ func (d *ResourceReconcilerBase[T]) Reconcile(ctx context.Context, k8sClient cli
 				}
 
 				// Apply the update to the object in Kubernetes
-				if err := k8sClient.Update(ctx, actual); err != nil {
-					logger.Error(err, "Failed to update existing Job with correct owner reference")
-					return empty, nil, err
+
+				retryAttempts := 3
+				for i := 0; i < retryAttempts; i++ {
+					if err := k8sClient.Update(ctx, actual); err != nil {
+						if errors.IsConflict(err) {
+							continue
+						}
+						logger.Error(err, "Failed to update existing Job with correct owner reference")
+						return empty, nil, err
+					}
 				}
 			}
 		default:

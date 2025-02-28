@@ -241,7 +241,6 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, k8sClient client.Cli
 
 		if err := k8sClient.Status().Update(ctx, kaiwoJob); err != nil {
 			if errors.IsConflict(err) {
-				logger.Error(err, "Conflict error during KaiwoJob update, retrying")
 				continue
 			}
 			return ctrl.Result{}, nil, fmt.Errorf("failed to update kaiwoJob status: %w", err)

@@ -1,0 +1,73 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: kaiwojob-job-label-reconciliation
+spec:
+  steps:
+    - try:
+        - apply:
+            resource:
+              apiVersion: batch/v1
+              kind: Job
+              metadata:
+                name: job-with-label-1
+                labels:
+                  kaiwo.silogen.ai/managed: "true"
+              spec:
+                template:
+                  spec:
+                    containers:
+                      - name: test-container
+                        image: busybox:latest
+                        command: ["sleep", "30"]
+                    restartPolicy: Never
+        - assert:
+            resource:
+              apiVersion: kaiwo.silogen.ai/v1alpha1
+              kind: KaiwoJob
+              metadata:
+                name: job-with-label-1
+              status:
+                Status: RUNNING
+      catch:
+        - events: {}
+        - podLogs: {}
+
+---
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: kaiwojob-label-propagation
+spec:
+  steps:
+    - try:
+        - apply:
+            resource:
+              apiVersion: batch/v1
+              kind: Job
+              metadata:
+                name: job-with-label-2-label-propagation
+                labels:
+                  kaiwo.silogen.ai/managed: "true"
+                  custom.label/example: "yes"
+              spec:
+                template:
+                  spec:
+                    containers:
+                      - name: test-container
+                        image: busybox:latest
+                        command: ["sleep", "30"]
+                    restartPolicy: Never
+        - assert:
+            resource:
+              apiVersion: kaiwo.silogen.ai/v1alpha1
+              kind: KaiwoJob
+              metadata:
+                name: job-with-label-2-label-propagation
+                labels:
+                  kaiwo.silogen.ai/managed: "true"
+                  custom.label/example: "yes"
+      catch:
+        - events: {}
+        - podLogs: {}

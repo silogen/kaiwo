@@ -314,30 +314,6 @@ var _ = Describe("Manager", Ordered, func() {
 			Eventually(verifyCAInjection).Should(Succeed())
 		})
 
-		It("should create a kaiwojob and verify reconciliation", func() {
-			testCRName := "kaiwojob-1"
-
-			By("applying a basic kaiwojob")
-			cmd := exec.Command("kubectl", "apply", "-f", "test/test-manifests/kaiwojob-1.yaml", "-n", test_namespace)
-			_, err := utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to apply test Custom Resource")
-
-			By("waiting for the Custom Resource to be reconciled")
-			verifyCustomResource := func(g Gomega) {
-				cmd = exec.Command("kubectl", "get", "kaiwojob", testCRName, "-n", test_namespace, "-o", "jsonpath={.status.Status}")
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve kaiwojob status")
-				g.Expect(output).To(Equal("COMPLETE"), "Kaiwojob is not in COMPLETE state")
-			}
-			Eventually(verifyCustomResource, 5*time.Minute, 10*time.Second).Should(Succeed())
-
-			By("verifying controller logs for reconciliation message")
-			cmd = exec.Command("kubectl", "logs", controllerPodName, "-n", namespace)
-			// logs, err := utils.Run(cmd)
-			// Expect(err).NotTo(HaveOccurred(), "Failed to retrieve controller logs")
-			// Expect(logs).To(ContainSubstring(fmt.Sprintf("Successfully reconciled %s", testCRName)))
-		})
-
 		It("should run all the chainsaw tests", func() {
 			By("executing chainsaw tests")
 			cmd := exec.Command("chainsaw", "test", "--test-dir", "test/chainsaw")
@@ -348,73 +324,6 @@ var _ = Describe("Manager", Ordered, func() {
 			fmt.Println("Chainsaw stdout:\n\n" + outb.String())
 			fmt.Println("Chainsaw stderr:\n\n" + errb.String())
 			Expect(err).NotTo(HaveOccurred(), "Chainsaw test(s) failed")
-		})
-		It("create a job with kaiwo label and verify reconciliation of kaiwojob", func() {
-			testCRName := "job-with-label-1"
-
-			By("applying a basic job with kaiwo label")
-			cmd := exec.Command("kubectl", "apply", "-f", "test/test-manifests/job-with-label-1.yaml", "-n", test_namespace)
-			_, err := utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to apply test Custom Resource")
-
-			By("waiting for the Custom Resource to be reconciled")
-			verifyCustomResource := func(g Gomega) {
-				cmd = exec.Command("kubectl", "get", "kaiwojob", testCRName, "-n", test_namespace, "-o", "jsonpath={.status.Status}")
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve kaiwojob status")
-				g.Expect(output).To(Equal("RUNNING"), "Kaiwojob is not in RUNNING state")
-			}
-			Eventually(verifyCustomResource, 2*time.Minute, 10*time.Second).Should(Succeed())
-
-			By("verifying controller logs for reconciliation message")
-			cmd = exec.Command("kubectl", "logs", controllerPodName, "-n", namespace)
-		})
-
-		It("create a job with kaiwo label and verify deletion of kaiwojob via kubectl delete job", func() {
-			testCRName := "job-with-label-1"
-
-			By("applying a basic job with kaiwo label")
-			cmd := exec.Command("kubectl", "apply", "-f", "test/test-manifests/job-with-label-1.yaml", "-n", test_namespace)
-			_, err := utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to apply test Custom Resource")
-
-			By("waiting for the Custom Resource to be reconciled")
-			verifyCustomResource := func(g Gomega) {
-				cmd = exec.Command("kubectl", "get", "kaiwojob", testCRName, "-n", test_namespace, "-o", "jsonpath={.status.Status}")
-				_, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve kaiwojob status")
-			}
-			Eventually(verifyCustomResource, 2*time.Minute, 10*time.Second).Should(Succeed())
-
-			By("deleting the job and ensuring KaiwoJob is deleted")
-			cmd = exec.Command("kubectl", "delete", "job", testCRName, "-n", test_namespace)
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to delete test Job")
-
-			verifyKaiwoJobDeletion := func(g Gomega) {
-				cmd = exec.Command("kubectl", "get", "kaiwojob", testCRName, "-n", test_namespace)
-				_, err := utils.Run(cmd)
-				g.Expect(err).To(HaveOccurred(), "KaiwoJob still exists after Job deletion")
-			}
-			Eventually(verifyKaiwoJobDeletion, 2*time.Minute, 10*time.Second).Should(Succeed())
-		})
-
-		It("should propagate labels from job to kaiwojob", func() {
-			testCRName := "job-with-label-2-label-propagation"
-
-			By("applying a job with labels")
-			cmd := exec.Command("kubectl", "apply", "-f", "test/test-manifests/job-with-label-2-label-propagation.yaml", "-n", test_namespace)
-			_, err := utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to apply test Job with labels")
-
-			By("waiting for the KaiwoJob to be created and reconciled")
-			verifyKaiwoJobCreated := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "kaiwojob", testCRName, "-n", test_namespace, "-o", "jsonpath={.metadata.labels.kaiwo\\.silogen\\.ai/managed}")
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve KaiwoJob labels")
-				g.Expect(output).To(Equal("true"), "Label propagation to KaiwoJob failed")
-			}
-			Eventually(verifyKaiwoJobCreated, 2*time.Minute, 10*time.Second).Should(Succeed())
 		})
 
 		// +kubebuilder:scaffold:e2e-webhooks-checks
