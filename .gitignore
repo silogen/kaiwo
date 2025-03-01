@@ -2,6 +2,7 @@
 .env
 **/compiled
 builds/
+certs/
 .idea/
 *.swp
 *.swo
@@ -28,3 +29,8 @@ go.work
 # Kubernetes Generated files - skip generated files, except for vendored files
 !vendor/**/zz_generated.*
 
+# install file for tests
+test/merged.yaml
+
+# local kubeconfigs
+*kubeconfig*.yaml

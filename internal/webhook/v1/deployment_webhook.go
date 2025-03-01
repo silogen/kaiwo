@@ -64,3 +64,52 @@ func (d *DeploymentCustomDefaulter) Default(ctx context.Context, obj runtime.Obj
 
 	return nil
 }
+
+// TODO: refactor the following for Deployments (removed from job_webhook.go)
+// func (j *JobWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+// 	newJob, ok := newObj.(*batchv1.Job)
+// 	if !ok {
+// 		return nil, fmt.Errorf("expected a Job object but got %T", newObj)
+// 	}
+// 	oldJob, ok := oldObj.(*batchv1.Job)
+// 	if !ok {
+// 		return nil, fmt.Errorf("expected a Job object but got %T", oldObj)
+// 	}
+
+// 	// Allow modification only if the update is from Kueue
+// 	req, err := admission.RequestFromContext(ctx)
+// 	if err == nil {
+// 		if strings.HasPrefix(req.UserInfo.Username, "system:serviceaccount:kueue-") {
+// 			return nil, nil
+// 		}
+// 	}
+
+// 	if len(newJob.Spec.Template.Spec.Containers) != len(oldJob.Spec.Template.Spec.Containers) {
+// 		return nil, fmt.Errorf("changing the number of containers is not allowed")
+// 	}
+// 	// Prevent increasing GPU requests/limits
+// 	for i, newContainer := range newJob.Spec.Template.Spec.Containers {
+// 		oldContainer := oldJob.Spec.Template.Spec.Containers[i]
+
+// 		for _, gpuKey := range gpuKeys {
+// 			if newLimit, newExists := newContainer.Resources.Limits[gpuKey]; newExists {
+// 				if oldLimit, oldExists := oldContainer.Resources.Limits[gpuKey]; oldExists {
+// 					if newLimit.Cmp(oldLimit) != 0 {
+// 						return nil, fmt.Errorf("increasing/decreasing GPU limits is not allowed")
+// 					}
+// 				}
+// 			}
+
+// 			if newRequest, newExists := newContainer.Resources.Requests[gpuKey]; newExists {
+// 				if oldRequest, oldExists := oldContainer.Resources.Requests[gpuKey]; oldExists {
+// 					if newRequest.Cmp(oldRequest) != 0 {
+// 						return nil, fmt.Errorf("increasing/decreasing GPU requests is not allowed")
+// 					}
+// 				}
+// 			}
+// 		}
+// 	}
+
+// 	joblog.Info("Job update validation passed", "JobName", newJob.Name)
+// 	return nil, nil
+// }

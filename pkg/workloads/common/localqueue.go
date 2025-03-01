@@ -25,6 +25,7 @@ import (
 
 const (
 	DefaultLocalQueueName = "kaiwo"
+	Finalizer             = "kaiwo.silogen.ai/finalizer"
 )
 
 type LocalQueueReconciler struct {

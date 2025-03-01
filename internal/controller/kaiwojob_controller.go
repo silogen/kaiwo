@@ -61,6 +61,15 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		baseutils.Debug(logger, "KaiwoJob resource %s/%s not found", kaiwoJob.Namespace, kaiwoJob.Name)
 		return ctrl.Result{}, nil
 	}
+
+	if kaiwoJob.Status.Status == kaiwov1alpha1.StatusFailed {
+		baseutils.Debug(logger, "Skipping reconciliation, as status is failed")
+		return ctrl.Result{}, nil
+	} else if kaiwoJob.Status.Status == kaiwov1alpha1.StatusComplete {
+		baseutils.Debug(logger, "Skipping reconciliation, as status is complete")
+		return ctrl.Result{}, nil
+	}
+
 	reconciler := workloadjob.NewKaiwoJobReconciler(&kaiwoJob)
 
 	result, _, err := reconciler.Reconcile(ctx, r.Client, r.Scheme, false)
