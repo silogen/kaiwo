@@ -1,0 +1,59 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: default-kaiwoqueueconfig-creation-test
+spec:
+  steps:
+    - name: Assert default kaiwoQueueConfig
+      try:
+        - assert:
+            resource:
+              apiVersion: kaiwo.silogen.ai/v1alpha1
+              kind: KaiwoQueueConfig
+              metadata:
+                name: kaiwo
+              spec:
+                clusterQueues:
+                  - name: kaiwo
+                    spec:
+                      flavorFungibility:
+                        whenCanBorrow: Borrow
+                        whenCanPreempt: TryNextFlavor
+                      namespaceSelector: {}
+                      preemption:
+                        borrowWithinCohort:
+                          policy: Never
+                        reclaimWithinCohort: Never
+                        withinClusterQueue: Never
+                      queueingStrategy: BestEffortFIFO
+                      resourceGroups:
+                        - coveredResources:
+                            - cpu
+                            - memory
+                            - nvidia.com/gpu
+                          flavors:
+                            - name: "*cpu-only-0gpu*"
+                              resources:
+                                - name: cpu
+                                  nominalQuota: "*"
+                                - name: memory
+                                  nominalQuota: "*"
+                                - name: nvidia.com/gpu
+                                  nominalQuota: "0"
+                            - name: "*nvidia-teslak80-8gpu*"
+                              resources:
+                                - name: cpu
+                                  nominalQuota: "*"
+                                - name: memory
+                                  nominalQuota: "*"
+                                - name: nvidia.com/gpu
+                                  nominalQuota: "*"
+                      stopPolicy: None
+                resourceFlavors:
+                  - name: "*cpu-only-0gpu*"
+                    nodeLabels:
+                      kaiwo/nodepool: "*cpu-only-0gpu*"
+                  - name: "*nvidia-teslak80-8gpu*"
+                    nodeLabels:
+                      kaiwo/nodepool: "*nvidia-teslak80-8gpu*"
+
