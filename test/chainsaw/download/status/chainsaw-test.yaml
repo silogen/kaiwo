@@ -2,6 +2,7 @@ apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
   name: download-job-status-change
+  namespace: kaiwo-test
 spec:
   steps:
     - try:
@@ -11,6 +12,7 @@ spec:
               kind: KaiwoJob
               metadata:
                 name: test-job-kaiwojob-positive
+                namespace: kaiwo-test
               spec:
                 user: test@amd.com
                 gpus: 0
@@ -41,6 +43,7 @@ spec:
               kind: KaiwoJob
               metadata:
                 name: test-job-kaiwojob-positive
+                namespace: kaiwo-test
               status:
                 Status: COMPLETE
       catch:
@@ -57,6 +60,7 @@ spec:
               kind: KaiwoJob
               metadata:
                 name: test-job-kaiwojob-negative
+                namespace: kaiwo-test
               spec:
                 user: test@amd.com
                 gpus: 0
@@ -87,5 +91,6 @@ spec:
               kind: KaiwoJob
               metadata:
                 name: test-job-kaiwojob-negative
+                namespace: kaiwo-test
               status:
                 Status: FAILED

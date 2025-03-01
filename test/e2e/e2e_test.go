@@ -326,6 +326,35 @@ var _ = Describe("Manager", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Chainsaw test(s) failed")
 		})
 
+		It("create a job with kaiwo label and verify deletion of kaiwojob via kubectl delete job", func() {
+			testCRName := "job-with-label-1"
+
+			By("applying a basic job with kaiwo label")
+			cmd := exec.Command("kubectl", "apply", "-f", "test/test-manifests/job-with-label-1.yaml", "-n", test_namespace)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply test Custom Resource")
+
+			By("waiting for the Custom Resource to be reconciled")
+			verifyCustomResource := func(g Gomega) {
+				cmd = exec.Command("kubectl", "get", "kaiwojob", testCRName, "-n", test_namespace, "-o", "jsonpath={.status.Status}")
+				_, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve kaiwojob status")
+			}
+			Eventually(verifyCustomResource, 2*time.Minute, 10*time.Second).Should(Succeed())
+
+			By("deleting the job and ensuring KaiwoJob is deleted")
+			cmd = exec.Command("kubectl", "delete", "job", testCRName, "-n", test_namespace)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to delete test Job")
+
+			verifyKaiwoJobDeletion := func(g Gomega) {
+				cmd = exec.Command("kubectl", "get", "kaiwojob", testCRName, "-n", test_namespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).To(HaveOccurred(), "KaiwoJob still exists after Job deletion")
+			}
+			Eventually(verifyKaiwoJobDeletion, 2*time.Minute, 10*time.Second).Should(Succeed())
+		})
+
 		// +kubebuilder:scaffold:e2e-webhooks-checks
 
 		// TODO: Customize the e2e test suite with scenarios specific to your project.
