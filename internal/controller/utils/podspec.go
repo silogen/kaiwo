@@ -107,8 +107,8 @@ func AdjustResourceRequestsAndLimits(ctx context.Context, gpuVendor string, gpuC
 	gpuResourceKey := GetGpuResourceKey(gpuVendor)
 
 	// Modify resource requests/limits only if GPUs are requested
-	if gpuCount > 0 {
-		podTemplateSpec.Spec.Containers[0].Resources = getResourceRequestsAndLimits(gpuResourceKey, int32(gpuCount))
+	if gpusPerReplica > 0 {
+		podTemplateSpec.Spec.Containers[0].Resources = getResourceRequestsAndLimits(gpuResourceKey, int32(gpusPerReplica))
 		// logger.Info("Successfully adjusted resource requests and limits",
 		// 	"Container", podTemplateSpec.Spec.Containers[0].Name)
 	}
