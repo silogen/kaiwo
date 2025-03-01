@@ -11,7 +11,7 @@ KUBERAY_MANIFESTS="github.com/ray-project/kuberay/ray-operator/config/default?re
 
 create_cluster() {
   echo "Creating Kind cluster '$TEST_NAME'..."
-  kind create cluster --name "$TEST_NAME"
+  kind create cluster --name "$TEST_NAME" --config test/kind-test-cluster.yaml
 }
 
 # Check if the Kind cluster exists
@@ -34,6 +34,15 @@ for deploy in cert-manager cert-manager-webhook cert-manager-cainjector; do
     fi
 done
 echo "Cert-Manager deployed."
+
+# Add fake-gpu-operator
+kubectl create ns gpu-operator
+kubectl label ns gpu-operator pod-security.kubernetes.io/enforce=privileged 
+kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 run.ai/simulated-gpu-node-pool=default
+kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 nvidia.com/gpu.product=Tesla-K80
+kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 nvidia.com/gpu.count=8
+kubectl apply -f test/fake-gpu-operator/fake-gpu-operator.yaml
+
 
 # Add Kueue
 echo "Deploying Kueue operator..."
