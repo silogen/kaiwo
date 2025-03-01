@@ -10,6 +10,6 @@ spec:
       containers:
         - name: hello-world
           image: busybox:latest
-          command: [ "sh", "-c", "sleep 30" ]
+          command: [ "sh", "-c", "sleep 1" ]
       restartPolicy: Never
       

@@ -202,7 +202,6 @@ func (j *JobWebhook) ValidateCreate(ctx context.Context, obj runtime.Object) (ad
 		}
 	}
 
-	joblog.Info("Job validation passed", "JobName", job.Name)
 	return nil, nil
 }
 
