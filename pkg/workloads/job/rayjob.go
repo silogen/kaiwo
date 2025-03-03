@@ -84,9 +84,7 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 
 	var rayJobSpec rayv1.RayJobSpec
 	if spec.RayJob == nil {
-		fmt.Println(spec.Resources)
 		rayJobSpec = GetDefaultRayJobSpec(baseutils.ValueOrDefault(spec.Dangerous), baseutils.ValueOrDefault(spec.Resources))
-		fmt.Println(spec.Resources)
 	} else {
 		rayJobSpec = spec.RayJob.Spec
 	}

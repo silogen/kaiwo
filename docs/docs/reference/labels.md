@@ -16,7 +16,7 @@ metadata:
 spec:
   user: my-user
   queue: my-queue
-  podTemplateLabels:
+  podTemplateSpecLabels:
     key2: value2
 ```
 
