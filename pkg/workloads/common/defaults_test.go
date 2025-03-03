@@ -124,40 +124,40 @@ var _ = Describe("Workload defaults", func() {
 
 	// Move resource checks here
 
-	When("GPU calculations are included", func() {
-		Context("and no GPUs are given", func() {
-			It("fetches the number of GPUs from the existing requests", func() {
-			})
-		})
-		Context("and the memory and CPU is adjusted", func() {
-			It("updates values if they are not given", func() {
-			})
-			It("does not update values that are already set", func() {
-			})
-		})
-	})
-
-	When("environment variables are given", func() {
-		It("adds given environmental variables", func() {
-		})
-		It("keeps existing environmental variables", func() {
-		})
-	})
-
-	When("storage is given", func() {
-		Context("and the data volume is requested", func() {
-			It("includes the volume in the template", func() {
-			})
-			It("includes the volume mount in each container", func() {
-			})
-		})
-		Context("and the hugging face volume is requested", func() {
-			It("includes the volume in the template", func() {
-			})
-			It("includes the volume mount in each container", func() {
-			})
-			It("sets the hugging face HF_HOME environment variable", func() {
-			})
-		})
-	})
+	//When("GPU calculations are included", func() {
+	//	Context("and no GPUs are given", func() {
+	//		It("fetches the number of GPUs from the existing requests", func() {
+	//		})
+	//	})
+	//	Context("and the memory and CPU is adjusted", func() {
+	//		It("updates values if they are not given", func() {
+	//		})
+	//		It("does not update values that are already set", func() {
+	//		})
+	//	})
+	//})
+	//
+	//When("environment variables are given", func() {
+	//	It("adds given environmental variables", func() {
+	//	})
+	//	It("keeps existing environmental variables", func() {
+	//	})
+	//})
+	//
+	//When("storage is given", func() {
+	//	Context("and the data volume is requested", func() {
+	//		It("includes the volume in the template", func() {
+	//		})
+	//		It("includes the volume mount in each container", func() {
+	//		})
+	//	})
+	//	Context("and the hugging face volume is requested", func() {
+	//		It("includes the volume in the template", func() {
+	//		})
+	//		It("includes the volume mount in each container", func() {
+	//		})
+	//		It("sets the hugging face HF_HOME environment variable", func() {
+	//		})
+	//	})
+	//})
 })

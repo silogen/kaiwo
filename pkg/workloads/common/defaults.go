@@ -35,6 +35,7 @@ func UpdatePodSpec(kaiwoCommonMetaSpec v1alpha1.CommonMetaSpec, labelContext bas
 
 	// Make sure there is an image set for each container
 	// init containers are not included, as they are assumed to always be user given
+	// Also ensure that all image pull secrets are set
 	for i := range template.Spec.Containers {
 		// If the container has no image set
 		if template.Spec.Containers[i].Image == "" {
@@ -45,6 +46,9 @@ func UpdatePodSpec(kaiwoCommonMetaSpec v1alpha1.CommonMetaSpec, labelContext bas
 				// Otherwise use the default Ray image
 				template.Spec.Containers[i].Image = baseutils.DefaultRayImage
 			}
+		}
+		if kaiwoCommonMetaSpec.ImagePullSecrets != nil {
+			template.Spec.ImagePullSecrets = append(template.Spec.ImagePullSecrets, *kaiwoCommonMetaSpec.ImagePullSecrets...)
 		}
 	}
 
@@ -149,12 +153,12 @@ func GetPodTemplate(dshmSize resource.Quantity, dangerous bool, resources corev1
 			RestartPolicy: corev1.RestartPolicyNever,
 			Containers: []corev1.Container{
 				{
-					Name:            "workload",
-					Image:           baseutils.DefaultRayImage,
+					Name: "workload",
+					// Image:           baseutils.DefaultRayImage,
 					ImagePullPolicy: corev1.PullAlways,
-					Env: []corev1.EnvVar{
-						{Name: "HF_HOME", Value: "/workload/.cache/huggingface"},
-					},
+					//Env: []corev1.EnvVar{
+					//	{Name: "HF_HOME", Value: "/workload/.cache/huggingface"},
+					//},
 					Resources: *resourceRequirements,
 					VolumeMounts: []corev1.VolumeMount{
 						{Name: "dshm", MountPath: "/dev/shm"},

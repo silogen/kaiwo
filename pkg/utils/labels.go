@@ -38,7 +38,7 @@ func SetKaiwoSystemLabels(kaiwoLabelContext KaiwoLabelContext, objectMeta *v1.Ob
 	if objectMeta.Labels == nil {
 		objectMeta.Labels = make(map[string]string)
 	}
-	objectMeta.Labels[KaiwoUserLabel] = kaiwoLabelContext.User
+	objectMeta.Labels[KaiwoUserLabel] = MakeRFC1123Compliant(kaiwoLabelContext.User)
 	objectMeta.Labels[KaiwoNameLabel] = kaiwoLabelContext.Name
 	objectMeta.Labels[KaiwoTypeLabel] = kaiwoLabelContext.Type
 	objectMeta.Labels[KaiwoRunIdLabel] = kaiwoLabelContext.RunId

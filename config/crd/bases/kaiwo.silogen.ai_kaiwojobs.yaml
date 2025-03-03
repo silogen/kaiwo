@@ -8633,13 +8633,6 @@ spec:
                         type: object
                     type: object
                 type: object
-              name:
-                description: Name is the name of the workload.
-                type: string
-              namespace:
-                description: Namespace defines the namespace in which the workload
-                  is deployed.
-                type: string
               podTemplateSpecLabels:
                 additionalProperties:
                   type: string

@@ -33,6 +33,7 @@ import (
 func GetDefaultJobSpec(dangerous bool, resourceRequirements corev1.ResourceRequirements) batchv1.JobSpec {
 	return batchv1.JobSpec{
 		TTLSecondsAfterFinished: baseutils.Pointer(int32(3600)),
+		BackoffLimit:            baseutils.Pointer(int32(0)),
 		Template:                workloadcommon.GetPodTemplate(*resource.NewQuantity(1*1024*1024*1024, resource.BinarySI), dangerous, resourceRequirements),
 	}
 }

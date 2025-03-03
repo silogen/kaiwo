@@ -148,6 +148,14 @@ func (j *JobWebhook) ensureKaiwoJob(ctx context.Context, job *batchv1.Job, authe
 		},
 	}
 
+	kaiwoJob.Labels[kaiwov1alpha1.QueueLabel] = controllerutils.DefaultKaiwoQueueConfigName
+
+	labelContext := kaiwoJob.GetLabelContext()
+	// Set Kaiwo system labels on the Kaiwo job
+	baseutils.SetKaiwoSystemLabels(labelContext, &kaiwoJob.ObjectMeta)
+	// Set Kaiwo system labels on the original job
+	baseutils.SetKaiwoSystemLabels(labelContext, &job.ObjectMeta)
+
 	if err := controllerutils.CreateLocalQueue(ctx, j.Client, kaiwoJobLabels[kaiwov1alpha1.QueueLabel], kaiwoJob.Namespace); err != nil {
 		return fmt.Errorf("failed to create local queue: %w", err)
 	}
