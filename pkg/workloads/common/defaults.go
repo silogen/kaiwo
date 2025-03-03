@@ -199,8 +199,8 @@ func adjustResourceRequestsAndLimits(gpuVendor string, gpuCount int, replicas in
 	gpuResourceKey := getGpuResourceKey(gpuVendor)
 
 	// Modify resource requests/limits only if GPUs are requested
-	if gpuCount > 0 {
-		updatedResources := getResourceRequestsAndLimits(gpuResourceKey, int32(gpuCount))
+	if gpusPerReplica > 0 {
+		updatedResources := getResourceRequestsAndLimits(gpuResourceKey, int32(gpusPerReplica))
 		// Update the resources that have not been set yet (allowing the user to override the defaults here)
 		fillContainerResources(&podTemplateSpec.Spec.Containers[0], &updatedResources, false)
 	}
