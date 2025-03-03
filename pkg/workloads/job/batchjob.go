@@ -30,9 +30,13 @@ import (
 	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
+const (
+	defaultTTLSecondsAfterFinished = int32(3600)
+)
+
 func GetDefaultJobSpec(dangerous bool, resourceRequirements corev1.ResourceRequirements) batchv1.JobSpec {
 	return batchv1.JobSpec{
-		TTLSecondsAfterFinished: baseutils.Pointer(int32(3600)),
+		TTLSecondsAfterFinished: baseutils.Pointer(defaultTTLSecondsAfterFinished),
 		BackoffLimit:            baseutils.Pointer(int32(0)),
 		Template:                workloadcommon.GetPodTemplate(*resource.NewQuantity(1*1024*1024*1024, resource.BinarySI), dangerous, resourceRequirements),
 	}
@@ -76,6 +80,10 @@ func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batch
 	if baseutils.ValueOrDefault(jobSpec.BackoffLimit) > 0 {
 		logger.Info("Warning! BackOffLimit can currently only be 0, overriding the given value")
 		jobSpec.BackoffLimit = baseutils.Pointer(int32(0))
+	}
+
+	if jobSpec.TTLSecondsAfterFinished == nil {
+		jobSpec.TTLSecondsAfterFinished = baseutils.Pointer(defaultTTLSecondsAfterFinished)
 	}
 
 	if err := workloadcommon.AddEntrypoint(baseutils.ValueOrDefault(spec.EntryPoint), &jobSpec.Template); err != nil {
