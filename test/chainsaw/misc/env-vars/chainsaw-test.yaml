@@ -1,0 +1,85 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: env-vars
+spec:
+  steps:
+    - try:
+        - apply:
+            resource:
+              apiVersion: kaiwo.silogen.ai/v1alpha1
+              kind: KaiwoJob
+              metadata:
+                name: test-job-kaiwojob
+              spec:
+                resources:
+                  limits:
+                    cpu: "1"
+                    memory: "2Gi"
+                  requests:
+                    cpu: "1"
+                    memory: "2Gi"
+                user: test@amd.com
+                env:
+                  - name: FOO
+                    value: BAR
+                image: busybox:latest
+                entrypoint: |
+                  sleep 1
+        - assert:
+            resource:
+              apiVersion: v1
+              kind: Pod
+              metadata:
+                labels:
+                  kaiwo.silogen.ai/name: test-job-kaiwojob
+              spec:
+                containers:
+                  - (env[?name == 'NUM_GPUS']):
+                      - value: "0"
+                    (env[?name == 'FOO']):
+                      - value: "BAR"
+---
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: env-vars-ray
+spec:
+  steps:
+    - try:
+        - apply:
+            resource:
+              apiVersion: kaiwo.silogen.ai/v1alpha1
+              kind: KaiwoJob
+              metadata:
+                name: test-job-kaiwojob
+              spec:
+                resources:
+                  limits:
+                    cpu: "1"
+                    memory: "2Gi"
+                  requests:
+                    cpu: "1"
+                    memory: "2Gi"
+                user: test@amd.com
+                image: busybox:latest
+                entrypoint: |
+                  sleep 1
+                ray: true
+                env:
+                  - name: FOO
+                    value: BAR
+        - assert:
+            resource:
+              apiVersion: v1
+              kind: Pod
+              metadata:
+                labels:
+                  kaiwo.silogen.ai/name: test-job-kaiwojob
+                  ray.io/is-ray-node: "yes"
+              spec:
+                containers:
+                  - (env[?name == 'NUM_GPUS']):
+                      - value: "0"
+                    (env[?name == 'FOO']):
+                      - value: "BAR"

@@ -16,39 +16,40 @@ package workloadjob
 
 import (
 	"context"
-
-	workloadutils "github.com/silogen/kaiwo/pkg/workloads/common"
-
-	"k8s.io/apimachinery/pkg/api/resource"
-	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
+	"fmt"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
+	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
+	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
+)
+
+const (
+	defaultTTLSecondsAfterFinished = int32(3600)
 )
 
 func GetDefaultJobSpec(dangerous bool, resourceRequirements corev1.ResourceRequirements) batchv1.JobSpec {
 	return batchv1.JobSpec{
-		TTLSecondsAfterFinished: baseutils.Pointer(int32(3600)),
-		Template:                controllerutils.GetPodTemplate(*resource.NewQuantity(1*1024*1024*1024, resource.BinarySI), dangerous, resourceRequirements),
+		TTLSecondsAfterFinished: baseutils.Pointer(defaultTTLSecondsAfterFinished),
+		BackoffLimit:            baseutils.Pointer(int32(0)),
+		Template:                workloadcommon.GetPodTemplate(*resource.NewQuantity(1*1024*1024*1024, resource.BinarySI), dangerous, resourceRequirements),
 	}
 }
 
 type BatchJobReconciler struct {
-	workloadutils.ResourceReconcilerBase[*batchv1.Job]
+	workloadcommon.ResourceReconcilerBase[*batchv1.Job]
 	KaiwoJob *v1alpha1.KaiwoJob
 }
 
 func NewBatchJobReconciler(kaiwoJob *v1alpha1.KaiwoJob) *BatchJobReconciler {
 	reconciler := &BatchJobReconciler{
-		ResourceReconcilerBase: workloadutils.ResourceReconcilerBase[*batchv1.Job]{
+		ResourceReconcilerBase: workloadcommon.ResourceReconcilerBase[*batchv1.Job]{
 			ObjectKey: client.ObjectKeyFromObject(kaiwoJob),
 		},
 		KaiwoJob: kaiwoJob,
@@ -61,8 +62,10 @@ func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batch
 	logger := log.FromContext(ctx)
 
 	spec := r.KaiwoJob.Spec
+	labelContext := r.KaiwoJob.GetLabelContext()
 
 	var jobSpec batchv1.JobSpec
+	jobSpec.Template.ObjectMeta.Labels = r.KaiwoJob.ObjectMeta.Labels
 
 	if spec.Job == nil {
 		jobSpec = GetDefaultJobSpec(baseutils.ValueOrDefault(spec.Dangerous), baseutils.ValueOrDefault(spec.Resources))
@@ -70,16 +73,8 @@ func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batch
 		jobSpec = spec.Job.Spec
 	}
 
-	if baseutils.ValueOrDefault(spec.Image) != "" {
-		for i := range jobSpec.Template.Spec.Containers {
-			jobSpec.Template.Spec.Containers[i].Image = *spec.Image
-		}
-	}
-
-	workloadutils.FillPodResources(&jobSpec.Template.Spec, spec.Resources, false)
-
-	if jobSpec.Template.ObjectMeta.Labels == nil {
-		jobSpec.Template.ObjectMeta.Labels = make(map[string]string)
+	if err := workloadcommon.UpdatePodSpec(r.KaiwoJob.Spec.CommonMetaSpec, r.KaiwoJob.GetLabelContext(), &jobSpec.Template, r.KaiwoJob.Name, true); err != nil {
+		return nil, fmt.Errorf("failed to update job spec: %w", err)
 	}
 
 	if baseutils.ValueOrDefault(jobSpec.BackoffLimit) > 0 {
@@ -87,34 +82,12 @@ func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batch
 		jobSpec.BackoffLimit = baseutils.Pointer(int32(0))
 	}
 
-	jobSpec.Template.ObjectMeta.Labels["job-name"] = r.ObjectKey.Name
+	if jobSpec.TTLSecondsAfterFinished == nil {
+		jobSpec.TTLSecondsAfterFinished = baseutils.Pointer(defaultTTLSecondsAfterFinished)
+	}
 
-	if err := controllerutils.AddEntrypoint(ctx, baseutils.ValueOrDefault(spec.EntryPoint), &jobSpec.Template); err != nil {
+	if err := workloadcommon.AddEntrypoint(baseutils.ValueOrDefault(spec.EntryPoint), &jobSpec.Template); err != nil {
 		return nil, baseutils.LogErrorf(logger, "failed to add entrypoint: %v", err)
-	}
-
-	vendor := "AMD"
-	if spec.GpuVendor != nil {
-		vendor = *spec.GpuVendor
-	}
-	// logger.Info("GPU Vendor", "vendor", vendor)
-
-	gpus := spec.Gpus
-
-	if baseutils.ValueOrDefault(spec.Gpus) == 0 {
-		gpuResourceKey := corev1.ResourceName(controllerutils.GetGpuResourceKey(vendor))
-		if gpuQuantity, exists := jobSpec.Template.Spec.Containers[0].Resources.Requests[gpuResourceKey]; exists {
-			gpus = baseutils.Pointer(int(gpuQuantity.Value()))
-		}
-		// logger.Info("GPU resource request", "resource", gpuResourceKey.String())
-	}
-
-	if err := controllerutils.AdjustResourceRequestsAndLimits(ctx, vendor, baseutils.ValueOrDefault(gpus), 1, baseutils.ValueOrDefault(gpus), &jobSpec.Template); err != nil {
-		return nil, baseutils.LogErrorf(logger, "failed to adjust resource requests and limits", err)
-	}
-
-	if err := controllerutils.AddEnvVars(ctx, baseutils.ValueOrDefault(spec.Env), &jobSpec.Template); err != nil {
-		return nil, baseutils.LogErrorf(logger, "failed to add env vars", err)
 	}
 
 	jobSpec.Suspend = baseutils.Pointer(true)
@@ -123,16 +96,14 @@ func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batch
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      r.ObjectKey.Name,
 			Namespace: r.ObjectKey.Namespace,
-			Labels:    r.KaiwoJob.Labels,
+			Labels:    jobSpec.Template.ObjectMeta.Labels,
 		},
 		Spec: jobSpec,
 	}
 
-	if spec.Storage != nil && spec.Storage.StorageEnabled {
-		if err := controllerutils.UpdatePodSpecStorage(ctx, &job.Spec.Template.Spec, *spec.Storage, r.ObjectKey.Name); err != nil {
-			return nil, err
-		}
-	}
+	// Update the job-level labels
+	baseutils.CopyLabels(r.KaiwoJob.ObjectMeta.Labels, &job.ObjectMeta)
+	baseutils.SetKaiwoSystemLabels(labelContext, &job.ObjectMeta)
 
 	return job, nil
 }

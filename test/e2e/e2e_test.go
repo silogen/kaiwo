@@ -316,7 +316,7 @@ var _ = Describe("Manager", Ordered, func() {
 
 		It("should run all the chainsaw tests", func() {
 			By("executing chainsaw tests")
-			cmd := exec.Command("chainsaw", "test", "--test-dir", "test/chainsaw")
+			cmd := exec.Command("chainsaw", "test", "--test-dir", "test/chainsaw", "--parallel=1")
 			var outb, errb bytes.Buffer
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr

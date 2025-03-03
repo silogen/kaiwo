@@ -8633,19 +8633,10 @@ spec:
                         type: object
                     type: object
                 type: object
-              labels:
+              podTemplateSpecLabels:
                 additionalProperties:
                   type: string
-                description: Labels is a map of key-value pairs used for organizing
-                  workloads.
                 type: object
-              name:
-                description: Name is the name of the workload.
-                type: string
-              namespace:
-                description: Namespace defines the namespace in which the workload
-                  is deployed.
-                type: string
               priorityClass:
                 description: PriorityClass specifies the Kubernetes PriorityClass
                   for scheduling.

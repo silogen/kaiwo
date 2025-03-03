@@ -17,17 +17,14 @@ package v1alpha1
 import (
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	batchv1 "k8s.io/api/batch/v1"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
 // KaiwoJobSpec defines the desired state of KaiwoJob.
 type KaiwoJobSpec struct {
 	CommonMetaSpec `json:",inline"`
-
-	// User specifies the owner or creator of the workload.
-	// If authentication is enabled, this must be email address which is checked against authenticated user for match.
-	User *string `json:"user,omitempty"`
 
 	// ClusterQueue is the Kueue ClusterQueue name.
 	ClusterQueue *string `json:"clusterQueue,omitempty"`
@@ -40,57 +37,8 @@ type KaiwoJobSpec struct {
 	// inside RayJob struct as Entrypoint in the form of string
 	EntryPoint *string `json:"entrypoint,omitempty"`
 
-	// Gpus specifies the total number of GPUs allocated to the workload.
-	// Default is 0.
-	// +kubebuilder:default=0
-	Gpus *int `json:"gpus,omitempty"`
-
-	// GpuVendor specifies the GPU vendor (e.g., AMD, NVIDIA, etc.).
-	// Default is AMD.
-	// +kubebuilder:default=AMD
-	GpuVendor *string `json:"gpuVendor,omitempty"`
-
-	// Version is an optional field specifying the version of the workload.
-	Version *string `json:"version,omitempty"`
-
-	// Replicas specifies the number of replicas for the workload.
-	// If greater than one, the workload must use Ray.
-	// Default is 0.
-	// +kubebuilder:default=0
-	Replicas *int `json:"replicas,omitempty"`
-
-	// GpusPerReplica specifies the number of GPUs allocated per replica.
-	GpusPerReplica *int `json:"gpus-per-replica,omitempty"`
-
-	// Resources specify the default resource requirements applied for all pods inside the workflow
-	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
-
-	// Image defines the container image used for the workload.
-	Image *string `json:"image,omitempty"`
-
-	// ImagePullSecrets contains the list of secrets used to pull the container image.
-	ImagePullSecrets *[]corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
-
-	// Env specifies the environment variables to be passed to the container.
-	Env *[]corev1.EnvVar `json:"env,omitempty"`
-
-	// SecretVolumes list the secret volumes that should be mounted
-	SecretVolumes *[]SecretVolume `json:"secretVolumes,omitempty"`
-
-	// Ray determines whether the operator should use RayCluster for workload execution.
-	// Default is false.
-	// +kubebuilder:default=false
-	Ray *bool `json:"ray,omitempty"`
-
-	// Storage configuration for the workload.
-	Storage *StorageSpec `json:"storage,omitempty"`
-
 	// RayJob defines the RayJob configuration.
 	RayJob *rayv1.RayJob `json:"rayJob,omitempty"`
-
-	// Dangerous disables adding the default security context to the containers
-	// +kubebuilder:default=false
-	Dangerous *bool `json:"dangerous,omitempty"`
 
 	// Job defines the Kubernetes Job configuration.
 	Job *batchv1.Job `json:"job,omitempty"`
@@ -126,6 +74,16 @@ type KaiwoJob struct {
 
 	Spec   KaiwoJobSpec   `json:"spec,omitempty"`
 	Status KaiwoJobStatus `json:"status,omitempty"`
+}
+
+func (job *KaiwoJob) GetLabelContext() baseutils.KaiwoLabelContext {
+	return baseutils.KaiwoLabelContext{
+		User:    baseutils.ValueOrDefault(job.Spec.User),
+		Name:    job.GetName(),
+		Type:    "job",
+		RunId:   string(job.UID),
+		Managed: job.Labels[baseutils.KaiwoManagedLabel],
+	}
 }
 
 // +kubebuilder:object:root=true

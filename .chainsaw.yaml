@@ -10,5 +10,3 @@ spec:
     delete: 60s
     error: 60s
     exec: 10s
-  cleanup:
-    delayBeforeCleanup: 30s
