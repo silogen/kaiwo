@@ -38,9 +38,7 @@ spec:
                       queueingStrategy: BestEffortFIFO
                       resourceGroups:
                         - coveredResources:
-                            - cpu
-                            - memory
-                            - nvidia.com/gpu
+                            (length(@)): 3
                           flavors:
                             - name: ($resourceflavor1)
                               resources:
@@ -59,14 +57,9 @@ spec:
                                 - name: nvidia.com/gpu
                                   nominalQuota: "16"
                       stopPolicy: None
-                resourceFlavors:
-                  - name: ($resourceflavor1)
+                  - (resourceFlavors[?name == ($resourceflavor1]):
                     nodeLabels:
                       kaiwo/nodepool: ($resourceflavor1)
-                  - name: ($resourceflavor2)
+                  - (resourceFlavors[?name == ($resourceflavor2]):
                     nodeLabels:
                       kaiwo/nodepool: ($resourceflavor2)
-
-
-
-
