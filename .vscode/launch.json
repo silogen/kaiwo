@@ -79,6 +79,7 @@
 		"request": "launch",
 		"mode": "debug",
 		"program": "${workspaceFolder}/cmd/operator/main.go",
+		"args": ["--zap-log-level=info"],
 		"env": {
 		  "GO111MODULE": "on"
 		},

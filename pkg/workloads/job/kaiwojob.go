@@ -147,15 +147,8 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, k8sClient client.Cli
 	logger := log.FromContext(ctx)
 
 	kaiwoJob := r.Object
-	var manifests []client.Object
 
-	if kaiwoJob.Status.Status == kaiwov1alpha1.StatusFailed {
-		baseutils.Debug(logger, "Skipping reconciliation, as status is failed")
-		return ctrl.Result{}, nil, nil
-	} else if kaiwoJob.Status.Status == kaiwov1alpha1.StatusComplete {
-		baseutils.Debug(logger, "Skipping reconciliation, as status is complete")
-		return ctrl.Result{}, nil, nil
-	}
+	var manifests []client.Object
 
 	storageSpec := kaiwoJob.Spec.Storage
 

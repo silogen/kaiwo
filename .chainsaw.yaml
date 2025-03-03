@@ -1,0 +1,14 @@
+apiVersion: chainsaw.kyverno.io/v1alpha2
+kind: Configuration
+metadata:
+  name: example
+spec:
+  timeouts:
+    apply: 10s
+    assert: 30s
+    cleanup: 60s
+    delete: 60s
+    error: 60s
+    exec: 10s
+  cleanup:
+    delayBeforeCleanup: 30s
