@@ -110,7 +110,7 @@ func addSecretVolumes(template *corev1.PodTemplateSpec, secretVolumes []v1alpha1
 			})
 		}
 		for i := range template.Spec.InitContainers {
-			template.Spec.Containers[i].VolumeMounts = append(template.Spec.Containers[i].VolumeMounts, corev1.VolumeMount{
+			template.Spec.InitContainers[i].VolumeMounts = append(template.Spec.InitContainers[i].VolumeMounts, corev1.VolumeMount{
 				Name:      volume.Name,
 				MountPath: volume.MountPath,
 				SubPath:   volume.SubPath,
