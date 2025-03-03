@@ -17,6 +17,13 @@ spec:
                 image: ubuntu:latest
                 entrypoint: |
                   sleep 1
+                resources:
+                  limits:
+                    cpu: "1"
+                    memory: "2Gi"
+                  requests:
+                    cpu: "1"
+                    memory: "2Gi"
                 job:
                   apiVersion: batch/v1
                   kind: Job
