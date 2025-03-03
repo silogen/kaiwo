@@ -1,0 +1,65 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: default-kaiwoqueueconfig-creation-test
+spec:
+  steps:
+    - name: Check kaiwoqueueconfig creation
+      try:
+        - script:
+            content: kubectl get resourceflavors -o jsonpath="{.items[0].metadata.name}"
+            outputs:
+              - name: resourceflavor1
+                value: ($stdout)
+        - script:
+            content: kubectl get resourceflavors -o jsonpath="{.items[1].metadata.name}"
+            outputs:
+              - name: resourceflavor2
+                value: ($stdout)
+        - assert:
+            resource:
+              apiVersion: kaiwo.silogen.ai/v1alpha1
+              kind: KaiwoQueueConfig
+              metadata:
+                name: kaiwo
+              spec:
+                clusterQueues:
+                  - name: kaiwo
+                    spec:
+                      flavorFungibility:
+                        whenCanBorrow: Borrow
+                        whenCanPreempt: TryNextFlavor
+                      namespaceSelector: {}
+                      preemption:
+                        borrowWithinCohort:
+                          policy: Never
+                        reclaimWithinCohort: Never
+                        withinClusterQueue: Never
+                      queueingStrategy: BestEffortFIFO
+                      resourceGroups:
+                        - coveredResources:
+                            (length(@)): 3
+                          flavors:
+                            - name: ($resourceflavor1)
+                              resources:
+                                - name: cpu
+                                  nominalQuota: {}
+                                - name: memory
+                                  nominalQuota: {}
+                                - name: nvidia.com/gpu
+                                  nominalQuota: "0"
+                            - name: ($resourceflavor2)
+                              resources:
+                                - name: cpu
+                                  nominalQuota: {}
+                                - name: memory
+                                  nominalQuota: {}
+                                - name: nvidia.com/gpu
+                                  nominalQuota: "16"
+                      stopPolicy: None
+                  - (resourceFlavors[?name == ($resourceflavor1)]):
+                    nodeLabels:
+                      kaiwo/nodepool: ($resourceflavor1)
+                  - (resourceFlavors[?name == ($resourceflavor2)]):
+                    nodeLabels:
+                      kaiwo/nodepool: ($resourceflavor2)

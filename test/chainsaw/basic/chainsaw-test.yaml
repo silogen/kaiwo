@@ -2,6 +2,7 @@ apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
   name: kaiwojob-reconciliation
+  namespace: kaiwo-test
 spec:
   steps:
     - try:
@@ -11,6 +12,7 @@ spec:
               kind: KaiwoJob
               metadata:
                 name: kaiwojob-1
+                namespace: kaiwo-test
               spec:
                 user: test-user
                 resources:
@@ -22,13 +24,14 @@ spec:
                     memory: "2Gi"
                 image: busybox:latest
                 entrypoint: |
-                  sleep 5
+                  sleep 1
         - assert:
             resource:
               apiVersion: kaiwo.silogen.ai/v1alpha1
               kind: KaiwoJob
               metadata:
                 name: kaiwojob-1
+                namespace: kaiwo-test
               status:
                 Status: COMPLETE
       catch:
