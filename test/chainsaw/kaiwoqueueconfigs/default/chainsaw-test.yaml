@@ -4,8 +4,18 @@ metadata:
   name: default-kaiwoqueueconfig-creation-test
 spec:
   steps:
-    - name: Assert default kaiwoQueueConfig
+    - name: Check kaiwoqueueconfig creation
       try:
+        - script:
+            content: kubectl get resourceflavors -o jsonpath="{.items[0].metadata.name}"
+            outputs:
+              - name: resourceflavor1
+                value: ($stdout)
+        - script:
+            content: kubectl get resourceflavors -o jsonpath="{.items[1].metadata.name}"
+            outputs:
+              - name: resourceflavor2
+                value: ($stdout)
         - assert:
             resource:
               apiVersion: kaiwo.silogen.ai/v1alpha1
@@ -32,28 +42,31 @@ spec:
                             - memory
                             - nvidia.com/gpu
                           flavors:
-                            - name: "*cpu-only-0gpu*"
+                            - name: ($resourceflavor1)
                               resources:
                                 - name: cpu
-                                  nominalQuota: "*"
+                                  nominalQuota: {}
                                 - name: memory
-                                  nominalQuota: "*"
+                                  nominalQuota: {}
                                 - name: nvidia.com/gpu
                                   nominalQuota: "0"
-                            - name: "*nvidia-teslak80-8gpu*"
+                            - name: ($resourceflavor2)
                               resources:
                                 - name: cpu
-                                  nominalQuota: "*"
+                                  nominalQuota: {}
                                 - name: memory
-                                  nominalQuota: "*"
+                                  nominalQuota: {}
                                 - name: nvidia.com/gpu
-                                  nominalQuota: "*"
+                                  nominalQuota: "16"
                       stopPolicy: None
                 resourceFlavors:
-                  - name: "*cpu-only-0gpu*"
+                  - name: ($resourceflavor1)
                     nodeLabels:
-                      kaiwo/nodepool: "*cpu-only-0gpu*"
-                  - name: "*nvidia-teslak80-8gpu*"
+                      kaiwo/nodepool: ($resourceflavor1)
+                  - name: ($resourceflavor2)
                     nodeLabels:
-                      kaiwo/nodepool: "*nvidia-teslak80-8gpu*"
+                      kaiwo/nodepool: ($resourceflavor2)
+
+
+
 
