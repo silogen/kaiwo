@@ -20,6 +20,9 @@ spec:
                     cpu: "1"
                     memory: "2Gi"
                 user: test@amd.com
+                env:
+                  - name: FOO
+                    value: BAR
                 image: busybox:latest
                 entrypoint: |
                   sleep 1
@@ -34,6 +37,8 @@ spec:
                 containers:
                   - (env[?name == 'NUM_GPUS']):
                       - value: "0"
+                    (env[?name == 'FOO']):
+                      - value: "BAR"
 ---
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
@@ -61,6 +66,9 @@ spec:
                 entrypoint: |
                   sleep 1
                 ray: true
+                env:
+                  - name: FOO
+                    value: BAR
         - assert:
             resource:
               apiVersion: v1
@@ -73,3 +81,5 @@ spec:
                 containers:
                   - (env[?name == 'NUM_GPUS']):
                       - value: "0"
+                    (env[?name == 'FOO']):
+                      - value: "BAR"
