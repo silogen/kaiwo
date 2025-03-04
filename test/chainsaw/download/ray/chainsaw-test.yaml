@@ -22,7 +22,7 @@ spec:
                     cpu: "1"
                     memory: "2Gi"
                 ray: true
-                image: busybox:latest
+                image: ghcr.io/silogen/ray-test:v0.3
                 entrypoint: |
                   sleep 1
                 storage:
