@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	klog "k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -127,24 +128,19 @@ func getMemoryCount(flavorName string) int {
 
 // CalculateNumberOfReplicas determines the number of replicas and GPUs per replica
 // based on node labels and optionally available GPU capacity.
-func CalculateNumberOfReplicas(ctx context.Context, k8sClient client.Client, gpuVendor string, totalGpus int, userReplicas int, userGpusPerReplica int, useAvailability bool) (int, int, error) {
+func CalculateNumberOfReplicas(ctx context.Context, k8sClient client.Client, gpuVendor string, totalGpus int, userReplicas int, userGpusPerReplica int, useAvailability bool) (int, int, int, error) {
 	logger := log.FromContext(ctx)
-
-	// If user has already set these values, use those
-	if userReplicas > 0 && userGpusPerReplica > 0 {
-		// logger.Info("User-defined replicas and GPUs per replica provided", "Replicas", userReplicas, "GPUs per Replica", userGpusPerReplica)
-		return userReplicas, userGpusPerReplica, nil
-	}
 
 	// Fetch all nodes
 	var nodeList corev1.NodeList
 	if err := k8sClient.List(ctx, &nodeList); err != nil {
 		logger.Error(err, "Failed to list Kubernetes nodes")
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
 
 	minGpusPerNode := 64
 	totalAvailableGpus := 0
+	totalClusterGpus := 0
 	nodeGpuMap := make(map[string]int) // Map of node name -> available GPUs
 
 	for _, node := range nodeList.Items {
@@ -177,6 +173,8 @@ func CalculateNumberOfReplicas(ctx context.Context, k8sClient client.Client, gpu
 			continue
 		}
 
+		totalClusterGpus += gpusPerNode
+
 		// Determine GPU availability
 		availableGpus := gpusPerNode
 		if useAvailability {
@@ -196,9 +194,31 @@ func CalculateNumberOfReplicas(ctx context.Context, k8sClient client.Client, gpu
 		nodeGpuMap[node.Name] = availableGpus
 	}
 
+	userRequestedGpus := userReplicas * userGpusPerReplica
+
+	// If user has already set these values, use those
+	if userReplicas > 0 && userGpusPerReplica > 0 && userRequestedGpus <= totalClusterGpus {
+		// logger.Info("User-defined replicas and GPUs per replica provided", "Replicas", userReplicas, "GPUs per Replica", userGpusPerReplica)
+		return totalGpus, userReplicas, userGpusPerReplica, nil
+	}
+
+	if userRequestedGpus > totalClusterGpus {
+		totalGpus = userRequestedGpus
+	}
+
+	if totalGpus > totalClusterGpus {
+		klog.Warningf("Requested GPUs exceed total GPUs in the cluster. "+
+			"GPU request will be reduced to match maximum available GPU capacity. "+
+			"Requested GPUs: %d, Total GPUs in Cluster: %d",
+			totalGpus, totalClusterGpus,
+		)
+		// Adjust totalGpus to the maximum available
+		totalGpus = totalClusterGpus
+	}
+
 	replicas := (totalGpus + minGpusPerNode - 1) / minGpusPerNode // Round up
 	gpusPerReplica := totalGpus / replicas
 
 	// logger.Info("Calculated replicas and GPUs per replica", "Replicas", replicas, "GPUs per Replica", gpusPerReplica)
-	return replicas, gpusPerReplica, nil
+	return totalGpus, replicas, gpusPerReplica, nil
 }

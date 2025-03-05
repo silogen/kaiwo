@@ -53,6 +53,9 @@ var _ = Describe("Workload defaults", func() {
 
 	var kaiwoCommonMetaSpec v1alpha1.CommonMetaSpec
 
+	replicas := 1
+	gpusPerReplica := 1
+
 	labelContext := baseutils.KaiwoLabelContext{
 		User:  "test-user",
 		Type:  "test-type",
@@ -71,7 +74,7 @@ var _ = Describe("Workload defaults", func() {
 	})
 
 	JustBeforeEach(func() {
-		err := UpdatePodSpec(kaiwoCommonMetaSpec, labelContext, &podTemplateSpec, name, true)
+		err := UpdatePodSpec(kaiwoCommonMetaSpec, labelContext, &podTemplateSpec, name, replicas, gpusPerReplica, false)
 		Expect(err).NotTo(HaveOccurred())
 	})
 

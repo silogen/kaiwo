@@ -73,6 +73,7 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 
 		// Identify AMD GPU Nodes
 		if gpuID, exists := node.Labels["amd.com/gpu.device-id"]; exists {
+			gpuID = strings.Replace(strings.ToLower(gpuID), "-", "", -1)
 			gpuType = MapGPUDeviceIDToName(gpuID, "amd")
 			if count, ok := node.Labels["beta.amd.com/gpu.family.AI"]; ok {
 				gpuCount, _ = strconv.Atoi(count)
@@ -82,10 +83,10 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 
 		// Identify NVIDIA GPU Nodes
 		if gpuProduct, exists := node.Labels["nvidia.com/gpu.product"]; exists {
-			gpuType = fmt.Sprintf("nvidia-%s", gpuProduct)
+			gpuType = strings.Replace(strings.ToLower(gpuProduct), "-", "", -1)
 			if count, ok := node.Labels["nvidia.com/gpu.count"]; ok {
 				gpuCount, _ = strconv.Atoi(count)
-				gpuVendor = "nvidia"
+				gpuVendor = "nvidia" //nolint:goconst
 			}
 		}
 
@@ -105,7 +106,7 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 			}
 			if gpuCount > 0 {
 				gpuResource := corev1.ResourceName("amd.com/gpu")
-				if strings.HasPrefix(gpuType, "nvidia") {
+				if gpuVendor == "nvidia" {
 					gpuResource = corev1.ResourceName("nvidia.com/gpu")
 				}
 				resourceAggregates[flavorName][gpuResource] = resource.NewQuantity(0, resource.DecimalSI)
@@ -117,7 +118,7 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 
 		if gpuCount > 0 {
 			gpuResource := corev1.ResourceName("amd.com/gpu")
-			if strings.HasPrefix(gpuType, "nvidia") {
+			if gpuVendor == "nvidia" {
 				gpuResource = corev1.ResourceName("nvidia.com/gpu")
 			}
 			resourceAggregates[flavorName][gpuResource].Add(*resource.NewQuantity(int64(gpuCount), resource.DecimalSI))

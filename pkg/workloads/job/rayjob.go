@@ -83,6 +83,7 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 	spec := r.KaiwoJob.Spec
 
 	var rayJobSpec rayv1.RayJobSpec
+
 	if spec.RayJob == nil {
 		rayJobSpec = GetDefaultRayJobSpec(baseutils.ValueOrDefault(spec.Dangerous), baseutils.ValueOrDefault(spec.Resources))
 	} else {
@@ -114,27 +115,16 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 
 	labelContext := r.KaiwoJob.GetLabelContext()
 
-	if err := workloadcommon.UpdatePodSpec(r.KaiwoJob.Spec.CommonMetaSpec, labelContext, &rayJobSpec.RayClusterSpec.HeadGroupSpec.Template, r.KaiwoJob.Name, true); err != nil {
-		return nil, fmt.Errorf("failed to update job spec: %w", err)
-	}
-
-	for i := range rayJobSpec.RayClusterSpec.WorkerGroupSpecs {
-		if err := workloadcommon.UpdatePodSpec(r.KaiwoJob.Spec.CommonMetaSpec, labelContext, &rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Template, r.KaiwoJob.Name, true); err != nil {
-			return nil, fmt.Errorf("failed to update job spec for container %d: %w", i, err)
-		}
-	}
-
-	if baseutils.ValueOrDefault(spec.EntryPoint) != "" {
-		rayJobSpec.Entrypoint = *spec.EntryPoint
-	}
-
 	replicas := baseutils.ValueOrDefault(spec.Replicas)
 	gpusPerReplica := baseutils.ValueOrDefault(spec.GpusPerReplica)
+
+	var calculatedGpus int
+	calculatedGpus = baseutils.ValueOrDefault(r.KaiwoJob.Spec.CommonMetaSpec.Gpus)
 
 	if baseutils.ValueOrDefault(spec.Gpus) > 0 || gpusPerReplica > 0 {
 		// Only calculate if it is needed, otherwise avoid interacting with the cluster
 		var err error
-		replicas, gpusPerReplica, err = controllerutils.CalculateNumberOfReplicas(
+		calculatedGpus, replicas, gpusPerReplica, err = controllerutils.CalculateNumberOfReplicas(
 			ctx,
 			k8sClient,
 			strings.ToLower(baseutils.ValueOrDefault(spec.GpuVendor)),
@@ -150,6 +140,31 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 
 	spec.Replicas = &replicas
 	spec.GpusPerReplica = &gpusPerReplica
+	r.KaiwoJob.Spec.CommonMetaSpec.Gpus = &calculatedGpus
+
+	var overrideDefaults bool
+
+	if calculatedGpus > 0 {
+		if spec.RayJob == nil {
+			overrideDefaults = true
+		}
+	} else {
+		overrideDefaults = false
+	}
+
+	if err := workloadcommon.UpdatePodSpec(r.KaiwoJob.Spec.CommonMetaSpec, labelContext, &rayJobSpec.RayClusterSpec.HeadGroupSpec.Template, r.KaiwoJob.Name, replicas, gpusPerReplica, false); err != nil {
+		return nil, fmt.Errorf("failed to update job spec: %w", err)
+	}
+
+	for i := range rayJobSpec.RayClusterSpec.WorkerGroupSpecs {
+		if err := workloadcommon.UpdatePodSpec(r.KaiwoJob.Spec.CommonMetaSpec, labelContext, &rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Template, r.KaiwoJob.Name, replicas, gpusPerReplica, overrideDefaults); err != nil {
+			return nil, fmt.Errorf("failed to update job spec for container %d: %w", i, err)
+		}
+	}
+
+	if baseutils.ValueOrDefault(spec.EntryPoint) != "" {
+		rayJobSpec.Entrypoint = *spec.EntryPoint
+	}
 
 	// Adjust resource requests & limits
 	for i := range rayJobSpec.RayClusterSpec.WorkerGroupSpecs {

@@ -25,7 +25,7 @@ import (
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
-func UpdatePodSpec(kaiwoCommonMetaSpec v1alpha1.CommonMetaSpec, labelContext baseutils.KaiwoLabelContext, template *corev1.PodTemplateSpec, name string, includeGpuCalculations bool) error {
+func UpdatePodSpec(kaiwoCommonMetaSpec v1alpha1.CommonMetaSpec, labelContext baseutils.KaiwoLabelContext, template *corev1.PodTemplateSpec, name string, replicas int, gpusPerReplica int, override bool) error {
 	// Update labels
 	if template.ObjectMeta.Labels == nil {
 		template.ObjectMeta.Labels = map[string]string{}
@@ -55,25 +55,23 @@ func UpdatePodSpec(kaiwoCommonMetaSpec v1alpha1.CommonMetaSpec, labelContext bas
 	// Fill resources
 	FillPodResources(&template.Spec, kaiwoCommonMetaSpec.Resources, false)
 
-	if includeGpuCalculations {
-		vendor := "AMD"
-		if kaiwoCommonMetaSpec.GpuVendor != nil {
-			vendor = *kaiwoCommonMetaSpec.GpuVendor
-		}
+	vendor := "AMD"
+	if kaiwoCommonMetaSpec.GpuVendor != nil {
+		vendor = *kaiwoCommonMetaSpec.GpuVendor
+	}
 
-		gpus := kaiwoCommonMetaSpec.Gpus
+	gpus := kaiwoCommonMetaSpec.Gpus
 
-		if baseutils.ValueOrDefault(kaiwoCommonMetaSpec.Gpus) == 0 {
-			gpuResourceKey := corev1.ResourceName(getGpuResourceKey(vendor))
-			if gpuQuantity, exists := template.Spec.Containers[0].Resources.Requests[gpuResourceKey]; exists {
-				gpus = baseutils.Pointer(int(gpuQuantity.Value()))
-			}
+	if baseutils.ValueOrDefault(kaiwoCommonMetaSpec.Gpus) == 0 {
+		gpuResourceKey := corev1.ResourceName(getGpuResourceKey(vendor))
+		if gpuQuantity, exists := template.Spec.Containers[0].Resources.Requests[gpuResourceKey]; exists {
+			gpus = baseutils.Pointer(int(gpuQuantity.Value()))
 		}
+	}
 
-		// Adjust resource requests and limits based on GPUs
-		if err := adjustResourceRequestsAndLimits(vendor, baseutils.ValueOrDefault(gpus), 1, baseutils.ValueOrDefault(gpus), template); err != nil {
-			return fmt.Errorf("failed to adjust resource requests and limits: %w", err)
-		}
+	// Adjust resource requests and limits based on GPUs
+	if err := adjustResourceRequestsAndLimits(vendor, baseutils.ValueOrDefault(gpus), replicas, gpusPerReplica, template, override); err != nil {
+		return fmt.Errorf("failed to adjust resource requests and limits: %w", err)
 	}
 
 	// Add environmental variables
@@ -101,22 +99,21 @@ func FillPodResources(podSpec *corev1.PodSpec, resources *corev1.ResourceRequire
 
 // fillContainerResources fills container resources with a given template if they are not already set
 func fillContainerResources(container *corev1.Container, resources *corev1.ResourceRequirements, override bool) {
-	if resources != nil {
-		for k, v := range resources.Requests {
-			if _, ok := container.Resources.Requests[k]; !ok || override {
-				if container.Resources.Requests == nil {
-					container.Resources.Requests = corev1.ResourceList{}
-				}
-				container.Resources.Requests[k] = v
-			}
-		}
-		for k, v := range resources.Limits {
-			if _, ok := container.Resources.Limits[k]; !ok || override {
-				if container.Resources.Limits == nil {
-					container.Resources.Limits = corev1.ResourceList{}
-				}
-				container.Resources.Limits[k] = v
-			}
+	if resources == nil {
+		return
+	}
+
+	fillResourceList(&container.Resources.Requests, resources.Requests, override)
+	fillResourceList(&container.Resources.Limits, resources.Limits, override)
+}
+
+func fillResourceList(dest *corev1.ResourceList, src corev1.ResourceList, override bool) {
+	if *dest == nil {
+		*dest = corev1.ResourceList{}
+	}
+	for k, v := range src {
+		if _, exists := (*dest)[k]; override || !exists {
+			(*dest)[k] = v
 		}
 	}
 }
@@ -190,7 +187,7 @@ func GetPodTemplate(dshmSize resource.Quantity, dangerous bool, resources corev1
 	return podTemplate
 }
 
-func adjustResourceRequestsAndLimits(gpuVendor string, gpuCount int, replicas int, gpusPerReplica int, podTemplateSpec *corev1.PodTemplateSpec) error {
+func adjustResourceRequestsAndLimits(gpuVendor string, gpuCount int, replicas int, gpusPerReplica int, podTemplateSpec *corev1.PodTemplateSpec, override bool) error {
 	if len(podTemplateSpec.Spec.Containers) == 0 {
 		err := fmt.Errorf("podTemplateSpec has no containers to modify")
 		return err
@@ -199,10 +196,10 @@ func adjustResourceRequestsAndLimits(gpuVendor string, gpuCount int, replicas in
 	gpuResourceKey := getGpuResourceKey(gpuVendor)
 
 	// Modify resource requests/limits only if GPUs are requested
-	if gpuCount > 0 {
-		updatedResources := getResourceRequestsAndLimits(gpuResourceKey, int32(gpuCount))
+	if gpusPerReplica > 0 {
+		updatedResources := getResourceRequestsAndLimits(gpuResourceKey, int32(gpusPerReplica))
 		// Update the resources that have not been set yet (allowing the user to override the defaults here)
-		fillContainerResources(&podTemplateSpec.Spec.Containers[0], &updatedResources, false)
+		fillContainerResources(&podTemplateSpec.Spec.Containers[0], &updatedResources, override)
 	}
 
 	// Append new GPU-related environment variables to the container

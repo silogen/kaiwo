@@ -4,6 +4,7 @@ metadata:
   name: job-with-label-2-label-propagation
   labels:
     kaiwo.silogen.ai/managed: "true"
+    custom.label/baz: "foo"
 spec:
   template:
     spec:
