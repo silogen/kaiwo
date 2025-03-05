@@ -35,7 +35,6 @@ func UpdatePodSpec(kaiwoCommonMetaSpec v1alpha1.CommonMetaSpec, labelContext bas
 
 	// Make sure there is an image set for each container
 	// init containers are not included, as they are assumed to always be user given
-	// Also ensure that all image pull secrets are set
 	for i := range template.Spec.Containers {
 		// If the container has no image set
 		if template.Spec.Containers[i].Image == "" {
@@ -47,9 +46,15 @@ func UpdatePodSpec(kaiwoCommonMetaSpec v1alpha1.CommonMetaSpec, labelContext bas
 				template.Spec.Containers[i].Image = baseutils.DefaultRayImage
 			}
 		}
-		if kaiwoCommonMetaSpec.ImagePullSecrets != nil {
-			template.Spec.ImagePullSecrets = append(template.Spec.ImagePullSecrets, *kaiwoCommonMetaSpec.ImagePullSecrets...)
-		}
+	}
+
+	// Ensure that all image pull secrets are set
+	if kaiwoCommonMetaSpec.ImagePullSecrets != nil {
+		template.Spec.ImagePullSecrets = append(template.Spec.ImagePullSecrets, *kaiwoCommonMetaSpec.ImagePullSecrets...)
+	}
+
+	if kaiwoCommonMetaSpec.SecretVolumes != nil {
+		addSecretVolumes(template, *kaiwoCommonMetaSpec.SecretVolumes)
 	}
 
 	// Fill resources
@@ -85,6 +90,33 @@ func UpdatePodSpec(kaiwoCommonMetaSpec v1alpha1.CommonMetaSpec, labelContext bas
 	}
 
 	return nil
+}
+
+func addSecretVolumes(template *corev1.PodTemplateSpec, secretVolumes []v1alpha1.SecretVolume) {
+	for _, volume := range secretVolumes {
+		template.Spec.Volumes = append(template.Spec.Volumes, corev1.Volume{
+			Name: volume.Name,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: volume.SecretName,
+				},
+			},
+		})
+		for i := range template.Spec.Containers {
+			template.Spec.Containers[i].VolumeMounts = append(template.Spec.Containers[i].VolumeMounts, corev1.VolumeMount{
+				Name:      volume.Name,
+				MountPath: volume.MountPath,
+				SubPath:   volume.SubPath,
+			})
+		}
+		for i := range template.Spec.InitContainers {
+			template.Spec.InitContainers[i].VolumeMounts = append(template.Spec.InitContainers[i].VolumeMounts, corev1.VolumeMount{
+				Name:      volume.Name,
+				MountPath: volume.MountPath,
+				SubPath:   volume.SubPath,
+			})
+		}
+	}
 }
 
 // FillPodResources fills pod resources with a given template if they are not already set
@@ -150,13 +182,9 @@ func GetPodTemplate(dshmSize resource.Quantity, dangerous bool, resources corev1
 			RestartPolicy: corev1.RestartPolicyNever,
 			Containers: []corev1.Container{
 				{
-					Name: "workload",
-					// Image:           baseutils.DefaultRayImage,
+					Name:            "workload",
 					ImagePullPolicy: corev1.PullAlways,
-					//Env: []corev1.EnvVar{
-					//	{Name: "HF_HOME", Value: "/workload/.cache/huggingface"},
-					//},
-					Resources: *resourceRequirements,
+					Resources:       *resourceRequirements,
 					VolumeMounts: []corev1.VolumeMount{
 						{Name: "dshm", MountPath: "/dev/shm"},
 					},
