@@ -1,0 +1,37 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: ray-entrypoint
+spec:
+  steps:
+    - try:
+        - apply:
+            resource:
+              apiVersion: kaiwo.silogen.ai/v1alpha1
+              kind: KaiwoJob
+              metadata:
+                name: ray-entrypoint-test
+              spec:
+                resources:
+                  limits:
+                    cpu: "1"
+                    memory: "2Gi"
+                  requests:
+                    cpu: "1"
+                    memory: "2Gi"
+                user: test@amd.com
+                ray: true
+                image: ghcr.io/silogen/ray-test:v0.3
+                entrypoint: |
+                  sleep 1
+                  echo "Ray"
+                  sleep 1
+        - assert:
+            timeout: 60s
+            resource:
+              apiVersion: kaiwo.silogen.ai/v1alpha1
+              kind: KaiwoJob
+              metadata:
+                name: ray-entrypoint-test
+              status:
+                Status: COMPLETE

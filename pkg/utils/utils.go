@@ -116,23 +116,6 @@ func GetGVK(scheme runtime.Scheme, object client.Object) (schema.GroupVersionKin
 	return gvks[0], nil
 }
 
-func GetObjectDescriptor(scheme runtime.Scheme, object client.Object) (ObjectDescriptor, error) {
-	objectKey := client.ObjectKeyFromObject(object)
-	gvk, err := GetGVK(scheme, object)
-	if err != nil {
-		return ObjectDescriptor{}, err
-	}
-	return ObjectDescriptor{
-		GVK:       gvk,
-		ObjectKey: objectKey,
-	}, nil
-}
-
-type ObjectDescriptor struct {
-	GVK       schema.GroupVersionKind `json:"gvk"`
-	ObjectKey client.ObjectKey        `json:"objectKey"`
-}
-
 func ContainsString(slice []string, str string) bool {
 	for _, v := range slice {
 		if v == str {
@@ -150,4 +133,48 @@ func RemoveString(slice []string, str string) []string {
 		}
 	}
 	return newSlice
+}
+
+// ConvertMultilineEntrypointToSingleLine converts a multiline script into a single-line command
+func ConvertMultilineEntrypointToSingleLine(entrypoint string) string {
+	// Check if entrypoint is already a single line
+	if !strings.Contains(entrypoint, "\n") {
+		return entrypoint
+	}
+
+	// Remove backslashes used for line continuation
+	entrypoint = regexp.MustCompile(`\\\s*\n`).ReplaceAllString(entrypoint, " ")
+
+	// Split into lines
+	lines := strings.Split(entrypoint, "\n")
+
+	// Default shell
+	command := "/bin/bash"
+
+	// Check for shebang (`#!`) and adjust shell
+	if strings.HasPrefix(lines[0], "#!") {
+		command = strings.TrimSpace(lines[0][2:]) // Extract shell interpreter
+		lines = lines[1:]                         // Remove the shebang line
+	}
+
+	// Process lines: remove comments and empty lines
+	var nonEmptyLines []string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		// Ignore empty lines and lines that start with `#` (comments)
+		if line != "" && !strings.HasPrefix(line, "#") {
+			line = regexp.MustCompile(`\s+`).ReplaceAllString(line, " ")
+			line = strings.TrimSpace(line)
+			nonEmptyLines = append(nonEmptyLines, line)
+		}
+	}
+
+	// Join lines using `&&` to preserve execution order
+	entrypoint = strings.Join(nonEmptyLines, " && ")
+
+	// Escape single quotes for Bash safety
+	entrypoint = strings.ReplaceAll(entrypoint, "'", "'\"'\"'")
+
+	// Return final formatted command
+	return fmt.Sprintf(`%s -c '%s'`, command, entrypoint)
 }
