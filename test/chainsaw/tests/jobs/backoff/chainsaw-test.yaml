@@ -1,0 +1,49 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: job-backoff-test
+spec:
+  steps:
+    - try:
+        - apply:
+            resource:
+              apiVersion: kaiwo.silogen.ai/v1alpha1
+              kind: KaiwoJob
+              metadata:
+                name: test-job-kaiwojob
+              spec:
+                user: test@amd.com
+                gpus: 0
+                image: ubuntu:latest
+                entrypoint: |
+                  sleep 1
+                resources:
+                  limits:
+                    cpu: "1"
+                    memory: "2Gi"
+                  requests:
+                    cpu: "1"
+                    memory: "2Gi"
+                job:
+                  apiVersion: batch/v1
+                  kind: Job
+                  spec:
+                    backoffLimit: 2  # Set a backoffLimit that is too large
+                    template:
+                      spec:
+                        containers:
+                          - name: hello-world
+                            image: ubuntu:latest
+                            imagePullPolicy: Always
+                            # Just spin & wait forever
+                            command: [ "/bin/bash", "-c", "--" ]
+                            args: [ "sleep 1" ]
+                        restartPolicy: Never
+        - assert:
+            resource:
+              apiVersion: batch/v1
+              kind: Job
+              metadata:
+                name: test-job-kaiwojob
+              spec:
+                backoffLimit: 0  # Ensure the backoffLimit was reset to 0

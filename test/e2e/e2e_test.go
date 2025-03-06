@@ -38,13 +38,6 @@ const (
 	test_namespace = "kaiwo-test"
 )
 
-var parallel = func() int {
-	if os.Getenv("CI") != "" {
-		return 1
-	}
-	return 3
-}()
-
 // serviceAccountName created for the project
 const serviceAccountName = "kaiwo-controller-manager"
 
@@ -321,9 +314,19 @@ var _ = Describe("Manager", Ordered, func() {
 			Eventually(verifyCAInjection).Should(Succeed())
 		})
 
+		args := []string{
+			"test",
+			"--test-dir",
+			"test/chainsaw/tests",
+		}
+
+		if configPath := os.Getenv("CHAINSAW_CONFIG"); len(configPath) > 0 {
+			args = append(args, "--config", configPath)
+		}
+
 		It("should run all the chainsaw tests", func() {
 			By("executing chainsaw tests")
-			cmd := exec.Command("chainsaw", "test", "--test-dir", "test/chainsaw", fmt.Sprintf("--parallel=%d", parallel))
+			cmd := exec.Command("chainsaw", args...)
 			var outb, errb bytes.Buffer
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr

@@ -1,0 +1,61 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: hf-gated-repo
+  labels:
+    test.kaiwo.silogen.ai/sensitive: "true"
+spec:
+  steps:
+    - try:
+        - apply:
+            resource:
+              apiVersion: v1
+              kind: Secret
+              metadata:
+                name: my-hf-token
+              data:
+                hf-token: ($values.hf_token_base64)
+        - apply:
+            resource:
+              apiVersion: kaiwo.silogen.ai/v1alpha1
+              kind: KaiwoJob
+              metadata:
+                name: test-job-kaiwojob
+              spec:
+                resources:
+                  limits:
+                    cpu: "1"
+                    memory: "2Gi"
+                  requests:
+                    cpu: "1"
+                    memory: "2Gi"
+                user: test@amd.com
+                env:
+                  - name: HF_TOKEN
+                    valueFrom:
+                      secretKeyRef:
+                        name: my-hf-token
+                        key: hf-token
+                image: busybox:latest
+                entrypoint: |
+                  sleep 5
+                storage:
+                  storageEnabled: true
+                  storageClassName: "standard"
+                  accessMode: "ReadWriteOnce"
+                  huggingFace:
+                    storageSize: "1Gi"
+                    mountPath: "/.cache/huggingface"
+                    preCacheRepos:
+                      - repoId: alex-s-silo/gated-test
+                        files:
+                          - "README.md"
+        # Check that the job is running (meaning that the download job completed successfully)
+        - assert:
+            resource:
+              apiVersion: kaiwo.silogen.ai/v1alpha1
+              kind: KaiwoJob
+              metadata:
+                name: test-job-kaiwojob
+              status:
+                status: RUNNING
