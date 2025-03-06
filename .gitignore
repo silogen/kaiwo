@@ -7,6 +7,7 @@ certs/
 *.swp
 *.swo
 *~
+__debug*
 
 # Binaries for programs and plugins
 *.exe

@@ -140,3 +140,32 @@ spec:
                 ray: true
                 replicas: 1
                 user: test@amd.com
+
+---
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: test-gpu-scheduling-when-gpu-is-not-available
+spec:
+  steps:
+    - try:
+        - apply:
+            resource:
+              apiVersion: kaiwo.silogen.ai/v1alpha1
+              kind: KaiwoJob
+              metadata:
+                name: kaiwojob-rayjob-no-gpus-available
+                namespace: kaiwo-test
+              spec:
+                user: test@amd.com
+                ray: true
+                gpus: 1
+                entrypoint: |
+                  sleep 1
+        - script:
+            content: sleep 5
+        - script:
+            content: kubectl describe kaiwojob kaiwojob-rayjob-no-gpus-available -n kaiwo-test
+            check:
+              (contains($stdout, 'no AMD GPUs found in the cluster')): true

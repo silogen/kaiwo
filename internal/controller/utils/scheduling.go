@@ -17,6 +17,7 @@ package controllerutils
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -128,8 +129,11 @@ func getMemoryCount(flavorName string) int {
 
 // CalculateNumberOfReplicas determines the number of replicas and GPUs per replica
 // based on node labels and optionally available GPU capacity.
-func CalculateNumberOfReplicas(ctx context.Context, k8sClient client.Client, gpuVendor string, totalGpus int, userReplicas int, userGpusPerReplica int, useAvailability bool) (int, int, int, error) {
+func CalculateNumberOfReplicas(ctx context.Context, k8sClient client.Client, gpuVendor string, totalUserRequestedGpus int, userReplicas int, userGpusPerReplica int, useAvailability bool) (int, int, int, error) {
 	logger := log.FromContext(ctx)
+
+	userRequestedGpus := userReplicas * userGpusPerReplica
+	totalUserRequestedGpus = int(math.Max(float64(userRequestedGpus), float64(totalUserRequestedGpus)))
 
 	// Fetch all nodes
 	var nodeList corev1.NodeList
@@ -139,9 +143,11 @@ func CalculateNumberOfReplicas(ctx context.Context, k8sClient client.Client, gpu
 	}
 
 	minGpusPerNode := 64
+	minAllocatableGpusPerNode := 64
 	totalAvailableGpus := 0
+	totalAllocatableGpus := 0
 	totalClusterGpus := 0
-	nodeGpuMap := make(map[string]int) // Map of node name -> available GPUs
+	nodeGpuMap := make(map[string]int)
 
 	for _, node := range nodeList.Items {
 
@@ -180,7 +186,17 @@ func CalculateNumberOfReplicas(ctx context.Context, k8sClient client.Client, gpu
 		if useAvailability {
 			allocatable, ok := node.Status.Allocatable[corev1.ResourceName(fmt.Sprintf("%s.com/gpu", gpuVendor))]
 			if ok {
-				availableGpus = int(allocatable.Value())
+				allocatableGpus := int(allocatable.Value())
+				if allocatableGpus == 0 {
+					continue
+				}
+				// Track minimum allocatable GPUs per node
+				if allocatableGpus < minAllocatableGpusPerNode {
+					minAllocatableGpusPerNode = allocatableGpus
+				}
+
+				// Track total allocatable GPUs
+				totalAllocatableGpus += allocatableGpus
 			}
 		}
 
@@ -194,31 +210,35 @@ func CalculateNumberOfReplicas(ctx context.Context, k8sClient client.Client, gpu
 		nodeGpuMap[node.Name] = availableGpus
 	}
 
-	userRequestedGpus := userReplicas * userGpusPerReplica
+	if totalClusterGpus == 0 {
+		return 0, 1, 0, fmt.Errorf("no %s GPUs found in the cluster", strings.ToUpper(gpuVendor))
+	}
+
+	if useAvailability {
+		if totalAllocatableGpus >= totalUserRequestedGpus {
+			minGpusPerNode = minAllocatableGpusPerNode
+		}
+	}
 
 	// If user has already set these values, use those
-	if userReplicas > 0 && userGpusPerReplica > 0 && userRequestedGpus <= totalClusterGpus {
+	if userReplicas > 0 && userGpusPerReplica > 0 && totalUserRequestedGpus <= totalClusterGpus {
 		// logger.Info("User-defined replicas and GPUs per replica provided", "Replicas", userReplicas, "GPUs per Replica", userGpusPerReplica)
-		return totalGpus, userReplicas, userGpusPerReplica, nil
+		return totalUserRequestedGpus, userReplicas, userGpusPerReplica, nil
 	}
 
-	if userRequestedGpus > totalClusterGpus {
-		totalGpus = userRequestedGpus
-	}
-
-	if totalGpus > totalClusterGpus {
+	if totalUserRequestedGpus > totalClusterGpus {
 		klog.Warningf("Requested GPUs exceed total GPUs in the cluster. "+
 			"GPU request will be reduced to match maximum available GPU capacity. "+
 			"Requested GPUs: %d, Total GPUs in Cluster: %d",
-			totalGpus, totalClusterGpus,
+			totalUserRequestedGpus, totalClusterGpus,
 		)
 		// Adjust totalGpus to the maximum available
-		totalGpus = totalClusterGpus
+		totalUserRequestedGpus = totalClusterGpus
 	}
 
-	replicas := (totalGpus + minGpusPerNode - 1) / minGpusPerNode // Round up
-	gpusPerReplica := totalGpus / replicas
+	replicas := (totalUserRequestedGpus + minGpusPerNode - 1) / minGpusPerNode // Round up
+	gpusPerReplica := totalUserRequestedGpus / replicas
 
 	// logger.Info("Calculated replicas and GPUs per replica", "Replicas", replicas, "GPUs per Replica", gpusPerReplica)
-	return totalGpus, replicas, gpusPerReplica, nil
+	return totalUserRequestedGpus, replicas, gpusPerReplica, nil
 }

@@ -56,5 +56,7 @@ kubectl create -k "$KUBERAY_MANIFESTS"
 kubectl rollout status deployment/kuberay-operator --timeout=5m
 echo "KubeRay deployed."
 
+kubectl create ns $TEST_NAME
+
 echo "Cluster is ready!"
 

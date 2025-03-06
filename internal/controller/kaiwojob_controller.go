@@ -34,6 +34,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/tools/record"
+
 	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	workloadjob "github.com/silogen/kaiwo/pkg/workloads/job"
 )
@@ -41,7 +44,8 @@ import (
 // KaiwoJobReconciler reconciles a KaiwoJob object
 type KaiwoJobReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=kaiwo.silogen.ai,resources=kaiwojobs,verbs=get;list;watch;create;update;patch;delete
@@ -74,12 +78,19 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	result, _, err := reconciler.Reconcile(ctx, r.Client, r.Scheme, false)
 	if err != nil {
+		r.Recorder.Eventf(
+			&kaiwoJob,
+			corev1.EventTypeWarning,
+			"KaiwoJobReconcileError",
+			"Failed to reconcile KaiwoJob: %v", err,
+		)
 		return ctrl.Result{}, fmt.Errorf("failed to run reconciliation: %v", err)
 	}
 	return result, nil
 }
 
 func (r *KaiwoJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.Recorder = mgr.GetEventRecorderFor("kaiwojob-controller")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kaiwov1alpha1.KaiwoJob{}).
 		Watches(
