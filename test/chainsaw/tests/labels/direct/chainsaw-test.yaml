@@ -1,0 +1,54 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: label-propagation-direct
+spec:
+  steps:
+    - try:
+        - apply:
+            resource:
+              apiVersion: kaiwo.silogen.ai/v1alpha1
+              kind: KaiwoJob
+              metadata:
+                name: test-job-kaiwojob
+                # Set root-level label
+                labels:
+                  foo: bar
+              spec:
+                podTemplateSpecLabels:
+                  pod-foo: pod-bar
+                resources:
+                  limits:
+                    cpu: "1"
+                    memory: "2Gi"
+                  requests:
+                    cpu: "1"
+                    memory: "2Gi"
+                user: test@amd.com
+                image: busybox:latest
+                entrypoint: |
+                  sleep 1
+        - assert:
+            resource:
+              apiVersion: batch/v1
+              kind: Job
+              metadata:
+                name: test-job-kaiwojob
+                # Kaiwo system and metadata labels are propagated
+                labels:
+                  kaiwo.silogen.ai/user: test-amd.com
+                  kaiwo.silogen.ai/type: job
+                  kaiwo.silogen.ai/name: test-job-kaiwojob
+                  foo: bar
+#                  kaiwo.silogen.ai/run-id: test@amd.com
+        - assert:
+            resource:
+              apiVersion: v1
+              kind: Pod
+              metadata:
+                # Kaiwo system and pod template labels are propagated
+                labels:
+                  kaiwo.silogen.ai/user: test-amd.com
+                  kaiwo.silogen.ai/type: job
+                  kaiwo.silogen.ai/name: test-job-kaiwojob
+                  pod-foo: pod-bar

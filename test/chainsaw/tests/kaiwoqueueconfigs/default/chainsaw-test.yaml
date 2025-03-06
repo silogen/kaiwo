@@ -1,0 +1,81 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: default-kaiwoqueueconfig-creation-test
+spec:
+  steps:
+    - name: Check kaiwoqueueconfig creation
+      try:
+        - script:
+            content: kubectl get resourceflavors -o jsonpath="{.items[0].metadata.name}"
+            outputs:
+              - name: resourceflavor1
+                value: ($stdout)
+        - script:
+            content: kubectl get resourceflavors -o jsonpath="{.items[1].metadata.name}"
+            outputs:
+              - name: resourceflavor2
+                value: ($stdout)
+        - assert:
+            resource:
+              apiVersion: kaiwo.silogen.ai/v1alpha1
+              kind: KaiwoQueueConfig
+              metadata:
+                name: kaiwo
+              spec:
+                clusterQueues:
+                  - name: kaiwo
+                    spec:
+                      flavorFungibility:
+                        whenCanBorrow: Borrow
+                        whenCanPreempt: TryNextFlavor
+                      namespaceSelector: {}
+                      preemption:
+                        borrowWithinCohort:
+                          policy: Never
+                        reclaimWithinCohort: Never
+                        withinClusterQueue: Never
+                      queueingStrategy: BestEffortFIFO
+        - script:
+                  content: kubectl get kaiwoqueueconfig kaiwo -o json
+                  outputs:
+                  - name: coveredResources
+                    value: (json_parse($stdout).spec.clusterQueues[0].spec.resourceGroups[0].coveredResources)
+                  - name: resourceGroupFlavorResources
+                    value: (json_parse($stdout).spec.clusterQueues[0].spec.resourceGroups[0].flavors[*].resources)
+                  - name: resourceFlavors
+                    value: (json_parse($stdout).spec.resourceFlavors)
+        - script:
+            env: 
+              - name: covered
+                value: (to_string($coveredResources))
+            content:  |
+              echo $covered
+            check:
+              (contains($stdout, 'cpu')): true
+              (contains($stdout, 'memory')): true
+              (contains($stdout, 'nvidia.com/gpu')): true
+
+        - script:
+            env: 
+              - name: resources
+                value: (to_string($resourceGroupFlavorResources))
+            content:  |
+              echo $resources
+            check:
+              (contains($stdout, 'cpu')): true
+              (contains($stdout, 'memory')): true
+              (contains($stdout, '{"name":"nvidia.com/gpu","nominalQuota":"16"}')): true
+
+        - script:
+            env: 
+              - name: flavors
+                value: (to_string($resourceFlavors))
+            content:  |
+              echo $flavors
+            check:
+              (contains($stdout, '"name":"cpu-only-0gpu')): true
+              (contains($stdout, 'nodeLabels":{"kaiwo/nodepool":"cpu-only-0gpu')): true
+              (contains($stdout, '"name":"nvidia-teslak80-8gpu')): true
+              (contains($stdout, '"nodeLabels":{"kaiwo/nodepool":"nvidia-teslak80-8gpu')): true
+            

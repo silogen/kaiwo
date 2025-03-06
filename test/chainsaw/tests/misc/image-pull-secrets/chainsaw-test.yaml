@@ -1,0 +1,46 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: image-pull-secret
+spec:
+  steps:
+    - try:
+        - apply:
+            resource:
+              apiVersion: v1
+              kind: Secret
+              metadata:
+                name: my-image-secret
+              data:
+                .dockerconfigjson: ewogICJhdXRocyI6IHsKICAgICJodHRwczovL2luZGV4LmRvY2tlci5pby92MS8iOiB7CiAgICAgICJhdXRoIjogImRYTmxjbTVoYldVNmNHRnpjM2R2Y21RPSIKICAgIH0sCiAgICAiaHR0cHM6Ly9teS5wcml2YXRlLnJlZ2lzdHJ5LmNvbSI6IHsKICAgICAgImF1dGgiOiAiY0hKcGRtRjBaWFZ6WlhJNmNISnBkbUYwWlhCaGMzTT0iCiAgICB9CiAgfSwKICAiSHR0cEhlYWRlcnMiOiB7CiAgICAiVXNlci1BZ2VudCI6ICJEb2NrZXItQ2xpZW50LzIwLjEwLjEwIChsaW51eCkiCiAgfSwKICAiY3JlZHNTdG9yZSI6ICJkZXNrdG9wIiwKICAiZXhwZXJpbWVudGFsIjogImVuYWJsZWQiLAogICJzdGFja09yY2hlc3RyYXRvciI6ICJzd2FybSIsCiAgInByb3hpZXMiOiB7CiAgICAiZGVmYXVsdCI6IHsKICAgICAgImh0dHBQcm94eSI6ICJodHRwOi8vcHJveHkuZXhhbXBsZS5jb206MzEyOCIsCiAgICAgICJodHRwc1Byb3h5IjogImh0dHA6Ly9wcm94eS5leGFtcGxlLmNvbTozMTI4IiwKICAgICAgIm5vUHJveHkiOiAibG9jYWxob3N0LDEyNy4wLjAuMSwuZXhhbXBsZS5jb20iCiAgICB9CiAgfSwKICAibG9nLWxldmVsIjogImluZm8iCn0K
+              type: kubernetes.io/dockerconfigjson
+        - apply:
+            resource:
+              apiVersion: kaiwo.silogen.ai/v1alpha1
+              kind: KaiwoJob
+              metadata:
+                name: image-pull-secret-test-job
+              spec:
+                image: busybox:latest
+                resources:
+                  limits:
+                    cpu: "1"
+                    memory: "1Gi"
+                  requests:
+                    cpu: "1"
+                    memory: "1Gi"
+                entrypoint: |
+                  sleep 1
+                imagePullSecrets:
+                  - name: my-image-secret
+        - assert:
+            resource:
+              apiVersion: v1
+              kind: Pod
+              metadata:
+                labels:
+                  kaiwo.silogen.ai/type: job
+                  kaiwo.silogen.ai/name: image-pull-secret-test-job
+              spec:
+                imagePullSecrets:
+                  - name: my-image-secret
