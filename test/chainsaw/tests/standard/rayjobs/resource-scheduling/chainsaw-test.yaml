@@ -36,8 +36,7 @@ spec:
                   name: kaiwojob-rayjob-resource-scheduling
               spec:
                 backoffLimit: 0
-                entrypoint: |
-                  sleep 1
+                entrypoint: /bin/bash -c 'sleep 1'
                 rayClusterSpec:
                   enableInTreeAutoscaling: false
                   headGroupSpec:
