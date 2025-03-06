@@ -57,7 +57,7 @@ type KaiwoJobStatus struct {
 	StartTime          *metav1.Time       `json:"startTime,omitempty"`
 	CompletionTime     *metav1.Time       `json:"completionTime,omitempty"`
 	Conditions         []metav1.Condition `json:"conditions,omitempty"`
-	Status             Status             `json:"Status,omitempty"`
+	Status             Status             `json:"status,omitempty"`
 	Duration           int64              `json:"duration,omitempty"`
 	ObservedGeneration int64              `json:"observedGeneration,omitempty"`
 }

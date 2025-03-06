@@ -1,0 +1,47 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: download-job-ray-starts
+spec:
+  steps:
+    - try:
+        - apply:
+            resource:
+              apiVersion: kaiwo.silogen.ai/v1alpha1
+              kind: KaiwoJob
+              metadata:
+                name: test-job-kaiwojob-ray
+              spec:
+                user: test@amd.com
+                gpus: 0
+                resources:
+                  limits:
+                    cpu: "1"
+                    memory: "2Gi"
+                  requests:
+                    cpu: "1"
+                    memory: "2Gi"
+                ray: true
+                image: ghcr.io/silogen/ray-test:v0.3
+                entrypoint: |
+                  sleep 1
+                storage:
+                  storageEnabled: true
+                  storageClassName: "standard"
+                  accessMode: "ReadWriteOnce"
+                  huggingFace:
+                    storageSize: "1Gi"
+                    mountPath: "/.cache/huggingface"
+                    preCacheRepos:
+                      - repoId: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+                        files:
+                          - "README.md"
+        # Ensure that the Ray job starts at all
+        - assert:
+            resource:
+              apiVersion: v1
+              kind: Pod
+              metadata:
+                labels:
+                  kaiwo.silogen.ai/name: test-job-kaiwojob-ray
+                  ray.io/is-ray-node: "yes"

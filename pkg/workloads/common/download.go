@@ -16,6 +16,7 @@ package workloadcommon
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"time"
 
@@ -115,15 +116,17 @@ type DownloadJobReconciler struct {
 	ResourceReconcilerBase[*batchv1.Job]
 	StorageSpec *kaiwov1alpha1.StorageSpec
 	PvcBaseName string
+	UserEnvVars []corev1.EnvVar
 }
 
-func NewDownloadJobReconciler(objectKey client.ObjectKey, storageSpec *kaiwov1alpha1.StorageSpec, pvcBaseName string) *DownloadJobReconciler {
+func NewDownloadJobReconciler(objectKey client.ObjectKey, storageSpec *kaiwov1alpha1.StorageSpec, pvcBaseName string, userEnvVars []corev1.EnvVar) *DownloadJobReconciler {
 	reconciler := &DownloadJobReconciler{
 		ResourceReconcilerBase: ResourceReconcilerBase[*batchv1.Job]{
 			ObjectKey: objectKey,
 		},
 		StorageSpec: storageSpec,
 		PvcBaseName: pvcBaseName,
+		UserEnvVars: userEnvVars,
 	}
 	reconciler.Self = reconciler
 	return reconciler
@@ -281,6 +284,10 @@ func (r *DownloadJobReconciler) Build(_ context.Context, _ client.Client) (*batc
 				},
 			},
 		},
+	}
+
+	if err := addEnvVars(r.UserEnvVars, &downloadJob.Spec.Template); err != nil {
+		return nil, fmt.Errorf("error adding env vars: %w", err)
 	}
 
 	return downloadJob, nil
