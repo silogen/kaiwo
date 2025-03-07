@@ -62,7 +62,7 @@ func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batch
 	logger := log.FromContext(ctx)
 
 	spec := r.KaiwoJob.Spec
-	labelContext := r.KaiwoJob.GetLabelContext()
+	labelContext := baseutils.GetKaiwoLabelContext(r.KaiwoJob)
 
 	var jobSpec batchv1.JobSpec
 	jobSpec.Template.ObjectMeta.Labels = r.KaiwoJob.ObjectMeta.Labels
@@ -79,7 +79,7 @@ func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batch
 		overrideDefaults = false
 	}
 
-	if err := workloadcommon.UpdatePodSpec(r.KaiwoJob.Spec.CommonMetaSpec, r.KaiwoJob.GetLabelContext(), &jobSpec.Template, r.KaiwoJob.Name, 1, baseutils.ValueOrDefault(r.KaiwoJob.Spec.CommonMetaSpec.Gpus), overrideDefaults); err != nil {
+	if err := workloadcommon.UpdatePodSpec(r.KaiwoJob.Spec.CommonMetaSpec, labelContext, &jobSpec.Template, r.KaiwoJob.Name, 1, baseutils.ValueOrDefault(r.KaiwoJob.Spec.CommonMetaSpec.Gpus), overrideDefaults); err != nil {
 		return nil, fmt.Errorf("failed to update job spec: %w", err)
 	}
 
@@ -107,7 +107,6 @@ func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batch
 		Spec: jobSpec,
 	}
 
-	// Update the job-level labels
 	baseutils.CopyLabels(r.KaiwoJob.ObjectMeta.Labels, &job.ObjectMeta)
 	baseutils.SetKaiwoSystemLabels(labelContext, &job.ObjectMeta)
 

@@ -18,46 +18,111 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
+	"k8s.io/client-go/tools/record"
 
 	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
+	workloadservice "github.com/silogen/kaiwo/pkg/workloads/service"
 )
 
 // KaiwoServiceReconciler reconciles a KaiwoService object
 type KaiwoServiceReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=kaiwo.silogen.ai,resources=kaiwoservices,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=kaiwo.silogen.ai,resources=kaiwoservices/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=kaiwo.silogen.ai,resources=kaiwoservices/finalizers,verbs=update
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the KaiwoService object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.20.0/pkg/reconcile
 func (r *KaiwoServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	logger := log.FromContext(ctx)
+	baseutils.Debug(logger, "Running KaiwoService reconciliation")
 
-	// TODO(user): your logic here
+	var kaiwoService kaiwov1alpha1.KaiwoService
+	if err := r.Get(ctx, req.NamespacedName, &kaiwoService); err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to get KaiwoService: %w", err)
+		}
+		baseutils.Debug(logger, "KaiwoService resource %s/%s not found", req.Namespace, req.Name)
+		return ctrl.Result{}, nil
+	}
 
-	return ctrl.Result{}, nil
+	reconciler := workloadservice.NewKaiwoServiceReconciler(&kaiwoService)
+
+	result, _, err := reconciler.Reconcile(ctx, r.Client, r.Scheme, false /* dryRun */)
+	if err != nil {
+		r.Recorder.Eventf(
+			&kaiwoService,
+			corev1.EventTypeWarning,
+			"KaiwoServiceReconcileError",
+			"Failed to reconcile KaiwoService: %v", err,
+		)
+		return ctrl.Result{}, fmt.Errorf("failed to reconcile KaiwoService: %v", err)
+	}
+	return result, nil
 }
 
-// SetupWithManager sets up the controller with the Manager.
 func (r *KaiwoServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.Recorder = mgr.GetEventRecorderFor("kaiwoservice-controller")
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kaiwov1alpha1.KaiwoService{}).
+		Watches(
+			&appsv1.Deployment{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				return mapDeploymentToKaiwoService(obj)
+			}),
+		).
+		Watches(
+			&rayv1.RayService{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				return mapRayServiceToKaiwoService(obj)
+			}),
+		).
 		Named("kaiwoservice").
 		Complete(r)
+}
+
+func mapDeploymentToKaiwoService(obj client.Object) []reconcile.Request {
+	dep, ok := obj.(*appsv1.Deployment)
+	if !ok {
+		return nil
+	}
+	return []reconcile.Request{
+		{
+			NamespacedName: client.ObjectKey{
+				Name:      dep.Name,
+				Namespace: dep.Namespace,
+			},
+		},
+	}
+}
+
+func mapRayServiceToKaiwoService(obj client.Object) []reconcile.Request {
+	raySrv, ok := obj.(*rayv1.RayService)
+	if !ok {
+		return nil
+	}
+	return []reconcile.Request{
+		{
+			NamespacedName: client.ObjectKey{
+				Name:      raySrv.Name,
+				Namespace: raySrv.Namespace,
+			},
+		},
+	}
 }

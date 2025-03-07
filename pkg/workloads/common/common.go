@@ -15,11 +15,16 @@
 package workloadcommon
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
@@ -358,4 +363,62 @@ func updatePodSpecStorage(podSpec *corev1.PodSpec, storageSpec v1alpha1.StorageS
 	for i := range podSpec.InitContainers {
 		addContainerInfo(&podSpec.InitContainers[i])
 	}
+}
+
+func GetEarliestPodStartTime(ctx context.Context, k8sClient client.Client, name string, namespace string) *metav1.Time {
+	podList := &corev1.PodList{}
+	if err := k8sClient.List(ctx, podList, client.InNamespace(namespace), client.MatchingLabels{baseutils.KaiwoNameLabel: name}); err != nil {
+		return nil
+	}
+
+	var earliestStartTime *metav1.Time
+	for _, pod := range podList.Items {
+		if pod.Status.StartTime != nil {
+			if earliestStartTime == nil || pod.Status.StartTime.Before(earliestStartTime) {
+				earliestStartTime = pod.Status.StartTime
+			}
+		}
+	}
+	return earliestStartTime
+}
+
+func CheckPodStatus(ctx context.Context, k8sClient client.Client, name string, namespace string, startTime *metav1.Time) (earliestRunningTime *metav1.Time, status v1alpha1.Status, err error) {
+	logger := log.FromContext(ctx)
+
+	podList := &corev1.PodList{}
+	err = k8sClient.List(ctx, podList, client.InNamespace(namespace), client.MatchingLabels{baseutils.KaiwoNameLabel: name})
+	if err != nil {
+		logger.Error(err, "Failed to list pods for job", "KaiwoJob", name)
+		return nil, status, err
+	}
+
+	var runningPods, pendingPods []corev1.Pod
+
+	for _, pod := range podList.Items {
+		switch pod.Status.Phase {
+		case corev1.PodRunning:
+			runningPods = append(runningPods, pod)
+			if pod.Status.StartTime != nil {
+				if earliestRunningTime == nil || pod.Status.StartTime.Before(earliestRunningTime) {
+					earliestRunningTime = pod.Status.StartTime
+				}
+			}
+		case corev1.PodPending:
+			pendingPods = append(pendingPods, pod)
+		}
+	}
+
+	if earliestRunningTime != nil && startTime == nil {
+		return earliestRunningTime, status, nil
+	}
+
+	if len(runningPods) > 0 {
+		status = v1alpha1.StatusRunning
+	} else if len(pendingPods) > 0 {
+		status = v1alpha1.StatusStarting
+	} else {
+		status = v1alpha1.StatusPending
+	}
+
+	return earliestRunningTime, status, nil
 }

@@ -18,8 +18,6 @@ import (
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
 // KaiwoJobSpec defines the desired state of KaiwoJob.
@@ -76,14 +74,12 @@ type KaiwoJob struct {
 	Status KaiwoJobStatus `json:"status,omitempty"`
 }
 
-func (job *KaiwoJob) GetLabelContext() baseutils.KaiwoLabelContext {
-	return baseutils.KaiwoLabelContext{
-		User:    baseutils.ValueOrDefault(job.Spec.User),
-		Name:    job.GetName(),
-		Type:    "job",
-		RunId:   string(job.UID),
-		Managed: job.Labels[baseutils.KaiwoManagedLabel],
-	}
+func (job *KaiwoJob) GetUser() *string {
+	return job.Spec.User
+}
+
+func (job *KaiwoJob) ResourceType() string {
+	return "job"
 }
 
 // +kubebuilder:object:root=true

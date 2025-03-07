@@ -41,23 +41,7 @@ import (
 func GetDefaultRayJobSpec(dangerous bool, resourceRequirements v1.ResourceRequirements) rayv1.RayJobSpec {
 	return rayv1.RayJobSpec{
 		ShutdownAfterJobFinishes: true,
-		RayClusterSpec: &rayv1.RayClusterSpec{
-			EnableInTreeAutoscaling: baseutils.Pointer(false),
-			HeadGroupSpec: rayv1.HeadGroupSpec{
-				RayStartParams: map[string]string{},
-				Template:       workloadcommon.GetPodTemplate(resource.MustParse("1Gi"), dangerous, resourceRequirements),
-			},
-			WorkerGroupSpecs: []rayv1.WorkerGroupSpec{
-				{
-					GroupName:      "default-worker-group",
-					Replicas:       baseutils.Pointer(int32(1)),
-					MinReplicas:    baseutils.Pointer(int32(1)),
-					MaxReplicas:    baseutils.Pointer(int32(1)),
-					RayStartParams: map[string]string{},
-					Template:       workloadcommon.GetPodTemplate(resource.MustParse("200Gi"), dangerous, resourceRequirements), // TODO: add to CRD as configurable field
-				},
-			},
-		},
+		RayClusterSpec:           workloadcommon.GetRayClusterTemplate(dangerous, resourceRequirements),
 	}
 }
 
@@ -113,16 +97,14 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 		}, true)
 	}
 
-	labelContext := r.KaiwoJob.GetLabelContext()
+	labelContext := baseutils.GetKaiwoLabelContext(r.KaiwoJob)
 
 	replicas := baseutils.ValueOrDefault(spec.Replicas)
 	gpusPerReplica := baseutils.ValueOrDefault(spec.GpusPerReplica)
 
-	var calculatedGpus int
-	calculatedGpus = baseutils.ValueOrDefault(r.KaiwoJob.Spec.CommonMetaSpec.Gpus)
+	calculatedGpus := baseutils.ValueOrDefault(r.KaiwoJob.Spec.CommonMetaSpec.Gpus)
 
 	if baseutils.ValueOrDefault(spec.Gpus) > 0 || gpusPerReplica > 0 {
-		// Only calculate if it is needed, otherwise avoid interacting with the cluster
 		var err error
 		calculatedGpus, replicas, gpusPerReplica, err = controllerutils.CalculateNumberOfReplicas(
 			ctx,
@@ -144,10 +126,8 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 
 	var overrideDefaults bool
 
-	if calculatedGpus > 0 {
-		if spec.RayJob == nil {
-			overrideDefaults = true
-		}
+	if calculatedGpus > 0 && spec.RayJob == nil {
+		overrideDefaults = true
 	} else {
 		overrideDefaults = false
 	}
@@ -173,15 +153,17 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 		rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].MaxReplicas = baseutils.Pointer(int32(replicas))
 	}
 
-	// Construct the RayJob object
 	rayJob := &rayv1.RayJob{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      r.ObjectKey.Name,
 			Namespace: r.ObjectKey.Namespace,
-			Labels:    r.KaiwoJob.Labels,
+			Labels:    rayJobSpec.RayClusterSpec.HeadGroupSpec.Template.ObjectMeta.Labels,
 		},
 		Spec: rayJobSpec,
 	}
+
+	baseutils.CopyLabels(r.KaiwoJob.ObjectMeta.Labels, &rayJob.ObjectMeta)
+	baseutils.SetKaiwoSystemLabels(labelContext, &rayJob.ObjectMeta)
 
 	return rayJob, nil
 }
