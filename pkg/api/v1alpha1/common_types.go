@@ -16,6 +16,8 @@ package v1alpha1
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
 // Common labels used across resources.
@@ -274,3 +276,22 @@ type SecretVolume struct {
 	SubPath    string `json:"subPath,omitempty"`
 	MountPath  string `json:"mountPath,omitempty"`
 }
+
+type KaiwoObject interface {
+	GetName() string
+	GetUID() types.UID
+	GetLabels() map[string]string
+	GetUser() *string     
+	ResourceType() string
+    }
+
+func GetKaiwoLabelContext(k KaiwoObject) baseutils.KaiwoLabelContext {
+	return baseutils.KaiwoLabelContext{
+		User:    baseutils.ValueOrDefault(k.GetUser()),
+		Name:    k.GetName(),
+		Type:    k.ResourceType(),
+		RunId:   string(k.GetUID()),
+		Managed: k.GetLabels()[baseutils.KaiwoManagedLabel],
+	}
+}
+    

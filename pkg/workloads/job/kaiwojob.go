@@ -186,7 +186,6 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, k8sClient client.Cli
 	}
 
 	if downloadJobResult == nil {
-		// Only run, if there is no interrupting download job result
 
 		localQueue, _, err := r.LocalQueue.Reconcile(ctx, k8sClient, scheme, kaiwoJob, dryRun)
 		if err != nil {
@@ -222,13 +221,11 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, k8sClient client.Cli
 	}
 
 	if reflect.DeepEqual(previousStatus, status) {
-		// Nothing to update
 		return ctrl.Result{}, nil, nil
 	}
 
 	retryAttempts := 3
 	for i := 0; i < retryAttempts; i++ {
-		// Reload to fetch the latest state
 		if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(kaiwoJob), kaiwoJob); err != nil {
 			return ctrl.Result{}, nil, fmt.Errorf("failed to get kaiwoJob: %w", err)
 		}
