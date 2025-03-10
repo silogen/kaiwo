@@ -52,7 +52,7 @@ spec:
                         containers:
                         - image: ghcr.io/silogen/rocm-ray:v0.8
                           imagePullPolicy: Always
-                          name: workload
+                          name: ray-head
                           resources:
                             limits:
                               cpu: "2"
@@ -98,7 +98,7 @@ spec:
                             value: "8"
                           image: ghcr.io/silogen/rocm-ray:v0.8
                           imagePullPolicy: Always
-                          name: workload
+                          name: ray-worker
                           resources:
                             limits:
                               cpu: "32"
