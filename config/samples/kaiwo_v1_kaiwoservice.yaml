@@ -1,9 +1,19 @@
 apiVersion: kaiwo.silogen.ai/v1alpha1
 kind: KaiwoService
 metadata:
-  labels:
-    app.kubernetes.io/name: kaiwo
-    app.kubernetes.io/managed-by: kustomize
-  name: kaiwoservice-sample
+  name: kaiwoservice-1
 spec:
-  # TODO(user): Add fields here
+  user: test-user
+  resources:
+    requests:
+      cpu: "1"
+      memory: "2Gi"
+    limits:
+      cpu: "1"
+      memory: "2Gi"
+  image: busybox:latest
+  entrypoint: |
+    while true; do
+      echo "Hello, world!"
+      sleep 1
+    done

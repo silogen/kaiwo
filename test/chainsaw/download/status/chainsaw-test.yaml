@@ -44,7 +44,7 @@ spec:
               metadata:
                 name: test-job-kaiwojob-positive
               status:
-                Status: COMPLETE
+                status: COMPLETE
       catch:
         - events: {}
         - podLogs: {}
@@ -90,4 +90,4 @@ spec:
               metadata:
                 name: test-job-kaiwojob-negative
               status:
-                Status: FAILED
+                status: FAILED

@@ -27,7 +27,7 @@ func GetRayClusterTemplate(dangerous bool, resourceRequirements v1.ResourceRequi
 		EnableInTreeAutoscaling: baseutils.Pointer(false),
 		HeadGroupSpec: rayv1.HeadGroupSpec{
 			RayStartParams: map[string]string{},
-			Template:       GetPodTemplate(resource.MustParse("1Gi"), dangerous, resourceRequirements),
+			Template:       GetPodTemplate(resource.MustParse("1Gi"), dangerous, resourceRequirements, "ray-head"),
 		},
 		WorkerGroupSpecs: []rayv1.WorkerGroupSpec{
 			{
@@ -36,7 +36,7 @@ func GetRayClusterTemplate(dangerous bool, resourceRequirements v1.ResourceRequi
 				MinReplicas:    baseutils.Pointer(int32(1)),
 				MaxReplicas:    baseutils.Pointer(int32(1)),
 				RayStartParams: map[string]string{},
-				Template:       GetPodTemplate(resource.MustParse("200Gi"), dangerous, resourceRequirements), // TODO: add to CRD as configurable field
+				Template:       GetPodTemplate(resource.MustParse("200Gi"), dangerous, resourceRequirements, "ray-worker"), // TODO: add to CRD as configurable field
 			},
 		},
 	}

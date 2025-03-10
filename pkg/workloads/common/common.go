@@ -162,7 +162,7 @@ var (
 	DefaultCPU    = resource.MustParse("2")
 )
 
-func GetPodTemplate(dshmSize resource.Quantity, dangerous bool, resources corev1.ResourceRequirements) corev1.PodTemplateSpec {
+func GetPodTemplate(dshmSize resource.Quantity, dangerous bool, resources corev1.ResourceRequirements, workloadContainerName string) corev1.PodTemplateSpec {
 	resourceRequirements := resources.DeepCopy()
 	if resourceRequirements.Requests == nil {
 		resourceRequirements.Requests = corev1.ResourceList{}
@@ -187,7 +187,7 @@ func GetPodTemplate(dshmSize resource.Quantity, dangerous bool, resources corev1
 			RestartPolicy: corev1.RestartPolicyNever,
 			Containers: []corev1.Container{
 				{
-					Name:            "workload",
+					Name:            workloadContainerName,
 					ImagePullPolicy: corev1.PullAlways,
 					Resources:       *resourceRequirements,
 					VolumeMounts: []corev1.VolumeMount{

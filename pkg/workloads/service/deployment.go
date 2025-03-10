@@ -40,6 +40,7 @@ func GetDefaultDeploymentSpec(dangerous bool, resourceRequirements corev1.Resour
 			*resource.NewQuantity(1*1024*1024*1024, resource.BinarySI),
 			dangerous,
 			resourceRequirements,
+			"workload",
 		),
 	}
 }
@@ -80,6 +81,12 @@ func (r *DeploymentReconciler) Build(ctx context.Context, _ client.Client) (*app
 	} else {
 		depSpec = svcSpec.Deployment.Spec
 		overrideDefaults = false
+	}
+
+	depSpec.Template.Spec.RestartPolicy = corev1.RestartPolicyAlways
+
+	if depSpec.Template.ObjectMeta.Labels == nil {
+		depSpec.Template.ObjectMeta.Labels = map[string]string{}
 	}
 
 	depSpec.Selector.MatchLabels["app"] = r.ObjectKey.Name
