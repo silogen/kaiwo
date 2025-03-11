@@ -65,3 +65,11 @@ rules:
       - roles
       - rolebindings
     verbs: ["get", "list", "watch"]
+  
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  - apiGroups: ["ray.io"]
+    resources: ["rayservices"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

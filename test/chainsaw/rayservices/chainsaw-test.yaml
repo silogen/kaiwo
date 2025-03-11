@@ -1,0 +1,74 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: kaiwoservice-reconciliation-ray
+spec:
+  steps:
+    - try:
+        - apply:
+            resource:
+              apiVersion: kaiwo.silogen.ai/v1alpha1
+              kind: KaiwoService
+              metadata:
+                name: kaiwoservice-1
+                namespace: kaiwo-test
+              spec:
+                user: test-user
+                resources:
+                  requests:
+                    cpu: "1"
+                    memory: "2Gi"
+                  limits:
+                    cpu: "1"
+                    memory: "2Gi"
+                ray: true
+                image: ghcr.io/silogen/ray-test:v0.3
+                serveConfigV2: |
+                  applications:
+                  - name: llm
+                    route_prefix: /
+                    import_path: mounted:deployment
+                    deployments:
+                    - name: VLLMDeployment
+                      autoscaling_config:
+                        metrics_interval_s: 0.2
+                        look_back_period_s: 2
+                        downscale_delay_s: 600
+                        upscale_delay_s: 30
+                        target_num_ongoing_requests_per_replica: 20
+                      graceful_shutdown_timeout_s: 5
+                      max_concurrent_queries: 100
+        - assert:
+            resource:
+              apiVersion: kaiwo.silogen.ai/v1alpha1
+              kind: KaiwoService
+              metadata:
+                name: kaiwoservice-1
+                namespace: kaiwo-test
+              status:
+                status: PENDING
+        - assert:
+            resource:
+              apiVersion: ray.io/v1
+              kind: RayService
+              metadata:
+                name: kaiwoservice-1
+                namespace: kaiwo-test
+        - assert:
+            resource:
+              apiVersion: v1
+              kind: Pod
+              metadata:
+                (contains(name, '-head')): true
+                namespace: kaiwo-test
+                labels:
+                  ray.io/node-type: head
+        - assert:
+            resource:
+              apiVersion: v1
+              kind: Pod
+              metadata:
+                (contains(name, '-worker')): true
+                namespace: kaiwo-test
+                labels:
+                  ray.io/node-type: worker

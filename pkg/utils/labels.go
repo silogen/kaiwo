@@ -14,7 +14,10 @@
 
 package baseutils
 
-import v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+import (
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+)
 
 const (
 	KaiwoLabelBase    = "kaiwo.silogen.ai"
@@ -53,5 +56,23 @@ func CopyLabels(kaiwoLabels map[string]string, objectMeta *v1.ObjectMeta) {
 		if _, exists := objectMeta.Labels[kaiwoLabelKey]; !exists {
 			objectMeta.Labels[kaiwoLabelKey] = kaiwoLabelValue
 		}
+	}
+}
+
+type KaiwoObject interface {
+	GetName() string
+	GetUID() types.UID
+	GetLabels() map[string]string
+	GetUser() *string
+	ResourceType() string
+}
+
+func GetKaiwoLabelContext(k KaiwoObject) KaiwoLabelContext {
+	return KaiwoLabelContext{
+		User:    ValueOrDefault(k.GetUser()),
+		Name:    k.GetName(),
+		Type:    k.ResourceType(),
+		RunId:   string(k.GetUID()),
+		Managed: k.GetLabels()[KaiwoManagedLabel],
 	}
 }

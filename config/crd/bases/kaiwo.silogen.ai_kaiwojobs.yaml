@@ -15,7 +15,7 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .status.Status
+    - jsonPath: .status.status
       name: Status
       type: string
     - jsonPath: .status.startTime
@@ -34546,8 +34546,6 @@ spec:
           status:
             description: KaiwoJobStatus defines the observed state of KaiwoJob.
             properties:
-              Status:
-                type: string
               completionTime:
                 format: date-time
                 type: string
@@ -34615,6 +34613,8 @@ spec:
                 type: integer
               startTime:
                 format: date-time
+                type: string
+              status:
                 type: string
             type: object
         type: object

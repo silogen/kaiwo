@@ -77,6 +77,8 @@ spec:
             value: "false"
           - name: ENFORCE_KAIWO_ON_GPU_WORKLOADS
             value: "false"
+          - name: RAY_HEAD_POD_MEMORY
+            value: "16Gi"
         name: manager
         ports: []
         securityContext:

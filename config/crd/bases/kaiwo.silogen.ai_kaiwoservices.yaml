@@ -14,7 +14,17 @@ spec:
     singular: kaiwoservice
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.status
+      name: Status
+      type: string
+    - jsonPath: .status.startTime
+      name: StartTime
+      type: string
+    - jsonPath: .status.duration
+      name: Duration(s)
+      type: integer
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         properties:
@@ -26976,8 +26986,6 @@ spec:
           status:
             description: KaiwoServiceStatus defines the observed state of KaiwoService.
             properties:
-              Status:
-                type: string
               conditions:
                 items:
                   description: Condition contains details for one aspect of the current
@@ -27034,6 +27042,17 @@ spec:
                   - type
                   type: object
                 type: array
+              duration:
+                format: int64
+                type: integer
+              observedGeneration:
+                format: int64
+                type: integer
+              startTime:
+                format: date-time
+                type: string
+              status:
+                type: string
             type: object
         type: object
     served: true

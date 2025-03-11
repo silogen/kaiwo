@@ -21,7 +21,6 @@ import (
 
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	batchv1 "k8s.io/api/batch/v1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -29,6 +28,7 @@ import (
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
+	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
 	workloadshared "github.com/silogen/kaiwo/pkg/workloads/common"
 
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -186,7 +186,6 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, k8sClient client.Cli
 	}
 
 	if downloadJobResult == nil {
-		// Only run, if there is no interrupting download job result
 
 		localQueue, _, err := r.LocalQueue.Reconcile(ctx, k8sClient, scheme, kaiwoJob, dryRun)
 		if err != nil {
@@ -222,13 +221,11 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, k8sClient client.Cli
 	}
 
 	if reflect.DeepEqual(previousStatus, status) {
-		// Nothing to update
 		return ctrl.Result{}, nil, nil
 	}
 
 	retryAttempts := 3
 	for i := 0; i < retryAttempts; i++ {
-		// Reload to fetch the latest state
 		if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(kaiwoJob), kaiwoJob); err != nil {
 			return ctrl.Result{}, nil, fmt.Errorf("failed to get kaiwoJob: %w", err)
 		}
@@ -274,7 +271,7 @@ func (r *KaiwoJobReconciler) GatherStatus(ctx context.Context, k8sClient client.
 	var status kaiwov1alpha1.Status
 
 	if currentStatus.StartTime == nil {
-		if startTime := getEarliestPodStartTime(ctx, k8sClient, kaiwoJob); startTime != nil {
+		if startTime := workloadcommon.GetEarliestPodStartTime(ctx, k8sClient, kaiwoJob.Name, kaiwoJob.Namespace); startTime != nil {
 			currentStatus.StartTime = startTime
 		}
 	}
@@ -292,7 +289,7 @@ func (r *KaiwoJobReconciler) GatherStatus(ctx context.Context, k8sClient client.
 			currentStatus.Duration = int64(currentStatus.CompletionTime.Time.Sub(currentStatus.StartTime.Time).Seconds())
 		}
 	} else {
-		startTime, latestStatus, err := checkPodStatus(ctx, k8sClient, kaiwoJob)
+		startTime, latestStatus, err := workloadcommon.CheckPodStatus(ctx, k8sClient, kaiwoJob.Name, kaiwoJob.Namespace, currentStatus.StartTime)
 		if err != nil {
 			return nil, fmt.Errorf("error fetching start time and status: %w", err)
 		}
@@ -349,62 +346,4 @@ func checkJobCompletion(ctx context.Context, k8sClient client.Client, kaiwoJob *
 	}
 
 	return jobSucceeded, jobFailed, nil
-}
-
-func checkPodStatus(ctx context.Context, k8sClient client.Client, kaiwoJob *kaiwov1alpha1.KaiwoJob) (earliestRunningTime *metav1.Time, status kaiwov1alpha1.Status, err error) {
-	logger := log.FromContext(ctx)
-
-	podList := &corev1.PodList{}
-	err = k8sClient.List(ctx, podList, client.InNamespace(kaiwoJob.Namespace), client.MatchingLabels{"job-name": kaiwoJob.Name})
-	if err != nil {
-		logger.Error(err, "Failed to list pods for job", "KaiwoJob", kaiwoJob.Name)
-		return nil, status, err
-	}
-
-	var runningPods, pendingPods []corev1.Pod
-
-	for _, pod := range podList.Items {
-		switch pod.Status.Phase {
-		case corev1.PodRunning:
-			runningPods = append(runningPods, pod)
-			if pod.Status.StartTime != nil {
-				if earliestRunningTime == nil || pod.Status.StartTime.Before(earliestRunningTime) {
-					earliestRunningTime = pod.Status.StartTime
-				}
-			}
-		case corev1.PodPending:
-			pendingPods = append(pendingPods, pod)
-		}
-	}
-
-	if earliestRunningTime != nil && kaiwoJob.Status.StartTime == nil {
-		return earliestRunningTime, status, nil
-	}
-
-	if len(runningPods) > 0 {
-		status = kaiwov1alpha1.StatusRunning
-	} else if len(pendingPods) > 0 {
-		status = kaiwov1alpha1.StatusStarting
-	} else {
-		status = kaiwov1alpha1.StatusPending
-	}
-
-	return earliestRunningTime, status, nil
-}
-
-func getEarliestPodStartTime(ctx context.Context, k8sClient client.Client, kaiwoJob *kaiwov1alpha1.KaiwoJob) *metav1.Time {
-	podList := &corev1.PodList{}
-	if err := k8sClient.List(ctx, podList, client.InNamespace(kaiwoJob.Namespace), client.MatchingLabels{"job-name": kaiwoJob.Name}); err != nil {
-		return nil
-	}
-
-	var earliestStartTime *metav1.Time
-	for _, pod := range podList.Items {
-		if pod.Status.StartTime != nil {
-			if earliestStartTime == nil || pod.Status.StartTime.Before(earliestStartTime) {
-				earliestStartTime = pod.Status.StartTime
-			}
-		}
-	}
-	return earliestStartTime
 }

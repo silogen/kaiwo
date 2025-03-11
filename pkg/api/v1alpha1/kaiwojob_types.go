@@ -18,8 +18,6 @@ import (
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
 // KaiwoJobSpec defines the desired state of KaiwoJob.
@@ -57,14 +55,14 @@ type KaiwoJobStatus struct {
 	StartTime          *metav1.Time       `json:"startTime,omitempty"`
 	CompletionTime     *metav1.Time       `json:"completionTime,omitempty"`
 	Conditions         []metav1.Condition `json:"conditions,omitempty"`
-	Status             Status             `json:"Status,omitempty"`
+	Status             Status             `json:"status,omitempty"`
 	Duration           int64              `json:"duration,omitempty"`
 	ObservedGeneration int64              `json:"observedGeneration,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.Status"
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.status"
 // +kubebuilder:printcolumn:name="StartTime",type="string",JSONPath=".status.startTime"
 // +kubebuilder:printcolumn:name="CompletionTime",type="string",JSONPath=".status.completionTime"
 // +kubebuilder:printcolumn:name="Duration(s)",type="integer",JSONPath=".status.duration"
@@ -76,14 +74,12 @@ type KaiwoJob struct {
 	Status KaiwoJobStatus `json:"status,omitempty"`
 }
 
-func (job *KaiwoJob) GetLabelContext() baseutils.KaiwoLabelContext {
-	return baseutils.KaiwoLabelContext{
-		User:    baseutils.ValueOrDefault(job.Spec.User),
-		Name:    job.GetName(),
-		Type:    "job",
-		RunId:   string(job.UID),
-		Managed: job.Labels[baseutils.KaiwoManagedLabel],
-	}
+func (job *KaiwoJob) GetUser() *string {
+	return job.Spec.User
+}
+
+func (job *KaiwoJob) ResourceType() string {
+	return "job"
 }
 
 // +kubebuilder:object:root=true

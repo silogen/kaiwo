@@ -25,18 +25,18 @@ type KaiwoServiceSpec struct {
 	CommonMetaSpec `json:",inline"`
 
 	// ClusterQueue is the Kueue ClusterQueue name.
-	ClusterQueue string `json:"clusterQueue,omitempty"`
+	ClusterQueue *string `json:"clusterQueue,omitempty"`
 
 	// PriorityClass specifies the Kubernetes PriorityClass for scheduling.
-	PriorityClass string `json:"priorityClass,omitempty"`
+	PriorityClass *string `json:"priorityClass,omitempty"`
 
 	// EntryPoint specifies the command or script executed in a Deployment.
 	// Can also be defined inside Deployment struct as regular command in the form of string array
-	EntryPoint string `json:"entrypoint,omitempty"`
+	EntryPoint *string `json:"entrypoint,omitempty"`
 
 	// Defines the applications and deployments to deploy, should be a YAML multi-line scalar string.
 	// Can also be defined inside RayService struct
-	ServeConfigV2 string `json:"serveConfigV2,omitempty"`
+	ServeConfigV2 *string `json:"serveConfigV2,omitempty"`
 
 	// Optional workload-specific configs (Pointers to avoid bloating CRD)
 	RayService *rayv1.RayService  `json:"rayService,omitempty"`
@@ -45,12 +45,18 @@ type KaiwoServiceSpec struct {
 
 // KaiwoServiceStatus defines the observed state of KaiwoService.
 type KaiwoServiceStatus struct {
-	Conditions []metav1.Condition `json:"conditions,omitempty"`
-	Status     Status             `json:"Status,omitempty"`
+	StartTime          *metav1.Time       `json:"startTime,omitempty"`
+	Conditions         []metav1.Condition `json:"conditions,omitempty"`
+	Status             Status             `json:"status,omitempty"`
+	Duration           int64              `json:"duration,omitempty"`
+	ObservedGeneration int64              `json:"observedGeneration,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.status"
+// +kubebuilder:printcolumn:name="StartTime",type="string",JSONPath=".status.startTime"
+// +kubebuilder:printcolumn:name="Duration(s)",type="integer",JSONPath=".status.duration"
 type KaiwoService struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -64,6 +70,18 @@ type KaiwoServiceList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []KaiwoService `json:"items"`
+}
+
+func (svc *KaiwoService) GetUser() *string {
+	return svc.Spec.User
+}
+
+func (svc *KaiwoService) ResourceType() string {
+	return "service"
+}
+
+func (spec *KaiwoServiceSpec) IsRayService() bool {
+	return spec.RayService != nil || (spec.Ray != nil && *spec.Ray)
 }
 
 func init() {
