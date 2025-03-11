@@ -12,3 +12,5 @@ spec:
     exec: 10s
   execution:
     parallel: 1
+# test/chainsaw/values/sensitive/values.yaml
+# test/chainsaw/values/sensitive/values.yaml

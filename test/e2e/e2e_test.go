@@ -21,7 +21,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -51,9 +50,15 @@ func getChainsawArgs() ([]string, error) {
 		"test",
 		"--test-dir",
 	}
+	chainsawDir := filepath.Join("../", "chainsaw")
+	absoluteChainsawDir, err := filepath.Abs(chainsawDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get absolute chainsaw dir: %w", err)
+	}
+	chainsawDir = absoluteChainsawDir
 
 	if runningInCI {
-		args = append(args, "test/chainsaw/tests/standard", "--config", "test/chainsaw/configs/ci.yaml")
+		args = append(args, filepath.Join(chainsawDir, "tests/standard"), "--config", filepath.Join(chainsawDir, "configs/ci.yaml"))
 	} else {
 		hfToken := os.Getenv("HF_TOKEN")
 		if hfToken == "" {
@@ -66,7 +71,8 @@ func getChainsawArgs() ([]string, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate yaml file: %w", err)
 		}
-		valuesFile := "test/chainsaw/values/sensitive/values.yaml"
+		valuesFile := filepath.Join(chainsawDir, "values/sensitive/values.yaml")
+
 		f, err := os.Create(valuesFile)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create values file: %w", err)
@@ -78,15 +84,15 @@ func getChainsawArgs() ([]string, error) {
 			}
 		}(f)
 
-		_, err = io.Writer.Write(f, yamlFile)
+		_, err = f.Write(yamlFile)
 		if err != nil {
 			return nil, fmt.Errorf("failed to write values file: %w", err)
 		}
 		args = append(
 			args,
-			"test/chainsaw/tests",
+			filepath.Join(chainsawDir, "tests"),
 			"--config",
-			"test/chainsaw/configs/local.yaml",
+			filepath.Join(chainsawDir, "configs/local.yaml"),
 			"--values",
 			valuesFile,
 		)
