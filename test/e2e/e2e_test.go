@@ -18,13 +18,17 @@ package e2e
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -38,12 +42,69 @@ const (
 	test_namespace = "kaiwo-test"
 )
 
-var parallel = func() int {
-	if os.Getenv("CI") != "" {
-		return 1
-	}
-	return 3
+var runningInCI = func() bool {
+	return os.Getenv("CI") != ""
 }()
+
+func getChainsawArgs() ([]string, error) {
+	args := []string{
+		"test",
+		"--test-dir",
+	}
+
+	if runningInCI {
+		args = append(args, "test/chainsaw/tests/standard", "--config", "test/chainsaw/configs/ci.yaml")
+	} else {
+		hfToken := os.Getenv("HF_TOKEN")
+		if hfToken == "" {
+			return nil, fmt.Errorf("cannot run tests without the environmental variable HF_TOKEN set")
+		}
+		values := map[string]string{
+			"hf_token_base64": base64.StdEncoding.EncodeToString([]byte(hfToken)),
+		}
+		yamlFile, err := yaml.Marshal(&values)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate yaml file: %w", err)
+		}
+		valuesFile := "test/chainsaw/values/sensitive/values.yaml"
+		f, err := os.Create(valuesFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create values file: %w", err)
+		}
+		defer func(f *os.File) {
+			err := f.Close()
+			if err != nil {
+				panic(err)
+			}
+		}(f)
+
+		_, err = io.Writer.Write(f, yamlFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to write values file: %w", err)
+		}
+		args = append(
+			args,
+			"test/chainsaw/tests",
+			"--config",
+			"test/chainsaw/configs/local.yaml",
+			"--values",
+			valuesFile,
+		)
+	}
+	return args, nil
+}
+
+func validateChainsawErr(err error) error {
+	if err != nil {
+		panic(err)
+	}
+	return err
+}
+
+var (
+	chainsawArgs, chainsawErr = getChainsawArgs()
+	_                         = validateChainsawErr(chainsawErr)
+)
 
 // serviceAccountName created for the project
 const serviceAccountName = "kaiwo-controller-manager"
@@ -323,7 +384,8 @@ var _ = Describe("Manager", Ordered, func() {
 
 		It("should run all the chainsaw tests", func() {
 			By("executing chainsaw tests")
-			cmd := exec.Command("chainsaw", "test", "--test-dir", "test/chainsaw", fmt.Sprintf("--parallel=%d", parallel))
+
+			cmd := exec.Command("chainsaw", chainsawArgs...)
 			var outb, errb bytes.Buffer
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr

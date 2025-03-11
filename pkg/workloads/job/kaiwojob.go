@@ -91,7 +91,7 @@ func NewKaiwoJobReconciler(kaiwoJob *kaiwov1alpha1.KaiwoJob) KaiwoJobReconciler 
 				Name:      baseutils.FormatNameWithPostfix(objectKey.Name, "download"),
 			}
 			reconciler.DownloadJobConfigMap = workloadshared.NewDownloadJobConfigMapReconciler(downloadObjectKey, storageSpec)
-			reconciler.DownloadJob = workloadshared.NewDownloadJobReconciler(downloadObjectKey, storageSpec, objectKey.Name)
+			reconciler.DownloadJob = workloadshared.NewDownloadJobReconciler(downloadObjectKey, storageSpec, objectKey.Name, baseutils.ValueOrDefault(kaiwoJob.Spec.Env))
 		}
 	}
 
