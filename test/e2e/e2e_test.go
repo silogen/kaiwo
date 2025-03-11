@@ -53,7 +53,7 @@ func getChainsawArgs() ([]string, error) {
 	}
 
 	if runningInCI {
-		args = append(args, "test/chainsaw/tests/non-sensitive", "--config", "test/chainsaw/configs/ci.yaml")
+		args = append(args, "test/chainsaw/tests/standard", "--config", "test/chainsaw/configs/ci.yaml")
 	} else {
 		hfToken := os.Getenv("HF_TOKEN")
 		if hfToken == "" {
