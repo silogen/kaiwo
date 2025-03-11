@@ -32,6 +32,10 @@ import (
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
+const (
+	Finalizer = "kaiwo.silogen.ai/finalizer"
+)
+
 func UpdatePodSpec(kaiwoCommonMetaSpec v1alpha1.CommonMetaSpec, labelContext baseutils.KaiwoLabelContext, template *corev1.PodTemplateSpec, name string, replicas int, gpusPerReplica int, override bool) error {
 	// Update labels
 	if template.ObjectMeta.Labels == nil {
@@ -184,8 +188,12 @@ func GetPodTemplate(dshmSize resource.Quantity, dangerous bool, resources corev1
 	if _, ok := resourceRequirements.Requests[corev1.ResourceCPU]; !ok {
 		resourceRequirements.Requests[corev1.ResourceCPU] = DefaultCPU
 	}
+
+	schedulerName := baseutils.GetEnv("CUSTOM_KUBE_SCHEDULER_NAME", "default-scheduler")
+
 	podTemplate := corev1.PodTemplateSpec{
 		Spec: corev1.PodSpec{
+			SchedulerName: schedulerName,
 			RestartPolicy: corev1.RestartPolicyNever,
 			Containers: []corev1.Container{
 				{

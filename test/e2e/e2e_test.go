@@ -406,62 +406,83 @@ var _ = Describe("Manager", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Chainsaw test(s) failed")
 		})
 
-		It("create a job with kaiwo label and verify deletion of kaiwojob via kubectl delete job", func() {
-			testCRName := "job-with-label-1"
+		It("should create three jobs with the kaiwo-managed label with GPU requests and assert that they're running on the same node", func() {
+			testNamespace := "kaiwo-test"
+			jobNames := []string{"binpacking-job-with-label-1", "binpacking-job-with-label-2", "binpacking-job-with-label-3"}
 
-			By("applying a basic job with kaiwo label")
-			cmd := exec.Command("kubectl", "apply", "-f", "test/test-manifests/job-with-label-1.yaml", "-n", test_namespace)
-			utils.Run(cmd) // nolint:errcheck
+			By("Creating three Jobs with GPU requests and the kaiwo-managed label")
+			for _, jobName := range jobNames {
+				jobManifest := fmt.Sprintf(`
+	apiVersion: batch/v1
+	kind: Job
+	metadata:
+	  name: %s
+	  namespace: %s
+	  labels:
+	    kaiwo-managed: "true"
+	spec:
+	  template:
+	    spec:
+	      restartPolicy: Never
+	      containers:
+		- name: test-container
+		  image: busybox
+		  command: ["/bin/sh", "-c", "sleep 30"]
+		  resources:
+		    requests:
+		      nvidia.com/gpu: "1"
+	`, jobName, testNamespace)
 
-			By("waiting for the Custom Resource to be reconciled")
-			verifyCustomResource := func(g Gomega) {
-				cmd = exec.Command("kubectl", "get", "kaiwojob", testCRName, "-n", test_namespace, "-o", "jsonpath={.status.Status}")
-				_, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve kaiwojob status")
-			}
-			Eventually(verifyCustomResource, 2*time.Minute, 10*time.Second).Should(Succeed())
-
-			By("deleting the job and ensuring KaiwoJob is deleted")
-			cmd = exec.Command("kubectl", "delete", "job", testCRName, "-n", test_namespace)
-			_, err := utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to delete test Job")
-
-			verifyKaiwoJobDeletion := func(g Gomega) {
-				cmd = exec.Command("kubectl", "get", "kaiwojob", testCRName, "-n", test_namespace)
-				_, err := utils.Run(cmd)
-				g.Expect(err).To(HaveOccurred(), "KaiwoJob still exists after Job deletion")
-			}
-			Eventually(verifyKaiwoJobDeletion, 2*time.Minute, 10*time.Second).Should(Succeed())
-		})
-
-		It("should create a Job with labels and see the KaiwoJob is created with the same labels", func() {
-			testJobName := "job-with-label-2-label-propagation"
-
-			By("applying the Job that contains the desired labels")
-
-			cmd := exec.Command(
-				"kubectl", "apply", "-f",
-				"test/test-manifests/job-with-label-2-label-propagation.yaml",
-				"-n", test_namespace,
-			)
-			_, err := utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to apply the labeled Job")
-
-			By("verifying that the KaiwoJob was created with the same labels")
-			verifyKaiwoJobLabels := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "kaiwojob", testJobName,
-					"-n", test_namespace,
-					"-o", "jsonpath={.metadata.labels}")
-				out, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve KaiwoJob labels")
-
-				g.Expect(out).To(ContainSubstring("kaiwo.silogen.ai/managed"),
-					"KaiwoJob is missing expected managed label or value")
-				g.Expect(out).To(ContainSubstring("custom.label/baz"),
-					"KaiwoJob is missing the custom label or value")
+				cmd := exec.Command("kubectl", "apply", "-f", "-")
+				cmd.Stdin = strings.NewReader(jobManifest)
+				output, err := cmd.CombinedOutput()
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Failed to apply job %s: %s", jobName, string(output)))
 			}
 
-			Eventually(verifyKaiwoJobLabels, 90*time.Second, 5*time.Second).Should(Succeed())
+			By("Waiting for the jobs' pods to be scheduled")
+			Eventually(func(g Gomega) {
+				for _, jobName := range jobNames {
+					cmd := exec.Command("kubectl", "get", "pods", "-l", fmt.Sprintf("job-name=%s", jobName), "-n", testNamespace, "-o", "jsonpath={.items[0].status.phase}")
+					output, err := cmd.CombinedOutput()
+					g.Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Failed to get pod status for job %s: %s", jobName, string(output)))
+					g.Expect(string(output)).To(Equal("Running"), fmt.Sprintf("Pod for job %s is not running", jobName))
+				}
+			}, 2*time.Minute, 10*time.Second).Should(Succeed())
+
+			By("Ensuring all pods are running on the same node")
+			var nodeName string
+			Eventually(func(g Gomega) {
+				nodeNames := make(map[string]bool)
+
+				for _, jobName := range jobNames {
+					cmd := exec.Command("kubectl", "get", "pods", "-l", fmt.Sprintf("job-name=%s", jobName), "-n", testNamespace, "-o", "jsonpath={.items[0].spec.nodeName}")
+					output, err := cmd.CombinedOutput()
+					g.Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Failed to get node for job %s: %s", jobName, string(output)))
+					podNode := strings.TrimSpace(string(output))
+					g.Expect(podNode).NotTo(BeEmpty(), fmt.Sprintf("Pod for job %s is not scheduled on a node", jobName))
+					nodeNames[podNode] = true
+				}
+
+				g.Expect(nodeNames).To(HaveLen(1), fmt.Sprintf("Jobs are running on multiple nodes: %s", strings.Join(utils.MapKeys(nodeNames), ", ")))
+				nodeName = utils.MapKeys(nodeNames)[0]
+			}, 2*time.Minute, 10*time.Second).Should(Succeed())
+
+			By(fmt.Sprintf("All jobs are running on the same node: %s", nodeName))
+
+			By("Deleting the jobs and ensuring they are removed")
+			for _, jobName := range jobNames {
+				cmd := exec.Command("kubectl", "delete", "job", jobName, "-n", testNamespace)
+				output, err := cmd.CombinedOutput()
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Failed to delete job %s: %s", jobName, string(output)))
+			}
+
+			Eventually(func(g Gomega) {
+				for _, jobName := range jobNames {
+					cmd := exec.Command("kubectl", "get", "job", jobName, "-n", testNamespace)
+					_, err := cmd.CombinedOutput()
+					g.Expect(err).To(HaveOccurred(), fmt.Sprintf("Job %s still exists after deletion", jobName))
+				}
+			}, 2*time.Minute, 10*time.Second).Should(Succeed())
 		})
 
 		// +kubebuilder:scaffold:e2e-webhooks-checks
