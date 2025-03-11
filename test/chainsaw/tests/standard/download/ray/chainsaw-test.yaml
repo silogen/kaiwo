@@ -10,7 +10,7 @@ spec:
               apiVersion: kaiwo.silogen.ai/v1alpha1
               kind: KaiwoJob
               metadata:
-                name: test-job-kaiwojob-ray
+                name: download-job-ray-starts
               spec:
                 user: test@amd.com
                 gpus: 0
@@ -43,5 +43,5 @@ spec:
               kind: Pod
               metadata:
                 labels:
-                  kaiwo.silogen.ai/name: test-job-kaiwojob-ray
+                  kaiwo.silogen.ai/name: download-job-ray-starts
                   ray.io/is-ray-node: "yes"

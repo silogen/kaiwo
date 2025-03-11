@@ -83,6 +83,12 @@ We recommend using [Cluster-Forge](https://github.com/silogen/cluster-forge) to 
 6. Run `go run . cast`
 7. Run `go run . forge`
 
+### Installation of Kaiwo Operator (work in progress)
+
+Kaiwo Operator is a Kubernetes operator that manages the lifecycle of KaiwoJobs and KaiwoServices. It is currently under development and not yet ready for production use. The operator will be available in the future to enable more advanced features especially around GPU orchestration.
+
+TODO: finish documentation
+
 ### Installation of Kaiwo CLI tool
 
 The installation of Kaiwo CLI tool is easy as it's a single binary. The only requirement is a kubeconfig file to access a Kubernetes cluster (see authentication below for authentication plugins). If you are unsure where to get a kubeconfig, speak to the engineers who set up your Kubernetes cluster. Just like kubectl, Kaiwo will first look for a `KUBECONFIG=path` environment variable. If `KUBECONFIG` is not set, Kaiwo will then look for kubeconfig file in the default location `~/.kube/config`.
@@ -120,7 +126,6 @@ Links to authentication plugins:
 
 For example, your kubeconfig that uses kubelogin should resemble the following format:
 
-
 ```
 apiVersion: v1
 clusters:
@@ -150,8 +155,7 @@ users:
             provideClusterInfo: false
 ```
 
-In case your certificate trust store gives "untrusted" certificate errors, you can use `insecure-skip-tls-verify: true` under cluster and `--insecure-skip-tls-verify` in `kubelogin get-token` as a temporary workaround. As usual, we don't recommend this in production.  
-
+In case your certificate trust store gives "untrusted" certificate errors, you can use `insecure-skip-tls-verify: true` under cluster and `--insecure-skip-tls-verify` in `kubelogin get-token` as a temporary workaround. As usual, we don't recommend this in production.
 
 ## Usage
 
@@ -272,7 +276,7 @@ If these values do not exist, an exception is raised. If you are using the clust
 To specify storage, you can use the flags:
 
 * `--storage=2Gi` to specify the amount of storage and to use the default storage class name from the namespace labels
-* `--storage=2Gi,mystorageclass` to specify both the amount of storage and the storage class name 
+* `--storage=2Gi,mystorageclass` to specify both the amount of storage and the storage class name
 
 Note that the storage created is ephemeral and meant for caching, which means that it gets removed when the underlying pods get removed. However, the ephemeral storage is provisioned via a storage class, which ensures that the space requested is available and reserved for all pods before the workload starts.
 
@@ -286,7 +290,6 @@ Run the commands with the `--help` flag to see all the available options.
   * By default, only workloads that have been created by you are shown. This is inferred by your [username](#usernames)
   * If you want to list workloads by all users, use the `--all-users` flag
   * If you want to specify another user, use the `--user=...` flag
-
 
 Ensure that you provide the correct namespace for all commands via the `-n` or `--namespace` flags.
 

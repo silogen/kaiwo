@@ -33,6 +33,6 @@ update_env_var "KUBECONFIG" "$KUBECONFIG"
 
 make install
 
-kubectl apply -f config/webhook_local_dev/webhooks.yaml
+kubectl apply -f config/static/**
 
 echo "You can now run debugger in your IDE"

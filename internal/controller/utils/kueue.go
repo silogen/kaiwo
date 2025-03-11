@@ -35,7 +35,10 @@ import (
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
-const DefaultKaiwoQueueConfigName = "kaiwo"
+var (
+	DefaultKaiwoQueueConfigName = baseutils.GetEnv("DEFAULT_KAIWO_QUEUE_CONFIG_NAME", "kaiwo")
+	DefaultClusterQueueName     = baseutils.GetEnv("DEFAULT_CLUSTER_QUEUE_NAME", "kaiwo")
+)
 
 var excludeMasterNodes = baseutils.GetEnv("EXCLUDE_MASTER_NODES_FROM_NODE_POOLS", "false")
 

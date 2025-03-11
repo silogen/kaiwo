@@ -188,7 +188,7 @@ func (r *KaiwoQueueConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			logger.Error(err, "Failed to ensure default KaiwoQueueConfig on startup")
 			return err
 		}
-		logger.Info("Default KaiwoQueueConfig verified.")
+
 		return nil
 	})); err != nil {
 		return err
@@ -233,7 +233,7 @@ func (r *KaiwoQueueConfigReconciler) CreateDefaultKaiwoQueueConfig(ctx context.C
 		return err
 	}
 
-	clusterQueue := controllerutils.CreateClusterQueue(nodePoolResources, name)
+	clusterQueue := controllerutils.CreateClusterQueue(nodePoolResources, controllerutils.DefaultClusterQueueName)
 
 	defaultQueueConfig := kaiwov1alpha1.KaiwoQueueConfig{
 		ObjectMeta: metav1.ObjectMeta{
