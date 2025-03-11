@@ -11,5 +11,4 @@ spec:
     error: 60s
     exec: 10s
   execution:
-    failFast: true
-    parallel: 3
+    parallel: 8
