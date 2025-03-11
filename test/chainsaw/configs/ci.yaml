@@ -11,4 +11,4 @@ spec:
     error: 60s
     exec: 10s
   execution:
-    parallel: 3
+    parallel: 1
