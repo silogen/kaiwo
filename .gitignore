@@ -32,6 +32,8 @@ go.work
 
 # install file for tests
 test/merged.yaml
+dist/*
 
 # local kubeconfigs
 *kubeconfig*.yaml
+
