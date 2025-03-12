@@ -39,7 +39,6 @@ import (
 
 var (
 	enforceKaiwoOnWorkloads = baseutils.GetEnv("ENFORCE_KAIWO_ON_GPU_WORKLOADS", "false")
-	joblog                  = logf.Log.WithName("job-webhook")
 	gpuKeys                 = []corev1.ResourceName{"amd.com/gpu", "nvidia.com/gpu"}
 )
 
@@ -62,6 +61,8 @@ func (j *JobWebhook) Default(ctx context.Context, obj runtime.Object) error {
 		return fmt.Errorf("expected a Job object but got %T", obj)
 	}
 
+	logger := logf.FromContext(ctx)
+
 	if job.DeletionTimestamp != nil {
 		return nil
 	}
@@ -75,7 +76,7 @@ func (j *JobWebhook) Default(ctx context.Context, obj runtime.Object) error {
 	if strings.ToLower(enforceKaiwoOnWorkloads) == "true" { //nolint:goconst
 		for _, container := range job.Spec.Template.Spec.Containers {
 			if CheckGPUReservation(container) {
-				job.Labels["kaiwo.silogen.ai/managed"] = "true" //nolint:goconst
+				job.Labels[baseutils.KaiwoManagedLabel] = "true" //nolint:goconst
 			}
 		}
 	}
@@ -86,14 +87,14 @@ func (j *JobWebhook) Default(ctx context.Context, obj runtime.Object) error {
 		}
 		if job.Spec.Template.Spec.TerminationGracePeriodSeconds == nil {
 			job.Spec.Template.Spec.TerminationGracePeriodSeconds = baseutils.Pointer(int64(0))
+			baseutils.Debug(logger, "Set terminationGracePeriodSeconds to 0", "JobName", job.Name)
 		}
-		joblog.Info("Set terminationGracePeriodSeconds to 0", "JobName", job.Name)
 		if err := j.ensureKaiwoJob(ctx, job, authenticatedUser); err != nil {
 			return fmt.Errorf("failed to create KaiwoJob: %w", err)
 		}
 		if !baseutils.ContainsString(job.Finalizers, common.Finalizer) {
 			job.Finalizers = append(job.Finalizers, common.Finalizer)
-			joblog.Info("Added finalizer to Job", "JobName", job.Name)
+			logger.Info("Added finalizer to Job", "JobName", job.Name)
 		}
 
 	}
@@ -102,26 +103,31 @@ func (j *JobWebhook) Default(ctx context.Context, obj runtime.Object) error {
 }
 
 func kaiwoManages(job *batchv1.Job) bool {
-	return job.Labels["kaiwo.silogen.ai/managed"] == "true" //nolint:goconst
+	return job.Labels[baseutils.KaiwoManagedLabel] == "true" //nolint:goconst
 }
 
 func getAuthenticatedUser(ctx context.Context) string {
+	logger := logf.FromContext(ctx)
 	req, err := admission.RequestFromContext(ctx)
 	if err != nil {
-		joblog.Error(nil, "Failed to extract admission request from context")
+		logger.Error(nil, "Failed to extract admission request from context")
 		return "unknown-user"
 	}
 	return req.UserInfo.Username
 }
 
 func (j *JobWebhook) ensureKaiwoJob(ctx context.Context, job *batchv1.Job, authenticatedUser string) error {
+	logger := logf.FromContext(ctx)
+	logger.Info("Ensuring KaiwoJob exists for Job", "JobName", job.Name)
+
 	kaiwoJob := &kaiwov1alpha1.KaiwoJob{}
 
 	err := j.Client.Get(ctx, client.ObjectKey{Name: job.Name, Namespace: job.Namespace}, kaiwoJob)
 	if err == nil {
+		logger.Info("KaiwoJob already exists", "KaiwoJob", kaiwoJob.Name)
 		return nil
 	} else if !errors.IsNotFound(err) {
-		joblog.Error(err, "Unexpected error retrieving KaiwoJob")
+		logger.Error(err, "Unexpected error retrieving KaiwoJob")
 		return fmt.Errorf("unexpected error retrieving KaiwoJob: %w", err)
 	}
 
@@ -161,11 +167,11 @@ func (j *JobWebhook) ensureKaiwoJob(ctx context.Context, job *batchv1.Job, authe
 	}
 
 	if err := j.Client.Create(ctx, kaiwoJob); err != nil {
-		joblog.Error(err, "Failed to create KaiwoJob")
+		logger.Error(err, "Failed to create KaiwoJob")
 		return fmt.Errorf("failed to create KaiwoJob: %w", err)
 	}
 
-	joblog.Info("Successfully created KaiwoJob", "KaiwoJob", kaiwoJob.Name, "Labels", kaiwoJob.Labels)
+	logger.Info("Successfully created KaiwoJob", "KaiwoJob", kaiwoJob.Name, "Labels", kaiwoJob.Labels)
 	return nil
 }
 
@@ -195,7 +201,7 @@ func (j *JobWebhook) ValidateCreate(ctx context.Context, obj runtime.Object) (ad
 	if strings.ToLower(enforceKaiwoOnWorkloads) == "true" {
 		for _, container := range job.Spec.Template.Spec.Containers {
 			if CheckGPUReservation(container) {
-				if _, exists := job.Labels["kaiwo.silogen.ai/managed"]; !exists {
+				if _, exists := job.Labels[baseutils.KaiwoManagedLabel]; !exists {
 					return nil, fmt.Errorf("all jobs must have 'kaiwo.silogen.ai/managed' label")
 				}
 			}
@@ -210,6 +216,8 @@ func (j *JobWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.
 }
 
 func (j *JobWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	logger := logf.FromContext(ctx)
+
 	job, ok := obj.(*batchv1.Job)
 	if !ok {
 		return nil, fmt.Errorf("expected a Job object but got %T", obj)
@@ -220,7 +228,7 @@ func (j *JobWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) (ad
 		return nil, nil
 	}
 
-	joblog.Info("Removing finalizer from Job", "JobName", job.Name)
+	logger.Info("Removing finalizer from Job", "JobName", job.Name)
 
 	// **Retry removing finalizer if there's a conflict**
 	retryAttempts := 3
@@ -235,18 +243,18 @@ func (j *JobWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) (ad
 			if errors.IsConflict(err) {
 				continue // Retry
 			}
-			joblog.Error(err, "Failed to remove finalizer from Job", "JobName", job.Name)
+			logger.Error(err, "Failed to remove finalizer from Job", "JobName", job.Name)
 			return nil, fmt.Errorf("failed to remove finalizer: %w", err)
 		}
 
-		joblog.Info("Finalizer successfully removed, Job can now be deleted", "JobName", job.Name)
+		logger.Info("Finalizer successfully removed, Job can now be deleted", "JobName", job.Name)
 		break
 	}
 
 	kaiwoJob := &kaiwov1alpha1.KaiwoJob{}
 	err := j.Client.Get(ctx, client.ObjectKey{Name: job.Name, Namespace: job.Namespace}, kaiwoJob)
 	if err == nil {
-		joblog.Info("Deleting associated KaiwoJob", "KaiwoJob", kaiwoJob.Name)
+		logger.Info("Deleting associated KaiwoJob", "KaiwoJob", kaiwoJob.Name)
 
 		// Remove finalizer from KaiwoJob
 		if baseutils.ContainsString(kaiwoJob.Finalizers, common.Finalizer) {
@@ -259,7 +267,9 @@ func (j *JobWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) (ad
 		if err := j.Client.Delete(ctx, kaiwoJob); err != nil {
 			return nil, fmt.Errorf("failed to delete KaiwoJob: %w", err)
 		}
-		joblog.Info("KaiwoJob successfully deleted", "KaiwoJob", kaiwoJob.Name)
+		logger.Info("KaiwoJob successfully deleted", "KaiwoJob", kaiwoJob.Name)
+	} else if !errors.IsNotFound(err) {
+		return nil, fmt.Errorf("failed to get KaiwoJob: %w", err)
 	}
 
 	return nil, nil

@@ -99,6 +99,14 @@ func (d *ResourceReconcilerBase[T]) Reconcile(ctx context.Context, k8sClient cli
 	baseutils.Debug(logger, fmt.Sprintf("Reconciling %s (%s/%s)", gvk.String(), desired.GetNamespace(), desired.GetName()))
 
 	actual, err = d.Self.Get(ctx, k8sClient)
+
+	// Check if the reconciliation should be aborted at this point (based on remote object state)
+	if intermediateResult, err := d.Self.ValidateBeforeCreateOrUpdate(ctx, actual); err != nil {
+		return empty, nil, fmt.Errorf("failed to validate object before create or update: %w", err)
+	} else if intermediateResult != nil {
+		return empty, intermediateResult, nil
+	}
+
 	if err == nil {
 		switch any(actual).(type) {
 		case *batchv1.Job, *rayv1.RayJob:
@@ -163,6 +171,10 @@ func (d *ResourceReconcilerBase[T]) Get(ctx context.Context, k8sClient client.Cl
 	return obj, nil
 }
 
+func (d *ResourceReconcilerBase[T]) ValidateBeforeCreateOrUpdate(ctx context.Context, actual T) (*ctrl.Result, error) {
+	return nil, nil
+}
+
 func (d *ResourceReconcilerBase[T]) ShouldContinue(ctx context.Context, actual T) *ctrl.Result {
 	return nil
 }
@@ -188,4 +200,7 @@ type ResourceReconciler[T client.Object] interface {
 	ShouldContinue(ctx context.Context, actual T) *ctrl.Result
 
 	GetEmptyObject() T
+
+	// ValidateBeforeCreateOrUpdate provides a way to abort the reconciliation based on the currently existing object's state
+	ValidateBeforeCreateOrUpdate(ctx context.Context, actual T) (*ctrl.Result, error)
 }

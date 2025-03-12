@@ -20,6 +20,8 @@ import (
 	"os"
 	"strings"
 
+	ctrl "sigs.k8s.io/controller-runtime"
+
 	v1 "k8s.io/api/core/v1"
 
 	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
@@ -170,4 +172,10 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 
 func (r *RayJobReconciler) GetEmptyObject() *rayv1.RayJob {
 	return &rayv1.RayJob{}
+}
+
+func (r *RayJobReconciler) ValidateBeforeCreateOrUpdate(ctx context.Context, actual *rayv1.RayJob) (*ctrl.Result, error) {
+	// Abort reconciliation the managed label is set and actual doesn't exist, as the job is managed by the webhook
+	// This is to avoid trying to create the job that is going to be created once the webhook completes
+	return workloadcommon.ValidateKaiwoResourceBeforeCreateOrUpdate(ctx, actual, r.KaiwoJob.ObjectMeta)
 }
