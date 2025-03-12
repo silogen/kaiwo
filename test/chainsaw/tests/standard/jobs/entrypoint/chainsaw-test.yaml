@@ -1,0 +1,45 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: batch-entrypoint
+spec:
+  steps:
+    - try:
+        - apply:
+            resource:
+              apiVersion: kaiwo.silogen.ai/v1alpha1
+              kind: KaiwoJob
+              metadata:
+                name: batchjob-entrypoint-test
+              spec:
+                resources:
+                  limits:
+                    cpu: "1"
+                    memory: "2Gi"
+                  requests:
+                    cpu: "1"
+                    memory: "2Gi"
+                user: test@amd.com
+                image: busybox:latest
+                entrypoint: |
+                  ls \
+                    -lah
+                  echo "hello-batch"
+                  sleep 20
+        - assert:
+            timeout: 60s
+            resource:
+              apiVersion: v1
+              kind: Pod
+              metadata:
+                labels:
+                  job-name: batchjob-entrypoint-test
+        - sleep:
+            duration: 10s
+        - script:
+            content: ../../../../scripts/read_pod_logs.sh job-name=batchjob-entrypoint-test "$NAMESPACE"
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+            check:
+              (contains($stdout, 'hello-batch')): true
