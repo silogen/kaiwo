@@ -6,11 +6,9 @@ from typing import List, Literal
 from cloudpathlib import AzureBlobClient, CloudPath
 from pydantic import Field
 import git
-import os
 import logging
 
 from kaiwo.downloader.handlers.base import (
-    CloudDownloadBucket,
     CloudDownloadTask,
     ValueReference, DownloadTaskConfigBase,
 )
