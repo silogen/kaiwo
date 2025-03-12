@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"strings"
 
+	ctrl "sigs.k8s.io/controller-runtime"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -421,4 +423,13 @@ func CheckPodStatus(ctx context.Context, k8sClient client.Client, name string, n
 	}
 
 	return earliestRunningTime, status, nil
+}
+
+func ValidateKaiwoResourceBeforeCreateOrUpdate(ctx context.Context, actual client.Object, kaiwoObjectMeta metav1.ObjectMeta) (*ctrl.Result, error) {
+	if actual == nil && kaiwoObjectMeta.Labels != nil && kaiwoObjectMeta.Labels[baseutils.KaiwoManagedLabel] == "true" {
+		logger := log.FromContext(ctx)
+		logger.Info("Aborting reconciliation to avoid recreating a webhook-managed object")
+		return &ctrl.Result{}, nil
+	}
+	return nil, nil
 }

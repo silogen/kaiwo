@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	ctrl "sigs.k8s.io/controller-runtime"
+
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -115,4 +117,10 @@ func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batch
 
 func (r *BatchJobReconciler) GetEmptyObject() *batchv1.Job {
 	return &batchv1.Job{}
+}
+
+func (r *BatchJobReconciler) ValidateBeforeCreateOrUpdate(ctx context.Context, actual *batchv1.Job) (*ctrl.Result, error) {
+	// Abort reconciliation the managed label is set and actual doesn't exist, as the job is managed by the webhook
+	// This is to avoid trying to create the job that is going to be created once the webhook completes
+	return workloadcommon.ValidateKaiwoResourceBeforeCreateOrUpdate(ctx, actual, r.KaiwoJob.ObjectMeta)
 }
