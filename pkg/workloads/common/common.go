@@ -428,7 +428,7 @@ func CheckPodStatus(ctx context.Context, k8sClient client.Client, name string, n
 func ValidateKaiwoResourceBeforeCreateOrUpdate(ctx context.Context, actual client.Object, kaiwoObjectMeta metav1.ObjectMeta) (*ctrl.Result, error) {
 	if actual == nil && kaiwoObjectMeta.Labels != nil && kaiwoObjectMeta.Labels[baseutils.KaiwoManagedLabel] == "true" {
 		logger := log.FromContext(ctx)
-		logger.Info("Aborting reconciliation to avoid recreating a webhook-managed object")
+		baseutils.Debug(logger, "Aborting reconciliation to avoid recreating a webhook-managed object")
 		return &ctrl.Result{}, nil
 	}
 	return nil, nil
