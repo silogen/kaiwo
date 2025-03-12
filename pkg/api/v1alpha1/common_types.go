@@ -121,7 +121,11 @@ func (spec *StorageSpec) HasData() bool {
 }
 
 func (spec *StorageSpec) HasObjectStorageDownloads() bool {
-	return spec.HasData() && (len(spec.Data.Download.S3) > 0 || len(spec.Data.Download.GCS) > 0 || len(spec.Data.Download.AzureBlob) > 0)
+	return spec.HasData() &&
+		(len(spec.Data.Download.S3) > 0 ||
+			len(spec.Data.Download.GCS) > 0 ||
+			len(spec.Data.Download.AzureBlob) > 0 ||
+			len(spec.Data.Download.Git) > 0)
 }
 
 func (spec *StorageSpec) HasHfDownloads() bool {
@@ -143,6 +147,7 @@ type DownloadTaskConfig struct {
 	GCS       []GCSDownloadItem              `json:"gcs,omitempty" yaml:"gcs,omitempty"`
 	HF        []HuggingFaceDownloadItem      `json:"hf,omitempty" yaml:"hf,omitempty"`
 	AzureBlob []AzureBlobStorageDownloadItem `json:"azureBlob,omitempty" yaml:"azureBlob,omitempty"`
+	Git       []GitDownloadItem              `json:"git,omitempty" yaml:"git,omitempty"`
 }
 
 // CreateConfig creates the config required for the data downloader
@@ -160,6 +165,7 @@ func (spec *StorageSpec) CreateConfig() DownloadTaskConfig {
 			config.GCS = spec.Data.Download.GCS
 			config.S3 = spec.Data.Download.S3
 			config.AzureBlob = spec.Data.Download.AzureBlob
+			config.Git = spec.Data.Download.Git
 		}
 	}
 	if spec.HuggingFace != nil {
@@ -223,6 +229,24 @@ type HuggingFaceDownloadItem struct {
 	Files  []string `json:"files"`
 }
 
+type GitDownloadItem struct {
+	Repository string `json:"repository" yaml:"repository,omitempty"`
+
+	// Branch specifies the branch to use, ignored if commit is given
+	Branch string `json:"branch,omitempty" yaml:"branch,omitempty"`
+
+	// Commit specifies the commit to use, prioritized over branch
+	Commit   string          `json:"commit,omitempty" yaml:"commit,omitempty"`
+	Username *ValueReference `json:"username,omitempty" yaml:"username,omitempty"`
+	Token    *ValueReference `json:"token,omitempty" yaml:"token,omitempty"`
+
+	// Path denotes the path within the repository to copy. If not given, whole repository is copied
+	Path string `json:"path,omitempty" yaml:"path,omitempty"`
+
+	// TargetPath denotes where the path is copied to, relative to the data mount directory
+	TargetPath string `json:"targetPath" yaml:"targetPath"`
+}
+
 type CloudDownloadBucket struct {
 	Name    string                `json:"name"`
 	Files   []CloudDownloadFile   `json:"files,omitempty"`
@@ -249,6 +273,9 @@ type ObjectStorageDownloadSpec struct {
 
 	// AzureBlob lists any Azure Blob Storage downloads
 	AzureBlob []AzureBlobStorageDownloadItem `json:"azureBlob,omitempty"`
+
+	// Git lists any Git downloads
+	Git []GitDownloadItem `json:"git,omitempty"`
 }
 
 type HfStorageSpec struct {

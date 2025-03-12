@@ -86,6 +86,15 @@ func (r *DownloadJobConfigMapReconciler) Build(ctx context.Context, _ client.Cli
 		for i := range azureBlobDownloads {
 			setSecretPath(&azureBlobDownloads[i].ConnectionString)
 		}
+		gitDownloads := r.StorageSpec.Data.Download.Git
+		for i := range gitDownloads {
+			if gitDownloads[i].Username != nil {
+				setSecretPath(gitDownloads[i].Username)
+			}
+			if gitDownloads[i].Token != nil {
+				setSecretPath(gitDownloads[i].Token)
+			}
+		}
 	}
 
 	downloadConfig := r.StorageSpec.CreateConfig()
@@ -218,6 +227,15 @@ func (r *DownloadJobReconciler) Build(_ context.Context, _ client.Client) (*batc
 		for i := range azureBlobDownloads {
 			addSecret(&azureBlobDownloads[i].ConnectionString)
 		}
+		gitDownloads := r.StorageSpec.Data.Download.Git
+		for i := range gitDownloads {
+			if gitDownloads[i].Username != nil {
+				addSecret(gitDownloads[i].Username)
+			}
+			if gitDownloads[i].Token != nil {
+				addSecret(gitDownloads[i].Token)
+			}
+		}
 
 		for secretName, secretVolume := range secretVolumes {
 			volumeMount := corev1.VolumeMount{
@@ -267,7 +285,7 @@ func (r *DownloadJobReconciler) Build(_ context.Context, _ client.Client) (*batc
 					RestartPolicy: corev1.RestartPolicyNever,
 					Containers: []corev1.Container{
 						{
-							Image: "ghcr.io/silogen/kaiwo-python:0.2",
+							Image: "ghcr.io/silogen/kaiwo-python:0.4",
 							Name:  "data-downloader",
 							Command: []string{
 								"python",
