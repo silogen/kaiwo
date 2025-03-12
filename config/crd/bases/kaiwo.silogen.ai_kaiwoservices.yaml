@@ -26828,6 +26828,63 @@ spec:
                               - buckets
                               type: object
                             type: array
+                          git:
+                            description: Git lists any Git downloads
+                            items:
+                              properties:
+                                branch:
+                                  description: Branch specifies the branch to use,
+                                    ignored if commit is given
+                                  type: string
+                                commit:
+                                  description: Commit specifies the commit to use,
+                                    prioritized over branch
+                                  type: string
+                                path:
+                                  description: Path denotes the path within the repository
+                                    to copy. If not given, whole repository is copied
+                                  type: string
+                                repository:
+                                  type: string
+                                targetPath:
+                                  description: TargetPath denotes where the path is
+                                    copied to, relative to the data mount directory
+                                  type: string
+                                token:
+                                  properties:
+                                    file:
+                                      description: File determines the location of
+                                        the secret value mounted on the disk
+                                      type: string
+                                    secretKey:
+                                      description: SecretKey is the name of the key
+                                        within the secret where the value is kept
+                                      type: string
+                                    secretName:
+                                      description: SecretName is the name of the secret
+                                        where the value is kept
+                                      type: string
+                                  type: object
+                                username:
+                                  properties:
+                                    file:
+                                      description: File determines the location of
+                                        the secret value mounted on the disk
+                                      type: string
+                                    secretKey:
+                                      description: SecretKey is the name of the key
+                                        within the secret where the value is kept
+                                      type: string
+                                    secretName:
+                                      description: SecretName is the name of the secret
+                                        where the value is kept
+                                      type: string
+                                  type: object
+                              required:
+                              - repository
+                              - targetPath
+                              type: object
+                            type: array
                           s3:
                             description: S3 lists any S3 downloads
                             items:

@@ -64,8 +64,13 @@ func getChainsawArgs() ([]string, error) {
 		if hfToken == "" {
 			return nil, fmt.Errorf("cannot run tests without the environmental variable HF_TOKEN set")
 		}
+		githubToken := os.Getenv("GH_TOKEN")
+		if githubToken == "" {
+			return nil, fmt.Errorf("cannot run tests without the environmental variable GH_TOKEN set")
+		}
 		values := map[string]string{
 			"hf_token_base64": base64.StdEncoding.EncodeToString([]byte(hfToken)),
+			"gh_token_base64": base64.StdEncoding.EncodeToString([]byte(githubToken)),
 		}
 		yamlFile, err := yaml.Marshal(&values)
 		if err != nil {
