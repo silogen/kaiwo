@@ -6,12 +6,9 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 # Install system dependencies
-#RUN apt-get update && apt-get install -y --no-install-recommends \
-#    gcc \
-#    libffi-dev \
-#    musl-dev \
-#    build-essential \
-#    && rm -rf /var/lib/apt/lists/*  # Clean up to reduce image size
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    && rm -rf /var/lib/apt/lists/*  # Clean up to reduce image size
 
 # Install Python dependencies
 COPY requirements.txt .
