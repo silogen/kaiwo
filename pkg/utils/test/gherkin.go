@@ -227,20 +227,40 @@ func (g GherkinScenarioWrapper) Build(folder string, baseObject *unstructured.Un
 			},
 		}
 
-		chainsawTestYaml, err := yaml.Marshal(chainsawTest)
-		if err != nil {
-			return fmt.Errorf("failed to marshal chainsaw steps: %w", err)
-		}
-
 		scenarioFolder := filepath.Join(folder, baseutils.MakeRFC1123Compliant(scenario.Name))
-		if err := os.MkdirAll(scenarioFolder, os.ModePerm); err != nil {
-			return fmt.Errorf("failed to create gherkin scenario folder: %w", err)
+		if err := saveYAMLToFile(chainsawTest, filepath.Join(scenarioFolder, "chainsaw-test.yaml"), 2); err != nil {
+			return fmt.Errorf("failed to save chainsaw-test.yaml: %w", err)
 		}
 
-		if err := os.WriteFile(filepath.Join(scenarioFolder, "chainsaw-test.yaml"), chainsawTestYaml, os.ModePerm); err != nil {
-			return fmt.Errorf("failed to create gherkin scenario steps: %w", err)
-		}
 	}
+	return nil
+}
+
+func saveYAMLToFile(data interface{}, filePath string, indent int) error {
+	file, err := os.Create(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to create file: %w", err)
+	}
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			panic(err)
+		}
+	}(file)
+
+	encoder := yaml.NewEncoder(file)
+	encoder.SetIndent(indent) // Set indentation to 2
+	defer func(encoder *yaml.Encoder) {
+		err := encoder.Close()
+		if err != nil {
+			panic(err)
+		}
+	}(encoder)
+
+	if err := encoder.Encode(data); err != nil {
+		return fmt.Errorf("failed to encode YAML: %w", err)
+	}
+
 	return nil
 }
 
@@ -276,7 +296,8 @@ func BuildChainsawSteps(gherkinSteps []Step, applyObject *unstructured.Unstructu
 
 			if step.ApplyPatch != nil {
 				applyPatchReference := &unstructured.Unstructured{Object: *step.ApplyPatch}
-				if err := mergo.Merge(applyObject, applyPatchReference); err != nil {
+				fmt.Println("Adding", applyPatchReference)
+				if err := mergo.Merge(applyObject, applyPatchReference, mergo.WithOverride); err != nil {
 					return nil, nil, nil, fmt.Errorf("failed to merge patch step %d: %w", i, err)
 				}
 				fmt.Println("Merged patch reference:", applyObject)
