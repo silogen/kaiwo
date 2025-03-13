@@ -1,0 +1,34 @@
+name: Basic jobs
+reference:
+  resource:
+    apiVersion: kaiwo.silogen.ai/v1alpha1
+    spec:
+      user: test-user
+      resources:
+        requests:
+          cpu: "1"
+          memory: "2Gi"
+        limits:
+          cpu: "1"
+          memory: "2Gi"
+      image: busybox:latest
+      entrypoint: |
+        sleep 1
+rules:
+  - name: Jobs run to completion
+    scenarios:
+      - name: Batch job
+        background:
+          - given: the job is a batch job
+            applyPatch:
+              kind: KaiwoJob
+        steps:
+          - when: the job finishes after execution
+            applyPatch:
+              spec:
+                entrypoint: sleep 5
+          - then: the job is marked as completed
+            assert:
+              resource:
+                status:
+                  status: COMPLETE
