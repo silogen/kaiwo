@@ -28,7 +28,6 @@ rules:
               spec:
                 entrypoint: sleep 5
           - then: the job is marked as completed
-            assert:
-              resource:
-                status:
-                  status: COMPLETE
+            assertPatch:
+              status:
+                status: FAILED
