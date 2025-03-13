@@ -16,12 +16,12 @@ reference:
         sleep 1
 rules:
   - name: Jobs run to completion
+    background:
+    - given: the job is a batch job
+      applyPatch:
+        kind: KaiwoJob
     scenarios:
       - name: Batch job
-        background:
-          - given: the job is a batch job
-            applyPatch:
-              kind: KaiwoJob
         steps:
           - when: the job finishes after execution
             applyPatch:

@@ -1,0 +1,34 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: basic-jobs--jobs-run-to-completion--batch-job
+spec:
+  steps:
+    - catch:
+        - events: {}
+        - podLogs: {}
+      try:
+        - apply:
+            reference:
+              object:
+                apiVersion: kaiwo.silogen.ai/v1alpha1
+                kind: KaiwoJob
+                spec:
+                  entrypoint: sleep 5
+                  image: busybox:latest
+                  resources:
+                    limits:
+                      cpu: "1"
+                      memory: 2Gi
+                    requests:
+                      cpu: "1"
+                      memory: 2Gi
+                  user: test-user
+          description: |-
+            given: the job is a batch job
+            when: the job finishes after execution
+        - assert:
+            resource:
+              status:
+                status: COMPLETE
+          description: 'then: the job is marked as completed'
