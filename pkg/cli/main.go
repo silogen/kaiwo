@@ -80,6 +80,7 @@ func RunCli() {
 	})
 
 	rootCmd.AddCommand(cli.BuildSubmitCmd())
+	rootCmd.AddCommand(BuildTestsCmd())
 	// TODO re-enable
 	// rootCmd.AddCommand(cli.BuildServeCmd())
 
