@@ -413,25 +413,30 @@ var _ = Describe("Manager", Ordered, func() {
 			By("Creating three Jobs with GPU requests and the kaiwo-managed label")
 			for _, jobName := range jobNames {
 				jobManifest := fmt.Sprintf(`
-	apiVersion: batch/v1
-	kind: Job
-	metadata:
-	  name: %s
-	  namespace: %s
-	  labels:
-	    kaiwo-managed: "true"
-	spec:
-	  template:
-	    spec:
-	      restartPolicy: Never
-	      containers:
-		- name: test-container
-		  image: busybox
-		  command: ["/bin/sh", "-c", "sleep 30"]
-		  resources:
-		    requests:
-		      nvidia.com/gpu: "1"
-	`, jobName, testNamespace)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: %s
+  namespace: %s
+  labels:
+    kaiwo-managed: "true"
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: test-container
+          image: busybox
+          command:
+            - "/bin/sh"
+            - "-c"
+            - "sleep 30"
+          resources:
+            requests:
+              nvidia.com/gpu: "1"
+            limits:
+              nvidia.com/gpu: "1"
+`, jobName, testNamespace)
 
 				cmd := exec.Command("kubectl", "apply", "-f", "-")
 				cmd.Stdin = strings.NewReader(jobManifest)

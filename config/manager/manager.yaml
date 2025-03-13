@@ -84,7 +84,7 @@ spec:
           - name: DEFAULT_CLUSTER_QUEUE_NAME
             value: "kaiwo"
           - name: CUSTOM_KUBE_SCHEDULER_NAME
-            value: "default-scheduler"
+            value: "kaiwo-scheduler"
         name: manager
         ports: []
         securityContext:
