@@ -10,7 +10,7 @@ spec:
               apiVersion: kaiwo.silogen.ai/v1alpha1
               kind: KaiwoJob
               metadata:
-                name: test-job-kaiwojob
+                name: ttl-seconds-after-finished
               spec:
                 user: test@amd.com
                 gpus: 0
@@ -44,6 +44,6 @@ spec:
               apiVersion: batch/v1
               kind: Job
               metadata:
-                name: test-job-kaiwojob
+                name: ttl-seconds-after-finished
               spec:
                 ttlSecondsAfterFinished: 123  # Ensure the user-provided value is kept

@@ -18,7 +18,7 @@ spec:
               apiVersion: kaiwo.silogen.ai/v1alpha1
               kind: KaiwoJob
               metadata:
-                name: test-job-kaiwojob
+                name: hf-gated-repo
               spec:
                 resources:
                   limits:
@@ -54,6 +54,6 @@ spec:
               apiVersion: kaiwo.silogen.ai/v1alpha1
               kind: KaiwoJob
               metadata:
-                name: test-job-kaiwojob
+                name: hf-gated-repo
               status:
                 status: RUNNING
