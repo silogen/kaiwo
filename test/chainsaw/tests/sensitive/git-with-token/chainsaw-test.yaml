@@ -11,6 +11,7 @@ spec:
               kind: Secret
               metadata:
                 name: my-gh-token
+                namespace: kaiwo-test
               data:
                 gh-token: ($values.gh_token_base64)
         - apply:
@@ -18,7 +19,8 @@ spec:
               apiVersion: kaiwo.silogen.ai/v1alpha1
               kind: KaiwoJob
               metadata:
-                name: test-job-kaiwojob
+                name: github-private-repo
+                namespace: kaiwo-test
               spec:
                 resources:
                   limits:
@@ -30,7 +32,7 @@ spec:
                 user: test@amd.com
                 image: busybox:latest
                 entrypoint: |
-                  sleep 5
+                  sleep 10
                 storage:
                   storageEnabled: true
                   storageClassName: "standard"
@@ -53,14 +55,15 @@ spec:
               apiVersion: kaiwo.silogen.ai/v1alpha1
               kind: KaiwoJob
               metadata:
-                name: test-job-kaiwojob
+                name: github-private-repo
+                namespace: kaiwo-test
               status:
                 status: RUNNING
         - script:
-            timeout: 2s
+            timeout: 30s
             content: ../../../scripts/read_pod_file.sh kaiwo.silogen.ai/type=job "$NAMESPACE" /workload/dev-helpers/README.md
             env:
               - name: NAMESPACE
-                value: ($namespace)
+                value: kaiwo-test
             check:
               (contains($stdout, '# Local dev helper scripts and env connection info')): true

@@ -10,7 +10,7 @@ spec:
               apiVersion: kaiwo.silogen.ai/v1alpha1
               kind: KaiwoJob
               metadata:
-                name: test-job-kaiwojob
+                name: env-vars
               spec:
                 resources:
                   limits:
@@ -32,7 +32,7 @@ spec:
               kind: Pod
               metadata:
                 labels:
-                  kaiwo.silogen.ai/name: test-job-kaiwojob
+                  kaiwo.silogen.ai/name: env-vars
               spec:
                 containers:
                   - (env[?name == 'NUM_GPUS']):
@@ -52,7 +52,7 @@ spec:
               apiVersion: kaiwo.silogen.ai/v1alpha1
               kind: KaiwoJob
               metadata:
-                name: test-job-kaiwojob
+                name: env-vars-ray
               spec:
                 resources:
                   limits:
@@ -75,7 +75,7 @@ spec:
               kind: Pod
               metadata:
                 labels:
-                  kaiwo.silogen.ai/name: test-job-kaiwojob
+                  kaiwo.silogen.ai/name: env-vars-ray
                   ray.io/is-ray-node: "yes"
               spec:
                 containers:

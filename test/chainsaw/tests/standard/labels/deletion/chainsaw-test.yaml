@@ -1,0 +1,53 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: test-kaiwojob-deletion-via-job
+spec:
+  steps:
+    - try:
+        - apply:
+            resource:
+              apiVersion: batch/v1
+              kind: Job
+              metadata:
+                name: job-with-label-to-delete
+                namespace: kaiwo-test
+                labels:
+                  kaiwo.silogen.ai/managed: "true"
+              spec:
+                template:
+                  spec:
+                    restartPolicy: Never
+                    containers:
+                      - name: test-container
+                        image: busybox
+                        command:
+                        - "/bin/sh"
+                        - "-c"
+                        - |
+                          while true; do
+                            echo "Hello, world!"
+                            sleep 1
+                          done
+        - assert:
+            resource:
+              apiVersion: kaiwo.silogen.ai/v1alpha1
+              kind: KaiwoJob
+              metadata:
+                name: job-with-label-to-delete
+                namespace: kaiwo-test
+        - delete:
+            ref:
+              apiVersion: batch/v1
+              kind: Job
+              namespace: kaiwo-test
+              name: job-with-label-to-delete
+            expect:
+            - match:
+                apiVersion: kaiwo.silogen.ai/v1alpha1
+                kind: KaiwoJob
+                metadata:
+                  namespace: kaiwo-test
+                  name: job-with-label-to-delete
+              check:
+                ($error != null): true

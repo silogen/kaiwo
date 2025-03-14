@@ -79,6 +79,12 @@ spec:
             value: "false"
           - name: RAY_HEAD_POD_MEMORY
             value: "16Gi"
+          - name: DEFAULT_KAIWO_QUEUE_CONFIG_NAME
+            value: "kaiwo"
+          - name: DEFAULT_CLUSTER_QUEUE_NAME
+            value: "kaiwo"
+          - name: CUSTOM_KUBE_SCHEDULER_NAME
+            value: "kaiwo-scheduler"
         name: manager
         ports: []
         securityContext:

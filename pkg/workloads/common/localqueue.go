@@ -22,11 +22,6 @@ import (
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 )
 
-const (
-	DefaultLocalQueueName = "kaiwo"
-	Finalizer             = "kaiwo.silogen.ai/finalizer"
-)
-
 type LocalQueueReconciler struct {
 	ResourceReconcilerBase[*kueuev1beta1.LocalQueue]
 }

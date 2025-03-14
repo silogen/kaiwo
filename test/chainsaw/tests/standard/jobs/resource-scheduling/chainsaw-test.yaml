@@ -84,7 +84,7 @@ spec:
                         name: dshm
                     dnsPolicy: ClusterFirst
                     restartPolicy: Never
-                    schedulerName: default-scheduler
+                    schedulerName: kaiwo-scheduler
                     securityContext:
                       fsGroup: 1000
                       runAsGroup: 1000
@@ -199,7 +199,7 @@ spec:
                         name: dshm
                     dnsPolicy: ClusterFirst
                     restartPolicy: Never
-                    schedulerName: default-scheduler
+                    schedulerName: kaiwo-scheduler
                     securityContext:
                       fsGroup: 1000
                       runAsGroup: 1000

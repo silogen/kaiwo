@@ -97,7 +97,7 @@ func NewKaiwoServiceReconciler(kaiwoService *kaiwov1alpha1.KaiwoService) KaiwoSe
 
 	clusterQueue := baseutils.ValueOrDefault(kaiwoService.Spec.ClusterQueue)
 	if clusterQueue == "" {
-		clusterQueue = workloadcommon.DefaultLocalQueueName
+		clusterQueue = controllerutils.DefaultClusterQueueName
 	}
 	r.LocalQueue = workloadcommon.NewLocalQueueReconciler(
 		client.ObjectKey{Namespace: objectKey.Namespace, Name: clusterQueue},

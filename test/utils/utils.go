@@ -251,3 +251,11 @@ func UncommentCode(filename, target, prefix string) error {
 	// nolint:gosec
 	return os.WriteFile(filename, out.Bytes(), 0o644)
 }
+
+func MapKeys(m map[string]bool) []string {
+	keys := []string{}
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}

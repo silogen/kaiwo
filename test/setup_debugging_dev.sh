@@ -34,5 +34,12 @@ update_env_var "KUBECONFIG" "$KUBECONFIG"
 make install
 
 kubectl apply -f config/webhook_local_dev/webhooks.yaml
+kubectl get clusterrole system:kube-scheduler -o yaml | \
+sed 's/^\(\s*- kube-scheduler\)$/\1\n  - kaiwo-scheduler/' | \
+yq eval '.rules += [{"apiGroups":[""], "resources":["endpoints"], "verbs":["delete","get","patch","update"], "resourceNames":["kube-scheduler", "kaiwo-scheduler"] }]' - | \
+kubectl apply -f -
+kubectl apply -f config/static/**
+
+
 
 echo "You can now run debugger in your IDE"

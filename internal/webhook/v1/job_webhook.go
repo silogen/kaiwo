@@ -83,7 +83,7 @@ func (j *JobWebhook) Default(ctx context.Context, obj runtime.Object) error {
 
 	if kaiwoManages(job) {
 		if job.Labels[kaiwov1alpha1.QueueLabel] == "" {
-			job.Labels[kaiwov1alpha1.QueueLabel] = controllerutils.DefaultKaiwoQueueConfigName
+			job.Labels[kaiwov1alpha1.QueueLabel] = controllerutils.DefaultClusterQueueName
 		}
 		if job.Spec.Template.Spec.TerminationGracePeriodSeconds == nil {
 			job.Spec.Template.Spec.TerminationGracePeriodSeconds = baseutils.Pointer(int64(0))
@@ -137,7 +137,7 @@ func (j *JobWebhook) ensureKaiwoJob(ctx context.Context, job *batchv1.Job, authe
 	}
 
 	if _, exists := kaiwoJobLabels[kaiwov1alpha1.QueueLabel]; !exists {
-		kaiwoJobLabels[kaiwov1alpha1.QueueLabel] = controllerutils.DefaultKaiwoQueueConfigName
+		kaiwoJobLabels[kaiwov1alpha1.QueueLabel] = controllerutils.DefaultClusterQueueName
 	}
 
 	kaiwoJob = &kaiwov1alpha1.KaiwoJob{
@@ -153,8 +153,6 @@ func (j *JobWebhook) ensureKaiwoJob(ctx context.Context, job *batchv1.Job, authe
 			},
 		},
 	}
-
-	kaiwoJob.Labels[kaiwov1alpha1.QueueLabel] = controllerutils.DefaultKaiwoQueueConfigName
 
 	labelContext := baseutils.GetKaiwoLabelContext(kaiwoJob)
 	// Set Kaiwo system labels on the Kaiwo job

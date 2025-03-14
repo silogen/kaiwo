@@ -76,6 +76,9 @@ func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batch
 		if baseutils.ValueOrDefault(r.KaiwoJob.Spec.CommonMetaSpec.Gpus) > 0 {
 			overrideDefaults = true
 		}
+		if r.KaiwoJob.Spec.CommonMetaSpec.Resources != nil {
+			overrideDefaults = false
+		}
 	} else {
 		jobSpec = spec.Job.Spec
 		overrideDefaults = false
