@@ -80,6 +80,9 @@ func (r *DeploymentReconciler) Build(ctx context.Context, _ client.Client) (*app
 		if baseutils.ValueOrDefault(r.KaiwoService.Spec.CommonMetaSpec.Gpus) > 0 {
 			overrideDefaults = true
 		}
+		if r.KaiwoService.Spec.CommonMetaSpec.Resources != nil {
+			overrideDefaults = false
+		}
 	} else {
 		depSpec = svcSpec.Deployment.Spec
 		overrideDefaults = false

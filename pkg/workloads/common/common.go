@@ -68,7 +68,8 @@ func UpdatePodSpec(kaiwoCommonMetaSpec v1alpha1.CommonMetaSpec, labelContext bas
 		addSecretVolumes(template, *kaiwoCommonMetaSpec.SecretVolumes)
 	}
 
-	// Fill resources
+	// Update resources if specified in the CRD
+
 	FillPodResources(&template.Spec, kaiwoCommonMetaSpec.Resources, false)
 
 	vendor := "AMD"
