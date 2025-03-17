@@ -78,7 +78,7 @@ func AddCliFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolVarP(useRay, "ray", "", false, "Use ray for submitting the workload")
 	cmd.Flags().BoolVarP(dangerous, "dangerous", "", false, "Skip adding the default security context to containers")
 
-	cmd.Flags().StringVarP(queue, "queue", "", controllerutils.DefaultKaiwoQueueConfigName, "The local queue to use for jobs")
+	cmd.Flags().StringVarP(queue, "queue", "", controllerutils.DefaultClusterQueueName, "The local queue to use for jobs")
 }
 
 func GetCLIFlags(cmd *cobra.Command) workloads.CLIFlags {

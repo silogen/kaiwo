@@ -109,6 +109,7 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 	mkdir -p dist
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/default > dist/install.yaml
+	find config/static -type f -name "*.yaml" -exec sh -c 'echo "---" >> dist/install.yaml && cat {} >> dist/install.yaml' \;
 
 
 ##@ Deployment
