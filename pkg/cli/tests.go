@@ -15,11 +15,14 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/silogen/kaiwo/pkg/k8s"
 
 	"gopkg.in/yaml.v3"
 
@@ -31,13 +34,22 @@ import (
 var (
 	e2eTestSourceDir string
 	e2eTestOutputDir string
+
+	debugChainsawNamespace  string
+	debugChainsawPrintLevel string
 )
 
 func BuildTestsCmd() *cobra.Command {
+	testCmd := &cobra.Command{
+		Use:   "tests",
+		Short: "Interact with Kaiwo tests",
+	}
+
 	generateCmd := &cobra.Command{
 		Use:   "generate",
 		Short: "Generate assets",
 	}
+	testCmd.AddCommand(generateCmd)
 
 	generateE2eTestsCmd := &cobra.Command{
 		Use:   "e2e-tests",
@@ -51,7 +63,31 @@ func BuildTestsCmd() *cobra.Command {
 	generateE2eTestsCmd.Flags().StringVarP(&e2eTestSourceDir, "input", "", "", "Directory to load feature files from")
 	generateE2eTestsCmd.Flags().StringVarP(&e2eTestOutputDir, "output", "", "", "Directory to save generated tests in")
 
-	return generateCmd
+	debugCmd := &cobra.Command{
+		Use: "debug",
+	}
+	testCmd.AddCommand(debugCmd)
+
+	debugChainsawCmd := &cobra.Command{
+		Use: "chainsaw",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			clients, err := k8s.GetKubernetesClients()
+			if err != nil {
+				return fmt.Errorf("failed to get k8s clients: %w", err)
+			}
+
+			if err := testutils.DebugTest(context.Background(), clients.Clientset, debugChainsawNamespace, debugChainsawPrintLevel); err != nil {
+				return err
+			}
+
+			return nil
+		},
+	}
+	debugCmd.AddCommand(debugChainsawCmd)
+	debugChainsawCmd.Flags().StringVarP(&debugChainsawNamespace, "namespace", "n", "", "Test namespace to inspect")
+	debugChainsawCmd.Flags().StringVarP(&debugChainsawPrintLevel, "print-level", "", "info", "The log level to print")
+
+	return testCmd
 }
 
 func runGenerateE2eTests(inputDir string, outputDir string) error {

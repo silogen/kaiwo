@@ -17,7 +17,6 @@ limitations under the License.
 package e2e
 
 import (
-	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -26,6 +25,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 
 	"gopkg.in/yaml.v3"
 
@@ -57,9 +58,21 @@ func getChainsawArgs() ([]string, error) {
 	}
 	chainsawDir = absoluteChainsawDir
 
+	logLevel := baseutils.GetEnv("CHAINSAW_DEBUG_LOG_LEVEL", "info")
+
+	values := map[string]string{
+		"print_level": logLevel,
+	}
+
+	configPath := ""
+	testPath := ""
 	if runningInCI {
-		args = append(args, filepath.Join(chainsawDir, "tests/standard"), "--config", filepath.Join(chainsawDir, "configs/ci.yaml"))
+		configPath = filepath.Join(chainsawDir, "configs/ci.yaml")
+		testPath = filepath.Join(chainsawDir, "tests/standard")
 	} else {
+		testPath = filepath.Join(chainsawDir, "tests")
+		configPath = filepath.Join(chainsawDir, "configs/local.yaml")
+
 		hfToken := os.Getenv("HF_TOKEN")
 		if hfToken == "" {
 			return nil, fmt.Errorf("cannot run tests without the environmental variable HF_TOKEN set")
@@ -68,40 +81,40 @@ func getChainsawArgs() ([]string, error) {
 		if githubToken == "" {
 			return nil, fmt.Errorf("cannot run tests without the environmental variable GH_TOKEN set")
 		}
-		values := map[string]string{
-			"hf_token_base64": base64.StdEncoding.EncodeToString([]byte(hfToken)),
-			"gh_token_base64": base64.StdEncoding.EncodeToString([]byte(githubToken)),
-		}
-		yamlFile, err := yaml.Marshal(&values)
-		if err != nil {
-			return nil, fmt.Errorf("failed to generate yaml file: %w", err)
-		}
-		valuesFile := filepath.Join(chainsawDir, "values/sensitive/values.yaml")
-
-		f, err := os.Create(valuesFile)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create values file: %w", err)
-		}
-		defer func(f *os.File) {
-			err := f.Close()
-			if err != nil {
-				panic(err)
-			}
-		}(f)
-
-		_, err = f.Write(yamlFile)
-		if err != nil {
-			return nil, fmt.Errorf("failed to write values file: %w", err)
-		}
-		args = append(
-			args,
-			filepath.Join(chainsawDir, "tests"),
-			"--config",
-			filepath.Join(chainsawDir, "configs/local.yaml"),
-			"--values",
-			valuesFile,
-		)
+		values["hf_token_base64"] = base64.StdEncoding.EncodeToString([]byte(hfToken))
+		values["gh_token_base64"] = base64.StdEncoding.EncodeToString([]byte(githubToken))
 	}
+
+	yamlFile, err := yaml.Marshal(&values)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate yaml file: %w", err)
+	}
+	valuesFile := filepath.Join(chainsawDir, "values/sensitive/values.yaml")
+
+	f, err := os.Create(valuesFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create values file: %w", err)
+	}
+	defer func(f *os.File) {
+		err := f.Close()
+		if err != nil {
+			panic(err)
+		}
+	}(f)
+
+	_, err = f.Write(yamlFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to write values file: %w", err)
+	}
+	args = append(
+		args,
+		testPath,
+		"--config",
+		configPath,
+		"--values",
+		valuesFile,
+	)
+
 	return args, nil
 }
 
@@ -115,6 +128,8 @@ func validateChainsawErr(err error) error {
 var (
 	chainsawArgs, chainsawErr = getChainsawArgs()
 	_                         = validateChainsawErr(chainsawErr)
+	kaiwoBuildPath            = "builds"
+	kaiwoCliPath              = kaiwoBuildPath + "/kaiwo-test"
 )
 
 // serviceAccountName created for the project
@@ -135,6 +150,11 @@ var _ = Describe("Manager", Ordered, func() {
 	BeforeAll(func() {
 		RecreateNamespace(namespace)
 		RecreateNamespace(test_namespace)
+
+		By("building the Kaiwo CLI")
+		buildCmd := exec.Command("go", "build", "-o", kaiwoCliPath, "cmd/cli/main.go")
+		buildErr := buildCmd.Run()
+		Expect(buildErr).NotTo(HaveOccurred(), "Kaiwo build failed")
 
 		By("labeling the namespace to enforce the restricted security policy")
 		cmd := exec.Command("kubectl", "label", "--overwrite", "ns", namespace,
@@ -396,13 +416,19 @@ var _ = Describe("Manager", Ordered, func() {
 		It("should run all the chainsaw tests", func() {
 			By("executing chainsaw tests")
 
+			env := os.Environ()
+
+			// Retrieve the current PATH.
+			currentPath := os.Getenv("PATH")
+			// Append your additional directory.
+			absoluteKaiwoPath, _ := filepath.Abs(kaiwoBuildPath)
+			newPath := currentPath + ":" + absoluteKaiwoPath
+
 			cmd := exec.Command("chainsaw", chainsawArgs...)
-			var outb, errb bytes.Buffer
+			cmd.Env = append(env, "PATH="+newPath)
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			err := cmd.Run()
-			fmt.Println("Chainsaw stdout:\n\n" + outb.String())
-			fmt.Println("Chainsaw stderr:\n\n" + errb.String())
 			Expect(err).NotTo(HaveOccurred(), "Chainsaw test(s) failed")
 		})
 

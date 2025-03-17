@@ -219,11 +219,24 @@ func (g GherkinScenarioWrapper) Build(folder string, baseObject *unstructured.Un
 					{
 						"try": steps,
 						"catch": []map[string]interface{}{
-							{"events": map[string]any{}},
 							{"command": map[string]any{
-								"entrypoint": "kubectl",
+								"entrypoint": "kaiwo",
+								"env": []map[string]string{
+									{
+										"name":  "NAMESPACE",
+										"value": "$(namespace)",
+									},
+									{
+										"name":  "PRINT_LEVEL",
+										"value": "$(values.print_level)",
+									},
+								},
 								"args": []string{
-									"logs",
+									"tests",
+									"debug",
+									"chainsaw",
+									"--namespace=$NAMESPACE",
+									"--print-level=$PRINT_LEVEL",
 								},
 							}},
 						},

@@ -7,9 +7,19 @@ metadata:
 spec:
   steps:
     - catch:
-        - events: {}
-        - podLogs:
-            name: basic-jobs--jobs-run-to-completion--batch-job
+        - command:
+            args:
+              - tests
+              - debug
+              - chainsaw
+              - --namespace=$NAMESPACE
+              - --print-level=$PRINT_LEVEL
+            entrypoint: kaiwo
+            env:
+              - name: NAMESPACE
+                value: $(namespace)
+              - name: PRINT_LEVEL
+                value: $(values.print_level)
       try:
         - apply:
             resource:
