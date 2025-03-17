@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: job-with-label-1
+  name: job-with-label-to-delete
   labels:
     kaiwo.silogen.ai/managed: "true"
 spec:

@@ -407,6 +407,7 @@ var _ = Describe("Manager", Ordered, func() {
 		})
 
 		RunBinpackingTest()
+		RunLabeledJobDeletionTest()
 
 		// +kubebuilder:scaffold:e2e-webhooks-checks
 	})
