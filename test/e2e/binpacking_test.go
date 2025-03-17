@@ -29,7 +29,7 @@ import (
 func RunBinpackingTest() {
 	It("should create three kaiwojobs with GPU requests and assert that they're running on the same node", func() {
 		testNamespace := "kaiwo-test"
-		jobNames := []string{"binpacking-kaiwojob-1", "binpacking-kaiwojob-1", "binpacking-kaiwojob-1"}
+		jobNames := []string{"binpacking-kaiwojob-1", "binpacking-kaiwojob-2", "binpacking-kaiwojob-3"}
 
 		By("Creating three Jobs with GPU requests and the kaiwo-managed label")
 		for _, jobName := range jobNames {

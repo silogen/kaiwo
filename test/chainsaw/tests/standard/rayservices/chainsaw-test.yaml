@@ -11,7 +11,6 @@ spec:
               kind: KaiwoService
               metadata:
                 name: kaiwoservice-1
-                namespace: kaiwo-test
               spec:
                 user: test-user
                 resources:
@@ -44,7 +43,6 @@ spec:
               kind: KaiwoService
               metadata:
                 name: kaiwoservice-1
-                namespace: kaiwo-test
               status:
                 status: PENDING
         - assert:
@@ -53,14 +51,12 @@ spec:
               kind: RayService
               metadata:
                 name: kaiwoservice-1
-                namespace: kaiwo-test
         - assert:
             resource:
               apiVersion: v1
               kind: Pod
               metadata:
                 (contains(name, '-head')): true
-                namespace: kaiwo-test
                 labels:
                   ray.io/node-type: head
         - assert:
@@ -69,6 +65,5 @@ spec:
               kind: Pod
               metadata:
                 (contains(name, '-worker')): true
-                namespace: kaiwo-test
                 labels:
                   ray.io/node-type: worker

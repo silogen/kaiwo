@@ -11,7 +11,6 @@ spec:
               kind: Job
               metadata:
                 name: job-with-label-to-delete
-                namespace: kaiwo-test
                 labels:
                   kaiwo.silogen.ai/managed: "true"
               spec:
@@ -35,19 +34,16 @@ spec:
               kind: KaiwoJob
               metadata:
                 name: job-with-label-to-delete
-                namespace: kaiwo-test
         - delete:
             ref:
               apiVersion: batch/v1
               kind: Job
-              namespace: kaiwo-test
               name: job-with-label-to-delete
             expect:
             - match:
                 apiVersion: kaiwo.silogen.ai/v1alpha1
                 kind: KaiwoJob
                 metadata:
-                  namespace: kaiwo-test
                   name: job-with-label-to-delete
               check:
                 ($error != null): true
