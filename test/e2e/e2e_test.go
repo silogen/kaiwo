@@ -129,7 +129,8 @@ var (
 	chainsawArgs, chainsawErr = getChainsawArgs()
 	_                         = validateChainsawErr(chainsawErr)
 	kaiwoBuildPath            = "builds"
-	kaiwoCliPath              = kaiwoBuildPath + "/kaiwo-test"
+	kaiwoCliPath              = kaiwoBuildPath + "/kaiwo"
+	kaiwoDevCliPath           = kaiwoBuildPath + "/kaiwo-dev"
 )
 
 // serviceAccountName created for the project
@@ -155,6 +156,10 @@ var _ = Describe("Manager", Ordered, func() {
 		buildCmd := exec.Command("go", "build", "-o", kaiwoCliPath, "cmd/cli/main.go")
 		buildErr := buildCmd.Run()
 		Expect(buildErr).NotTo(HaveOccurred(), "Kaiwo build failed")
+
+		buildDevCmd := exec.Command("go", "build", "-o", kaiwoDevCliPath, "pkg/cli/dev/main.go")
+		buildDevErr := buildDevCmd.Run()
+		Expect(buildDevErr).NotTo(HaveOccurred(), "Kaiwo dev build failed")
 
 		By("labeling the namespace to enforce the restricted security policy")
 		cmd := exec.Command("kubectl", "label", "--overwrite", "ns", namespace,

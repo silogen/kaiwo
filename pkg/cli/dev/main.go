@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cmd
+package main
 
 import (
 	"bytes"
@@ -24,15 +24,14 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/sirupsen/logrus"
+
+	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	k8sUtils "github.com/silogen/kaiwo/pkg/k8s"
-
-	"gopkg.in/yaml.v3"
-
 	testutils "github.com/silogen/kaiwo/pkg/utils/test"
-
-	"github.com/spf13/cobra"
 )
 
 var (
@@ -43,17 +42,17 @@ var (
 	debugChainsawPrintLevel string
 )
 
-func BuildTestsCmd() *cobra.Command {
-	testCmd := &cobra.Command{
-		Use:   "tests",
-		Short: "Interact with Kaiwo tests",
+func main() {
+	rootCmd := &cobra.Command{
+		Use:   "kaiwo-dev",
+		Short: "Use Kaiwo developer features",
 	}
 
 	generateCmd := &cobra.Command{
 		Use:   "generate",
 		Short: "Generate assets",
 	}
-	testCmd.AddCommand(generateCmd)
+	rootCmd.AddCommand(generateCmd)
 
 	generateE2eTestsCmd := &cobra.Command{
 		Use:   "e2e-tests",
@@ -70,7 +69,7 @@ func BuildTestsCmd() *cobra.Command {
 	debugCmd := &cobra.Command{
 		Use: "debug",
 	}
-	testCmd.AddCommand(debugCmd)
+	rootCmd.AddCommand(debugCmd)
 
 	debugChainsawCmd := &cobra.Command{
 		Use: "chainsaw",
@@ -94,7 +93,7 @@ func BuildTestsCmd() *cobra.Command {
 	helpersCmd := &cobra.Command{
 		Use: "helpers",
 	}
-	testCmd.AddCommand(helpersCmd)
+	rootCmd.AddCommand(helpersCmd)
 
 	getFileCmd := &cobra.Command{
 		Use: "get-file",
@@ -151,7 +150,9 @@ func BuildTestsCmd() *cobra.Command {
 	getFileCmd.Flags().String("path", "", "The path to read the file from")
 	helpersCmd.AddCommand(getFileCmd)
 
-	return testCmd
+	if err := rootCmd.Execute(); err != nil {
+		logrus.Fatal(err)
+	}
 }
 
 func isBinary(data []byte) bool {
