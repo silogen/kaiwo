@@ -140,7 +140,15 @@ spec:
                 ray: true
                 replicas: 1
                 user: test@amd.com
-
+      catch:
+        - command:
+            entrypoint: kaiwo-dev
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+              - name: PRINT_LEVEL
+                value: ($values.print_level)
+            args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
 ---
 
 apiVersion: chainsaw.kyverno.io/v1alpha1
@@ -169,3 +177,12 @@ spec:
             content: kubectl describe kaiwojob kaiwojob-rayjob-no-gpus-available -n kaiwo-test
             check:
               (contains($stdout, 'no AMD GPUs found in the cluster')): true
+      catch:
+        - command:
+            entrypoint: kaiwo-dev
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+              - name: PRINT_LEVEL
+                value: ($values.print_level)
+            args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
