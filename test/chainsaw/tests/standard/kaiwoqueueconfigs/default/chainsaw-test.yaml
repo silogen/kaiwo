@@ -1,10 +1,10 @@
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
-  name: default-kaiwoqueueconfig-creation-test
+  name: kaiwoqueueconfig-creation-update-deletion-test
 spec:
   steps:
-    - name: Check kaiwoqueueconfig creation
+    - name: Check kaiwoqueueconfig creation, update, deletion
       try:
         - script:
             content: kubectl get resourceflavors -o jsonpath="{.items[0].metadata.name}"
@@ -78,4 +78,38 @@ spec:
               (contains($stdout, 'nodeLabels":{"kaiwo/nodepool":"cpu-only-0gpu')): true
               (contains($stdout, '"name":"nvidia-teslak80-8gpu')): true
               (contains($stdout, '"nodeLabels":{"kaiwo/nodepool":"nvidia-teslak80-8gpu')): true
-            
+
+        - apply:
+            file: kaiwoqueueconfig1.yaml
+        - script:
+            content: sleep 3
+        - script:
+            content: kubectl get resourceflavor --no-headers | wc -l
+            check:
+              (contains($stdout, '5')): true
+        - script:
+            content: kubectl get clusterqueue --no-headers | wc -l
+            check:
+              (contains($stdout, '2')): true
+        - apply:
+            file: kaiwoqueueconfig2.yaml
+        - script: 
+            content: sleep 3
+        - script:
+            content: kubectl get resourceflavor --no-headers | wc -l
+            check:
+              (contains($stdout, '1')): true
+        - script:
+            content: kubectl get clusterqueue --no-headers | wc -l
+            check:
+              (contains($stdout, '1')): true
+        - script:
+            content: kubectl get clusterqueue fizz -o json
+            check: 
+              (contains($stdout, 'amd.com/gpu')): true
+              (contains($stdout, 'nvidia.com/gpu')): false
+        - script:
+            content: kubectl get resourceflavor foo -o json
+            check: 
+              (contains($stdout, 'amd-rocks')): true
+

@@ -96,31 +96,86 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, queueConfig *kaiwov1alpha1.KaiwoQueueConfig) error {
 	logger := log.FromContext(ctx)
 
+	existingFlavors := &kueuev1beta1.ResourceFlavorList{}
+	existingQueues := &kueuev1beta1.ClusterQueueList{}
+	existingPriorityClasses := &kueuev1beta1.WorkloadPriorityClassList{}
+
+	if err := r.List(ctx, existingFlavors); err != nil {
+		logger.Error(err, "Failed to list ResourceFlavors")
+		return err
+	}
+	if err := r.List(ctx, existingQueues); err != nil {
+		logger.Error(err, "Failed to list ClusterQueues")
+		return err
+	}
+	if err := r.List(ctx, existingPriorityClasses); err != nil {
+		logger.Error(err, "Failed to list WorkloadPriorityClasses")
+		return err
+	}
+
+	success := r.syncResourceFlavors(ctx, queueConfig, existingFlavors)
+	success = r.syncClusterQueues(ctx, queueConfig, existingQueues) && success
+	success = r.syncWorkloadPriorityClasses(ctx, queueConfig, existingPriorityClasses) && success
+
+	if success {
+		logger.Info("Successfully synced all Kueue resources")
+		return nil
+	}
+	return fmt.Errorf("failed to sync some Kueue resources")
+}
+
+func (r *KaiwoQueueConfigReconciler) syncResourceFlavors(ctx context.Context, queueConfig *kaiwov1alpha1.KaiwoQueueConfig, existingFlavors *kueuev1beta1.ResourceFlavorList) bool {
+	logger := log.FromContext(ctx)
+
 	success := true
+	expectedFlavors := controllerutils.ConvertKaiwoToKueueResourceFlavors(queueConfig.Spec.ResourceFlavors)
+	existingFlavorMap := make(map[string]kueuev1beta1.ResourceFlavor)
 
-	// Sync ResourceFlavors
-	kueueFlavors := controllerutils.ConvertKaiwoToKueueResourceFlavors(queueConfig.Spec.ResourceFlavors)
-	for _, kueueFlavor := range kueueFlavors {
-		existingFlavor := &kueuev1beta1.ResourceFlavor{}
-		err := r.Get(ctx, client.ObjectKey{Name: kueueFlavor.Name}, existingFlavor)
-
-		if errors.IsNotFound(err) {
+	for _, kueueFlavor := range expectedFlavors {
+		existingFlavor, found := controllerutils.FindFlavor(existingFlavors.Items, kueueFlavor.Name)
+		if !found {
 			logger.Info("Creating ResourceFlavor", "name", kueueFlavor.Name)
+			if err := ctrl.SetControllerReference(queueConfig, &kueueFlavor, r.Scheme); err != nil {
+				logger.Error(err, "Failed to set owner reference", "name", kueueFlavor.Name)
+				success = false
+				continue
+			}
 			if err := r.Create(ctx, &kueueFlavor); err != nil {
 				logger.Error(err, "Failed to create ResourceFlavor", "name", kueueFlavor.Name)
 				success = false
 			}
-		} else if err != nil {
-			logger.Error(err, "Failed to get ResourceFlavor", "name", kueueFlavor.Name)
-			success = false
+		} else if !controllerutils.CompareResourceFlavors(existingFlavor, kueueFlavor) {
+			logger.Info("Updating ResourceFlavor", "name", kueueFlavor.Name)
+			existingFlavor.Spec = kueueFlavor.Spec
+			if err := r.Update(ctx, &existingFlavor); err != nil {
+				logger.Error(err, "Failed to update ResourceFlavor", "name", kueueFlavor.Name)
+				success = false
+			}
+		}
+		existingFlavorMap[kueueFlavor.Name] = kueueFlavor
+	}
+
+	for _, existingFlavor := range existingFlavors.Items {
+		if _, exists := existingFlavorMap[existingFlavor.Name]; !exists {
+			logger.Info("Deleting ResourceFlavor", "name", existingFlavor.Name)
+			if err := r.Delete(ctx, &existingFlavor); err != nil {
+				logger.Error(err, "Failed to delete ResourceFlavor", "name", existingFlavor.Name)
+				success = false
+			}
 		}
 	}
 
-	// Sync ClusterQueues
+	return success
+}
+
+func (r *KaiwoQueueConfigReconciler) syncClusterQueues(ctx context.Context, queueConfig *kaiwov1alpha1.KaiwoQueueConfig, existingQueues *kueuev1beta1.ClusterQueueList) bool {
+	logger := log.FromContext(ctx)
+
+	success := true
+	expectedQueues := make(map[string]kueuev1beta1.ClusterQueue)
+
 	for _, kaiwoQueue := range queueConfig.Spec.ClusterQueues {
 		kueueQueue := controllerutils.ConvertKaiwoToKueueClusterQueue(kaiwoQueue)
-
-		// Ensure that the resources are in the same order as the covered resources array
 		for i, resourceGroup := range kueueQueue.Spec.ResourceGroups {
 			for j, flavor := range resourceGroup.Flavors {
 				resourceMap := make(map[string]kueuev1beta1.ResourceQuota)
@@ -136,12 +191,16 @@ func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, que
 				kueueQueue.Spec.ResourceGroups[i].Flavors[j].Resources = resources
 			}
 		}
-
 		existingQueue := &kueuev1beta1.ClusterQueue{}
 		err := r.Get(ctx, client.ObjectKey{Name: kueueQueue.Name}, existingQueue)
 
 		if errors.IsNotFound(err) {
 			logger.Info("Creating ClusterQueue", "name", kueueQueue.Name)
+			if err := ctrl.SetControllerReference(queueConfig, &kueueQueue, r.Scheme); err != nil {
+				logger.Error(err, "Failed to set owner reference", "name", kueueQueue.Name)
+				success = false
+				continue
+			}
 			if err := r.Create(ctx, &kueueQueue); err != nil {
 				logger.Error(err, "Failed to create ClusterQueue", "name", kueueQueue.Name)
 				success = false
@@ -149,16 +208,47 @@ func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, que
 		} else if err != nil {
 			logger.Error(err, "Failed to get ClusterQueue", "name", kueueQueue.Name)
 			success = false
+		} else if !controllerutils.CompareClusterQueues(*existingQueue, kueueQueue) {
+			logger.Info("Updating ClusterQueue", "name", kueueQueue.Name)
+			existingQueue.Spec = kueueQueue.Spec
+			if err := r.Update(ctx, existingQueue); err != nil {
+				logger.Error(err, "Failed to update ClusterQueue", "name", kueueQueue.Name)
+				success = false
+			}
+		}
+		expectedQueues[kueueQueue.Name] = kueueQueue
+	}
+
+	for _, existingQueue := range existingQueues.Items {
+		if _, exists := expectedQueues[existingQueue.Name]; !exists {
+			logger.Info("Deleting ClusterQueue", "name", existingQueue.Name)
+			if err := r.Delete(ctx, &existingQueue); err != nil {
+				logger.Error(err, "Failed to delete ClusterQueue", "name", existingQueue.Name)
+				success = false
+			}
 		}
 	}
 
-	// Sync WorkloadPriorityClasses
+	return success
+}
+
+func (r *KaiwoQueueConfigReconciler) syncWorkloadPriorityClasses(ctx context.Context, queueConfig *kaiwov1alpha1.KaiwoQueueConfig, existingPriorityClasses *kueuev1beta1.WorkloadPriorityClassList) bool {
+	logger := log.FromContext(ctx)
+
+	success := true
+	expectedPriorityClasses := make(map[string]kueuev1beta1.WorkloadPriorityClass)
+
 	for _, priorityClassSpec := range queueConfig.Spec.WorkloadPriorityClasses {
 		existingPriorityClass := &kueuev1beta1.WorkloadPriorityClass{}
 		err := r.Get(ctx, client.ObjectKey{Name: priorityClassSpec.Name}, existingPriorityClass)
 
 		if errors.IsNotFound(err) {
 			logger.Info("Creating WorkloadPriorityClass", "name", priorityClassSpec.Name)
+			if err := ctrl.SetControllerReference(queueConfig, &priorityClassSpec, r.Scheme); err != nil {
+				logger.Error(err, "Failed to set owner reference", "name", priorityClassSpec.Name)
+				success = false
+				continue
+			}
 			if err := r.Create(ctx, &priorityClassSpec); err != nil {
 				logger.Error(err, "Failed to create WorkloadPriorityClass", "name", priorityClassSpec.Name)
 				success = false
@@ -166,18 +256,30 @@ func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, que
 		} else if err != nil {
 			logger.Error(err, "Failed to get WorkloadPriorityClass", "name", priorityClassSpec.Name)
 			success = false
+		} else if !controllerutils.ComparePriorityClasses(*existingPriorityClass, priorityClassSpec) {
+			logger.Info("Updating WorkloadPriorityClass", "name", priorityClassSpec.Name)
+			existingPriorityClass.Value = priorityClassSpec.Value
+			if err := r.Update(ctx, existingPriorityClass); err != nil {
+				logger.Error(err, "Failed to update WorkloadPriorityClass", "name", priorityClassSpec.Name)
+				success = false
+			}
+		}
+		expectedPriorityClasses[priorityClassSpec.Name] = priorityClassSpec
+	}
+
+	for _, existingPriorityClass := range existingPriorityClasses.Items {
+		if _, exists := expectedPriorityClasses[existingPriorityClass.Name]; !exists {
+			logger.Info("Deleting WorkloadPriorityClass", "name", existingPriorityClass.Name)
+			if err := r.Delete(ctx, &existingPriorityClass); err != nil {
+				logger.Error(err, "Failed to delete WorkloadPriorityClass", "name", existingPriorityClass.Name)
+				success = false
+			}
 		}
 	}
 
-	if success {
-		logger.Info("Successfully synced all Kueue resources")
-		return nil
-	} else {
-		return fmt.Errorf("failed to sync some Kueue resources")
-	}
+	return success
 }
 
-// SetupWithManager sets up the controller with the Manager.
 func (r *KaiwoQueueConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	logger := log.Log.WithName("SetupWithManager")
 
