@@ -17,6 +17,7 @@ package controllerutils
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -341,4 +342,25 @@ func CreateLocalQueue(ctx context.Context, c client.Client, name string, namespa
 
 	logger.Info("Successfully created LocalQueue", "Name", name, "Namespace", namespace)
 	return nil
+}
+
+func FindFlavor(flavors []kueuev1beta1.ResourceFlavor, name string) (kueuev1beta1.ResourceFlavor, bool) {
+	for _, flavor := range flavors {
+		if flavor.Name == name {
+			return flavor, true
+		}
+	}
+	return kueuev1beta1.ResourceFlavor{}, false
+}
+
+func CompareResourceFlavors(a, b kueuev1beta1.ResourceFlavor) bool {
+	return reflect.DeepEqual(a.Spec, b.Spec)
+}
+
+func CompareClusterQueues(a, b kueuev1beta1.ClusterQueue) bool {
+	return reflect.DeepEqual(a.Spec, b.Spec)
+}
+
+func ComparePriorityClasses(a, b kueuev1beta1.WorkloadPriorityClass) bool {
+	return reflect.DeepEqual(a.Value, b.Value)
 }
