@@ -3,6 +3,7 @@ kind: Test
 metadata:
   name: kaiwoqueueconfig-creation-update-deletion-test
 spec:
+  concurrent: false
   steps:
     - name: Check kaiwoqueueconfig creation, update, deletion
       try:
@@ -78,7 +79,9 @@ spec:
               (contains($stdout, 'nodeLabels":{"kaiwo/nodepool":"cpu-only-0gpu')): true
               (contains($stdout, '"name":"nvidia-teslak80-8gpu')): true
               (contains($stdout, '"nodeLabels":{"kaiwo/nodepool":"nvidia-teslak80-8gpu')): true
-
+        # Save the current kaiwoqueueconfig for other tests to use later 
+        - script:
+            content: kubectl get kaiwoqueueconfig kaiwo -o yaml > /tmp/kaiwoqueueconfig.yaml
         - apply:
             file: kaiwoqueueconfig1.yaml
         - script:
@@ -112,4 +115,6 @@ spec:
             content: kubectl get resourceflavor foo -o json
             check: 
               (contains($stdout, 'amd-rocks')): true
-
+        # Apply the saved kaiwoqueueconfig for other tests to use 
+        - script:
+            content: kubectl replace --force -f /tmp/kaiwoqueueconfig.yaml
