@@ -417,10 +417,3 @@ func printLogs(logs []LogEntry, printLevel string, writeTo string) {
 		}
 	}
 }
-
-var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*m`)
-
-// stripANSI removes ANSI escape codes from a string.
-func stripANSI(s string) string {
-	return ansiRegex.ReplaceAllString(s, "")
-}
