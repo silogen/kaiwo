@@ -1,0 +1,105 @@
+apiVersion: ray.io/v1
+kind: RayJob
+metadata:
+  finalizers:
+  - ray.io/rayjob-finalizer
+  labels:
+    kueue.x-k8s.io/queue-name: kaiwo
+  name: kaiwojob-rayjob-resource-scheduling
+  ownerReferences:
+  - apiVersion: kaiwo.silogen.ai/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: KaiwoJob
+    name: kaiwojob-rayjob-resource-scheduling
+spec:
+  backoffLimit: 0
+  entrypoint: |
+    sleep 1
+  rayClusterSpec:
+    enableInTreeAutoscaling: false
+    headGroupSpec:
+      rayStartParams: {}
+      template:
+        metadata:
+          labels:
+            kaiwo.silogen.ai/name: kaiwojob-rayjob-resource-scheduling
+            kaiwo.silogen.ai/type: job
+            kaiwo.silogen.ai/user: test-amd.com
+        spec:
+          containers:
+          - image: ghcr.io/silogen/rocm-ray:v0.8
+            imagePullPolicy: Always
+            name: ray-head
+            resources:
+              limits:
+                cpu: "2"
+                memory: 1Gi
+              requests:
+                cpu: "2"
+                memory: 1Gi
+            volumeMounts:
+            - mountPath: /dev/shm
+              name: dshm
+          restartPolicy: Never
+          securityContext:
+            fsGroup: 1000
+            runAsGroup: 1000
+            runAsUser: 1000
+          volumes:
+          - emptyDir:
+              medium: Memory
+              sizeLimit: 1Gi
+            name: dshm
+    workerGroupSpecs:
+    - groupName: default-worker-group
+      maxReplicas: 2
+      minReplicas: 2
+      numOfHosts: 1
+      rayStartParams: {}
+      replicas: 2
+      scaleStrategy: {}
+      template:
+        metadata:
+          labels:
+            kaiwo.silogen.ai/name: kaiwojob-rayjob-resource-scheduling
+            kaiwo.silogen.ai/type: job
+            kaiwo.silogen.ai/user: test-amd.com
+        spec:
+          containers:
+          - env:
+            - name: NUM_GPUS
+              value: "16"
+            - name: NUM_REPLICAS
+              value: "2"
+            - name: NUM_GPUS_PER_REPLICA
+              value: "8"
+            image: ghcr.io/silogen/rocm-ray:v0.8
+            imagePullPolicy: Always
+            name: ray-worker
+            resources:
+              limits:
+                cpu: "32"
+                memory: 256Gi
+                nvidia.com/gpu: "8"
+              requests:
+                cpu: "32"
+                memory: 256Gi
+                nvidia.com/gpu: "8"
+            volumeMounts:
+            - mountPath: /dev/shm
+              name: dshm
+          restartPolicy: Never
+          securityContext:
+            fsGroup: 1000
+            runAsGroup: 1000
+            runAsUser: 1000
+          volumes:
+          - emptyDir:
+              medium: Memory
+              sizeLimit: 200Gi
+            name: dshm
+  shutdownAfterJobFinishes: true
+  submissionMode: K8sJobMode
+  suspend: true
+  ttlSecondsAfterFinished: 0

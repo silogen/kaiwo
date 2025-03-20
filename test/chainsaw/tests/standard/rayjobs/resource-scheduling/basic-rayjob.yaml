@@ -1,0 +1,11 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoJob
+metadata:
+  name: kaiwojob-rayjob-resource-scheduling
+spec:
+  user: test@amd.com
+  ray: true
+  gpuVendor: "nvidia"
+  gpus: 17
+  entrypoint: |
+    sleep 1

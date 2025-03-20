@@ -4,49 +4,53 @@ metadata:
   name: kaiwoservice-reconciliation-ray
 spec:
   steps:
-    - try:
-        - apply:
-            file: basic-rayservice.yaml
-        - assert:
-            resource:
-              apiVersion: kaiwo.silogen.ai/v1alpha1
-              kind: KaiwoService
-              metadata:
-                name: kaiwoservice-1
-              status:
-                status: PENDING
-        - assert:
-            resource:
-              apiVersion: ray.io/v1
-              kind: RayService
-              metadata:
-                name: kaiwoservice-1
-        - assert:
-            resource:
-              apiVersion: v1
-              kind: Pod
-              metadata:
-                (contains(name, '-head')): true
-                labels:
-                  ray.io/node-type: head
-        - assert:
-            resource:
-              apiVersion: v1
-              kind: Pod
-              metadata:
-                (contains(name, '-worker')): true
-                labels:
-                  ray.io/node-type: worker
-        - script:
-            content: sleep 30 && kubectl get events --sort-by=.lastTimestamp | grep "AppWrapper/kaiwoservice-1"
-            check:
-              (contains($stdout, "Admitted by clusterQueue kaiwo")): true
-      catch:
-        - command:
-            entrypoint: kaiwo-dev
-            env:
-              - name: NAMESPACE
-                value: ($namespace)
-              - name: PRINT_LEVEL
-                value: ($values.print_level)
-            args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+  - try:
+    - apply:
+        file: basic-rayservice.yaml
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoService
+          metadata:
+            name: kaiwoservice-1
+          status:
+            status: PENDING
+    - assert:
+        resource:
+          apiVersion: ray.io/v1
+          kind: RayService
+          metadata:
+            name: kaiwoservice-1
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            (contains(name, '-head')): true
+            labels:
+              ray.io/node-type: head
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            (contains(name, '-worker')): true
+            labels:
+              ray.io/node-type: worker
+    - script:
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        content: ../../../scripts/assert_kueue_admitted.sh $NAMESPACE kaiwoservice-1
+        check:
+          ($error == null): true
+
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: [ "debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL" ]

@@ -1,0 +1,11 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoJob
+metadata:
+  name: kaiwojob-rayjob-no-gpus-available
+  namespace: kaiwo-test
+spec:
+  user: test@amd.com
+  ray: true
+  gpus: 1
+  entrypoint: |
+    sleep 1
