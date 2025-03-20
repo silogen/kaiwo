@@ -4,10 +4,6 @@ set -e
 
 TEST_NAME=${TEST_NAME:-"kaiwo-test"}
 
-CERT_MANAGER_MANIFESTS="https://github.com/cert-manager/cert-manager/releases/download/v1.17.0/cert-manager.yaml"
-KUEUE_MANIFESTS="https://github.com/kubernetes-sigs/kueue/releases/download/v0.10.1/manifests.yaml"
-KUBERAY_MANIFESTS="github.com/ray-project/kuberay/ray-operator/config/default?ref=master"
-
 
 create_cluster() {
   echo "Creating Kind cluster '$TEST_NAME'..."
@@ -23,7 +19,7 @@ else
     create_cluster
 fi
 
-kubectl apply -f "$CERT_MANAGER_MANIFESTS"
+kubectl apply -k dependencies/kustomization-client-side
 echo "Waiting for Cert-Manager to be deployed..."
 for deploy in cert-manager cert-manager-webhook cert-manager-cainjector; do
     echo "Waiting for deployment: $deploy"
@@ -44,17 +40,12 @@ kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 nvidia.com/gpu.count
 kubectl apply -f test/fake-gpu-operator/fake-gpu-operator.yaml
 
 
-# Add Kueue
-echo "Deploying Kueue operator..."
-kubectl apply --server-side -f "$KUEUE_MANIFESTS"
-echo "Waiting for Kueue to be deployed..."
+# Deploy other dependencies
+kubectl apply --server-side -k dependencies/kustomization-server-side
 kubectl rollout status deployment/kueue-controller-manager -n kueue-system --timeout=5m
-echo "Kueue deployed."
-
-# Add KubeRay
-kubectl create -k "$KUBERAY_MANIFESTS"
 kubectl rollout status deployment/kuberay-operator --timeout=5m
-echo "KubeRay deployed."
+kubectl rollout status deployment/appwrapper-controller-manager -n appwrapper-system --timeout=5m
+
 
 kubectl create ns $TEST_NAME
 

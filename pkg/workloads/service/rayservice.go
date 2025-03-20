@@ -16,6 +16,7 @@ package workloadservice
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -25,9 +26,11 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	appwrapperv1beta2 "github.com/project-codeflare/appwrapper/api/v1beta2"
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -44,13 +47,13 @@ func GetDefaultRayServiceSpec(dangerous bool, resourceRequirements v1.ResourceRe
 }
 
 type RayServiceReconciler struct {
-	workloadcommon.ResourceReconcilerBase[*rayv1.RayService]
+	workloadcommon.ResourceReconcilerBase[*appwrapperv1beta2.AppWrapper]
 	KaiwoService *v1alpha1.KaiwoService
 }
 
 func NewRayServiceReconciler(kaiwoService *v1alpha1.KaiwoService) *RayServiceReconciler {
 	r := &RayServiceReconciler{
-		ResourceReconcilerBase: workloadcommon.ResourceReconcilerBase[*rayv1.RayService]{
+		ResourceReconcilerBase: workloadcommon.ResourceReconcilerBase[*appwrapperv1beta2.AppWrapper]{
 			ObjectKey: client.ObjectKeyFromObject(kaiwoService),
 		},
 		KaiwoService: kaiwoService,
@@ -59,7 +62,7 @@ func NewRayServiceReconciler(kaiwoService *v1alpha1.KaiwoService) *RayServiceRec
 	return r
 }
 
-func (r *RayServiceReconciler) Build(ctx context.Context, k8sClient client.Client) (*rayv1.RayService, error) {
+func (r *RayServiceReconciler) Build(ctx context.Context, k8sClient client.Client) (*appwrapperv1beta2.AppWrapper, error) {
 	logger := log.FromContext(ctx)
 
 	spec := r.KaiwoService.Spec
@@ -180,14 +183,50 @@ func (r *RayServiceReconciler) Build(ctx context.Context, k8sClient client.Clien
 	baseutils.CopyLabels(r.KaiwoService.GetLabels(), &rayService.ObjectMeta)
 	baseutils.SetKaiwoSystemLabels(labelContext, &rayService.ObjectMeta)
 
-	return rayService, nil
+	rayServiceSpecBytes, err := json.Marshal(rayServiceSpec)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal RayServiceSpec: %w", err)
+	}
+
+	appWrapper := &appwrapperv1beta2.AppWrapper{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      r.KaiwoService.Name,
+			Namespace: r.KaiwoService.Namespace,
+			Labels: map[string]string{
+				v1alpha1.QueueLabel: r.KaiwoService.Labels[v1alpha1.QueueLabel],
+			},
+		},
+		Spec: appwrapperv1beta2.AppWrapperSpec{
+			Components: []appwrapperv1beta2.AppWrapperComponent{
+				{
+					DeclaredPodSets: []appwrapperv1beta2.AppWrapperPodSet{
+						{Replicas: baseutils.Pointer(int32(1)), Path: "template.spec.rayClusterConfig.headGroupSpec.template"},
+						{Replicas: baseutils.Pointer(int32(replicas)), Path: "template.spec.rayClusterConfig.workerGroupSpecs[0].template"},
+					},
+					Template: runtime.RawExtension{
+						Raw: []byte(fmt.Sprintf(`{
+				    "apiVersion": "ray.io/v1",
+				    "kind": "RayService",
+				    "metadata": {
+					"name": "%s",
+					"namespace": "%s"
+				    },
+				    "spec": %s
+				}`, r.KaiwoService.Name, r.KaiwoService.Namespace, rayServiceSpecBytes)),
+					},
+				},
+			},
+		},
+	}
+
+	return appWrapper, nil
 }
 
-func (r *RayServiceReconciler) GetEmptyObject() *rayv1.RayService {
-	return &rayv1.RayService{}
+func (r *RayServiceReconciler) GetEmptyObject() *appwrapperv1beta2.AppWrapper {
+	return &appwrapperv1beta2.AppWrapper{}
 }
 
-func (r *RayServiceReconciler) ValidateBeforeCreateOrUpdate(ctx context.Context, actual *rayv1.RayService) (*ctrl.Result, error) {
+func (r *RayServiceReconciler) ValidateBeforeCreateOrUpdate(ctx context.Context, actual *appwrapperv1beta2.AppWrapper) (*ctrl.Result, error) {
 	// Abort reconciliation the managed label is set and actual doesn't exist, as the service is managed by the webhook
 	// This is to avoid trying to create the service that is going to be created once the webhook completes
 	return workloadcommon.ValidateKaiwoResourceBeforeCreateOrUpdate(ctx, actual, r.KaiwoService.ObjectMeta)

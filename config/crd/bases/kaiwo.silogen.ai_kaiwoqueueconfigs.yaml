@@ -106,8 +106,9 @@ spec:
                           type: string
                         fairSharing:
                           description: |-
-                            fairSharing defines the properties of the ClusterQueue when participating in fair sharing.
-                            The values are only relevant if fair sharing is enabled in the Kueue configuration.
+                            fairSharing defines the properties of the ClusterQueue when
+                            participating in FairSharing.  The values are only relevant
+                            if FairSharing is enabled in the Kueue configuration.
                           properties:
                             weight:
                               anyOf:
@@ -115,12 +116,14 @@ spec:
                               - type: string
                               default: 1
                               description: |-
-                                weight gives a comparative advantage to this ClusterQueue when competing for unused
-                                resources in the cohort against other ClusterQueues.
-                                The share of a ClusterQueue is based on the dominant resource usage above nominal
-                                quotas for each resource, divided by the weight.
-                                Admission prioritizes scheduling workloads from ClusterQueues with the lowest share
-                                and preempting workloads from the ClusterQueues with the highest share.
+                                weight gives a comparative advantage to this ClusterQueue
+                                or Cohort when competing for unused resources in the
+                                Cohort.  The share is based on the dominant resource usage
+                                above nominal quotas for each resource, divided by the
+                                weight.  Admission prioritizes scheduling workloads from
+                                ClusterQueues and Cohorts with the lowest share and
+                                preempting workloads from the ClusterQueues and Cohorts
+                                with the highest share.
                               pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                               x-kubernetes-int-or-string: true
                           type: object
@@ -212,21 +215,22 @@ spec:
                         preemption:
                           default: {}
                           description: |-
-                            preemption describes policies to preempt Workloads from this ClusterQueue
-                            or the ClusterQueue's cohort.
+                            ClusterQueuePreemption contains policies to preempt Workloads from this
+                            ClusterQueue or the ClusterQueue's cohort.
 
-                            Preemption can happen in two scenarios:
+                            Preemption may be configured to work in the following scenarios:
 
-                            - When a Workload fits within the nominal quota of the ClusterQueue, but
-                              the quota is currently borrowed by other ClusterQueues in the cohort.
-                              Preempting Workloads in other ClusterQueues allows this ClusterQueue to
-                              reclaim its nominal quota.
+                              - When a Workload fits within the nominal quota of the ClusterQueue, but
+                                the quota is currently borrowed by other ClusterQueues in the cohort.
+                                We preempt workloads in other ClusterQueues to allow this ClusterQueue to
+                                reclaim its nominal quota. Configured using reclaimWithinCohort.
                           properties:
                             borrowWithinCohort:
                               default: {}
                               description: |-
-                                borrowWithinCohort provides configuration to allow preemption within
-                                cohort while borrowing.
+                                BorrowWithinCohort contains configuration which allows to preempt workloads
+                                within cohort while borrowing. It only works with Classical Preemption,
+                                __not__ with Fair Sharing.
                               properties:
                                 maxPriorityThreshold:
                                   description: |-

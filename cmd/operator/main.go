@@ -38,7 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/silogen/kaiwo/internal/controller"
-	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
+	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
@@ -46,6 +46,7 @@ import (
 
 	// +kubebuilder:scaffold:imports
 
+	appwrapperv1beta2 "github.com/project-codeflare/appwrapper/api/v1beta2"
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
@@ -62,11 +63,12 @@ var certDirectory = baseutils.GetEnv("WEBHOOK_CERT_DIRECTORY", "")
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	utilruntime.Must(kaiwov1alpha1.AddToScheme(scheme))
+	utilruntime.Must(v1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 
 	utilruntime.Must(kueuev1beta1.AddToScheme(scheme))
 	utilruntime.Must(rayv1.AddToScheme(scheme))
+	utilruntime.Must(appwrapperv1beta2.AddToScheme(scheme))
 }
 
 // nolint:gocyclo
@@ -245,10 +247,11 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "KaiwoQueueConfig")
 		os.Exit(1)
 	}
-	// nolint:goconst
+
 	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
-		jobWebhook := &webhookv1.JobWebhook{}
 		decoder := admission.NewDecoder(scheme)
+
+		jobWebhook := &webhookv1.JobWebhook{}
 		if err = jobWebhook.InjectDecoder(&decoder); err != nil {
 			setupLog.Error(err, "unable to inject decoder to webhook")
 			os.Exit(1)
@@ -257,28 +260,21 @@ func main() {
 			setupLog.Error(err, "Unable to create webhook", "webhook", "Job")
 			os.Exit(1)
 		}
-	}
 
-	// nolint:goconst
-	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
 		if err = webhookv1.SetupRayJobWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "RayJob")
 			os.Exit(1)
 		}
-	}
-	// nolint:goconst
-	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
 		if err = webhookv1.SetupRayServiceWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "RayService")
 			os.Exit(1)
 		}
-	}
-	// nolint:goconst
-	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
+
 		if err = webhookv1.SetupDeploymentWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Deployment")
 			os.Exit(1)
 		}
+
 	}
 	// +kubebuilder:scaffold:builder
 

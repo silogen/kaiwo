@@ -26,10 +26,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
-	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
+	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
-	workloadshared "github.com/silogen/kaiwo/pkg/workloads/common"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -37,23 +36,23 @@ import (
 )
 
 type KaiwoJobReconciler struct {
-	workloadshared.ReconcilerBase[*kaiwov1alpha1.KaiwoJob]
-	DownloadJobConfigMap *workloadshared.DownloadJobConfigMapReconciler
-	DownloadJob          *workloadshared.DownloadJobReconciler
-	HuggingFacePVC       *workloadshared.StorageReconciler
-	DataPVC              *workloadshared.StorageReconciler
-	LocalQueue           *workloadshared.LocalQueueReconciler
+	workloadcommon.ReconcilerBase[*v1alpha1.KaiwoJob]
+	DownloadJobConfigMap *workloadcommon.DownloadJobConfigMapReconciler
+	DownloadJob          *workloadcommon.DownloadJobReconciler
+	HuggingFacePVC       *workloadcommon.StorageReconciler
+	DataPVC              *workloadcommon.StorageReconciler
+	LocalQueue           *workloadcommon.LocalQueueReconciler
 	BatchJob             *BatchJobReconciler
 	RayJob               *RayJobReconciler
 }
 
-func NewKaiwoJobReconciler(kaiwoJob *kaiwov1alpha1.KaiwoJob) KaiwoJobReconciler {
+func NewKaiwoJobReconciler(kaiwoJob *v1alpha1.KaiwoJob) KaiwoJobReconciler {
 	sanitize(kaiwoJob)
 
 	objectKey := client.ObjectKeyFromObject(kaiwoJob)
 
 	reconciler := KaiwoJobReconciler{
-		ReconcilerBase: workloadshared.ReconcilerBase[*kaiwov1alpha1.KaiwoJob]{
+		ReconcilerBase: workloadcommon.ReconcilerBase[*v1alpha1.KaiwoJob]{
 			Object:    kaiwoJob,
 			ObjectKey: objectKey,
 		},
@@ -64,9 +63,9 @@ func NewKaiwoJobReconciler(kaiwoJob *kaiwov1alpha1.KaiwoJob) KaiwoJobReconciler 
 
 	if storageSpec != nil && storageSpec.StorageEnabled {
 		if storageSpec.HasData() {
-			reconciler.DataPVC = workloadshared.NewStorageReconciler(
+			reconciler.DataPVC = workloadcommon.NewStorageReconciler(
 				client.ObjectKey{
-					Name:      baseutils.FormatNameWithPostfix(objectKey.Name, workloadshared.DataStoragePostfix),
+					Name:      baseutils.FormatNameWithPostfix(objectKey.Name, workloadcommon.DataStoragePostfix),
 					Namespace: objectKey.Namespace,
 				},
 				storageSpec.AccessMode,
@@ -75,9 +74,9 @@ func NewKaiwoJobReconciler(kaiwoJob *kaiwov1alpha1.KaiwoJob) KaiwoJobReconciler 
 			)
 		}
 		if storageSpec.HasHfDownloads() {
-			reconciler.HuggingFacePVC = workloadshared.NewStorageReconciler(
+			reconciler.HuggingFacePVC = workloadcommon.NewStorageReconciler(
 				client.ObjectKey{
-					Name:      baseutils.FormatNameWithPostfix(objectKey.Name, workloadshared.HfStoragePostfix),
+					Name:      baseutils.FormatNameWithPostfix(objectKey.Name, workloadcommon.HfStoragePostfix),
 					Namespace: objectKey.Namespace,
 				},
 				storageSpec.AccessMode,
@@ -90,8 +89,8 @@ func NewKaiwoJobReconciler(kaiwoJob *kaiwov1alpha1.KaiwoJob) KaiwoJobReconciler 
 				Namespace: objectKey.Namespace,
 				Name:      baseutils.FormatNameWithPostfix(objectKey.Name, "download"),
 			}
-			reconciler.DownloadJobConfigMap = workloadshared.NewDownloadJobConfigMapReconciler(downloadObjectKey, storageSpec)
-			reconciler.DownloadJob = workloadshared.NewDownloadJobReconciler(downloadObjectKey, storageSpec, objectKey.Name, baseutils.ValueOrDefault(kaiwoJob.Spec.Env))
+			reconciler.DownloadJobConfigMap = workloadcommon.NewDownloadJobConfigMapReconciler(downloadObjectKey, storageSpec)
+			reconciler.DownloadJob = workloadcommon.NewDownloadJobReconciler(downloadObjectKey, storageSpec, objectKey.Name, baseutils.ValueOrDefault(kaiwoJob.Spec.Env))
 		}
 	}
 
@@ -99,7 +98,7 @@ func NewKaiwoJobReconciler(kaiwoJob *kaiwov1alpha1.KaiwoJob) KaiwoJobReconciler 
 	if clusterQueue == "" {
 		clusterQueue = controllerutils.DefaultClusterQueueName
 	}
-	reconciler.LocalQueue = workloadshared.NewLocalQueueReconciler(client.ObjectKey{Namespace: objectKey.Namespace, Name: clusterQueue})
+	reconciler.LocalQueue = workloadcommon.NewLocalQueueReconciler(client.ObjectKey{Namespace: objectKey.Namespace, Name: clusterQueue})
 
 	if kaiwoJob.Spec.IsBatchJob() {
 		reconciler.BatchJob = NewBatchJobReconciler(kaiwoJob)
@@ -112,7 +111,7 @@ func NewKaiwoJobReconciler(kaiwoJob *kaiwov1alpha1.KaiwoJob) KaiwoJobReconciler 
 	return reconciler
 }
 
-func sanitize(kaiwoJob *kaiwov1alpha1.KaiwoJob) {
+func sanitize(kaiwoJob *v1alpha1.KaiwoJob) {
 	storageSpec := kaiwoJob.Spec.Storage
 
 	if storageSpec != nil && storageSpec.StorageEnabled {
@@ -120,11 +119,11 @@ func sanitize(kaiwoJob *kaiwov1alpha1.KaiwoJob) {
 		// Ensure mount paths are set
 		if storageSpec.Data != nil && storageSpec.Data.IsRequested() && storageSpec.Data.MountPath == "" {
 			// logger.Info("Data storage mount path not set, using default:" + defaultDataMountPath)
-			storageSpec.Data.MountPath = workloadshared.DefaultDataMountPath
+			storageSpec.Data.MountPath = workloadcommon.DefaultDataMountPath
 		}
 		if storageSpec.HuggingFace != nil && storageSpec.HuggingFace.IsRequested() && storageSpec.HuggingFace.MountPath == "" {
 			// logger.Info("Hugging Face storage mount path not set, using default:" + defaultHfMountPath)
-			storageSpec.HuggingFace.MountPath = workloadshared.DefaultHfMountPath
+			storageSpec.HuggingFace.MountPath = workloadcommon.DefaultHfMountPath
 		}
 	}
 
@@ -133,9 +132,9 @@ func sanitize(kaiwoJob *kaiwov1alpha1.KaiwoJob) {
 	}
 
 	if baseutils.ValueOrDefault(kaiwoJob.Spec.ClusterQueue) == "" {
-		kaiwoJob.Labels[kaiwov1alpha1.QueueLabel] = controllerutils.DefaultClusterQueueName
+		kaiwoJob.Labels[v1alpha1.QueueLabel] = controllerutils.DefaultClusterQueueName
 	} else {
-		kaiwoJob.Labels[kaiwov1alpha1.QueueLabel] = baseutils.ValueOrDefault(kaiwoJob.Spec.ClusterQueue)
+		kaiwoJob.Labels[v1alpha1.QueueLabel] = baseutils.ValueOrDefault(kaiwoJob.Spec.ClusterQueue)
 	}
 }
 
@@ -246,7 +245,7 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, k8sClient client.Cli
 	return ctrl.Result{}, nil, fmt.Errorf("failed to update kaiwoJob status")
 }
 
-func (r *KaiwoJobReconciler) GatherStatus(ctx context.Context, k8sClient client.Client, previousStatus kaiwov1alpha1.KaiwoJobStatus, downloadJob *batchv1.Job) (*kaiwov1alpha1.KaiwoJobStatus, error) {
+func (r *KaiwoJobReconciler) GatherStatus(ctx context.Context, k8sClient client.Client, previousStatus v1alpha1.KaiwoJobStatus, downloadJob *batchv1.Job) (*v1alpha1.KaiwoJobStatus, error) {
 	kaiwoJob := r.Object
 
 	currentStatus := previousStatus.DeepCopy()
@@ -254,10 +253,10 @@ func (r *KaiwoJobReconciler) GatherStatus(ctx context.Context, k8sClient client.
 	// Check if download job has failed
 	if downloadJob != nil {
 		if downloadJob.Status.Failed > 0 {
-			currentStatus.Status = kaiwov1alpha1.StatusFailed
+			currentStatus.Status = v1alpha1.StatusFailed
 			return currentStatus, nil
 		} else if downloadJob.Status.Succeeded == 0 {
-			currentStatus.Status = kaiwov1alpha1.StatusPending
+			currentStatus.Status = v1alpha1.StatusPending
 			// Download job still ongoing
 			return currentStatus, nil
 		}
@@ -268,7 +267,7 @@ func (r *KaiwoJobReconciler) GatherStatus(ctx context.Context, k8sClient client.
 		return nil, fmt.Errorf("failed to check job completion: %w", err)
 	}
 
-	var status kaiwov1alpha1.Status
+	var status v1alpha1.Status
 
 	if currentStatus.StartTime == nil {
 		if startTime := workloadcommon.GetEarliestPodStartTime(ctx, k8sClient, kaiwoJob.Name, kaiwoJob.Namespace); startTime != nil {
@@ -278,9 +277,9 @@ func (r *KaiwoJobReconciler) GatherStatus(ctx context.Context, k8sClient client.
 
 	if jobSucceeded || jobFailed {
 		if jobSucceeded {
-			status = kaiwov1alpha1.StatusComplete
+			status = v1alpha1.StatusComplete
 		} else {
-			status = kaiwov1alpha1.StatusFailed
+			status = v1alpha1.StatusFailed
 		}
 		if currentStatus.CompletionTime == nil {
 			currentStatus.CompletionTime = baseutils.Pointer(metav1.Now())
@@ -302,14 +301,14 @@ func (r *KaiwoJobReconciler) GatherStatus(ctx context.Context, k8sClient client.
 		status = latestStatus
 	}
 
-	if status != kaiwov1alpha1.StatusNew {
+	if status != v1alpha1.StatusNew {
 		currentStatus.Status = status
 	}
 
 	return currentStatus, nil
 }
 
-func checkJobCompletion(ctx context.Context, k8sClient client.Client, kaiwoJob *kaiwov1alpha1.KaiwoJob) (bool, bool, error) {
+func checkJobCompletion(ctx context.Context, k8sClient client.Client, kaiwoJob *v1alpha1.KaiwoJob) (bool, bool, error) {
 	logger := log.FromContext(ctx)
 	var jobSucceeded, jobFailed bool
 

@@ -29,10 +29,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	appwrapperv1beta2 "github.com/project-codeflare/appwrapper/api/v1beta2"
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	"k8s.io/client-go/tools/record"
 
-	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
+	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
+	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 	workloadservice "github.com/silogen/kaiwo/pkg/workloads/service"
 )
@@ -52,7 +54,11 @@ func (r *KaiwoServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	logger := log.FromContext(ctx)
 	baseutils.Debug(logger, "Running KaiwoService reconciliation")
 
-	var kaiwoService kaiwov1alpha1.KaiwoService
+	if err := controllerutils.EnsureNamespaceKueueManaged(ctx, r.Client, req.Namespace); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	var kaiwoService v1alpha1.KaiwoService
 	if err := r.Get(ctx, req.NamespacedName, &kaiwoService); err != nil {
 		if client.IgnoreNotFound(err) != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to get KaiwoService: %w", err)
@@ -80,7 +86,7 @@ func (r *KaiwoServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Recorder = mgr.GetEventRecorderFor("kaiwoservice-controller")
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&kaiwov1alpha1.KaiwoService{}).
+		For(&v1alpha1.KaiwoService{}).
 		Watches(
 			&appsv1.Deployment{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
@@ -91,6 +97,12 @@ func (r *KaiwoServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&rayv1.RayService{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
 				return mapRayServiceToKaiwoService(obj)
+			}),
+		).
+		Watches(
+			&appwrapperv1beta2.AppWrapper{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				return mapAppWrapperToKaiwoService(obj)
 			}),
 		).
 		Named("kaiwoservice").
@@ -122,6 +134,21 @@ func mapRayServiceToKaiwoService(obj client.Object) []reconcile.Request {
 			NamespacedName: client.ObjectKey{
 				Name:      raySrv.Name,
 				Namespace: raySrv.Namespace,
+			},
+		},
+	}
+}
+
+func mapAppWrapperToKaiwoService(obj client.Object) []reconcile.Request {
+	appWrpr, ok := obj.(*appwrapperv1beta2.AppWrapper)
+	if !ok {
+		return nil
+	}
+	return []reconcile.Request{
+		{
+			NamespacedName: client.ObjectKey{
+				Name:      appWrpr.Name,
+				Namespace: appWrpr.Namespace,
 			},
 		},
 	}

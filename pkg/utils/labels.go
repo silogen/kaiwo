@@ -17,6 +17,8 @@ package baseutils
 import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+
+	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 )
 
 const (
@@ -53,6 +55,9 @@ func SetKaiwoSystemLabels(kaiwoLabelContext KaiwoLabelContext, objectMeta *v1.Ob
 // CopyLabels copies labels from kaiwoLabels to objectMeta.Labels, skipping keys that already exist
 func CopyLabels(kaiwoLabels map[string]string, objectMeta *v1.ObjectMeta) {
 	for kaiwoLabelKey, kaiwoLabelValue := range kaiwoLabels {
+		if kaiwoLabelKey == v1alpha1.QueueLabel {
+			continue
+		}
 		if _, exists := objectMeta.Labels[kaiwoLabelKey]; !exists {
 			objectMeta.Labels[kaiwoLabelKey] = kaiwoLabelValue
 		}
