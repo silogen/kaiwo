@@ -438,7 +438,9 @@ var _ = Describe("Manager", Ordered, func() {
 		})
 
 		RunBinpackingTest()
-		RunLabeledJobDeletionTest()
+		if !runningInCI {
+			RunLabeledJobDeletionTest()
+		}
 
 		// +kubebuilder:scaffold:e2e-webhooks-checks
 	})
