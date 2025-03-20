@@ -30,3 +30,12 @@ spec:
               metadata:
                 labels:
                   kaiwo/nodepool: ($resourceflavor2)
+      catch:
+        - command:
+            entrypoint: kaiwo-dev
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+              - name: PRINT_LEVEL
+                value: ($values.print_level)
+            args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]

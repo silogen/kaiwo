@@ -32,8 +32,14 @@ spec:
               status:
                 status: COMPLETE
       catch:
-        - events: {}
-        - podLogs: {}
+        - command:
+            entrypoint: kaiwo-dev
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+              - name: PRINT_LEVEL
+                value: ($values.print_level)
+            args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
 
 --- 
 
@@ -86,5 +92,11 @@ spec:
                 readyReplicas: 1
                 replicas: 1
       catch:
-        - events: {}
-        - podLogs: {}
+        - command:
+            entrypoint: kaiwo-dev
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+              - name: PRINT_LEVEL
+                value: ($values.print_level)
+            args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]

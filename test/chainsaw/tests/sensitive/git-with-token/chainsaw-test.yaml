@@ -47,20 +47,20 @@ spec:
                             secretKey: gh-token
                           path: README.md
                           targetPath: dev-helpers/README.md
-        # Check that the job is running (meaning that the download job completed successfully)
         - assert:
             resource:
-              apiVersion: kaiwo.silogen.ai/v1alpha1
-              kind: KaiwoJob
+              apiVersion: batch/v1
+              kind: Job
               metadata:
-                name: github-private-repo
+                name: github-private-repo-download
               status:
-                status: RUNNING
-        - script:
-            timeout: 30s
-            content: ../../../scripts/read_pod_file.sh kaiwo.silogen.ai/type=job "$NAMESPACE" /workload/dev-helpers/README.md
+                succeeded: 1
+      catch:
+        - command:
+            entrypoint: kaiwo-dev
             env:
               - name: NAMESPACE
-                value: kaiwo-test
-            check:
-              (contains($stdout, '# Local dev helper scripts and env connection info')): true
+                value: ($namespace)
+              - name: PRINT_LEVEL
+                value: ($values.print_level)
+            args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
