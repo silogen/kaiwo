@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
+	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
 )
@@ -49,10 +49,10 @@ func GetDefaultDeploymentSpec(dangerous bool, resourceRequirements corev1.Resour
 
 type DeploymentReconciler struct {
 	workloadcommon.ResourceReconcilerBase[*appsv1.Deployment]
-	KaiwoService *kaiwov1alpha1.KaiwoService
+	KaiwoService *v1alpha1.KaiwoService
 }
 
-func NewDeploymentReconciler(svc *kaiwov1alpha1.KaiwoService) *DeploymentReconciler {
+func NewDeploymentReconciler(svc *v1alpha1.KaiwoService) *DeploymentReconciler {
 	reconciler := &DeploymentReconciler{
 		ResourceReconcilerBase: workloadcommon.ResourceReconcilerBase[*appsv1.Deployment]{
 			ObjectKey: client.ObjectKeyFromObject(svc),
@@ -96,6 +96,8 @@ func (r *DeploymentReconciler) Build(ctx context.Context, _ client.Client) (*app
 
 	depSpec.Selector.MatchLabels["app"] = r.ObjectKey.Name
 	depSpec.Template.ObjectMeta.Labels["app"] = r.ObjectKey.Name
+
+	depSpec.Template.ObjectMeta.Labels[v1alpha1.QueueLabel] = r.KaiwoService.Labels[v1alpha1.QueueLabel]
 
 	if svcSpec.Replicas != nil {
 		depSpec.Replicas = baseutils.Pointer(int32(*svcSpec.Replicas))

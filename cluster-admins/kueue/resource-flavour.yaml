@@ -1,7 +1,0 @@
-apiVersion: kueue.x-k8s.io/v1beta1
-kind: ResourceFlavor
-metadata:
-  name: base-gpu-flavour
-spec:
-  nodeLabels:
-    beta.amd.com/gpu.family.AI: "8"

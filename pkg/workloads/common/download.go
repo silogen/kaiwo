@@ -28,7 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
+	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
@@ -45,10 +45,10 @@ var (
 
 type DownloadJobConfigMapReconciler struct {
 	ResourceReconcilerBase[*corev1.ConfigMap]
-	StorageSpec *kaiwov1alpha1.StorageSpec
+	StorageSpec *v1alpha1.StorageSpec
 }
 
-func NewDownloadJobConfigMapReconciler(objectKey client.ObjectKey, storageSpec *kaiwov1alpha1.StorageSpec) *DownloadJobConfigMapReconciler {
+func NewDownloadJobConfigMapReconciler(objectKey client.ObjectKey, storageSpec *v1alpha1.StorageSpec) *DownloadJobConfigMapReconciler {
 	reconciler := &DownloadJobConfigMapReconciler{
 		ResourceReconcilerBase: ResourceReconcilerBase[*corev1.ConfigMap]{
 			ObjectKey: objectKey,
@@ -64,7 +64,7 @@ func (r *DownloadJobConfigMapReconciler) Build(ctx context.Context, _ client.Cli
 
 	if r.StorageSpec.HasObjectStorageDownloads() {
 		// Update secret paths
-		setSecretPath := func(ref *kaiwov1alpha1.ValueReference) {
+		setSecretPath := func(ref *v1alpha1.ValueReference) {
 			if ref.File == "" {
 				// Path where the secret will be mounted on in the primary container
 				ref.File = filepath.Join(secretsMount, ref.SecretName, ref.SecretKey)
@@ -123,12 +123,12 @@ func (r *DownloadJobConfigMapReconciler) GetEmptyObject() *corev1.ConfigMap {
 
 type DownloadJobReconciler struct {
 	ResourceReconcilerBase[*batchv1.Job]
-	StorageSpec *kaiwov1alpha1.StorageSpec
+	StorageSpec *v1alpha1.StorageSpec
 	PvcBaseName string
 	UserEnvVars []corev1.EnvVar
 }
 
-func NewDownloadJobReconciler(objectKey client.ObjectKey, storageSpec *kaiwov1alpha1.StorageSpec, pvcBaseName string, userEnvVars []corev1.EnvVar) *DownloadJobReconciler {
+func NewDownloadJobReconciler(objectKey client.ObjectKey, storageSpec *v1alpha1.StorageSpec, pvcBaseName string, userEnvVars []corev1.EnvVar) *DownloadJobReconciler {
 	reconciler := &DownloadJobReconciler{
 		ResourceReconcilerBase: ResourceReconcilerBase[*batchv1.Job]{
 			ObjectKey: objectKey,
@@ -190,7 +190,7 @@ func (r *DownloadJobReconciler) Build(_ context.Context, _ client.Client) (*batc
 		secretVolumes := map[string]*corev1.Volume{}
 
 		// Closure to add a new secret volume if required, and to add the specific secret to the secret volume items list
-		addSecret := func(ref *kaiwov1alpha1.ValueReference) {
+		addSecret := func(ref *v1alpha1.ValueReference) {
 			if _, ok := secretVolumes[ref.SecretName]; !ok {
 				secretVolumes[ref.SecretName] = &corev1.Volume{
 					Name: "secret-" + ref.SecretName,

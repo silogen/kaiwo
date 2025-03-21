@@ -73,3 +73,7 @@ rules:
   - apiGroups: ["ray.io"]
     resources: ["rayservices"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  - apiGroups: ["workload.codeflare.dev"]
+    resources: ["appwrappers"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

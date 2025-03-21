@@ -167,6 +167,8 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 	baseutils.CopyLabels(r.KaiwoJob.ObjectMeta.Labels, &rayJob.ObjectMeta)
 	baseutils.SetKaiwoSystemLabels(labelContext, &rayJob.ObjectMeta)
 
+	rayJob.ObjectMeta.Labels[v1alpha1.QueueLabel] = r.KaiwoJob.Labels[v1alpha1.QueueLabel]
+
 	return rayJob, nil
 }
 

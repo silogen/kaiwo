@@ -37,7 +37,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
 
-	kaiwov1alpha1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
+	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
+	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	workloadjob "github.com/silogen/kaiwo/pkg/workloads/job"
 )
 
@@ -56,8 +57,12 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	logger := log.FromContext(ctx)
 	baseutils.Debug(logger, "Running reconciliation")
 
+	if err := controllerutils.EnsureNamespaceKueueManaged(ctx, r.Client, req.Namespace); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	// Fetch the KaiwoJob instance
-	var kaiwoJob kaiwov1alpha1.KaiwoJob
+	var kaiwoJob v1alpha1.KaiwoJob
 	if err := r.Get(ctx, req.NamespacedName, &kaiwoJob); err != nil {
 		if client.IgnoreNotFound(err) != nil {
 			return ctrl.Result{}, baseutils.LogErrorf(logger, "failed to get KaiwoJob", err)
@@ -66,10 +71,10 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, nil
 	}
 
-	if kaiwoJob.Status.Status == kaiwov1alpha1.StatusFailed {
+	if kaiwoJob.Status.Status == v1alpha1.StatusFailed {
 		baseutils.Debug(logger, "Skipping reconciliation, as status is failed")
 		return ctrl.Result{}, nil
-	} else if kaiwoJob.Status.Status == kaiwov1alpha1.StatusComplete {
+	} else if kaiwoJob.Status.Status == v1alpha1.StatusComplete {
 		baseutils.Debug(logger, "Skipping reconciliation, as status is complete")
 		return ctrl.Result{}, nil
 	}
@@ -92,7 +97,7 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 func (r *KaiwoJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Recorder = mgr.GetEventRecorderFor("kaiwojob-controller")
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&kaiwov1alpha1.KaiwoJob{}).
+		For(&v1alpha1.KaiwoJob{}).
 		Watches(
 			&batchv1.Job{}, // Watching batchv1.Job
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {

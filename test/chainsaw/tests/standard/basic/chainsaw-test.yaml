@@ -6,23 +6,7 @@ spec:
   steps:
     - try:
         - apply:
-            resource:
-              apiVersion: kaiwo.silogen.ai/v1alpha1
-              kind: KaiwoJob
-              metadata:
-                name: kaiwojob-1
-              spec:
-                user: test-user
-                resources:
-                  requests:
-                    cpu: "1"
-                    memory: "2Gi"
-                  limits:
-                    cpu: "1"
-                    memory: "2Gi"
-                image: busybox:latest
-                entrypoint: |
-                  sleep 1
+            file: basic-kaiwojob.yaml
         - assert:
             resource:
               apiVersion: kaiwo.silogen.ai/v1alpha1
@@ -31,6 +15,13 @@ spec:
                 name: kaiwojob-1
               status:
                 status: COMPLETE
+        - script:
+            env:
+            - name: NAMESPACE
+              value: ($namespace)
+            content: ../../../scripts/assert_kueue_admitted.sh $NAMESPACE kaiwojob-1
+            check:
+              ($error == null): true
       catch:
         - command:
             entrypoint: kaiwo-dev
@@ -53,26 +44,7 @@ spec:
   steps:
     - try:
         - apply:
-            resource:
-              apiVersion: kaiwo.silogen.ai/v1alpha1
-              kind: KaiwoService
-              metadata:
-                name: kaiwoservice-1
-              spec:
-                user: test-user
-                resources:
-                  requests:
-                    cpu: "1"
-                    memory: "2Gi"
-                  limits:
-                    cpu: "1"
-                    memory: "2Gi"
-                image: busybox:latest
-                entrypoint: |
-                  while true; do
-                    echo "Hello, world!"
-                    sleep 1
-                  done
+            file: basic-kaiwoservice.yaml
         - assert:
             resource:
               apiVersion: kaiwo.silogen.ai/v1alpha1
@@ -91,6 +63,13 @@ spec:
                 availableReplicas: 1
                 readyReplicas: 1
                 replicas: 1
+        - script:
+            env:
+            - name: NAMESPACE
+              value: ($namespace)
+            content: ../../../scripts/assert_kueue_admitted.sh $NAMESPACE kaiwoservice-1
+            check:
+              ($error == null): true
       catch:
         - command:
             entrypoint: kaiwo-dev

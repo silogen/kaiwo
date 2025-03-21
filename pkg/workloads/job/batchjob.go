@@ -115,6 +115,8 @@ func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batch
 	baseutils.CopyLabels(r.KaiwoJob.ObjectMeta.Labels, &job.ObjectMeta)
 	baseutils.SetKaiwoSystemLabels(labelContext, &job.ObjectMeta)
 
+	job.ObjectMeta.Labels[v1alpha1.QueueLabel] = r.KaiwoJob.Labels[v1alpha1.QueueLabel]
+
 	return job, nil
 }
 

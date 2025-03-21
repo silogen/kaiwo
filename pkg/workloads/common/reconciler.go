@@ -18,7 +18,9 @@ import (
 	"context"
 	"fmt"
 
+	appwrapperv1beta2 "github.com/project-codeflare/appwrapper/api/v1beta2"
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -109,7 +111,7 @@ func (d *ResourceReconcilerBase[T]) Reconcile(ctx context.Context, k8sClient cli
 
 	if err == nil {
 		switch any(actual).(type) {
-		case *batchv1.Job, *rayv1.RayJob:
+		case *batchv1.Job, *rayv1.RayJob, *rayv1.RayService, *appwrapperv1beta2.AppWrapper, *appsv1.Deployment:
 			if !metav1.IsControlledBy(actual, owner) {
 				logger.Info("Updating object owner for BatchJob or RayJob", "Object", actual.GetObjectKind().GroupVersionKind().Kind)
 
