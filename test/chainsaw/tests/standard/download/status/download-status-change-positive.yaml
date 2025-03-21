@@ -9,10 +9,10 @@ spec:
   resources:
     limits:
       cpu: "1"
-      memory: "2Gi"
+      memory: "1Gi"
     requests:
       cpu: "1"
-      memory: "2Gi"
+      memory: "1Gi"
   image: busybox:latest
   entrypoint: |
     sleep 1
@@ -21,7 +21,7 @@ spec:
     storageClassName: "standard"
     accessMode: "ReadWriteOnce"
     huggingFace:
-      storageSize: "1Gi"
+      storageSize: "1Mi"
       mountPath: "/.cache/huggingface"
       preCacheRepos:
         - repoId: TinyLlama/TinyLlama-1.1B-Chat-v1.0

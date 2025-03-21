@@ -74,9 +74,10 @@ func (r *DownloadJobConfigMapReconciler) Build(ctx context.Context, _ client.Cli
 		// Set secret paths
 		s3Downloads := r.StorageSpec.Data.Download.S3
 		for i := range r.StorageSpec.Data.Download.S3 {
-			setSecretPath(&s3Downloads[i].EndpointUrl)
-			setSecretPath(&s3Downloads[i].AccessKeyId)
-			setSecretPath(&s3Downloads[i].SecretKey)
+			if s3Downloads[i].AccessKeyId.SecretName != "" || s3Downloads[i].SecretKey.SecretName != "" {
+				setSecretPath(&s3Downloads[i].AccessKeyId)
+				setSecretPath(&s3Downloads[i].SecretKey)
+			}
 		}
 		gcsDownloads := r.StorageSpec.Data.Download.GCS
 		for i := range gcsDownloads {
@@ -215,9 +216,10 @@ func (r *DownloadJobReconciler) Build(_ context.Context, _ client.Client) (*batc
 
 		s3Downloads := r.StorageSpec.Data.Download.S3
 		for i := range s3Downloads {
-			addSecret(&s3Downloads[i].EndpointUrl)
-			addSecret(&s3Downloads[i].AccessKeyId)
-			addSecret(&s3Downloads[i].SecretKey)
+			if s3Downloads[i].AccessKeyId.SecretName != "" || s3Downloads[i].SecretKey.SecretName != "" {
+				addSecret(&s3Downloads[i].AccessKeyId)
+				addSecret(&s3Downloads[i].SecretKey)
+			}
 		}
 		gcsDownloads := r.StorageSpec.Data.Download.GCS
 		for i := range gcsDownloads {
@@ -285,8 +287,9 @@ func (r *DownloadJobReconciler) Build(_ context.Context, _ client.Client) (*batc
 					RestartPolicy: corev1.RestartPolicyNever,
 					Containers: []corev1.Container{
 						{
-							Image: "ghcr.io/silogen/kaiwo-python:0.4",
-							Name:  "data-downloader",
+							Image:           "ghcr.io/silogen/kaiwo-python:0.5",
+							ImagePullPolicy: corev1.PullAlways,
+							Name:            "data-downloader",
 							Command: []string{
 								"python",
 								"-m",

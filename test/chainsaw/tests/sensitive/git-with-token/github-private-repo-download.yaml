@@ -1,0 +1,32 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoJob
+metadata:
+  name: github-private-repo
+spec:
+  resources:
+    limits:
+      cpu: "1"
+      memory: "2Gi"
+    requests:
+      cpu: "1"
+      memory: "2Gi"
+  user: test@amd.com
+  image: busybox:latest
+  entrypoint: |
+    sleep 10
+  storage:
+    storageEnabled: true
+    storageClassName: "standard"
+    accessMode: "ReadWriteOnce"
+    data:
+      storageSize: 1Gi
+      mountPath: /workload
+      download:
+        git:
+          - repository: https://github.com/silogen/dev_helpers.git
+            commit: 8c1b48ad593a8cdd3322e79cab7933dbcae24826
+            token:
+              secretName: my-gh-token
+              secretKey: gh-token
+            path: README.md
+            targetPath: dev-helpers/README.md

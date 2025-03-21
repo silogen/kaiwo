@@ -112,7 +112,9 @@ class ValueReference(BaseModel):
     def get_value(self) -> str:
         if self.value is not None:
             return self.value
+        if self.file is not None:
+            with open(self.file) as f:
+                return f.read().strip()
         if self.file is None:
-            raise ValueError("Must provide either value or file")
-        with open(self.file) as f:
-            return f.read().strip()
+            return None
+        
