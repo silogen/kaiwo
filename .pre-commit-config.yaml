@@ -9,3 +9,24 @@ repos:
         language: golang
         require_serial: true
         pass_filenames: false
+
+  - repo: https://github.com/psf/black
+    rev: 25.1.0
+    hooks:
+      - id: black
+        additional_dependencies: ["toml"]
+        args: ["--config", "python/pyproject.toml"]
+
+  - repo: https://github.com/pycqa/isort
+    rev: 6.0.1 
+    hooks:
+      - id: isort
+        additional_dependencies: ["toml"]
+        args: ["--settings", "python/pyproject.toml"]
+
+  - repo: https://github.com/pycqa/flake8
+    rev: 7.1.2
+    hooks:
+      - id: flake8
+        additional_dependencies: ["flake8-pyproject"] 
+        args: ["--config", "python/pyproject.toml"]
