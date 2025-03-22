@@ -14,8 +14,7 @@ metadata:
     name: kaiwojob-rayjob-resource-scheduling
 spec:
   backoffLimit: 0
-  entrypoint: |
-    sleep 1
+  entrypoint: sleep 1
   rayClusterSpec:
     enableInTreeAutoscaling: false
     headGroupSpec:

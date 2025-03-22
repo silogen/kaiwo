@@ -4,26 +4,26 @@ run:
 
 linters:
   enable:
-      - errcheck
-      - gosimple
-      - goheader
-      - gofumpt
-      - goimports
-      - govet
-      - ineffassign
-      - staticcheck
-      - unused
-      - dupl
-      - copyloopvar
-      - ginkgolinter
-      - goconst
-      - gocyclo
-      - lll
-      - misspell
-      - nakedret
-      - typecheck
-      - unconvert
-      - unparam
+  - errcheck
+  - gosimple
+  - goheader
+  - gofumpt
+  - goimports
+  - govet
+  - ineffassign
+  - staticcheck
+  - unused
+  - dupl
+  - copyloopvar
+  - ginkgolinter
+  - goconst
+  - gocyclo
+  - lll
+  - misspell
+  - nakedret
+  - typecheck
+  - unconvert
+  - unparam
 issues:
   fix: true
   # don't exclude the default set of lint
@@ -31,15 +31,15 @@ issues:
   # restore some of the defaults
   # (fill in the rest as needed)
   exclude-rules:
-    - path: "pkg/api/*"
-      linters:
-        - lll
-    - path: "internal/*"
-      linters:
-        - dupl
-        - lll
+  - path: "pkg/api/*"
+    linters:
+    - lll
+  - path: "internal/*"
+    linters:
+    - dupl
+    - lll
   exclude-dirs:
-    - python
+  - python
 linters-settings:
   goimports:
     local-prefixes: github.com/silogen/kaiwo

@@ -5,125 +5,125 @@ metadata:
 spec:
   concurrent: false
   steps:
-    - name: Check kaiwoqueueconfig creation, update, deletion
-      try:
-        - script:
-            content: kubectl get resourceflavors -o jsonpath="{.items[0].metadata.name}"
-            outputs:
-              - name: resourceflavor1
-                value: ($stdout)
-        - script:
-            content: kubectl get resourceflavors -o jsonpath="{.items[1].metadata.name}"
-            outputs:
-              - name: resourceflavor2
-                value: ($stdout)
-        - assert:
-            resource:
-              apiVersion: kaiwo.silogen.ai/v1alpha1
-              kind: KaiwoQueueConfig
-              metadata:
-                name: kaiwo
+  - name: Check kaiwoqueueconfig creation, update, deletion
+    try:
+    - script:
+        content: kubectl get resourceflavors -o jsonpath="{.items[0].metadata.name}"
+        outputs:
+        - name: resourceflavor1
+          value: ($stdout)
+    - script:
+        content: kubectl get resourceflavors -o jsonpath="{.items[1].metadata.name}"
+        outputs:
+        - name: resourceflavor2
+          value: ($stdout)
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoQueueConfig
+          metadata:
+            name: kaiwo
+          spec:
+            clusterQueues:
+            - name: kaiwo
               spec:
-                clusterQueues:
-                  - name: kaiwo
-                    spec:
-                      flavorFungibility:
-                        whenCanBorrow: Borrow
-                        whenCanPreempt: TryNextFlavor
-                      namespaceSelector: {}
-                      preemption:
-                        borrowWithinCohort:
-                          policy: Never
-                        reclaimWithinCohort: Never
-                        withinClusterQueue: Never
-                      queueingStrategy: BestEffortFIFO
-        - script:
-                  content: kubectl get kaiwoqueueconfig kaiwo -o json
-                  outputs:
-                  - name: coveredResources
-                    value: (json_parse($stdout).spec.clusterQueues[0].spec.resourceGroups[0].coveredResources)
-                  - name: resourceGroupFlavorResources
-                    value: (json_parse($stdout).spec.clusterQueues[0].spec.resourceGroups[0].flavors[*].resources)
-                  - name: resourceFlavors
-                    value: (json_parse($stdout).spec.resourceFlavors)
-        - script:
-            env: 
-              - name: covered
-                value: (to_string($coveredResources))
-            content:  |
-              echo $covered
-            check:
-              (contains($stdout, 'cpu')): true
-              (contains($stdout, 'memory')): true
-              (contains($stdout, 'nvidia.com/gpu')): true
+                flavorFungibility:
+                  whenCanBorrow: Borrow
+                  whenCanPreempt: TryNextFlavor
+                namespaceSelector: {}
+                preemption:
+                  borrowWithinCohort:
+                    policy: Never
+                  reclaimWithinCohort: Never
+                  withinClusterQueue: Never
+                queueingStrategy: BestEffortFIFO
+    - script:
+        content: kubectl get kaiwoqueueconfig kaiwo -o json
+        outputs:
+        - name: coveredResources
+          value: (json_parse($stdout).spec.clusterQueues[0].spec.resourceGroups[0].coveredResources)
+        - name: resourceGroupFlavorResources
+          value: (json_parse($stdout).spec.clusterQueues[0].spec.resourceGroups[0].flavors[*].resources)
+        - name: resourceFlavors
+          value: (json_parse($stdout).spec.resourceFlavors)
+    - script:
+        env:
+        - name: covered
+          value: (to_string($coveredResources))
+        content: |
+          echo $covered
+        check:
+          (contains($stdout, 'cpu')): true
+          (contains($stdout, 'memory')): true
+          (contains($stdout, 'nvidia.com/gpu')): true
 
-        - script:
-            env: 
-              - name: resources
-                value: (to_string($resourceGroupFlavorResources))
-            content:  |
-              echo $resources
-            check:
-              (contains($stdout, 'cpu')): true
-              (contains($stdout, 'memory')): true
-              (contains($stdout, '{"name":"nvidia.com/gpu","nominalQuota":"16"}')): true
+    - script:
+        env:
+        - name: resources
+          value: (to_string($resourceGroupFlavorResources))
+        content: |
+          echo $resources
+        check:
+          (contains($stdout, 'cpu')): true
+          (contains($stdout, 'memory')): true
+          (contains($stdout, '{"name":"nvidia.com/gpu","nominalQuota":"16"}')): true
 
-        - script:
-            env: 
-              - name: flavors
-                value: (to_string($resourceFlavors))
-            content:  |
-              echo $flavors
-            check:
-              (contains($stdout, '"name":"cpu-only-0gpu')): true
-              (contains($stdout, 'nodeLabels":{"kaiwo/nodepool":"cpu-only-0gpu')): true
-              (contains($stdout, '"name":"nvidia-teslak80-8gpu')): true
-              (contains($stdout, '"nodeLabels":{"kaiwo/nodepool":"nvidia-teslak80-8gpu')): true
+    - script:
+        env:
+        - name: flavors
+          value: (to_string($resourceFlavors))
+        content: |
+          echo $flavors
+        check:
+          (contains($stdout, '"name":"cpu-only-0gpu')): true
+          (contains($stdout, 'nodeLabels":{"kaiwo/nodepool":"cpu-only-0gpu')): true
+          (contains($stdout, '"name":"nvidia-teslak80-8gpu')): true
+          (contains($stdout, '"nodeLabels":{"kaiwo/nodepool":"nvidia-teslak80-8gpu')): true
         # Save the current kaiwoqueueconfig for other tests to use later
-        - script:
-            content: kubectl get kaiwoqueueconfig kaiwo -o yaml > /tmp/kaiwoqueueconfig.yaml
-        - apply:
-            file: kaiwoqueueconfig1.yaml
-        - script:
-            content: sleep 3
-        - script:
-            content: kubectl get resourceflavor --no-headers | wc -l
-            check:
-              (contains($stdout, '5')): true
-        - script:
-            content: kubectl get clusterqueue --no-headers | wc -l
-            check:
-              (contains($stdout, '2')): true
-        - apply:
-            file: kaiwoqueueconfig2.yaml
-        - script:
-            content: sleep 3
-        - script:
-            content: kubectl get resourceflavor --no-headers | wc -l
-            check:
-              (contains($stdout, '1')): true
-        - script:
-            content: kubectl get clusterqueue --no-headers | wc -l
-            check:
-              (contains($stdout, '1')): true
-        - script:
-            content: kubectl get clusterqueue fizz -o json
-            check:
-              (contains($stdout, 'amd.com/gpu')): true
-              (contains($stdout, 'nvidia.com/gpu')): false
-        - script:
-            content: kubectl get resourceflavor foo -o json
-            check:
-              (contains($stdout, 'amd-rocks')): true
+    - script:
+        content: kubectl get kaiwoqueueconfig kaiwo -o yaml > /tmp/kaiwoqueueconfig.yaml
+    - apply:
+        file: kaiwoqueueconfig1.yaml
+    - script:
+        content: sleep 3
+    - script:
+        content: kubectl get resourceflavor --no-headers | wc -l
+        check:
+          (contains($stdout, '5')): true
+    - script:
+        content: kubectl get clusterqueue --no-headers | wc -l
+        check:
+          (contains($stdout, '2')): true
+    - apply:
+        file: kaiwoqueueconfig2.yaml
+    - script:
+        content: sleep 3
+    - script:
+        content: kubectl get resourceflavor --no-headers | wc -l
+        check:
+          (contains($stdout, '1')): true
+    - script:
+        content: kubectl get clusterqueue --no-headers | wc -l
+        check:
+          (contains($stdout, '1')): true
+    - script:
+        content: kubectl get clusterqueue fizz -o json
+        check:
+          (contains($stdout, 'amd.com/gpu')): true
+          (contains($stdout, 'nvidia.com/gpu')): false
+    - script:
+        content: kubectl get resourceflavor foo -o json
+        check:
+          (contains($stdout, 'amd-rocks')): true
         # Apply the saved kaiwoqueueconfig for other tests to use
-        - script:
-            content: kubectl replace --force -f /tmp/kaiwoqueueconfig.yaml
-      catch:
-        - command:
-            entrypoint: kaiwo-dev
-            env:
-              - name: NAMESPACE
-                value: ($namespace)
-              - name: PRINT_LEVEL
-                value: ($values.print_level)
-            args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+    - script:
+        content: kubectl replace --force -f /tmp/kaiwoqueueconfig.yaml
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]

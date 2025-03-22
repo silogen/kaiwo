@@ -7,33 +7,33 @@ spec:
   timeouts:
     assert: 240s
   steps:
-    - try:
-        - apply:
-            file: download-from-public-bucket.yaml
-        - apply:
-            file: s3-deployment.yaml
-        - apply:
-            file: data-uploader.yaml
-        - apply:
-            file: download-from-private-bucket.yaml
-        - assert:
-            resource:
-              apiVersion: kaiwo.silogen.ai/v1alpha1
-              kind: KaiwoJob
-              metadata:
-                name: download-from-public-bucket
-                namespace: kaiwo-test
-              status:
-                status: COMPLETE
-        - assert:
-            resource:
-              apiVersion: kaiwo.silogen.ai/v1alpha1
-              kind: KaiwoJob
-              metadata:
-                name: download-from-private-bucket
-                namespace: kaiwo-test
-              status:
-                status: COMPLETE
-      catch:
-        - events: {}
-        - podLogs: {}
+  - try:
+    - apply:
+        file: download-from-public-bucket.yaml
+    - apply:
+        file: s3-deployment.yaml
+    - apply:
+        file: data-uploader.yaml
+    - apply:
+        file: download-from-private-bucket.yaml
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: download-from-public-bucket
+            namespace: kaiwo-test
+          status:
+            status: COMPLETE
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: download-from-private-bucket
+            namespace: kaiwo-test
+          status:
+            status: COMPLETE
+    catch:
+    - events: {}
+    - podLogs: {}

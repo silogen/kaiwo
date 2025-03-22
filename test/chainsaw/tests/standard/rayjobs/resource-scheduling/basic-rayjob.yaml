@@ -7,5 +7,4 @@ spec:
   ray: true
   gpuVendor: "nvidia"
   gpus: 17
-  entrypoint: |
-    sleep 1
+  entrypoint: sleep 1

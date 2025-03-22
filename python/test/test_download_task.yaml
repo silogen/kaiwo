@@ -1,65 +1,65 @@
 download_root: /workload
 hf:
-  - name: Hugging Face download example
-    repo_id: TinyLlama/TinyLlama-1.1B-Chat-v1.0
-    files:
-      - README.md
+- name: Hugging Face download example
+  repo_id: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+  files:
+  - README.md
 gcs:
-  - name: Test GCS
-    project: test-project
+- name: Test GCS
+  project: test-project
 #    application_credentials:
 #      secret_name: gcs-secret
 #      secret_key: credentials
-    buckets:
-      - name: test
-        folders:
-          - path: .
-            target_path: gcs/all
-          - path: subdir
-            target_path: gcs/sub
-          - path: .
-            glob: "**/*.md"
-            target_path: gcs/glob
-        files:
-          - path: subdir/file02.txt
-            target_path: gcs/single.txt
+  buckets:
+  - name: test
+    folders:
+    - path: .
+      target_path: gcs/all
+    - path: subdir
+      target_path: gcs/sub
+    - path: .
+      glob: "**/*.md"
+      target_path: gcs/glob
+    files:
+    - path: subdir/file02.txt
+      target_path: gcs/single.txt
 s3:
-  - name: Test Minio
-    endpoint_url:
-      file: test/secrets/s3/endpoint
-      secret_name: s3-secret
-      secret_key: endpoint
-    access_key_id:
-      file: test/secrets/s3/access_key_id
-      secret_name: s3-secret
-      secret_key: access_key_id
-    secret_key:
-      file: test/secrets/s3/secret_key
-      secret_name: s3-secret
-      secret_key: secret_key
-    buckets:
-      - name: test
-        folders:
-          - path: .
-            target_path: s3/all
-          - path: subdir
-            target_path: s3/sub
-        files:
-          - path: subdir/file02.txt
-            target_path: s3/single.txt
+- name: Test Minio
+  endpoint_url:
+    file: test/secrets/s3/endpoint
+    secret_name: s3-secret
+    secret_key: endpoint
+  access_key_id:
+    file: test/secrets/s3/access_key_id
+    secret_name: s3-secret
+    secret_key: access_key_id
+  secret_key:
+    file: test/secrets/s3/secret_key
+    secret_name: s3-secret
+    secret_key: secret_key
+  buckets:
+  - name: test
+    folders:
+    - path: .
+      target_path: s3/all
+    - path: subdir
+      target_path: s3/sub
+    files:
+    - path: subdir/file02.txt
+      target_path: s3/single.txt
 azure_blob:
-  - name: Test Azurite
-    connection_string:
-      file: test/secrets/azure/connection_string
-      secret_name: azure-secret
-      secret_key: connection_string
-    containers:
-      - name: test
-        folders:
-          - path: .
-            target_path: azure/all
-          - path: subdir
-            target_path: azure/sub
-        files:
-          - path: subdir/file02.txt
-            target_path: azure/single.txt
+- name: Test Azurite
+  connection_string:
+    file: test/secrets/azure/connection_string
+    secret_name: azure-secret
+    secret_key: connection_string
+  containers:
+  - name: test
+    folders:
+    - path: .
+      target_path: azure/all
+    - path: subdir
+      target_path: azure/sub
+    files:
+    - path: subdir/file02.txt
+      target_path: azure/single.txt

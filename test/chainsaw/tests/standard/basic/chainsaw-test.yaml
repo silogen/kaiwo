@@ -4,35 +4,35 @@ metadata:
   name: kaiwojob-reconciliation
 spec:
   steps:
-    - try:
-        - apply:
-            file: basic-kaiwojob.yaml
-        - assert:
-            resource:
-              apiVersion: kaiwo.silogen.ai/v1alpha1
-              kind: KaiwoJob
-              metadata:
-                name: kaiwojob-1
-              status:
-                status: COMPLETE
-        - script:
-            env:
-            - name: NAMESPACE
-              value: ($namespace)
-            content: ../../../scripts/assert_kueue_admitted.sh $NAMESPACE kaiwojob-1
-            check:
-              ($error == null): true
-      catch:
-        - command:
-            entrypoint: kaiwo-dev
-            env:
-              - name: NAMESPACE
-                value: ($namespace)
-              - name: PRINT_LEVEL
-                value: ($values.print_level)
-            args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+  - try:
+    - apply:
+        file: basic-kaiwojob.yaml
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: kaiwojob-1
+          status:
+            status: COMPLETE
+    - script:
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        content: ../../../scripts/assert_kueue_admitted.sh $NAMESPACE kaiwojob-1
+        check:
+          ($error == null): true
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
 
---- 
+---
 
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
@@ -40,42 +40,42 @@ metadata:
   name: kaiwoservice-reconciliation
 spec:
   timeouts:
-      assert: 90s
+    assert: 90s
   steps:
-    - try:
-        - apply:
-            file: basic-kaiwoservice.yaml
-        - assert:
-            resource:
-              apiVersion: kaiwo.silogen.ai/v1alpha1
-              kind: KaiwoService
-              metadata:
-                name: kaiwoservice-1
-              status:
-                status: RUNNING
-        - assert:
-            resource:
-              apiVersion: apps/v1
-              kind: Deployment
-              metadata:
-                name: kaiwoservice-1
-              status:
-                availableReplicas: 1
-                readyReplicas: 1
-                replicas: 1
-        - script:
-            env:
-            - name: NAMESPACE
-              value: ($namespace)
-            content: ../../../scripts/assert_kueue_admitted.sh $NAMESPACE kaiwoservice-1
-            check:
-              ($error == null): true
-      catch:
-        - command:
-            entrypoint: kaiwo-dev
-            env:
-              - name: NAMESPACE
-                value: ($namespace)
-              - name: PRINT_LEVEL
-                value: ($values.print_level)
-            args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+  - try:
+    - apply:
+        file: basic-kaiwoservice.yaml
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoService
+          metadata:
+            name: kaiwoservice-1
+          status:
+            status: RUNNING
+    - assert:
+        resource:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: kaiwoservice-1
+          status:
+            availableReplicas: 1
+            readyReplicas: 1
+            replicas: 1
+    - script:
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        content: ../../../scripts/assert_kueue_admitted.sh $NAMESPACE kaiwoservice-1
+        check:
+          ($error == null): true
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]

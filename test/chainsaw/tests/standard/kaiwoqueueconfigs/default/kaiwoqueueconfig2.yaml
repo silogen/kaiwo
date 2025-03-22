@@ -35,4 +35,3 @@ spec:
   - name: foo
     nodeLabels:
       kaiwo/nodepool: amd-rocks
-  

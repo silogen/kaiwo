@@ -1,32 +1,39 @@
 repos:
-  - repo: local
-    hooks:
-      - id: golangci-lint
-        name: golangci-lint
-        description: Fast linters runner for Go. Note that only modified files are linted, so linters like 'unused' that need to scan all files won't work as expected.
-        entry: golangci-lint run --timeout 10m 
-        types: [go]
-        language: golang
-        require_serial: true
-        pass_filenames: false
+- repo: local
+  hooks:
+  - id: golangci-lint
+    name: golangci-lint
+    description: Fast linters runner for Go. Note that only modified files are linted, so linters like 'unused' that need to scan all files won't work as expected.
+    entry: golangci-lint run --timeout 10m
+    types: [go]
+    language: golang
+    require_serial: true
+    pass_filenames: false
 
-  - repo: https://github.com/psf/black
-    rev: 25.1.0
-    hooks:
-      - id: black
-        additional_dependencies: ["toml"]
-        args: ["--config", "python/pyproject.toml"]
+- repo: https://github.com/jumanjihouse/pre-commit-hook-yamlfmt
+  rev: 0.2.3
+  hooks:
+  - id: yamlfmt
+    args: [--offset, "0", --sequence, "2", --mapping, "2", "--width", "4096", "--preserve-quotes", "--implicit_start", "--preserve_null"]
+    exclude: "(^config/prometheus/.*\\.ya?ml$)"
 
-  - repo: https://github.com/pycqa/isort
-    rev: 6.0.1 
-    hooks:
-      - id: isort
-        additional_dependencies: ["toml"]
-        args: ["--settings", "python/pyproject.toml"]
+- repo: https://github.com/psf/black
+  rev: 25.1.0
+  hooks:
+  - id: black
+    additional_dependencies: ["toml"]
+    args: ["--config", "python/pyproject.toml"]
 
-  - repo: https://github.com/pycqa/flake8
-    rev: 7.1.2
-    hooks:
-      - id: flake8
-        additional_dependencies: ["flake8-pyproject"] 
-        args: ["--config", "python/.flake8"]
+- repo: https://github.com/pycqa/isort
+  rev: 6.0.1
+  hooks:
+  - id: isort
+    additional_dependencies: ["toml"]
+    args: ["--settings", "python/pyproject.toml"]
+
+- repo: https://github.com/pycqa/flake8
+  rev: 7.1.2
+  hooks:
+  - id: flake8
+    additional_dependencies: ["flake8-pyproject"]
+    args: ["--config", "python/.flake8"]

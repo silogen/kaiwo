@@ -4,31 +4,31 @@ metadata:
   name: github-private-repo
 spec:
   steps:
-    - try:
-        - apply:
-            resource:
-              apiVersion: v1
-              kind: Secret
-              metadata:
-                name: my-gh-token
-              data:
-                gh-token: ($values.gh_token_base64)
-        - apply:
-            file: github-private-repo-download.yaml
-        - assert:
-            resource:
-              apiVersion: batch/v1
-              kind: Job
-              metadata:
-                name: github-private-repo-download
-              status:
-                succeeded: 1
-      catch:
-        - command:
-            entrypoint: kaiwo-dev
-            env:
-              - name: NAMESPACE
-                value: ($namespace)
-              - name: PRINT_LEVEL
-                value: ($values.print_level)
-            args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+  - try:
+    - apply:
+        resource:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: my-gh-token
+          data:
+            gh-token: ($values.gh_token_base64)
+    - apply:
+        file: github-private-repo-download.yaml
+    - assert:
+        resource:
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: github-private-repo-download
+          status:
+            succeeded: 1
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]

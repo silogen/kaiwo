@@ -7,45 +7,45 @@ spec:
   timeouts:
     assert: 180s
   steps:
-    - try:
-        - apply:
-            file: download-status-change-positive.yaml
-        - assert:
-            resource:
-              apiVersion: kaiwo.silogen.ai/v1alpha1
-              kind: KaiwoJob
-              metadata:
-                name: download-job-status-change-positive
-                namespace: kaiwo-test
-              status:
-                status: COMPLETE
-      catch:
-        - events: {}
-        - podLogs: {}
-        - describe:
-            apiVersion: v1
-            kind: Pod
-            namespace: kaiwo-system
-    - try:
-        - apply:
-            file: download-status-change-negative.yaml
-        - assert:
-            resource:
-              apiVersion: kaiwo.silogen.ai/v1alpha1
-              kind: KaiwoJob
-              metadata:
-                name: download-job-status-change-negative
-                namespace: kaiwo-test
-              status:
-                status: FAILED
-        
-      catch:
-        - command:
-            entrypoint: kaiwo-dev
-            env:
-              - name: NAMESPACE
-                value: ($namespace)
-              - name: PRINT_LEVEL
-                value: ($values.print_level)
-            args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+  - try:
+    - apply:
+        file: download-status-change-positive.yaml
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: download-job-status-change-positive
+            namespace: kaiwo-test
+          status:
+            status: COMPLETE
+    catch:
+    - events: {}
+    - podLogs: {}
+    - describe:
+        apiVersion: v1
+        kind: Pod
+        namespace: kaiwo-system
+  - try:
+    - apply:
+        file: download-status-change-negative.yaml
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: download-job-status-change-negative
+            namespace: kaiwo-test
+          status:
+            status: FAILED
+
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
 

@@ -57,35 +57,35 @@ spec:
     spec:
       restartPolicy: Never
       containers:
-        - name: s3-uploader
-          image: ghcr.io/silogen/kaiwo-python:0.5
-          resources:
-            limits:
-              cpu: "1"
-              memory: "1Gi"
-            requests:
-              cpu: "1"
-              memory: "1Gi"
-          command: ["python", "/app/entrypoint.py"]
-          volumeMounts:
-            - name: app-script
-              mountPath: /app
-          env:
-            - name: S3_ENDPOINT_URL
-              value: "http://minio-service:9000"
-            - name: S3_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: minio-secret
-                  key: access_key_id
-            - name: S3_SECRET_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: minio-secret
-                  key: secret_key
-            - name: TEST_BUCKET_NAME
-              value: "test-bucket"
-      volumes:
+      - name: s3-uploader
+        image: ghcr.io/silogen/kaiwo-python:0.5
+        resources:
+          limits:
+            cpu: "1"
+            memory: "1Gi"
+          requests:
+            cpu: "1"
+            memory: "1Gi"
+        command: ["python", "/app/entrypoint.py"]
+        volumeMounts:
         - name: app-script
-          configMap:
-            name: s3-uploader-script
+          mountPath: /app
+        env:
+        - name: S3_ENDPOINT_URL
+          value: "http://minio-service:9000"
+        - name: S3_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: minio-secret
+              key: access_key_id
+        - name: S3_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: minio-secret
+              key: secret_key
+        - name: TEST_BUCKET_NAME
+          value: "test-bucket"
+      volumes:
+      - name: app-script
+        configMap:
+          name: s3-uploader-script

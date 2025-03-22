@@ -66,5 +66,5 @@ spec:
       storageSize: "2Gi"
       mountPath: "/.cache/huggingface"  # Also sets the env var HF_HOME to this value in each container
       preCacheRepos:
-        - repoId: Qwen/Qwen2-0.5B-Instruct
-          files: []
+      - repoId: Qwen/Qwen2-0.5B-Instruct
+        files: []

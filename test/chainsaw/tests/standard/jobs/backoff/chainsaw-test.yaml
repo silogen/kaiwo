@@ -36,8 +36,8 @@ spec:
                       image: ubuntu:latest
                       imagePullPolicy: Always
                       # Just spin & wait forever
-                      command: [ "/bin/bash", "-c", "--" ]
-                      args: [ "sleep 1" ]
+                      command: ["/bin/bash", "-c", "--"]
+                      args: ["sleep 1"]
                     restartPolicy: Never
     - assert:
         resource:
@@ -55,4 +55,4 @@ spec:
           value: ($namespace)
         - name: PRINT_LEVEL
           value: ($values.print_level)
-        args: [ "debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL" ]
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]

@@ -7,5 +7,4 @@ spec:
   user: test@amd.com
   ray: true
   gpus: 1
-  entrypoint: |
-    sleep 1
+  entrypoint: sleep 1
