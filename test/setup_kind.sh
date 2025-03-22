@@ -62,11 +62,16 @@ if ! systemctl is-active --quiet nfs-server || [[ ! -d "$NFS_DIR" ]]; then
     echo "NFS setup completed successfully!"
 fi
 
-HOST_IP=$(ip -4 addr show | awk '/inet / {print $2, $NF}' | grep '^172\.' | grep -vE 'docker|br-' | awk '{print $1}' | cut -d'/' -f1 | head -n 1)
+echo "Available interfaces:"
+ip -4 addr show
 
+HOST_IP=$(ip -4 addr show | awk '/inet / {print $2, $NF}' | grep -E '^(10\.|172\.16\.|172\.17\.|172\.18\.|172\.19\.|172\.20\.|172\.21\.|172\.22\.|172\.23\.|172\.24\.|172\.25\.|172\.26\.|172\.27\.|172\.28\.|172\.29\.|172\.30\.|172\.31\.|192\.168\.)' | grep -vE 'docker|br-' | awk '{print $1}' | cut -d'/' -f1 | head -n 1)
+
+# Debugging output
+echo "Detected candidate IPs: $HOST_IP"
 
 if [[ -z "$HOST_IP" ]]; then
-    echo "No suitable IP found for NFS server. Exiting..."
+    echo "No suitable private IP found for NFS server!"
     exit 1
 fi
 
