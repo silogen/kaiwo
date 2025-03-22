@@ -29,4 +29,4 @@ repos:
     hooks:
       - id: flake8
         additional_dependencies: ["flake8-pyproject"] 
-        args: ["--config", "python/pyproject.toml"]
+        args: ["--config", "python/.flake8"]

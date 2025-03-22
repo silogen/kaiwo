@@ -117,4 +117,3 @@ class ValueReference(BaseModel):
                 return f.read().strip()
         if self.file is None:
             return None
-        
