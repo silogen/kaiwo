@@ -4,65 +4,64 @@ metadata:
   name: hf-gated-repo
 spec:
   steps:
-    - try:
-        - apply:
-            resource:
-              apiVersion: v1
-              kind: Secret
-              metadata:
-                name: my-hf-token
-              data:
-                hf-token: ($values.hf_token_base64)
-        - apply:
-            resource:
-              apiVersion: kaiwo.silogen.ai/v1alpha1
-              kind: KaiwoJob
-              metadata:
-                name: hf-gated-repo
-              spec:
-                resources:
-                  limits:
-                    cpu: "100m"
-                    memory: "100Mi"
-                  requests:
-                    cpu: "100m"
-                    memory: "100Mi"
-                user: test@amd.com
-                env:
-                  - name: HF_TOKEN
-                    valueFrom:
-                      secretKeyRef:
-                        name: my-hf-token
-                        key: hf-token
-                image: busybox:latest
-                entrypoint: |
-                  sleep 5
-                storage:
-                  storageEnabled: true
-                  storageClassName: "standard"
-                  accessMode: "ReadWriteOnce"
-                  huggingFace:
-                    storageSize: "1Gi"
-                    mountPath: "/.cache/huggingface"
-                    preCacheRepos:
-                      - repoId: siloai-eai-test/private-test
-                        files:
-                          - "README.md"
-        # Check that the job is running (meaning that the download job completed successfully)
-        - assert:
-            resource:
-              apiVersion: kaiwo.silogen.ai/v1alpha1
-              kind: KaiwoJob
-              metadata:
-                name: hf-gated-repo
-              status:
-                status: RUNNING
-      catch:
-        - command:
-            entrypoint: kaiwo-dev
+  - try:
+    - apply:
+        resource:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: my-hf-token
+          data:
+            hf-token: ($values.hf_token_base64)
+    - apply:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: hf-gated-repo
+          spec:
+            resources:
+              limits:
+                cpu: "100m"
+                memory: "100Mi"
+              requests:
+                cpu: "100m"
+                memory: "100Mi"
+            user: test@amd.com
             env:
-              - name: NAMESPACE
-                value: ($namespace)
-              - name: PRINT_LEVEL
-                value: ($values.print_level)
-            args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: my-hf-token
+                  key: hf-token
+            image: busybox:latest
+            entrypoint: |
+              sleep 5
+            storage:
+              storageEnabled: true
+              storageClassName: "nfs-client"
+              huggingFace:
+                storageSize: "1Gi"
+                mountPath: "/.cache/huggingface"
+                preCacheRepos:
+                - repoId: siloai-eai-test/private-test
+                  files:
+                  - "README.md"
+    # Check that the job is running (meaning that the download job completed successfully)
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: hf-gated-repo
+          status:
+            status: RUNNING
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: [ "debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL" ]

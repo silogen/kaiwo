@@ -19,8 +19,7 @@ spec:
     sleep 1
   storage:
     storageEnabled: true
-    storageClassName: "standard"
-    accessMode: "ReadWriteOnce"
+    storageClassName: "nfs-client"
     huggingFace:
       storageSize: "1Gi"
       mountPath: "/.cache/huggingface"

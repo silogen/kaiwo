@@ -16,17 +16,16 @@ spec:
     sleep 10
   storage:
     storageEnabled: true
-    storageClassName: "standard"
-    accessMode: "ReadWriteOnce"
+    storageClassName: "nfs-client"
     data:
       storageSize: 1Gi
       mountPath: /workload
       download:
         git:
-          - repository: https://github.com/silogen/dev_helpers.git
-            commit: 8c1b48ad593a8cdd3322e79cab7933dbcae24826
-            token:
-              secretName: my-gh-token
-              secretKey: gh-token
-            path: README.md
-            targetPath: dev-helpers/README.md
+        - repository: https://github.com/silogen/dev_helpers.git
+          commit: 8c1b48ad593a8cdd3322e79cab7933dbcae24826
+          token:
+            secretName: my-gh-token
+            secretKey: gh-token
+          path: README.md
+          targetPath: dev-helpers/README.md
