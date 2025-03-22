@@ -61,11 +61,11 @@ spec:
           image: ghcr.io/silogen/kaiwo-python:0.5
           resources:
             limits:
-              cpu: "500m"
-              memory: "500Mi"
+              cpu: "1"
+              memory: "1Gi"
             requests:
-              cpu: "500m"
-              memory: "500Mi"
+              cpu: "1"
+              memory: "1Gi"
           command: ["python", "/app/entrypoint.py"]
           volumeMounts:
             - name: app-script

@@ -10,6 +10,12 @@ spec:
     - try:
         - apply:
             file: download-from-public-bucket.yaml
+        - apply:
+            file: s3-deployment.yaml
+        - apply:
+            file: data-uploader.yaml
+        - apply:
+            file: download-from-private-bucket.yaml
         - assert:
             resource:
               apiVersion: kaiwo.silogen.ai/v1alpha1
@@ -19,12 +25,6 @@ spec:
                 namespace: kaiwo-test
               status:
                 status: COMPLETE
-        - apply:
-            file: s3-deployment.yaml
-        - apply:
-            file: data-uploader.yaml
-        - apply:
-            file: download-from-private-bucket.yaml
         - assert:
             resource:
               apiVersion: kaiwo.silogen.ai/v1alpha1
