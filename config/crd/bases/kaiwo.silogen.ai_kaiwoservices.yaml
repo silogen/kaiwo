@@ -27235,20 +27235,7 @@ spec:
                                 endpointUrl:
                                   description: EndpointUrl is the endpoint of the
                                     S3 API
-                                  properties:
-                                    file:
-                                      description: File determines the location of
-                                        the secret value mounted on the disk
-                                      type: string
-                                    secretKey:
-                                      description: SecretKey is the name of the key
-                                        within the secret where the value is kept
-                                      type: string
-                                    secretName:
-                                      description: SecretName is the name of the secret
-                                        where the value is kept
-                                      type: string
-                                  type: object
+                                  type: string
                                 secretKey:
                                   properties:
                                     file:
@@ -27265,10 +27252,8 @@ spec:
                                       type: string
                                   type: object
                               required:
-                              - accessKeyId
                               - buckets
                               - endpointUrl
-                              - secretKey
                               type: object
                             type: array
                         type: object

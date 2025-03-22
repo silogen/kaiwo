@@ -206,11 +206,11 @@ type ValueReference struct {
 
 type S3DownloadItem struct {
 	// EndpointUrl is the endpoint of the S3 API
-	EndpointUrl ValueReference `json:"endpointUrl" yaml:"endpointUrl"`
+	EndpointUrl string `json:"endpointUrl" yaml:"endpointUrl"`
 
 	// AccessKeyId
-	AccessKeyId ValueReference        `json:"accessKeyId" yaml:"accessKeyId"`
-	SecretKey   ValueReference        `json:"secretKey" yaml:"secretKey"`
+	AccessKeyId ValueReference        `json:"accessKeyId,omitempty" yaml:"accessKeyId,omitempty"`
+	SecretKey   ValueReference        `json:"secretKey,omitempty" yaml:"secretKey,omitempty"`
 	Buckets     []CloudDownloadBucket `json:"buckets"`
 }
 

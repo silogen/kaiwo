@@ -3,6 +3,7 @@
 set -e
 
 TEST_NAME=${TEST_NAME:-"kaiwo-test"}
+NFS_DIR="/nfs-data"
 
 
 create_cluster() {
@@ -46,6 +47,45 @@ kubectl rollout status deployment/kueue-controller-manager -n kueue-system --tim
 kubectl rollout status deployment/kuberay-operator --timeout=5m
 kubectl rollout status deployment/appwrapper-controller-manager -n appwrapper-system --timeout=5m
 
+# Deploy NFS-backed storageclass 
+if ! systemctl is-active --quiet nfs-server || [[ ! -d "$NFS_DIR" ]]; then
+    echo "NFS server is not running OR $NFS_DIR is missing!"
+    echo "Running 'setup_nfs_server.sh' to set up NFS..."
+    
+    sudo bash test/setup_nfs_server.sh
+
+    if ! systemctl is-active --quiet nfs-server || [[ ! -d "$NFS_DIR" ]]; then
+        echo "NFS setup failed. Please check logs."
+        exit 1
+    fi
+
+    echo "NFS setup completed successfully!"
+fi
+
+echo "Available interfaces:"
+ip -4 addr show
+
+HOST_IP=$(ip -4 addr show | awk '/inet / {print $2, $NF}' | grep -E '^(10\.|172\.16\.|172\.17\.|172\.18\.|172\.19\.|172\.20\.|172\.21\.|172\.22\.|172\.23\.|172\.24\.|172\.25\.|172\.26\.|172\.27\.|172\.28\.|172\.29\.|172\.30\.|172\.31\.|192\.168\.)' | grep -vE 'docker|br-' | awk '{print $1}' | cut -d'/' -f1 | head -n 1)
+
+# Debugging output
+echo "Detected candidate IPs: $HOST_IP"
+
+if [[ -z "$HOST_IP" ]]; then
+    echo "No suitable private IP found for NFS server!"
+    exit 1
+fi
+
+echo "Using IP: $HOST_IP for NFS provisioner"
+
+echo "Installing NFS provisioner..."
+helm repo add nfs-subdir-external-provisioner https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner/
+helm repo update
+
+helm install nfs-subdir-external-provisioner nfs-subdir-external-provisioner/nfs-subdir-external-provisioner \
+    --set nfs.server=$HOST_IP \
+    --set nfs.path=$NFS_DIR
+
+echo "NFS provisioner deployed successfully!"
 
 kubectl create ns $TEST_NAME
 

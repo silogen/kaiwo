@@ -1,6 +1,7 @@
-import ray
 import argparse
 import time
+
+import ray
 
 
 @ray.remote

@@ -4,50 +4,50 @@ metadata:
   name: env-vars
 spec:
   steps:
-    - try:
-        - apply:
-            resource:
-              apiVersion: kaiwo.silogen.ai/v1alpha1
-              kind: KaiwoJob
-              metadata:
-                name: env-vars
-              spec:
-                resources:
-                  limits:
-                    cpu: "1"
-                    memory: "2Gi"
-                  requests:
-                    cpu: "1"
-                    memory: "2Gi"
-                user: test@amd.com
-                env:
-                  - name: FOO
-                    value: BAR
-                image: busybox:latest
-                entrypoint: |
-                  sleep 1
-        - assert:
-            resource:
-              apiVersion: v1
-              kind: Pod
-              metadata:
-                labels:
-                  kaiwo.silogen.ai/name: env-vars
-              spec:
-                containers:
-                  - (env[?name == 'NUM_GPUS']):
-                      - value: "0"
-                    (env[?name == 'FOO']):
-                      - value: "BAR"
-      catch:
-        - command:
-            entrypoint: kaiwo-dev
+  - try:
+    - apply:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: env-vars
+          spec:
+            resources:
+              limits:
+                cpu: "100m"
+                memory: "100Mi"
+              requests:
+                cpu: "100m"
+                memory: "100Mi"
+            user: test@amd.com
             env:
-              - name: NAMESPACE
-                value: ($namespace)
-              - name: PRINT_LEVEL
-                value: ($values.print_level)
-            args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+            - name: FOO
+              value: BAR
+            image: busybox:latest
+            entrypoint: |
+              sleep 1
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            labels:
+              kaiwo.silogen.ai/name: env-vars
+          spec:
+            containers:
+            - (env[?name == 'NUM_GPUS']):
+              - value: "0"
+              (env[?name == 'FOO']):
+              - value: "BAR"
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: [ "debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL" ]
 ---
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
@@ -55,49 +55,49 @@ metadata:
   name: env-vars-ray
 spec:
   steps:
-    - try:
-        - apply:
-            resource:
-              apiVersion: kaiwo.silogen.ai/v1alpha1
-              kind: KaiwoJob
-              metadata:
-                name: env-vars-ray
-              spec:
-                resources:
-                  limits:
-                    cpu: "1"
-                    memory: "2Gi"
-                  requests:
-                    cpu: "1"
-                    memory: "2Gi"
-                user: test@amd.com
-                image: ghcr.io/silogen/ray-test:v0.3
-                entrypoint: |
-                  sleep 1
-                ray: true
-                env:
-                  - name: FOO
-                    value: BAR
-        - assert:
-            resource:
-              apiVersion: v1
-              kind: Pod
-              metadata:
-                labels:
-                  kaiwo.silogen.ai/name: env-vars-ray
-                  ray.io/is-ray-node: "yes"
-              spec:
-                containers:
-                  - (env[?name == 'NUM_GPUS']):
-                      - value: "0"
-                    (env[?name == 'FOO']):
-                      - value: "BAR"
-      catch:
-        - command:
-            entrypoint: kaiwo-dev
+  - try:
+    - apply:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: env-vars-ray
+          spec:
+            resources:
+              limits:
+                cpu: "100m"
+                memory: "100Mi"
+              requests:
+                cpu: "100m"
+                memory: "100Mi"
+            user: test@amd.com
+            image: ghcr.io/silogen/ray-test:v0.3
+            entrypoint: |
+              sleep 1
+            ray: true
             env:
-              - name: NAMESPACE
-                value: ($namespace)
-              - name: PRINT_LEVEL
-                value: ($values.print_level)
-            args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+            - name: FOO
+              value: BAR
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            labels:
+              kaiwo.silogen.ai/name: env-vars-ray
+              ray.io/is-ray-node: "yes"
+          spec:
+            containers:
+            - (env[?name == 'NUM_GPUS']):
+              - value: "0"
+              (env[?name == 'FOO']):
+              - value: "BAR"
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: [ "debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL" ]

@@ -1,16 +1,17 @@
+import logging
 import pathlib
 import shutil
 import tempfile
 from typing import List, Literal
 
+import git
 from cloudpathlib import AzureBlobClient, CloudPath
 from pydantic import Field
-import git
-import logging
 
 from kaiwo.downloader.handlers.base import (
     CloudDownloadTask,
-    ValueReference, DownloadTaskConfigBase,
+    DownloadTaskConfigBase,
+    ValueReference,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,11 +47,11 @@ class GitDownloadTaskConfig(DownloadTaskConfigBase):
 
             if self.commit is not None:
                 logger.info(f"Using commit: {self.commit}")
-                repo.git.fetch('origin', self.commit, depth=1)
+                repo.git.fetch("origin", self.commit, depth=1)
                 repo.git.checkout(self.commit)
             elif self.branch is not None:
                 logger.info(f"Using branch: {self.branch}")
-                repo.git.fetch('origin', self.branch, depth=1)
+                repo.git.fetch("origin", self.branch, depth=1)
                 repo.git.checkout(self.branch)
 
             path = self.path if self.path is not None else "."

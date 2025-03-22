@@ -8,22 +8,21 @@ spec:
   gpus: 0
   resources:
     limits:
-      cpu: "1"
-      memory: "2Gi"
+      cpu: "100m"
+      memory: "100Mi"
     requests:
-      cpu: "1"
-      memory: "2Gi"
+      cpu: "100m"
+      memory: "100Mi"
   image: busybox:latest
   entrypoint: |
     sleep 1
   storage:
     storageEnabled: true
-    storageClassName: "standard"
-    accessMode: "ReadWriteOnce"
+    storageClassName: "nfs-client"
     huggingFace:
-      storageSize: "1Gi"
+      storageSize: "1Mi"
       mountPath: "/.cache/huggingface"
       preCacheRepos:
-        - repoId: TinyLlama/TinyLlama-1.1B-Chat-v1.0
-          files:
-            - "README.md"
+      - repoId: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+        files:
+        - "README.md"

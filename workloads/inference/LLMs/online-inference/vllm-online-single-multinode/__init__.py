@@ -16,16 +16,15 @@
 
 import logging
 import os
-from typing import Optional, List
+from typing import List, Optional
 
 from fastapi import FastAPI
-from starlette.requests import Request
-from starlette.responses import StreamingResponse, JSONResponse
-
 from ray import serve
-
+from starlette.requests import Request
+from starlette.responses import JSONResponse, StreamingResponse
 from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.engine.async_llm_engine import AsyncLLMEngine
+from vllm.entrypoints.logger import RequestLogger
 from vllm.entrypoints.openai.protocol import (
     ChatCompletionRequest,
     ChatCompletionResponse,
@@ -33,11 +32,11 @@ from vllm.entrypoints.openai.protocol import (
 )
 from vllm.entrypoints.openai.serving_chat import OpenAIServingChat
 from vllm.entrypoints.openai.serving_engine import BaseModelPath, LoRAModulePath, PromptAdapterPath
-from vllm.entrypoints.logger import RequestLogger
 
 logger = logging.getLogger("ray.serve")
 
 app = FastAPI()
+
 
 @serve.deployment()
 @serve.ingress(app)
@@ -64,14 +63,10 @@ class VLLMDeployment:
         self.engine = AsyncLLMEngine.from_engine_args(engine_args)
 
     @app.post("/v1/chat/completions")
-    async def create_chat_completion(
-        self, request: ChatCompletionRequest, raw_request: Request
-    ):
+    async def create_chat_completion(self, request: ChatCompletionRequest, raw_request: Request):
         if not self.openai_serving_chat:
             model_config = await self.engine.get_model_config()
-            base_model_paths = [
-            BaseModelPath(name=self.engine_args.model, model_path=self.engine_args.model)
-            ]
+            base_model_paths = [BaseModelPath(name=self.engine_args.model, model_path=self.engine_args.model)]
             self.openai_serving_chat = OpenAIServingChat(
                 self.engine,
                 model_config,
@@ -84,40 +79,36 @@ class VLLMDeployment:
                 chat_template_content_format=self.chat_template_content_format,
             )
         logger.info(f"Request: {request}")
-        generator = await self.openai_serving_chat.create_chat_completion(
-            request, raw_request
-        )
+        generator = await self.openai_serving_chat.create_chat_completion(request, raw_request)
         if isinstance(generator, ErrorResponse):
-            return JSONResponse(
-                content=generator.model_dump(), status_code=generator.code
-            )
+            return JSONResponse(content=generator.model_dump(), status_code=generator.code)
         if request.stream:
             return StreamingResponse(content=generator, media_type="text/event-stream")
         else:
             assert isinstance(generator, ChatCompletionResponse)
             return JSONResponse(content=generator.model_dump())
 
-engine_args=AsyncEngineArgs(
-        model=os.getenv("MODEL_ID", "meta-llama/Meta-Llama-3-8B-Instruct"),
-        disable_log_requests=True,
-        dtype="auto",
-        device="cuda",
-        enable_chunked_prefill=False,
-        enable_prefix_caching=True,
-        gpu_memory_utilization=float(os.getenv("GPU_MEMORY_UTILIZATION", "0.8")),
-        max_model_len=int(os.getenv("MAX_MODEL_LEN", "4096")),
-        max_num_batched_tokens=int(os.getenv("MAX_NUM_BATCHED_TOKENS", "32768")),
-        max_num_seqs=int(os.getenv("MAX_NUM_SEQ", "512")),
-        pipeline_parallel_size=int(os.getenv("NUM_REPLICAS", "2")),
-        tensor_parallel_size=int(os.getenv("NUM_GPUS_PER_REPLICA", "8")),
-        tokenizer_pool_size=4,
-        tokenizer_pool_type="ray",
-        distributed_executor_backend="ray",
-        trust_remote_code=True,
-    )
 
-deployment = VLLMDeployment.options(
-).bind(
+engine_args = AsyncEngineArgs(
+    model=os.getenv("MODEL_ID", "meta-llama/Meta-Llama-3-8B-Instruct"),
+    disable_log_requests=True,
+    dtype="auto",
+    device="cuda",
+    enable_chunked_prefill=False,
+    enable_prefix_caching=True,
+    gpu_memory_utilization=float(os.getenv("GPU_MEMORY_UTILIZATION", "0.8")),
+    max_model_len=int(os.getenv("MAX_MODEL_LEN", "4096")),
+    max_num_batched_tokens=int(os.getenv("MAX_NUM_BATCHED_TOKENS", "32768")),
+    max_num_seqs=int(os.getenv("MAX_NUM_SEQ", "512")),
+    pipeline_parallel_size=int(os.getenv("NUM_REPLICAS", "2")),
+    tensor_parallel_size=int(os.getenv("NUM_GPUS_PER_REPLICA", "8")),
+    tokenizer_pool_size=4,
+    tokenizer_pool_type="ray",
+    distributed_executor_backend="ray",
+    trust_remote_code=True,
+)
+
+deployment = VLLMDeployment.options().bind(
     engine_args=engine_args,
     response_role="assistant",
     lora_modules=None,

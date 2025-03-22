@@ -15,12 +15,12 @@
 # limitations under the License.
 
 import argparse
+
 import numpy as np
 import torch
 from datasets import load_dataset
-from transformers import AutoModelForCausalLM, AutoTokenizer
 from torch.nn.attention import SDPBackend, sdpa_kernel
-
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import (
     DPOConfig,
     DPOTrainer,
@@ -34,8 +34,6 @@ from trl import (
 from trl.trainer.utils import SIMPLE_CHAT_TEMPLATE
 
 
-
-
 def remove_invalid_entries(example):
     """
     Removes NaN and Inf values from the dataset example.
@@ -44,7 +42,6 @@ def remove_invalid_entries(example):
         if isinstance(value, float) and (np.isnan(value) or np.isinf(value)):
             return False  # Filter out this entry
     return True
-
 
 
 def main(script_args, training_args, model_args):
@@ -104,7 +101,7 @@ def main(script_args, training_args, model_args):
         processing_class=tokenizer,
         peft_config=peft_config,
     )
-    
+
     with sdpa_kernel(SDPBackend.MATH):
         trainer.train()
 

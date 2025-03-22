@@ -1,11 +1,11 @@
-from google.cloud.exceptions import NotFound
-from cloudpathlib import CloudPath, GSClient, S3Client, AzureBlobClient, AnyPath
-
 import os
-from google.cloud import storage
+
 import boto3
-from botocore.exceptions import ClientError
 from azure.storage.blob import BlobServiceClient
+from botocore.exceptions import ClientError
+from cloudpathlib import AnyPath, AzureBlobClient, CloudPath, GSClient, S3Client
+from google.cloud import storage
+from google.cloud.exceptions import NotFound
 
 TEST_BUCKET_NAME = "test"
 
@@ -55,7 +55,13 @@ def get_s3_test_root() -> CloudPath:
 
 def get_azure_test_root() -> CloudPath:
     container_name = TEST_BUCKET_NAME
-    connection_string = "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite-service:10000/devstoreaccount1;QueueEndpoint=http://azurite-service:10001/devstoreaccount1;TableEndpoint=http://azurite-service:10002/devstoreaccount1;"
+    connection_string = (
+        "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;"
+        "AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;"
+        "BlobEndpoint=http://azurite-service:10000/devstoreaccount1;"
+        "QueueEndpoint=http://azurite-service:10001/devstoreaccount1;"
+        "TableEndpoint=http://azurite-service:10002/devstoreaccount1;"
+    )
 
     blob_service_client = BlobServiceClient.from_connection_string(connection_string)
     client = AzureBlobClient(blob_service_client=blob_service_client)

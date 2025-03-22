@@ -6,11 +6,11 @@ spec:
   user: test-user
   resources:
     requests:
-      cpu: "1"
-      memory: "2Gi"
+      cpu: "100m"
+      memory: "100Mi"
     limits:
-      cpu: "1"
-      memory: "2Gi"
+      cpu: "100m"
+      memory: "100Mi"
   image: busybox:latest
   entrypoint: |
     while true; do
