@@ -38,6 +38,7 @@ spec:
                 namespace: kaiwo-test
               status:
                 status: FAILED
+        
       catch:
         - command:
             entrypoint: kaiwo-dev
@@ -47,3 +48,4 @@ spec:
               - name: PRINT_LEVEL
                 value: ($values.print_level)
             args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+

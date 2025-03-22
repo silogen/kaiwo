@@ -3,6 +3,7 @@
 set -e
 
 TEST_NAME=${TEST_NAME:-"kaiwo-test"}
+NFS_DIR="/nfs-data"
 
 
 create_cluster() {
@@ -46,6 +47,40 @@ kubectl rollout status deployment/kueue-controller-manager -n kueue-system --tim
 kubectl rollout status deployment/kuberay-operator --timeout=5m
 kubectl rollout status deployment/appwrapper-controller-manager -n appwrapper-system --timeout=5m
 
+# Deploy NFS-backed storageclass 
+if ! systemctl is-active --quiet nfs-server || [[ ! -d "$NFS_DIR" ]]; then
+    echo "NFS server is not running OR $NFS_DIR is missing!"
+    echo "Running 'setup_nfs_server.sh' to set up NFS..."
+    
+    sudo bash test/setup_nfs_server.sh
+
+    if ! systemctl is-active --quiet nfs-server || [[ ! -d "$NFS_DIR" ]]; then
+        echo "NFS setup failed. Please check logs."
+        exit 1
+    fi
+
+    echo "NFS setup completed successfully!"
+fi
+
+HOST_IP=$(ip -4 addr show | awk '/inet / {print $2, $NF}' | grep '^172\.' | grep -vE 'docker|br-' | awk '{print $1}' | cut -d'/' -f1 | head -n 1)
+
+
+if [[ -z "$HOST_IP" ]]; then
+    echo "No suitable IP found for NFS server. Exiting..."
+    exit 1
+fi
+
+echo "Using IP: $HOST_IP for NFS provisioner"
+
+echo "Installing NFS provisioner..."
+helm repo add nfs-subdir-external-provisioner https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner/
+helm repo update
+
+helm install nfs-subdir-external-provisioner nfs-subdir-external-provisioner/nfs-subdir-external-provisioner \
+    --set nfs.server=$HOST_IP \
+    --set nfs.path=$NFS_DIR
+
+echo "NFS provisioner deployed successfully!"
 
 kubectl create ns $TEST_NAME
 

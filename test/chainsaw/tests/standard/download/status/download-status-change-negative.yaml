@@ -8,11 +8,11 @@ spec:
   gpus: 0
   resources:
     limits:
-      cpu: "1"
-      memory: "1Gi"
+      cpu: "100m"
+      memory: "100Mi"
     requests:
-      cpu: "1"
-      memory: "1Gi"
+      cpu: "100m"
+      memory: "100Mi"
   image: busybox:latest
   entrypoint: |
     sleep 1
