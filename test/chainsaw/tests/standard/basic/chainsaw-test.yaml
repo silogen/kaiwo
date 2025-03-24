@@ -45,8 +45,6 @@ spec:
   - try:
     - apply:
         file: basic-kaiwoservice.yaml
-    - apply:
-        file: basic-kaiwoservice-with-deployment-spec.yaml
     - assert:
         resource:
           apiVersion: kaiwo.silogen.ai/v1alpha1
@@ -72,6 +70,29 @@ spec:
         content: ../../../scripts/assert_kueue_admitted.sh $NAMESPACE kaiwoservice-1
         check:
           ($error == null): true
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+
+---
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: kaiwoservice-reconciliation-with-deployment-spec-labels
+spec:
+  timeouts:
+    assert: 90s
+  steps:
+  - try:
+    - apply:
+        file: basic-kaiwoservice-with-deployment-spec.yaml
     - assert:
         resource:
           apiVersion: kaiwo.silogen.ai/v1alpha1
