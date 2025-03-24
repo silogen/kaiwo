@@ -46,4 +46,4 @@ linters-settings:
   goheader:
     template-path: .copyright-template
   lll:
-    line-length: 250  # We strive for about 180, but 250 is a good upper limit
+    line-length: 500  # We strive for about 180, tests are allowed to be longer

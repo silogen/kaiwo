@@ -6,7 +6,7 @@ TEST_NAME=${TEST_NAME:-"kaiwo-test"}
 
 ./test/setup_kind.sh
 
-kind get kubeconfig -n $TEST_NAME > kaiwo_test_kubeconfig.yaml 
+kind get kubeconfig -n "$TEST_NAME" > kaiwo_test_kubeconfig.yaml 
 
 ./test/generate_certs.sh
 
@@ -25,6 +25,7 @@ update_env_var() {
         echo "${var_name}=${var_value}" >> "$ENV_FILE"
     fi
 }
+
 
 touch "$ENV_FILE"
 

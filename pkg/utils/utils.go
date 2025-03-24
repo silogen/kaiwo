@@ -116,23 +116,6 @@ func GetGVK(scheme runtime.Scheme, object client.Object) (schema.GroupVersionKin
 	return gvks[0], nil
 }
 
-func GetObjectDescriptor(scheme runtime.Scheme, object client.Object) (ObjectDescriptor, error) {
-	objectKey := client.ObjectKeyFromObject(object)
-	gvk, err := GetGVK(scheme, object)
-	if err != nil {
-		return ObjectDescriptor{}, err
-	}
-	return ObjectDescriptor{
-		GVK:       gvk,
-		ObjectKey: objectKey,
-	}, nil
-}
-
-type ObjectDescriptor struct {
-	GVK       schema.GroupVersionKind `json:"gvk"`
-	ObjectKey client.ObjectKey        `json:"objectKey"`
-}
-
 func ContainsString(slice []string, str string) bool {
 	for _, v := range slice {
 		if v == str {
@@ -150,4 +133,26 @@ func RemoveString(slice []string, str string) []string {
 		}
 	}
 	return newSlice
+}
+
+func ConvertMultilineEntrypoint(entrypoint string, isRayJob bool) interface{} {
+	entrypoint = strings.TrimSpace(entrypoint)
+
+	// Handle line continuation backslashes
+	entrypoint = regexp.MustCompile(`\\\s*\n`).ReplaceAllString(entrypoint, " ")
+
+	// If RayJob, return raw command (Ray handles it as-is)
+	if isRayJob {
+		return entrypoint
+	}
+
+	// Detect shebang
+	shell := "/bin/sh"
+	lines := strings.Split(entrypoint, "\n")
+	if len(lines) > 0 && strings.HasPrefix(lines[0], "#!") {
+		shell = strings.TrimSpace(lines[0][2:])
+		entrypoint = strings.Join(lines[1:], "\n") // remove shebang line
+	}
+
+	return []string{shell, "-c", entrypoint}
 }

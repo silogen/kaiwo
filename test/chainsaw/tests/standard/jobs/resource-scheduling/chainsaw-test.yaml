@@ -15,8 +15,7 @@ spec:
             user: test@amd.com
             gpuVendor: "nvidia"
             gpus: 8
-            entrypoint: |
-              sleep 1
+            entrypoint: sleep 1
     - assert:
         resource:
           apiVersion: batch/v1
@@ -54,10 +53,9 @@ spec:
               spec:
                 containers:
                 - command:
-                  - sh
+                  - /bin/sh
                   - -c
-                  - |
-                    sleep 1
+                  - sleep 1
                   env:
                   - name: NUM_GPUS
                     value: "8"
@@ -104,8 +102,7 @@ spec:
             name: kaiwojob-job-resource-scheduling
           spec:
             dangerous: false
-            entrypoint: |
-              sleep 1
+            entrypoint: sleep 1
             gpuVendor: nvidia
             gpus: 8
             ray: false
@@ -141,8 +138,7 @@ spec:
             user: test@amd.com
             gpuVendor: "nvidia"
             gpus: 0
-            entrypoint: |
-              sleep 1
+            entrypoint: sleep 1
     - assert:
         resource:
           apiVersion: batch/v1
@@ -179,10 +175,9 @@ spec:
               spec:
                 containers:
                 - command:
-                  - sh
+                  - /bin/sh
                   - -c
-                  - |
-                    sleep 1
+                  - sleep 1
                   env:
                   - name: NUM_GPUS
                     value: "0"
@@ -227,8 +222,7 @@ spec:
             name: kaiwojob-job-resource-scheduling-no-gpu
           spec:
             dangerous: false
-            entrypoint: |
-              sleep 1
+            entrypoint: sleep 1
             gpuVendor: nvidia
             gpus: 0
             ray: false

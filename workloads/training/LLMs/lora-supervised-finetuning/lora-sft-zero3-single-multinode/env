@@ -1,0 +1,20 @@
+envVars:
+  - name: MY_VAR
+    value: "my_value"
+  - fromSecret:
+      name: "AWS_ACCESS_KEY_ID"
+      secret: "gcs-credentials"
+      key: "access_key"
+  - fromSecret:
+      name: "AWS_SECRET_ACCESS_KEY"
+      secret: "gcs-credentials"
+      key: "secret_key"
+  - fromSecret:
+      name: "HF_TOKEN"
+      secret: "hf-token"
+      key: "hf-token"
+  - mountSecret:
+      name: "GOOGLE_APPLICATION_CREDENTIALS"
+      secret: "gcs-credentials"
+      key: "gcs-credentials-json"
+      path: "/etc/gcp/credentials.json"
