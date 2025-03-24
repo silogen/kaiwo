@@ -13,7 +13,7 @@ spec:
   envVars:
   - name: HF_TOKEN
     valueFrom:
-      secretKeyRef: 
+      secretKeyRef:
         name: hf-token
         key: hf-token
   storage:
@@ -58,5 +58,5 @@ spec:
       storageSize: "2Gi"
       mountPath: "/.cache/huggingface"  # Also sets the env var HF_HOME to this value in each container
       preCacheRepos:
-        - repoId: meta-llama/Llama-3.1-8B-Instruct
-          files: []
+      - repoId: meta-llama/Llama-3.1-8B-Instruct
+        files: []

@@ -4,60 +4,60 @@ metadata:
   name: label-propagation-direct
 spec:
   steps:
-    - try:
-        - apply:
-            resource:
-              apiVersion: kaiwo.silogen.ai/v1alpha1
-              kind: KaiwoJob
-              metadata:
-                name: label-propagation-direct
-                # Set root-level label
-                labels:
-                  foo: bar
-              spec:
-                podTemplateSpecLabels:
-                  pod-foo: pod-bar
-                resources:
-                  limits:
-                    cpu: "1"
-                    memory: "2Gi"
-                  requests:
-                    cpu: "1"
-                    memory: "2Gi"
-                user: test@amd.com
-                image: busybox:latest
-                entrypoint: |
-                  sleep 1
-        - assert:
-            resource:
-              apiVersion: batch/v1
-              kind: Job
-              metadata:
-                name: label-propagation-direct
-                # Kaiwo system and metadata labels are propagated
-                labels:
-                  kaiwo.silogen.ai/user: test-amd.com
-                  kaiwo.silogen.ai/type: job
-                  kaiwo.silogen.ai/name: label-propagation-direct
-                  foo: bar
-#                  kaiwo.silogen.ai/run-id: test@amd.com
-        - assert:
-            resource:
-              apiVersion: v1
-              kind: Pod
-              metadata:
-                # Kaiwo system and pod template labels are propagated
-                labels:
-                  kaiwo.silogen.ai/user: test-amd.com
-                  kaiwo.silogen.ai/type: job
-                  kaiwo.silogen.ai/name: label-propagation-direct
-                  pod-foo: pod-bar
-      catch:
-        - command:
-            entrypoint: kaiwo-dev
-            env:
-              - name: NAMESPACE
-                value: ($namespace)
-              - name: PRINT_LEVEL
-                value: ($values.print_level)
-            args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+  - try:
+    - apply:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: label-propagation-direct
+            # Set root-level label
+            labels:
+              foo: bar
+          spec:
+            podTemplateSpecLabels:
+              pod-foo: pod-bar
+            resources:
+              limits:
+                cpu: "100m"
+                memory: "100Mi"
+              requests:
+                cpu: "100m"
+                memory: "100Mi"
+            user: test@amd.com
+            image: busybox:latest
+            entrypoint: |
+              sleep 1
+    - assert:
+        resource:
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: label-propagation-direct
+            # Kaiwo system and metadata labels are propagated
+            labels:
+              kaiwo.silogen.ai/user: test-amd.com
+              kaiwo.silogen.ai/type: job
+              kaiwo.silogen.ai/name: label-propagation-direct
+              foo: bar
+    #                  kaiwo.silogen.ai/run-id: test@amd.com
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            # Kaiwo system and pod template labels are propagated
+            labels:
+              kaiwo.silogen.ai/user: test-amd.com
+              kaiwo.silogen.ai/type: job
+              kaiwo.silogen.ai/name: label-propagation-direct
+              pod-foo: pod-bar
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]

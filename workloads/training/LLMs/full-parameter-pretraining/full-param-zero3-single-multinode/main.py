@@ -15,43 +15,43 @@
 # limitations under the License.
 
 import argparse
-from filelock import FileLock
 import functools
 import json
 import math
 import os
-from pathlib import Path
 import tempfile
 import time
-import tree
-from typing import Tuple
 import urllib
-from urllib.parse import urljoin
 
-import deepspeed 
+# from pathlib import Path
+from typing import Tuple
 
-from accelerate import Accelerator, DeepSpeedPlugin
-from accelerate.utils import DummyOptim, DummyScheduler, set_seed
+# import deepspeed
+import ray
+import ray.util.scheduling_strategies
 import torch
 import torch.nn as nn
 import tqdm
+import tree
+from accelerate import Accelerator, DeepSpeedPlugin
+from accelerate.utils import DummyOptim, DummyScheduler, set_seed
 from datasets import load_dataset
+
+# from filelock import FileLock
+from peft import LoraConfig, get_peft_model
+from pyarrow.fs import GcsFileSystem
+
+# from pyarrow.fs import AwsDefaultS3RetryStrategy,  S3FileSystem
+from ray import train
+from ray.train import Checkpoint
+from ray.train.torch import TorchTrainer
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     get_linear_schedule_with_warmup,
 )
 
-from pyarrow.fs import S3FileSystem, AwsDefaultS3RetryStrategy, GcsFileSystem
-
-from peft import LoraConfig, get_peft_model
-import ray
-from ray import train
-import ray.util.scheduling_strategies
-from ray.train.torch import TorchTrainer
-from ray.train import Checkpoint
-
-
+# from urllib.parse import urljoin
 
 urllib.parse.uses_relative.append("s3")
 urllib.parse.uses_netloc.append("s3")
@@ -61,6 +61,7 @@ OPTIM_EPS = 1e-8
 NUM_WARMUP_STEPS = 10
 OPTIM_WEIGHT_DECAY = 0.0
 ATTENTION_LAYER_NAME = "self_attn"
+
 
 def load_gsm8k_dataset():
     """Loads the GSM8K dataset."""
@@ -80,13 +81,7 @@ def process_gsm8k_qa_tokens_template(dataset):
     processed_data = {}
     for split, ds in dataset.items():
         processed_data[split] = [
-            {
-                "messages": (
-                    f"<START_Q>{item['question']}<END_Q>"
-                    f"<START_A>{item['answer']}<END_A>"
-                )
-            }
-            for item in ds
+            {"messages": (f"<START_Q>{item['question']}<END_Q>" f"<START_A>{item['answer']}<END_A>")} for item in ds
         ]
 
     return config, processed_data
@@ -142,9 +137,8 @@ def process_gsm8k_hf_chat_template(dataset):
 
     return processed_data
 
-def get_expected_lora_num_parameters(
-    model, lora_config: LoraConfig, attn_layer_name: str = ATTENTION_LAYER_NAME
-):
+
+def get_expected_lora_num_parameters(model, lora_config: LoraConfig, attn_layer_name: str = ATTENTION_LAYER_NAME):
     """Calculate the expected number of parameters for lora fine-tuning."""
     sum_params = 0
     num_attention_layers = 0
@@ -179,14 +173,10 @@ def get_expected_lora_num_parameters(
                     loraified_modules += 1
                     if isinstance(target, nn.Linear):
                         # Target is attention weight
-                        sum_params += (
-                            target.in_features + target.out_features
-                        ) * lora_config.r
+                        sum_params += (target.in_features + target.out_features) * lora_config.r
                     elif isinstance(target, nn.Embedding):
                         # Target is linear weight
-                        sum_params += (
-                            target.embedding_dim + target.num_embeddings
-                        ) * lora_config.r
+                        sum_params += (target.embedding_dim + target.num_embeddings) * lora_config.r
 
     print(
         f"Detected {num_attention_layers} attention layers, containing"
@@ -207,11 +197,14 @@ def get_number_of_params(model: nn.Module):
 
 def collate_fn(batch, tokenizer, block_size, device):
     out_batch = tokenizer(
-        list(map(lambda m: tokenizer.apply_chat_template(m,
-                                                        tokenize=False,
-                                                        add_generation_prompt=False,
-                                                        add_special_tokens=False),
-                batch["messages"])),
+        list(
+            map(
+                lambda m: tokenizer.apply_chat_template(
+                    m, tokenize=False, add_generation_prompt=False, add_special_tokens=False
+                ),
+                batch["messages"],
+            )
+        ),
         padding="max_length",
         max_length=block_size,
         truncation=True,
@@ -222,8 +215,6 @@ def collate_fn(batch, tokenizer, block_size, device):
     out_batch = tree.map_structure(lambda x: x.to(device), out_batch)
 
     return out_batch
-
-
 
 
 def get_tokenizer(model_name, **kwargs):
@@ -238,17 +229,13 @@ def get_tokenizer(model_name, **kwargs):
     return tokenizer
 
 
-def evaluate(
-    *, model, eval_ds, accelerator, bsize, ds_kwargs, as_test: bool = False
-) -> Tuple[float, float]:
+def evaluate(*, model, eval_ds, accelerator, bsize, ds_kwargs, as_test: bool = False) -> Tuple[float, float]:
     model.eval()
     losses = []
 
     eval_dataloader = eval_ds.iter_torch_batches(batch_size=bsize, **ds_kwargs)
     eval_ds_len = len(list(eval_ds.iter_batches(batch_size=1)))
-    for step, batch in tqdm.tqdm(
-        enumerate(eval_dataloader), total=eval_ds_len // (bsize + 1)
-    ):
+    for step, batch in tqdm.tqdm(enumerate(eval_dataloader), total=eval_ds_len // (bsize + 1)):
         with torch.no_grad():
             outputs = model(**batch)
 
@@ -280,14 +267,11 @@ def _test_tokenizer(model_name):
     testoutput = tokenizer("<REPR_END>inform")["input_ids"]
     expected = tokenizer("inform")["input_ids"]
     assert testoutput[-1] == expected[-1], (
-        "The tokenizer is not working as expected with special tokens, "
-        f"testoutput={testoutput}, expected={expected}"
+        "The tokenizer is not working as expected with special tokens, " f"testoutput={testoutput}, expected={expected}"
     )
 
 
-def checkpoint_model(
-    checkpoint_folder, ckpt_id, model, epoch, last_global_step, **kwargs
-):
+def checkpoint_model(checkpoint_folder, ckpt_id, model, epoch, last_global_step, **kwargs):
     """Utility function for checkpointing model + optimizer dictionaries
     The main purpose for this is to be able to resume training from that instant again.
     """
@@ -300,9 +284,7 @@ def checkpoint_model(
 
     # In here model will be a DeepspeedEngine object
     model.save_checkpoint(checkpoint_folder, ckpt_id, checkpoint_state_dict)
-    status_msg = (
-        f"checkpointing: checkpoint_folder={checkpoint_folder}, ckpt_id={ckpt_id}"
-    )
+    status_msg = f"checkpointing: checkpoint_folder={checkpoint_folder}, ckpt_id={ckpt_id}"
     print(status_msg)
 
 
@@ -320,8 +302,7 @@ def training_function(kwargs: dict):
     args = argparse.Namespace(**kwargs["args"])
     chat_template = kwargs.get("chat_template", [])
     special_tokens = kwargs.get("special_tokens", [])
-    model_id = config["model_name"]
-
+    # model_id = config["model_name"]
 
     # Sample hyperparameters for learning rate, batch size, seed and a few other HPs
     lr = config["lr"]
@@ -350,9 +331,7 @@ def training_function(kwargs: dict):
     train_ds_len = len(list(train_ds.iter_batches(batch_size=1)))
 
     _test_tokenizer(args.model_name)
-    tokenizer = get_tokenizer(model_name=args.model_name,
-                                chat_template=chat_template,
-                                special_tokens=special_tokens)
+    tokenizer = get_tokenizer(model_name=args.model_name, chat_template=chat_template, special_tokens=special_tokens)
     collate_partial = functools.partial(
         collate_fn,
         tokenizer=tokenizer,
@@ -378,9 +357,7 @@ def training_function(kwargs: dict):
         s = time.time()
         lora_config = LoraConfig(**config["lora_config"])
 
-        expected_num_parameters = get_expected_lora_num_parameters(
-            lora_config=lora_config, model=model
-        )
+        expected_num_parameters = get_expected_lora_num_parameters(lora_config=lora_config, model=model)
 
         print(f"Attempting to apply LoRA config: {lora_config}")
 
@@ -427,9 +404,7 @@ def training_function(kwargs: dict):
     # get train and valid dataset lengths
 
     num_steps_per_epoch = math.ceil(train_ds_len / args.batch_size_per_device)
-    total_training_steps = (
-        num_steps_per_epoch * num_epochs // gradient_accumulation_steps
-    )
+    total_training_steps = num_steps_per_epoch * num_epochs // gradient_accumulation_steps
 
     if (
         accelerator.state.deepspeed_plugin is None
@@ -470,9 +445,7 @@ def training_function(kwargs: dict):
             collate_fn=collate_partial,
         )
 
-        for step, batch in tqdm.tqdm(
-            enumerate(train_dataloader), total=train_ds_len // batch_size + 1
-        ):
+        for step, batch in tqdm.tqdm(enumerate(train_dataloader), total=train_ds_len // batch_size + 1):
 
             # We could avoid this line since we set the accelerator with
             # `device_placement=True`.
@@ -499,8 +472,7 @@ def training_function(kwargs: dict):
 
             if accelerator.is_main_process:
                 accelerator.print(
-                    f"[epoch {epoch} step {step}] "
-                    f"loss: {loss.item()} step-time: {e_opt_step - s_fwd}"
+                    f"[epoch {epoch} step {step}] " f"loss: {loss.item()} step-time: {e_opt_step - s_fwd}"
                 )
 
             aggregated_loss = torch.mean(accelerator.gather(loss[None])).item()
@@ -613,11 +585,7 @@ def training_function(kwargs: dict):
             # the checkpoint from the rank 0 worker, since all other checkpoint
             # directories are empty (`save_pretrained` was a noop for other workers).
             if aggregate_on_rank_0:
-                checkpoint = (
-                    Checkpoint.from_directory(temp_checkpoint_dir)
-                    if accelerator.is_main_process
-                    else None
-                )
+                checkpoint = Checkpoint.from_directory(temp_checkpoint_dir) if accelerator.is_main_process else None
             else:
                 # Distributed checkpointing should upload shards from each worker.
                 checkpoint = Checkpoint.from_directory(temp_checkpoint_dir)
@@ -648,69 +616,79 @@ def parse_args():
 
     parser.add_argument("--model-name", type=str, default="meta-llama/Meta-Llama-3.1-8B")
 
-    parser.add_argument("--train-path", type=str, default="./data/train.jsonl",
-                        help="Path to training jsonl file")
+    parser.add_argument("--train-path", type=str, default="./data/train.jsonl", help="Path to training jsonl file")
 
-    parser.add_argument("--test-path", type=str, default="./data/test.jsonl",
-                        help="Path to testing jsonl file")
+    parser.add_argument("--test-path", type=str, default="./data/test.jsonl", help="Path to testing jsonl file")
 
-    parser.add_argument("--dataset-config", type=str, default="./data/config.json",
-                        help="Path to the config file")
+    parser.add_argument("--dataset-config", type=str, default="./data/config.json", help="Path to the config file")
 
-    parser.add_argument("--num-devices", "-nd", type=int, default=4,
-                        help="Number of devices to use.")
+    parser.add_argument("--num-devices", "-nd", type=int, default=4, help="Number of devices to use.")
 
-    parser.add_argument("--mx", type=str, choices=["no", "fp16", "bf16", "fp8"], default="bf16",
-                        help="Whether to use mixed precision. Choose between fp16 and bf16 (bfloat16). "
-                            "Bf16 requires PyTorch >= 1.10 and an Nvidia Ampere GPU.")
+    parser.add_argument(
+        "--mx",
+        type=str,
+        choices=["no", "fp16", "bf16", "fp8"],
+        default="bf16",
+        help="Whether to use mixed precision. Choose between fp16 and bf16 (bfloat16). "
+        "Bf16 requires PyTorch >= 1.10 and an Nvidia Ampere GPU.",
+    )
 
-    parser.add_argument("--ds-config", type=str, default="./deepspeed_configs/zero_3_offload_optim_param.json",
-                        help="Deepspeed config json to use.")
+    parser.add_argument(
+        "--ds-config",
+        type=str,
+        default="./deepspeed_configs/zero_3_offload_optim_param.json",
+        help="Deepspeed config json to use.",
+    )
 
-    parser.add_argument("--lora", action="store_true", default=False,
-                        help="If passed, will enable parameter efficient fine-tuning with LoRA.")
+    parser.add_argument(
+        "--lora",
+        action="store_true",
+        default=False,
+        help="If passed, will enable parameter efficient fine-tuning with LoRA.",
+    )
 
-    parser.add_argument("--lora-config", type=str, default="./lora-llama.json",
-                        help="Lora config json to use.")
+    parser.add_argument("--lora-config", type=str, default="./lora-llama.json", help="Lora config json to use.")
 
-    parser.add_argument("--num-epochs", type=int, default=1,
-                        help="Number of epochs to train for.")
+    parser.add_argument("--num-epochs", type=int, default=1, help="Number of epochs to train for.")
 
-    parser.add_argument("--lr", type=float, default=1e-4,
-                        help="Learning rate to use.")
+    parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate to use.")
 
-    parser.add_argument("--ctx-len", type=int, default=512,
-                        help="Maximum context length for the model input sequences.")
+    parser.add_argument(
+        "--ctx-len", type=int, default=512, help="Maximum context length for the model input sequences."
+    )
 
-    parser.add_argument("--batch-size-per-device", "-bs", type=int, default=16,
-                        help="Batch size to use per device.")
+    parser.add_argument("--batch-size-per-device", "-bs", type=int, default=16, help="Batch size to use per device.")
 
-    parser.add_argument("--eval-batch-size-per-device", type=int, default=64,
-                        help="Batch size to use per device (For evaluation).")
+    parser.add_argument(
+        "--eval-batch-size-per-device", type=int, default=64, help="Batch size to use per device (For evaluation)."
+    )
 
-    parser.add_argument("--grad-accum", type=int, default=1,
-                        help="Gradient accumulation steps.")
+    parser.add_argument("--grad-accum", type=int, default=1, help="Gradient accumulation steps.")
 
-    parser.add_argument("--output-dir", type=str, default="/tmp",
-                        help="Path to output directory.")
+    parser.add_argument("--output-dir", type=str, default="/tmp", help="Path to output directory.")
 
-    parser.add_argument("--bucket", type=str,
-                        help="Bucket for results and checkpoints storage")
+    parser.add_argument("--bucket", type=str, help="Bucket for results and checkpoints storage")
 
-    parser.add_argument("--no-grad-ckpt", action="store_true",
-                        help="If passed, will not use gradient checkpointing.")
+    parser.add_argument("--no-grad-ckpt", action="store_true", help="If passed, will not use gradient checkpointing.")
 
-    parser.add_argument("--num-checkpoints-to-keep", type=int, default=1,
-                        help="Number of checkpoints to keep, if None, all checkpoints will be kept, "
-                            "if set to n>=1, the top n checkpoint with min. evaluation perplexity "
-                            "will be kept.")
+    parser.add_argument(
+        "--num-checkpoints-to-keep",
+        type=int,
+        default=1,
+        help="Number of checkpoints to keep, if None, all checkpoints will be kept, "
+        "if set to n>=1, the top n checkpoint with min. evaluation perplexity "
+        "will be kept.",
+    )
 
-    parser.add_argument("--stop-perplexity", type=float, default=0,
-                        help="Target perplexity to reach after which to stop training. Default is 0. "
-                            "If 0, training will not stop on perplexity.")
+    parser.add_argument(
+        "--stop-perplexity",
+        type=float,
+        default=0,
+        help="Target perplexity to reach after which to stop training. Default is 0. "
+        "If 0, training will not stop on perplexity.",
+    )
 
-    parser.add_argument("--as-test", action="store_true",
-                        help="If passed, will run the script in test mode.")
+    parser.add_argument("--as-test", action="store_true", help="If passed, will run the script in test mode.")
 
     args = parser.parse_args()
 
@@ -784,8 +762,10 @@ def main():
                 checkpoint_score_attribute="perplexity",
                 checkpoint_score_order="min",
             ),
-            storage_filesystem=GcsFileSystem(default_bucket_location="europe-west4",
-            project_id="silogen-dev",)
+            storage_filesystem=GcsFileSystem(
+                default_bucket_location="europe-west4",
+                project_id="silogen-dev",
+            ),
             # storage_filesystem=S3FileSystem(
             # access_key=os.environ["AWS_ACCESS_KEY_ID"],
             # secret_key=os.environ["AWS_SECRET_ACCESS_KEY"],

@@ -7,24 +7,24 @@ spec:
   timeouts:
     assert: 180s
   steps:
-    - try:
-        - apply:
-            file: ray-download-status-change.yaml
-        - assert:
-            resource:
-              apiVersion: v1
-              kind: Pod
-              metadata:
-                namespace: kaiwo-test
-                labels:
-                  kaiwo.silogen.ai/name: download-job-ray-starts
-                  ray.io/is-ray-node: "yes"
-      catch:
-        - command:
-            entrypoint: kaiwo-dev
-            env:
-              - name: NAMESPACE
-                value: ($namespace)
-              - name: PRINT_LEVEL
-                value: ($values.print_level)
-            args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+  - try:
+    - apply:
+        file: ray-download-status-change.yaml
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            namespace: kaiwo-test
+            labels:
+              kaiwo.silogen.ai/name: download-job-ray-starts
+              ray.io/is-ray-node: "yes"
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]

@@ -8,8 +8,8 @@ spec:
   template:
     spec:
       containers:
-        - name: hello-world
-          image: busybox:latest
-          command: [ "sh", "-c", "sleep 1" ]
+      - name: hello-world
+        image: busybox:latest
+        command: ["sh", "-c", "sleep 1"]
       restartPolicy: Never
-      
+

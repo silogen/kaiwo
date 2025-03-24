@@ -1,0 +1,31 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoJob
+metadata:
+  name: download-from-public-bucket
+  namespace: kaiwo-test
+spec:
+  user: test@amd.com
+  gpus: 0
+  resources:
+    limits:
+      cpu: "100m"
+      memory: "100Mi"
+    requests:
+      cpu: "100m"
+      memory: "100Mi"
+  image: busybox:latest
+  entrypoint: cat /workload/s3/file01.html
+  storage:
+    storageEnabled: true
+    storageClassName: "nfs-client"
+    data:
+      storageSize: "1Gi"
+      mountPath: "/workload"
+      download:
+        s3:
+        - endpointUrl: https://s3.amazonaws.com
+          buckets:
+          - name: open-images-dataset
+            files:
+            - path: landing-pages/0002af1f7839dd0d.html
+              targetPath: s3/file01.html

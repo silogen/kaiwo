@@ -12,7 +12,7 @@ spec:
       cpu: "1"
       memory: "2Gi"
   image: busybox:latest
-  entrypoint: |
+  entrypoint: |-
     while true; do
       echo "Hello, world!"
       sleep 1

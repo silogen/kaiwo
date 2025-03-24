@@ -5,5 +5,5 @@ metadata:
     app.kubernetes.io/name: kaiwo
     app.kubernetes.io/managed-by: kustomize
   name: kaiwoqueueconfig-sample
-spec:
+spec: null
   # TODO(user): Add fields here

@@ -4,7 +4,7 @@ on:
     branches:
     - main
     - master
-  pull_request:
+  pull_request: null
 
 
 permissions:
@@ -94,6 +94,6 @@ jobs:
       run: test/setup_kind.sh
 
     - name: Running Test e2e
-      run: |
+      run: |-
         go mod tidy
         make test-e2e

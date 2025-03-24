@@ -65,26 +65,26 @@ spec:
         - --health-probe-bind-address=:8081
         image: controller:latest
         env:
-          - name: STORAGECLASS
-            value: mlstorage
-          - name: DEFAULT_DATA_MOUNT_PATH
-            value: /workload
-          - name: DEFAULT_HF_MOUNT_PATH
-            value: /.cache/huggingface
-          - name: DEFAULT_GPU_RESOURCE_KEY
-            value: amd
-          - name: EXCLUDE_MASTER_NODES_FROM_NODE_POOLS
-            value: "false"
-          - name: ENFORCE_KAIWO_ON_GPU_WORKLOADS
-            value: "false"
-          - name: RAY_HEAD_POD_MEMORY
-            value: "16Gi"
-          - name: DEFAULT_KAIWO_QUEUE_CONFIG_NAME
-            value: "kaiwo"
-          - name: DEFAULT_CLUSTER_QUEUE_NAME
-            value: "kaiwo"
-          - name: CUSTOM_KUBE_SCHEDULER_NAME
-            value: "kaiwo-scheduler"
+        - name: STORAGECLASS
+          value: mlstorage
+        - name: DEFAULT_DATA_MOUNT_PATH
+          value: /workload
+        - name: DEFAULT_HF_MOUNT_PATH
+          value: /.cache/huggingface
+        - name: DEFAULT_GPU_RESOURCE_KEY
+          value: amd
+        - name: EXCLUDE_MASTER_NODES_FROM_NODE_POOLS
+          value: "false"
+        - name: ENFORCE_KAIWO_ON_GPU_WORKLOADS
+          value: "false"
+        - name: RAY_HEAD_POD_MEMORY
+          value: "16Gi"
+        - name: DEFAULT_KAIWO_QUEUE_CONFIG_NAME
+          value: "kaiwo"
+        - name: DEFAULT_CLUSTER_QUEUE_NAME
+          value: "kaiwo"
+        - name: CUSTOM_KUBE_SCHEDULER_NAME
+          value: "kaiwo-scheduler"
         name: manager
         ports: []
         securityContext:

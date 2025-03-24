@@ -30,7 +30,6 @@ roleRef:
   kind: ClusterRole
   name: system:kaiwo-scheduler
   apiGroup: rbac.authorization.k8s.io
-
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -55,10 +54,9 @@ roleRef:
   kind: ClusterRole
   name: kaiwo-scheduler-storage
 subjects:
-  - kind: ServiceAccount
-    name: kaiwo-scheduler
-    namespace: kube-system
-
+- kind: ServiceAccount
+  name: kaiwo-scheduler
+  namespace: kube-system
 ---
 
 apiVersion: rbac.authorization.k8s.io/v1
@@ -240,21 +238,20 @@ rules:
   - get
   - patch
   - update
-
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: kaiwo-scheduler-storage
 rules:
-  - apiGroups:
-      - storage.k8s.io
-    resources:
-      - volumeattachments
-    verbs:
-      - get
-      - list
-      - watch
+- apiGroups:
+  - storage.k8s.io
+  resources:
+  - volumeattachments
+  verbs:
+  - get
+  - list
+  - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

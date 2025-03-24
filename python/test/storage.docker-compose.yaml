@@ -2,20 +2,20 @@ services:
   gcs:
     image: oittaa/gcp-storage-emulator
     environment:
-      - PORT=9023
+    - PORT=9023
     ports:
-      - "9023:9023"
+    - "9023:9023"
   azurite:
     image: mcr.microsoft.com/azure-storage/azurite
     ports:
-      - "10000:10000"
-      - "10001:10001"
-      - "10002:10002"
+    - "10000:10000"
+    - "10001:10001"
+    - "10002:10002"
   minio:
     image: minio/minio
     command: server /data
     ports:
-      - "9000:9000"
+    - "9000:9000"
     environment:
       MINIO_ACCESS_KEY: minio
       MINIO_SECRET_KEY: minio123

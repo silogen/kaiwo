@@ -15,7 +15,7 @@ spec:
   envVars:
   - name: HF_TOKEN
     valueFrom:
-      secretKeyRef: 
+      secretKeyRef:
         name: hf-token
         key: hf-token
   - name: MODEL_ID
@@ -62,5 +62,5 @@ spec:
       storageSize: "100Gi"
       mountPath: "/.cache/huggingface"  # Also sets the env var HF_HOME to this value in each container
       preCacheRepos:
-        - repoId: TinyLlama/TinyLlama-1.1B-Chat-v1.0
-          files: []
+      - repoId: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+        files: []
