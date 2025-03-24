@@ -1,0 +1,298 @@
+// Copyright 2025 Advanced Micro Devices, Inc.  All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package cmd
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"github.com/charmbracelet/huh"
+	"github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
+	cliutils "github.com/silogen/kaiwo/pkg/cli/utils"
+	k8sUtils "github.com/silogen/kaiwo/pkg/k8s"
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
+)
+
+var (
+	dryRun bool
+
+	queue string
+	user  string
+
+	config string
+	file   string
+)
+
+const promptAccessible = false
+
+func BuildSubmitCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "submit",
+		Short: "Submit a job or service",
+		Long:  "Submit a Kaiwo Job or a Kaiwo Service",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if file == "" {
+				return fmt.Errorf("--file is required")
+			}
+
+			obj, err := readManifest(file)
+			if err != nil {
+				return fmt.Errorf("failed to read manifest: %v", err)
+			}
+
+			kaiwoCliConfigPath, err := cliutils.GetKaiwoCliConfigPath(config)
+			if err != nil {
+				return fmt.Errorf("failed to get Kaiwo config path: %v", err)
+			}
+
+			var kaiwoConfig cliutils.KaiwoCliConfig
+
+			if kaiwoCliConfigPath == "" && (user == "" || queue == "") {
+				fmt.Printf("Kaiwo config file cannot be resolved and user and/or queue is not given. Would you like to create a kaiwoconfig file at")
+				configCreated, err := promptUserForConfig()
+				if err != nil {
+					return fmt.Errorf("failed to prompt user: %v", err)
+				}
+				configPath, err := cliutils.GetDefaultKaiwoCliConfigPath()
+				if err != nil {
+					return fmt.Errorf("failed to get default Kaiwo config path: %w", err)
+				}
+				if !configCreated {
+					return fmt.Errorf("kaiwo cli config file was not given, ensure you pass it as a CLI flag, via the env var %s or place it in %s", cliutils.KaiwoCliConfigPathEnv, configPath)
+				}
+				kaiwoCliConfigPath = configPath
+				kaiwoConfig, err = readKaiwoCliConfig(kaiwoCliConfigPath)
+				if err != nil {
+					return fmt.Errorf("failed to read Kaiwo config file: %v", err)
+				}
+			} else if kaiwoCliConfigPath == "" {
+				kaiwoConfig = cliutils.KaiwoCliConfig{
+					User:         user,
+					ClusterQueue: queue,
+				}
+			} else {
+				kaiwoConfig, err = readKaiwoCliConfig(kaiwoCliConfigPath)
+				if err != nil {
+					return fmt.Errorf("failed to read Kaiwo config file: %v", err)
+				}
+			}
+
+			ctx := context.Background()
+			clients, err := k8sUtils.GetKubernetesClients()
+			if err != nil {
+				return fmt.Errorf("failed to get Kubernetes clients: %v", err)
+			}
+
+			if err := ensureObjectNestedStringField(&obj, kaiwoConfig.User, "spec", "user"); err != nil {
+				return fmt.Errorf("failed to ensure user field: %v", err)
+			}
+			if err := ensureObjectNestedStringField(&obj, kaiwoConfig.ClusterQueue, "spec", "clusterQueue"); err != nil {
+				return fmt.Errorf("failed to ensure queue field: %v", err)
+			}
+
+			return ApplyCreate(ctx, clients.Client, &obj)
+		},
+	}
+	cmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "Run a server-side dry run without creating any actual resources")
+
+	cmd.Flags().StringVarP(&user, "user", "", "", "The user to run as")
+	cmd.Flags().StringVarP(&queue, "queue", "", "", "The local queue to use") // controllerutils.DefaultClusterQueueName
+
+	cmd.Flags().StringVarP(&file, "file", "f", "", "The Kaiwo manifest file to apply")
+	cmd.Flags().StringVarP(&config, "config", "c", "", "The path to the kaiwoconfig configuration file")
+
+	return cmd
+}
+
+func readKaiwoCliConfig(path string) (cliutils.KaiwoCliConfig, error) {
+	yamlFile, err := os.ReadFile(path)
+	config := cliutils.KaiwoCliConfig{}
+	if err != nil {
+		return config, fmt.Errorf("failed to read file %s: %w", path, err)
+	}
+	err = yaml.Unmarshal(yamlFile, &config)
+	if err != nil {
+		return config, fmt.Errorf("failed to unmarshal file %s: %w", path, err)
+	}
+	return config, nil
+}
+
+// readManifest reads a Kubernetes manifest from a given path
+func readManifest(path string) (unstructured.Unstructured, error) {
+	var obj unstructured.Unstructured
+
+	file, err := os.Open(path)
+	if err != nil {
+		return obj, fmt.Errorf("failed to open file: %w", err)
+	}
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			panic(err)
+		}
+	}(file)
+
+	yamlBytes, err := os.ReadFile(path)
+	if err != nil {
+		return obj, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	// Decode YAML into unstructured.Unstructured
+	decoder := k8syaml.NewYAMLOrJSONDecoder(file, 4096)
+	err = decoder.Decode(&obj)
+	if err != nil {
+		// Retry decoding from raw bytes if the decoder failed
+		err = k8syaml.Unmarshal(yamlBytes, &obj)
+		if err != nil {
+			return obj, fmt.Errorf("failed to decode manifest: %w", err)
+		}
+	}
+
+	return obj, nil
+}
+
+// promptUserForConfig allows the user to dynamically create a kaiwoconfig if one does not exist
+func promptUserForConfig() (bool, error) {
+	configPath, err := cliutils.GetDefaultKaiwoCliConfigPath()
+	if err != nil {
+		return false, fmt.Errorf("failed to get default Kaiwo config path: %w", err)
+	}
+
+	create := false
+	err = huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("Create Kaiwo config?").
+				Value(&create).
+				Description(fmt.Sprintf("Create Kaiwo config in %s", configPath)),
+		),
+	).WithAccessible(promptAccessible).Run()
+	if err != nil {
+		return false, err
+	}
+
+	if !create {
+		return false, nil
+	}
+
+	userValue, err := baseutils.GetCurrentUser()
+	if err != nil {
+		return false, fmt.Errorf("failed to get current user: %w", err)
+	}
+	queueValue := controllerutils.DefaultKaiwoQueueConfigName
+
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("User").
+				Description("The user name to run your jobs and services with").
+				Value(&userValue),
+			huh.NewInput().
+				Title("Cluster queue").
+				Description("The cluster queue name to run your jobs and services in").
+				Value(&queueValue),
+		),
+	).WithAccessible(promptAccessible)
+
+	if err := form.Run(); err != nil {
+		return false, err
+	}
+
+	config := &cliutils.KaiwoCliConfig{
+		User:         userValue,
+		ClusterQueue: queueValue,
+	}
+
+	dir := filepath.Dir(configPath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return false, fmt.Errorf("failed to create directory %s: %w", dir, err)
+	}
+
+	file, err := os.Create(configPath)
+	if err != nil {
+		fmt.Println("Failed to create file:", err)
+		return false, fmt.Errorf("failed to create Kaiwo config file: %w", err)
+	}
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			panic(err)
+		}
+	}(file)
+
+	encoder := yaml.NewEncoder(file)
+	encoder.SetIndent(2)
+	if err := encoder.Encode(config); err != nil {
+		return false, fmt.Errorf("failed to encode Kaiwo config file: %w", err)
+	}
+
+	return true, nil
+}
+
+func ensureObjectNestedStringField(obj *unstructured.Unstructured, value string, fields ...string) error {
+	if _, found, err := unstructured.NestedFieldCopy(obj.Object, fields...); err != nil {
+		return fmt.Errorf("failed to get nested fields: %w", err)
+	} else if !found {
+		if err := unstructured.SetNestedField(obj.Object, value, fields...); err != nil {
+			return fmt.Errorf("failed to set nested field: %w", err)
+		}
+	}
+	return nil
+}
+
+func ApplyCreate(ctx context.Context, k8sClient client.Client, manifest *unstructured.Unstructured) error {
+	obj := manifest.DeepCopy()
+
+	if err := ensureObjectNestedStringField(obj, "default", "metadata", "namespace"); err != nil {
+		return fmt.Errorf("failed to ensure object namespace: %w", err)
+	}
+
+	key := client.ObjectKeyFromObject(obj)
+	gvk := obj.GroupVersionKind()
+	logrus.Infof("Submitting resource: %s/%s %s %s/%s", gvk.Group, gvk.Version, gvk.Kind, key.Namespace, key.Name)
+
+	if err := k8sClient.Get(ctx, key, obj); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("failed to get object: %w", err)
+		}
+	} else {
+		logrus.Infof("Resource already exists, updating...")
+		if err := k8sClient.Update(ctx, obj); err != nil {
+			return fmt.Errorf("failed to update object: %w", err)
+		}
+		logrus.Infof("Resource successfully updated")
+		return nil
+	}
+
+	logrus.Info("Creating resource...")
+
+	if err := k8sClient.Create(ctx, obj); err != nil {
+		return fmt.Errorf("failed to create resource: %w", err)
+	}
+
+	logrus.Infof("Resource successfully created")
+
+	return nil
+}

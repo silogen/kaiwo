@@ -19,8 +19,6 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-
-	cli "github.com/silogen/kaiwo/pkg/cli/apply"
 )
 
 // Build-time variables (set with -ldflags). Do not touch
@@ -79,10 +77,7 @@ func RunCli() {
 		},
 	})
 
-	rootCmd.AddCommand(cli.BuildSubmitCmd())
-
-	// TODO re-enable
-	// rootCmd.AddCommand(cli.BuildServeCmd())
+	rootCmd.AddCommand(BuildSubmitCmd())
 
 	// TODO re-enable
 	//rootCmd.AddCommand(
