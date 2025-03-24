@@ -39,7 +39,10 @@ type KaiwoServiceSpec struct {
 	ServeConfigV2 *string `json:"serveConfigV2,omitempty"`
 
 	// Optional workload-specific configs (Pointers to avoid bloating CRD)
-	RayService *rayv1.RayService  `json:"rayService,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	RayService *rayv1.RayService `json:"rayService,omitempty"`
+
+	// +kubebuilder:pruning:PreserveUnknownFields
 	Deployment *appsv1.Deployment `json:"deployment,omitempty"`
 }
 

@@ -31,6 +31,8 @@ touch "$ENV_FILE"
 update_env_var "WEBHOOK_CERT_DIRECTORY" "$WEBHOOK_CERT_DIRECTORY"
 update_env_var "KUBECONFIG" "$KUBECONFIG"
 
+make generate
+make manifests
 make install
 
 kubectl apply -f config/static/**

@@ -36,9 +36,11 @@ type KaiwoJobSpec struct {
 	EntryPoint *string `json:"entrypoint,omitempty"`
 
 	// RayJob defines the RayJob configuration.
+	// +kubebuilder:pruning:PreserveUnknownFields
 	RayJob *rayv1.RayJob `json:"rayJob,omitempty"`
 
 	// Job defines the Kubernetes Job configuration.
+	// +kubebuilder:pruning:PreserveUnknownFields
 	Job *batchv1.Job `json:"job,omitempty"`
 }
 

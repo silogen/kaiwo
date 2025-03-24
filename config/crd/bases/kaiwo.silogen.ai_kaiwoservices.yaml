@@ -81,6 +81,23 @@ spec:
                     description: |-
                       Standard object's metadata.
                       More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      finalizers:
+                        items:
+                          type: string
+                        type: array
+                      labels:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      name:
+                        type: string
+                      namespace:
+                        type: string
                     type: object
                   spec:
                     description: Specification of the desired behavior of the Deployment.
@@ -214,6 +231,23 @@ spec:
                             description: |-
                               Standard object's metadata.
                               More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+                            properties:
+                              annotations:
+                                additionalProperties:
+                                  type: string
+                                type: object
+                              finalizers:
+                                items:
+                                  type: string
+                                type: array
+                              labels:
+                                additionalProperties:
+                                  type: string
+                                type: object
+                              name:
+                                type: string
+                              namespace:
+                                type: string
                             type: object
                           spec:
                             description: |-
@@ -6337,6 +6371,23 @@ spec:
                                                 May contain labels and annotations that will be copied into the PVC
                                                 when creating it. No other fields are allowed and will be rejected during
                                                 validation.
+                                              properties:
+                                                annotations:
+                                                  additionalProperties:
+                                                    type: string
+                                                  type: object
+                                                finalizers:
+                                                  items:
+                                                    type: string
+                                                  type: array
+                                                labels:
+                                                  additionalProperties:
+                                                    type: string
+                                                  type: object
+                                                name:
+                                                  type: string
+                                                namespace:
+                                                  type: string
                                               type: object
                                             spec:
                                               description: |-
@@ -7619,6 +7670,7 @@ spec:
                         type: integer
                     type: object
                 type: object
+                x-kubernetes-preserve-unknown-fields: true
               entrypoint:
                 description: |-
                   EntryPoint specifies the command or script executed in a Deployment.
@@ -7802,6 +7854,23 @@ spec:
                       More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
                     type: string
                   metadata:
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      finalizers:
+                        items:
+                          type: string
+                        type: array
+                      labels:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      name:
+                        type: string
+                      namespace:
+                        type: string
                     type: object
                   spec:
                     description: RayServiceSpec defines the desired state of RayService
@@ -8526,6 +8595,23 @@ spec:
                                     description: |-
                                       Standard object's metadata.
                                       More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+                                    properties:
+                                      annotations:
+                                        additionalProperties:
+                                          type: string
+                                        type: object
+                                      finalizers:
+                                        items:
+                                          type: string
+                                        type: array
+                                      labels:
+                                        additionalProperties:
+                                          type: string
+                                        type: object
+                                      name:
+                                        type: string
+                                      namespace:
+                                        type: string
                                     type: object
                                   spec:
                                     description: |-
@@ -8951,6 +9037,23 @@ spec:
                                     description: |-
                                       Standard object's metadata.
                                       More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+                                    properties:
+                                      annotations:
+                                        additionalProperties:
+                                          type: string
+                                        type: object
+                                      finalizers:
+                                        items:
+                                          type: string
+                                        type: array
+                                      labels:
+                                        additionalProperties:
+                                          type: string
+                                        type: object
+                                      name:
+                                        type: string
+                                      namespace:
+                                        type: string
                                     type: object
                                   spec:
                                     description: |-
@@ -15074,6 +15177,23 @@ spec:
                                                         May contain labels and annotations that will be copied into the PVC
                                                         when creating it. No other fields are allowed and will be rejected during
                                                         validation.
+                                                      properties:
+                                                        annotations:
+                                                          additionalProperties:
+                                                            type: string
+                                                          type: object
+                                                        finalizers:
+                                                          items:
+                                                            type: string
+                                                          type: array
+                                                        labels:
+                                                          additionalProperties:
+                                                            type: string
+                                                          type: object
+                                                        name:
+                                                          type: string
+                                                        namespace:
+                                                          type: string
                                                       type: object
                                                     spec:
                                                       description: |-
@@ -16371,6 +16491,23 @@ spec:
                                       description: |-
                                         Standard object's metadata.
                                         More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+                                      properties:
+                                        annotations:
+                                          additionalProperties:
+                                            type: string
+                                          type: object
+                                        finalizers:
+                                          items:
+                                            type: string
+                                          type: array
+                                        labels:
+                                          additionalProperties:
+                                            type: string
+                                          type: object
+                                        name:
+                                          type: string
+                                        namespace:
+                                          type: string
                                       type: object
                                     spec:
                                       description: |-
@@ -22494,6 +22631,23 @@ spec:
                                                           May contain labels and annotations that will be copied into the PVC
                                                           when creating it. No other fields are allowed and will be rejected during
                                                           validation.
+                                                        properties:
+                                                          annotations:
+                                                            additionalProperties:
+                                                              type: string
+                                                            type: object
+                                                          finalizers:
+                                                            items:
+                                                              type: string
+                                                            type: array
+                                                          labels:
+                                                            additionalProperties:
+                                                              type: string
+                                                            type: object
+                                                          name:
+                                                            type: string
+                                                          namespace:
+                                                            type: string
                                                         type: object
                                                       spec:
                                                         description: |-
@@ -23738,6 +23892,23 @@ spec:
                             description: |-
                               Standard object's metadata.
                               More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+                            properties:
+                              annotations:
+                                additionalProperties:
+                                  type: string
+                                type: object
+                              finalizers:
+                                items:
+                                  type: string
+                                type: array
+                              labels:
+                                additionalProperties:
+                                  type: string
+                                type: object
+                              name:
+                                type: string
+                              namespace:
+                                type: string
                             type: object
                           spec:
                             description: |-
@@ -24609,6 +24780,7 @@ spec:
                         type: string
                     type: object
                 type: object
+                x-kubernetes-preserve-unknown-fields: true
               replicas:
                 default: 1
                 description: |-
