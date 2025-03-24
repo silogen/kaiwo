@@ -32,9 +32,9 @@ type KaiwoQueueConfigSpec struct {
 }
 
 type ClusterQueue struct {
-	Name string `json:"name"`
-
-	Spec kueuev1beta1.ClusterQueueSpec `json:"spec,omitempty"`
+	Name       string                        `json:"name"`
+	Spec       kueuev1beta1.ClusterQueueSpec `json:"spec,omitempty"`
+	Namespaces []string                      `json:"namespaces,omitempty"`
 }
 
 // ResourceFlavorSpec defines the configuration for a specific resource flavor.

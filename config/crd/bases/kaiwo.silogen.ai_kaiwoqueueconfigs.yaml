@@ -47,6 +47,10 @@ spec:
                   properties:
                     name:
                       type: string
+                    namespaces:
+                      items:
+                        type: string
+                      type: array
                     spec:
                       description: ClusterQueueSpec defines the desired state of ClusterQueue
                       properties:
@@ -561,6 +565,23 @@ spec:
                         More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
                       type: string
                     metadata:
+                      properties:
+                        annotations:
+                          additionalProperties:
+                            type: string
+                          type: object
+                        finalizers:
+                          items:
+                            type: string
+                          type: array
+                        labels:
+                          additionalProperties:
+                            type: string
+                          type: object
+                        name:
+                          type: string
+                        namespace:
+                          type: string
                       type: object
                     value:
                       description: |-
