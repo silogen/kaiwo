@@ -1,0 +1,40 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: kaiwo-cli-job
+spec:
+  steps:
+  - try:
+    - command:
+        entrypoint: kaiwo
+        args:
+        - submit
+        - --file=../../basic/basic-kaiwojob.yaml
+        - --user=test-user
+        - --namespace=$NAMESPACE
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: kaiwojob-1
+          status:
+            status: COMPLETE
+    - delete:
+        ref:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          namespace: ($namespace)
+          name: kaiwojob-1
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]

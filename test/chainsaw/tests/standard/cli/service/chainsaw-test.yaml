@@ -1,0 +1,50 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: kaiwo-cli-service
+spec:
+  steps:
+  - try:
+    - command:
+        entrypoint: kaiwo
+        args:
+        - submit
+        - --file=../../basic/basic-kaiwoservice.yaml
+        - --user=test-user
+        - --namespace=$NAMESPACE
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoService
+          metadata:
+            name: kaiwoservice-1
+          status:
+            status: RUNNING
+    - assert:
+        resource:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: kaiwoservice-1
+          status:
+            availableReplicas: 1
+            readyReplicas: 1
+            replicas: 1
+    - delete:
+        ref:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoService
+          namespace: ($namespace)
+          name: kaiwoservice-1
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]

@@ -38,8 +38,9 @@ import (
 var (
 	dryRun bool
 
-	queue string
-	user  string
+	queue     string
+	user      string
+	namespace string
 
 	config string
 	file   string
@@ -56,47 +57,54 @@ func BuildSubmitCmd() *cobra.Command {
 			if file == "" {
 				return fmt.Errorf("--file is required")
 			}
-
 			obj, err := readManifest(file)
 			if err != nil {
 				return fmt.Errorf("failed to read manifest: %v", err)
 			}
 
-			kaiwoCliConfigPath, err := cliutils.GetKaiwoCliConfigPath(config)
+			existingKaiwoCliConfigPath, err := cliutils.GetKaiwoCliConfigPath(config)
 			if err != nil {
 				return fmt.Errorf("failed to get Kaiwo config path: %v", err)
 			}
 
 			var kaiwoConfig cliutils.KaiwoCliConfig
 
-			if kaiwoCliConfigPath == "" && (user == "" || queue == "") {
-				fmt.Printf("Kaiwo config file cannot be resolved and user and/or queue is not given. Would you like to create a kaiwoconfig file at")
+			configPath, err := cliutils.GetDefaultKaiwoCliConfigPath()
+			if err != nil {
+				return fmt.Errorf("failed to get default Kaiwo config path: %w", err)
+			}
+
+			if existingKaiwoCliConfigPath == "" && user == "" {
+				// No config file was found and no user was given, allow user to create the config dynamically
+				fmt.Printf("Kaiwo config file cannot be resolved and user is not given. Would you like to create a kaiwoconfig file?")
 				configCreated, err := promptUserForConfig()
 				if err != nil {
 					return fmt.Errorf("failed to prompt user: %v", err)
 				}
-				configPath, err := cliutils.GetDefaultKaiwoCliConfigPath()
-				if err != nil {
-					return fmt.Errorf("failed to get default Kaiwo config path: %w", err)
+
+				if configCreated {
+					existingKaiwoCliConfigPath = configPath
 				}
-				if !configCreated {
-					return fmt.Errorf("kaiwo cli config file was not given, ensure you pass it as a CLI flag, via the env var %s or place it in %s", cliutils.KaiwoCliConfigPathEnv, configPath)
-				}
-				kaiwoCliConfigPath = configPath
-				kaiwoConfig, err = readKaiwoCliConfig(kaiwoCliConfigPath)
-				if err != nil {
-					return fmt.Errorf("failed to read Kaiwo config file: %v", err)
-				}
-			} else if kaiwoCliConfigPath == "" {
-				kaiwoConfig = cliutils.KaiwoCliConfig{
-					User:         user,
-					ClusterQueue: queue,
-				}
-			} else {
-				kaiwoConfig, err = readKaiwoCliConfig(kaiwoCliConfigPath)
+			}
+
+			if existingKaiwoCliConfigPath != "" {
+				// Config file exists
+				kaiwoConfig, err = readKaiwoCliConfig(existingKaiwoCliConfigPath)
 				if err != nil {
 					return fmt.Errorf("failed to read Kaiwo config file: %v", err)
 				}
+			} else if user == "" {
+				// No config file exists and the user was not explicitly provided
+				return fmt.Errorf("kaiwo cli config file was not given, ensure you pass it as a CLI flag, via the env var %s or place it in %s, or provide the user / queue via CLI flags", cliutils.KaiwoCliConfigPathEnv, configPath)
+			}
+
+			if user != "" {
+				// Override the user
+				kaiwoConfig.User = user
+			}
+			if queue != "" {
+				// Override the cluster queue
+				kaiwoConfig.ClusterQueue = queue
 			}
 
 			ctx := context.Background()
@@ -112,13 +120,14 @@ func BuildSubmitCmd() *cobra.Command {
 				return fmt.Errorf("failed to ensure queue field: %v", err)
 			}
 
-			return ApplyCreate(ctx, clients.Client, &obj)
+			return Apply(ctx, clients.Client, &obj)
 		},
 	}
 	cmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "Run a server-side dry run without creating any actual resources")
 
 	cmd.Flags().StringVarP(&user, "user", "", "", "The user to run as")
-	cmd.Flags().StringVarP(&queue, "queue", "", "", "The local queue to use") // controllerutils.DefaultClusterQueueName
+	cmd.Flags().StringVarP(&queue, "queue", "", "", "The cluster queue to use")
+	cmd.Flags().StringVarP(&namespace, "namespace", "n", "", "The namespace to use, if none is given")
 
 	cmd.Flags().StringVarP(&file, "file", "f", "", "The Kaiwo manifest file to apply")
 	cmd.Flags().StringVarP(&config, "config", "c", "", "The path to the kaiwoconfig configuration file")
@@ -262,11 +271,19 @@ func ensureObjectNestedStringField(obj *unstructured.Unstructured, value string,
 	return nil
 }
 
-func ApplyCreate(ctx context.Context, k8sClient client.Client, manifest *unstructured.Unstructured) error {
+func Apply(ctx context.Context, k8sClient client.Client, manifest *unstructured.Unstructured) error {
 	obj := manifest.DeepCopy()
 
-	if err := ensureObjectNestedStringField(obj, "default", "metadata", "namespace"); err != nil {
+	if namespace == "" {
+		namespace = "default"
+	}
+
+	if err := ensureObjectNestedStringField(obj, namespace, "metadata", "namespace"); err != nil {
 		return fmt.Errorf("failed to ensure object namespace: %w", err)
+	}
+
+	if obj.GetNamespace() != namespace && namespace != "default" {
+		return fmt.Errorf("expected namespace to be %s, got %s", namespace, obj.GetNamespace())
 	}
 
 	key := client.ObjectKeyFromObject(obj)
