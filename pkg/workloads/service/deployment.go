@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -38,7 +40,7 @@ func GetDefaultDeploymentSpec(dangerous bool, resourceRequirements corev1.Resour
 		Selector: &metav1.LabelSelector{
 			MatchLabels: map[string]string{},
 		},
-		Template: workloadcommon.GetPodTemplate(
+		Template: workloadutils.GetPodTemplate(
 			*resource.NewQuantity(1*1024*1024*1024, resource.BinarySI),
 			dangerous,
 			resourceRequirements,
@@ -105,7 +107,7 @@ func (r *DeploymentReconciler) Build(ctx context.Context, _ client.Client) (*app
 
 	gpus := r.KaiwoService.Spec.CommonMetaSpec.Gpus
 
-	if err := workloadcommon.UpdatePodSpec(
+	if err := workloadutils.UpdatePodSpec(
 		r.KaiwoService.Spec.CommonMetaSpec,
 		labelContext,
 		&depSpec.Template,
@@ -117,7 +119,7 @@ func (r *DeploymentReconciler) Build(ctx context.Context, _ client.Client) (*app
 		return nil, fmt.Errorf("failed to update deployment template: %w", err)
 	}
 
-	if err := workloadcommon.AddEntrypoint(
+	if err := workloadutils.AddEntrypoint(
 		svcSpec.EntryPoint,
 		&depSpec.Template,
 	); err != nil {
@@ -147,5 +149,5 @@ func (r *DeploymentReconciler) GetEmptyObject() *appsv1.Deployment {
 func (r *DeploymentReconciler) ValidateBeforeCreateOrUpdate(ctx context.Context, actual *appsv1.Deployment) (*ctrl.Result, error) {
 	// Abort reconciliation the managed label is set and actual doesn't exist, as the deployment is managed by the webhook
 	// This is to avoid trying to create the deployment that is going to be created once the webhook completes
-	return workloadcommon.ValidateKaiwoResourceBeforeCreateOrUpdate(ctx, actual, r.KaiwoService.ObjectMeta)
+	return workloadutils.ValidateKaiwoResourceBeforeCreateOrUpdate(ctx, actual, r.KaiwoService.ObjectMeta)
 }

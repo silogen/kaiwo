@@ -15,7 +15,15 @@
 package cliutils
 
 import (
+	"context"
+	"fmt"
+	"strings"
+
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
+	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 type PodSelectionPredicate func(pod corev1.Pod) bool
@@ -29,4 +37,25 @@ func IsGPUPod(pod corev1.Pod) bool {
 		}
 	}
 	return false
+}
+
+func GetWorkload(ctx context.Context, k8sClient client.Client, workloadSelector string, namespace string) (workloadcommon.KaiwoWorkload, error) {
+	parts := strings.Split(workloadSelector, "/")
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("invalid workload selector, must be type/name: %s", workloadSelector)
+	}
+	type_ := parts[0]
+	name := parts[1]
+	var obj client.Object
+	if type_ == "job" {
+		obj = &v1alpha1.KaiwoJob{}
+	} else if type_ == "service" {
+		obj = &v1alpha1.KaiwoService{}
+	} else {
+		return nil, fmt.Errorf("invalid workload type: %s, must be either 'job' or 'service'", type_)
+	}
+	if err := k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, obj); err != nil {
+		return nil, fmt.Errorf("error getting Kaiwo %s %s/%s: %v", type_, namespace, name, err)
+	}
+	return obj.(workloadcommon.KaiwoWorkload), nil
 }

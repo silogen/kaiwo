@@ -17,6 +17,8 @@ package cmd
 import (
 	"fmt"
 
+	cliutils "github.com/silogen/kaiwo/pkg/cli/utils"
+
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -81,10 +83,10 @@ func RunCli() {
 
 	// TODO re-enable
 	rootCmd.AddCommand(
-		// BuildLogCmd(),
+		BuildLogCmd(),
 		BuildListCmd(),
-	// BuildMonitorCmd("monitor", utils.DefaultMonitorCommand),
-	// BuildExecCommand(),
+		BuildMonitorCmd("monitor", cliutils.DefaultMonitorCommand),
+		BuildExecCommand(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {

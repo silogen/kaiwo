@@ -15,9 +15,16 @@
 package v1alpha1
 
 import (
+	"context"
+	"fmt"
+
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 // KaiwoServiceSpec defines the desired state of KaiwoService.
@@ -99,4 +106,18 @@ func (svc *KaiwoService) GetType() string {
 
 func init() {
 	SchemeBuilder.Register(&KaiwoService{}, &KaiwoServiceList{})
+}
+
+func (svc *KaiwoService) GetPods(ctx context.Context, k8sClient client.Client) ([]corev1.Pod, error) {
+	podList := &corev1.PodList{}
+	if err := k8sClient.List(ctx, podList, client.InNamespace(svc.Namespace), client.MatchingLabels{
+		workloadcommon.KaiwoRunIdLabel: string(svc.UID),
+	}); err != nil {
+		return nil, fmt.Errorf("failed to list pods: %w", err)
+	}
+	return podList.Items, nil
+}
+
+func (svc *KaiwoService) GetServices(ctx context.Context, k8sClient client.Client) ([]corev1.Service, error) {
+	return []corev1.Service{}, nil
 }

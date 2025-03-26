@@ -129,13 +129,13 @@ func runSelectWorkload(ctx context.Context, clients k8s.KubernetesClients, state
 func runSelectWorkloadAction(_ context.Context, _ k8s.KubernetesClients, _ *tuicomponents.RunState) (tuicomponents.StepResult, tuicomponents.RunStep[tuicomponents.RunState], error) {
 	type workloadAction string
 	var viewPods workloadAction = "View pods"
-	// portForward    workloadAction = "Port-forward"
-	// deleteWorkload workloadAction = "Delete workload"
+	var portForward workloadAction = "Port-forward"
+	var deleteWorkload workloadAction = "Delete workload"
 
 	data := [][]string{
 		{string(viewPods)},
-		//{string(portForward)},
-		//{string(deleteWorkload)},
+		{string(portForward)},
+		{string(deleteWorkload)},
 	}
 	title := "Select the action you wish to take on the workload"
 	selectedRow, result, err := tuicomponents.RunSelectTable(data, []string{"Action"}, title, true)
@@ -144,9 +144,9 @@ func runSelectWorkloadAction(_ context.Context, _ k8s.KubernetesClients, _ *tuic
 	}
 
 	actionMap := map[workloadAction]tuicomponents.RunStep[tuicomponents.RunState]{
-		viewPods: podlist.RunSelectPodAndContainer,
-		// portForward:    runPortForward,
-		// deleteWorkload: runDeleteWorkload,
+		viewPods:       podlist.RunSelectPodAndContainer,
+		portForward:    runPortForward,
+		deleteWorkload: runDeleteWorkload,
 	}
 
 	if result == tuicomponents.StepResultOk {

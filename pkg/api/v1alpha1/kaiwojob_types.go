@@ -15,9 +15,17 @@
 package v1alpha1
 
 import (
+	"context"
+	"fmt"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 // KaiwoJobSpec defines the desired state of KaiwoJob.
@@ -91,6 +99,20 @@ func (job *KaiwoJob) GetStatus() string {
 
 func (job *KaiwoJob) GetType() string {
 	return "job"
+}
+
+func (job *KaiwoJob) GetPods(ctx context.Context, k8sClient client.Client) ([]corev1.Pod, error) {
+	podList := &corev1.PodList{}
+	if err := k8sClient.List(ctx, podList, client.InNamespace(job.Namespace), client.MatchingLabels{
+		workloadcommon.KaiwoRunIdLabel: string(job.UID),
+	}); err != nil {
+		return nil, fmt.Errorf("failed to list pods: %w", err)
+	}
+	return podList.Items, nil
+}
+
+func (job *KaiwoJob) GetServices(ctx context.Context, k8sClient client.Client) ([]corev1.Service, error) {
+	return []corev1.Service{}, nil
 }
 
 // KaiwoJobList

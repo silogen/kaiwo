@@ -21,6 +21,8 @@ import (
 	"os"
 	"strings"
 
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	v1 "k8s.io/api/core/v1"
@@ -42,7 +44,7 @@ import (
 
 func GetDefaultRayServiceSpec(dangerous bool, resourceRequirements v1.ResourceRequirements) rayv1.RayServiceSpec {
 	return rayv1.RayServiceSpec{
-		RayClusterSpec: *workloadcommon.GetRayClusterTemplate(dangerous, resourceRequirements),
+		RayClusterSpec: *workloadutils.GetRayClusterTemplate(dangerous, resourceRequirements),
 	}
 }
 
@@ -85,7 +87,7 @@ func (r *RayServiceReconciler) Build(ctx context.Context, k8sClient client.Clien
 			logger.Error(err, msg)
 			panic(msg)
 		}
-		workloadcommon.FillPodResources(
+		workloadutils.FillPodResources(
 			&rayServiceSpec.RayClusterSpec.HeadGroupSpec.Template.Spec,
 			&v1.ResourceRequirements{
 				Limits: v1.ResourceList{
@@ -134,7 +136,7 @@ func (r *RayServiceReconciler) Build(ctx context.Context, k8sClient client.Clien
 	}
 
 	if spec.RayService == nil {
-		if err := workloadcommon.UpdatePodSpec(
+		if err := workloadutils.UpdatePodSpec(
 			r.KaiwoService.Spec.CommonMetaSpec,
 			labelContext,
 			&rayServiceSpec.RayClusterSpec.HeadGroupSpec.Template,
@@ -147,7 +149,7 @@ func (r *RayServiceReconciler) Build(ctx context.Context, k8sClient client.Clien
 		}
 
 		for i := range rayServiceSpec.RayClusterSpec.WorkerGroupSpecs {
-			if err := workloadcommon.UpdatePodSpec(
+			if err := workloadutils.UpdatePodSpec(
 				r.KaiwoService.Spec.CommonMetaSpec,
 				labelContext,
 				&rayServiceSpec.RayClusterSpec.WorkerGroupSpecs[i].Template,
@@ -229,5 +231,5 @@ func (r *RayServiceReconciler) GetEmptyObject() *appwrapperv1beta2.AppWrapper {
 func (r *RayServiceReconciler) ValidateBeforeCreateOrUpdate(ctx context.Context, actual *appwrapperv1beta2.AppWrapper) (*ctrl.Result, error) {
 	// Abort reconciliation the managed label is set and actual doesn't exist, as the service is managed by the webhook
 	// This is to avoid trying to create the service that is going to be created once the webhook completes
-	return workloadcommon.ValidateKaiwoResourceBeforeCreateOrUpdate(ctx, actual, r.KaiwoService.ObjectMeta)
+	return workloadutils.ValidateKaiwoResourceBeforeCreateOrUpdate(ctx, actual, r.KaiwoService.ObjectMeta)
 }

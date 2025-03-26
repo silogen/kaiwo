@@ -18,11 +18,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// Common labels used across resources.
-const (
-	UserLabel = "kaiwo/user"
-)
-
 type Status string
 
 const (
