@@ -80,12 +80,12 @@ func RunCli() {
 	rootCmd.AddCommand(BuildSubmitCmd())
 
 	// TODO re-enable
-	//rootCmd.AddCommand(
-	//BuildLogCmd(),
-	//BuildListCmd(),
-	//BuildMonitorCmd("monitor", utils.DefaultMonitorCommand),
-	//BuildExecCommand(),
-	//)
+	rootCmd.AddCommand(
+		// BuildLogCmd(),
+		BuildListCmd(),
+	// BuildMonitorCmd("monitor", utils.DefaultMonitorCommand),
+	// BuildExecCommand(),
+	)
 
 	if err := rootCmd.Execute(); err != nil {
 		logrus.Fatal(err)

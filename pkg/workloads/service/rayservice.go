@@ -71,7 +71,7 @@ func (r *RayServiceReconciler) Build(ctx context.Context, k8sClient client.Clien
 
 	if spec.RayService == nil {
 		rayServiceSpec = GetDefaultRayServiceSpec(
-			baseutils.ValueOrDefault(spec.Dangerous),
+			spec.Dangerous,
 			baseutils.ValueOrDefault(spec.Resources),
 		)
 	} else {
@@ -99,22 +99,22 @@ func (r *RayServiceReconciler) Build(ctx context.Context, k8sClient client.Clien
 		)
 	}
 
-	labelContext := baseutils.GetKaiwoLabelContext(r.KaiwoService)
+	labelContext := workloadcommon.GetKaiwoLabelContext(r.KaiwoService)
 
 	replicas := baseutils.ValueOrDefault(spec.Replicas)
-	gpusPerReplica := baseutils.ValueOrDefault(spec.GpusPerReplica)
+	gpusPerReplica := spec.GpusPerReplica
 
-	calculatedGpus := baseutils.ValueOrDefault(r.KaiwoService.Spec.CommonMetaSpec.Gpus)
+	calculatedGpus := r.KaiwoService.Spec.CommonMetaSpec.Gpus
 
-	if baseutils.ValueOrDefault(spec.Gpus) > 0 || gpusPerReplica > 0 {
+	if spec.Gpus > 0 || gpusPerReplica > 0 {
 		var err error
 		calculatedGpus, replicas, gpusPerReplica, err = controllerutils.CalculateNumberOfReplicas(
 			ctx,
 			k8sClient,
-			strings.ToLower(baseutils.ValueOrDefault(spec.GpuVendor)),
-			baseutils.ValueOrDefault(spec.Gpus),
+			strings.ToLower(spec.GpuVendor),
+			spec.Gpus,
 			baseutils.ValueOrDefault(spec.Replicas),
-			baseutils.ValueOrDefault(spec.GpusPerReplica),
+			spec.GpusPerReplica,
 			true,
 		)
 		if err != nil {
@@ -123,8 +123,8 @@ func (r *RayServiceReconciler) Build(ctx context.Context, k8sClient client.Clien
 	}
 
 	spec.Replicas = &replicas
-	spec.GpusPerReplica = &gpusPerReplica
-	r.KaiwoService.Spec.CommonMetaSpec.Gpus = &calculatedGpus
+	spec.GpusPerReplica = gpusPerReplica
+	r.KaiwoService.Spec.CommonMetaSpec.Gpus = calculatedGpus
 
 	var overrideDefaults bool
 	if calculatedGpus > 0 && spec.RayService == nil {
@@ -167,8 +167,8 @@ func (r *RayServiceReconciler) Build(ctx context.Context, k8sClient client.Clien
 		}
 	}
 
-	if baseutils.ValueOrDefault(spec.ServeConfigV2) != "" {
-		rayServiceSpec.ServeConfigV2 = *spec.ServeConfigV2
+	if spec.ServeConfigV2 != "" {
+		rayServiceSpec.ServeConfigV2 = spec.ServeConfigV2
 	}
 
 	rayService := &rayv1.RayService{
@@ -180,8 +180,8 @@ func (r *RayServiceReconciler) Build(ctx context.Context, k8sClient client.Clien
 		Spec: rayServiceSpec,
 	}
 
-	baseutils.CopyLabels(r.KaiwoService.GetLabels(), &rayService.ObjectMeta)
-	baseutils.SetKaiwoSystemLabels(labelContext, &rayService.ObjectMeta)
+	workloadcommon.CopyLabels(r.KaiwoService.GetLabels(), &rayService.ObjectMeta)
+	workloadcommon.SetKaiwoSystemLabels(labelContext, &rayService.ObjectMeta)
 
 	rayServiceSpecBytes, err := json.Marshal(rayServiceSpec)
 	if err != nil {
@@ -193,7 +193,7 @@ func (r *RayServiceReconciler) Build(ctx context.Context, k8sClient client.Clien
 			Name:      r.KaiwoService.Name,
 			Namespace: r.KaiwoService.Namespace,
 			Labels: map[string]string{
-				v1alpha1.QueueLabel: r.KaiwoService.Labels[v1alpha1.QueueLabel],
+				workloadcommon.QueueLabel: r.KaiwoService.Labels[workloadcommon.QueueLabel],
 			},
 		},
 		Spec: appwrapperv1beta2.AppWrapperSpec{

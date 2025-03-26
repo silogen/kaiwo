@@ -25,15 +25,15 @@ type KaiwoJobSpec struct {
 	CommonMetaSpec `json:",inline"`
 
 	// ClusterQueue is the Kueue ClusterQueue name.
-	ClusterQueue *string `json:"clusterQueue,omitempty"`
+	ClusterQueue string `json:"clusterQueue,omitempty"`
 
 	// PriorityClass specifies the Kubernetes PriorityClass for scheduling.
-	PriorityClass *string `json:"priorityClass,omitempty"`
+	PriorityClass string `json:"priorityClass,omitempty"`
 
 	// EntryPoint specifies the command or script executed in a Job or RayJob.
 	// Can also be defined inside Job struct as Command in the form of string array or
 	// inside RayJob struct as Entrypoint in the form of string
-	EntryPoint *string `json:"entrypoint,omitempty"`
+	EntryPoint string `json:"entrypoint,omitempty"`
 
 	// RayJob defines the RayJob configuration.
 	// +kubebuilder:pruning:PreserveUnknownFields
@@ -49,7 +49,7 @@ func (spec *KaiwoJobSpec) IsBatchJob() bool {
 }
 
 func (spec *KaiwoJobSpec) IsRayJob() bool {
-	return spec.RayJob != nil || (spec.Ray != nil && *spec.Ray)
+	return spec.RayJob != nil || spec.Ray
 }
 
 // KaiwoJobStatus defines the observed state of KaiwoJob.
@@ -62,6 +62,7 @@ type KaiwoJobStatus struct {
 	ObservedGeneration int64              `json:"observedGeneration,omitempty"`
 }
 
+// KaiwoJob
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.status"
@@ -76,14 +77,23 @@ type KaiwoJob struct {
 	Status KaiwoJobStatus `json:"status,omitempty"`
 }
 
-func (job *KaiwoJob) GetUser() *string {
-	return job.Spec.User
+func (job *KaiwoJob) GetUser() string {
+	return job.Spec.CommonMetaSpec.User
 }
 
-func (job *KaiwoJob) ResourceType() string {
+func (job *KaiwoJob) GetObjectMeta() *metav1.ObjectMeta {
+	return &job.ObjectMeta
+}
+
+func (job *KaiwoJob) GetStatus() string {
+	return string(job.Status.Status)
+}
+
+func (job *KaiwoJob) GetType() string {
 	return "job"
 }
 
+// KaiwoJobList
 // +kubebuilder:object:root=true
 type KaiwoJobList struct {
 	metav1.TypeMeta `json:",inline"`

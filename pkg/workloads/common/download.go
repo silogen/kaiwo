@@ -276,7 +276,7 @@ func (r *DownloadJobReconciler) Build(_ context.Context, _ client.Client) (*batc
 			Name:      r.ObjectKey.Name,
 			Namespace: r.ObjectKey.Namespace,
 			Labels: map[string]string{
-				baseutils.KaiwoTypeLabel: KaiwoDownloadTypeLabelValue,
+				KaiwoTypeLabel: KaiwoDownloadTypeLabelValue,
 			},
 		},
 		Spec: batchv1.JobSpec{

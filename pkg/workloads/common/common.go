@@ -40,21 +40,29 @@ const (
 var DefaultRequeueDuration = 2 * time.Second
 
 func UpdatePodSpec(kaiwoCommonMetaSpec v1alpha1.CommonMetaSpec, labelContext baseutils.KaiwoLabelContext, template *corev1.PodTemplateSpec, name string, replicas int, gpusPerReplica int, override bool) error {
+type KaiwoWorkload interface {
+	GetUser() string
+	GetObjectMeta() *metav1.ObjectMeta
+	GetStatus() string
+	GetType() string
+}
+
+func UpdatePodSpec(kaiwoCommonMetaSpec v1alpha1.CommonMetaSpec, labelContext KaiwoLabelContext, template *corev1.PodTemplateSpec, name string, replicas int, gpusPerReplica int, override bool) error {
 	// Update labels
 	if template.ObjectMeta.Labels == nil {
 		template.ObjectMeta.Labels = map[string]string{}
 	}
-	baseutils.CopyLabels(kaiwoCommonMetaSpec.PodTemplateSpecLabels, &template.ObjectMeta)
-	baseutils.SetKaiwoSystemLabels(labelContext, &template.ObjectMeta)
+	CopyLabels(kaiwoCommonMetaSpec.PodTemplateSpecLabels, &template.ObjectMeta)
+	SetKaiwoSystemLabels(labelContext, &template.ObjectMeta)
 
 	// Make sure there is an image set for each container
 	// init containers are not included, as they are assumed to always be user given
 	for i := range template.Spec.Containers {
 		// If the container has no image set
 		if template.Spec.Containers[i].Image == "" {
-			if baseutils.ValueOrDefault(kaiwoCommonMetaSpec.Image) != "" {
+			if kaiwoCommonMetaSpec.Image != "" {
 				// If a default image is provided, use it
-				template.Spec.Containers[i].Image = *kaiwoCommonMetaSpec.Image
+				template.Spec.Containers[i].Image = kaiwoCommonMetaSpec.Image
 			} else {
 				// Otherwise use the default Ray image
 				template.Spec.Containers[i].Image = baseutils.DefaultRayImage
@@ -64,11 +72,11 @@ func UpdatePodSpec(kaiwoCommonMetaSpec v1alpha1.CommonMetaSpec, labelContext bas
 
 	// Ensure that all image pull secrets are set
 	if kaiwoCommonMetaSpec.ImagePullSecrets != nil {
-		template.Spec.ImagePullSecrets = append(template.Spec.ImagePullSecrets, *kaiwoCommonMetaSpec.ImagePullSecrets...)
+		template.Spec.ImagePullSecrets = append(template.Spec.ImagePullSecrets, kaiwoCommonMetaSpec.ImagePullSecrets...)
 	}
 
 	if kaiwoCommonMetaSpec.SecretVolumes != nil {
-		addSecretVolumes(template, *kaiwoCommonMetaSpec.SecretVolumes)
+		addSecretVolumes(template, kaiwoCommonMetaSpec.SecretVolumes)
 	}
 
 	// Update resources if specified in the CRD
@@ -76,26 +84,26 @@ func UpdatePodSpec(kaiwoCommonMetaSpec v1alpha1.CommonMetaSpec, labelContext bas
 	FillPodResources(&template.Spec, kaiwoCommonMetaSpec.Resources, false)
 
 	vendor := "AMD"
-	if kaiwoCommonMetaSpec.GpuVendor != nil {
-		vendor = *kaiwoCommonMetaSpec.GpuVendor
+	if kaiwoCommonMetaSpec.GpuVendor != "" {
+		vendor = kaiwoCommonMetaSpec.GpuVendor
 	}
 
 	gpus := kaiwoCommonMetaSpec.Gpus
 
-	if baseutils.ValueOrDefault(kaiwoCommonMetaSpec.Gpus) == 0 {
+	if kaiwoCommonMetaSpec.Gpus == 0 {
 		gpuResourceKey := corev1.ResourceName(getGpuResourceKey(vendor))
 		if gpuQuantity, exists := template.Spec.Containers[0].Resources.Requests[gpuResourceKey]; exists {
-			gpus = baseutils.Pointer(int(gpuQuantity.Value()))
+			gpus = int(gpuQuantity.Value())
 		}
 	}
 
 	// Adjust resource requests and limits based on GPUs
-	if err := adjustResourceRequestsAndLimits(vendor, baseutils.ValueOrDefault(gpus), replicas, gpusPerReplica, template, override); err != nil {
+	if err := adjustResourceRequestsAndLimits(vendor, gpus, replicas, gpusPerReplica, template, override); err != nil {
 		return fmt.Errorf("failed to adjust resource requests and limits: %w", err)
 	}
 
 	// Add environmental variables
-	if err := addEnvVars(baseutils.ValueOrDefault(kaiwoCommonMetaSpec.Env), template); err != nil {
+	if err := addEnvVars(kaiwoCommonMetaSpec.Env, template); err != nil {
 		return fmt.Errorf("failed to add env vars: %w", err)
 	}
 
@@ -381,7 +389,7 @@ func updatePodSpecStorage(podSpec *corev1.PodSpec, storageSpec v1alpha1.StorageS
 
 func GetEarliestPodStartTime(ctx context.Context, k8sClient client.Client, name string, namespace string) *metav1.Time {
 	podList := &corev1.PodList{}
-	if err := k8sClient.List(ctx, podList, client.InNamespace(namespace), client.MatchingLabels{baseutils.KaiwoNameLabel: name}); err != nil {
+	if err := k8sClient.List(ctx, podList, client.InNamespace(namespace), client.MatchingLabels{KaiwoNameLabel: name}); err != nil {
 		return nil
 	}
 
@@ -400,7 +408,7 @@ func CheckPodStatus(ctx context.Context, k8sClient client.Client, name string, n
 	logger := log.FromContext(ctx)
 
 	podList := &corev1.PodList{}
-	err = k8sClient.List(ctx, podList, client.InNamespace(namespace), client.MatchingLabels{baseutils.KaiwoNameLabel: name})
+	err = k8sClient.List(ctx, podList, client.InNamespace(namespace), client.MatchingLabels{KaiwoNameLabel: name})
 	if err != nil {
 		logger.Error(err, "Failed to list pods for job", "KaiwoJob", name)
 		return nil, status, err
@@ -438,7 +446,7 @@ func CheckPodStatus(ctx context.Context, k8sClient client.Client, name string, n
 }
 
 func ValidateKaiwoResourceBeforeCreateOrUpdate(ctx context.Context, actual client.Object, kaiwoObjectMeta metav1.ObjectMeta) (*ctrl.Result, error) {
-	if actual == nil && kaiwoObjectMeta.Labels != nil && kaiwoObjectMeta.Labels[baseutils.KaiwoManagedLabel] == "true" {
+	if actual == nil && kaiwoObjectMeta.Labels != nil && kaiwoObjectMeta.Labels[KaiwoManagedLabel] == "true" {
 		logger := log.FromContext(ctx)
 		baseutils.Debug(logger, "Aborting reconciliation to avoid recreating a webhook-managed object")
 		return &ctrl.Result{}, nil

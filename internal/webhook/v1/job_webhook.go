@@ -76,14 +76,14 @@ func (j *JobWebhook) Default(ctx context.Context, obj runtime.Object) error {
 	if strings.ToLower(enforceKaiwoOnWorkloads) == "true" { //nolint:goconst
 		for _, container := range job.Spec.Template.Spec.Containers {
 			if CheckGPUReservation(container) {
-				job.Labels[baseutils.KaiwoManagedLabel] = "true" //nolint:goconst
+				job.Labels[common.KaiwoManagedLabel] = "true" //nolint:goconst
 			}
 		}
 	}
 
 	if kaiwoManages(job) {
-		if job.Labels[v1alpha1.QueueLabel] == "" {
-			job.Labels[v1alpha1.QueueLabel] = controllerutils.DefaultClusterQueueName
+		if job.Labels[common.QueueLabel] == "" {
+			job.Labels[common.QueueLabel] = controllerutils.DefaultClusterQueueName
 		}
 		if job.Spec.Template.Spec.TerminationGracePeriodSeconds == nil {
 			job.Spec.Template.Spec.TerminationGracePeriodSeconds = baseutils.Pointer(int64(0))
@@ -103,7 +103,7 @@ func (j *JobWebhook) Default(ctx context.Context, obj runtime.Object) error {
 }
 
 func kaiwoManages(job *batchv1.Job) bool {
-	return job.Labels[baseutils.KaiwoManagedLabel] == "true" //nolint:goconst
+	return job.Labels[common.KaiwoManagedLabel] == "true" //nolint:goconst
 }
 
 func getAuthenticatedUser(ctx context.Context) string {
@@ -136,8 +136,8 @@ func (j *JobWebhook) ensureKaiwoJob(ctx context.Context, job *batchv1.Job, authe
 		kaiwoJobLabels[key] = value
 	}
 
-	if _, exists := kaiwoJobLabels[v1alpha1.QueueLabel]; !exists {
-		kaiwoJobLabels[v1alpha1.QueueLabel] = controllerutils.DefaultClusterQueueName
+	if _, exists := kaiwoJobLabels[common.QueueLabel]; !exists {
+		kaiwoJobLabels[common.QueueLabel] = controllerutils.DefaultClusterQueueName
 	}
 
 	kaiwoJob = &v1alpha1.KaiwoJob{
@@ -149,18 +149,18 @@ func (j *JobWebhook) ensureKaiwoJob(ctx context.Context, job *batchv1.Job, authe
 		Spec: v1alpha1.KaiwoJobSpec{
 			Job: job,
 			CommonMetaSpec: v1alpha1.CommonMetaSpec{
-				User: baseutils.Pointer(authenticatedUser),
+				User: authenticatedUser,
 			},
 		},
 	}
 
-	labelContext := baseutils.GetKaiwoLabelContext(kaiwoJob)
+	labelContext := common.GetKaiwoLabelContext(kaiwoJob)
 	// Set Kaiwo system labels on the Kaiwo job
-	baseutils.SetKaiwoSystemLabels(labelContext, &kaiwoJob.ObjectMeta)
+	common.SetKaiwoSystemLabels(labelContext, &kaiwoJob.ObjectMeta)
 	// Set Kaiwo system labels on the original job
-	baseutils.SetKaiwoSystemLabels(labelContext, &job.ObjectMeta)
+	common.SetKaiwoSystemLabels(labelContext, &job.ObjectMeta)
 
-	if err := controllerutils.CreateLocalQueue(ctx, j.Client, kaiwoJobLabels[v1alpha1.QueueLabel], kaiwoJob.Namespace); err != nil {
+	if err := controllerutils.CreateLocalQueue(ctx, j.Client, kaiwoJobLabels[common.QueueLabel], kaiwoJob.Namespace); err != nil {
 		return fmt.Errorf("failed to create local queue: %w", err)
 	}
 
@@ -199,7 +199,7 @@ func (j *JobWebhook) ValidateCreate(ctx context.Context, obj runtime.Object) (ad
 	if strings.ToLower(enforceKaiwoOnWorkloads) == "true" {
 		for _, container := range job.Spec.Template.Spec.Containers {
 			if CheckGPUReservation(container) {
-				if _, exists := job.Labels[baseutils.KaiwoManagedLabel]; !exists {
+				if _, exists := job.Labels[common.KaiwoManagedLabel]; !exists {
 					return nil, fmt.Errorf("all jobs must have 'kaiwo.silogen.ai/managed' label")
 				}
 			}

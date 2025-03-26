@@ -122,7 +122,7 @@ func mapJobToKaiwoJob(obj client.Object) []reconcile.Request {
 
 	// If the job is a Download job, fetch the owning kaiwo job name
 	name := job.Name
-	if value, ok := job.Labels[baseutils.KaiwoTypeLabel]; ok && value == workloadcommon.KaiwoDownloadTypeLabelValue {
+	if value, ok := job.Labels[workloadcommon.KaiwoTypeLabel]; ok && value == workloadcommon.KaiwoDownloadTypeLabelValue {
 		name = strings.TrimSuffix(name, "-download")
 	}
 

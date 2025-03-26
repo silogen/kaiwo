@@ -90,11 +90,11 @@ func NewKaiwoJobReconciler(kaiwoJob *v1alpha1.KaiwoJob) KaiwoJobReconciler {
 				Name:      baseutils.FormatNameWithPostfix(objectKey.Name, "download"),
 			}
 			reconciler.DownloadJobConfigMap = workloadcommon.NewDownloadJobConfigMapReconciler(downloadObjectKey, storageSpec)
-			reconciler.DownloadJob = workloadcommon.NewDownloadJobReconciler(downloadObjectKey, storageSpec, objectKey.Name, baseutils.ValueOrDefault(kaiwoJob.Spec.Env))
+			reconciler.DownloadJob = workloadcommon.NewDownloadJobReconciler(downloadObjectKey, storageSpec, objectKey.Name, kaiwoJob.Spec.Env)
 		}
 	}
 
-	clusterQueue := baseutils.ValueOrDefault(kaiwoJob.Spec.ClusterQueue)
+	clusterQueue := kaiwoJob.Spec.ClusterQueue
 	if clusterQueue == "" {
 		clusterQueue = controllerutils.DefaultClusterQueueName
 	}
@@ -131,10 +131,10 @@ func sanitize(kaiwoJob *v1alpha1.KaiwoJob) {
 		kaiwoJob.Labels = make(map[string]string)
 	}
 
-	if baseutils.ValueOrDefault(kaiwoJob.Spec.ClusterQueue) == "" {
-		kaiwoJob.Labels[v1alpha1.QueueLabel] = controllerutils.DefaultClusterQueueName
+	if kaiwoJob.Spec.ClusterQueue == "" {
+		kaiwoJob.Labels[workloadcommon.QueueLabel] = controllerutils.DefaultClusterQueueName
 	} else {
-		kaiwoJob.Labels[v1alpha1.QueueLabel] = baseutils.ValueOrDefault(kaiwoJob.Spec.ClusterQueue)
+		kaiwoJob.Labels[workloadcommon.QueueLabel] = kaiwoJob.Spec.ClusterQueue
 	}
 }
 

@@ -67,17 +67,17 @@ func (r *DeploymentReconciler) Build(ctx context.Context, _ client.Client) (*app
 	logger := log.FromContext(ctx)
 
 	svcSpec := r.KaiwoService.Spec
-	labelContext := baseutils.GetKaiwoLabelContext(r.KaiwoService)
+	labelContext := workloadcommon.GetKaiwoLabelContext(r.KaiwoService)
 
 	var depSpec appsv1.DeploymentSpec
 	var overrideDefaults bool
 
 	if svcSpec.Deployment == nil {
 		depSpec = GetDefaultDeploymentSpec(
-			baseutils.ValueOrDefault(svcSpec.Dangerous),
+			svcSpec.Dangerous,
 			baseutils.ValueOrDefault(svcSpec.Resources),
 		)
-		if baseutils.ValueOrDefault(r.KaiwoService.Spec.CommonMetaSpec.Gpus) > 0 {
+		if r.KaiwoService.Spec.CommonMetaSpec.Gpus > 0 {
 			overrideDefaults = true
 		}
 		if r.KaiwoService.Spec.CommonMetaSpec.Resources != nil {
@@ -97,13 +97,13 @@ func (r *DeploymentReconciler) Build(ctx context.Context, _ client.Client) (*app
 	depSpec.Selector.MatchLabels["app"] = r.ObjectKey.Name
 	depSpec.Template.ObjectMeta.Labels["app"] = r.ObjectKey.Name
 
-	depSpec.Template.ObjectMeta.Labels[v1alpha1.QueueLabel] = r.KaiwoService.Labels[v1alpha1.QueueLabel]
+	depSpec.Template.ObjectMeta.Labels[workloadcommon.QueueLabel] = r.KaiwoService.Labels[workloadcommon.QueueLabel]
 
 	if svcSpec.Replicas != nil {
 		depSpec.Replicas = baseutils.Pointer(int32(*svcSpec.Replicas))
 	}
 
-	gpus := baseutils.ValueOrDefault(r.KaiwoService.Spec.CommonMetaSpec.Gpus)
+	gpus := r.KaiwoService.Spec.CommonMetaSpec.Gpus
 
 	if err := workloadcommon.UpdatePodSpec(
 		r.KaiwoService.Spec.CommonMetaSpec,
@@ -118,7 +118,7 @@ func (r *DeploymentReconciler) Build(ctx context.Context, _ client.Client) (*app
 	}
 
 	if err := workloadcommon.AddEntrypoint(
-		baseutils.ValueOrDefault(svcSpec.EntryPoint),
+		svcSpec.EntryPoint,
 		&depSpec.Template,
 	); err != nil {
 		return nil, baseutils.LogErrorf(logger, "failed to add entrypoint: %v", err)
@@ -133,8 +133,8 @@ func (r *DeploymentReconciler) Build(ctx context.Context, _ client.Client) (*app
 		Spec: depSpec,
 	}
 
-	baseutils.CopyLabels(r.KaiwoService.GetLabels(), &dep.ObjectMeta)
-	baseutils.SetKaiwoSystemLabels(labelContext, &dep.ObjectMeta)
+	workloadcommon.CopyLabels(r.KaiwoService.GetLabels(), &dep.ObjectMeta)
+	workloadcommon.SetKaiwoSystemLabels(labelContext, &dep.ObjectMeta)
 
 	logger.Info("Building Deployment for KaiwoService", "name", r.ObjectKey.Name)
 	return dep, nil

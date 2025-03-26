@@ -71,7 +71,7 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 	var rayJobSpec rayv1.RayJobSpec
 
 	if spec.RayJob == nil {
-		rayJobSpec = GetDefaultRayJobSpec(baseutils.ValueOrDefault(spec.Dangerous), baseutils.ValueOrDefault(spec.Resources))
+		rayJobSpec = GetDefaultRayJobSpec(spec.Dangerous, baseutils.ValueOrDefault(spec.Resources))
 	} else {
 		rayJobSpec = spec.RayJob.Spec
 	}
@@ -99,22 +99,22 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 		}, true)
 	}
 
-	labelContext := baseutils.GetKaiwoLabelContext(r.KaiwoJob)
+	labelContext := workloadcommon.GetKaiwoLabelContext(r.KaiwoJob)
 
 	replicas := baseutils.ValueOrDefault(spec.Replicas)
-	gpusPerReplica := baseutils.ValueOrDefault(spec.GpusPerReplica)
+	gpusPerReplica := spec.GpusPerReplica
 
-	calculatedGpus := baseutils.ValueOrDefault(r.KaiwoJob.Spec.CommonMetaSpec.Gpus)
+	calculatedGpus := r.KaiwoJob.Spec.CommonMetaSpec.Gpus
 
-	if baseutils.ValueOrDefault(spec.Gpus) > 0 || gpusPerReplica > 0 {
+	if spec.Gpus > 0 || gpusPerReplica > 0 {
 		var err error
 		calculatedGpus, replicas, gpusPerReplica, err = controllerutils.CalculateNumberOfReplicas(
 			ctx,
 			k8sClient,
-			strings.ToLower(baseutils.ValueOrDefault(spec.GpuVendor)),
-			baseutils.ValueOrDefault(spec.Gpus),
+			strings.ToLower(spec.GpuVendor),
+			spec.Gpus,
 			baseutils.ValueOrDefault(spec.Replicas),
-			baseutils.ValueOrDefault(spec.GpusPerReplica),
+			spec.GpusPerReplica,
 			true,
 		)
 		if err != nil {
@@ -123,8 +123,8 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 	}
 
 	spec.Replicas = &replicas
-	spec.GpusPerReplica = &gpusPerReplica
-	r.KaiwoJob.Spec.CommonMetaSpec.Gpus = &calculatedGpus
+	spec.GpusPerReplica = gpusPerReplica
+	r.KaiwoJob.Spec.CommonMetaSpec.Gpus = calculatedGpus
 
 	var overrideDefaults bool
 
@@ -144,8 +144,8 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 		}
 	}
 
-	if baseutils.ValueOrDefault(spec.EntryPoint) != "" {
-		rayJobSpec.Entrypoint = baseutils.ConvertMultilineEntrypoint(*spec.EntryPoint, true).(string)
+	if spec.EntryPoint != "" {
+		rayJobSpec.Entrypoint = baseutils.ConvertMultilineEntrypoint(spec.EntryPoint, true).(string)
 	}
 
 	// Adjust resource requests & limits
@@ -164,10 +164,10 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 		Spec: rayJobSpec,
 	}
 
-	baseutils.CopyLabels(r.KaiwoJob.ObjectMeta.Labels, &rayJob.ObjectMeta)
-	baseutils.SetKaiwoSystemLabels(labelContext, &rayJob.ObjectMeta)
+	workloadcommon.CopyLabels(r.KaiwoJob.ObjectMeta.Labels, &rayJob.ObjectMeta)
+	workloadcommon.SetKaiwoSystemLabels(labelContext, &rayJob.ObjectMeta)
 
-	rayJob.ObjectMeta.Labels[v1alpha1.QueueLabel] = r.KaiwoJob.Labels[v1alpha1.QueueLabel]
+	rayJob.ObjectMeta.Labels[workloadcommon.QueueLabel] = r.KaiwoJob.Labels[workloadcommon.QueueLabel]
 
 	return rayJob, nil
 }

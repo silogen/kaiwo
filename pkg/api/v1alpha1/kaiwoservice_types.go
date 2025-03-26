@@ -25,18 +25,18 @@ type KaiwoServiceSpec struct {
 	CommonMetaSpec `json:",inline"`
 
 	// ClusterQueue is the Kueue ClusterQueue name.
-	ClusterQueue *string `json:"clusterQueue,omitempty"`
+	ClusterQueue string `json:"clusterQueue,omitempty"`
 
 	// PriorityClass specifies the Kubernetes PriorityClass for scheduling.
-	PriorityClass *string `json:"priorityClass,omitempty"`
+	PriorityClass string `json:"priorityClass,omitempty"`
 
 	// EntryPoint specifies the command or script executed in a Deployment.
 	// Can also be defined inside Deployment struct as regular command in the form of string array
-	EntryPoint *string `json:"entrypoint,omitempty"`
+	EntryPoint string `json:"entrypoint,omitempty"`
 
 	// Defines the applications and deployments to deploy, should be a YAML multi-line scalar string.
 	// Can also be defined inside RayService struct
-	ServeConfigV2 *string `json:"serveConfigV2,omitempty"`
+	ServeConfigV2 string `json:"serveConfigV2,omitempty"`
 
 	// Optional workload-specific configs (Pointers to avoid bloating CRD)
 	// +kubebuilder:pruning:PreserveUnknownFields
@@ -55,6 +55,7 @@ type KaiwoServiceStatus struct {
 	ObservedGeneration int64              `json:"observedGeneration,omitempty"`
 }
 
+// KaiwoService
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.status"
@@ -68,6 +69,7 @@ type KaiwoService struct {
 	Status KaiwoServiceStatus `json:"status,omitempty"`
 }
 
+// KaiwoServiceList
 // +kubebuilder:object:root=true
 type KaiwoServiceList struct {
 	metav1.TypeMeta `json:",inline"`
@@ -75,16 +77,24 @@ type KaiwoServiceList struct {
 	Items           []KaiwoService `json:"items"`
 }
 
-func (svc *KaiwoService) GetUser() *string {
-	return svc.Spec.User
+func (svc *KaiwoService) GetUser() string {
+	return svc.Spec.CommonMetaSpec.User
 }
 
-func (svc *KaiwoService) ResourceType() string {
-	return "service"
+func (svc *KaiwoService) GetObjectMeta() *metav1.ObjectMeta {
+	return &svc.ObjectMeta
 }
 
 func (spec *KaiwoServiceSpec) IsRayService() bool {
-	return spec.RayService != nil || (spec.Ray != nil && *spec.Ray)
+	return spec.RayService != nil || spec.Ray
+}
+
+func (svc *KaiwoService) GetStatus() string {
+	return string(svc.Status.Status)
+}
+
+func (svc *KaiwoService) GetType() string {
+	return "service"
 }
 
 func init() {

@@ -56,7 +56,7 @@ var _ = Describe("Workload defaults", func() {
 	replicas := 1
 	gpusPerReplica := 1
 
-	labelContext := baseutils.KaiwoLabelContext{
+	labelContext := KaiwoLabelContext{
 		User:  "test-user",
 		Type:  "test-type",
 		RunId: "test-run-id",
@@ -80,10 +80,10 @@ var _ = Describe("Workload defaults", func() {
 
 	When("a workload pod spec is being updated", func() {
 		It("sets the kaiwo system flags", func() {
-			Expect(podTemplateSpec.Labels[baseutils.KaiwoTypeLabel]).To(Equal(labelContext.Type))
-			Expect(podTemplateSpec.Labels[baseutils.KaiwoUserLabel]).To(Equal(labelContext.User))
-			Expect(podTemplateSpec.Labels[baseutils.KaiwoNameLabel]).To(Equal(labelContext.Name))
-			Expect(podTemplateSpec.Labels[baseutils.KaiwoRunIdLabel]).To(Equal(labelContext.RunId))
+			Expect(podTemplateSpec.Labels[KaiwoTypeLabel]).To(Equal(labelContext.Type))
+			Expect(podTemplateSpec.Labels[KaiwoUserLabel]).To(Equal(labelContext.User))
+			Expect(podTemplateSpec.Labels[KaiwoNameLabel]).To(Equal(labelContext.Name))
+			Expect(podTemplateSpec.Labels[KaiwoRunIdLabel]).To(Equal(labelContext.RunId))
 		})
 
 		It("keeps any existing flags", func() {
@@ -100,14 +100,14 @@ var _ = Describe("Workload defaults", func() {
 	When("images are being checked", func() {
 		Context("and an image has been given", func() {
 			BeforeEach(func() {
-				kaiwoCommonMetaSpec.Image = baseutils.Pointer("ubuntu")
+				kaiwoCommonMetaSpec.Image = "ubuntu"
 			})
 			Context("and there is no image set in the container", func() {
 				BeforeEach(func() {
 					podTemplateSpec.Spec.Containers[0].Image = ""
 				})
 				It("sets the image if none is set in the spec", func() {
-					Expect(podTemplateSpec.Spec.Containers[0].Image).To(Equal(baseutils.ValueOrDefault(kaiwoCommonMetaSpec.Image)))
+					Expect(podTemplateSpec.Spec.Containers[0].Image).To(Equal(kaiwoCommonMetaSpec.Image))
 				})
 			})
 

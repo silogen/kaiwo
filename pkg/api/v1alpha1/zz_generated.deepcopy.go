@@ -137,11 +137,6 @@ func (in *CommonMetaSpec) DeepCopyInto(out *CommonMetaSpec) {
 			(*out)[key] = val
 		}
 	}
-	if in.User != nil {
-		in, out := &in.User, &out.User
-		*out = new(string)
-		**out = **in
-	}
 	if in.PodTemplateSpecLabels != nil {
 		in, out := &in.PodTemplateSpecLabels, &out.PodTemplateSpecLabels
 		*out = make(map[string]string, len(*in))
@@ -149,28 +144,8 @@ func (in *CommonMetaSpec) DeepCopyInto(out *CommonMetaSpec) {
 			(*out)[key] = val
 		}
 	}
-	if in.Gpus != nil {
-		in, out := &in.Gpus, &out.Gpus
-		*out = new(int)
-		**out = **in
-	}
-	if in.GpuVendor != nil {
-		in, out := &in.GpuVendor, &out.GpuVendor
-		*out = new(string)
-		**out = **in
-	}
-	if in.Version != nil {
-		in, out := &in.Version, &out.Version
-		*out = new(string)
-		**out = **in
-	}
 	if in.Replicas != nil {
 		in, out := &in.Replicas, &out.Replicas
-		*out = new(int)
-		**out = **in
-	}
-	if in.GpusPerReplica != nil {
-		in, out := &in.GpusPerReplica, &out.GpusPerReplica
 		*out = new(int)
 		**out = **in
 	}
@@ -179,54 +154,27 @@ func (in *CommonMetaSpec) DeepCopyInto(out *CommonMetaSpec) {
 		*out = new(v1.ResourceRequirements)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.Image != nil {
-		in, out := &in.Image, &out.Image
-		*out = new(string)
-		**out = **in
-	}
 	if in.ImagePullSecrets != nil {
 		in, out := &in.ImagePullSecrets, &out.ImagePullSecrets
-		*out = new([]v1.LocalObjectReference)
-		if **in != nil {
-			in, out := *in, *out
-			*out = make([]v1.LocalObjectReference, len(*in))
-			copy(*out, *in)
-		}
+		*out = make([]v1.LocalObjectReference, len(*in))
+		copy(*out, *in)
 	}
 	if in.Env != nil {
 		in, out := &in.Env, &out.Env
-		*out = new([]v1.EnvVar)
-		if **in != nil {
-			in, out := *in, *out
-			*out = make([]v1.EnvVar, len(*in))
-			for i := range *in {
-				(*in)[i].DeepCopyInto(&(*out)[i])
-			}
+		*out = make([]v1.EnvVar, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
 	if in.SecretVolumes != nil {
 		in, out := &in.SecretVolumes, &out.SecretVolumes
-		*out = new([]SecretVolume)
-		if **in != nil {
-			in, out := *in, *out
-			*out = make([]SecretVolume, len(*in))
-			copy(*out, *in)
-		}
-	}
-	if in.Ray != nil {
-		in, out := &in.Ray, &out.Ray
-		*out = new(bool)
-		**out = **in
+		*out = make([]SecretVolume, len(*in))
+		copy(*out, *in)
 	}
 	if in.Storage != nil {
 		in, out := &in.Storage, &out.Storage
 		*out = new(StorageSpec)
 		(*in).DeepCopyInto(*out)
-	}
-	if in.Dangerous != nil {
-		in, out := &in.Dangerous, &out.Dangerous
-		*out = new(bool)
-		**out = **in
 	}
 }
 
@@ -459,21 +407,6 @@ func (in *KaiwoJobList) DeepCopyObject() runtime.Object {
 func (in *KaiwoJobSpec) DeepCopyInto(out *KaiwoJobSpec) {
 	*out = *in
 	in.CommonMetaSpec.DeepCopyInto(&out.CommonMetaSpec)
-	if in.ClusterQueue != nil {
-		in, out := &in.ClusterQueue, &out.ClusterQueue
-		*out = new(string)
-		**out = **in
-	}
-	if in.PriorityClass != nil {
-		in, out := &in.PriorityClass, &out.PriorityClass
-		*out = new(string)
-		**out = **in
-	}
-	if in.EntryPoint != nil {
-		in, out := &in.EntryPoint, &out.EntryPoint
-		*out = new(string)
-		**out = **in
-	}
 	if in.RayJob != nil {
 		in, out := &in.RayJob, &out.RayJob
 		*out = new(rayv1.RayJob)
@@ -706,26 +639,6 @@ func (in *KaiwoServiceList) DeepCopyObject() runtime.Object {
 func (in *KaiwoServiceSpec) DeepCopyInto(out *KaiwoServiceSpec) {
 	*out = *in
 	in.CommonMetaSpec.DeepCopyInto(&out.CommonMetaSpec)
-	if in.ClusterQueue != nil {
-		in, out := &in.ClusterQueue, &out.ClusterQueue
-		*out = new(string)
-		**out = **in
-	}
-	if in.PriorityClass != nil {
-		in, out := &in.PriorityClass, &out.PriorityClass
-		*out = new(string)
-		**out = **in
-	}
-	if in.EntryPoint != nil {
-		in, out := &in.EntryPoint, &out.EntryPoint
-		*out = new(string)
-		**out = **in
-	}
-	if in.ServeConfigV2 != nil {
-		in, out := &in.ServeConfigV2, &out.ServeConfigV2
-		*out = new(string)
-		**out = **in
-	}
 	if in.RayService != nil {
 		in, out := &in.RayService, &out.RayService
 		*out = new(rayv1.RayService)
