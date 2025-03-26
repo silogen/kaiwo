@@ -187,6 +187,11 @@ golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
 $(GOLANGCI_LINT): $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
 
+.PHONY: generate-crd-docs
+generate-crd-docs:
+	go install github.com/elastic/crd-ref-docs@latest
+	crd-ref-docs --source-path pkg/api/v1alpha1/ --renderer=markdown --output-path=docs/docs/reference/crds/kaiwo.silogen.ai.md --config docs/crd-ref-cocs-config.yaml
+
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary
 # $2 - package url which can be installed

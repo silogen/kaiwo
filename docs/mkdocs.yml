@@ -20,7 +20,7 @@ markdown_extensions:
     custom_fences:
     - name: mermaid
       class: mermaid
-      format: !%21python/name:pymdownx.superfences.fence_code_format
+      format: !!python/name:pymdownx.superfences.fence_code_format
 nav:
 - "Home": "index.md"
 - "Getting started":
@@ -30,7 +30,5 @@ nav:
   - "CLI": "usage-guide/cli.md"
   - "Troubleshooting": "usage-guide/troubleshooting.md"
 - "Reference":
-  - "CRDs":
-    - "Kaiwo Job": "reference/crds/kaiwo-job.md"
-    - "Kaiwo Service": "reference/crds/kaiwo-service.md"
+  - "CRDs": "reference/crds/kaiwo.silogen.ai.md"
   - "Reconciliation": "reference/reconciliation.md"
