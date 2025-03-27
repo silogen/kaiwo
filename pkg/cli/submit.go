@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 
 	"github.com/charmbracelet/huh"
 	"github.com/sirupsen/logrus"
@@ -32,7 +33,6 @@ import (
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 	cliutils "github.com/silogen/kaiwo/pkg/cli/utils"
 	k8sUtils "github.com/silogen/kaiwo/pkg/k8s"
-	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
 var (
@@ -42,11 +42,14 @@ var (
 	user      string
 	namespace string
 
-	config string
-	file   string
+	config     string
+	file       string
+	emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
 )
 
-const promptAccessible = false
+const (
+	promptAccessible = false
+)
 
 func BuildSubmitCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -206,31 +209,38 @@ func promptUserForConfig() (bool, error) {
 		return false, nil
 	}
 
-	userValue, err := baseutils.GetCurrentUser()
-	if err != nil {
-		return false, fmt.Errorf("failed to get current user: %w", err)
-	}
 	queueValue := controllerutils.DefaultKaiwoQueueConfigName
+	userEmail := ""
 
-	form := huh.NewForm(
-		huh.NewGroup(
-			huh.NewInput().
-				Title("User").
-				Description("The user name to run your jobs and services with").
-				Value(&userValue),
-			huh.NewInput().
-				Title("Cluster queue").
-				Description("The cluster queue name to run your jobs and services in").
-				Value(&queueValue),
-		),
-	).WithAccessible(promptAccessible)
+	for {
+		form := huh.NewForm(
+			huh.NewGroup(
+				huh.NewInput().
+					Title("User").
+					Description("The user name to run your jobs and services with").
+					Placeholder("user@email.com").
+					Value(&userEmail),
+				huh.NewInput().
+					Title("Cluster queue").
+					Description("The cluster queue name to run your jobs and services in").
+					Value(&queueValue),
+			),
+		).WithAccessible(promptAccessible)
 
-	if err := form.Run(); err != nil {
-		return false, err
+		if err := form.Run(); err != nil {
+			return false, err
+		}
+
+		if !emailRegex.MatchString(userEmail) {
+			fmt.Println("Please enter a valid email address (e.g., user@example.com)")
+			continue
+		}
+
+		break
 	}
 
 	config := &cliutils.KaiwoCliConfig{
-		User:         userValue,
+		User:         userEmail,
 		ClusterQueue: queueValue,
 	}
 
