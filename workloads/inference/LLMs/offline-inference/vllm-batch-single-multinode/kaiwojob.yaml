@@ -2,65 +2,39 @@ apiVersion: kaiwo.silogen.ai/v1alpha1
 kind: KaiwoJob
 metadata:
   name: batch-vllm
-  namespace: kaiwo
 spec:
   user: test@amd.com
   # gpus-per-replica: 4
   # replicas: 2
   gpus: 8
   ray: true
-  entrypoint: |
-    git clone https://github.com/silogen/kaiwo.git && \
-    python kaiwo/workloads/inference/LLMs/offline-inference/vllm-batch-single-multinode/main.py
-  envVars:
+  entrypoint: python code/main.py
+  env:
   - name: HF_TOKEN
     valueFrom:
       secretKeyRef:
         name: hf-token
         key: hf-token
   - name: MODEL_ID
-    value: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+    value: meta-llama/Llama-3.1-8B-Instruct
   storage:
-    storageEnabled: false
-    storageClassName: mlstorage
-    accessMode: ReadWriteOnce
-    # data:
-    #   storageSize: "2Gi"
-    #   mountPath: "/workload"
-    #   download:
-    #     s3:
-    #       - endpointUrl:
-    #           secretName: minio-secret
-    #           secretKey: endpoint
-    #         accessKeyId:
-    #           secretName: minio-secret
-    #           secretKey: access_key_id
-    #         secretKey:
-    #           secretName: minio-secret
-    #           secretKey: secret_key
-    #         buckets:
-    #           - name: test
-    #             files:
-    #               - path: file01.txt
-    #                 targetPath: s3/file01.txt
-    #             folders:
-    #               - path: .
-    #                 targetPath: s3/all
-    #     azureBlob:
-    #       - connectionString:
-    #           secretName: azure-secret
-    #           secretKey: connection_string
-    #         containers:
-    #           - name: test
-    #             files:
-    #               - path: file01.txt
-    #                 targetPath: azure/file01.txt
-    #             folders:
-    #               - path: .
-    #                 targetPath: azure/all
+    storageEnabled: true
+    storageClassName: multinode
+    data:
+      storageSize: 10Mi
+      mountPath: /workload
+      download:
+        git:
+        - repository: https://github.com/silogen/kaiwo.git
+          path: workloads/inference/LLMs/offline-inference/vllm-batch-single-multinode
+          targetPath: code
     huggingFace:
       storageSize: "100Gi"
       mountPath: "/.cache/huggingface"  # Also sets the env var HF_HOME to this value in each container
       preCacheRepos:
-      - repoId: TinyLlama/TinyLlama-1.1B-Chat-v1.0
-        files: []
+      - repoId: siloai-eai-test/private-test
+        files:
+        - "README.md"
+      # preCacheRepos:
+      # - repoId: meta-llama/Llama-3.1-8B-Instruct
+      #   files: []
