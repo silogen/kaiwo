@@ -266,7 +266,7 @@ func AddEntrypoint(entrypoint string, podTemplateSpec *corev1.PodTemplateSpec) e
 		return err
 	}
 
-	podTemplateSpec.Spec.Containers[0].Command = []string{"sh", "-c", entrypoint}
+	podTemplateSpec.Spec.Containers[0].Command = baseutils.ConvertMultilineEntrypoint(entrypoint, false).([]string)
 
 	return nil
 }
