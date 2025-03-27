@@ -6,7 +6,7 @@ spec:
   user: test@amd.com
   # gpus-per-replica: 4
   # replicas: 2
-  gpus: 8
+  gpus: 6
   ray: true
   entrypoint: python code/main.py
   env:
