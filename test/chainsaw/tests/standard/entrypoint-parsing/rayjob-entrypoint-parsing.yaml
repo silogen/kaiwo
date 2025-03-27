@@ -1,0 +1,30 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoJob
+metadata:
+  name: rayjob-entrypoint-parsing-1
+spec:
+  user: test@amd.com
+  ray: true
+  resources:
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+    requests:
+      cpu: "1"
+      memory: "1Gi"
+  image: ghcr.io/silogen/ray-test:v0.3
+  entrypoint: |
+    python /workload/app/ray_test_entrypoint.py \
+    --tasks 5 \
+    --delay 0.5
+  storage:
+    storageEnabled: true
+    storageClassName: "nfs-client"
+    data:
+      storageSize: 10Mi
+      mountPath: /workload
+      download:
+        git:
+        - repository: https://github.com/silogen/kaiwo.git
+          path: test/utils
+          targetPath: app

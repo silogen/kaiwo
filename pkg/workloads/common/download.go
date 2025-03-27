@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"time"
 
 	"gopkg.in/yaml.v3"
 	batchv1 "k8s.io/api/batch/v1"
@@ -313,6 +312,10 @@ func (r *DownloadJobReconciler) Build(_ context.Context, _ client.Client) (*batc
 	return downloadJob, nil
 }
 
+func (r *DownloadJobReconciler) GetEmptyObject() *batchv1.Job {
+	return &batchv1.Job{}
+}
+
 func (r *DownloadJobReconciler) ShouldContinue(ctx context.Context, actual *batchv1.Job) *ctrl.Result {
 	logger := log.FromContext(ctx)
 	if actual.Status.Succeeded >= 1 {
@@ -326,9 +329,5 @@ func (r *DownloadJobReconciler) ShouldContinue(ctx context.Context, actual *batc
 	}
 
 	// Requeue after some time to check again if the job has completed
-	return &ctrl.Result{RequeueAfter: 5 * time.Second}
-}
-
-func (r *DownloadJobReconciler) GetEmptyObject() *batchv1.Job {
-	return &batchv1.Job{}
+	return &ctrl.Result{RequeueAfter: DefaultRequeueDuration}
 }

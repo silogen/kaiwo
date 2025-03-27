@@ -1,0 +1,142 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: batchjob-entrypoint-parsing-1
+spec:
+  timeouts:
+    exec: 240s
+    assert: 240s
+  steps:
+  - try:
+    - apply:
+        file: job-entrypoint-parsing.yaml
+    - sleep:
+        duration: 15s
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: batchjob-entrypoint-parsing-1
+          status:
+            status: RUNNING
+    - script:
+        content: ../../../scripts/assert_string_in_logs.sh --any positive job-name=batchjob-entrypoint-parsing-1 $NAMESPACE 20 "Task 4 completed after 0.5 seconds!"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        check:
+          ($error == null): true
+    - script:
+        content: ../../../scripts/assert_string_in_logs.sh --any negative job-name=batchjob-entrypoint-parsing-1 $NAMESPACE 1 "not found" "Error" "Exception" "No such"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        check:
+          ($error == null): true
+  catch:
+  - command:
+      entrypoint: kaiwo-dev
+      env:
+      - name: NAMESPACE
+        value: ($namespace)
+      - name: PRINT_LEVEL
+        value: ($values.print_level)
+      args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+
+---
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: deployment-entrypoint-parsing-1
+spec:
+  timeouts:
+    exec: 240s
+    assert: 240s
+  steps:
+  - try:
+    - apply:
+        file: deployment-entrypoint-parsing.yaml
+    - sleep:
+        duration: 15s
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoService
+          metadata:
+            name: deployment-entrypoint-parsing-1
+          status:
+            status: RUNNING
+    - script:
+        content: ../../../scripts/assert_string_in_logs.sh --any positive app=deployment-entrypoint-parsing-1 $NAMESPACE 20 "Task 4 completed after 0.5 seconds!"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        check:
+          ($error == null): true
+    - script:
+        content: ../../../scripts/assert_string_in_logs.sh --any negative app=deployment-entrypoint-parsing-1 $NAMESPACE 1 "not found" "Error" "Exception" "No such"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        check:
+          ($error == null): true
+  catch:
+  - command:
+      entrypoint: kaiwo-dev
+      env:
+      - name: NAMESPACE
+        value: ($namespace)
+      - name: PRINT_LEVEL
+        value: ($values.print_level)
+      args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+
+---
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: rayjob-entrypoint-parsing-1
+spec:
+  concurrent: false
+  timeouts:
+    exec: 240s
+    assert: 240s
+  steps:
+  - try:
+    - apply:
+        file: rayjob-entrypoint-parsing.yaml
+    - sleep:
+        duration: 15s
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: rayjob-entrypoint-parsing-1
+          status:
+            status: RUNNING
+    - script:
+        content: ../../../scripts/assert_string_in_logs.sh --any positive job-name=rayjob-entrypoint-parsing-1 $NAMESPACE 20 "Task 4 completed after 0.5 seconds!"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        check:
+          ($error == null): true
+    - script:
+        content: ../../../scripts/assert_string_in_logs.sh --any negative job-name=rayjob-entrypoint-parsing-1 $NAMESPACE 1 "not found" "Error" "Exception" "No such"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        check:
+          ($error == null): true
+  catch:
+  - command:
+      entrypoint: kaiwo-dev
+      env:
+      - name: NAMESPACE
+        value: ($namespace)
+      - name: PRINT_LEVEL
+        value: ($values.print_level)
+      args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]

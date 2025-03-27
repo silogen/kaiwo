@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 
@@ -35,6 +36,8 @@ import (
 const (
 	Finalizer = "kaiwo.silogen.ai/finalizer"
 )
+
+var DefaultRequeueDuration = 2 * time.Second
 
 func UpdatePodSpec(kaiwoCommonMetaSpec v1alpha1.CommonMetaSpec, labelContext baseutils.KaiwoLabelContext, template *corev1.PodTemplateSpec, name string, replicas int, gpusPerReplica int, override bool) error {
 	// Update labels
@@ -271,7 +274,7 @@ func AddEntrypoint(entrypoint string, podTemplateSpec *corev1.PodTemplateSpec) e
 		return err
 	}
 
-	podTemplateSpec.Spec.Containers[0].Command = []string{"sh", "-c", entrypoint}
+	podTemplateSpec.Spec.Containers[0].Command = baseutils.ConvertMultilineEntrypoint(entrypoint, false).([]string)
 
 	return nil
 }

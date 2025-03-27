@@ -180,6 +180,11 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, k8sClient client.Cli
 			if err != nil {
 				return ctrl.Result{}, nil, fmt.Errorf("failed to reconcile DownloadJob: %w", err)
 			}
+			if downloadJobResult != nil {
+				if downloadJobResult.Requeue || downloadJobResult.RequeueAfter > 0 {
+					return *downloadJobResult, nil, nil
+				}
+			}
 			manifests = append(manifests, downloadJob)
 		}
 	}
@@ -220,6 +225,10 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, k8sClient client.Cli
 	}
 
 	if reflect.DeepEqual(previousStatus, status) {
+		if status.Status == v1alpha1.StatusPending {
+			logger.Info("Still pending, requeuing...")
+			return ctrl.Result{RequeueAfter: workloadcommon.DefaultRequeueDuration}, nil, nil
+		}
 		return ctrl.Result{}, nil, nil
 	}
 

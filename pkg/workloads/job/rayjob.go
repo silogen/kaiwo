@@ -145,7 +145,7 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 	}
 
 	if baseutils.ValueOrDefault(spec.EntryPoint) != "" {
-		rayJobSpec.Entrypoint = *spec.EntryPoint
+		rayJobSpec.Entrypoint = baseutils.ConvertMultilineEntrypoint(*spec.EntryPoint, true).(string)
 	}
 
 	// Adjust resource requests & limits
