@@ -1,6 +1,6 @@
 # Installing Kaiwo
 
-## Pre-requisites (Ray and Kueue operators)
+## Pre-requisites
 
 Kaiwo requires 4-5 components installed on Kubernetes:
 
@@ -8,27 +8,63 @@ Kaiwo requires 4-5 components installed on Kubernetes:
 2. AMD Operator (with AMD-Device-Config and Node Labeller) or Nvidia Operator and Feature Discovery
 3. Kueue Operator
 4. KubeRay Operator
-5. Prometheus (not strictly necessary but recommended)
+5. AppWrapper
+6. Prometheus (not strictly necessary but recommended)
+
+These and the Kaiwo operator itself can be installed in a few different ways.
+
+### Use Kustomize
+
+The simplest method is to use Kustomize to deploy the dependencies. There is a convenience script which you can run:
+
+```
+bash depedencies/setup_dependencies.sh
+```
+
+### Use Cluster Forge
 
 We recommend using [Cluster-Forge](https://github.com/silogen/cluster-forge) to install all necessary components for Kubernetes. There is a README in the Cluster-Forge repo, but the steps are simple:
 
 1. Clone the repository: `git clone https://github.com/silogen/cluster-forge.git`
 2. Make sure you have Go installed
-3. Run `./scripts/clean.sh` to make sure you're starting off clean slate
-4. Run `go run . smelt` and select your components (above)
-5. Make sure docker is using multiarch-builder `docker buildx create --name multiarch-builder --use`
-6. Run `go run . cast`
-7. Run `go run . forge`
+3. Run `go run . forge -s kaiwo-dependencies` and select `certmanager`, `kueue`, `ray-operator` and `app-wrapper`, in addition to any other components you may want
+4. Run the deploy script `bash stacks/kaiwo-dependencies/deploy.sh`
+
+This will deploy the dependencies into your currently selected Kubernetes cluster.
+
+!!!note
+    You can also directly install the Kaiwo operator using Cluster Forge, which is described below.
 
 ## Kaiwo operator
 
-!!!warning
-    This release is intended purely for internal testing of forth-coming Kaiwo-Operator. Not intended for general use
+Once you have the dependencies installed, you can install the Kaiwo operator in a few different ways.
 
-Install the operator by running:
+### Use Cluster Forge
 
-```bash
-kubectl apply -f https://github.com/silogen/kaiwo/releases/download/v.0.1-internal/install.yaml --server-side
+Instead of separately installing the Kaiwo dependencies, you can directly install Kaiwo with its dependencies by running (inside the Cluster Forge repository):
+
+1. Run `go run . forge -s kaiwo` and select `kaiwo-all`, in addition to any other components you may want
+2. Run the deploy script `bash stacks/kaiwo/deploy.sh`
+
+### Build installer locally
+
+This will build the release manifest locally and apply it to the Kubernetes cluster.
+
+```
+export IMG=ghcr.io/silogen/kaiwo-operator:v.0.2.0
+IMG=$IMG make build-installer
+kubectl apply -f dist/install.yaml --server-side
+```
+
+!!!caution
+    This does not build the Docker image, so any local changes made into the code will not be reflected in the operator that gets deployed.
+
+### Install from release manifest
+
+You can directly install the operator from a release by running:
+
+```
+kubectl apply -f https://github.com/silogen/kaiwo/releases/download/v.0.2.0/install.yaml --server-side
 ```
 
 ## Kaiwo CLI tool
