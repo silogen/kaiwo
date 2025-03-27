@@ -331,5 +331,5 @@ func (r *DownloadJobReconciler) ShouldContinue(ctx context.Context, actual *batc
 	}
 
 	// Requeue after some time to check again if the job has completed
-	return &ctrl.Result{RequeueAfter: DefaultRequeueDuration}
+	return &ctrl.Result{RequeueAfter: workloadcommon.DefaultRequeueDuration}
 }

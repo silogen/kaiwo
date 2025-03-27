@@ -16,11 +16,7 @@ package workloadcommon
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"time"
-
-	ctrl "sigs.k8s.io/controller-runtime"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,7 +29,6 @@ const (
 
 var DefaultRequeueDuration = 2 * time.Second
 
-func UpdatePodSpec(kaiwoCommonMetaSpec v1alpha1.CommonMetaSpec, labelContext baseutils.KaiwoLabelContext, template *corev1.PodTemplateSpec, name string, replicas int, gpusPerReplica int, override bool) error {
 type KaiwoWorkload interface {
 	GetUser() string
 	GetObjectMeta() *metav1.ObjectMeta
