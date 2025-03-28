@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -40,7 +42,7 @@ func GetDefaultJobSpec(dangerous bool, resourceRequirements corev1.ResourceRequi
 	return batchv1.JobSpec{
 		TTLSecondsAfterFinished: baseutils.Pointer(defaultTTLSecondsAfterFinished),
 		BackoffLimit:            baseutils.Pointer(int32(0)),
-		Template:                workloadcommon.GetPodTemplate(*resource.NewQuantity(1*1024*1024*1024, resource.BinarySI), dangerous, resourceRequirements, "workload"),
+		Template:                workloadutils.GetPodTemplate(*resource.NewQuantity(1*1024*1024*1024, resource.BinarySI), dangerous, resourceRequirements, "workload"),
 	}
 }
 
@@ -64,7 +66,7 @@ func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batch
 	logger := log.FromContext(ctx)
 
 	spec := r.KaiwoJob.Spec
-	labelContext := baseutils.GetKaiwoLabelContext(r.KaiwoJob)
+	labelContext := workloadcommon.GetKaiwoLabelContext(r.KaiwoJob)
 
 	var jobSpec batchv1.JobSpec
 	jobSpec.Template.ObjectMeta.Labels = r.KaiwoJob.ObjectMeta.Labels
@@ -72,8 +74,8 @@ func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batch
 	var overrideDefaults bool
 
 	if spec.Job == nil {
-		jobSpec = GetDefaultJobSpec(baseutils.ValueOrDefault(spec.Dangerous), baseutils.ValueOrDefault(spec.Resources))
-		if baseutils.ValueOrDefault(r.KaiwoJob.Spec.CommonMetaSpec.Gpus) > 0 {
+		jobSpec = GetDefaultJobSpec(spec.Dangerous, baseutils.ValueOrDefault(spec.Resources))
+		if r.KaiwoJob.Spec.CommonMetaSpec.Gpus > 0 {
 			overrideDefaults = true
 		}
 		if r.KaiwoJob.Spec.CommonMetaSpec.Resources != nil {
@@ -84,7 +86,7 @@ func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batch
 		overrideDefaults = false
 	}
 
-	if err := workloadcommon.UpdatePodSpec(r.KaiwoJob.Spec.CommonMetaSpec, labelContext, &jobSpec.Template, r.KaiwoJob.Name, 1, baseutils.ValueOrDefault(r.KaiwoJob.Spec.CommonMetaSpec.Gpus), overrideDefaults); err != nil {
+	if err := workloadutils.UpdatePodSpec(r.KaiwoJob.Spec.CommonMetaSpec, labelContext, &jobSpec.Template, r.KaiwoJob.Name, 1, r.KaiwoJob.Spec.CommonMetaSpec.Gpus, overrideDefaults); err != nil {
 		return nil, fmt.Errorf("failed to update job spec: %w", err)
 	}
 
@@ -97,7 +99,7 @@ func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batch
 		jobSpec.TTLSecondsAfterFinished = baseutils.Pointer(defaultTTLSecondsAfterFinished)
 	}
 
-	if err := workloadcommon.AddEntrypoint(baseutils.ValueOrDefault(spec.EntryPoint), &jobSpec.Template); err != nil {
+	if err := workloadutils.AddEntrypoint(spec.EntryPoint, &jobSpec.Template); err != nil {
 		return nil, baseutils.LogErrorf(logger, "failed to add entrypoint: %v", err)
 	}
 
@@ -112,10 +114,10 @@ func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batch
 		Spec: jobSpec,
 	}
 
-	baseutils.CopyLabels(r.KaiwoJob.ObjectMeta.Labels, &job.ObjectMeta)
-	baseutils.SetKaiwoSystemLabels(labelContext, &job.ObjectMeta)
+	workloadcommon.CopyLabels(r.KaiwoJob.ObjectMeta.Labels, &job.ObjectMeta)
+	workloadcommon.SetKaiwoSystemLabels(labelContext, &job.ObjectMeta)
 
-	job.ObjectMeta.Labels[v1alpha1.QueueLabel] = r.KaiwoJob.Labels[v1alpha1.QueueLabel]
+	job.ObjectMeta.Labels[workloadcommon.QueueLabel] = r.KaiwoJob.Labels[workloadcommon.QueueLabel]
 
 	return job, nil
 }
@@ -127,5 +129,5 @@ func (r *BatchJobReconciler) GetEmptyObject() *batchv1.Job {
 func (r *BatchJobReconciler) ValidateBeforeCreateOrUpdate(ctx context.Context, actual *batchv1.Job) (*ctrl.Result, error) {
 	// Abort reconciliation the managed label is set and actual doesn't exist, as the job is managed by the webhook
 	// This is to avoid trying to create the job that is going to be created once the webhook completes
-	return workloadcommon.ValidateKaiwoResourceBeforeCreateOrUpdate(ctx, actual, r.KaiwoJob.ObjectMeta)
+	return workloadutils.ValidateKaiwoResourceBeforeCreateOrUpdate(ctx, actual, r.KaiwoJob.ObjectMeta)
 }

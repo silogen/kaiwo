@@ -20,6 +20,8 @@ import (
 	"os"
 	"strings"
 
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	v1 "k8s.io/api/core/v1"
@@ -43,7 +45,7 @@ import (
 func GetDefaultRayJobSpec(dangerous bool, resourceRequirements v1.ResourceRequirements) rayv1.RayJobSpec {
 	return rayv1.RayJobSpec{
 		ShutdownAfterJobFinishes: true,
-		RayClusterSpec:           workloadcommon.GetRayClusterTemplate(dangerous, resourceRequirements),
+		RayClusterSpec:           workloadutils.GetRayClusterTemplate(dangerous, resourceRequirements),
 	}
 }
 
@@ -71,7 +73,7 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 	var rayJobSpec rayv1.RayJobSpec
 
 	if spec.RayJob == nil {
-		rayJobSpec = GetDefaultRayJobSpec(baseutils.ValueOrDefault(spec.Dangerous), baseutils.ValueOrDefault(spec.Resources))
+		rayJobSpec = GetDefaultRayJobSpec(spec.Dangerous, baseutils.ValueOrDefault(spec.Resources))
 	} else {
 		rayJobSpec = spec.RayJob.Spec
 	}
@@ -89,7 +91,7 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 			logger.Error(err, msg)
 			panic(msg)
 		}
-		workloadcommon.FillPodResources(&rayJobSpec.RayClusterSpec.HeadGroupSpec.Template.Spec, &v1.ResourceRequirements{
+		workloadutils.FillPodResources(&rayJobSpec.RayClusterSpec.HeadGroupSpec.Template.Spec, &v1.ResourceRequirements{
 			Limits: v1.ResourceList{
 				v1.ResourceMemory: quantity,
 			},
@@ -99,22 +101,22 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 		}, true)
 	}
 
-	labelContext := baseutils.GetKaiwoLabelContext(r.KaiwoJob)
+	labelContext := workloadcommon.GetKaiwoLabelContext(r.KaiwoJob)
 
 	replicas := baseutils.ValueOrDefault(spec.Replicas)
-	gpusPerReplica := baseutils.ValueOrDefault(spec.GpusPerReplica)
+	gpusPerReplica := spec.GpusPerReplica
 
-	calculatedGpus := baseutils.ValueOrDefault(r.KaiwoJob.Spec.CommonMetaSpec.Gpus)
+	calculatedGpus := r.KaiwoJob.Spec.CommonMetaSpec.Gpus
 
-	if baseutils.ValueOrDefault(spec.Gpus) > 0 || gpusPerReplica > 0 {
+	if spec.Gpus > 0 || gpusPerReplica > 0 {
 		var err error
 		calculatedGpus, replicas, gpusPerReplica, err = controllerutils.CalculateNumberOfReplicas(
 			ctx,
 			k8sClient,
-			strings.ToLower(baseutils.ValueOrDefault(spec.GpuVendor)),
-			baseutils.ValueOrDefault(spec.Gpus),
+			strings.ToLower(spec.GpuVendor),
+			spec.Gpus,
 			baseutils.ValueOrDefault(spec.Replicas),
-			baseutils.ValueOrDefault(spec.GpusPerReplica),
+			spec.GpusPerReplica,
 			true,
 		)
 		if err != nil {
@@ -123,8 +125,8 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 	}
 
 	spec.Replicas = &replicas
-	spec.GpusPerReplica = &gpusPerReplica
-	r.KaiwoJob.Spec.CommonMetaSpec.Gpus = &calculatedGpus
+	spec.GpusPerReplica = gpusPerReplica
+	r.KaiwoJob.Spec.CommonMetaSpec.Gpus = calculatedGpus
 
 	var overrideDefaults bool
 
@@ -134,18 +136,18 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 		overrideDefaults = false
 	}
 
-	if err := workloadcommon.UpdatePodSpec(r.KaiwoJob.Spec.CommonMetaSpec, labelContext, &rayJobSpec.RayClusterSpec.HeadGroupSpec.Template, r.KaiwoJob.Name, replicas, gpusPerReplica, false); err != nil {
+	if err := workloadutils.UpdatePodSpec(r.KaiwoJob.Spec.CommonMetaSpec, labelContext, &rayJobSpec.RayClusterSpec.HeadGroupSpec.Template, r.KaiwoJob.Name, replicas, gpusPerReplica, false); err != nil {
 		return nil, fmt.Errorf("failed to update job spec: %w", err)
 	}
 
 	for i := range rayJobSpec.RayClusterSpec.WorkerGroupSpecs {
-		if err := workloadcommon.UpdatePodSpec(r.KaiwoJob.Spec.CommonMetaSpec, labelContext, &rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Template, r.KaiwoJob.Name, replicas, gpusPerReplica, overrideDefaults); err != nil {
+		if err := workloadutils.UpdatePodSpec(r.KaiwoJob.Spec.CommonMetaSpec, labelContext, &rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Template, r.KaiwoJob.Name, replicas, gpusPerReplica, overrideDefaults); err != nil {
 			return nil, fmt.Errorf("failed to update job spec for container %d: %w", i, err)
 		}
 	}
 
-	if baseutils.ValueOrDefault(spec.EntryPoint) != "" {
-		rayJobSpec.Entrypoint = baseutils.ConvertMultilineEntrypoint(*spec.EntryPoint, true).(string)
+	if spec.EntryPoint != "" {
+		rayJobSpec.Entrypoint = baseutils.ConvertMultilineEntrypoint(spec.EntryPoint, true).(string)
 	}
 
 	// Adjust resource requests & limits
@@ -164,10 +166,10 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 		Spec: rayJobSpec,
 	}
 
-	baseutils.CopyLabels(r.KaiwoJob.ObjectMeta.Labels, &rayJob.ObjectMeta)
-	baseutils.SetKaiwoSystemLabels(labelContext, &rayJob.ObjectMeta)
+	workloadcommon.CopyLabels(r.KaiwoJob.ObjectMeta.Labels, &rayJob.ObjectMeta)
+	workloadcommon.SetKaiwoSystemLabels(labelContext, &rayJob.ObjectMeta)
 
-	rayJob.ObjectMeta.Labels[v1alpha1.QueueLabel] = r.KaiwoJob.Labels[v1alpha1.QueueLabel]
+	rayJob.ObjectMeta.Labels[workloadcommon.QueueLabel] = r.KaiwoJob.Labels[workloadcommon.QueueLabel]
 
 	return rayJob, nil
 }
@@ -179,5 +181,5 @@ func (r *RayJobReconciler) GetEmptyObject() *rayv1.RayJob {
 func (r *RayJobReconciler) ValidateBeforeCreateOrUpdate(ctx context.Context, actual *rayv1.RayJob) (*ctrl.Result, error) {
 	// Abort reconciliation the managed label is set and actual doesn't exist, as the job is managed by the webhook
 	// This is to avoid trying to create the job that is going to be created once the webhook completes
-	return workloadcommon.ValidateKaiwoResourceBeforeCreateOrUpdate(ctx, actual, r.KaiwoJob.ObjectMeta)
+	return workloadutils.ValidateKaiwoResourceBeforeCreateOrUpdate(ctx, actual, r.KaiwoJob.ObjectMeta)
 }

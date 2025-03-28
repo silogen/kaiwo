@@ -25,7 +25,7 @@ import (
 )
 
 var (
-	user          string
+	listUser      string
 	namespaceList string
 	allUsers      bool
 )
@@ -46,21 +46,21 @@ func BuildListCmd() *cobra.Command {
 				workloadName = args[1]
 			}
 
-			if user == "" && !allUsers {
+			if listUser == "" && !allUsers {
 				var err error
-				user, err = baseutils.GetCurrentUser()
+				listUser, err = baseutils.GetCurrentUser()
 				if err != nil {
 					return fmt.Errorf("could not get current user: %v", err)
 				}
 			}
-			if user != "" {
-				logrus.Infof("Listing as user: %s", user)
+			if listUser != "" {
+				logrus.Infof("Listing as user: %s", listUser)
 			}
 
 			return tui.RunList(workloadType, workloadName, namespaceList, user)
 		},
 	}
-	cmd.Flags().StringVarP(&user, "user", "u", "", "Limit the workloads to one created by this user")
+	cmd.Flags().StringVarP(&listUser, "user", "u", "", "Limit the workloads to one created by this user")
 	cmd.Flags().StringVarP(&namespaceList, "namespace", "n", "kaiwo", "Namespace of the workloads to return")
 	cmd.Flags().BoolVarP(&allUsers, "all-users", "", false, "Return workloads for all users")
 	return cmd

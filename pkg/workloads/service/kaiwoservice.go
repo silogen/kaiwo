@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"reflect"
 
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
+
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -40,8 +42,8 @@ import (
 type KaiwoServiceReconciler struct {
 	workloadcommon.ReconcilerBase[*v1alpha1.KaiwoService]
 
-	DownloadJobConfigMap *workloadcommon.DownloadJobConfigMapReconciler
-	DownloadJob          *workloadcommon.DownloadJobReconciler
+	DownloadJobConfigMap *workloadutils.DownloadJobConfigMapReconciler
+	DownloadJob          *workloadutils.DownloadJobReconciler
 	HuggingFacePVC       *workloadcommon.StorageReconciler
 	DataPVC              *workloadcommon.StorageReconciler
 	LocalQueue           *workloadcommon.LocalQueueReconciler
@@ -91,12 +93,12 @@ func NewKaiwoServiceReconciler(kaiwoService *v1alpha1.KaiwoService) KaiwoService
 				Namespace: objectKey.Namespace,
 				Name:      baseutils.FormatNameWithPostfix(objectKey.Name, "download"),
 			}
-			r.DownloadJobConfigMap = workloadcommon.NewDownloadJobConfigMapReconciler(downloadObjectKey, storageSpec)
-			r.DownloadJob = workloadcommon.NewDownloadJobReconciler(downloadObjectKey, storageSpec, objectKey.Name, baseutils.ValueOrDefault(kaiwoService.Spec.Env))
+			r.DownloadJobConfigMap = workloadutils.NewDownloadJobConfigMapReconciler(downloadObjectKey, storageSpec)
+			r.DownloadJob = workloadutils.NewDownloadJobReconciler(downloadObjectKey, storageSpec, objectKey.Name, kaiwoService.Spec.Env)
 		}
 	}
 
-	clusterQueue := baseutils.ValueOrDefault(kaiwoService.Spec.ClusterQueue)
+	clusterQueue := kaiwoService.Spec.ClusterQueue
 	if clusterQueue == "" {
 		clusterQueue = controllerutils.DefaultClusterQueueName
 	}
@@ -121,11 +123,11 @@ func sanitize(kaiwoService *v1alpha1.KaiwoService) {
 		// Ensure mount paths are set
 		if storageSpec.Data != nil && storageSpec.Data.IsRequested() && storageSpec.Data.MountPath == "" {
 			// logger.Info("Data storage mount path not set, using default:" + defaultDataMountPath)
-			storageSpec.Data.MountPath = workloadcommon.DefaultDataMountPath
+			storageSpec.Data.MountPath = workloadutils.DefaultDataMountPath
 		}
 		if storageSpec.HuggingFace != nil && storageSpec.HuggingFace.IsRequested() && storageSpec.HuggingFace.MountPath == "" {
 			// logger.Info("Hugging Face storage mount path not set, using default:" + defaultHfMountPath)
-			storageSpec.HuggingFace.MountPath = workloadcommon.DefaultHfMountPath
+			storageSpec.HuggingFace.MountPath = workloadutils.DefaultHfMountPath
 		}
 	}
 
@@ -133,10 +135,10 @@ func sanitize(kaiwoService *v1alpha1.KaiwoService) {
 		kaiwoService.Labels = make(map[string]string)
 	}
 
-	if baseutils.ValueOrDefault(kaiwoService.Spec.ClusterQueue) == "" {
-		kaiwoService.Labels[v1alpha1.QueueLabel] = controllerutils.DefaultKaiwoQueueConfigName
+	if kaiwoService.Spec.ClusterQueue == "" {
+		kaiwoService.Labels[workloadcommon.QueueLabel] = controllerutils.DefaultKaiwoQueueConfigName
 	} else {
-		kaiwoService.Labels[v1alpha1.QueueLabel] = baseutils.ValueOrDefault(kaiwoService.Spec.ClusterQueue)
+		kaiwoService.Labels[workloadcommon.QueueLabel] = kaiwoService.Spec.ClusterQueue
 	}
 }
 
@@ -277,7 +279,7 @@ func (r *KaiwoServiceReconciler) GatherStatus(
 
 	// 2. Fill in startTime if it’s not set yet
 	if currentStatus.StartTime == nil {
-		if startTime := workloadcommon.GetEarliestPodStartTime(
+		if startTime := workloadutils.GetEarliestPodStartTime(
 			ctx,
 			k8sClient,
 			svc.Name,
@@ -335,7 +337,7 @@ func (r *KaiwoServiceReconciler) GatherStatus(
 			return currentStatus, nil
 		}
 	}
-	_, latestStatus, err := workloadcommon.CheckPodStatus(ctx, k8sClient, svc.Name, svc.Namespace, currentStatus.StartTime)
+	_, latestStatus, err := workloadutils.CheckPodStatus(ctx, k8sClient, svc.Name, svc.Namespace, currentStatus.StartTime)
 	currentStatus.Status = latestStatus
 	return currentStatus, err
 }

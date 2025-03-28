@@ -15,9 +15,17 @@
 package v1alpha1
 
 import (
+	"context"
+	"fmt"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 // KaiwoJobSpec defines the desired state of KaiwoJob.
@@ -25,15 +33,15 @@ type KaiwoJobSpec struct {
 	CommonMetaSpec `json:",inline"`
 
 	// ClusterQueue is the Kueue ClusterQueue name.
-	ClusterQueue *string `json:"clusterQueue,omitempty"`
+	ClusterQueue string `json:"clusterQueue,omitempty"`
 
 	// PriorityClass specifies the Kubernetes PriorityClass for scheduling.
-	PriorityClass *string `json:"priorityClass,omitempty"`
+	PriorityClass string `json:"priorityClass,omitempty"`
 
 	// EntryPoint specifies the command or script executed in a Job or RayJob.
 	// Can also be defined inside Job struct as Command in the form of string array or
 	// inside RayJob struct as Entrypoint in the form of string
-	EntryPoint *string `json:"entrypoint,omitempty"`
+	EntryPoint string `json:"entrypoint,omitempty"`
 
 	// RayJob defines the RayJob configuration.
 	// +kubebuilder:pruning:PreserveUnknownFields
@@ -49,7 +57,7 @@ func (spec *KaiwoJobSpec) IsBatchJob() bool {
 }
 
 func (spec *KaiwoJobSpec) IsRayJob() bool {
-	return spec.RayJob != nil || (spec.Ray != nil && *spec.Ray)
+	return spec.RayJob != nil || spec.Ray
 }
 
 // KaiwoJobStatus defines the observed state of KaiwoJob.
@@ -62,6 +70,7 @@ type KaiwoJobStatus struct {
 	ObservedGeneration int64              `json:"observedGeneration,omitempty"`
 }
 
+// KaiwoJob
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.status"
@@ -76,14 +85,37 @@ type KaiwoJob struct {
 	Status KaiwoJobStatus `json:"status,omitempty"`
 }
 
-func (job *KaiwoJob) GetUser() *string {
-	return job.Spec.User
+func (job *KaiwoJob) GetUser() string {
+	return job.Spec.CommonMetaSpec.User
 }
 
-func (job *KaiwoJob) ResourceType() string {
+func (job *KaiwoJob) GetObjectMeta() *metav1.ObjectMeta {
+	return &job.ObjectMeta
+}
+
+func (job *KaiwoJob) GetStatus() string {
+	return string(job.Status.Status)
+}
+
+func (job *KaiwoJob) GetType() string {
 	return "job"
 }
 
+func (job *KaiwoJob) GetPods(ctx context.Context, k8sClient client.Client) ([]corev1.Pod, error) {
+	podList := &corev1.PodList{}
+	if err := k8sClient.List(ctx, podList, client.InNamespace(job.Namespace), client.MatchingLabels{
+		workloadcommon.KaiwoRunIdLabel: string(job.UID),
+	}); err != nil {
+		return nil, fmt.Errorf("failed to list pods: %w", err)
+	}
+	return podList.Items, nil
+}
+
+func (job *KaiwoJob) GetServices(ctx context.Context, k8sClient client.Client) ([]corev1.Service, error) {
+	return []corev1.Service{}, nil
+}
+
+// KaiwoJobList
 // +kubebuilder:object:root=true
 type KaiwoJobList struct {
 	metav1.TypeMeta `json:",inline"`

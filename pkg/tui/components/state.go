@@ -16,9 +16,11 @@ package tuicomponents
 
 import (
 	cliutils "github.com/silogen/kaiwo/pkg/cli/utils"
+	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 type RunState struct {
+	Workload               workloadcommon.KaiwoWorkload
 	WorkloadType           string
 	User                   string
 	Namespace              string

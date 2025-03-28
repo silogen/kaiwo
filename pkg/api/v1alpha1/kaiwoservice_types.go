@@ -15,9 +15,16 @@
 package v1alpha1
 
 import (
+	"context"
+	"fmt"
+
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 // KaiwoServiceSpec defines the desired state of KaiwoService.
@@ -25,18 +32,18 @@ type KaiwoServiceSpec struct {
 	CommonMetaSpec `json:",inline"`
 
 	// ClusterQueue is the Kueue ClusterQueue name.
-	ClusterQueue *string `json:"clusterQueue,omitempty"`
+	ClusterQueue string `json:"clusterQueue,omitempty"`
 
 	// PriorityClass specifies the Kubernetes PriorityClass for scheduling.
-	PriorityClass *string `json:"priorityClass,omitempty"`
+	PriorityClass string `json:"priorityClass,omitempty"`
 
 	// EntryPoint specifies the command or script executed in a Deployment.
 	// Can also be defined inside Deployment struct as regular command in the form of string array
-	EntryPoint *string `json:"entrypoint,omitempty"`
+	EntryPoint string `json:"entrypoint,omitempty"`
 
 	// Defines the applications and deployments to deploy, should be a YAML multi-line scalar string.
 	// Can also be defined inside RayService struct
-	ServeConfigV2 *string `json:"serveConfigV2,omitempty"`
+	ServeConfigV2 string `json:"serveConfigV2,omitempty"`
 
 	// Optional workload-specific configs (Pointers to avoid bloating CRD)
 	// +kubebuilder:pruning:PreserveUnknownFields
@@ -55,6 +62,7 @@ type KaiwoServiceStatus struct {
 	ObservedGeneration int64              `json:"observedGeneration,omitempty"`
 }
 
+// KaiwoService
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.status"
@@ -68,6 +76,7 @@ type KaiwoService struct {
 	Status KaiwoServiceStatus `json:"status,omitempty"`
 }
 
+// KaiwoServiceList
 // +kubebuilder:object:root=true
 type KaiwoServiceList struct {
 	metav1.TypeMeta `json:",inline"`
@@ -75,18 +84,40 @@ type KaiwoServiceList struct {
 	Items           []KaiwoService `json:"items"`
 }
 
-func (svc *KaiwoService) GetUser() *string {
-	return svc.Spec.User
+func (svc *KaiwoService) GetUser() string {
+	return svc.Spec.CommonMetaSpec.User
 }
 
-func (svc *KaiwoService) ResourceType() string {
-	return "service"
+func (svc *KaiwoService) GetObjectMeta() *metav1.ObjectMeta {
+	return &svc.ObjectMeta
 }
 
 func (spec *KaiwoServiceSpec) IsRayService() bool {
-	return spec.RayService != nil || (spec.Ray != nil && *spec.Ray)
+	return spec.RayService != nil || spec.Ray
+}
+
+func (svc *KaiwoService) GetStatus() string {
+	return string(svc.Status.Status)
+}
+
+func (svc *KaiwoService) GetType() string {
+	return "service"
 }
 
 func init() {
 	SchemeBuilder.Register(&KaiwoService{}, &KaiwoServiceList{})
+}
+
+func (svc *KaiwoService) GetPods(ctx context.Context, k8sClient client.Client) ([]corev1.Pod, error) {
+	podList := &corev1.PodList{}
+	if err := k8sClient.List(ctx, podList, client.InNamespace(svc.Namespace), client.MatchingLabels{
+		workloadcommon.KaiwoRunIdLabel: string(svc.UID),
+	}); err != nil {
+		return nil, fmt.Errorf("failed to list pods: %w", err)
+	}
+	return podList.Items, nil
+}
+
+func (svc *KaiwoService) GetServices(ctx context.Context, k8sClient client.Client) ([]corev1.Service, error) {
+	return []corev1.Service{}, nil
 }

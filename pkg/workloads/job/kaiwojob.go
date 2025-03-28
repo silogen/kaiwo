@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"reflect"
 
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
+
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -37,8 +39,8 @@ import (
 
 type KaiwoJobReconciler struct {
 	workloadcommon.ReconcilerBase[*v1alpha1.KaiwoJob]
-	DownloadJobConfigMap *workloadcommon.DownloadJobConfigMapReconciler
-	DownloadJob          *workloadcommon.DownloadJobReconciler
+	DownloadJobConfigMap *workloadutils.DownloadJobConfigMapReconciler
+	DownloadJob          *workloadutils.DownloadJobReconciler
 	HuggingFacePVC       *workloadcommon.StorageReconciler
 	DataPVC              *workloadcommon.StorageReconciler
 	LocalQueue           *workloadcommon.LocalQueueReconciler
@@ -89,12 +91,12 @@ func NewKaiwoJobReconciler(kaiwoJob *v1alpha1.KaiwoJob) KaiwoJobReconciler {
 				Namespace: objectKey.Namespace,
 				Name:      baseutils.FormatNameWithPostfix(objectKey.Name, "download"),
 			}
-			reconciler.DownloadJobConfigMap = workloadcommon.NewDownloadJobConfigMapReconciler(downloadObjectKey, storageSpec)
-			reconciler.DownloadJob = workloadcommon.NewDownloadJobReconciler(downloadObjectKey, storageSpec, objectKey.Name, baseutils.ValueOrDefault(kaiwoJob.Spec.Env))
+			reconciler.DownloadJobConfigMap = workloadutils.NewDownloadJobConfigMapReconciler(downloadObjectKey, storageSpec)
+			reconciler.DownloadJob = workloadutils.NewDownloadJobReconciler(downloadObjectKey, storageSpec, objectKey.Name, kaiwoJob.Spec.Env)
 		}
 	}
 
-	clusterQueue := baseutils.ValueOrDefault(kaiwoJob.Spec.ClusterQueue)
+	clusterQueue := kaiwoJob.Spec.ClusterQueue
 	if clusterQueue == "" {
 		clusterQueue = controllerutils.DefaultClusterQueueName
 	}
@@ -119,11 +121,11 @@ func sanitize(kaiwoJob *v1alpha1.KaiwoJob) {
 		// Ensure mount paths are set
 		if storageSpec.Data != nil && storageSpec.Data.IsRequested() && storageSpec.Data.MountPath == "" {
 			// logger.Info("Data storage mount path not set, using default:" + defaultDataMountPath)
-			storageSpec.Data.MountPath = workloadcommon.DefaultDataMountPath
+			storageSpec.Data.MountPath = workloadutils.DefaultDataMountPath
 		}
 		if storageSpec.HuggingFace != nil && storageSpec.HuggingFace.IsRequested() && storageSpec.HuggingFace.MountPath == "" {
 			// logger.Info("Hugging Face storage mount path not set, using default:" + defaultHfMountPath)
-			storageSpec.HuggingFace.MountPath = workloadcommon.DefaultHfMountPath
+			storageSpec.HuggingFace.MountPath = workloadutils.DefaultHfMountPath
 		}
 	}
 
@@ -131,10 +133,10 @@ func sanitize(kaiwoJob *v1alpha1.KaiwoJob) {
 		kaiwoJob.Labels = make(map[string]string)
 	}
 
-	if baseutils.ValueOrDefault(kaiwoJob.Spec.ClusterQueue) == "" {
-		kaiwoJob.Labels[v1alpha1.QueueLabel] = controllerutils.DefaultClusterQueueName
+	if kaiwoJob.Spec.ClusterQueue == "" {
+		kaiwoJob.Labels[workloadcommon.QueueLabel] = controllerutils.DefaultClusterQueueName
 	} else {
-		kaiwoJob.Labels[v1alpha1.QueueLabel] = baseutils.ValueOrDefault(kaiwoJob.Spec.ClusterQueue)
+		kaiwoJob.Labels[workloadcommon.QueueLabel] = kaiwoJob.Spec.ClusterQueue
 	}
 }
 
@@ -279,7 +281,7 @@ func (r *KaiwoJobReconciler) GatherStatus(ctx context.Context, k8sClient client.
 	var status v1alpha1.Status
 
 	if currentStatus.StartTime == nil {
-		if startTime := workloadcommon.GetEarliestPodStartTime(ctx, k8sClient, kaiwoJob.Name, kaiwoJob.Namespace); startTime != nil {
+		if startTime := workloadutils.GetEarliestPodStartTime(ctx, k8sClient, kaiwoJob.Name, kaiwoJob.Namespace); startTime != nil {
 			currentStatus.StartTime = startTime
 		}
 	}
@@ -297,7 +299,7 @@ func (r *KaiwoJobReconciler) GatherStatus(ctx context.Context, k8sClient client.
 			currentStatus.Duration = int64(currentStatus.CompletionTime.Time.Sub(currentStatus.StartTime.Time).Seconds())
 		}
 	} else {
-		startTime, latestStatus, err := workloadcommon.CheckPodStatus(ctx, k8sClient, kaiwoJob.Name, kaiwoJob.Namespace, currentStatus.StartTime)
+		startTime, latestStatus, err := workloadutils.CheckPodStatus(ctx, k8sClient, kaiwoJob.Name, kaiwoJob.Namespace, currentStatus.StartTime)
 		if err != nil {
 			return nil, fmt.Errorf("error fetching start time and status: %w", err)
 		}

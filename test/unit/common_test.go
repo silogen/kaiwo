@@ -12,10 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package workloadcommon
+package unit
 
 import (
 	"testing"
+
+	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
+
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 
@@ -56,7 +60,7 @@ var _ = Describe("Workload defaults", func() {
 	replicas := 1
 	gpusPerReplica := 1
 
-	labelContext := baseutils.KaiwoLabelContext{
+	labelContext := workloadcommon.KaiwoLabelContext{
 		User:  "test-user",
 		Type:  "test-type",
 		RunId: "test-run-id",
@@ -74,16 +78,16 @@ var _ = Describe("Workload defaults", func() {
 	})
 
 	JustBeforeEach(func() {
-		err := UpdatePodSpec(kaiwoCommonMetaSpec, labelContext, &podTemplateSpec, name, replicas, gpusPerReplica, false)
+		err := workloadutils.UpdatePodSpec(kaiwoCommonMetaSpec, labelContext, &podTemplateSpec, name, replicas, gpusPerReplica, false)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	When("a workload pod spec is being updated", func() {
 		It("sets the kaiwo system flags", func() {
-			Expect(podTemplateSpec.Labels[baseutils.KaiwoTypeLabel]).To(Equal(labelContext.Type))
-			Expect(podTemplateSpec.Labels[baseutils.KaiwoUserLabel]).To(Equal(labelContext.User))
-			Expect(podTemplateSpec.Labels[baseutils.KaiwoNameLabel]).To(Equal(labelContext.Name))
-			Expect(podTemplateSpec.Labels[baseutils.KaiwoRunIdLabel]).To(Equal(labelContext.RunId))
+			Expect(podTemplateSpec.Labels[workloadcommon.KaiwoTypeLabel]).To(Equal(labelContext.Type))
+			Expect(podTemplateSpec.Labels[workloadcommon.KaiwoUserLabel]).To(Equal(labelContext.User))
+			Expect(podTemplateSpec.Labels[workloadcommon.KaiwoNameLabel]).To(Equal(labelContext.Name))
+			Expect(podTemplateSpec.Labels[workloadcommon.KaiwoRunIdLabel]).To(Equal(labelContext.RunId))
 		})
 
 		It("keeps any existing flags", func() {
@@ -100,14 +104,14 @@ var _ = Describe("Workload defaults", func() {
 	When("images are being checked", func() {
 		Context("and an image has been given", func() {
 			BeforeEach(func() {
-				kaiwoCommonMetaSpec.Image = baseutils.Pointer("ubuntu")
+				kaiwoCommonMetaSpec.Image = "ubuntu"
 			})
 			Context("and there is no image set in the container", func() {
 				BeforeEach(func() {
 					podTemplateSpec.Spec.Containers[0].Image = ""
 				})
 				It("sets the image if none is set in the spec", func() {
-					Expect(podTemplateSpec.Spec.Containers[0].Image).To(Equal(baseutils.ValueOrDefault(kaiwoCommonMetaSpec.Image)))
+					Expect(podTemplateSpec.Spec.Containers[0].Image).To(Equal(kaiwoCommonMetaSpec.Image))
 				})
 			})
 
@@ -124,43 +128,4 @@ var _ = Describe("Workload defaults", func() {
 			})
 		})
 	})
-
-	// Move resource checks here
-
-	//When("GPU calculations are included", func() {
-	//	Context("and no GPUs are given", func() {
-	//		It("fetches the number of GPUs from the existing requests", func() {
-	//		})
-	//	})
-	//	Context("and the memory and CPU is adjusted", func() {
-	//		It("updates values if they are not given", func() {
-	//		})
-	//		It("does not update values that are already set", func() {
-	//		})
-	//	})
-	//})
-	//
-	//When("environment variables are given", func() {
-	//	It("adds given environmental variables", func() {
-	//	})
-	//	It("keeps existing environmental variables", func() {
-	//	})
-	//})
-	//
-	//When("storage is given", func() {
-	//	Context("and the data volume is requested", func() {
-	//		It("includes the volume in the template", func() {
-	//		})
-	//		It("includes the volume mount in each container", func() {
-	//		})
-	//	})
-	//	Context("and the hugging face volume is requested", func() {
-	//		It("includes the volume in the template", func() {
-	//		})
-	//		It("includes the volume mount in each container", func() {
-	//		})
-	//		It("sets the hugging face HF_HOME environment variable", func() {
-	//		})
-	//	})
-	//})
 })

@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"testing"
 
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	batchv1 "k8s.io/api/batch/v1"
@@ -28,7 +30,6 @@ import (
 
 	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	"github.com/silogen/kaiwo/pkg/k8s"
-	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 func TestBatchJob(t *testing.T) {
@@ -79,8 +80,8 @@ var _ = Describe("Batch job suite", func() {
 			})
 
 			It("uses the default values for those fields that are not set", func() {
-				Expect(reconciler.BatchJob.Desired.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]).To(Equal(workloadcommon.DefaultCPU))
-				Expect(reconciler.BatchJob.Desired.Spec.Template.Spec.Containers[0].Resources.Limits[v1.ResourceMemory]).To(Equal(workloadcommon.DefaultMemory))
+				Expect(reconciler.BatchJob.Desired.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]).To(Equal(workloadutils.DefaultCPU))
+				Expect(reconciler.BatchJob.Desired.Spec.Template.Spec.Containers[0].Resources.Limits[v1.ResourceMemory]).To(Equal(workloadutils.DefaultMemory))
 			})
 		})
 

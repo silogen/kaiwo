@@ -14,47 +14,35 @@
 
 package tui
 
+import (
+	"context"
+	"fmt"
+
+	"github.com/silogen/kaiwo/pkg/k8s"
+	tuicomponents "github.com/silogen/kaiwo/pkg/tui/components"
+	workloadlist "github.com/silogen/kaiwo/pkg/tui/list/workload"
+)
+
 func RunList(workloadType string, workloadName string, namespace string, user string) error {
-	panic("")
-	//if workloadType == "" && workloadName != "" {
-	//	return fmt.Errorf("cannot determine workload from name without a type")
-	//}
-	//
-	//k8sClient, err := k8s.GetClient()
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//ctx := context.Background()
-	//
-	//var workloadReference workloads.Workload
-	//
-	//if workloadName != "" {
-	//	// If the workload name is set, attempt to load the workload reference
-	//	workload, objectKey, err := factory.GetWorkloadAndObjectKey(fmt.Sprintf("%s/%s", workloadType, workloadName), namespace)
-	//	if err != nil {
-	//		return fmt.Errorf("failed to get workload: %w", err)
-	//	}
-	//
-	//	if err := workload.LoadFromObjectKey(ctx, k8sClient, objectKey); err != nil {
-	//		return fmt.Errorf("failed to build workload reference: %w", err)
-	//	}
-	//}
-	//
-	//runState := &tuicomponents.RunState{
-	//	WorkloadType: workloadType,
-	//	Workload:     workloadReference,
-	//	User:         user,
-	//	Namespace:    namespace,
-	//}
-	//
-	//clients, err := k8s.GetKubernetesClients()
-	//if err != nil {
-	//	return fmt.Errorf("failed to get k8s clients: %w", err)
-	//}
-	//
-	//if err := tuicomponents.RunSteps(ctx, *clients, runState, workloadlist.RunSelectWorkloadType); err != nil {
-	//	return fmt.Errorf("failed to run steps: %w", err)
-	//}
-	//return nil
+	if workloadType == "" && workloadName != "" {
+		return fmt.Errorf("cannot determine workload from name without a type")
+	}
+
+	ctx := context.Background()
+
+	runState := &tuicomponents.RunState{
+		WorkloadType: workloadType,
+		User:         user,
+		Namespace:    namespace,
+	}
+
+	clients, err := k8s.GetKubernetesClients()
+	if err != nil {
+		return fmt.Errorf("failed to get k8s clients: %w", err)
+	}
+
+	if err := tuicomponents.RunSteps(ctx, *clients, runState, workloadlist.RunSelectWorkloadType); err != nil {
+		return fmt.Errorf("failed to run steps: %w", err)
+	}
+	return nil
 }

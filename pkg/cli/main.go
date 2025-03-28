@@ -17,10 +17,10 @@ package cmd
 import (
 	"fmt"
 
+	cliutils "github.com/silogen/kaiwo/pkg/cli/utils"
+
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-
-	cli "github.com/silogen/kaiwo/pkg/cli/apply"
 )
 
 // Build-time variables (set with -ldflags). Do not touch
@@ -79,18 +79,15 @@ func RunCli() {
 		},
 	})
 
-	rootCmd.AddCommand(cli.BuildSubmitCmd())
+	rootCmd.AddCommand(BuildSubmitCmd())
 
 	// TODO re-enable
-	// rootCmd.AddCommand(cli.BuildServeCmd())
-
-	// TODO re-enable
-	//rootCmd.AddCommand(
-	//BuildLogCmd(),
-	//BuildListCmd(),
-	//BuildMonitorCmd("monitor", utils.DefaultMonitorCommand),
-	//BuildExecCommand(),
-	//)
+	rootCmd.AddCommand(
+		BuildLogCmd(),
+		BuildListCmd(),
+		BuildMonitorCmd("monitor", cliutils.DefaultMonitorCommand),
+		BuildExecCommand(),
+	)
 
 	if err := rootCmd.Execute(); err != nil {
 		logrus.Fatal(err)
