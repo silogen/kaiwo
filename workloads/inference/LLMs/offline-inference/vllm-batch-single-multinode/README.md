@@ -2,36 +2,27 @@
 
 ## Gated models
 
-This workload example with Llama3 currently only supports single-node inference (one model instance per node), but the workload can be scaled to multiple instances by increasing `num_instances`
+This workload currently only supports single-node inference (one model instance per node), but the workload can be scaled up to multiple replicas (on multiple nodes) by increasing `replicas` and using `gpus-per-replica` instead of `gpus` field. However, note that not all models work with `NUM_REPLICAS` > 1. We have tested that this works with llama-3.1-8b-instruct. 
 
-Note! this workload expects existing secrets. Have a look at `env` file for the expected secrets. 
+When using `gpus` field,  user is letting Kaiwo to automatically set env variables `NUM_GPUS_PER_REPLICA` to `8` and `NUM_REPLICAS` to `2`. Kaiwo is able to set these by inspecting the number of requested GPUs (`gpus` field) and the number of GPUs available per node. See `main.py` for more details how the training script uses these env variables. These env variables can also be controlled by the user when `replicas` and `gpus-per-replica` fields are used instead of `gpus` field.
 
-To run this workload on 16 GPUs in `kaiwo` namespace, you can let Kaiwo automatically set env variables `NUM_GPUS_PER_REPLICA` to `8` and `NUM_REPLICAS` to `2`. Kaiwo is able to set these by inspecting the number of requested GPUs (`-g`) and the number of GPUs available per node. See `main.py` for more details how the training script uses these env variables.
+Run example with:
 
-Run with:
+`kubectl apply -f kaiwojob-llama-3.1-8b-instruct.yaml`
 
-`kaiwo submit -p workloads/inference/LLMs/offline-inference/vllm-batch-single-multinode/ -g 16 --ray --storage=100Gi,nameofyourstorageclass`
+Or if you're using kaiwo-cli which can also set user email and clusterQueue to the correct one, run
 
-Or set these variables yourself with the following command:
-
-`kaiwo submit -p workloads/inference/LLMs/offline-inference/vllm-batch-single-multinode/ --replicas 2 --gpus-per-replica 8 --ray --storage=100Gi,nameofyourstorageclass`
+`kaiwo submit -f kaiwojob-llama-3.1-8b-instruct.yaml`
 
 ### Dependencies
 - Secret `hf-token`: Hugging Face API token for model download
 
 ### Models that do not require HF_TOKEN
 
-Note! Not all models work with `NUM_REPLICAS` > 1
+For example, to run inference with Tiny Llama, run 
 
-Replace `env` file with the following contents to use TinyLlama
+`kubectl apply -f kaiwojob-tiny-llama.yaml`
 
-```
-envVars:
-  - name: MODEL_ID
-    value: "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+Or if you're using kaiwo-cli which can also set user email and clusterQueue to the correct one, run
 
-```
-
-Run with:
-
-`kaiwo submit -p workloads/inference/LLMs/offline-inference/vllm-batch-single-multinode/ --ray --replicas 1 --gpus-per-replica 8`
+`kaiwo submit -f kaiwojob-tiny-llama.yaml`
