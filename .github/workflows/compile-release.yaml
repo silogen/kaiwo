@@ -92,7 +92,7 @@ jobs:
         fi
 
     - name: Create Pull Request
-      if: success()
+      if: ${{ success() }}
       uses: peter-evans/create-pull-request@v6
       with:
         token: ${{ secrets.CLUSTER_FORGE_PAT }}
