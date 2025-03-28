@@ -21,6 +21,9 @@ import (
 	"strconv"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
+
 	corev1 "k8s.io/api/core/v1"
 	klog "k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,6 +39,18 @@ type NodeResourceInfo struct {
 	CPU    int
 	Memory int
 	Labels map[string]string
+}
+
+var GPUTaint = corev1.Taint{
+	Key:    DefaultGPUTaintKey,
+	Value:  "true",
+	Effect: corev1.TaintEffectNoSchedule,
+}
+
+var GPUToleration = corev1.Toleration{
+	Key:      DefaultGPUTaintKey,
+	Operator: corev1.TolerationOpExists,
+	Effect:   corev1.TaintEffectNoSchedule,
 }
 
 func GetNodeResources(ctx context.Context, c client.Client) []NodeResourceInfo {
@@ -90,6 +105,24 @@ func LabelNode(ctx context.Context, c client.Client, nodeName, key, value string
 	node.Labels[key] = value
 
 	return c.Update(ctx, &node)
+}
+
+func TaintNode(ctx context.Context, client client.Client, nodeName string, taint corev1.Taint) error {
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		var node corev1.Node
+		if err := client.Get(ctx, types.NamespacedName{Name: nodeName}, &node); err != nil {
+			return err
+		}
+
+		for _, t := range node.Spec.Taints {
+			if t.MatchTaint(&taint) {
+				return nil
+			}
+		}
+
+		node.Spec.Taints = append(node.Spec.Taints, taint)
+		return client.Update(ctx, &node)
+	})
 }
 
 func getGPUCount(flavorName string) int {
