@@ -40,6 +40,7 @@ var (
 	DefaultKaiwoQueueConfigName = baseutils.GetEnv("DEFAULT_KAIWO_QUEUE_CONFIG_NAME", "kaiwo")
 	DefaultClusterQueueName     = baseutils.GetEnv("DEFAULT_CLUSTER_QUEUE_NAME", "kaiwo")
 	DefaultNodePoolLabel        = "kaiwo/nodepool"
+	DefaultGPUTaintKey          = baseutils.GetEnv("DEFAULT_GPU_TAINT_KEY", "kaiwo.silogen.ai/gpu")
 )
 
 var excludeMasterNodes = baseutils.GetEnv("EXCLUDE_MASTER_NODES_FROM_NODE_POOLS", "false")
@@ -160,6 +161,8 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]v1alp
 		}
 	}
 
+	addTaints := strings.ToLower(baseutils.GetEnv("ADD_TAINTS_TO_GPU_NODES", "true")) == "true"
+
 	for flavorName := range nodePools {
 		resourceQuotas := []kueuev1beta1.ResourceQuota{
 			{
@@ -188,13 +191,19 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]v1alp
 			Resources: resourceQuotas,
 		}
 
-		// Define ResourceFlavor
-		resourceFlavors = append(resourceFlavors, v1alpha1.ResourceFlavorSpec{
+		flavor := v1alpha1.ResourceFlavorSpec{
 			Name: flavorName,
 			NodeLabels: map[string]string{
 				DefaultNodePoolLabel: flavorName,
 			},
-		})
+		}
+
+		if addTaints && !strings.HasPrefix(flavorName, "cpu-only") {
+			flavor.Tolerations = []corev1.Toleration{GPUToleration}
+		}
+
+		resourceFlavors = append(resourceFlavors, flavor)
+
 	}
 
 	resourceFlavors = RemoveDuplicateResourceFlavors(resourceFlavors)
@@ -206,6 +215,14 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]v1alp
 				logger.Info("Labeled node", "node", nodeName, "label", DefaultNodePoolLabel, "value", flavorName)
 			} else {
 				return nil, nil, fmt.Errorf("failed to label node %s: %w", nodeName, err)
+			}
+			if addTaints {
+				if !strings.HasPrefix(flavorName, "cpu-only") {
+					err = TaintNode(ctx, c, nodeName, GPUTaint)
+					if err != nil {
+						logger.Error(err, "Failed to taint GPU node", "node", nodeName)
+					}
+				}
 			}
 		}
 	}
