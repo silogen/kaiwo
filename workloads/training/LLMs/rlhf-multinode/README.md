@@ -1,5 +1,9 @@
 # RLHF (PPO) Multi-Node Training with OpenRLHF, Ray and vLLLM
 
-Notice that number of replicas and GPUs per replica are hard coded in the entrypoint, currently totaling 12 gpus. If you change those values, remember to change the Kaiwo command below accordingly.   
+Run with kubectl:   
 
-`kaiwo submit -p workloads/training/LLMs/rlhf-multinode -g 12 --ray --storage=100Gi,nameofyourstorageclass`
+`kubectl apply -f kaiwojob-llama-3-8b-mixture.yaml`
+
+Or if you're using kaiwo-cli which can also set user email and clusterQueue to the correct one, run
+
+`kaiwo submit -f kaiwojob-llama-3-8b-mixture.yaml`

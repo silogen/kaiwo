@@ -10,9 +10,13 @@ Keep in mind the following:
 - DeepSpeed Zero stage 3 partitions LLM parameters, gradients, and optimizer states across multiple GPUs
 - set `num_devices` to total number of GPUs.
 
-To run this workload on 16 GPUs in `kaiwo` namespace, set `num_devices` in `entrypoint` to `16` and use the following command:
+Run example with:
 
-`kaiwo submit -p workloads/training/LLMs/full-parameter-pretraining/full-param-zero3-single-multinode --overlay-path workloads/training/LLMs/lora-supervised-finetuning/lora-sft-zero3-single-multinode -g 16 --ray --storage=100Gi,nameofyourstorageclass`
+`kubectl apply -f kaiwojob-llama-3.1-8b-instruct.yaml`
+
+Or if you're using kaiwo-cli which can also set user email and clusterQueue to the correct one, run
+
+`kaiwo submit -f kaiwojob-llama-3.1-8b-instruct.yaml`
 
 ## Dependencies
 - hf-token: Hugging Face API token for model download

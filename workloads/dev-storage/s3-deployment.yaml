@@ -9,8 +9,8 @@ metadata:
   name: minio-secret
   namespace: kaiwo
 data:
-  access_key_id: bWluaW8=
-  secret_key: bWluaW8xMjM=
+  access_key_id: bWluaW8= # minio
+  secret_key: bWluaW8xMjM= # minio123
 ---
 
 apiVersion: v1

@@ -1,12 +1,11 @@
 apiVersion: kaiwo.silogen.ai/v1alpha1
 kind: KaiwoJob
 metadata:
-  name: batch-vllm
+  name: batch-inference-vllm-example
 spec:
   user: test@amd.com
-  # gpus-per-replica: 4
-  # replicas: 2
-  gpus: 6
+  gpus-per-replica: 4
+  replicas: 2
   ray: true
   entrypoint: python code/main.py
   env:
