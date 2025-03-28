@@ -1,3 +1,10 @@
 # Single-node Direct Preference Optimization (DPO) example with HF Accelerate
 
-Run on 4 GPUs with `kaiwo submit -p workloads/training/LLMs/dpo-singlenode -g 4 -n yournamespace --storage=100Gi,yourstorageclass`
+
+Run example with:
+
+`kubectl apply -f kaiwojob-dpo.yaml`
+
+Or if you're using kaiwo-cli which can also set user email and clusterQueue to the correct one, run
+
+`kaiwo submit -f kaiwojob-dpo.yaml`

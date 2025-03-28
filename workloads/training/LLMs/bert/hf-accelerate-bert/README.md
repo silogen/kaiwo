@@ -3,11 +3,15 @@
 
 ## Overview
 
-The `--gpus`/`-g` is passed to the job as `NUM_GPUS` environment variable in the entrypoint so you don't need to touch the entrypoint when adding GPUs for training.
+The `gpus` field is passed to the job as `NUM_GPUS` environment variable in the entrypoint so you don't need to touch the entrypoint when adding GPUs for training.
 
-To run on 4 GPUs:
+Run example with:
 
-`kaiwo submit -p workloads/training/LLMs/jobs/single-node-bert-train-classification -g 4`
+`kubectl apply -f kaiwojob-bert-accelerate.yaml`
+
+Or if you're using kaiwo-cli which can also set user email and clusterQueue to the correct one, run
+
+`kaiwo submit -f kaiwojob-bert-accelerate.yaml`
 
 ## Dependencies
 - None if using Bert

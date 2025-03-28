@@ -39,9 +39,7 @@ from datasets import load_dataset
 
 # from filelock import FileLock
 from peft import LoraConfig, get_peft_model
-from pyarrow.fs import GcsFileSystem
-
-# from pyarrow.fs import AwsDefaultS3RetryStrategy,  S3FileSystem
+from pyarrow.fs import AwsDefaultS3RetryStrategy, S3FileSystem
 from ray import train
 from ray.train import Checkpoint
 from ray.train.torch import TorchTrainer
@@ -50,6 +48,9 @@ from transformers import (
     AutoTokenizer,
     get_linear_schedule_with_warmup,
 )
+
+# from pyarrow.fs import GcsFileSystem
+
 
 # from urllib.parse import urljoin
 
@@ -762,19 +763,19 @@ def main():
                 checkpoint_score_attribute="perplexity",
                 checkpoint_score_order="min",
             ),
-            storage_filesystem=GcsFileSystem(
-                default_bucket_location="europe-west4",
-                project_id="silogen-dev",
+            # storage_filesystem=GcsFileSystem(
+            #     default_bucket_location="europe-west4",
+            #     project_id="silogen-dev",
+            # ),
+            storage_filesystem=S3FileSystem(
+                access_key=os.environ["AWS_ACCESS_KEY_ID"],
+                secret_key=os.environ["AWS_SECRET_ACCESS_KEY"],
+                endpoint_override="http://minio-service.kaiwo.svc.cluster.local:9000",
+                region="auto",
+                request_timeout=3600,
+                connect_timeout=3600,
+                retry_strategy=AwsDefaultS3RetryStrategy(max_attempts=500),
             ),
-            # storage_filesystem=S3FileSystem(
-            # access_key=os.environ["AWS_ACCESS_KEY_ID"],
-            # secret_key=os.environ["AWS_SECRET_ACCESS_KEY"],
-            # endpoint_override='https://storage.googleapis.com/',
-            # region="auto",
-            # request_timeout=3600,
-            # connect_timeout=3600,
-            # retry_strategy=AwsDefaultS3RetryStrategy(max_attempts=500)
-            # ),)
         ),
         scaling_config=train.ScalingConfig(
             num_workers=args.num_devices,

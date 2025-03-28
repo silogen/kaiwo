@@ -1,26 +1,23 @@
 # VLLM-based online inference
 
+## Dependencies
+- Secret `hf-token`: Hugging Face API token for model download
+
 ## Overview
 
 Supports single-node and multi-node inference
-
-Note! this workload expects existing secrets. Have a look at `env` file for the expected secrets. 
 
 Note also that currently multi-node setup (`NUM_REPLICAS` > 1) requires setting `NCCL_P2P_DISABLE=1` which involves some performance penalty in addition to the penalty introduced by network latency/bandwidth between nodes. Do not set `NCCL_P2P_DISABLE=1` for single-node setup.
  
 To run this workload on 16 GPUs in `kaiwo` namespace, you can let Kaiwo automatically set env variables `NUM_GPUS_PER_REPLICA` to `8` and `NUM_REPLICAS` to `2`. Kaiwo is able to set these by inspecting the number of requested GPUs (`-g`) and the number of GPUs available per node. See `__init__.py` for more details how the training script uses these env variables.
 
-Run with:
+Run example with:
 
-`kaiwo serve -p workloads/inference/LLMs/online-inference/vllm-online-single-multinode -g 16 --ray --storage=100Gi,nameofyourstorageclass`
+`kubectl apply -f kaiwoservice-llama-3.1-8b-instruct.yaml`
 
-Or set these variables yourself with the following command:
+Or if you're using kaiwo-cli which can also set user email and clusterQueue to the correct one, run
 
-`kaiwo serve -p workloads/inference/LLMs/online-inference/vllm-online-single-multinode --replicas 2 --gpus-per-replica 8 --ray --storage=100Gi,nameofyourstorageclass`
-
-## Dependencies
-- Secret `hf-token`: Hugging Face API token for model download
-
+`kaiwo submit -f kaiwoservice-llama-3.1-8b-instruct.yaml`
 
 ## Testing the workload
 

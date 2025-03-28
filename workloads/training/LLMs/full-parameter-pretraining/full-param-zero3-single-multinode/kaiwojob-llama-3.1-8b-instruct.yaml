@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-secret
+data:
+  access_key_id: bWluaW8= # minio
+  secret_key: bWluaW8xMjM= # minio123
+
+---
+
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoJob
+metadata:
+  name: multinode-stage-zero3-pretraining-example
+spec:
+  user: test@amd.com
+  gpus: 16
+  ray: true
+  entrypoint: |
+    python code/main.py \
+    --model-name=meta-llama/Llama-3.1-8B-Instruct \
+    --ds-config=./mounted/zero_3_offload_optim_param.json \
+    --bucket=silogen-dev-ray \
+    --num-epochs=1 \
+    --num-devices=$NUM_GPUS \
+    --batch-size-per-device=32 \
+    --eval-batch-size-per-device=32 \
+    --ctx-len=1024
+  env:
+  - fromSecret:
+      name: "AWS_ACCESS_KEY_ID"
+      secret: "minio-secret"
+      key: "access_key_id"
+  - fromSecret:
+      name: "AWS_SECRET_ACCESS_KEY"
+      secret: "minio-secret"
+      key: "secret_key"
+  - fromSecret:
+      name: "HF_TOKEN"
+      secret: "hf-token"
+      key: "hf-token"
+  - name: MODEL_ID
+    value: meta-llama/Llama-3.1-8B-Instruct
+  storage:
+    storageEnabled: true
+    storageClassName: multinode
+    data:
+      storageSize: 10Mi
+      mountPath: /workload
+      download:
+        git:
+        - repository: https://github.com/silogen/kaiwo.git
+          path: workloads/training/LLMs/full-parameter-pretraining/full-param-zero3-single-multinode
+          targetPath: code
+    huggingFace:
+      storageSize: "100Gi"
+      mountPath: "/.cache/huggingface"  # Also sets the env var HF_HOME to this value in each container
+      preCacheRepos:
+      - repoId: meta-llama/Llama-3.1-8B-Instruct
+        files: []

@@ -1,0 +1,59 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoService
+metadata:
+  name: online-inference-vllm-example
+spec:
+  user: test@amd.com
+  gpus: 16
+  ray: true
+  serveConfigV2: |
+    applications:
+    - name: llm
+      route_prefix: /
+      import_path: code:deployment
+      deployments:
+      - name: VLLMDeployment
+        autoscaling_config:
+          metrics_interval_s: 0.2
+          look_back_period_s: 2
+          downscale_delay_s: 600
+          upscale_delay_s: 30
+          target_num_ongoing_requests_per_replica: 20
+        graceful_shutdown_timeout_s: 5
+        max_concurrent_queries: 100
+  env:
+  - name: NCCL_P2P_DISABLE
+    value: "1"
+  - name: MODEL_ID
+    value: "meta-llama/Llama-3.1-8B-Instruct"
+  - name: GPU_MEMORY_UTILIZATION
+    value: "0.9"
+  - name: PLACEMENT_STRATEGY
+    value: "PACK"
+  - name: MAX_MODEL_LEN
+    value: "8192"
+  - name: MAX_NUM_SEQ
+    value: "4"
+  - name: MAX_NUM_BATCHED_TOKENS
+    value: "32768"
+  - fromSecret:
+      name: "HF_TOKEN"
+      secret: "hf-token"
+      key: "hf-token"
+  storage:
+    storageEnabled: true
+    storageClassName: multinode
+    data:
+      storageSize: 10Mi
+      mountPath: /workload
+      download:
+        git:
+        - repository: https://github.com/silogen/kaiwo.git
+          path: workloads/inference/LLMs/online-inference/vllm-online-single-multinode
+          targetPath: code
+    huggingFace:
+      storageSize: "100Gi"
+      mountPath: "/.cache/huggingface"  # Also sets the env var HF_HOME to this value in each container
+      preCacheRepos:
+      - repoId: meta-llama/Llama-3.1-8B-Instruct
+        files: []
