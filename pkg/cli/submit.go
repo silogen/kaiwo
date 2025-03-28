@@ -216,8 +216,8 @@ func promptUserForConfig() (bool, error) {
 		form := huh.NewForm(
 			huh.NewGroup(
 				huh.NewInput().
-					Title("User").
-					Description("The user name to run your jobs and services with").
+					Title("User email").
+					Description("The user name (email address) to run your jobs and services with").
 					Placeholder("user@email.com").
 					Value(&userEmail),
 				huh.NewInput().
