@@ -46,19 +46,6 @@ Instead of separately installing the Kaiwo dependencies, you can directly instal
 1. Run `go run . forge -s kaiwo` and select `kaiwo-all`, in addition to any other components you may want
 2. Run the deploy script `bash stacks/kaiwo/deploy.sh`
 
-### Build installer locally
-
-This will build the release manifest locally and apply it to the Kubernetes cluster.
-
-```
-export IMG=ghcr.io/silogen/kaiwo-operator:v.0.2.0
-IMG=$IMG make build-installer
-kubectl apply -f dist/install.yaml --server-side
-```
-
-!!!caution
-    This does not build the Docker image, so any local changes made into the code will not be reflected in the operator that gets deployed.
-
 ### Install from release manifest
 
 You can directly install the operator from a release by running:
