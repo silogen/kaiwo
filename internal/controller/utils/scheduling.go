@@ -151,8 +151,8 @@ func CalculateNumberOfReplicas(ctx context.Context, k8sClient client.Client, gpu
 
 	for _, node := range nodeList.Items {
 
-		// Extract GPU info from "kaiwo/nodepool" label
-		nodepoolLabel, exists := node.Labels["kaiwo/nodepool"]
+		// Extract GPU info from DefaultNodePoolLabel
+		nodepoolLabel, exists := node.Labels[DefaultNodePoolLabel]
 		if !exists {
 			continue
 		}

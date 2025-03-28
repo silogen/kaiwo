@@ -1,0 +1,29 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoJob
+metadata:
+  name: batch-vllm
+spec:
+  user: test@amd.com
+  gpus: 1
+  ray: true
+  entrypoint: python code/main.py
+  env:
+  - name: MODEL_ID
+    value: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+  storage:
+    storageEnabled: true
+    storageClassName: multinode
+    data:
+      storageSize: 10Mi
+      mountPath: /workload
+      download:
+        git:
+        - repository: https://github.com/silogen/kaiwo.git
+          path: workloads/inference/LLMs/offline-inference/vllm-batch-single-multinode
+          targetPath: code
+    huggingFace:
+      storageSize: "100Gi"
+      mountPath: "/.cache/huggingface"  # Also sets the env var HF_HOME to this value in each container
+      preCacheRepos:
+      - repoId: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+        files: []

@@ -1,6 +1,0 @@
-gpus: 0 
-namespace: kaiwo
-image: hello-world
-version: 0.0.1
-envFile: workloads/custom-template-hello-world-example/env_foo
-customConfig: workloads/custom-template-hello-world-example/values_for_custom_template.yaml

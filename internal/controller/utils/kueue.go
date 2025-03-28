@@ -39,6 +39,7 @@ import (
 var (
 	DefaultKaiwoQueueConfigName = baseutils.GetEnv("DEFAULT_KAIWO_QUEUE_CONFIG_NAME", "kaiwo")
 	DefaultClusterQueueName     = baseutils.GetEnv("DEFAULT_CLUSTER_QUEUE_NAME", "kaiwo")
+	DefaultNodePoolLabel        = "kaiwo/nodepool"
 )
 
 var excludeMasterNodes = baseutils.GetEnv("EXCLUDE_MASTER_NODES_FROM_NODE_POOLS", "false")
@@ -131,6 +132,7 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]v1alp
 
 		// Track node membership in the nodepool
 		nodePools[flavorName] = append(nodePools[flavorName], node.Name)
+		logger.Info("Node added to node pool", "node", node.Name, "nodePool", flavorName)
 
 		if _, exists := resourceAggregates[flavorName]; !exists {
 			resourceAggregates[flavorName] = map[corev1.ResourceName]*resource.Quantity{
@@ -190,7 +192,7 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]v1alp
 		resourceFlavors = append(resourceFlavors, v1alpha1.ResourceFlavorSpec{
 			Name: flavorName,
 			NodeLabels: map[string]string{
-				"kaiwo/nodepool": flavorName,
+				DefaultNodePoolLabel: flavorName,
 			},
 		})
 	}
@@ -199,12 +201,15 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]v1alp
 
 	for flavorName, nodeNames := range nodePools {
 		for _, nodeName := range nodeNames {
-			err := LabelNode(ctx, c, nodeName, "kaiwo/nodepool", flavorName)
-			if err != nil {
+			err := LabelNode(ctx, c, nodeName, DefaultNodePoolLabel, flavorName)
+			if err == nil {
+				logger.Info("Labeled node", "node", nodeName, "label", DefaultNodePoolLabel, "value", flavorName)
+			} else {
 				return nil, nil, fmt.Errorf("failed to label node %s: %w", nodeName, err)
 			}
 		}
 	}
+	logger.Info("Final generated node pools", "nodePools", nodePools)
 	logger.Info("Final generated node pool resources", "nodePoolResources", nodePoolResources)
 	logger.Info("Final generated resource flavors", "resourceFlavors", resourceFlavors)
 
