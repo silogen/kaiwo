@@ -13,6 +13,8 @@ You can use the Kaiwo CLI to
 * `kaiwo monitor`: Monitor (GPU) workloads
 * `kaiwo exec`: Execute arbitrary commands inside the workload containers
 
+For a list of full functionality run `kaiwo --help`, or for a specific command, `kaiwo <command> --help`.
+
 ### Submitting workloads
 
 Given a Kaiwo manifest, you can submit it via the following command:
@@ -29,16 +31,25 @@ As you may want to leave the user and queue definitions empty to allow different
   * The environmental variable `KAIWOCONFIG`, which points to the path where the config exists
   * Placing the config file in `~/.config/kaiwo/kaiwoconfig.yaml`
 
+!!!note
+    The `user` field should be the user's email address
+
 If you try to submit a workload without providing these values, you will be prompted to interactively create the Kaiwo config file.
 
 ### Managing workloads
 
-You can list currently running workloads by running `kaiwo manage`. This displays a terminal application which you can use to:
+You can list currently running workloads by running `kaiwo manage [flags]`. This displays a terminal application which you can use to:
 
 * Select the workload type
 * Delete the workload
 * List the workload logs
 * Port forward to the workload
+
+By default, only workloads that you have submitted are shown. You can use the following flags:
+
+* `-n / --namespace` to specify the namespace
+* `-u / --user` to specify a different user
+* `--all-users` to show workloads from all users
 
 ### Fetching workload logs
 
