@@ -5,6 +5,16 @@ set -e
 TEST_NAME=${TEST_NAME:-"kaiwo-test"}
 NFS_DIR="/nfs-data"
 
+SKIP_DEPENDENCIES=false
+
+for arg in "$@"; do
+  if [[ "$arg" == "--no-dependencies" ]]; then
+    SKIP_DEPENDENCIES=true
+    break
+  fi
+done
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 create_cluster() {
   echo "Creating Kind cluster '$TEST_NAME'..."
@@ -20,17 +30,12 @@ else
     create_cluster
 fi
 
-kubectl apply -k dependencies/kustomization-client-side
-echo "Waiting for Cert-Manager to be deployed..."
-for deploy in cert-manager cert-manager-webhook cert-manager-cainjector; do
-    echo "Waiting for deployment: $deploy"
-    if kubectl get deployment/$deploy -n cert-manager >/dev/null 2>&1; then
-        kubectl rollout status deployment/$deploy -n cert-manager --timeout=5m
-    else
-        echo "Warning: $deploy deployment not found, skipping wait."
-    fi
-done
-echo "Cert-Manager deployed."
+if [ "$SKIP_DEPENDENCIES" = false ]; then
+  CONFIG_FILE="$SCRIPT_DIR/../dependencies/setup_dependencies.sh"
+  bash "$CONFIG_FILE"
+else
+  echo "Skipping standard dependency installation"
+fi
 
 # Add fake-gpu-operator
 kubectl create ns gpu-operator
@@ -40,12 +45,6 @@ kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 nvidia.com/gpu.produ
 kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 nvidia.com/gpu.count=8
 kubectl apply -f test/fake-gpu-operator/fake-gpu-operator.yaml
 
-
-# Deploy other dependencies
-kubectl apply --server-side -k dependencies/kustomization-server-side
-kubectl rollout status deployment/kueue-controller-manager -n kueue-system --timeout=5m
-kubectl rollout status deployment/kuberay-operator --timeout=5m
-kubectl rollout status deployment/appwrapper-controller-manager -n appwrapper-system --timeout=5m
 
 # Deploy NFS-backed storageclass 
 if ! systemctl is-active --quiet nfs-server || [[ ! -d "$NFS_DIR" ]]; then
