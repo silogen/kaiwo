@@ -65,3 +65,39 @@ jobs:
         token: '${{ secrets.GITHUB_TOKEN }}'
         draft: true
         prerelease: true
+  sync-to-cluster-forge:
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+    - name: Checkout cluster-forge
+      run: |
+        git clone https://x-access-token:${{ secrets.CLUSTER_FORGE_PAT }}@github.com/silogen/cluster-forge.git
+        cd cluster-forge
+        git config user.name "github-actions"
+        git config user.email "github-actions@github.com"
+        git checkout -b kaiwo-release-${{ env.VERSION }}
+
+    - name: Copy install.yaml and commit if changed
+      run: |
+        set -e
+        cp install.yaml cluster-forge/input/kaiwo/install.yaml
+        cd cluster-forge
+        if ! git diff --quiet; then
+          git add input/kaiwo/install.yaml
+          git commit -m "Update kaiwo install.yaml for version ${{ env.VERSION }}"
+          git push origin kaiwo-release-${{ env.VERSION }}
+        else
+          echo "No changes to commit."
+        fi
+
+    - name: Create Pull Request
+      if: ${{ success() }}
+      uses: peter-evans/create-pull-request@v6
+      with:
+        token: ${{ secrets.CLUSTER_FORGE_PAT }}
+        path: cluster-forge
+        commit-message: "Update kaiwo install.yaml for version ${{ env.VERSION }}"
+        branch: kaiwo-release-${{ env.VERSION }}
+        title: "Update kaiwo install.yaml for ${{ env.VERSION }}"
+        base: main
