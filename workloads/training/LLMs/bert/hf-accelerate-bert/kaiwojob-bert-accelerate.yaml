@@ -1,0 +1,10 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoJob
+metadata:
+  name: bert-hf-accelerate-example
+spec:
+  gpus: 2
+  entrypoint: |
+    cd / && git clone https://github.com/huggingface/accelerate && \
+    cd accelerate/examples && \
+    torchrun --nproc_per_node $NUM_GPUS ./nlp_example.py 

@@ -1,9 +1,0 @@
-python mounted/main.py
---model-name=meta-llama/Llama-3.1-8B-Instruct
---ds-config=./mounted/zero_3_offload_optim_param.json
---bucket=silogen-dev-ray
---num-epochs=2
---num-devices=$NUM_GPUS
---batch-size-per-device=32
---eval-batch-size-per-device=32
---ctx-len=1024
