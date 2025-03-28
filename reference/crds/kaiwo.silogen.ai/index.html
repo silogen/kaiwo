@@ -1,0 +1,2687 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../../../usage-guide/troubleshooting/">
+      
+      
+        <link rel="next" href="../../reconciliation/">
+      
+      
+      <link rel="icon" href="../../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.9">
+    
+    
+      
+        <title>CRDs - Kaiwo - Kubernetes AI Workload Orchestrator</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.4af4bdda.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#api-reference" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="Kaiwo - Kubernetes AI Workload Orchestrator" class="md-header__button md-logo" aria-label="Kaiwo - Kubernetes AI Workload Orchestrator" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Kaiwo - Kubernetes AI Workload Orchestrator
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              CRDs
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
+        
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../getting-started/installation/" class="md-tabs__link">
+          
+  
+  Getting started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../usage-guide/cli/" class="md-tabs__link">
+          
+  
+  Usage guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="Kaiwo - Kubernetes AI Workload Orchestrator" class="md-nav__button md-logo" aria-label="Kaiwo - Kubernetes AI Workload Orchestrator" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Kaiwo - Kubernetes AI Workload Orchestrator
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Getting started
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Getting started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../getting-started/installation/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Installation
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../getting-started/quickstart/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Quickstart
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Usage guide
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Usage guide
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../usage-guide/cli/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    CLI
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../usage-guide/troubleshooting/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Troubleshooting
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Reference
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    CRDs
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    CRDs
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#packages" class="md-nav__link">
+    <span class="md-ellipsis">
+      Packages
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kaiwosilogenaiv1alpha1" class="md-nav__link">
+    <span class="md-ellipsis">
+      kaiwo.silogen.ai/v1alpha1
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="kaiwo.silogen.ai/v1alpha1">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#resource-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      Resource Types
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Resource Types">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#azureblobstoragedownloaditem" class="md-nav__link">
+    <span class="md-ellipsis">
+      AzureBlobStorageDownloadItem
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#clouddownloadbucket" class="md-nav__link">
+    <span class="md-ellipsis">
+      CloudDownloadBucket
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#clusterqueue" class="md-nav__link">
+    <span class="md-ellipsis">
+      ClusterQueue
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#commonmetaspec" class="md-nav__link">
+    <span class="md-ellipsis">
+      CommonMetaSpec
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#datastoragespec" class="md-nav__link">
+    <span class="md-ellipsis">
+      DataStorageSpec
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gcsdownloaditem" class="md-nav__link">
+    <span class="md-ellipsis">
+      GCSDownloadItem
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gitdownloaditem" class="md-nav__link">
+    <span class="md-ellipsis">
+      GitDownloadItem
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hfstoragespec" class="md-nav__link">
+    <span class="md-ellipsis">
+      HfStorageSpec
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#huggingfacedownloaditem" class="md-nav__link">
+    <span class="md-ellipsis">
+      HuggingFaceDownloadItem
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kaiwojob" class="md-nav__link">
+    <span class="md-ellipsis">
+      KaiwoJob
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kaiwojoblist" class="md-nav__link">
+    <span class="md-ellipsis">
+      KaiwoJobList
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kaiwojobspec" class="md-nav__link">
+    <span class="md-ellipsis">
+      KaiwoJobSpec
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kaiwojobstatus" class="md-nav__link">
+    <span class="md-ellipsis">
+      KaiwoJobStatus
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kaiwoqueueconfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      KaiwoQueueConfig
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kaiwoqueueconfiglist" class="md-nav__link">
+    <span class="md-ellipsis">
+      KaiwoQueueConfigList
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kaiwoqueueconfigspec" class="md-nav__link">
+    <span class="md-ellipsis">
+      KaiwoQueueConfigSpec
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kaiwoqueueconfigstatus" class="md-nav__link">
+    <span class="md-ellipsis">
+      KaiwoQueueConfigStatus
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kaiwoservice" class="md-nav__link">
+    <span class="md-ellipsis">
+      KaiwoService
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kaiwoservicelist" class="md-nav__link">
+    <span class="md-ellipsis">
+      KaiwoServiceList
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kaiwoservicespec" class="md-nav__link">
+    <span class="md-ellipsis">
+      KaiwoServiceSpec
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kaiwoservicestatus" class="md-nav__link">
+    <span class="md-ellipsis">
+      KaiwoServiceStatus
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#objectstoragedownloadspec" class="md-nav__link">
+    <span class="md-ellipsis">
+      ObjectStorageDownloadSpec
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#resourceflavorspec" class="md-nav__link">
+    <span class="md-ellipsis">
+      ResourceFlavorSpec
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#s3downloaditem" class="md-nav__link">
+    <span class="md-ellipsis">
+      S3DownloadItem
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#secretvolume" class="md-nav__link">
+    <span class="md-ellipsis">
+      SecretVolume
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#status" class="md-nav__link">
+    <span class="md-ellipsis">
+      Status
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#storagespec" class="md-nav__link">
+    <span class="md-ellipsis">
+      StorageSpec
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#valuereference" class="md-nav__link">
+    <span class="md-ellipsis">
+      ValueReference
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reconciliation/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Reconciliation
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#packages" class="md-nav__link">
+    <span class="md-ellipsis">
+      Packages
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kaiwosilogenaiv1alpha1" class="md-nav__link">
+    <span class="md-ellipsis">
+      kaiwo.silogen.ai/v1alpha1
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="kaiwo.silogen.ai/v1alpha1">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#resource-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      Resource Types
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Resource Types">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#azureblobstoragedownloaditem" class="md-nav__link">
+    <span class="md-ellipsis">
+      AzureBlobStorageDownloadItem
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#clouddownloadbucket" class="md-nav__link">
+    <span class="md-ellipsis">
+      CloudDownloadBucket
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#clusterqueue" class="md-nav__link">
+    <span class="md-ellipsis">
+      ClusterQueue
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#commonmetaspec" class="md-nav__link">
+    <span class="md-ellipsis">
+      CommonMetaSpec
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#datastoragespec" class="md-nav__link">
+    <span class="md-ellipsis">
+      DataStorageSpec
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gcsdownloaditem" class="md-nav__link">
+    <span class="md-ellipsis">
+      GCSDownloadItem
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gitdownloaditem" class="md-nav__link">
+    <span class="md-ellipsis">
+      GitDownloadItem
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hfstoragespec" class="md-nav__link">
+    <span class="md-ellipsis">
+      HfStorageSpec
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#huggingfacedownloaditem" class="md-nav__link">
+    <span class="md-ellipsis">
+      HuggingFaceDownloadItem
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kaiwojob" class="md-nav__link">
+    <span class="md-ellipsis">
+      KaiwoJob
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kaiwojoblist" class="md-nav__link">
+    <span class="md-ellipsis">
+      KaiwoJobList
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kaiwojobspec" class="md-nav__link">
+    <span class="md-ellipsis">
+      KaiwoJobSpec
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kaiwojobstatus" class="md-nav__link">
+    <span class="md-ellipsis">
+      KaiwoJobStatus
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kaiwoqueueconfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      KaiwoQueueConfig
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kaiwoqueueconfiglist" class="md-nav__link">
+    <span class="md-ellipsis">
+      KaiwoQueueConfigList
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kaiwoqueueconfigspec" class="md-nav__link">
+    <span class="md-ellipsis">
+      KaiwoQueueConfigSpec
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kaiwoqueueconfigstatus" class="md-nav__link">
+    <span class="md-ellipsis">
+      KaiwoQueueConfigStatus
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kaiwoservice" class="md-nav__link">
+    <span class="md-ellipsis">
+      KaiwoService
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kaiwoservicelist" class="md-nav__link">
+    <span class="md-ellipsis">
+      KaiwoServiceList
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kaiwoservicespec" class="md-nav__link">
+    <span class="md-ellipsis">
+      KaiwoServiceSpec
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kaiwoservicestatus" class="md-nav__link">
+    <span class="md-ellipsis">
+      KaiwoServiceStatus
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#objectstoragedownloadspec" class="md-nav__link">
+    <span class="md-ellipsis">
+      ObjectStorageDownloadSpec
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#resourceflavorspec" class="md-nav__link">
+    <span class="md-ellipsis">
+      ResourceFlavorSpec
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#s3downloaditem" class="md-nav__link">
+    <span class="md-ellipsis">
+      S3DownloadItem
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#secretvolume" class="md-nav__link">
+    <span class="md-ellipsis">
+      SecretVolume
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#status" class="md-nav__link">
+    <span class="md-ellipsis">
+      Status
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#storagespec" class="md-nav__link">
+    <span class="md-ellipsis">
+      StorageSpec
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#valuereference" class="md-nav__link">
+    <span class="md-ellipsis">
+      ValueReference
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="api-reference">API Reference</h1>
+<h2 id="packages">Packages</h2>
+<ul>
+<li><a href="#kaiwosilogenaiv1alpha1">kaiwo.silogen.ai/v1alpha1</a></li>
+</ul>
+<h2 id="kaiwosilogenaiv1alpha1">kaiwo.silogen.ai/v1alpha1</h2>
+<p>Package v1alpha1 contains API Schema definitions for the kaiwo v1 API group.</p>
+<h3 id="resource-types">Resource Types</h3>
+<ul>
+<li><a href="#kaiwojob">KaiwoJob</a></li>
+<li><a href="#kaiwojoblist">KaiwoJobList</a></li>
+<li><a href="#kaiwoqueueconfig">KaiwoQueueConfig</a></li>
+<li><a href="#kaiwoqueueconfiglist">KaiwoQueueConfigList</a></li>
+<li><a href="#kaiwoservice">KaiwoService</a></li>
+<li><a href="#kaiwoservicelist">KaiwoServiceList</a></li>
+</ul>
+<h4 id="azureblobstoragedownloaditem">AzureBlobStorageDownloadItem</h4>
+<p><em>Appears in:</em>
+- <a href="#downloadtaskconfig">DownloadTaskConfig</a>
+- <a href="#objectstoragedownloadspec">ObjectStorageDownloadSpec</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>connectionString</code> <em><a href="#valuereference">ValueReference</a></em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>containers</code> <em><a href="#clouddownloadbucket">CloudDownloadBucket</a> array</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="clouddownloadbucket">CloudDownloadBucket</h4>
+<p><em>Appears in:</em>
+- <a href="#azureblobstoragedownloaditem">AzureBlobStorageDownloadItem</a>
+- <a href="#gcsdownloaditem">GCSDownloadItem</a>
+- <a href="#s3downloaditem">S3DownloadItem</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code> <em>string</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>files</code> <em><a href="#clouddownloadfile">CloudDownloadFile</a> array</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>folders</code> <em><a href="#clouddownloadfolder">CloudDownloadFolder</a> array</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="clusterqueue">ClusterQueue</h4>
+<p><em>Appears in:</em>
+- <a href="#kaiwoqueueconfigspec">KaiwoQueueConfigSpec</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code> <em>string</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>spec</code> <em><a href="#clusterqueuespec">ClusterQueueSpec</a></em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>namespaces</code> <em>string array</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="commonmetaspec">CommonMetaSpec</h4>
+<p>CommonMetaSpec defines reusable metadata fields for workloads.</p>
+<p><em>Appears in:</em>
+- <a href="#kaiwojobspec">KaiwoJobSpec</a>
+- <a href="#kaiwoservicespec">KaiwoServiceSpec</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>annotations</code> <em>object (keys:string, values:string)</em></td>
+<td>Annotations provides additional metadata for the workload.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>user</code> <em>string</em></td>
+<td>User specifies the owner or creator of the workload.<br />If authentication is enabled, this must be email address which is checked against authenticated user for match.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>podTemplateSpecLabels</code> <em>object (keys:string, values:string)</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>gpus</code> <em>integer</em></td>
+<td>Gpus specifies the total number of GPUs allocated to the workload.<br />Default is 0.</td>
+<td>0</td>
+<td></td>
+</tr>
+<tr>
+<td><code>gpuVendor</code> <em>string</em></td>
+<td>GpuVendor specifies the GPU vendor (e.g., AMD, NVIDIA, etc.).<br />Default is AMD.</td>
+<td>AMD</td>
+<td></td>
+</tr>
+<tr>
+<td><code>version</code> <em>string</em></td>
+<td>Version is an optional field specifying the version of the workload.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>replicas</code> <em>integer</em></td>
+<td>Replicas specifies the number of replicas for the workload.<br />If greater than one, the workload must use Ray.<br />Default is 0.</td>
+<td>1</td>
+<td></td>
+</tr>
+<tr>
+<td><code>gpus-per-replica</code> <em>integer</em></td>
+<td>GpusPerReplica specifies the number of GPUs allocated per replica.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>resources</code> <em><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core">ResourceRequirements</a></em></td>
+<td>Resources specify the default resource requirements applied for all pods inside the workflow</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>image</code> <em>string</em></td>
+<td>Image defines the container image used for the workload.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>imagePullSecrets</code> <em><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core">LocalObjectReference</a></em></td>
+<td>ImagePullSecrets contains the list of secrets used to pull the container image.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>env</code> <em><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core">EnvVar</a></em></td>
+<td>Env specifies the environment variables to be passed to the container.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>secretVolumes</code> <em><a href="#secretvolume">SecretVolume</a></em></td>
+<td>SecretVolumes list the secret volumes that should be mounted</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>ray</code> <em>boolean</em></td>
+<td>Ray determines whether the operator should use RayCluster for workload execution.<br />Default is false.</td>
+<td>false</td>
+<td></td>
+</tr>
+<tr>
+<td><code>storage</code> <em><a href="#storagespec">StorageSpec</a></em></td>
+<td>Storage configuration for the workload.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>dangerous</code> <em>boolean</em></td>
+<td>Dangerous disables adding the default security context to the containers</td>
+<td>false</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="datastoragespec">DataStorageSpec</h4>
+<p><em>Appears in:</em>
+- <a href="#storagespec">StorageSpec</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mountPath</code> <em>string</em></td>
+<td>MountPath specifies where the data PVC will be mounted to in each pod</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>storageSize</code> <em>string</em></td>
+<td>StorageSize specifies the amount of storage allocated to the data PVC</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>download</code> <em><a href="#objectstoragedownloadspec">ObjectStorageDownloadSpec</a></em></td>
+<td>Download optional object storage pre-downloads</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="gcsdownloaditem">GCSDownloadItem</h4>
+<p><em>Appears in:</em>
+- <a href="#downloadtaskconfig">DownloadTaskConfig</a>
+- <a href="#objectstoragedownloadspec">ObjectStorageDownloadSpec</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>applicationCredentials</code> <em><a href="#valuereference">ValueReference</a></em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>buckets</code> <em><a href="#clouddownloadbucket">CloudDownloadBucket</a> array</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="gitdownloaditem">GitDownloadItem</h4>
+<p><em>Appears in:</em>
+- <a href="#downloadtaskconfig">DownloadTaskConfig</a>
+- <a href="#objectstoragedownloadspec">ObjectStorageDownloadSpec</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>repository</code> <em>string</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>branch</code> <em>string</em></td>
+<td>Branch specifies the branch to use, ignored if commit is given</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>commit</code> <em>string</em></td>
+<td>Commit specifies the commit to use, prioritized over branch</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>username</code> <em><a href="#valuereference">ValueReference</a></em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>token</code> <em><a href="#valuereference">ValueReference</a></em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>path</code> <em>string</em></td>
+<td>Path denotes the path within the repository to copy. If not given, whole repository is copied</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>targetPath</code> <em>string</em></td>
+<td>TargetPath denotes where the path is copied to, relative to the data mount directory</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="hfstoragespec">HfStorageSpec</h4>
+<p><em>Appears in:</em>
+- <a href="#storagespec">StorageSpec</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mountPath</code> <em>string</em></td>
+<td>MountPath specifies where the data HF will be mounted to in each pod.<br />This is also used to set the HF_HOME environmental variable into each container.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>storageSize</code> <em>string</em></td>
+<td>StorageSize specifies the amount of storage allocated to the HF PVC</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>preCacheRepos</code> <em><a href="#huggingfacedownloaditem">HuggingFaceDownloadItem</a> array</em></td>
+<td>PreCacheRepos is a list of repositories (and their files) that should be cached before the workload starts</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="huggingfacedownloaditem">HuggingFaceDownloadItem</h4>
+<p><em>Appears in:</em>
+- <a href="#downloadtaskconfig">DownloadTaskConfig</a>
+- <a href="#hfstoragespec">HfStorageSpec</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>repoId</code> <em>string</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>files</code> <em>string array</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="kaiwojob">KaiwoJob</h4>
+<p><em>Appears in:</em>
+- <a href="#kaiwojoblist">KaiwoJobList</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>apiVersion</code> <em>string</em></td>
+<td><code>kaiwo.silogen.ai/v1alpha1</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>kind</code> <em>string</em></td>
+<td><code>KaiwoJob</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>metadata</code> <em><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta">ObjectMeta</a></em></td>
+<td>Refer to Kubernetes API documentation for fields of <code>metadata</code>.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>spec</code> <em><a href="#kaiwojobspec">KaiwoJobSpec</a></em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>status</code> <em><a href="#kaiwojobstatus">KaiwoJobStatus</a></em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="kaiwojoblist">KaiwoJobList</h4>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>apiVersion</code> <em>string</em></td>
+<td><code>kaiwo.silogen.ai/v1alpha1</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>kind</code> <em>string</em></td>
+<td><code>KaiwoJobList</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>metadata</code> <em><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta">ListMeta</a></em></td>
+<td>Refer to Kubernetes API documentation for fields of <code>metadata</code>.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>items</code> <em><a href="#kaiwojob">KaiwoJob</a> array</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="kaiwojobspec">KaiwoJobSpec</h4>
+<p>KaiwoJobSpec defines the desired state of KaiwoJob.</p>
+<p><em>Appears in:</em>
+- <a href="#kaiwojob">KaiwoJob</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>annotations</code> <em>object (keys:string, values:string)</em></td>
+<td>Annotations provides additional metadata for the workload.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>user</code> <em>string</em></td>
+<td>User specifies the owner or creator of the workload.<br />If authentication is enabled, this must be email address which is checked against authenticated user for match.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>podTemplateSpecLabels</code> <em>object (keys:string, values:string)</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>gpus</code> <em>integer</em></td>
+<td>Gpus specifies the total number of GPUs allocated to the workload.<br />Default is 0.</td>
+<td>0</td>
+<td></td>
+</tr>
+<tr>
+<td><code>gpuVendor</code> <em>string</em></td>
+<td>GpuVendor specifies the GPU vendor (e.g., AMD, NVIDIA, etc.).<br />Default is AMD.</td>
+<td>AMD</td>
+<td></td>
+</tr>
+<tr>
+<td><code>version</code> <em>string</em></td>
+<td>Version is an optional field specifying the version of the workload.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>replicas</code> <em>integer</em></td>
+<td>Replicas specifies the number of replicas for the workload.<br />If greater than one, the workload must use Ray.<br />Default is 0.</td>
+<td>1</td>
+<td></td>
+</tr>
+<tr>
+<td><code>gpus-per-replica</code> <em>integer</em></td>
+<td>GpusPerReplica specifies the number of GPUs allocated per replica.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>resources</code> <em><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core">ResourceRequirements</a></em></td>
+<td>Resources specify the default resource requirements applied for all pods inside the workflow</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>image</code> <em>string</em></td>
+<td>Image defines the container image used for the workload.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>imagePullSecrets</code> <em><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core">LocalObjectReference</a></em></td>
+<td>ImagePullSecrets contains the list of secrets used to pull the container image.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>env</code> <em><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core">EnvVar</a></em></td>
+<td>Env specifies the environment variables to be passed to the container.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>secretVolumes</code> <em><a href="#secretvolume">SecretVolume</a></em></td>
+<td>SecretVolumes list the secret volumes that should be mounted</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>ray</code> <em>boolean</em></td>
+<td>Ray determines whether the operator should use RayCluster for workload execution.<br />Default is false.</td>
+<td>false</td>
+<td></td>
+</tr>
+<tr>
+<td><code>storage</code> <em><a href="#storagespec">StorageSpec</a></em></td>
+<td>Storage configuration for the workload.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>dangerous</code> <em>boolean</em></td>
+<td>Dangerous disables adding the default security context to the containers</td>
+<td>false</td>
+<td></td>
+</tr>
+<tr>
+<td><code>clusterQueue</code> <em>string</em></td>
+<td>ClusterQueue is the Kueue ClusterQueue name.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>priorityClass</code> <em>string</em></td>
+<td>PriorityClass specifies the Kubernetes PriorityClass for scheduling.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>entrypoint</code> <em>string</em></td>
+<td>EntryPoint specifies the command or script executed in a Job or RayJob.<br />Can also be defined inside Job struct as Command in the form of string array or<br />inside RayJob struct as Entrypoint in the form of string</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>rayJob</code> <em><a href="#rayjob">RayJob</a></em></td>
+<td>RayJob defines the RayJob configuration.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>job</code> <em><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#job-v1-batch">Job</a></em></td>
+<td>Job defines the Kubernetes Job configuration.</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="kaiwojobstatus">KaiwoJobStatus</h4>
+<p>KaiwoJobStatus defines the observed state of KaiwoJob.</p>
+<p><em>Appears in:</em>
+- <a href="#kaiwojob">KaiwoJob</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>startTime</code> <em><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta">Time</a></em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>completionTime</code> <em><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta">Time</a></em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>conditions</code> <em><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta">Condition</a> array</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>status</code> <em><a href="#status">Status</a></em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>duration</code> <em>integer</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>observedGeneration</code> <em>integer</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="kaiwoqueueconfig">KaiwoQueueConfig</h4>
+<p>KaiwoQueueConfig manages Kueue resources.</p>
+<p><em>Appears in:</em>
+- <a href="#kaiwoqueueconfiglist">KaiwoQueueConfigList</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>apiVersion</code> <em>string</em></td>
+<td><code>kaiwo.silogen.ai/v1alpha1</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>kind</code> <em>string</em></td>
+<td><code>KaiwoQueueConfig</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>metadata</code> <em><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta">ObjectMeta</a></em></td>
+<td>Refer to Kubernetes API documentation for fields of <code>metadata</code>.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>spec</code> <em><a href="#kaiwoqueueconfigspec">KaiwoQueueConfigSpec</a></em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>status</code> <em><a href="#kaiwoqueueconfigstatus">KaiwoQueueConfigStatus</a></em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="kaiwoqueueconfiglist">KaiwoQueueConfigList</h4>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>apiVersion</code> <em>string</em></td>
+<td><code>kaiwo.silogen.ai/v1alpha1</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>kind</code> <em>string</em></td>
+<td><code>KaiwoQueueConfigList</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>metadata</code> <em><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta">ListMeta</a></em></td>
+<td>Refer to Kubernetes API documentation for fields of <code>metadata</code>.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>items</code> <em><a href="#kaiwoqueueconfig">KaiwoQueueConfig</a> array</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="kaiwoqueueconfigspec">KaiwoQueueConfigSpec</h4>
+<p>KaiwoQueueConfigSpec defines the desired configuration for Kaiwo.</p>
+<p><em>Appears in:</em>
+- <a href="#kaiwoqueueconfig">KaiwoQueueConfig</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>clusterQueues</code> <em><a href="#clusterqueue">ClusterQueue</a> array</em></td>
+<td></td>
+<td></td>
+<td>MaxItems: 10 <br /></td>
+</tr>
+<tr>
+<td><code>resourceFlavors</code> <em><a href="#resourceflavorspec">ResourceFlavorSpec</a> array</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>workloadPriorityClasses</code> <em>WorkloadPriorityClass array</em></td>
+<td></td>
+<td></td>
+<td>MaxItems: 5 <br /></td>
+</tr>
+</tbody>
+</table>
+<h4 id="kaiwoqueueconfigstatus">KaiwoQueueConfigStatus</h4>
+<p>KaiwoQueueConfigStatus represents the observed state of KaiwoQueueConfig.</p>
+<p><em>Appears in:</em>
+- <a href="#kaiwoqueueconfig">KaiwoQueueConfig</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>conditions</code> <em><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta">Condition</a> array</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>Status</code> <em><a href="#status">Status</a></em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="kaiwoservice">KaiwoService</h4>
+<p><em>Appears in:</em>
+- <a href="#kaiwoservicelist">KaiwoServiceList</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>apiVersion</code> <em>string</em></td>
+<td><code>kaiwo.silogen.ai/v1alpha1</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>kind</code> <em>string</em></td>
+<td><code>KaiwoService</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>metadata</code> <em><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta">ObjectMeta</a></em></td>
+<td>Refer to Kubernetes API documentation for fields of <code>metadata</code>.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>spec</code> <em><a href="#kaiwoservicespec">KaiwoServiceSpec</a></em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>status</code> <em><a href="#kaiwoservicestatus">KaiwoServiceStatus</a></em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="kaiwoservicelist">KaiwoServiceList</h4>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>apiVersion</code> <em>string</em></td>
+<td><code>kaiwo.silogen.ai/v1alpha1</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>kind</code> <em>string</em></td>
+<td><code>KaiwoServiceList</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>metadata</code> <em><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta">ListMeta</a></em></td>
+<td>Refer to Kubernetes API documentation for fields of <code>metadata</code>.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>items</code> <em><a href="#kaiwoservice">KaiwoService</a> array</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="kaiwoservicespec">KaiwoServiceSpec</h4>
+<p>KaiwoServiceSpec defines the desired state of KaiwoService.</p>
+<p><em>Appears in:</em>
+- <a href="#kaiwoservice">KaiwoService</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>annotations</code> <em>object (keys:string, values:string)</em></td>
+<td>Annotations provides additional metadata for the workload.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>user</code> <em>string</em></td>
+<td>User specifies the owner or creator of the workload.<br />If authentication is enabled, this must be email address which is checked against authenticated user for match.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>podTemplateSpecLabels</code> <em>object (keys:string, values:string)</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>gpus</code> <em>integer</em></td>
+<td>Gpus specifies the total number of GPUs allocated to the workload.<br />Default is 0.</td>
+<td>0</td>
+<td></td>
+</tr>
+<tr>
+<td><code>gpuVendor</code> <em>string</em></td>
+<td>GpuVendor specifies the GPU vendor (e.g., AMD, NVIDIA, etc.).<br />Default is AMD.</td>
+<td>AMD</td>
+<td></td>
+</tr>
+<tr>
+<td><code>version</code> <em>string</em></td>
+<td>Version is an optional field specifying the version of the workload.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>replicas</code> <em>integer</em></td>
+<td>Replicas specifies the number of replicas for the workload.<br />If greater than one, the workload must use Ray.<br />Default is 0.</td>
+<td>1</td>
+<td></td>
+</tr>
+<tr>
+<td><code>gpus-per-replica</code> <em>integer</em></td>
+<td>GpusPerReplica specifies the number of GPUs allocated per replica.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>resources</code> <em><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core">ResourceRequirements</a></em></td>
+<td>Resources specify the default resource requirements applied for all pods inside the workflow</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>image</code> <em>string</em></td>
+<td>Image defines the container image used for the workload.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>imagePullSecrets</code> <em><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core">LocalObjectReference</a></em></td>
+<td>ImagePullSecrets contains the list of secrets used to pull the container image.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>env</code> <em><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core">EnvVar</a></em></td>
+<td>Env specifies the environment variables to be passed to the container.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>secretVolumes</code> <em><a href="#secretvolume">SecretVolume</a></em></td>
+<td>SecretVolumes list the secret volumes that should be mounted</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>ray</code> <em>boolean</em></td>
+<td>Ray determines whether the operator should use RayCluster for workload execution.<br />Default is false.</td>
+<td>false</td>
+<td></td>
+</tr>
+<tr>
+<td><code>storage</code> <em><a href="#storagespec">StorageSpec</a></em></td>
+<td>Storage configuration for the workload.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>dangerous</code> <em>boolean</em></td>
+<td>Dangerous disables adding the default security context to the containers</td>
+<td>false</td>
+<td></td>
+</tr>
+<tr>
+<td><code>clusterQueue</code> <em>string</em></td>
+<td>ClusterQueue is the Kueue ClusterQueue name.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>priorityClass</code> <em>string</em></td>
+<td>PriorityClass specifies the Kubernetes PriorityClass for scheduling.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>entrypoint</code> <em>string</em></td>
+<td>EntryPoint specifies the command or script executed in a Deployment.<br />Can also be defined inside Deployment struct as regular command in the form of string array</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>serveConfigV2</code> <em>string</em></td>
+<td>Defines the applications and deployments to deploy, should be a YAML multi-line scalar string.<br />Can also be defined inside RayService struct</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>rayService</code> <em><a href="#rayservice">RayService</a></em></td>
+<td>Optional workload-specific configs (Pointers to avoid bloating CRD)</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>deployment</code> <em><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#deployment-v1-apps">Deployment</a></em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="kaiwoservicestatus">KaiwoServiceStatus</h4>
+<p>KaiwoServiceStatus defines the observed state of KaiwoService.</p>
+<p><em>Appears in:</em>
+- <a href="#kaiwoservice">KaiwoService</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>startTime</code> <em><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta">Time</a></em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>conditions</code> <em><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta">Condition</a> array</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>status</code> <em><a href="#status">Status</a></em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>duration</code> <em>integer</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>observedGeneration</code> <em>integer</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="objectstoragedownloadspec">ObjectStorageDownloadSpec</h4>
+<p><em>Appears in:</em>
+- <a href="#datastoragespec">DataStorageSpec</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>s3</code> <em><a href="#s3downloaditem">S3DownloadItem</a> array</em></td>
+<td>S3 lists any S3 downloads</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>gcs</code> <em><a href="#gcsdownloaditem">GCSDownloadItem</a> array</em></td>
+<td>GCS lists and Google Cloud Storage downloads</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>azureBlob</code> <em><a href="#azureblobstoragedownloaditem">AzureBlobStorageDownloadItem</a> array</em></td>
+<td>AzureBlob lists any Azure Blob Storage downloads</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>git</code> <em><a href="#gitdownloaditem">GitDownloadItem</a> array</em></td>
+<td>Git lists any Git downloads</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="resourceflavorspec">ResourceFlavorSpec</h4>
+<p>ResourceFlavorSpec defines the configuration for a specific resource flavor.</p>
+<p><em>Appears in:</em>
+- <a href="#kaiwoqueueconfigspec">KaiwoQueueConfigSpec</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code> <em>string</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>nodeLabels</code> <em>object (keys:string, values:string)</em></td>
+<td>NodeLabels must not exceed a reasonable limit to prevent CRD validation failures</td>
+<td></td>
+<td>MaxProperties: 10 <br /></td>
+</tr>
+<tr>
+<td><code>taints</code> <em><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#taint-v1-core">Taint</a> array</em></td>
+<td></td>
+<td></td>
+<td>MaxItems: 5 <br /></td>
+</tr>
+<tr>
+<td><code>tolerations</code> <em><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#toleration-v1-core">Toleration</a> array</em></td>
+<td>// +kubebuilder:validation:MaxItems=5</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="s3downloaditem">S3DownloadItem</h4>
+<p><em>Appears in:</em>
+- <a href="#downloadtaskconfig">DownloadTaskConfig</a>
+- <a href="#objectstoragedownloadspec">ObjectStorageDownloadSpec</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>endpointUrl</code> <em>string</em></td>
+<td>EndpointUrl is the endpoint of the S3 API</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>accessKeyId</code> <em><a href="#valuereference">ValueReference</a></em></td>
+<td>AccessKeyId</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>secretKey</code> <em><a href="#valuereference">ValueReference</a></em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>buckets</code> <em><a href="#clouddownloadbucket">CloudDownloadBucket</a> array</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="secretvolume">SecretVolume</h4>
+<p><em>Appears in:</em>
+- <a href="#commonmetaspec">CommonMetaSpec</a>
+- <a href="#kaiwojobspec">KaiwoJobSpec</a>
+- <a href="#kaiwoservicespec">KaiwoServiceSpec</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code> <em>string</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>secretName</code> <em>string</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>key</code> <em>string</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>subPath</code> <em>string</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>mountPath</code> <em>string</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="status">Status</h4>
+<p><em>Underlying type:</em> <em>string</em></p>
+<p><em>Appears in:</em>
+- <a href="#kaiwojobstatus">KaiwoJobStatus</a>
+- <a href="#kaiwoqueueconfigstatus">KaiwoQueueConfigStatus</a>
+- <a href="#kaiwoservicestatus">KaiwoServiceStatus</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>``</td>
+<td></td>
+</tr>
+<tr>
+<td><code>PENDING</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>STARTING</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>READY</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>RUNNING</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>COMPLETE</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>FAILED</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="storagespec">StorageSpec</h4>
+<p>StorageSpec defines the storage configuration for the workload.</p>
+<p><em>Appears in:</em>
+- <a href="#commonmetaspec">CommonMetaSpec</a>
+- <a href="#kaiwojobspec">KaiwoJobSpec</a>
+- <a href="#kaiwoservicespec">KaiwoServiceSpec</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>storageEnabled</code> <em>boolean</em></td>
+<td>StorageEnabled tells whether to enable persistent storage.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>storageClassName</code> <em>string</em></td>
+<td>StorageClassName specifies the storage class used for PVC.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>accessMode</code> <em><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#persistentvolumeaccessmode-v1-core">PersistentVolumeAccessMode</a></em></td>
+<td>AccessMode determines the access mode for the storage</td>
+<td>ReadWriteMany</td>
+<td></td>
+</tr>
+<tr>
+<td><code>data</code> <em><a href="#datastoragespec">DataStorageSpec</a></em></td>
+<td>Data specifies the main workload PVC and optional object storage pre-downloads</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>huggingFace</code> <em><a href="#hfstoragespec">HfStorageSpec</a></em></td>
+<td>HuggingFace specifies any hugging face models that should be cached before the workload starts</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="valuereference">ValueReference</h4>
+<p><em>Appears in:</em>
+- <a href="#azureblobstoragedownloaditem">AzureBlobStorageDownloadItem</a>
+- <a href="#gcsdownloaditem">GCSDownloadItem</a>
+- <a href="#gitdownloaditem">GitDownloadItem</a>
+- <a href="#s3downloaditem">S3DownloadItem</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>file</code> <em>string</em></td>
+<td>File determines the location of the secret value mounted on the disk</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>secretName</code> <em>string</em></td>
+<td>SecretName is the name of the secret where the value is kept</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>secretKey</code> <em>string</em></td>
+<td>SecretKey is the name of the key within the secret where the value is kept</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+      <div class="md-progress" data-md-component="progress" role="progressbar"></div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../../..", "features": ["navigation.instant", "navigation.instant.progress", "navigation.tabs", "navigation.sections", "content.code.copy"], "search": "../../../assets/javascripts/workers/search.f8cc74c7.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.c8b220af.min.js"></script>
+      
+    
+  </body>
+</html>
