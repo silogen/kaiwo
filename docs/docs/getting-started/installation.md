@@ -7,7 +7,7 @@
 Kaiwo requires several components installed on Kubernetes:
 
 1. Cert-Manager
-2. AMD Operator (with AMD-Device-Config and Node Labeller) or Nvidia Operator and Feature Discovery
+2. GPU Operator: AMD Operator (with AMD-Device-Config and Node Labeller) or Nvidia Operator and Feature Discovery
 3. Kueue Operator
 4. KubeRay Operator
 5. AppWrapper
@@ -29,7 +29,7 @@ Then you can install the Kaiwo operator by running
 kubectl apply -f https://github.com/silogen/kaiwo/releases/download/v.0.2.0/install.yaml --server-side
 ```
 
-This method assumes you have installed the AMD GPU operator separately.
+This method assumes you have installed a GPU operator separately.
 
 ### Using Cluster Forge
 
