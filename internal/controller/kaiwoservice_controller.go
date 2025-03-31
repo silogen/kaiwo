@@ -64,7 +64,7 @@ func (r *KaiwoServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	reconciler := workloadservice.NewKaiwoServiceReconciler(&kaiwoService)
 
-	result, _, err := reconciler.Reconcile(ctx, r.Client, r.Scheme, false /* dryRun */)
+	result, err := reconciler.Reconcile(ctx, r.Client, r.Scheme)
 	if err != nil {
 		r.Recorder.Eventf(
 			&kaiwoService,

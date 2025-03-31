@@ -1,0 +1,23 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoJob
+metadata:
+  name: resource-requests-1
+spec:
+  user: test@amd.com
+  resources:
+    limits:
+      cpu: 1
+      memory: 2Gi
+    requests:
+      cpu: 1
+      memory: 2Gi
+  job:
+    apiVersion: batch/v1
+    kind: Job
+    spec:
+      template:
+        spec:
+          containers:
+          - name: hello-world
+            image: busybox:latest
+          restartPolicy: Never

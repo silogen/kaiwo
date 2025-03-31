@@ -1,0 +1,35 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: resource-requests-1
+spec:
+  steps:
+  - try:
+    - apply:
+        file: kaiwojob-1.yaml
+    - assert:
+        file: job-result-1.yaml
+---
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: resource-requests-non-overlapping
+spec:
+  steps:
+  - try:
+    - apply:
+        file: job-non-overlapping.yaml
+    - assert:
+        file: job-non-overlapping-result.yaml
+---
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: resource-requests-overlapping
+spec:
+  steps:
+  - try:
+    - apply:
+        file: job-overlapping.yaml
+    - assert:
+        file: job-overlapping-result.yaml

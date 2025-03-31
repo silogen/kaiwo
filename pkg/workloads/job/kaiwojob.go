@@ -141,12 +141,10 @@ func sanitize(kaiwoJob *v1alpha1.KaiwoJob) {
 }
 
 // Reconcile reconciles the kaiwo job to ensure each resource exists and is in the desired state
-func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme, dryRun bool) (ctrl.Result, []client.Object, error) {
+func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
 	kaiwoJob := r.Object
-
-	var manifests []client.Object
 
 	storageSpec := kaiwoJob.Spec.Storage
 
@@ -155,96 +153,85 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, k8sClient client.Cli
 
 	if k8sClient != nil {
 		if err := controllerutils.EnsureNamespaceKueueManaged(ctx, k8sClient, r.ObjectKey.Namespace); err != nil {
-			return ctrl.Result{}, nil, fmt.Errorf("failed to ensure namespace is Kueue managed: %w", err)
+			return ctrl.Result{}, fmt.Errorf("failed to ensure namespace is Kueue managed: %w", err)
 		}
 	}
 
 	if storageSpec != nil && storageSpec.StorageEnabled {
 
 		if storageSpec.HasData() {
-			dataPvc, _, err := r.DataPVC.Reconcile(ctx, k8sClient, scheme, kaiwoJob, dryRun)
+			_, _, err := r.DataPVC.Reconcile(ctx, k8sClient, scheme, kaiwoJob)
 			if err != nil {
-				return ctrl.Result{}, nil, fmt.Errorf("failed to reconcile data PVC: %w", err)
+				return ctrl.Result{}, fmt.Errorf("failed to reconcile data PVC: %w", err)
 			}
-			manifests = append(manifests, dataPvc)
 		}
 
 		if storageSpec.HasHfDownloads() {
 			// Add HuggingFace PVC
-			hfPvc, _, err := r.HuggingFacePVC.Reconcile(ctx, k8sClient, scheme, kaiwoJob, dryRun)
+			_, _, err := r.HuggingFacePVC.Reconcile(ctx, k8sClient, scheme, kaiwoJob)
 			if err != nil {
-				return ctrl.Result{}, nil, fmt.Errorf("failed to reconcile HuggingFace PVC: %w", err)
+				return ctrl.Result{}, fmt.Errorf("failed to reconcile HuggingFace PVC: %w", err)
 			}
-			manifests = append(manifests, hfPvc)
 		}
 
 		if storageSpec.HasDownloads() {
-			downloadJobConfigMap, _, err := r.DownloadJobConfigMap.Reconcile(ctx, k8sClient, scheme, kaiwoJob, dryRun)
+			_, _, err := r.DownloadJobConfigMap.Reconcile(ctx, k8sClient, scheme, kaiwoJob)
 			if err != nil {
-				return ctrl.Result{}, nil, fmt.Errorf("failed to reconcile DownloadJobConfigMap: %w", err)
+				return ctrl.Result{}, fmt.Errorf("failed to reconcile DownloadJobConfigMap: %w", err)
 			}
-			manifests = append(manifests, downloadJobConfigMap)
 
-			downloadJob, downloadJobResult, err = r.DownloadJob.Reconcile(ctx, k8sClient, scheme, kaiwoJob, dryRun)
+			downloadJob, downloadJobResult, err = r.DownloadJob.Reconcile(ctx, k8sClient, scheme, kaiwoJob)
 			if err != nil {
-				return ctrl.Result{}, nil, fmt.Errorf("failed to reconcile DownloadJob: %w", err)
+				return ctrl.Result{}, fmt.Errorf("failed to reconcile DownloadJob: %w", err)
 			}
 			if downloadJobResult != nil {
 				if downloadJobResult.Requeue || downloadJobResult.RequeueAfter > 0 {
-					return *downloadJobResult, nil, nil
+					return *downloadJobResult, nil
 				}
 			}
-			manifests = append(manifests, downloadJob)
 		}
 	}
 
 	if downloadJobResult == nil {
 
-		localQueue, _, err := r.LocalQueue.Reconcile(ctx, k8sClient, scheme, kaiwoJob, dryRun)
+		_, _, err := r.LocalQueue.Reconcile(ctx, k8sClient, scheme, kaiwoJob)
 		if err != nil {
-			return ctrl.Result{}, nil, fmt.Errorf("failed to reconcile local queue: %w", err)
+			return ctrl.Result{}, fmt.Errorf("failed to reconcile local queue: %w", err)
 		}
-		manifests = append(manifests, localQueue)
 
 		if kaiwoJob.Spec.IsBatchJob() {
-			batchJob, _, err := r.BatchJob.Reconcile(ctx, k8sClient, scheme, kaiwoJob, dryRun)
+			_, _, err := r.BatchJob.Reconcile(ctx, k8sClient, scheme, kaiwoJob)
 			if err != nil {
-				return ctrl.Result{}, nil, fmt.Errorf("failed to reconcile BatchJob: %w", err)
+				return ctrl.Result{}, fmt.Errorf("failed to reconcile BatchJob: %w", err)
 			}
-			manifests = append(manifests, batchJob)
 		} else if kaiwoJob.Spec.IsRayJob() {
-			rayJob, _, err := r.RayJob.Reconcile(ctx, k8sClient, scheme, kaiwoJob, dryRun)
+			_, _, err := r.RayJob.Reconcile(ctx, k8sClient, scheme, kaiwoJob)
 			if err != nil {
-				return ctrl.Result{}, nil, fmt.Errorf("failed to reconcile RayJob: %w", err)
+				return ctrl.Result{}, fmt.Errorf("failed to reconcile RayJob: %w", err)
 			}
-			manifests = append(manifests, rayJob)
 		} else {
 			panic("Unsupported job configuration")
 		}
 	}
 
-	if dryRun {
-		return ctrl.Result{}, manifests, nil
-	}
-
 	previousStatus := kaiwoJob.Status.DeepCopy()
 	status, err := r.GatherStatus(ctx, k8sClient, *previousStatus, downloadJob)
 	if err != nil {
-		return ctrl.Result{}, nil, fmt.Errorf("failed to gather status: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to gather status: %w", err)
 	}
 
 	if reflect.DeepEqual(previousStatus, status) {
 		if status.Status == v1alpha1.StatusPending {
 			logger.Info("Still pending, requeuing...")
-			return ctrl.Result{RequeueAfter: common.DefaultRequeueDuration}, nil, nil
+			return ctrl.Result{RequeueAfter: common.DefaultRequeueDuration}, nil
 		}
-		return ctrl.Result{}, nil, nil
+		return ctrl.Result{}, nil
 	}
 
 	retryAttempts := 3
 	for i := 0; i < retryAttempts; i++ {
 		if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(kaiwoJob), kaiwoJob); err != nil {
-			return ctrl.Result{}, nil, fmt.Errorf("failed to get kaiwoJob: %w", err)
+			return ctrl.Result{}, fmt.Errorf("failed to get kaiwoJob: %w", err)
 		}
 
 		kaiwoJob.Status = *status
@@ -255,12 +242,12 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, k8sClient client.Cli
 				baseutils.Debug(logger, "Conflict error during KaiwoJob update, retrying", "attempt", i+1)
 				continue
 			}
-			return ctrl.Result{}, nil, fmt.Errorf("failed to update kaiwoJob status: %w", err)
+			return ctrl.Result{}, fmt.Errorf("failed to update kaiwoJob status: %w", err)
 		}
 
-		return ctrl.Result{}, nil, nil
+		return ctrl.Result{}, nil
 	}
-	return ctrl.Result{}, nil, fmt.Errorf("failed to update kaiwoJob status")
+	return ctrl.Result{}, fmt.Errorf("failed to update kaiwoJob status")
 }
 
 func (r *KaiwoJobReconciler) GatherStatus(ctx context.Context, k8sClient client.Client, previousStatus v1alpha1.KaiwoJobStatus, downloadJob *batchv1.Job) (*v1alpha1.KaiwoJobStatus, error) {
