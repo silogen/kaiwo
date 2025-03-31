@@ -1,5 +1,9 @@
 # Getting started with Kaiwo
 
+## Kaiwo operator and CRDs
+
+At its core, Kaiwo is composed of the Kaiwo Custom Resource Definitions (CRDs) and the Kaiwo operator, which contains controllers that react to changes in the Kaiwo CRDs to manage workloads.
+
 ## Kaiwo CLI
 
 !!!info
@@ -14,6 +18,10 @@ You can use the Kaiwo CLI to
 * `kaiwo exec`: Execute arbitrary commands inside the workload containers
 
 For a list of full functionality run `kaiwo --help`, or for a specific command, `kaiwo <command> --help`.
+
+### Before running workloads with Kaiwo
+
+Kaiwo uses Kueue to manage job queuing. Make sure your cluster-admin has created two necessary Kueue resources on the cluster: `ResourceFlavor` and `ClusterQueue`. Manifests for these can be found under `cluster-admins` directory. By default, kaiwo will always submit workloads to `kaiwo` ClusterQueue if no other queue is provided with `-q`or`--queue` option during `kaiwo submit`. Kaiwo will automatically create the namespaced `LocalQueue` resource if it doesn't exist. Speak to your cluster-admin if you are unsure which `ClusterQueue` is allocated to your team.
 
 ### Submitting workloads
 
@@ -35,6 +43,9 @@ As you may want to leave the user and queue definitions empty to allow different
     The `user` field should be the user's email address
 
 If you try to submit a workload without providing these values, you will be prompted to interactively create the Kaiwo config file.
+
+!!!caution
+    One important note about GPU requests: it is up to the user to ensure that the code can run on the requested number of GPUs. If the code is not written to run on the requested number of GPUs, the job will fail. Note that some parallelized code may only work on a specific number of GPUs such as 1, 2, 4, 8, 16, 32 but not 6, 10, 12 etc. If you are unsure, start with a single GPU and scale up as needed. For example, the total number of attention heads must be divisible by tensor parallel size.
 
 ### Managing workloads
 
@@ -97,3 +108,4 @@ The following flags are supported:
 * `-t / --tty` to enable TTY (default true)
 * `--command` to specify the command to execute
 * `-n / --namespace` to specify the namespace
+
