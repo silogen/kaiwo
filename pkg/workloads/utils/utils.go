@@ -28,16 +28,16 @@ import (
 
 	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
+	common "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
-func UpdatePodSpec(kaiwoCommonMetaSpec v1alpha1.CommonMetaSpec, labelContext workloadcommon.KaiwoLabelContext, template *corev1.PodTemplateSpec, name string, replicas int, gpusPerReplica int, override bool) error {
+func UpdatePodSpec(kaiwoCommonMetaSpec v1alpha1.CommonMetaSpec, labelContext common.KaiwoLabelContext, template *corev1.PodTemplateSpec, name string, replicas int, gpusPerReplica int, override bool) error {
 	// Update labels
 	if template.ObjectMeta.Labels == nil {
 		template.ObjectMeta.Labels = map[string]string{}
 	}
-	workloadcommon.CopyLabels(kaiwoCommonMetaSpec.PodTemplateSpecLabels, &template.ObjectMeta)
-	workloadcommon.SetKaiwoSystemLabels(labelContext, &template.ObjectMeta)
+	common.CopyLabels(kaiwoCommonMetaSpec.PodTemplateSpecLabels, &template.ObjectMeta)
+	common.SetKaiwoSystemLabels(labelContext, &template.ObjectMeta)
 
 	// Make sure there is an image set for each container
 	// init containers are not included, as they are assumed to always be user given
@@ -251,6 +251,29 @@ func adjustResourceRequestsAndLimits(gpuVendor string, gpuCount int, replicas in
 	// Append to existing environment variables
 	podTemplateSpec.Spec.Containers[0].Env = append(podTemplateSpec.Spec.Containers[0].Env, envVarsToAppend...)
 
+	// Check all containers for any GPU resource requests
+	addTaints := strings.ToLower(baseutils.GetEnv("ADD_TAINTS_TO_GPU_NODES", "true")) == "true"
+	if addTaints {
+		for _, container := range podTemplateSpec.Spec.Containers {
+			requests := container.Resources.Requests
+			if requests != nil {
+				if _, ok := requests[corev1.ResourceName("nvidia.com/gpu")]; ok {
+					goto AddToleration
+				}
+				if _, ok := requests[corev1.ResourceName("amd.com/gpu")]; ok {
+					goto AddToleration
+				}
+			}
+		}
+	}
+	return nil
+
+AddToleration:
+	podTemplateSpec.Spec.Tolerations = append(podTemplateSpec.Spec.Tolerations, corev1.Toleration{
+		Key:      common.DefaultGPUTaintKey,
+		Operator: corev1.TolerationOpExists,
+		Effect:   corev1.TaintEffectNoSchedule,
+	})
 	return nil
 }
 
@@ -330,11 +353,11 @@ func updatePodSpecStorage(podSpec *corev1.PodSpec, storageSpec v1alpha1.StorageS
 
 	// Add volumes
 	if storageSpec.Data.IsRequested() {
-		addStorageVolume(workloadcommon.DataStoragePostfix, baseutils.FormatNameWithPostfix(ownerName, workloadcommon.DataStoragePostfix))
+		addStorageVolume(common.DataStoragePostfix, baseutils.FormatNameWithPostfix(ownerName, common.DataStoragePostfix))
 	}
 
 	if storageSpec.HuggingFace.IsRequested() {
-		addStorageVolume(workloadcommon.HfStoragePostfix, baseutils.FormatNameWithPostfix(ownerName, workloadcommon.HfStoragePostfix))
+		addStorageVolume(common.HfStoragePostfix, baseutils.FormatNameWithPostfix(ownerName, common.HfStoragePostfix))
 	}
 
 	addVolumeMount := func(container *corev1.Container, name string, path string) {
@@ -355,10 +378,10 @@ func updatePodSpecStorage(podSpec *corev1.PodSpec, storageSpec v1alpha1.StorageS
 
 	addContainerInfo := func(container *corev1.Container) {
 		if storageSpec.Data.IsRequested() {
-			addVolumeMount(container, workloadcommon.DataStoragePostfix, storageSpec.Data.MountPath)
+			addVolumeMount(container, common.DataStoragePostfix, storageSpec.Data.MountPath)
 		}
 		if storageSpec.HuggingFace.IsRequested() {
-			addVolumeMount(container, workloadcommon.HfStoragePostfix, storageSpec.HuggingFace.MountPath)
+			addVolumeMount(container, common.HfStoragePostfix, storageSpec.HuggingFace.MountPath)
 			addEnvVar(container, "HF_HOME", storageSpec.HuggingFace.MountPath)
 		}
 	}
@@ -373,7 +396,7 @@ func updatePodSpecStorage(podSpec *corev1.PodSpec, storageSpec v1alpha1.StorageS
 
 func GetEarliestPodStartTime(ctx context.Context, k8sClient client.Client, name string, namespace string) *metav1.Time {
 	podList := &corev1.PodList{}
-	if err := k8sClient.List(ctx, podList, client.InNamespace(namespace), client.MatchingLabels{workloadcommon.KaiwoNameLabel: name}); err != nil {
+	if err := k8sClient.List(ctx, podList, client.InNamespace(namespace), client.MatchingLabels{common.KaiwoNameLabel: name}); err != nil {
 		return nil
 	}
 
@@ -392,7 +415,7 @@ func CheckPodStatus(ctx context.Context, k8sClient client.Client, name string, n
 	logger := log.FromContext(ctx)
 
 	podList := &corev1.PodList{}
-	err = k8sClient.List(ctx, podList, client.InNamespace(namespace), client.MatchingLabels{workloadcommon.KaiwoNameLabel: name})
+	err = k8sClient.List(ctx, podList, client.InNamespace(namespace), client.MatchingLabels{common.KaiwoNameLabel: name})
 	if err != nil {
 		logger.Error(err, "Failed to list pods for job", "KaiwoJob", name)
 		return nil, status, err
@@ -430,7 +453,7 @@ func CheckPodStatus(ctx context.Context, k8sClient client.Client, name string, n
 }
 
 func ValidateKaiwoResourceBeforeCreateOrUpdate(ctx context.Context, actual client.Object, kaiwoObjectMeta metav1.ObjectMeta) (*ctrl.Result, error) {
-	if actual == nil && kaiwoObjectMeta.Labels != nil && kaiwoObjectMeta.Labels[workloadcommon.KaiwoManagedLabel] == "true" {
+	if actual == nil && kaiwoObjectMeta.Labels != nil && kaiwoObjectMeta.Labels[common.KaiwoManagedLabel] == "true" {
 		logger := log.FromContext(ctx)
 		baseutils.Debug(logger, "Aborting reconciliation to avoid recreating a webhook-managed object")
 		return &ctrl.Result{}, nil

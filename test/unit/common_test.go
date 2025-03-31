@@ -17,7 +17,7 @@ package unit
 import (
 	"testing"
 
-	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
+	common "github.com/silogen/kaiwo/pkg/workloads/common"
 
 	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 
@@ -60,7 +60,7 @@ var _ = Describe("Workload defaults", func() {
 	replicas := 1
 	gpusPerReplica := 1
 
-	labelContext := workloadcommon.KaiwoLabelContext{
+	labelContext := common.KaiwoLabelContext{
 		User:  "test-user",
 		Type:  "test-type",
 		RunId: "test-run-id",
@@ -84,10 +84,10 @@ var _ = Describe("Workload defaults", func() {
 
 	When("a workload pod spec is being updated", func() {
 		It("sets the kaiwo system flags", func() {
-			Expect(podTemplateSpec.Labels[workloadcommon.KaiwoTypeLabel]).To(Equal(labelContext.Type))
-			Expect(podTemplateSpec.Labels[workloadcommon.KaiwoUserLabel]).To(Equal(labelContext.User))
-			Expect(podTemplateSpec.Labels[workloadcommon.KaiwoNameLabel]).To(Equal(labelContext.Name))
-			Expect(podTemplateSpec.Labels[workloadcommon.KaiwoRunIdLabel]).To(Equal(labelContext.RunId))
+			Expect(podTemplateSpec.Labels[common.KaiwoTypeLabel]).To(Equal(labelContext.Type))
+			Expect(podTemplateSpec.Labels[common.KaiwoUserLabel]).To(Equal(labelContext.User))
+			Expect(podTemplateSpec.Labels[common.KaiwoNameLabel]).To(Equal(labelContext.Name))
+			Expect(podTemplateSpec.Labels[common.KaiwoRunIdLabel]).To(Equal(labelContext.RunId))
 		})
 
 		It("keeps any existing flags", func() {

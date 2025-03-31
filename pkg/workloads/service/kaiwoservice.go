@@ -33,20 +33,19 @@ import (
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	corev1 "k8s.io/api/core/v1"
 
-	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
+	common "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 type KaiwoServiceReconciler struct {
-	workloadcommon.ReconcilerBase[*v1alpha1.KaiwoService]
+	common.ReconcilerBase[*v1alpha1.KaiwoService]
 
 	DownloadJobConfigMap *workloadutils.DownloadJobConfigMapReconciler
 	DownloadJob          *workloadutils.DownloadJobReconciler
-	HuggingFacePVC       *workloadcommon.StorageReconciler
-	DataPVC              *workloadcommon.StorageReconciler
-	LocalQueue           *workloadcommon.LocalQueueReconciler
+	HuggingFacePVC       *common.StorageReconciler
+	DataPVC              *common.StorageReconciler
+	LocalQueue           *common.LocalQueueReconciler
 
 	DeploymentReconciler *DeploymentReconciler
 	RayServiceReconciler *RayServiceReconciler
@@ -57,7 +56,7 @@ func NewKaiwoServiceReconciler(kaiwoService *v1alpha1.KaiwoService) KaiwoService
 
 	objectKey := client.ObjectKeyFromObject(kaiwoService)
 	r := KaiwoServiceReconciler{
-		ReconcilerBase: workloadcommon.ReconcilerBase[*v1alpha1.KaiwoService]{
+		ReconcilerBase: common.ReconcilerBase[*v1alpha1.KaiwoService]{
 			Object:    kaiwoService,
 			ObjectKey: objectKey,
 		},
@@ -67,9 +66,9 @@ func NewKaiwoServiceReconciler(kaiwoService *v1alpha1.KaiwoService) KaiwoService
 	storageSpec := kaiwoService.Spec.Storage
 	if storageSpec != nil && storageSpec.StorageEnabled {
 		if storageSpec.HasData() {
-			r.DataPVC = workloadcommon.NewStorageReconciler(
+			r.DataPVC = common.NewStorageReconciler(
 				client.ObjectKey{
-					Name:      baseutils.FormatNameWithPostfix(objectKey.Name, workloadcommon.DataStoragePostfix),
+					Name:      baseutils.FormatNameWithPostfix(objectKey.Name, common.DataStoragePostfix),
 					Namespace: objectKey.Namespace,
 				},
 				storageSpec.AccessMode,
@@ -78,9 +77,9 @@ func NewKaiwoServiceReconciler(kaiwoService *v1alpha1.KaiwoService) KaiwoService
 			)
 		}
 		if storageSpec.HasHfDownloads() {
-			r.HuggingFacePVC = workloadcommon.NewStorageReconciler(
+			r.HuggingFacePVC = common.NewStorageReconciler(
 				client.ObjectKey{
-					Name:      baseutils.FormatNameWithPostfix(objectKey.Name, workloadcommon.HfStoragePostfix),
+					Name:      baseutils.FormatNameWithPostfix(objectKey.Name, common.HfStoragePostfix),
 					Namespace: objectKey.Namespace,
 				},
 				storageSpec.AccessMode,
@@ -100,9 +99,9 @@ func NewKaiwoServiceReconciler(kaiwoService *v1alpha1.KaiwoService) KaiwoService
 
 	clusterQueue := kaiwoService.Spec.ClusterQueue
 	if clusterQueue == "" {
-		clusterQueue = controllerutils.DefaultClusterQueueName
+		clusterQueue = common.DefaultClusterQueueName
 	}
-	r.LocalQueue = workloadcommon.NewLocalQueueReconciler(
+	r.LocalQueue = common.NewLocalQueueReconciler(
 		client.ObjectKey{Namespace: objectKey.Namespace, Name: clusterQueue},
 	)
 
@@ -136,9 +135,9 @@ func sanitize(kaiwoService *v1alpha1.KaiwoService) {
 	}
 
 	if kaiwoService.Spec.ClusterQueue == "" {
-		kaiwoService.Labels[workloadcommon.QueueLabel] = controllerutils.DefaultKaiwoQueueConfigName
+		kaiwoService.Labels[common.QueueLabel] = common.DefaultKaiwoQueueConfigName
 	} else {
-		kaiwoService.Labels[workloadcommon.QueueLabel] = kaiwoService.Spec.ClusterQueue
+		kaiwoService.Labels[common.QueueLabel] = kaiwoService.Spec.ClusterQueue
 	}
 }
 
@@ -229,7 +228,7 @@ func (r *KaiwoServiceReconciler) Reconcile(
 	if reflect.DeepEqual(previousStatus, status) {
 		if status.Status == v1alpha1.StatusPending {
 			logger.Info("Still pending, requeuing...")
-			return ctrl.Result{RequeueAfter: workloadcommon.DefaultRequeueDuration}, nil, nil
+			return ctrl.Result{RequeueAfter: common.DefaultRequeueDuration}, nil, nil
 		}
 		return ctrl.Result{}, nil, nil
 	}

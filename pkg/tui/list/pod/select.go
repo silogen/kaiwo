@@ -22,7 +22,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	cliutils "github.com/silogen/kaiwo/pkg/cli/utils"
-	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
+	common "github.com/silogen/kaiwo/pkg/workloads/common"
 
 	"github.com/silogen/kaiwo/pkg/k8s"
 	tuicomponents "github.com/silogen/kaiwo/pkg/tui/components"
@@ -38,7 +38,7 @@ var containerSelectColumns = []string{
 
 // ChoosePodAndContainer allows the User to choose the pod and the container they want to interact with
 // predicates define an optional list of predicates that must be matched in order to include the pod in the list
-func ChoosePodAndContainer(ctx context.Context, clients k8s.KubernetesClients, reference workloadcommon.KaiwoWorkload, predicates ...cliutils.PodSelectionPredicate) (string, string, error, bool) {
+func ChoosePodAndContainer(ctx context.Context, clients k8s.KubernetesClients, reference common.KaiwoWorkload, predicates ...cliutils.PodSelectionPredicate) (string, string, error, bool) {
 	state := &tuicomponents.RunState{
 		Workload:               reference,
 		PodSelectionPredicates: predicates,

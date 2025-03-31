@@ -39,7 +39,7 @@ import (
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
+	common "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 func GetDefaultRayServiceSpec(dangerous bool, resourceRequirements v1.ResourceRequirements) rayv1.RayServiceSpec {
@@ -49,13 +49,13 @@ func GetDefaultRayServiceSpec(dangerous bool, resourceRequirements v1.ResourceRe
 }
 
 type RayServiceReconciler struct {
-	workloadcommon.ResourceReconcilerBase[*appwrapperv1beta2.AppWrapper]
+	common.ResourceReconcilerBase[*appwrapperv1beta2.AppWrapper]
 	KaiwoService *v1alpha1.KaiwoService
 }
 
 func NewRayServiceReconciler(kaiwoService *v1alpha1.KaiwoService) *RayServiceReconciler {
 	r := &RayServiceReconciler{
-		ResourceReconcilerBase: workloadcommon.ResourceReconcilerBase[*appwrapperv1beta2.AppWrapper]{
+		ResourceReconcilerBase: common.ResourceReconcilerBase[*appwrapperv1beta2.AppWrapper]{
 			ObjectKey: client.ObjectKeyFromObject(kaiwoService),
 		},
 		KaiwoService: kaiwoService,
@@ -101,7 +101,7 @@ func (r *RayServiceReconciler) Build(ctx context.Context, k8sClient client.Clien
 		)
 	}
 
-	labelContext := workloadcommon.GetKaiwoLabelContext(r.KaiwoService)
+	labelContext := common.GetKaiwoLabelContext(r.KaiwoService)
 
 	replicas := baseutils.ValueOrDefault(spec.Replicas)
 	gpusPerReplica := spec.GpusPerReplica
@@ -182,8 +182,8 @@ func (r *RayServiceReconciler) Build(ctx context.Context, k8sClient client.Clien
 		Spec: rayServiceSpec,
 	}
 
-	workloadcommon.CopyLabels(r.KaiwoService.GetLabels(), &rayService.ObjectMeta)
-	workloadcommon.SetKaiwoSystemLabels(labelContext, &rayService.ObjectMeta)
+	common.CopyLabels(r.KaiwoService.GetLabels(), &rayService.ObjectMeta)
+	common.SetKaiwoSystemLabels(labelContext, &rayService.ObjectMeta)
 
 	rayServiceSpecBytes, err := json.Marshal(rayServiceSpec)
 	if err != nil {
@@ -195,7 +195,7 @@ func (r *RayServiceReconciler) Build(ctx context.Context, k8sClient client.Clien
 			Name:      r.KaiwoService.Name,
 			Namespace: r.KaiwoService.Namespace,
 			Labels: map[string]string{
-				workloadcommon.QueueLabel: r.KaiwoService.Labels[workloadcommon.QueueLabel],
+				common.QueueLabel: r.KaiwoService.Labels[common.QueueLabel],
 			},
 		},
 		Spec: appwrapperv1beta2.AppWrapperSpec{

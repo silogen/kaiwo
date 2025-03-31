@@ -24,7 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
+	common "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 // KaiwoServiceSpec defines the desired state of KaiwoService.
@@ -111,7 +111,7 @@ func init() {
 func (svc *KaiwoService) GetPods(ctx context.Context, k8sClient client.Client) ([]corev1.Pod, error) {
 	podList := &corev1.PodList{}
 	if err := k8sClient.List(ctx, podList, client.InNamespace(svc.Namespace), client.MatchingLabels{
-		workloadcommon.KaiwoRunIdLabel: string(svc.UID),
+		common.KaiwoRunIdLabel: string(svc.UID),
 	}); err != nil {
 		return nil, fmt.Errorf("failed to list pods: %w", err)
 	}

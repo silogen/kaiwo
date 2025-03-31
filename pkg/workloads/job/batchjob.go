@@ -31,7 +31,7 @@ import (
 
 	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
+	common "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 const (
@@ -47,13 +47,13 @@ func GetDefaultJobSpec(dangerous bool, resourceRequirements corev1.ResourceRequi
 }
 
 type BatchJobReconciler struct {
-	workloadcommon.ResourceReconcilerBase[*batchv1.Job]
+	common.ResourceReconcilerBase[*batchv1.Job]
 	KaiwoJob *v1alpha1.KaiwoJob
 }
 
 func NewBatchJobReconciler(kaiwoJob *v1alpha1.KaiwoJob) *BatchJobReconciler {
 	reconciler := &BatchJobReconciler{
-		ResourceReconcilerBase: workloadcommon.ResourceReconcilerBase[*batchv1.Job]{
+		ResourceReconcilerBase: common.ResourceReconcilerBase[*batchv1.Job]{
 			ObjectKey: client.ObjectKeyFromObject(kaiwoJob),
 		},
 		KaiwoJob: kaiwoJob,
@@ -66,7 +66,7 @@ func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batch
 	logger := log.FromContext(ctx)
 
 	spec := r.KaiwoJob.Spec
-	labelContext := workloadcommon.GetKaiwoLabelContext(r.KaiwoJob)
+	labelContext := common.GetKaiwoLabelContext(r.KaiwoJob)
 
 	var jobSpec batchv1.JobSpec
 	jobSpec.Template.ObjectMeta.Labels = r.KaiwoJob.ObjectMeta.Labels
@@ -114,10 +114,10 @@ func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batch
 		Spec: jobSpec,
 	}
 
-	workloadcommon.CopyLabels(r.KaiwoJob.ObjectMeta.Labels, &job.ObjectMeta)
-	workloadcommon.SetKaiwoSystemLabels(labelContext, &job.ObjectMeta)
+	common.CopyLabels(r.KaiwoJob.ObjectMeta.Labels, &job.ObjectMeta)
+	common.SetKaiwoSystemLabels(labelContext, &job.ObjectMeta)
 
-	job.ObjectMeta.Labels[workloadcommon.QueueLabel] = r.KaiwoJob.Labels[workloadcommon.QueueLabel]
+	job.ObjectMeta.Labels[common.QueueLabel] = r.KaiwoJob.Labels[common.QueueLabel]
 
 	return job, nil
 }

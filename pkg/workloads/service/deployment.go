@@ -31,7 +31,7 @@ import (
 
 	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
+	common "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 func GetDefaultDeploymentSpec(dangerous bool, resourceRequirements corev1.ResourceRequirements) appsv1.DeploymentSpec {
@@ -50,13 +50,13 @@ func GetDefaultDeploymentSpec(dangerous bool, resourceRequirements corev1.Resour
 }
 
 type DeploymentReconciler struct {
-	workloadcommon.ResourceReconcilerBase[*appsv1.Deployment]
+	common.ResourceReconcilerBase[*appsv1.Deployment]
 	KaiwoService *v1alpha1.KaiwoService
 }
 
 func NewDeploymentReconciler(svc *v1alpha1.KaiwoService) *DeploymentReconciler {
 	reconciler := &DeploymentReconciler{
-		ResourceReconcilerBase: workloadcommon.ResourceReconcilerBase[*appsv1.Deployment]{
+		ResourceReconcilerBase: common.ResourceReconcilerBase[*appsv1.Deployment]{
 			ObjectKey: client.ObjectKeyFromObject(svc),
 		},
 		KaiwoService: svc,
@@ -69,7 +69,7 @@ func (r *DeploymentReconciler) Build(ctx context.Context, _ client.Client) (*app
 	logger := log.FromContext(ctx)
 
 	svcSpec := r.KaiwoService.Spec
-	labelContext := workloadcommon.GetKaiwoLabelContext(r.KaiwoService)
+	labelContext := common.GetKaiwoLabelContext(r.KaiwoService)
 
 	var depSpec appsv1.DeploymentSpec
 	var overrideDefaults bool
@@ -99,7 +99,7 @@ func (r *DeploymentReconciler) Build(ctx context.Context, _ client.Client) (*app
 	depSpec.Selector.MatchLabels["app"] = r.ObjectKey.Name
 	depSpec.Template.ObjectMeta.Labels["app"] = r.ObjectKey.Name
 
-	depSpec.Template.ObjectMeta.Labels[workloadcommon.QueueLabel] = r.KaiwoService.Labels[workloadcommon.QueueLabel]
+	depSpec.Template.ObjectMeta.Labels[common.QueueLabel] = r.KaiwoService.Labels[common.QueueLabel]
 
 	if svcSpec.Replicas != nil {
 		depSpec.Replicas = baseutils.Pointer(int32(*svcSpec.Replicas))
@@ -135,8 +135,8 @@ func (r *DeploymentReconciler) Build(ctx context.Context, _ client.Client) (*app
 		Spec: depSpec,
 	}
 
-	workloadcommon.CopyLabels(r.KaiwoService.GetLabels(), &dep.ObjectMeta)
-	workloadcommon.SetKaiwoSystemLabels(labelContext, &dep.ObjectMeta)
+	common.CopyLabels(r.KaiwoService.GetLabels(), &dep.ObjectMeta)
+	common.SetKaiwoSystemLabels(labelContext, &dep.ObjectMeta)
 
 	logger.Info("Building Deployment for KaiwoService", "name", r.ObjectKey.Name)
 	return dep, nil

@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"path/filepath"
 
-	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
+	common "github.com/silogen/kaiwo/pkg/workloads/common"
 
 	"gopkg.in/yaml.v3"
 	batchv1 "k8s.io/api/batch/v1"
@@ -46,13 +46,13 @@ var (
 )
 
 type DownloadJobConfigMapReconciler struct {
-	workloadcommon.ResourceReconcilerBase[*corev1.ConfigMap]
+	common.ResourceReconcilerBase[*corev1.ConfigMap]
 	StorageSpec *v1alpha1.StorageSpec
 }
 
 func NewDownloadJobConfigMapReconciler(objectKey client.ObjectKey, storageSpec *v1alpha1.StorageSpec) *DownloadJobConfigMapReconciler {
 	reconciler := &DownloadJobConfigMapReconciler{
-		ResourceReconcilerBase: workloadcommon.ResourceReconcilerBase[*corev1.ConfigMap]{
+		ResourceReconcilerBase: common.ResourceReconcilerBase[*corev1.ConfigMap]{
 			ObjectKey: objectKey,
 		},
 		StorageSpec: storageSpec,
@@ -125,7 +125,7 @@ func (r *DownloadJobConfigMapReconciler) GetEmptyObject() *corev1.ConfigMap {
 }
 
 type DownloadJobReconciler struct {
-	workloadcommon.ResourceReconcilerBase[*batchv1.Job]
+	common.ResourceReconcilerBase[*batchv1.Job]
 	StorageSpec *v1alpha1.StorageSpec
 	PvcBaseName string
 	UserEnvVars []corev1.EnvVar
@@ -133,7 +133,7 @@ type DownloadJobReconciler struct {
 
 func NewDownloadJobReconciler(objectKey client.ObjectKey, storageSpec *v1alpha1.StorageSpec, pvcBaseName string, userEnvVars []corev1.EnvVar) *DownloadJobReconciler {
 	reconciler := &DownloadJobReconciler{
-		ResourceReconcilerBase: workloadcommon.ResourceReconcilerBase[*batchv1.Job]{
+		ResourceReconcilerBase: common.ResourceReconcilerBase[*batchv1.Job]{
 			ObjectKey: objectKey,
 		},
 		StorageSpec: storageSpec,
@@ -179,7 +179,7 @@ func (r *DownloadJobReconciler) Build(_ context.Context, _ client.Client) (*batc
 			Name: "data",
 			VolumeSource: corev1.VolumeSource{
 				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-					ClaimName: baseutils.FormatNameWithPostfix(r.PvcBaseName, workloadcommon.DataStoragePostfix),
+					ClaimName: baseutils.FormatNameWithPostfix(r.PvcBaseName, common.DataStoragePostfix),
 				},
 			},
 		}
@@ -257,7 +257,7 @@ func (r *DownloadJobReconciler) Build(_ context.Context, _ client.Client) (*batc
 			Name: "hf",
 			VolumeSource: corev1.VolumeSource{
 				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-					ClaimName: baseutils.FormatNameWithPostfix(r.PvcBaseName, workloadcommon.HfStoragePostfix),
+					ClaimName: baseutils.FormatNameWithPostfix(r.PvcBaseName, common.HfStoragePostfix),
 				},
 			},
 		}
@@ -279,7 +279,7 @@ func (r *DownloadJobReconciler) Build(_ context.Context, _ client.Client) (*batc
 			Name:      r.ObjectKey.Name,
 			Namespace: r.ObjectKey.Namespace,
 			Labels: map[string]string{
-				workloadcommon.KaiwoTypeLabel: KaiwoDownloadTypeLabelValue,
+				common.KaiwoTypeLabel: KaiwoDownloadTypeLabelValue,
 			},
 		},
 		Spec: batchv1.JobSpec{
@@ -342,5 +342,5 @@ func (r *DownloadJobReconciler) ShouldContinue(ctx context.Context, actual *batc
 	}
 
 	// Requeue after some time to check again if the job has completed
-	return &ctrl.Result{RequeueAfter: workloadcommon.DefaultRequeueDuration}
+	return &ctrl.Result{RequeueAfter: common.DefaultRequeueDuration}
 }

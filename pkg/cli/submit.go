@@ -30,9 +30,9 @@ import (
 	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 	cliutils "github.com/silogen/kaiwo/pkg/cli/utils"
 	k8sUtils "github.com/silogen/kaiwo/pkg/k8s"
+	common "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 var (
@@ -209,7 +209,7 @@ func promptUserForConfig() (bool, error) {
 		return false, nil
 	}
 
-	queueValue := controllerutils.DefaultKaiwoQueueConfigName
+	queueValue := common.DefaultKaiwoQueueConfigName
 	userEmail := ""
 
 	for {

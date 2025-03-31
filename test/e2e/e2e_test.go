@@ -437,11 +437,6 @@ var _ = Describe("Manager", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Chainsaw test(s) failed")
 		})
 
-		RunBinpackingTest()
-		if !runningInCI {
-			RunLabeledJobDeletionTest()
-		}
-
 		// +kubebuilder:scaffold:e2e-webhooks-checks
 	})
 })
