@@ -33,6 +33,7 @@ import (
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	corev1 "k8s.io/api/core/v1"
 
+	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 	common "github.com/silogen/kaiwo/pkg/workloads/common"
@@ -155,6 +156,12 @@ func (r *KaiwoServiceReconciler) Reconcile(
 	storageSpec := svc.Spec.Storage
 	var downloadJobResult *ctrl.Result
 	var downloadJob *batchv1.Job
+
+	if k8sClient != nil {
+		if err := controllerutils.EnsureNamespaceKueueManaged(ctx, k8sClient, r.ObjectKey.Namespace); err != nil {
+			return ctrl.Result{}, nil, fmt.Errorf("failed to ensure namespace is Kueue managed: %w", err)
+		}
+	}
 
 	if storageSpec != nil && storageSpec.StorageEnabled {
 		if storageSpec.HasData() {

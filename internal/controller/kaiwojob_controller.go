@@ -39,7 +39,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
 
-	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	workloadjob "github.com/silogen/kaiwo/pkg/workloads/job"
 )
@@ -58,10 +57,6 @@ type KaiwoJobReconciler struct {
 func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 	baseutils.Debug(logger, "Running reconciliation")
-
-	if err := controllerutils.EnsureNamespaceKueueManaged(ctx, r.Client, req.Namespace); err != nil {
-		return ctrl.Result{}, err
-	}
 
 	// Fetch the KaiwoJob instance
 	var kaiwoJob v1alpha1.KaiwoJob
