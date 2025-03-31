@@ -37,13 +37,9 @@ import (
 )
 
 var (
-	DefaultKaiwoQueueConfigName = baseutils.GetEnv("DEFAULT_KAIWO_QUEUE_CONFIG_NAME", "kaiwo")
-	DefaultClusterQueueName     = baseutils.GetEnv("DEFAULT_CLUSTER_QUEUE_NAME", "kaiwo")
-	DefaultNodePoolLabel        = "kaiwo/nodepool"
-	DefaultGPUTaintKey          = baseutils.GetEnv("DEFAULT_GPU_TAINT_KEY", "kaiwo.silogen.ai/gpu")
+	excludeMasterNodes   = baseutils.GetEnv("EXCLUDE_MASTER_NODES_FROM_NODE_POOLS", "false")
+	DefaultNodePoolLabel = "kaiwo/nodepool"
 )
-
-var excludeMasterNodes = baseutils.GetEnv("EXCLUDE_MASTER_NODES_FROM_NODE_POOLS", "false")
 
 func EnsureNamespaceKueueManaged(ctx context.Context, k8sClient client.Client, namespaceName string) error {
 	logger := log.FromContext(ctx)
@@ -198,9 +194,12 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]v1alp
 			},
 		}
 
-		if addTaints && !strings.HasPrefix(flavorName, "cpu-only") {
-			flavor.Tolerations = []corev1.Toleration{GPUToleration}
-		}
+		// TODO: Look into why automatic scheduling is not working
+		// At the moment, we are adding toleration to pod spec ourselves
+		// https://kueue.sigs.k8s.io/docs/concepts/resource_flavor/#resourceflavor-tolerations-for-automatic-scheduling
+		// if addTaints && !strings.HasPrefix(flavorName, "cpu-only") {
+		// 	flavor.Tolerations = []corev1.Toleration{GPUToleration}
+		// }
 
 		resourceFlavors = append(resourceFlavors, flavor)
 

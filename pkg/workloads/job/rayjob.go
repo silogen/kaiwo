@@ -26,7 +26,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 
-	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
+	common "github.com/silogen/kaiwo/pkg/workloads/common"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -50,13 +50,13 @@ func GetDefaultRayJobSpec(dangerous bool, resourceRequirements v1.ResourceRequir
 }
 
 type RayJobReconciler struct {
-	workloadcommon.ResourceReconcilerBase[*rayv1.RayJob]
+	common.ResourceReconcilerBase[*rayv1.RayJob]
 	KaiwoJob *v1alpha1.KaiwoJob
 }
 
 func NewRayJobReconciler(kaiwoJob *v1alpha1.KaiwoJob) *RayJobReconciler {
 	reconciler := &RayJobReconciler{
-		ResourceReconcilerBase: workloadcommon.ResourceReconcilerBase[*rayv1.RayJob]{
+		ResourceReconcilerBase: common.ResourceReconcilerBase[*rayv1.RayJob]{
 			ObjectKey: client.ObjectKeyFromObject(kaiwoJob),
 		},
 		KaiwoJob: kaiwoJob,
@@ -101,7 +101,7 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 		}, true)
 	}
 
-	labelContext := workloadcommon.GetKaiwoLabelContext(r.KaiwoJob)
+	labelContext := common.GetKaiwoLabelContext(r.KaiwoJob)
 
 	replicas := baseutils.ValueOrDefault(spec.Replicas)
 	gpusPerReplica := spec.GpusPerReplica
@@ -166,10 +166,10 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 		Spec: rayJobSpec,
 	}
 
-	workloadcommon.CopyLabels(r.KaiwoJob.ObjectMeta.Labels, &rayJob.ObjectMeta)
-	workloadcommon.SetKaiwoSystemLabels(labelContext, &rayJob.ObjectMeta)
+	common.CopyLabels(r.KaiwoJob.ObjectMeta.Labels, &rayJob.ObjectMeta)
+	common.SetKaiwoSystemLabels(labelContext, &rayJob.ObjectMeta)
 
-	rayJob.ObjectMeta.Labels[workloadcommon.QueueLabel] = r.KaiwoJob.Labels[workloadcommon.QueueLabel]
+	rayJob.ObjectMeta.Labels[common.QueueLabel] = r.KaiwoJob.Labels[common.QueueLabel]
 
 	return rayJob, nil
 }

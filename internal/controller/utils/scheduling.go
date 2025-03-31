@@ -28,6 +28,8 @@ import (
 	klog "k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	common "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 const (
@@ -42,13 +44,13 @@ type NodeResourceInfo struct {
 }
 
 var GPUTaint = corev1.Taint{
-	Key:    DefaultGPUTaintKey,
+	Key:    common.DefaultGPUTaintKey,
 	Value:  "true",
 	Effect: corev1.TaintEffectNoSchedule,
 }
 
 var GPUToleration = corev1.Toleration{
-	Key:      DefaultGPUTaintKey,
+	Key:      common.DefaultGPUTaintKey,
 	Operator: corev1.TolerationOpExists,
 	Effect:   corev1.TaintEffectNoSchedule,
 }

@@ -23,7 +23,7 @@ import (
 
 	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 
-	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
+	common "github.com/silogen/kaiwo/pkg/workloads/common"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 
@@ -124,7 +124,7 @@ func mapJobToKaiwoJob(obj client.Object) []reconcile.Request {
 
 	// If the job is a Download job, fetch the owning kaiwo job name
 	name := job.Name
-	if value, ok := job.Labels[workloadcommon.KaiwoTypeLabel]; ok && value == workloadutils.KaiwoDownloadTypeLabelValue {
+	if value, ok := job.Labels[common.KaiwoTypeLabel]; ok && value == workloadutils.KaiwoDownloadTypeLabelValue {
 		name = strings.TrimSuffix(name, "-download")
 	}
 

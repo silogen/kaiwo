@@ -27,10 +27,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
+	common "github.com/silogen/kaiwo/pkg/workloads/common"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -38,12 +37,12 @@ import (
 )
 
 type KaiwoJobReconciler struct {
-	workloadcommon.ReconcilerBase[*v1alpha1.KaiwoJob]
+	common.ReconcilerBase[*v1alpha1.KaiwoJob]
 	DownloadJobConfigMap *workloadutils.DownloadJobConfigMapReconciler
 	DownloadJob          *workloadutils.DownloadJobReconciler
-	HuggingFacePVC       *workloadcommon.StorageReconciler
-	DataPVC              *workloadcommon.StorageReconciler
-	LocalQueue           *workloadcommon.LocalQueueReconciler
+	HuggingFacePVC       *common.StorageReconciler
+	DataPVC              *common.StorageReconciler
+	LocalQueue           *common.LocalQueueReconciler
 	BatchJob             *BatchJobReconciler
 	RayJob               *RayJobReconciler
 }
@@ -54,7 +53,7 @@ func NewKaiwoJobReconciler(kaiwoJob *v1alpha1.KaiwoJob) KaiwoJobReconciler {
 	objectKey := client.ObjectKeyFromObject(kaiwoJob)
 
 	reconciler := KaiwoJobReconciler{
-		ReconcilerBase: workloadcommon.ReconcilerBase[*v1alpha1.KaiwoJob]{
+		ReconcilerBase: common.ReconcilerBase[*v1alpha1.KaiwoJob]{
 			Object:    kaiwoJob,
 			ObjectKey: objectKey,
 		},
@@ -65,9 +64,9 @@ func NewKaiwoJobReconciler(kaiwoJob *v1alpha1.KaiwoJob) KaiwoJobReconciler {
 
 	if storageSpec != nil && storageSpec.StorageEnabled {
 		if storageSpec.HasData() {
-			reconciler.DataPVC = workloadcommon.NewStorageReconciler(
+			reconciler.DataPVC = common.NewStorageReconciler(
 				client.ObjectKey{
-					Name:      baseutils.FormatNameWithPostfix(objectKey.Name, workloadcommon.DataStoragePostfix),
+					Name:      baseutils.FormatNameWithPostfix(objectKey.Name, common.DataStoragePostfix),
 					Namespace: objectKey.Namespace,
 				},
 				storageSpec.AccessMode,
@@ -76,9 +75,9 @@ func NewKaiwoJobReconciler(kaiwoJob *v1alpha1.KaiwoJob) KaiwoJobReconciler {
 			)
 		}
 		if storageSpec.HasHfDownloads() {
-			reconciler.HuggingFacePVC = workloadcommon.NewStorageReconciler(
+			reconciler.HuggingFacePVC = common.NewStorageReconciler(
 				client.ObjectKey{
-					Name:      baseutils.FormatNameWithPostfix(objectKey.Name, workloadcommon.HfStoragePostfix),
+					Name:      baseutils.FormatNameWithPostfix(objectKey.Name, common.HfStoragePostfix),
 					Namespace: objectKey.Namespace,
 				},
 				storageSpec.AccessMode,
@@ -98,9 +97,9 @@ func NewKaiwoJobReconciler(kaiwoJob *v1alpha1.KaiwoJob) KaiwoJobReconciler {
 
 	clusterQueue := kaiwoJob.Spec.ClusterQueue
 	if clusterQueue == "" {
-		clusterQueue = controllerutils.DefaultClusterQueueName
+		clusterQueue = common.DefaultClusterQueueName
 	}
-	reconciler.LocalQueue = workloadcommon.NewLocalQueueReconciler(client.ObjectKey{Namespace: objectKey.Namespace, Name: clusterQueue})
+	reconciler.LocalQueue = common.NewLocalQueueReconciler(client.ObjectKey{Namespace: objectKey.Namespace, Name: clusterQueue})
 
 	if kaiwoJob.Spec.IsBatchJob() {
 		reconciler.BatchJob = NewBatchJobReconciler(kaiwoJob)
@@ -134,9 +133,9 @@ func sanitize(kaiwoJob *v1alpha1.KaiwoJob) {
 	}
 
 	if kaiwoJob.Spec.ClusterQueue == "" {
-		kaiwoJob.Labels[workloadcommon.QueueLabel] = controllerutils.DefaultClusterQueueName
+		kaiwoJob.Labels[common.QueueLabel] = common.DefaultClusterQueueName
 	} else {
-		kaiwoJob.Labels[workloadcommon.QueueLabel] = kaiwoJob.Spec.ClusterQueue
+		kaiwoJob.Labels[common.QueueLabel] = kaiwoJob.Spec.ClusterQueue
 	}
 }
 
@@ -229,7 +228,7 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, k8sClient client.Cli
 	if reflect.DeepEqual(previousStatus, status) {
 		if status.Status == v1alpha1.StatusPending {
 			logger.Info("Still pending, requeuing...")
-			return ctrl.Result{RequeueAfter: workloadcommon.DefaultRequeueDuration}, nil, nil
+			return ctrl.Result{RequeueAfter: common.DefaultRequeueDuration}, nil, nil
 		}
 		return ctrl.Result{}, nil, nil
 	}

@@ -25,7 +25,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	workloadcommon "github.com/silogen/kaiwo/pkg/workloads/common"
+	common "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 // KaiwoJobSpec defines the desired state of KaiwoJob.
@@ -104,7 +104,7 @@ func (job *KaiwoJob) GetType() string {
 func (job *KaiwoJob) GetPods(ctx context.Context, k8sClient client.Client) ([]corev1.Pod, error) {
 	podList := &corev1.PodList{}
 	if err := k8sClient.List(ctx, podList, client.InNamespace(job.Namespace), client.MatchingLabels{
-		workloadcommon.KaiwoRunIdLabel: string(job.UID),
+		common.KaiwoRunIdLabel: string(job.UID),
 	}); err != nil {
 		return nil, fmt.Errorf("failed to list pods: %w", err)
 	}
