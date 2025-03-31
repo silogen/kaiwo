@@ -55,6 +55,8 @@ You can list currently running workloads by running `kaiwo manage [flags]`. This
 * Delete the workload
 * List the workload logs
 * Port forward to the workload
+* Run a command within a workload container
+* Monitor a workload pod
 
 By default, only workloads that you have submitted are shown. You can use the following flags:
 
