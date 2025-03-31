@@ -23,10 +23,10 @@ You can install the dependencies using the convenience script
 bash depedencies/setup_dependencies.sh
 ```
 
-Then you can install the Kaiwo operator by running
+Then check the latest release [here](https://github.com/silogen/kaiwo/releases) and install Kaiwo operator by running (first replace `v.x.x.x` with the latest version):
 
 ```
-kubectl apply -f https://github.com/silogen/kaiwo/releases/download/v.0.2.0/install.yaml --server-side
+kubectl apply -f https://github.com/silogen/kaiwo/releases/download/v.x.x.x/install.yaml --server-side
 ```
 
 This method assumes you have installed a GPU operator separately.
@@ -49,7 +49,7 @@ The installation of Kaiwo CLI tool is easy as it's a single binary. The only req
 1. To install Kaiwo, download the Kaiwo CLI binary from the [Releases Page](https://github.com/silogen/kaiwo/releases).
 2. Make the binary executable and add it to your PATH
 
-To do both steps in one command for Linux (AMD64), edit `v.x.x.x` in the following and run it
+To do both steps in one command for Linux (AMD64), change `v.x.x.x` in the following to the latest version and run it
 
 ```bash
 export KAIWO_VERSION=v.x.x.x && \
