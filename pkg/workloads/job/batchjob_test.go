@@ -72,7 +72,11 @@ var _ = Describe("Batch job suite", func() {
 
 	When("the resources are specified in the kaiwo job spec", func() {
 		Context("and the job does not specify resources", func() {
-			reconciler := dryReconcileLocal(nil)
+			var reconciler KaiwoJobReconciler
+
+			BeforeEach(func() {
+				reconciler = dryReconcileLocal(nil)
+			})
 
 			It("sets all of the given resources", func() {
 				Expect(reconciler.BatchJob.Desired.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceMemory]).To(Equal((*kaiwoJobSpec.Resources).Requests[v1.ResourceMemory]))
@@ -89,34 +93,36 @@ var _ = Describe("Batch job suite", func() {
 			memoryLimit := resource.MustParse("14Gi")
 			cpuRequest := resource.MustParse("250m")
 
-			reconciler := dryReconcileLocal(&batchv1.Job{
-				Spec: batchv1.JobSpec{
-					Template: v1.PodTemplateSpec{
-						Spec: v1.PodSpec{
-							Containers: []v1.Container{
-								{
-									Resources: v1.ResourceRequirements{
-										Limits: v1.ResourceList{
-											v1.ResourceMemory: memoryLimit,
-										},
-										Requests: v1.ResourceList{
-											v1.ResourceCPU: cpuRequest,
+			BeforeEach(func() {
+				reconciler := dryReconcileLocal(&batchv1.Job{
+					Spec: batchv1.JobSpec{
+						Template: v1.PodTemplateSpec{
+							Spec: v1.PodSpec{
+								Containers: []v1.Container{
+									{
+										Resources: v1.ResourceRequirements{
+											Limits: v1.ResourceList{
+												v1.ResourceMemory: memoryLimit,
+											},
+											Requests: v1.ResourceList{
+												v1.ResourceCPU: cpuRequest,
+											},
 										},
 									},
 								},
 							},
 						},
 					},
-				},
-			})
+				})
 
-			It("sets all of the given resources", func() {
-				Expect(reconciler.BatchJob.Desired.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceMemory]).To(Equal((*kaiwoJobSpec.Resources).Requests[v1.ResourceMemory]))
-				Expect(reconciler.BatchJob.Desired.Spec.Template.Spec.Containers[0].Resources.Limits[v1.ResourceCPU]).To(Equal((*kaiwoJobSpec.Resources).Limits[v1.ResourceCPU]))
-			})
-			It("does not use defaults for values that are given in the job spec", func() {
-				Expect(reconciler.BatchJob.Desired.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]).To(Equal(cpuRequest))
-				Expect(reconciler.BatchJob.Desired.Spec.Template.Spec.Containers[0].Resources.Limits[v1.ResourceMemory]).To(Equal(memoryLimit))
+				It("sets all of the given resources", func() {
+					Expect(reconciler.BatchJob.Desired.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceMemory]).To(Equal((*kaiwoJobSpec.Resources).Requests[v1.ResourceMemory]))
+					Expect(reconciler.BatchJob.Desired.Spec.Template.Spec.Containers[0].Resources.Limits[v1.ResourceCPU]).To(Equal((*kaiwoJobSpec.Resources).Limits[v1.ResourceCPU]))
+				})
+				It("does not use defaults for values that are given in the job spec", func() {
+					Expect(reconciler.BatchJob.Desired.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]).To(Equal(cpuRequest))
+					Expect(reconciler.BatchJob.Desired.Spec.Template.Spec.Containers[0].Resources.Limits[v1.ResourceMemory]).To(Equal(memoryLimit))
+				})
 			})
 		})
 
@@ -124,39 +130,41 @@ var _ = Describe("Batch job suite", func() {
 			memoryRequest := resource.MustParse("14Gi")
 			cpuLimit := resource.MustParse("500m")
 
-			reconciler := dryReconcileLocal(&batchv1.Job{
-				Spec: batchv1.JobSpec{
-					Template: v1.PodTemplateSpec{
-						Spec: v1.PodSpec{
-							Containers: []v1.Container{
-								{
-									Resources: v1.ResourceRequirements{
-										Requests: v1.ResourceList{
-											v1.ResourceMemory: memoryRequest,
-										},
-										Limits: v1.ResourceList{
-											v1.ResourceCPU: cpuLimit,
+			BeforeEach(func() {
+				reconciler := dryReconcileLocal(&batchv1.Job{
+					Spec: batchv1.JobSpec{
+						Template: v1.PodTemplateSpec{
+							Spec: v1.PodSpec{
+								Containers: []v1.Container{
+									{
+										Resources: v1.ResourceRequirements{
+											Requests: v1.ResourceList{
+												v1.ResourceMemory: memoryRequest,
+											},
+											Limits: v1.ResourceList{
+												v1.ResourceCPU: cpuLimit,
+											},
 										},
 									},
 								},
 							},
 						},
 					},
-				},
-			})
+				})
 
-			It("does not override the resources that were set in the job spec", func() {
-				Expect(reconciler.BatchJob.Desired.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceMemory]).To(Equal(memoryRequest))
-				Expect(reconciler.BatchJob.Desired.Spec.Template.Spec.Containers[0].Resources.Limits[v1.ResourceCPU]).To(Equal(cpuLimit))
-			})
+				It("does not override the resources that were set in the job spec", func() {
+					Expect(reconciler.BatchJob.Desired.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceMemory]).To(Equal(memoryRequest))
+					Expect(reconciler.BatchJob.Desired.Spec.Template.Spec.Containers[0].Resources.Limits[v1.ResourceCPU]).To(Equal(cpuLimit))
+				})
 
-			It("values that were not set are still unset", func() {
-				fmt.Println(reconciler.BatchJob.Desired.Spec.Template.Spec.Containers[0].Resources)
-				requestedCpu := reconciler.BatchJob.Desired.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]
-				Expect(requestedCpu.Value()).To(Equal(int64(0)))
+				It("values that were not set are still unset", func() {
+					fmt.Println(reconciler.BatchJob.Desired.Spec.Template.Spec.Containers[0].Resources)
+					requestedCpu := reconciler.BatchJob.Desired.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]
+					Expect(requestedCpu.Value()).To(Equal(int64(0)))
 
-				limitedMemory := reconciler.BatchJob.Desired.Spec.Template.Spec.Containers[0].Resources.Limits[v1.ResourceMemory]
-				Expect(limitedMemory.Value()).To(Equal(int64(0)))
+					limitedMemory := reconciler.BatchJob.Desired.Spec.Template.Spec.Containers[0].Resources.Limits[v1.ResourceMemory]
+					Expect(limitedMemory.Value()).To(Equal(int64(0)))
+				})
 			})
 		})
 	})

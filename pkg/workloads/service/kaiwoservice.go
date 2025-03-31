@@ -156,6 +156,12 @@ func (r *KaiwoServiceReconciler) Reconcile(
 	var downloadJobResult *ctrl.Result
 	var downloadJob *batchv1.Job
 
+	if k8sClient != nil {
+		if err := controllerutils.EnsureNamespaceKueueManaged(ctx, k8sClient, r.ObjectKey.Namespace); err != nil {
+			return ctrl.Result{}, nil, fmt.Errorf("failed to ensure namespace is Kueue managed: %w", err)
+		}
+	}
+
 	if storageSpec != nil && storageSpec.StorageEnabled {
 		if storageSpec.HasData() {
 			dataPvc, _, err := r.DataPVC.Reconcile(ctx, k8sClient, scheme, svc, dryRun)

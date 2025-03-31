@@ -33,7 +33,6 @@ import (
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	"k8s.io/client-go/tools/record"
 
-	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 	workloadservice "github.com/silogen/kaiwo/pkg/workloads/service"
@@ -53,10 +52,6 @@ type KaiwoServiceReconciler struct {
 func (r *KaiwoServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 	baseutils.Debug(logger, "Running KaiwoService reconciliation")
-
-	if err := controllerutils.EnsureNamespaceKueueManaged(ctx, r.Client, req.Namespace); err != nil {
-		return ctrl.Result{}, err
-	}
 
 	var kaiwoService v1alpha1.KaiwoService
 	if err := r.Get(ctx, req.NamespacedName, &kaiwoService); err != nil {
