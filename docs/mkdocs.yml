@@ -8,6 +8,7 @@ theme:
   - navigation.sections
   - content.code.copy
 markdown_extensions:
+- def_list
 - pymdownx.highlight:
     anchor_linenums: true
     line_spans: __span
@@ -26,9 +27,9 @@ nav:
 - "Getting started":
   - "Installation": "getting-started/installation.md"
   - "Quickstart": "getting-started/quickstart.md"
-- "Usage guide":
-  - "CLI": "usage-guide/cli.md"
-  - "Troubleshooting": "usage-guide/troubleshooting.md"
+#- "Usage guide":
+#  - "CLI": "usage-guide/cli.md"
+#  - "Troubleshooting": "usage-guide/troubleshooting.md"
 - "Reference":
   - "CRDs": "reference/crds/kaiwo.silogen.ai.md"
-  - "Reconciliation": "reference/reconciliation.md"
+#  - "Reconciliation": "reference/reconciliation.md"

@@ -18,9 +18,9 @@ If you are interested in contributing code to the project, please follow the gui
 4. Make your changes on the new branch.
 5. Make sure your changes pass all linters and tests.
 6. Above all, make sure that example workloads are still running to `completed` status after your changes.
-5. Push your changes to your fork on GitHub.
-6. Create a pull request from your fork to the main repository.
-7. We will assign a reviewer to your pull request, who will review your changes and provide feedback.
+7. Push your changes to your fork on GitHub.
+8. Create a pull request from your fork to the main repository.
+9. We will assign a reviewer to your pull request, who will review your changes and provide feedback.
 
 ## Setting Up Your Development Environment
 
@@ -31,5 +31,3 @@ To set up your development environment, follow these steps:
 3. Install the dependencies by running `go mod tidy`.
 4. Install GolangCI-Lint by running `brew install golangci-lint`
 5. Install pre-commit hooks by running `pre-commit install`
-
-
