@@ -1,0 +1,28 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoJob
+metadata:
+  name: job-overlapping
+spec:
+  user: test@amd.com
+  resources:
+    limits:
+      cpu: 100m
+      memory: 150Mi
+    requests:
+      memory: 100Mi
+      cpu: 100m
+  job:
+    apiVersion: batch/v1
+    kind: Job
+    spec:
+      template:
+        spec:
+          containers:
+          - name: test-container
+            image: busybox
+            resources:
+              limits:
+                cpu: 125m
+              requests:
+                memory: 125Mi
+          restartPolicy: Never

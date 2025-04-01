@@ -45,7 +45,6 @@ type CLIFlags struct {
 	Queue *string
 
 	// Run without modifying resources
-	DryRun      bool
 	PrintOutput bool
 	Preview     bool
 

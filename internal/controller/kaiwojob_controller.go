@@ -78,7 +78,7 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	reconciler := workloadjob.NewKaiwoJobReconciler(&kaiwoJob)
 
-	result, _, err := reconciler.Reconcile(ctx, r.Client, r.Scheme, false)
+	result, err := reconciler.Reconcile(ctx, r.Client, r.Scheme)
 	if err != nil {
 		r.Recorder.Eventf(
 			&kaiwoJob,

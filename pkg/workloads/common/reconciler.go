@@ -39,20 +39,10 @@ type ReconcilerBase[T client.Object] struct {
 	Self      Reconciler[T]
 }
 
-func (r *ReconcilerBase[T]) GetManifests(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme) ([]client.Object, error) {
-	_, manifests, err := r.Self.Reconcile(ctx, k8sClient, scheme, true)
-	if err != nil {
-		return nil, err
-	}
-	return manifests, nil
-}
-
 // Reconciler manages the reconciliation of a Kaiwo resource (job or service)
 type Reconciler[T client.Object] interface {
-	GetManifests(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme) ([]client.Object, error)
-
 	// Reconcile runs through the reconciliation loop
-	Reconcile(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme, dryRun bool) (ctrl.Result, []client.Object, error)
+	Reconcile(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme) (ctrl.Result, error)
 }
 
 type ResourceReconcilerBase[T client.Object] struct {
@@ -79,7 +69,7 @@ func (d *ResourceReconcilerBase[T]) Update(_ context.Context, _ client.Client, d
 // Reconcile ensures that the resource exists and is in the desired state.
 // The object is first built based on the reconciler object (kaiwo job or service), and the remote object is fetched.
 // If it exists, it is updated, otherwise it is created.
-func (d *ResourceReconcilerBase[T]) Reconcile(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme, owner client.Object, dryRun bool) (actual T, result *ctrl.Result, err error) {
+func (d *ResourceReconcilerBase[T]) Reconcile(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme, owner client.Object) (actual T, result *ctrl.Result, err error) {
 	logger := log.FromContext(ctx)
 
 	var empty T // nil or default value
@@ -89,10 +79,6 @@ func (d *ResourceReconcilerBase[T]) Reconcile(ctx context.Context, k8sClient cli
 	}
 
 	d.Desired = desired
-
-	if dryRun {
-		return desired, nil, nil
-	}
 
 	gvk, err := baseutils.GetGVK(*scheme, desired)
 	if err != nil {
@@ -196,7 +182,7 @@ type ResourceReconciler[T client.Object] interface {
 	Update(ctx context.Context, k8sClient client.Client, desired *T, actual T) error
 
 	// Reconcile will build and then create
-	Reconcile(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme, owner client.Object, dryRun bool) (actual T, result *ctrl.Result, err error)
+	Reconcile(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme, owner client.Object) (actual T, result *ctrl.Result, err error)
 
 	// ShouldContinue returns a reconciliation result if there is an intermediate result to return
 	ShouldContinue(ctx context.Context, actual T) *ctrl.Result

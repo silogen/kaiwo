@@ -36,8 +36,6 @@ import (
 )
 
 var (
-	dryRun bool
-
 	queue     string
 	user      string
 	namespace string
@@ -126,7 +124,6 @@ func BuildSubmitCmd() *cobra.Command {
 			return Apply(ctx, clients.Client, &obj)
 		},
 	}
-	cmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "Run a server-side dry run without creating any actual resources")
 
 	cmd.Flags().StringVarP(&user, "user", "", "", "The user to run as")
 	cmd.Flags().StringVarP(&queue, "queue", "", "", "The cluster queue to use")

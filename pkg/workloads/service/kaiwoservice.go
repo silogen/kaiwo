@@ -146,12 +146,9 @@ func (r *KaiwoServiceReconciler) Reconcile(
 	ctx context.Context,
 	k8sClient client.Client,
 	scheme *runtime.Scheme,
-	dryRun bool,
-) (ctrl.Result, []client.Object, error) {
+) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 	svc := r.Object
-
-	var manifests []client.Object
 
 	storageSpec := svc.Spec.Storage
 	var downloadJobResult *ctrl.Result
@@ -159,91 +156,80 @@ func (r *KaiwoServiceReconciler) Reconcile(
 
 	if k8sClient != nil {
 		if err := controllerutils.EnsureNamespaceKueueManaged(ctx, k8sClient, r.ObjectKey.Namespace); err != nil {
-			return ctrl.Result{}, nil, fmt.Errorf("failed to ensure namespace is Kueue managed: %w", err)
+			return ctrl.Result{}, fmt.Errorf("failed to ensure namespace is Kueue managed: %w", err)
 		}
 	}
 
 	if storageSpec != nil && storageSpec.StorageEnabled {
 		if storageSpec.HasData() {
-			dataPvc, _, err := r.DataPVC.Reconcile(ctx, k8sClient, scheme, svc, dryRun)
+			_, _, err := r.DataPVC.Reconcile(ctx, k8sClient, scheme, svc)
 			if err != nil {
-				return ctrl.Result{}, nil, fmt.Errorf("failed to reconcile data PVC: %w", err)
+				return ctrl.Result{}, fmt.Errorf("failed to reconcile data PVC: %w", err)
 			}
-			manifests = append(manifests, dataPvc)
 		}
 
 		if storageSpec.HasHfDownloads() {
-			hfPvc, _, err := r.HuggingFacePVC.Reconcile(ctx, k8sClient, scheme, svc, dryRun)
+			_, _, err := r.HuggingFacePVC.Reconcile(ctx, k8sClient, scheme, svc)
 			if err != nil {
-				return ctrl.Result{}, nil, fmt.Errorf("failed to reconcile huggingface PVC: %w", err)
+				return ctrl.Result{}, fmt.Errorf("failed to reconcile huggingface PVC: %w", err)
 			}
-			manifests = append(manifests, hfPvc)
 		}
 
 		if storageSpec.HasDownloads() {
-			downloadJobConfigMap, _, err := r.DownloadJobConfigMap.Reconcile(ctx, k8sClient, scheme, svc, dryRun)
+			_, _, err := r.DownloadJobConfigMap.Reconcile(ctx, k8sClient, scheme, svc)
 			if err != nil {
-				return ctrl.Result{}, nil, fmt.Errorf("failed to reconcile download configmap: %w", err)
+				return ctrl.Result{}, fmt.Errorf("failed to reconcile download configmap: %w", err)
 			}
-			manifests = append(manifests, downloadJobConfigMap)
 
-			downloadJob, downloadJobResult, err = r.DownloadJob.Reconcile(ctx, k8sClient, scheme, svc, dryRun)
+			downloadJob, downloadJobResult, err = r.DownloadJob.Reconcile(ctx, k8sClient, scheme, svc)
 			if err != nil {
-				return ctrl.Result{}, nil, fmt.Errorf("failed to reconcile download job: %w", err)
+				return ctrl.Result{}, fmt.Errorf("failed to reconcile download job: %w", err)
 			}
 			if downloadJobResult != nil {
 				if downloadJobResult.Requeue || downloadJobResult.RequeueAfter > 0 {
-					return *downloadJobResult, nil, nil
+					return *downloadJobResult, nil
 				}
 			}
-			manifests = append(manifests, downloadJob)
 		}
 	}
 
 	if downloadJobResult == nil {
-		localQueue, _, err := r.LocalQueue.Reconcile(ctx, k8sClient, scheme, svc, dryRun)
+		_, _, err := r.LocalQueue.Reconcile(ctx, k8sClient, scheme, svc)
 		if err != nil {
-			return ctrl.Result{}, nil, fmt.Errorf("failed to reconcile local queue: %w", err)
+			return ctrl.Result{}, fmt.Errorf("failed to reconcile local queue: %w", err)
 		}
-		manifests = append(manifests, localQueue)
 
 		if svc.Spec.IsRayService() {
-			rayService, _, err := r.RayServiceReconciler.Reconcile(ctx, k8sClient, scheme, svc, dryRun)
+			_, _, err := r.RayServiceReconciler.Reconcile(ctx, k8sClient, scheme, svc)
 			if err != nil {
-				return ctrl.Result{}, nil, fmt.Errorf("failed to reconcile RayService: %w", err)
+				return ctrl.Result{}, fmt.Errorf("failed to reconcile RayService: %w", err)
 			}
-			manifests = append(manifests, rayService)
 		} else {
-			deployment, _, err := r.DeploymentReconciler.Reconcile(ctx, k8sClient, scheme, svc, dryRun)
+			_, _, err := r.DeploymentReconciler.Reconcile(ctx, k8sClient, scheme, svc)
 			if err != nil {
-				return ctrl.Result{}, nil, fmt.Errorf("failed to reconcile Deployment: %w", err)
+				return ctrl.Result{}, fmt.Errorf("failed to reconcile Deployment: %w", err)
 			}
-			manifests = append(manifests, deployment)
 		}
-	}
-
-	if dryRun {
-		return ctrl.Result{}, manifests, nil
 	}
 
 	previousStatus := svc.Status.DeepCopy()
 	status, err := r.GatherStatus(ctx, k8sClient, *previousStatus, downloadJob)
 	if err != nil {
-		return ctrl.Result{}, nil, fmt.Errorf("failed to gather service status: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to gather service status: %w", err)
 	}
 
 	if reflect.DeepEqual(previousStatus, status) {
 		if status.Status == v1alpha1.StatusPending {
 			logger.Info("Still pending, requeuing...")
-			return ctrl.Result{RequeueAfter: common.DefaultRequeueDuration}, nil, nil
+			return ctrl.Result{RequeueAfter: common.DefaultRequeueDuration}, nil
 		}
-		return ctrl.Result{}, nil, nil
+		return ctrl.Result{}, nil
 	}
 
 	retryAttempts := 3
 	for i := 0; i < retryAttempts; i++ {
 		if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(svc), svc); err != nil {
-			return ctrl.Result{}, nil, fmt.Errorf("failed to get KaiwoService: %w", err)
+			return ctrl.Result{}, fmt.Errorf("failed to get KaiwoService: %w", err)
 		}
 
 		svc.Status = *status
@@ -254,11 +240,11 @@ func (r *KaiwoServiceReconciler) Reconcile(
 				baseutils.Debug(logger, "Conflict error during KaiwoService update, retrying", "attempt", i+1)
 				continue
 			}
-			return ctrl.Result{}, nil, fmt.Errorf("failed to update KaiwoService status: %w", err)
+			return ctrl.Result{}, fmt.Errorf("failed to update KaiwoService status: %w", err)
 		}
-		return ctrl.Result{}, nil, nil
+		return ctrl.Result{}, nil
 	}
-	return ctrl.Result{}, nil, fmt.Errorf("failed to update KaiwoService status after retries")
+	return ctrl.Result{}, fmt.Errorf("failed to update KaiwoService status after retries")
 }
 
 func (r *KaiwoServiceReconciler) GatherStatus(

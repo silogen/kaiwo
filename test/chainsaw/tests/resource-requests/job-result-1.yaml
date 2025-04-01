@@ -1,0 +1,18 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: resource-requests-1
+spec:
+  template:
+    spec:
+      containers:
+      - name: hello-world
+        image: busybox:latest
+        resources:
+          limits:
+            cpu: "1"
+            memory: 2Gi
+          requests:
+            cpu: "1"
+            memory: 2Gi
+      restartPolicy: Never
