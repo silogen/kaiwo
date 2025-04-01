@@ -23,13 +23,25 @@ markdown_extensions:
       class: mermaid
       format: !!python/name:pymdownx.superfences.fence_code_format
 nav:
-- "Home": "index.md"
-- "Getting started":
-  - "Installation": "getting-started/installation.md"
-  - "Quickstart": "getting-started/quickstart.md"
-#- "Usage guide":
-#  - "CLI": "usage-guide/cli.md"
-#  - "Troubleshooting": "usage-guide/troubleshooting.md"
+- "Home": 
+  - "Overview": "index.md"
+  - "Main Components": "general/main-components.md"
+  - "Releases": "general/releases.md"
+  - "Support": "general/support.md"
+- "AI Scientist":
+  - "Overview": "scientist/overview.md"
+  - "Quickstart": "scientist/quickstart.md"
+  - "CLI": "scientist/cli.md"
+  - "Scheduling": "scientist/scheduling.md"
+- "Administrator":
+  - "Overview": "admin/overview.md"
+  - "Quickstart": "admin/quickstart.md"
+  - "Installation": "admin/installation.md"
+  - "Configuration": "admin/configuration.md"
+  - "Maintenance": "admin/maintenance.md"
+  - "Monitoring": "admin/monitoring.md"
+  - "Authentication & Authorization": "admin/auth.md"
+  - "Troubleshooting": "admin/troubleshooting.md"
 - "Reference":
-  - "CRDs": "reference/crds/kaiwo.silogen.ai.md"
-#  - "Reconciliation": "reference/reconciliation.md"
+  - "CRD Reference": "reference/crds/kaiwo.silogen.ai.md"
+

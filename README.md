@@ -13,20 +13,26 @@ Kubernetes-native AI Workload Orchestrator
 
 ## Description
 
-**Kaiwo** (pronunciation *"ky-voh"*) is a Kubernetes-native tool designed to optimize GPU resource utilization for AI workloads. The project is built primarily for AMD GPUs. Built on top of **Ray** and **Kueue** , Kaiwo minimizes GPU idleness and increases resource efficiency through intelligent job queueing, fair sharing of resources, guaranteed quotas and opportunistic gang scheduling.
+**Kaiwo** (pronunciation *"ky-voh"*) is a Kubernetes-native tool designed to optimize GPU resource utilization for AI workloads. Built on top of **Ray** and **Kueue** , Kaiwo minimizes GPU idleness and increases resource efficiency through intelligent job queueing, fair sharing of resources, guaranteed quotas and opportunistic gang scheduling.
 
 Kaiwo supports a wide range of AI workloads, including distributed multi-node pretraining, fine-tuning, online inference, and batch inference, with seamless integration into Kubernetes environments.
 
-Documentation can be found [here](https://silogen.github.io/kaiwo/)
+**Full documentation can be found** [here](https://silogen.github.io/kaiwo/)
+
+Kaiwo consists of two main components:
+
+- **Kaiwo CLI**: A command-line interface for submitting and managing workloads to the Kaiwo Operator.
+- **Kaiwo Operator**: A Kubernetes operator that manages the scheduling and execution of workloads on GPU nodes.
+  The Kaiwo Operator is responsible for managing the lifecycle of workloads, including scheduling, resource allocation, and monitoring. It leverages the power of Ray and Kueue to provide efficient job queueing and scheduling.
 
 ## Main Features
 
 * **GPU Utilization Optimization** :
-  * Dynamically queues workloads to reduce GPU idle time and maximize resource utilization.
+  * Kaiwo Operator dynamically queues workloads to reduce GPU idle time and maximize resource utilization.
 * **CLI Tool** :
   * Simplified workload submission using the kaiwo CLI tool
 * **Distributed Workload Scheduling** :
-  * Effortlessly schedule distributed workloads across multiple Kubernetes nodes.
+  * Effortlessly schedule distributed workloads across multiple Kubernetes nodes with Kaiwo Operator.
 * **Broad Workload Support** with pre-built templates:
   * Supports running **Kubernetes Jobs**, **RayJobs** and **RayServices**.
 * **Integration with Ray and Kueue** :
