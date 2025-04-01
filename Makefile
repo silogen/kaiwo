@@ -191,6 +191,7 @@ $(GOLANGCI_LINT): $(LOCALBIN)
 generate-crd-docs:
 	go install github.com/elastic/crd-ref-docs@latest
 	crd-ref-docs --source-path pkg/api/v1alpha1/ --renderer=markdown --output-path=docs/docs/reference/crds/kaiwo.silogen.ai.md --config docs/crd-ref-cocs-config.yaml
+	sed -i '1i---\nhide:\n  - navigation\n---\n' docs/docs/reference/crds/kaiwo.silogen.ai.md
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary
