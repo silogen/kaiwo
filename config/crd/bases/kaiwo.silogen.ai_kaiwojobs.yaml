@@ -51,11 +51,6 @@ spec:
           spec:
             description: KaiwoJobSpec defines the desired state of KaiwoJob.
             properties:
-              annotations:
-                additionalProperties:
-                  type: string
-                description: Annotations provides additional metadata for the workload.
-                type: object
               clusterQueue:
                 description: ClusterQueue is the Kueue ClusterQueue name.
                 type: string

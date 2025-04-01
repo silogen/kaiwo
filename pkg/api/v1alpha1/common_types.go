@@ -32,9 +32,6 @@ const (
 
 // CommonMetaSpec defines reusable metadata fields for workloads.
 type CommonMetaSpec struct {
-	// Annotations provides additional metadata for the workload.
-	Annotations map[string]string `json:"annotations,omitempty"`
-
 	// User specifies the owner or creator of the workload.
 	// If authentication is enabled, this must be email address which is checked against authenticated user for match.
 	User string `json:"user,omitempty"`
