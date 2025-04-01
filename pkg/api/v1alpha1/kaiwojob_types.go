@@ -32,22 +32,46 @@ import (
 type KaiwoJobSpec struct {
 	CommonMetaSpec `json:",inline"`
 
-	// ClusterQueue is the Kueue ClusterQueue name.
+	// ClusterQueue specifies the name of the Kueue `ClusterQueue` that the job should be submitted to for scheduling and resource management.
+	//
+	// This value is set as the `kueue.x-k8s.io/queue-name` label on the underlying Kubernetes Job or RayJob.
+	//
+	// If omitted, it defaults to the value specified by the `DEFAULT_CLUSTER_QUEUE_NAME` environment variable in the Kaiwo controller (typically "kaiwo").
+	//
+	// The `kaiwo submit` CLI command can override this using the `--queue` flag or the `clusterQueue` field in the `kaiwoconfig.yaml` file.
 	ClusterQueue string `json:"clusterQueue,omitempty"`
 
-	// PriorityClass specifies the Kubernetes PriorityClass for scheduling.
+	// PriorityClass specifies the name of a Kubernetes `PriorityClass` to be assigned to the job's pods. This influences the scheduling priority relative to other pods in the cluster.
 	PriorityClass string `json:"priorityClass,omitempty"`
 
-	// EntryPoint specifies the command or script executed in a Job or RayJob.
-	// Can also be defined inside Job struct as Command in the form of string array or
-	// inside RayJob struct as Entrypoint in the form of string
+	// EntryPoint defines the command or script that the primary container in the job's pod(s) should execute.
+	//
+	// It can be a multi-line string. Shell script shebangs (`#!/bin/bash`) are detected.
+	//
+	// For standard Kubernetes Jobs (`ray: false`), this populates the `command` and `args` fields of the container spec (typically `["/bin/sh", "-c", "<entrypoint_script>"]`).
+	//
+	// For RayJobs (`ray: true`), this populates the `rayJob.spec.entrypoint` field.
+	//
+	// This overrides any default command specified in the container image or the underlying `job` or `rayJob` spec sections if they are also defined.
 	EntryPoint string `json:"entrypoint,omitempty"`
 
 	// RayJob defines the RayJob configuration.
+	//
+	// If this field is present (or if `spec.ray` is `true`), Kaiwo will create a `RayJob` resource instead of a standard `batchv1.Job`.
+	//
+	// Common fields like `image`, `resources`, `gpus`, `replicas`, etc., will be merged into this spec, potentially overriding values defined here unless explicitly configured otherwise.
+	//
+	// This provides fine-grained control over the Ray cluster configuration (head/worker groups) and Ray job submission parameters.
 	// +kubebuilder:pruning:PreserveUnknownFields
 	RayJob *rayv1.RayJob `json:"rayJob,omitempty"`
 
 	// Job defines the Kubernetes Job configuration.
+	//
+	// If this field is present and `spec.ray` is `false`, Kaiwo will use this as the base for the created `batchv1.Job`.
+	//
+	// Common fields like `image`, `resources`, `gpus`, `entrypoint`, etc., will be merged into this spec, potentially overriding values defined here.
+	//
+	// This provides fine-grained control over standard Kubernetes Job parameters like `backoffLimit`, `ttlSecondsAfterFinished`, pod template details, etc.
 	// +kubebuilder:pruning:PreserveUnknownFields
 	Job *batchv1.Job `json:"job,omitempty"`
 }
@@ -62,15 +86,26 @@ func (spec *KaiwoJobSpec) IsRayJob() bool {
 
 // KaiwoJobStatus defines the observed state of KaiwoJob.
 type KaiwoJobStatus struct {
-	StartTime          *metav1.Time       `json:"startTime,omitempty"`
-	CompletionTime     *metav1.Time       `json:"completionTime,omitempty"`
-	Conditions         []metav1.Condition `json:"conditions,omitempty"`
-	Status             Status             `json:"status,omitempty"`
-	Duration           int64              `json:"duration,omitempty"`
-	ObservedGeneration int64              `json:"observedGeneration,omitempty"`
+	// StartTime records the timestamp when the first pod associated with the KaiwoJob started running.
+	StartTime *metav1.Time `json:"startTime,omitempty"`
+
+	// CompletionTime records the timestamp when the KaiwoJob finished execution (either successfully or with failure).
+	CompletionTime *metav1.Time `json:"completionTime,omitempty"`
+
+	// Conditions lists the observed conditions of the KaiwoJob resource, following standard Kubernetes conventions.
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// Status reflects the current high-level phase of the KaiwoJob lifecycle (e.g., PENDING, RUNNING, COMPLETE, FAILED).
+	Status Status `json:"status,omitempty"`
+
+	// Duration indicates the total time the job ran, calculated from StartTime to CompletionTime, in seconds.
+	Duration int64 `json:"duration,omitempty"`
+
+	// ObservedGeneration records the `.metadata.generation` of the KaiwoJob resource that was last processed by the controller.
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
-// KaiwoJob
+// KaiwoJob represents a batch workload managed by Kaiwo. It encapsulates either a standard Kubernetes Job or a RayJob, along with common metadata, storage configurations, and scheduling preferences. The Kaiwo controller reconciles this resource to create and manage the underlying workload objects.
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.status"
@@ -81,7 +116,10 @@ type KaiwoJob struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   KaiwoJobSpec   `json:"spec,omitempty"`
+	// Spec defines the desired state of the KaiwoJob, including workload type (Job/RayJob), configuration, resources, and common metadata.
+	Spec KaiwoJobSpec `json:"spec,omitempty"`
+
+	// Status reflects the most recently observed state of the KaiwoJob, including its phase, start/completion times, and conditions.
 	Status KaiwoJobStatus `json:"status,omitempty"`
 }
 
