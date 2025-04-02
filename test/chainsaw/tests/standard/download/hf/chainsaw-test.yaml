@@ -6,8 +6,7 @@ spec:
   steps:
   - try:
     - apply:
-        resource:
-          file: public-repo.yaml
+        file: public-repo.yaml
     # Check that the job is running (meaning that the download job completed successfully)
     - assert:
         resource:

@@ -18,7 +18,7 @@ spec:
     storageEnabled: true
     storageClassName: "nfs-client"
     huggingFace:
-      storageSize: "1Gi"
+      storageSize: "50Mi"
       mountPath: "/.cache/huggingface"
       preCacheRepos:
-      - repoId: ahelk/ccaligned_multilingual
+      - repoId: timm/mobilenetv3_small_100.lamb_in1k

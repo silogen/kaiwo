@@ -32288,7 +32288,6 @@ spec:
                               description: RepoID is the Hugging Face Hub repository ID (e.g., "meta-llama/Llama-2-7b-chat-hf").
                               type: string
                           required:
-                          - files
                           - repoId
                           type: object
                         type: array
