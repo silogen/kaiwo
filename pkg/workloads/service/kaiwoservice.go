@@ -136,7 +136,7 @@ func sanitize(kaiwoService *v1alpha1.KaiwoService) {
 	}
 
 	if kaiwoService.Spec.ClusterQueue == "" {
-		kaiwoService.Labels[common.QueueLabel] = common.DefaultKaiwoQueueConfigName
+		kaiwoService.Labels[common.QueueLabel] = common.DefaultClusterQueueName
 	} else {
 		kaiwoService.Labels[common.QueueLabel] = kaiwoService.Spec.ClusterQueue
 	}

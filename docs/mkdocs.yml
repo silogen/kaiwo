@@ -1,4 +1,4 @@
-site_name: Kaiwo - Kubernetes AI Workload Orchestrator
+site_name: Kaiwo - Kubernetes-native AI Workload Orchestrator
 theme:
   name: material
   features:

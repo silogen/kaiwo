@@ -66,4 +66,29 @@ In case your certificate trust store gives "untrusted" certificate errors, you c
 
 ## Configuration
 
+**Command-Line Flags:**
+
+Users configure the `kaiwo` CLI tool via a YAML file. If this is not set, kaiwo cli will prompt you to create a config file interactively. The config file can be specified via the `--config` flag or the `KAIWOCONFIG` environment variable. If neither is set, kaiwo will look for a config file in the default location.
+
+**Location Precedence:**
+
+1.  Path specified by `--config <path>` flag in `kaiwo submit`.
+2.  Path specified by the `KAIWOCONFIG` environment variable.
+3.  Default path: `~/.config/kaiwo/kaiwoconfig.yaml`.
+
+**Fields:**
+
+*   `user`: The user's identifier (typically email) to be associated with submitted workloads (sets `spec.user` and `kaiwo.silogen.ai/user` label).
+*   `clusterQueue`: The default Kueue `ClusterQueue` to submit workloads to (sets `spec.clusterQueue` and `kueue.x-k8s.io/queue-name` label).
+
+**Example:**
+
+```yaml
+# ~/.config/kaiwo/kaiwoconfig.yaml
+user: scientist@example.com
+clusterQueue: team-a-queue
+```
+
+The `kaiwo submit` command provides an interactive prompt to create this file if it's missing and user/queue information isn't provided via flags.
+
 ## Use

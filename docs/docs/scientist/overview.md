@@ -12,3 +12,5 @@ Features and Benefits to AI Scientists
 - **Monitoring and Logging**: Kaiwo offers built-in monitoring and logging features, enabling scientists to track the performance of their workloads and troubleshoot issues easily.
 - **Integration with Ray**: Kaiwo integrates seamlessly with Ray, a powerful distributed computing framework, enabling scientists to run large-scale AI workloads efficiently.
 - **Integration with Kueue**: Kaiwo uses Kueue for job queueing and scheduling, ensuring efficient management of workloads in a Kubernetes environment.
+
+To get started with Kaiwo, scientists can follow the [quickstart guides](quickstart.md). These guides cover various aspects of deploying AI workloads, including training, distributed training, inference, and distributed inference. The quickstart guides are designed to help scientists quickly understand how to use Kaiwo and get their workloads up and running on Kubernetes.

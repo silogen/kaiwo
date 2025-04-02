@@ -2,7 +2,6 @@ apiVersion: kaiwo.silogen.ai/v1alpha1
 kind: KaiwoJob
 metadata:
   name: dpo-singlenode
-  namespace: kaiwo
 spec:
   user: test@amd.com
   gpus: 4
@@ -31,4 +30,3 @@ spec:
       mountPath: "/.cache/huggingface"
       preCacheRepos:
       - repoId: Qwen/Qwen2-0.5B-Instruct
-        files: []
