@@ -4,7 +4,12 @@ Administrators configure Kaiwo primarily through the cluster-scoped `KaiwoQueueC
 
 ## KaiwoQueueConfig CRD
 
-This is the central point for managing how Kaiwo interacts with Kueue. There should typically be only **one** `KaiwoQueueConfig` resource in the cluster, named `kaiwo`. The Kaiwo operator automatically creates a default one upon startup if it doesn't exist.
+This is the central point for managing how Kaiwo interacts with Kueue. There can be only **one** `KaiwoQueueConfig` resource in the cluster, and the name must match `DEFAULT_KAIWO_QUEUE_CONFIG_NAME` (see below). The Kaiwo operator automatically creates a default one upon startup if it doesn't exist. This default queue config defines:
+
+* A single cluster queue, which applies to the `kaiwo` namespace
+* The cluster queue includes all resource flavors and the entire compute capacity of the cluster
+* A comprehensive set of resource flavors and node pools which are made up of CPU count, memory amount and GPU type/count
+* No priority classes
 
 You can edit the configuration using:
 `kubectl edit kaiwoqueueconfig kaiwo`
@@ -24,7 +29,7 @@ You can edit the configuration using:
     *   `spec`: The full Kueue `ClusterQueueSpec`. This is where you define resource quotas, cohorts, preemption policies, etc. See [Kueue ClusterQueue Documentation](https://kueue.sigs.k8s.io/docs/concepts/cluster_queue/).
         *   `resourceGroups`: Define sets of flavors and their associated quotas (`nominalQuota`). This links the queue to the available hardware defined in `resourceFlavors`.
         *   `namespaceSelector`: Controls which namespaces can use this queue (via `LocalQueue` resources).
-    *   `namespaces`: (Optional) A list of namespace names where Kaiwo should automatically create a Kueue `LocalQueue` pointing to this `ClusterQueue`.
+    *   `namespaces`: A list of namespace names where Kaiwo should automatically create a Kueue `LocalQueue` pointing to this `ClusterQueue`.
 
 *   **`workloadPriorityClasses`**: Defines Kueue `WorkloadPriorityClass` resources.
     *   Follows the standard Kueue `WorkloadPriorityClass` structure (`name`, `value`, `description`). Kaiwo ensures these exist as defined. See [Kueue Priority Documentation](https://kueue.sigs.k8s.io/docs/concepts/workload_priority_class/).
@@ -100,37 +105,14 @@ The Kaiwo operator deployment itself can be configured using environment variabl
 *   `DEFAULT_GPU_TAINT_KEY` (Default: `kaiwo.silogen.ai/gpu`): The taint key applied to GPU nodes if automatic tainting is enabled.
 *   `ADD_TAINTS_TO_GPU_NODES` (Default: `true`): If `true`, the `KaiwoQueueConfigController` will attempt to taint nodes identified as having GPUs (based on flavor discovery/definition) with the `DEFAULT_GPU_TAINT_KEY`.
 *   `EXCLUDE_MASTER_NODES_FROM_NODE_POOLS` (Default: `false`): If `true`, control-plane/master nodes are excluded during automatic `ResourceFlavor` discovery.
-*   `ENFORCE_KAIWO_ON_GPU_WORKLOADS` (Default: `false`): If `true`, the mutating admission webhook for `batchv1.Job` will automatically add the `kaiwo.silogen.ai/managed: "true"` label to any job requesting GPU resources, forcing it to be managed by Kaiwo/Kueue.
-*   `RAY_HEAD_POD_MEMORY`: (Optional) Override the default memory request/limit for Ray head pods created by Kaiwo (e.g., `8Gi`).
+*   `RAY_HEAD_POD_MEMORY`: (Optional) Override the default memory request/limit for Ray head pods created by Kaiwo (which is `16Gi`).
 *   `WEBHOOK_CERT_DIRECTORY`: Path to manually provided webhook certificates (overrides automatic management if set). See [Installation](./installation.md).
+
+!!! info "Forthcoming feature"
+    `ENFORCE_KAIWO_ON_GPU_WORKLOADS` (Default: `false`): If `true`, the mutating admission webhook for `batchv1.Job` will automatically add the `kaiwo.silogen.ai/managed: "true"` label to any job requesting GPU resources, forcing it to be managed by Kaiwo/Kueue.
 
 These are typically set in the operator's `Deployment` manifest.
 
 **Command-Line Flags:**
 
 Refer to the output of `kaiwo-operator --help` (or check `cmd/operator/main.go`) for flags controlling metrics, health probes, leader election, and certificate paths.
-
-## CLI Configuration (`kaiwoconfig.yaml`)
-
-Users configure the `kaiwo` CLI tool via a YAML file.
-
-**Location Precedence:**
-
-1.  Path specified by `--config <path>` flag in `kaiwo submit`.
-2.  Path specified by the `KAIWOCONFIG` environment variable.
-3.  Default path: `~/.config/kaiwo/kaiwoconfig.yaml`.
-
-**Fields:**
-
-*   `user`: The user's identifier (typically email) to be associated with submitted workloads (sets `spec.user` and `kaiwo.silogen.ai/user` label).
-*   `clusterQueue`: The default Kueue `ClusterQueue` to submit workloads to (sets `spec.clusterQueue` and `kueue.x-k8s.io/queue-name` label).
-
-**Example:**
-
-```yaml
-# ~/.config/kaiwo/kaiwoconfig.yaml
-user: scientist@example.com
-clusterQueue: team-a-queue
-```
-
-The `kaiwo submit` command provides an interactive prompt to create this file if it's missing and user/queue information isn't provided via flags.

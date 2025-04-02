@@ -131,6 +131,9 @@ This occurs after Kueue admits the workload but before Kubernetes schedules the 
 
 ## Developer Debugging (`kaiwo-dev`)
 
+!!! info
+    This feature is only intended for contributors
+
 The `kaiwo-dev` tool (built separately from the main CLI/operator) provides debugging utilities.
 
 *   **`kaiwo-dev debug chainsaw`**: Helps debug Kyverno Chainsaw E2E tests by collecting and correlating logs and events from a specific test namespace.
