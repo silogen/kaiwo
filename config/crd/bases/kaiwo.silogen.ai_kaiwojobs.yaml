@@ -57,7 +57,9 @@ spec:
 
                   This value is set as the `kueue.x-k8s.io/queue-name` label on the underlying Kubernetes Job or RayJob.
 
-                  If omitted, it defaults to the value specified by the `DEFAULT_CLUSTER_QUEUE_NAME` environment variable in the Kaiwo controller (typically "kaiwo").
+                  If omitted, it defaults to the value specified by the `DEFAULT_CLUSTER_QUEUE_NAME` environment variable in the Kaiwo controller (typically "kaiwo"), which is set during installation.
+
+                  Note!
                 type: string
               dangerous:
                 default: false
@@ -71,7 +73,7 @@ spec:
 
                   For standard Kubernetes Jobs (`ray: false`), this populates the `command` and `args` fields of the container spec (typically `["/bin/sh", "-c", "<entrypoint_script>"]`).
 
-                  For RayJobs (`ray: true`), this populates the `rayJob.spec.entrypoint` field.
+                  For RayJobs (`ray: true`), this populates the `rayJob.spec.entrypoint` field. For RayJobs, this must reference a Python script.
                 type: string
               env:
                 description: Env is a list of Kubernetes `EnvVar` structs. These environment variables are added to the primary workload container(s) in the generated pods. They are appended to any environment variables already defined in the underlying Job, Deployment, or Ray spec.
@@ -183,22 +185,25 @@ spec:
                   type: object
                 type: array
               gpuVendor:
-                default: AMD
-                description: GpuVendor specifies the GPU vendor (e.g., AMD, NVIDIA, etc.). See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor) for more details on how this field impacts scheduling.
+                default: amd
+                description: GpuVendor specifies the GPU vendor (e.g., amd, nvidia, etc.). See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor) for more details on how this field impacts scheduling.
                 type: string
               gpus:
                 default: 0
                 description: Gpus specifies the total number of GPUs allocated to the workload. See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor) for more details on how this field impacts scheduling.
                 type: integer
               gpus-per-replica:
-                description: GpusPerReplica specifies the number of GPUs allocated per replica. See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor) for more details on how this field impacts scheduling.
+                description: |-
+                  GpusPerReplica specifies the number of GPUs allocated per replica. See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor) for more details on how this field impacts scheduling.
+
+                  If you specify `gpusPerReplica`, you must also specify `replicas`.
                 type: integer
               image:
                 description: |-
                   Image specifies the default container image to be used for the primary workload container(s).
 
                   - If containers defined within the underlying Job, Deployment, or Ray spec do *not* specify an image, this image will be used.
-                  - If this field is also empty, a system default (e.g., `ghcr.io/silogen/rocm-ray:v0.8`) is used.
+                  - If this field is also empty, the latest tag of ghcr.io/silogen/rocm-ray is used
                 type: string
               imagePullSecrets:
                 description: ImagePullSecrets is a list of Kubernetes `LocalObjectReference` (containing just the secret `name`) referencing secrets needed to pull the container image(s). These are added to the `imagePullSecrets` field of the PodSpec for all generated pods.
@@ -31963,7 +31968,10 @@ spec:
                 properties:
                   accessMode:
                     default: ReadWriteMany
-                    description: AccessMode determines the access mode (e.g., `ReadWriteOnce`, `ReadWriteMany`, `ReadOnlyMany`) for the created PersistentVolumeClaims.
+                    description: |-
+                      AccessMode determines the access mode (e.g., `ReadWriteOnce`, `ReadWriteMany`, `ReadOnlyMany`) for the created PersistentVolumeClaims.
+
+                      In a multi-node setting, ReadWriteMany is generally required, as pods scheduled on different nodes cannot access ReadWriteOnce PVCs. This is true even when `replicas: 1` if you are using download jobs, as the download pod may get scheduled on a different pod than the main workload pod.
                     type: string
                   data:
                     description: Data configures the main data PersistentVolumeClaim and optional pre-download tasks for it.

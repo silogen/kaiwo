@@ -476,7 +476,7 @@ spec:
                       maxProperties: 10
                       type: object
                     taints:
-                      description: 'Taints specifies a list of taints associated with this flavor. Pods admitted using this flavor will automatically receive tolerations for these taints from Kueue. Example: `[{"key": "amd.com/gpu", "effect": "NoSchedule"}]`'
+                      description: Taints specifies a list of taints associated with this flavor.
                       items:
                         description: |-
                           The node this Taint is attached to has the "effect" on
