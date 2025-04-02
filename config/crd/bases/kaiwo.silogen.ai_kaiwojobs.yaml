@@ -29,7 +29,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: KaiwoJob
+        description: KaiwoJob represents a batch workload managed by Kaiwo. It encapsulates either a standard Kubernetes Job or a RayJob, along with common metadata, storage configurations, and scheduling preferences. The Kaiwo controller reconciles this resource to create and manage the underlying workload objects.
         properties:
           apiVersion:
             description: |-
@@ -49,28 +49,34 @@ spec:
           metadata:
             type: object
           spec:
-            description: KaiwoJobSpec defines the desired state of KaiwoJob.
+            description: Spec defines the desired state of the KaiwoJob, including workload type (Job/RayJob), configuration, resources, and common metadata.
             properties:
-              annotations:
-                additionalProperties:
-                  type: string
-                description: Annotations provides additional metadata for the workload.
-                type: object
               clusterQueue:
-                description: ClusterQueue is the Kueue ClusterQueue name.
+                description: |-
+                  ClusterQueue specifies the name of the Kueue `ClusterQueue` that the job should be submitted to for scheduling and resource management.
+
+                  This value is set as the `kueue.x-k8s.io/queue-name` label on the underlying Kubernetes Job or RayJob.
+
+                  If omitted, it defaults to the value specified by the `DEFAULT_CLUSTER_QUEUE_NAME` environment variable in the Kaiwo controller (typically "kaiwo"), which is set during installation.
+
+                  Note!
                 type: string
               dangerous:
                 default: false
-                description: Dangerous disables adding the default security context to the containers
+                description: 'Dangerous, if when set to `true`, Kaiwo will *not* add the default `PodSecurityContext` (which normally sets `runAsUser: 1000`, `runAsGroup: 1000`, `fsGroup: 1000`) to the generated pods. Use this only if you need to run containers as root or a different specific user and understand the security implications.'
                 type: boolean
               entrypoint:
                 description: |-
-                  EntryPoint specifies the command or script executed in a Job or RayJob.
-                  Can also be defined inside Job struct as Command in the form of string array or
-                  inside RayJob struct as Entrypoint in the form of string
+                  EntryPoint defines the command or script that the primary container in the job's pod(s) should execute.
+
+                  It can be a multi-line string. Shell script shebangs (`#!/bin/bash`) are detected.
+
+                  For standard Kubernetes Jobs (`ray: false`), this populates the `command` and `args` fields of the container spec (typically `["/bin/sh", "-c", "<entrypoint_script>"]`).
+
+                  For RayJobs (`ray: true`), this populates the `rayJob.spec.entrypoint` field. For RayJobs, this must reference a Python script.
                 type: string
               env:
-                description: Env specifies the environment variables to be passed to the container.
+                description: Env is a list of Kubernetes `EnvVar` structs. These environment variables are added to the primary workload container(s) in the generated pods. They are appended to any environment variables already defined in the underlying Job, Deployment, or Ray spec.
                 items:
                   description: EnvVar represents an environment variable present in a Container.
                   properties:
@@ -179,25 +185,28 @@ spec:
                   type: object
                 type: array
               gpuVendor:
-                default: AMD
-                description: |-
-                  GpuVendor specifies the GPU vendor (e.g., AMD, NVIDIA, etc.).
-                  Default is AMD.
+                default: amd
+                description: GpuVendor specifies the GPU vendor (e.g., amd, nvidia, etc.). See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor) for more details on how this field impacts scheduling.
                 type: string
               gpus:
                 default: 0
-                description: |-
-                  Gpus specifies the total number of GPUs allocated to the workload.
-                  Default is 0.
+                description: Gpus specifies the total number of GPUs allocated to the workload. See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor) for more details on how this field impacts scheduling.
                 type: integer
               gpus-per-replica:
-                description: GpusPerReplica specifies the number of GPUs allocated per replica.
+                description: |-
+                  GpusPerReplica specifies the number of GPUs allocated per replica. See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor) for more details on how this field impacts scheduling.
+
+                  If you specify `gpusPerReplica`, you must also specify `replicas`.
                 type: integer
               image:
-                description: Image defines the container image used for the workload.
+                description: |-
+                  Image specifies the default container image to be used for the primary workload container(s).
+
+                  - If containers defined within the underlying Job, Deployment, or Ray spec do *not* specify an image, this image will be used.
+                  - If this field is also empty, the latest tag of ghcr.io/silogen/rocm-ray is used
                 type: string
               imagePullSecrets:
-                description: ImagePullSecrets contains the list of secrets used to pull the container image.
+                description: ImagePullSecrets is a list of Kubernetes `LocalObjectReference` (containing just the secret `name`) referencing secrets needed to pull the container image(s). These are added to the `imagePullSecrets` field of the PodSpec for all generated pods.
                 items:
                   description: |-
                     LocalObjectReference contains enough information to let you locate the
@@ -216,7 +225,14 @@ spec:
                   x-kubernetes-map-type: atomic
                 type: array
               job:
-                description: Job defines the Kubernetes Job configuration.
+                description: |-
+                  Job defines the Kubernetes Job configuration.
+
+                  If this field is present and `spec.ray` is `false`, Kaiwo will use this as the base for the created `batchv1.Job`.
+
+                  Common fields like `image`, `resources`, `gpus`, `entrypoint`, etc., will be merged into this spec, potentially overriding values defined here.
+
+                  This provides fine-grained control over standard Kubernetes Job parameters like `backoffLimit`, `ttlSecondsAfterFinished`, pod template details, etc.
                 properties:
                   apiVersion:
                     description: |-
@@ -8124,18 +8140,28 @@ spec:
               podTemplateSpecLabels:
                 additionalProperties:
                   type: string
+                description: PodTemplateSpecLabels allows you to specify custom labels that will be added to the `template.metadata.labels` section of the generated Pods (within Jobs, Deployments, or RayCluster specs). Standard Kaiwo system labels (like `kaiwo.silogen.ai/user`, `kaiwo.silogen.ai/name`, etc.) are added automatically and take precedence if there are conflicts.
                 type: object
               priorityClass:
-                description: PriorityClass specifies the Kubernetes PriorityClass for scheduling.
+                description: PriorityClass specifies the name of a Kubernetes `PriorityClass` to be assigned to the job's pods. This influences the scheduling priority relative to other pods in the cluster.
                 type: string
               ray:
                 default: false
                 description: |-
                   Ray determines whether the operator should use RayCluster for workload execution.
-                  Default is false.
+                  If `true`, Kaiwo will create Ray-specific resources.
+                  If `false` (default), Kaiwo will create standard Kubernetes resources (BatchJob for `KaiwoJob`, Deployment for `KaiwoService`).
+                  This setting dictates which underlying spec (`job`/`rayJob` or `deployment`/`rayService`) is primarily used.
                 type: boolean
               rayJob:
-                description: RayJob defines the RayJob configuration.
+                description: |-
+                  RayJob defines the RayJob configuration.
+
+                  If this field is present (or if `spec.ray` is `true`), Kaiwo will create a `RayJob` resource instead of a standard `batchv1.Job`.
+
+                  Common fields like `image`, `resources`, `gpus`, `replicas`, etc., will be merged into this spec, potentially overriding values defined here unless explicitly configured otherwise.
+
+                  This provides fine-grained control over the Ray cluster configuration (head/worker groups) and Ray job submission parameters.
                 properties:
                   apiVersion:
                     description: |-
@@ -31840,13 +31866,21 @@ spec:
                 x-kubernetes-preserve-unknown-fields: true
               replicas:
                 default: 1
-                description: |-
-                  Replicas specifies the number of replicas for the workload.
-                  If greater than one, the workload must use Ray.
-                  Default is 0.
+                description: Replicas specifies the number of replicas for the workload. See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor) for more details on how this field impacts scheduling.
                 type: integer
               resources:
-                description: Resources specify the default resource requirements applied for all pods inside the workflow
+                description: |-
+                  Resources specify the default resource requirements applied for all pods inside the workflow.
+
+                  This field defines default Kubernetes `ResourceRequirements` (requests and limits for CPU,
+                  memory, ephemeral-storage) applied to *all* containers (including init containers) within
+                  the workload's pods.
+
+                  **Behavior:**
+
+                  These values act as **defaults**. If a container within the underlying Job, Deployment,
+                  or Ray spec (if provided by the user) already defines a specific request or limit
+                  (e.g.
                 properties:
                   claims:
                     description: |-
@@ -31905,59 +31939,79 @@ spec:
                     type: object
                 type: object
               secretVolumes:
-                description: SecretVolumes list the secret volumes that should be mounted
+                description: SecretVolumes allows you to mount specific keys from Kubernetes Secrets as files into the workload containers.
                 items:
+                  description: SecretVolume defines how to mount a specific key from a Kubernetes Secret into the workload's containers.
                   properties:
                     key:
+                      description: Key specifies the key within the Secret whose value should be mounted. If omitted, the entire secret might be mounted as files (depending on Kubernetes behavior).
                       type: string
                     mountPath:
+                      description: MountPath defines the directory path inside the container where the secret volume (or the `SubPath` file) should be mounted.
                       type: string
                     name:
+                      description: Name defines the name of the Kubernetes Volume that will be created. Should be unique within the pod.
                       type: string
                     secretName:
+                      description: SecretName specifies the name of the Kubernetes Secret resource to mount from.
                       type: string
                     subPath:
+                      description: SubPath defines the filename within the `MountPath` directory where the secret `Key`'s content will be placed. Useful for mounting a single secret key as a file.
                       type: string
                   type: object
                 type: array
               storage:
-                description: Storage configuration for the workload.
+                description: |-
+                  Storage configures persistent storage using Kubernetes PersistentVolumeClaims (PVCs).
+
+                  Enabling `storage.data.download` or `storage.huggingFace.preCacheRepos` will cause Kaiwo to create a temporary Kubernetes Job (the "download job") before starting the main workload. This job runs a container that performs the downloads into the respective PVCs. The main workload only starts after the download job completes successfully.
                 properties:
                   accessMode:
                     default: ReadWriteMany
-                    description: AccessMode determines the access mode for the storage
+                    description: |-
+                      AccessMode determines the access mode (e.g., `ReadWriteOnce`, `ReadWriteMany`, `ReadOnlyMany`) for the created PersistentVolumeClaims.
+
+                      In a multi-node setting, ReadWriteMany is generally required, as pods scheduled on different nodes cannot access ReadWriteOnce PVCs. This is true even when `replicas: 1` if you are using download jobs, as the download pod may get scheduled on a different pod than the main workload pod.
                     type: string
                   data:
-                    description: Data specifies the main workload PVC and optional object storage pre-downloads
+                    description: Data configures the main data PersistentVolumeClaim and optional pre-download tasks for it.
                     properties:
                       download:
-                        description: Download optional object storage pre-downloads
+                        description: Download configures optional tasks to download data from various sources into the data volume *before* the main workload starts. See `ObjectStorageDownloadSpec`.
                         properties:
                           azureBlob:
                             description: AzureBlob lists any Azure Blob Storage downloads
                             items:
+                              description: AzureBlobStorageDownloadItem defines parameters for downloading data from Azure Blob Storage.
                               properties:
                                 connectionString:
+                                  description: ConnectionString references a Kubernetes Secret containing the Azure Storage connection string. See `ValueReference`.
                                   properties:
                                     file:
-                                      description: File determines the location of the secret value mounted on the disk
+                                      description: File specifies the expected path within the download job's container where the secret value will be mounted as a file. This path is usually automatically generated by the controller based on SecretName and SecretKey.
                                       type: string
                                     secretKey:
-                                      description: SecretKey is the name of the key within the secret where the value is kept
+                                      description: SecretKey is the key within the specified Secret whose value should be used.
                                       type: string
                                     secretName:
-                                      description: SecretName is the name of the secret where the value is kept
+                                      description: SecretName is the name of the Kubernetes Secret resource containing the value.
                                       type: string
                                   type: object
                                 containers:
+                                  description: Containers lists the Azure Blob Storage containers and the specific files/folders to download from them. See `CloudDownloadBucket`.
                                   items:
+                                    description: CloudDownloadBucket represents a specific bucket (S3, GCS) or container (Azure) to download from.
                                     properties:
                                       files:
+                                        description: Files lists specific files to download from this bucket/container.
                                         items:
+                                          description: CloudDownloadFile specifies a single file within a cloud bucket/container to download.
                                           properties:
                                             path:
+                                              description: Path is the full path to the source file within the bucket/container (e.g., "models/model.bin").
                                               type: string
                                             targetPath:
+                                              description: TargetPath specifies the destination path, including the filename, relative to the data volume's mount point where the file should be saved.
                                               type: string
                                           required:
                                           - path
@@ -31965,13 +32019,18 @@ spec:
                                           type: object
                                         type: array
                                       folders:
+                                        description: Folders lists specific folders (prefixes) to download from this bucket/container.
                                         items:
+                                          description: CloudDownloadFolder specifies a folder (prefix) within a cloud bucket/container to download.
                                           properties:
                                             glob:
+                                              description: Glob provides an optional pattern (e.g., "*.jpg") to filter files within the source Path.
                                               type: string
                                             path:
+                                              description: Path is the source path (prefix) within the bucket/container (e.g., "data/images/").
                                               type: string
                                             targetPath:
+                                              description: TargetPath specifies the destination path relative to the data volume's mount point where the folder contents should be placed.
                                               type: string
                                           required:
                                           - path
@@ -31979,6 +32038,7 @@ spec:
                                           type: object
                                         type: array
                                       name:
+                                        description: Name is the name of the bucket or container.
                                         type: string
                                     required:
                                     - name
@@ -31992,28 +32052,36 @@ spec:
                           gcs:
                             description: GCS lists and Google Cloud Storage downloads
                             items:
+                              description: GCSDownloadItem defines parameters for downloading data from Google Cloud Storage.
                               properties:
                                 applicationCredentials:
+                                  description: ApplicationCredentials references a Kubernetes Secret containing the GCS service account key JSON file content. See `ValueReference`.
                                   properties:
                                     file:
-                                      description: File determines the location of the secret value mounted on the disk
+                                      description: File specifies the expected path within the download job's container where the secret value will be mounted as a file. This path is usually automatically generated by the controller based on SecretName and SecretKey.
                                       type: string
                                     secretKey:
-                                      description: SecretKey is the name of the key within the secret where the value is kept
+                                      description: SecretKey is the key within the specified Secret whose value should be used.
                                       type: string
                                     secretName:
-                                      description: SecretName is the name of the secret where the value is kept
+                                      description: SecretName is the name of the Kubernetes Secret resource containing the value.
                                       type: string
                                   type: object
                                 buckets:
+                                  description: Buckets lists the GCS buckets and the specific files/folders to download from them. See `CloudDownloadBucket`.
                                   items:
+                                    description: CloudDownloadBucket represents a specific bucket (S3, GCS) or container (Azure) to download from.
                                     properties:
                                       files:
+                                        description: Files lists specific files to download from this bucket/container.
                                         items:
+                                          description: CloudDownloadFile specifies a single file within a cloud bucket/container to download.
                                           properties:
                                             path:
+                                              description: Path is the full path to the source file within the bucket/container (e.g., "models/model.bin").
                                               type: string
                                             targetPath:
+                                              description: TargetPath specifies the destination path, including the filename, relative to the data volume's mount point where the file should be saved.
                                               type: string
                                           required:
                                           - path
@@ -32021,13 +32089,18 @@ spec:
                                           type: object
                                         type: array
                                       folders:
+                                        description: Folders lists specific folders (prefixes) to download from this bucket/container.
                                         items:
+                                          description: CloudDownloadFolder specifies a folder (prefix) within a cloud bucket/container to download.
                                           properties:
                                             glob:
+                                              description: Glob provides an optional pattern (e.g., "*.jpg") to filter files within the source Path.
                                               type: string
                                             path:
+                                              description: Path is the source path (prefix) within the bucket/container (e.g., "data/images/").
                                               type: string
                                             targetPath:
+                                              description: TargetPath specifies the destination path relative to the data volume's mount point where the folder contents should be placed.
                                               type: string
                                           required:
                                           - path
@@ -32035,6 +32108,7 @@ spec:
                                           type: object
                                         type: array
                                       name:
+                                        description: Name is the name of the bucket or container.
                                         type: string
                                     required:
                                     - name
@@ -32048,43 +32122,47 @@ spec:
                           git:
                             description: Git lists any Git downloads
                             items:
+                              description: GitDownloadItem defines parameters for cloning a Git repository or parts of it.
                               properties:
                                 branch:
-                                  description: Branch specifies the branch to use, ignored if commit is given
+                                  description: Branch specifies the branch to clone. This is ignored if `commit` is specified.
                                   type: string
                                 commit:
-                                  description: Commit specifies the commit to use, prioritized over branch
+                                  description: Commit specifies the exact commit hash to check out. This takes precedence over `branch`.
                                   type: string
                                 path:
-                                  description: Path denotes the path within the repository to copy. If not given, whole repository is copied
+                                  description: Path specifies a sub-path within the repository to copy. If omitted, the entire repository is copied.
                                   type: string
                                 repository:
+                                  description: Repository specifies the Git repository URL (e.g., "https://github.com/user/repo.git").
                                   type: string
                                 targetPath:
-                                  description: TargetPath denotes where the path is copied to, relative to the data mount directory
+                                  description: TargetPath specifies the destination path relative to the data volume's mount point (`DataStorageSpec.MountPath`) where the repository or `path` content should be copied.
                                   type: string
                                 token:
+                                  description: Token optionally references a Secret containing the Git token (or password) for authentication. See `ValueReference`.
                                   properties:
                                     file:
-                                      description: File determines the location of the secret value mounted on the disk
+                                      description: File specifies the expected path within the download job's container where the secret value will be mounted as a file. This path is usually automatically generated by the controller based on SecretName and SecretKey.
                                       type: string
                                     secretKey:
-                                      description: SecretKey is the name of the key within the secret where the value is kept
+                                      description: SecretKey is the key within the specified Secret whose value should be used.
                                       type: string
                                     secretName:
-                                      description: SecretName is the name of the secret where the value is kept
+                                      description: SecretName is the name of the Kubernetes Secret resource containing the value.
                                       type: string
                                   type: object
                                 username:
+                                  description: Username optionally references a Secret containing the Git username for authentication. See `ValueReference`.
                                   properties:
                                     file:
-                                      description: File determines the location of the secret value mounted on the disk
+                                      description: File specifies the expected path within the download job's container where the secret value will be mounted as a file. This path is usually automatically generated by the controller based on SecretName and SecretKey.
                                       type: string
                                     secretKey:
-                                      description: SecretKey is the name of the key within the secret where the value is kept
+                                      description: SecretKey is the key within the specified Secret whose value should be used.
                                       type: string
                                     secretName:
-                                      description: SecretName is the name of the secret where the value is kept
+                                      description: SecretName is the name of the Kubernetes Secret resource containing the value.
                                       type: string
                                   type: object
                               required:
@@ -32095,29 +32173,36 @@ spec:
                           s3:
                             description: S3 lists any S3 downloads
                             items:
+                              description: S3DownloadItem defines parameters for downloading data from an S3-compatible object store.
                               properties:
                                 accessKeyId:
-                                  description: AccessKeyId
+                                  description: AccessKeyId optionally references a Kubernetes Secret containing the S3 access key ID. See `ValueReference`.
                                   properties:
                                     file:
-                                      description: File determines the location of the secret value mounted on the disk
+                                      description: File specifies the expected path within the download job's container where the secret value will be mounted as a file. This path is usually automatically generated by the controller based on SecretName and SecretKey.
                                       type: string
                                     secretKey:
-                                      description: SecretKey is the name of the key within the secret where the value is kept
+                                      description: SecretKey is the key within the specified Secret whose value should be used.
                                       type: string
                                     secretName:
-                                      description: SecretName is the name of the secret where the value is kept
+                                      description: SecretName is the name of the Kubernetes Secret resource containing the value.
                                       type: string
                                   type: object
                                 buckets:
+                                  description: Buckets lists the S3 buckets and the specific files/folders to download from them. See `CloudDownloadBucket`.
                                   items:
+                                    description: CloudDownloadBucket represents a specific bucket (S3, GCS) or container (Azure) to download from.
                                     properties:
                                       files:
+                                        description: Files lists specific files to download from this bucket/container.
                                         items:
+                                          description: CloudDownloadFile specifies a single file within a cloud bucket/container to download.
                                           properties:
                                             path:
+                                              description: Path is the full path to the source file within the bucket/container (e.g., "models/model.bin").
                                               type: string
                                             targetPath:
+                                              description: TargetPath specifies the destination path, including the filename, relative to the data volume's mount point where the file should be saved.
                                               type: string
                                           required:
                                           - path
@@ -32125,13 +32210,18 @@ spec:
                                           type: object
                                         type: array
                                       folders:
+                                        description: Folders lists specific folders (prefixes) to download from this bucket/container.
                                         items:
+                                          description: CloudDownloadFolder specifies a folder (prefix) within a cloud bucket/container to download.
                                           properties:
                                             glob:
+                                              description: Glob provides an optional pattern (e.g., "*.jpg") to filter files within the source Path.
                                               type: string
                                             path:
+                                              description: Path is the source path (prefix) within the bucket/container (e.g., "data/images/").
                                               type: string
                                             targetPath:
+                                              description: TargetPath specifies the destination path relative to the data volume's mount point where the folder contents should be placed.
                                               type: string
                                           required:
                                           - path
@@ -32139,24 +32229,26 @@ spec:
                                           type: object
                                         type: array
                                       name:
+                                        description: Name is the name of the bucket or container.
                                         type: string
                                     required:
                                     - name
                                     type: object
                                   type: array
                                 endpointUrl:
-                                  description: EndpointUrl is the endpoint of the S3 API
+                                  description: EndpointUrl specifies the S3 API endpoint URL (e.g., "https://s3.us-east-1.amazonaws.com" or a MinIO endpoint).
                                   type: string
                                 secretKey:
+                                  description: SecretKey optionally references a Kubernetes Secret containing the S3 secret access key. See `ValueReference`.
                                   properties:
                                     file:
-                                      description: File determines the location of the secret value mounted on the disk
+                                      description: File specifies the expected path within the download job's container where the secret value will be mounted as a file. This path is usually automatically generated by the controller based on SecretName and SecretKey.
                                       type: string
                                     secretKey:
-                                      description: SecretKey is the name of the key within the secret where the value is kept
+                                      description: SecretKey is the key within the specified Secret whose value should be used.
                                       type: string
                                     secretName:
-                                      description: SecretName is the name of the secret where the value is kept
+                                      description: SecretName is the name of the Kubernetes Secret resource containing the value.
                                       type: string
                                   type: object
                               required:
@@ -32166,29 +32258,34 @@ spec:
                             type: array
                         type: object
                       mountPath:
-                        description: MountPath specifies where the data PVC will be mounted to in each pod
+                        default: /workload
+                        description: MountPath specifies the path inside the workload containers where the data PersistentVolumeClaim will be mounted.
                         type: string
                       storageSize:
-                        description: StorageSize specifies the amount of storage allocated to the data PVC
+                        description: StorageSize specifies the requested size for the data PersistentVolumeClaim (e.g., "100Gi", "1Ti"). If set, a PVC will be created.
                         type: string
                     type: object
                   huggingFace:
-                    description: HuggingFace specifies any hugging face models that should be cached before the workload starts
+                    description: HuggingFace configures a PersistentVolumeClaim specifically for caching Hugging Face models and datasets, with options for pre-caching.
                     properties:
                       mountPath:
+                        default: /.cache/huggingface
                         description: |-
-                          MountPath specifies where the data HF will be mounted to in each pod.
-                          This is also used to set the HF_HOME environmental variable into each container.
+                          MountPath specifies the path inside workload containers where the Hugging Face cache PVC will be mounted.
+                          This path is also automatically set as the `HF_HOME` environment variable in the containers.
                         type: string
                       preCacheRepos:
-                        description: PreCacheRepos is a list of repositories (and their files) that should be cached before the workload starts
+                        description: PreCacheRepos is a list of Hugging Face repositories to download into the cache volume *before* the main workload starts.
                         items:
+                          description: HuggingFaceDownloadItem defines parameters for pre-caching a Hugging Face repository or specific files from it.
                           properties:
                             files:
+                              description: Files is an optional list of specific files to download from the repository. If omitted, the entire repository is downloaded.
                               items:
                                 type: string
                               type: array
                             repoId:
+                              description: RepoID is the Hugging Face Hub repository ID (e.g., "meta-llama/Llama-2-7b-chat-hf").
                               type: string
                           required:
                           - files
@@ -32196,34 +32293,37 @@ spec:
                           type: object
                         type: array
                       storageSize:
-                        description: StorageSize specifies the amount of storage allocated to the HF PVC
+                        description: StorageSize specifies the requested size for the Hugging Face cache PersistentVolumeClaim (e.g., "50Gi", "200Gi"). If set, a PVC will be created.
                         type: string
                     type: object
                   storageClassName:
-                    description: StorageClassName specifies the storage class used for PVC.
+                    description: StorageClassName specifies the name of the Kubernetes `StorageClass` to use when creating PersistentVolumeClaims for `data` and `huggingFace` volumes. Must refer to an existing StorageClass in the cluster.
                     type: string
                   storageEnabled:
-                    description: StorageEnabled tells whether to enable persistent storage.
+                    description: StorageEnabled must be `true` to enable the creation of any PersistentVolumeClaims defined within this spec. If `false`, `data` and `huggingFace` sections are ignored.
                     type: boolean
                 required:
                 - accessMode
                 type: object
               user:
                 description: |-
-                  User specifies the owner or creator of the workload.
-                  If authentication is enabled, this must be email address which is checked against authenticated user for match.
+                  User specifies the owner or creator of the workload. It should typically be the user's email address. This value is primarily used for labeling (`kaiwo.silogen.ai/user`) the generated resources (like Pods, Jobs, Deployments) for identification and filtering (e.g., with `kaiwo list --user <email>`).
+
+                  In the future, if authentication is enabled, this must be the email address which is checked against authenticated user for match.
                 type: string
               version:
-                description: Version is an optional field specifying the version of the workload.
+                description: Version allows you to specify an optional version string for the workload. This can be useful for tracking different iterations or configurations of the same logical workload. It does not directly affect resource creation but serves as metadata.
                 type: string
             type: object
           status:
-            description: KaiwoJobStatus defines the observed state of KaiwoJob.
+            description: Status reflects the most recently observed state of the KaiwoJob, including its phase, start/completion times, and conditions.
             properties:
               completionTime:
+                description: CompletionTime records the timestamp when the KaiwoJob finished execution (either successfully or with failure).
                 format: date-time
                 type: string
               conditions:
+                description: Conditions lists the observed conditions of the KaiwoJob resource, following standard Kubernetes conventions.
                 items:
                   description: Condition contains details for one aspect of the current state of this API Resource.
                   properties:
@@ -32279,15 +32379,19 @@ spec:
                   type: object
                 type: array
               duration:
+                description: Duration indicates the total time the job ran, calculated from StartTime to CompletionTime, in seconds.
                 format: int64
                 type: integer
               observedGeneration:
+                description: ObservedGeneration records the `.metadata.generation` of the KaiwoJob resource that was last processed by the controller.
                 format: int64
                 type: integer
               startTime:
+                description: StartTime records the timestamp when the first pod associated with the KaiwoJob started running.
                 format: date-time
                 type: string
               status:
+                description: Status reflects the current high-level phase of the KaiwoJob lifecycle (e.g., PENDING, RUNNING, COMPLETE, FAILED).
                 type: string
             type: object
         type: object
