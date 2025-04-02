@@ -51,8 +51,8 @@ type CommonMetaSpec struct {
 	// +kubebuilder:default=0
 	Gpus int `json:"gpus,omitempty"`
 
-	// GpuVendor specifies the GPU vendor (e.g., AMD, NVIDIA, etc.). See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor) for more details on how this field impacts scheduling.
-	// +kubebuilder:default=AMD
+	// GpuVendor specifies the GPU vendor (e.g., amd, nvidia, etc.). See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor) for more details on how this field impacts scheduling.
+	// +kubebuilder:default=amd
 	GpuVendor string `json:"gpuVendor,omitempty"`
 
 	// Version allows you to specify an optional version string for the workload. This can be useful for tracking different iterations or configurations of the same logical workload. It does not directly affect resource creation but serves as metadata.
@@ -63,6 +63,8 @@ type CommonMetaSpec struct {
 	Replicas *int `json:"replicas,omitempty"`
 
 	// GpusPerReplica specifies the number of GPUs allocated per replica. See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor) for more details on how this field impacts scheduling.
+	//
+	// If you specify `gpusPerReplica`, you must also specify `replicas`.
 	GpusPerReplica int `json:"gpus-per-replica,omitempty"`
 
 	// Resources specify the default resource requirements applied for all pods inside the workflow.
@@ -96,7 +98,7 @@ type CommonMetaSpec struct {
 	// Image specifies the default container image to be used for the primary workload container(s).
 	//
 	// - If containers defined within the underlying Job, Deployment, or Ray spec do *not* specify an image, this image will be used.
-	// - If this field is also empty, a system default (e.g., `ghcr.io/silogen/rocm-ray:v0.8`) is used.
+	// - If this field is also empty, the latest tag of ghcr.io/silogen/rocm-ray is used
 	Image string `json:"image,omitempty"`
 
 	// ImagePullSecrets is a list of Kubernetes `LocalObjectReference` (containing just the secret `name`) referencing secrets needed to pull the container image(s). These are added to the `imagePullSecrets` field of the PodSpec for all generated pods.
@@ -134,6 +136,8 @@ type StorageSpec struct {
 	StorageClassName string `json:"storageClassName,omitempty"`
 
 	// AccessMode determines the access mode (e.g., `ReadWriteOnce`, `ReadWriteMany`, `ReadOnlyMany`) for the created PersistentVolumeClaims.
+	//
+	// In a multi-node setting, ReadWriteMany is generally required, as pods scheduled on different nodes cannot access ReadWriteOnce PVCs. This is true even when `replicas: 1` if you are using download jobs, as the download pod may get scheduled on a different pod than the main workload pod.
 	// +kubebuilder:default=ReadWriteMany
 	AccessMode corev1.PersistentVolumeAccessMode `json:"accessMode"`
 

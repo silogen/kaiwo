@@ -56,7 +56,7 @@ type ResourceFlavorSpec struct {
 	// +kubebuilder:validation:MaxProperties=10
 	NodeLabels map[string]string `json:"nodeLabels,omitempty"`
 
-	// Taints specifies a list of taints associated with this flavor. Pods admitted using this flavor will automatically receive tolerations for these taints from Kueue. Example: `[{"key": "amd.com/gpu", "effect": "NoSchedule"}]`
+	// Taints specifies a list of taints associated with this flavor.
 	// +kubebuilder:validation:MaxItems=5
 	Taints []corev1.Taint `json:"taints,omitempty"`
 

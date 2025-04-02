@@ -9,7 +9,7 @@ These fields collectively control the number of workload instances and how GPUs 
 *   `replicas`: Sets the desired number of instances (pods). Default: 1. *Ignored for non-Ray Jobs.*
 *   `gpus`: Specifies the *total* number of GPUs requested across all replicas. Default: 0.
 *   `gpusPerReplica`: Specifies the number of GPUs requested *per* replica. Default: 0.
-*   `gpuVendor`: Determines the GPU resource key (e.g., `amd.com/gpu`, `nvidia.com/gpu`). Default: "AMD".
+*   `gpuVendor`: Determines the GPU resource key (e.g., `amd.com/gpu`, `nvidia.com/gpu`). Default: "amd".
 
 **Behavior:**
 
@@ -24,7 +24,7 @@ These fields collectively control the number of workload instances and how GPUs 
         *   The `totalUserRequestedGpus` is determined (using `gpus` field, capped at total cluster capacity).
         *   The final `replicas` is calculated as `ceil(totalUserRequestedGpus / minGpusPerNode)`.
         *   The final `gpusPerReplica` is calculated as `totalUserRequestedGpus / replicas`.
-    *   The calculated or user-provided `replicas` value sets the Ray worker group replica count (`minReplicas`, `maxReplicas`, `replicas`).
+    *   The calculated or user-provided `replicas` value sets the Ray worker group replica count (`minReplicas`, `maxReplicas`, `replicas`). This is due the fact that Kueue does not support Ray's autoscaling.
     *   The calculated or user-provided `gpusPerReplica` value sets the GPU resource request/limit for each Ray worker pod's container.
 
 **Summary Table (Ray Workloads):**

@@ -36,7 +36,9 @@ type KaiwoJobSpec struct {
 	//
 	// This value is set as the `kueue.x-k8s.io/queue-name` label on the underlying Kubernetes Job or RayJob.
 	//
-	// If omitted, it defaults to the value specified by the `DEFAULT_CLUSTER_QUEUE_NAME` environment variable in the Kaiwo controller (typically "kaiwo").
+	// If omitted, it defaults to the value specified by the `DEFAULT_CLUSTER_QUEUE_NAME` environment variable in the Kaiwo controller (typically "kaiwo"), which is set during installation.
+	//
+	// Note! If the applied KaiwoQueueConfig includes no quota for the default queue, no workload will run that tries to fall back on it.
 	//
 	// The `kaiwo submit` CLI command can override this using the `--queue` flag or the `clusterQueue` field in the `kaiwoconfig.yaml` file.
 	ClusterQueue string `json:"clusterQueue,omitempty"`
@@ -50,7 +52,7 @@ type KaiwoJobSpec struct {
 	//
 	// For standard Kubernetes Jobs (`ray: false`), this populates the `command` and `args` fields of the container spec (typically `["/bin/sh", "-c", "<entrypoint_script>"]`).
 	//
-	// For RayJobs (`ray: true`), this populates the `rayJob.spec.entrypoint` field.
+	// For RayJobs (`ray: true`), this populates the `rayJob.spec.entrypoint` field. For RayJobs, this must reference a Python script.
 	//
 	// This overrides any default command specified in the container image or the underlying `job` or `rayJob` spec sections if they are also defined.
 	EntryPoint string `json:"entrypoint,omitempty"`
