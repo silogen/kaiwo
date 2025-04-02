@@ -2,11 +2,9 @@
 
 Kaiwo integrates with Kubernetes authentication and authorization mechanisms.
 
-## LocalQueue namespace / cluster queue
+## Cluster queue namespaces
 
-LocalQueue namespace-specific, so K8s RBAC should reflect
-
-Namespace in cluster queue, but must reflect
+Since the **`KaiwoQueueConfig`** lists the namespaces for the cluster queues, you must make sure that users that use these queues have the correct RBAC rights for these namespaces.
 
 ## User Authentication (CLI)
 

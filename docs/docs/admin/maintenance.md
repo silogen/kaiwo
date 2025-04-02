@@ -29,7 +29,6 @@ This section outlines common maintenance tasks for the Kaiwo system.
 ## Certificate Rotation
 
 *   **Cert-Manager (Default)**: If using the default setup with Cert-Manager, certificate rotation for webhooks is typically handled automatically based on the `Certificate` resources created during installation. Monitor Cert-Manager logs and certificate expiry (`kubectl get certificates -n kaiwo-system`) if issues arise.
-*   **Manual Certificates**: If you manually manage webhook certificates (using `--webhook-cert-path` or mounting secrets), you are responsible for rotating them before expiry. Generate new certificates, update the Kubernetes `tls` secret containing them, and ensure the Kaiwo operator deployment restarts or dynamically reloads the certificates (using `certwatcher` if configured via flags like `--webhook-cert-path`). You might also need to update the `caBundle` in the webhook configurations if the CA changed.
 
 ## Operator Pod Management
 

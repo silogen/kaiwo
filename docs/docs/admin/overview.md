@@ -11,7 +11,7 @@ Kaiwo provides a layer on top of Kubernetes, Kueue, and Ray to streamline the ma
         *   `KaiwoJobController`: Translates `KaiwoJob` into `batchv1.Job` or `rayv1.RayJob`, manages dependencies (like download jobs, PVCs), and updates status.
         *   `KaiwoServiceController`: Translates `KaiwoService` into `appsv1.Deployment` or `rayv1.RayService` (wrapped in an `AppWrapper`), manages dependencies, and updates status.
         *   `KaiwoQueueConfigController`: Manages Kueue resources (`ClusterQueue`, `ResourceFlavor`, `WorkloadPriorityClass`) based on the cluster-scoped `KaiwoQueueConfig` CRD. Ensures a default configuration exists.
-    *   **Integration**: Interacts heavily with the Kubernetes API, Kueue, and potentially Ray operators.
+    *   **Integration**: Interacts with the Kubernetes API, Kueue, and Ray operators.
 
 2.  **Kaiwo CRDs**:
     *   **`KaiwoJob` / `KaiwoService`**: User-facing resources defined by AI Scientists to describe their workloads. They abstract away much of the underlying Kubernetes/Ray/Kueue complexity.
@@ -22,17 +22,11 @@ Kaiwo provides a layer on top of Kubernetes, Kueue, and Ray to streamline the ma
     *   The Kaiwo Operator, specifically the `KaiwoQueueConfigController`, manages the creation and synchronization of Kueue `ClusterQueue`, `ResourceFlavor`, and `WorkloadPriorityClass` resources based on the `KaiwoQueueConfig` CRD.
     *   Workloads (`KaiwoJob`/`KaiwoService`) are submitted to a specific `ClusterQueue` (via the `kueue.x-k8s.io/queue-name` label, derived from `spec.clusterQueue`).
 
-4.  **Ray Integration (Optional)**:
+4.  **Ray Integration**:
     *   If `spec.ray: true` is set in a `KaiwoJob` or `KaiwoService`, the operator creates `RayJob` or `RayService` resources instead of standard Kubernetes ones.
     *   This leverages Ray for distributed execution capabilities. Requires the KubeRay operator to be installed.
 
-5.  **Webhooks (Optional)**:
-    *   Kaiwo includes admission webhooks (mutating and validating).
-    *   A key function (controlled by `ENFORCE_KAIWO_ON_GPU_WORKLOADS` env var) is the mutating webhook for `batchv1.Job`. If enabled, it can automatically label standard Kubernetes Jobs requesting GPUs with `kaiwo.silogen.ai/managed: true`.
-    *   When this label is present (either set manually or by the webhook), the webhook ensures a corresponding `KaiwoJob` CRD is created, effectively bringing standard GPU jobs under Kaiwo/Kueue management.
-    *   Validation webhooks might enforce policies (e.g., preventing direct modification of GPU requests on managed jobs).
-
-6.  **Kaiwo CLI**:
+5.  **Kaiwo CLI**:
     *   The primary user interface for AI Scientists.
     *   Communicates with the Kubernetes API to create and manage Kaiwo CRDs.
     *   Requires `kubeconfig` access similar to `kubectl`.

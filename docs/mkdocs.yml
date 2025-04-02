@@ -35,7 +35,6 @@ nav:
   - "Scheduling": "scientist/scheduling.md"
 - "Administrator":
   - "Overview": "admin/overview.md"
-  - "Quickstart": "admin/quickstart.md"
   - "Installation": "admin/installation.md"
   - "Configuration": "admin/configuration.md"
   - "Maintenance": "admin/maintenance.md"
