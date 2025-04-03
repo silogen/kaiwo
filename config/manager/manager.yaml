@@ -86,7 +86,7 @@ spec:
         - name: CUSTOM_KUBE_SCHEDULER_NAME
           value: "kaiwo-scheduler"
         - name: ADD_TAINTS_TO_GPU_NODES
-          value: "true"
+          value: "false"
         name: manager
         ports: []
         securityContext:
