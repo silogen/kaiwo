@@ -115,7 +115,8 @@ spec:
         content: kubectl get resourceflavor foo -o json
         check:
           (contains($stdout, 'amd-rocks')): true
-        # Apply the saved kaiwoqueueconfig for other tests to use
+    finally:
+    # Apply the saved kaiwoqueueconfig for other tests to use
     - script:
         content: kubectl replace --force -f /tmp/kaiwoqueueconfig.yaml
     catch:
