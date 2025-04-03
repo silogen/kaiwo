@@ -127,10 +127,10 @@ The Kaiwo operator deployment itself can be configured using environment variabl
 
 **Key Environment Variables:**
 
-*   `DEFAULT_KAIWO_QUEUE_CONFIG_NAME` (Default: `kaiwo`): The expected name of the single `KaiwoQueueConfig` resource the controller manages. *Changing this requires ensuring your CRD instance matches.*
-*   `DEFAULT_CLUSTER_QUEUE_NAME` (Default: `kaiwo`): The default Kueue `ClusterQueue` name used by the startup logic when creating the default `KaiwoQueueConfig` and potentially by other components if a queue isn't specified.
+*   `DEFAULT_KAIWO_QUEUE_CONFIG_NAME` (Default: `kaiwo`): The expected name of the single `KaiwoQueueConfig` resource the controller manages.
+*   `DEFAULT_CLUSTER_QUEUE_NAME` (Default: `kaiwo`): The default Kueue `ClusterQueue` name used by the startup logic when creating the default `KaiwoQueueConfig` and used by workloads that do not include the `clusterQueue` field.
 *   `DEFAULT_GPU_TAINT_KEY` (Default: `kaiwo.silogen.ai/gpu`): The taint key applied to GPU nodes if automatic tainting is enabled.
-*   `ADD_TAINTS_TO_GPU_NODES` (Default: `true`): If `true`, the `KaiwoQueueConfigController` will attempt to taint nodes identified as having GPUs (based on flavor discovery/definition) with the `DEFAULT_GPU_TAINT_KEY`. *Note: This functionality might be part of the controller or a separate node management component depending on implementation details.*
+*   `ADD_TAINTS_TO_GPU_NODES` (Default: `false`): If `true`, the `KaiwoQueueConfigController` will attempt to taint nodes identified as having GPUs (based on flavor discovery/definition) with the `DEFAULT_GPU_TAINT_KEY`.
 *   `EXCLUDE_MASTER_NODES_FROM_NODE_POOLS` (Default: `false`): If `true`, control-plane/master nodes are excluded during automatic `ResourceFlavor` discovery in the startup logic.
 *   `RAY_HEAD_POD_MEMORY`: (Optional) Override the default memory request/limit for Ray head pods created by Kaiwo (which is `16Gi`).
 *   `WEBHOOK_CERT_DIRECTORY`: Path to manually provided webhook certificates (overrides automatic management if set). See [Installation](./installation.md).
