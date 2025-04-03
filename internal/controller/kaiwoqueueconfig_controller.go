@@ -168,7 +168,7 @@ func (r *KaiwoQueueConfigReconciler) syncResourceFlavors(ctx context.Context, qu
 	}
 
 	for _, existingFlavor := range existingFlavors.Items {
-		if _, exists := existingFlavorMap[existingFlavor.Name]; !exists {
+		if _, exists := existingFlavorMap[existingFlavor.Name]; !exists && metav1.IsControlledBy(&existingFlavor, queueConfig) {
 			logger.Info("Deleting ResourceFlavor", "name", existingFlavor.Name)
 			if err := r.Delete(ctx, &existingFlavor); err != nil {
 				logger.Error(err, "Failed to delete ResourceFlavor", "name", existingFlavor.Name)
@@ -368,7 +368,7 @@ func (r *KaiwoQueueConfigReconciler) syncWorkloadPriorityClasses(ctx context.Con
 	}
 
 	for _, existingPriorityClass := range existingPriorityClasses.Items {
-		if _, exists := expectedPriorityClasses[existingPriorityClass.Name]; !exists {
+		if _, exists := expectedPriorityClasses[existingPriorityClass.Name]; !exists && metav1.IsControlledBy(&existingPriorityClass, queueConfig) {
 			logger.Info("Deleting WorkloadPriorityClass", "name", existingPriorityClass.Name)
 			if err := r.Delete(ctx, &existingPriorityClass); err != nil {
 				logger.Error(err, "Failed to delete WorkloadPriorityClass", "name", existingPriorityClass.Name)
