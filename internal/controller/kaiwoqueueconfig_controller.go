@@ -232,7 +232,7 @@ func (r *KaiwoQueueConfigReconciler) syncClusterQueues(ctx context.Context, queu
 	}
 
 	for _, existingQueue := range existingQueues.Items {
-		if _, exists := expectedQueues[existingQueue.Name]; !exists {
+		if _, exists := expectedQueues[existingQueue.Name]; !exists && metav1.IsControlledBy(&existingQueue, queueConfig) {
 			logger.Info("Deleting ClusterQueue", "name", existingQueue.Name)
 			if err := r.Delete(ctx, &existingQueue); err != nil {
 				logger.Error(err, "Failed to delete ClusterQueue", "name", existingQueue.Name)

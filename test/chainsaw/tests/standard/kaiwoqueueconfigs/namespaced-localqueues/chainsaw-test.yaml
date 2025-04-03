@@ -22,8 +22,30 @@ spec:
           kind: Namespace
           metadata:
             name: namespace2
+    # Create a manual cluster queue
+    - apply:
+        resource:
+          apiVersion: "kueue.x-k8s.io/v1beta1"
+          kind: ClusterQueue
+          metadata:
+            name: test-queue
+          spec:
+            namespaceSelector: {}
+            resourceGroups: []
+      # Create a manual local queue (to ensure it is not affected by the kaiwo queue config)
+    - apply:
+        resource:
+          apiVersion: "kueue.x-k8s.io/v1beta1"
+          kind: LocalQueue
+          metadata:
+            name: test-queue
+            namespace: namespace2
+          spec:
+            clusterQueue: test-queue
+    # Create the kaiwo queue config
     - apply:
         file: kaiwoqueueconfig1.yaml
+    # Ensure the local queues were created
     - assert:
         resource:
           apiVersion: "kueue.x-k8s.io/v1beta1"
@@ -38,9 +60,10 @@ spec:
           metadata:
             name: fizz
             namespace: namespace2
-        # Update the config (removing one of the namespaces)
+    # Update the config (which removes one of the namespaces)
     - apply:
         file: kaiwoqueueconfig2.yaml
+    # Ensure the first local queue still exists
     - assert:
         resource:
           apiVersion: "kueue.x-k8s.io/v1beta1"
@@ -48,7 +71,7 @@ spec:
           metadata:
             name: fizz
             namespace: namespace1
-        # The second local queue should not exist anymore
+    # The second local queue should not exist anymore
     - error:
         resource:
           apiVersion: "kueue.x-k8s.io/v1beta1"
@@ -56,8 +79,18 @@ spec:
           metadata:
             name: fizz
             namespace: namespace2
+    # Ensure that the manually created local queue still exists (even though it was in the same namespace that was deleted)
+    - assert:
+        resource:
+          apiVersion: "kueue.x-k8s.io/v1beta1"
+          kind: LocalQueue
+          metadata:
+            name: test-queue
+            namespace: namespace2
+          spec:
+            clusterQueue: test-queue
+    # Apply the saved kaiwoqueueconfig for other tests to use
     finally:
-        # Apply the saved kaiwoqueueconfig for other tests to use
     - script:
         content: kubectl replace --force -f /tmp/kaiwoqueueconfig.yaml
     catch:
