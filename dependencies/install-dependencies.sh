@@ -2,15 +2,11 @@
 
 set -e
 
-INSTALL_KAIWO=true
 USE_LOCAL=false
 
 # Parse arguments
 for arg in "$@"; do
   case $arg in
-    --dependencies-only)
-      INSTALL_KAIWO=false
-      ;;
     --local)
       USE_LOCAL=true
       ;;
@@ -48,13 +44,3 @@ kubectl rollout status deployment/kueue-controller-manager -n kueue-system --tim
 kubectl rollout status deployment/kuberay-operator --timeout=5m
 kubectl rollout status deployment/appwrapper-controller-manager -n appwrapper-system --timeout=5m
 echo "Other dependencies deployed"
-
-if [ "$INSTALL_KAIWO" = "true" ]; then
-  echo "Deploying Kaiwo"
-  kubectl apply --server-side -f https://github.com/silogen/kaiwo/releases/latest/download/install.yaml
-  echo "Waiting for Kaiwo to be deployed..."
-  kubectl rollout status deployment/kaiwo-controller-manager -n kaiwo-system --timeout=5m
-  echo "Kaiwo deployed"
-else
-  echo "Skipping Kaiwo installation (--dependencies-only specified)"
-fi

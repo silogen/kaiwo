@@ -5,21 +5,25 @@
 
 The installation of Kaiwo CLI tool is easy as it's a single binary. The only requirement is a kubeconfig file to access a Kubernetes cluster (see authentication below for authentication plugins). If you are unsure where to get a kubeconfig, speak to your infrastructure/platform administrator. Just like kubectl, Kaiwo will first look for a `KUBECONFIG=path` environment variable. If `KUBECONFIG` is not set, Kaiwo will then look for kubeconfig file in the default location `~/.kube/config`.
 
-First, look up the latest Kaiwo CLI binary under [Releases Page](https://github.com/silogen/kaiwo/releases) for your operating system. Then update KAIWO_VERSION in the following to the latest version and run it in your terminal:
+You can use the convenience script to install the CLI:
 
 ```bash
-export KAIWO_VERSION=v.x.x.x && \
-wget https://github.com/silogen/kaiwo/releases/download/$KAIWO_VERSION/kaiwo_linux_amd64 && \
-mv kaiwo_linux_amd64 kaiwo && \
-chmod +x kaiwo && \
-sudo mv kaiwo /usr/local/bin/ && \
-wget https://github.com/silogen/kaiwo/releases/download/$KAIWO_VERSION/workloads.zip && \
-unzip workloads.zip && \
-kaiwo version && \
-kaiwo help
+curl -sSL https://raw.githubusercontent.com/silogen/kaiwo/main/get-kaiwo-cli.sh | bash -s --
+```
+
+This will install the latest CLI. If you want to install a different version, you can run
+
+```bash
+KAIWO_VERSION=vX.X.X curl -sSL https://raw.githubusercontent.com/silogen/kaiwo/main/get-kaiwo-cli.sh | bash -s --
 ```
 
 You're off to the races!
+
+If you want to uninstall the Kaiwo CLI, you can run
+
+```bash
+curl -sSL https://raw.githubusercontent.com/silogen/kaiwo/main/get-kaiwo-cli.sh | bash -s --
+```
 
 Although not strictly required, we recommend that you also [install kubectl](https://kubernetes.io/docs/tasks/tools/) just in case you need some functionality that Kaiwo can't provide.
 

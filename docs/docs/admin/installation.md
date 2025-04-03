@@ -37,7 +37,7 @@ This script uses Kustomize to install Cert-Manager, Kueue, KubeRay, and AppWrapp
 # cd kaiwo
 
 # Run the script
-bash dependencies/setup_dependencies.sh
+bash dependencies/install-dependencies.sh --local
 ```
 
 !!!warning "GPU Operator Not Included"
