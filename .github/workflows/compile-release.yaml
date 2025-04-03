@@ -4,7 +4,6 @@ on:
     tags:
     - "v*"
 env:
-  BRANCH: kaiwo-release-${{ env.VERSION }}
   REPO: github.com/silogen/cluster-forge.git
 
 jobs:
@@ -85,7 +84,7 @@ jobs:
       run: |
         git clone https://x-access-token:${{ secrets.CLUSTER_FORGE_PAT }}@${{ env.REPO }} cluster-forge 
         cd cluster-forge
-        git checkout -b ${{ env.BRANCH }}
+        git checkout -b kaiwo-release-${{ env.VERSION }}
 
     - name: Download install.yaml artifact
       uses: actions/download-artifact@v4
