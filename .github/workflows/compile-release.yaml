@@ -3,6 +3,9 @@ on:
   push:
     tags:
     - "v*"
+env:
+  BRANCH: kaiwo-release-${{ env.VERSION }}
+  REPO: github.com/silogen/cluster-forge.git
 
 jobs:
   build:
@@ -76,9 +79,6 @@ jobs:
   sync-to-cluster-forge:
     runs-on: ubuntu-latest
     needs: build
-    env:
-      BRANCH: kaiwo-release-${{ env.VERSION }}
-      REPO: github.com/silogen/cluster-forge.git
 
     steps:
     - name: Checkout cluster-forge
@@ -121,7 +121,8 @@ jobs:
           -F files[][contents]="$ENCODED_CONTENT" \
           -F 'query=@.github/api/createCommitOnBranch.gql'
       env:
-        GH_TOKEN: ${{ secrets.CLUSTER_FORGE_PAT }}
+        # GH_TOKEN: ${{ secrets.CLUSTER_FORGE_PAT }}
+        GH_TOKEN: ${{ github.token }}
 
     - name: Create Pull Request
       if: steps.check_diff.outputs.changed == 'true'
