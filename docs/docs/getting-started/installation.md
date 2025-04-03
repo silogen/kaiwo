@@ -17,16 +17,14 @@ These and the Kaiwo operator itself can be installed in a few different ways.
 
 ### Using our convenience scripts
 
-You can install the dependencies using the convenience script  
+You can install Kaiwo and its dependencies into your currently active Kubernetes cluster via the convenience script
 
 ```
-bash depedencies/setup_dependencies.sh
-```
+# From the remote script
+curl -sSL https://raw.githubusercontent.com/silogen/kaiwo/main/get-kaiwo.sh | bash
 
-Then check the latest release [here](https://github.com/silogen/kaiwo/releases) and install Kaiwo operator by running (first replace `v.x.x.x` with the latest version):
-
-```
-kubectl apply -f https://github.com/silogen/kaiwo/releases/download/v.x.x.x/install.yaml --server-side
+# Or if you have cloned the repostiory
+bash get-kaiwo.sh
 ```
 
 This method assumes you have installed a GPU operator separately.
@@ -41,6 +39,10 @@ Another option is using [Cluster-Forge](https://github.com/silogen/cluster-forge
 4. Run the deploy script `bash stacks/kaiwo/deploy.sh`
 
 This will deploy a working Kaiwo stack into your target Kubernetes cluster.
+
+### Manually
+
+If you prefer to manage the dependencies yourself, you can inspect the `/dependencies` folder to see what is required, and install Kaiwo yourself by using the `install.yaml` release from the [releases page](https://github.com/silogen/kaiwo/releases).
 
 ### Enabling auto-completion
 

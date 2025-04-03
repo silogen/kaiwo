@@ -31,7 +31,7 @@ else
 fi
 
 if [ "$SKIP_DEPENDENCIES" = false ]; then
-  CONFIG_FILE="$SCRIPT_DIR/../dependencies/setup_dependencies.sh"
+  CONFIG_FILE="$SCRIPT_DIR/../get-kaiwo.sh --dependencies-only --local"
   bash "$CONFIG_FILE"
 else
   echo "Skipping standard dependency installation"
