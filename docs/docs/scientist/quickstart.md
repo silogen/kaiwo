@@ -47,7 +47,7 @@ spec:
   user: test@amd.com
   gpus: 4
   entrypoint: |
-    accelerate launch mounted/dpo.py \
+    accelerate launch code/dpo.py \
     --dataset_name trl-lib/ultrafeedback_binarized \
     --model_name_or_path Qwen/Qwen2-0.5B-Instruct \
     --learning_rate 5.0e-6 \
@@ -66,9 +66,17 @@ spec:
   storage:
     storageEnabled: true
     storageClassName: multinode
+    data:
+      storageSize: 10Mi
+      mountPath: /workload
+      download:
+        git:
+        - repository: https://github.com/silogen/kaiwo.git
+          path: workloads/training/LLMs/dpo-singlenode
+          targetPath: code
     huggingFace:
       storageSize: "30Gi"
-      mountPath: "/.cache/huggingface"
+      # automatically sets HF_HOME env variable for all containers
       preCacheRepos:
       - repoId: Qwen/Qwen2-0.5B-Instruct
 
@@ -88,7 +96,7 @@ After receiving this simple workload submission, Kaiwo Operator does the followi
 
 #### Using storage task with KaiwoJobs/Services
 
-As our example above shows, Kaiwo makes it possible to download artifacts (model weights, data, code, etc.) into a persistent volume before starting the training workload. This is done by filling in `data` or `huggingFace` sections of KaiwoJob/KaiwoService. We must specify a mountPath under `data`. All subsequent targetPaths will be relative to this mountPath. The storage task will create separate persistent volume claims for `data` and `huggingFace` with the specified storageClassName and storageSize. We specify a mountPath for `huggingFace` as well, which will be used to set the HF_HOME environment variable in each container. This is useful if you want to use the HuggingFace cache in your training workload.  
+As our example above shows, Kaiwo makes it possible to download artifacts (model weights, data, code, etc.) into a persistent volume before starting the training workload. This is done by filling in `data` or `huggingFace` sections of KaiwoJob/KaiwoService. We must specify a mountPath under `data`. All subsequent targetPaths will be relative to this mountPath. The storage task will create separate persistent volume claims for `data` and `huggingFace` with the specified storageClassName and storageSize. We specify a mountPath for `huggingFace` as well, which will be used to set the HF_HOME environment variable in each container. This is useful if you want to use the HuggingFace cache in your training workload.  For more details on storage tasks, see [here](../reference/crds/kaiwo.silogen.ai.md#datastoragespec).
 
 ## Distributed training
 

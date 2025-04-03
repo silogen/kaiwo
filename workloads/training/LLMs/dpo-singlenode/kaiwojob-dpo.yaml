@@ -6,7 +6,7 @@ spec:
   user: test@amd.com
   gpus: 4
   entrypoint: |
-    accelerate launch mounted/dpo.py \
+    accelerate launch code/dpo.py \
     --dataset_name trl-lib/ultrafeedback_binarized \
     --model_name_or_path Qwen/Qwen2-0.5B-Instruct \
     --learning_rate 5.0e-6 \
@@ -25,8 +25,16 @@ spec:
   storage:
     storageEnabled: true
     storageClassName: multinode
+    data:
+      storageSize: 10Mi
+      mountPath: /workload
+      download:
+        git:
+        - repository: https://github.com/silogen/kaiwo.git
+          path: workloads/training/LLMs/dpo-singlenode
+          targetPath: code
     huggingFace:
       storageSize: "30Gi"
-      mountPath: "/.cache/huggingface"
+      # automatically sets HF_HOME env variable for all containers
       preCacheRepos:
       - repoId: Qwen/Qwen2-0.5B-Instruct
