@@ -30,7 +30,7 @@ else
     create_cluster
 fi
 
-SCRIPT_PATH="$SCRIPT_DIR/../dependencies/install-dependencies.sh"
+SCRIPT_PATH="$SCRIPT_DIR/../dependencies/install_dependencies.sh"
 
 if [ "$SKIP_DEPENDENCIES" = false ]; then
   bash "$SCRIPT_PATH" --local

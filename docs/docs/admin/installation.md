@@ -29,15 +29,14 @@ There are several different ways that you can install the Kaiwo dependencies and
 
 ### Dependencies via convenience script
 
-This script uses Kustomize to install Cert-Manager, Kueue, KubeRay, and AppWrapper.
+You can install the dependencies using the convenience script:
 
 ```bash
-# Clone the Kaiwo repository if you haven't already
-# git clone https://github.com/silogen/kaiwo.git
-# cd kaiwo
+# From the remote script
+curl -sSL https://raw.githubusercontent.com/silogen/kaiwo/main/dependencies/install_depedencies.sh | bash -s --
 
-# Run the script
-bash dependencies/install-dependencies.sh --local
+# Or if you have cloned the repostiory
+bash dependencies/install_depedencies.sh --local
 ```
 
 !!!warning "GPU Operator Not Included"
@@ -46,6 +45,14 @@ bash dependencies/install-dependencies.sh --local
 ### Kaiwo operator via install manifest
 
 Once dependencies are ready, install the Kaiwo operator itself.
+
+You can install the latest version via:
+
+```bash
+kubectl apply -f https://github.com/silogen/kaiwo/releases/latest/download/install.yaml --server-side
+```
+
+If you want to choose the release, follow these steps:
 
 1.  **Choose Release**: Find the latest stable release tag on the [Kaiwo GitHub Releases page](https://github.com/silogen/kaiwo/releases).
 2.  **Apply Manifest**: Use `kubectl apply` with the `--server-side` flag (recommended for managing large manifests and CRDs). Replace `vX.Y.Z` with your chosen release tag.
@@ -80,6 +87,10 @@ Once dependencies are ready, install the Kaiwo operator itself.
     bash stacks/kaiwo/deploy.sh
     ```
 6.  Verify pods in relevant namespaces (`kaiwo-system`, `cert-manager`, `kueue-system`, etc.).
+
+### Manually
+
+If you prefer to manage the dependencies yourself, you can inspect the `/dependencies` folder to see what is required, and install Kaiwo yourself by using the `install.yaml` release from the [releases page](https://github.com/silogen/kaiwo/releases).
 
 ## Step 2: Verify Installation
 
