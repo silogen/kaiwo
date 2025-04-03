@@ -30,9 +30,10 @@ else
     create_cluster
 fi
 
+SCRIPT_PATH="$SCRIPT_DIR/../dependencies/install_dependencies.sh"
+
 if [ "$SKIP_DEPENDENCIES" = false ]; then
-  CONFIG_FILE="$SCRIPT_DIR/../dependencies/setup_dependencies.sh"
-  bash "$CONFIG_FILE"
+  bash "$SCRIPT_PATH" --local
 else
   echo "Skipping standard dependency installation"
 fi
