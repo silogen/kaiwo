@@ -1,0 +1,92 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: kaiwoqueueconfig-namespaced-localqueues
+spec:
+  concurrent: false
+  steps:
+  - name: Check KaiwoQueueConfig ClusterQueue namespaces create local queues
+    try:
+        # Save the current kaiwoqueueconfig for other tests to use later
+    - script:
+        content: kubectl get kaiwoqueueconfig kaiwo -o yaml > /tmp/kaiwoqueueconfig.yaml
+    - apply:
+        resource:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: namespace1
+    - apply:
+        resource:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: namespace2
+    # Create the kaiwo queue config
+    - apply:
+        file: kaiwoqueueconfig1.yaml
+    # Ensure the local queues were created
+    - assert:
+        resource:
+          apiVersion: "kueue.x-k8s.io/v1beta1"
+          kind: LocalQueue
+          metadata:
+            name: fizz
+            namespace: namespace1
+    - assert:
+        resource:
+          apiVersion: "kueue.x-k8s.io/v1beta1"
+          kind: LocalQueue
+          metadata:
+            name: fizz
+            namespace: namespace2
+    # Update the config (which removes one of the namespaces)
+    - apply:
+        file: kaiwoqueueconfig2.yaml
+    # Ensure the first local queue still exists
+    - assert:
+        resource:
+          apiVersion: "kueue.x-k8s.io/v1beta1"
+          kind: LocalQueue
+          metadata:
+            name: fizz
+            namespace: namespace1
+    # The second local queue should not exist anymore
+    - error:
+        resource:
+          apiVersion: "kueue.x-k8s.io/v1beta1"
+          kind: LocalQueue
+          metadata:
+            name: fizz
+            namespace: namespace2
+    # Update the config (which removes the whole cluster queue)
+    - apply:
+        file: kaiwoqueueconfig3.yaml
+    # Ensure the local queue was removed
+    - error:
+        resource:
+          apiVersion: "kueue.x-k8s.io/v1beta1"
+          kind: LocalQueue
+          metadata:
+            name: fizz
+            namespace: namespace1
+      # Ensure the cluster queue was removed
+    - error:
+        resource:
+          apiVersion: "kueue.x-k8s.io/v1beta1"
+          kind: ClusterQueue
+          metadata:
+            name: fizz
+    # Apply the saved kaiwoqueueconfig for other tests to use
+    finally:
+    - script:
+        content: kubectl replace --force -f /tmp/kaiwoqueueconfig.yaml
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]

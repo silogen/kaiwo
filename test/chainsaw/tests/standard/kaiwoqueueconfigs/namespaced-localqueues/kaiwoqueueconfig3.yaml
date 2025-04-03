@@ -1,0 +1,6 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoQueueConfig
+metadata:
+  name: kaiwo
+spec:
+  clusterQueues: []
