@@ -81,7 +81,6 @@ func RunCli() {
 
 	rootCmd.AddCommand(BuildSubmitCmd())
 
-	// TODO re-enable
 	rootCmd.AddCommand(
 		BuildLogCmd(),
 		BuildListCmd(),

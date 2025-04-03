@@ -17,6 +17,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -148,28 +149,40 @@ func readKaiwoCliConfig(path string) (cliutils.KaiwoCliConfig, error) {
 	return config, nil
 }
 
-// readManifest reads a Kubernetes manifest from a given path
+// readManifest reads a Kubernetes manifest from a given path or from stdin if path is "-" or "--"
 func readManifest(path string) (unstructured.Unstructured, error) {
 	var obj unstructured.Unstructured
+	var reader io.Reader
+	var yamlBytes []byte
+	var err error
 
-	file, err := os.Open(path)
-	if err != nil {
-		return obj, fmt.Errorf("failed to open file: %w", err)
-	}
-	defer func(file *os.File) {
-		err := file.Close()
+	if path == "-" || path == "--" {
+		reader = os.Stdin
+		yamlBytes, err = io.ReadAll(os.Stdin)
 		if err != nil {
-			panic(err)
+			return obj, fmt.Errorf("failed to read from stdin: %w", err)
 		}
-	}(file)
+	} else {
+		file, err := os.Open(path)
+		if err != nil {
+			return obj, fmt.Errorf("failed to open file: %w", err)
+		}
+		defer func(file *os.File) {
+			err := file.Close()
+			if err != nil {
+				panic(err)
+			}
+		}(file)
 
-	yamlBytes, err := os.ReadFile(path)
-	if err != nil {
-		return obj, fmt.Errorf("failed to read file: %w", err)
+		reader = file
+		yamlBytes, err = os.ReadFile(path)
+		if err != nil {
+			return obj, fmt.Errorf("failed to read file: %w", err)
+		}
 	}
 
 	// Decode YAML into unstructured.Unstructured
-	decoder := k8syaml.NewYAMLOrJSONDecoder(file, 4096)
+	decoder := k8syaml.NewYAMLOrJSONDecoder(reader, 4096)
 	err = decoder.Decode(&obj)
 	if err != nil {
 		// Retry decoding from raw bytes if the decoder failed
