@@ -102,7 +102,7 @@ The `KaiwoQueueConfigController` acts as a translator, continuously ensuring tha
 *   **`spec.resourceFlavors` -> Kueue `ResourceFlavor`:**
     *   Each entry in this list directly defines a Kueue `ResourceFlavor`.
     *   The controller ensures a corresponding `ResourceFlavor` exists for each entry, creating or updating it as necessary based on the specified `name`, `nodeLabels`, and `taints`.
-    *   If an entry is removed from this list, the controller deletes the corresponding `ResourceFlavor` (provided it owns it).
+    *   If an entry is removed from this list, the controller deletes the corresponding `ResourceFlavor`.
 
 *   **`spec.clusterQueues` -> Kueue `ClusterQueue` and `LocalQueue`:**
     *   Each entry in this list defines a Kueue `ClusterQueue`. The controller translates the structure into a standard `ClusterQueueSpec` and ensures the resource exists and matches the definition. Removing an entry deletes the corresponding `ClusterQueue`.
@@ -115,6 +115,9 @@ The `KaiwoQueueConfigController` acts as a translator, continuously ensuring tha
 
 !!! info "Owner References"
     The controller establishes the `kaiwo` `KaiwoQueueConfig` as the owner of all the Kueue resources it creates. This linkage ensures that if the `KaiwoQueueConfig` is deleted, Kubernetes automatically cleans up all the managed Kueue resources (`ResourceFlavor`, `ClusterQueue`, `LocalQueue`, `WorkloadPriorityClass`).
+
+!!! warning "Kueue resource management"
+    By default, Kaiwo takes ownership of Kueue `ResourceFlavor`, `ClusterQueue`, `LocalQueue` and `WorkloadPriorityClass` resources. This means that resources of these types that are created manually, i.e. not via the `KaiwoQueueConfig`, may be deleted by the Kaiwo Controller. If you want to disable this behavior, set the `ENFORCE_KAIWO_KUEUE_OWNERSHIP` environment variable to `false` in the operator.
 
 The controller updates the `status.status` field of the `KaiwoQueueConfig` resource (`Pending`, `Ready`, or `Failed`) to indicate the current state of synchronization between the desired configuration and the actual Kueue resources in the cluster. This continuous reconciliation keeps the Kueue setup aligned with the central `KaiwoQueueConfig`.
 
@@ -131,9 +134,10 @@ The Kaiwo operator deployment itself can be configured using environment variabl
 *   `EXCLUDE_MASTER_NODES_FROM_NODE_POOLS` (Default: `false`): If `true`, control-plane/master nodes are excluded during automatic `ResourceFlavor` discovery in the startup logic.
 *   `RAY_HEAD_POD_MEMORY`: (Optional) Override the default memory request/limit for Ray head pods created by Kaiwo (which is `16Gi`).
 *   `WEBHOOK_CERT_DIRECTORY`: Path to manually provided webhook certificates (overrides automatic management if set). See [Installation](./installation.md).
+*   `ENFORCE_KAIWO_KUEUE_OWNERSHIP` (Default: `true`): Ensures that the Kueue resources `ResourceFlavor`, `ClusterQueue`, `LocalQueue` and `WorkloadPriorityClass` are controlled by Kaiwo only, and may get deleted if created outside of the `KaiwoQueueConfig`.
 
 !!! info "Forthcoming feature"
-`ENFORCE_KAIWO_ON_GPU_WORKLOADS` (Default: `false`): If `true`, the mutating admission webhook for `batchv1.Job` will automatically add the `kaiwo.silogen.ai/managed: "true"` label to any job requesting GPU resources, forcing it to be managed by Kaiwo/Kueue.
+    `ENFORCE_KAIWO_ON_GPU_WORKLOADS` (Default: `false`): If `true`, the mutating admission webhook for `batchv1.Job` will automatically add the `kaiwo.silogen.ai/managed: "true"` label to any job requesting GPU resources, forcing it to be managed by Kaiwo/Kueue.
 
 These are typically set in the operator's `Deployment` manifest.
 

@@ -87,6 +87,8 @@ spec:
           value: "kaiwo-scheduler"
         - name: ADD_TAINTS_TO_GPU_NODES
           value: "false"
+        - name: ENFORCE_KAIWO_KUEUE_OWNERSHIP
+          value: "true"
         name: manager
         ports: []
         securityContext:

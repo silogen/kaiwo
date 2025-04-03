@@ -17,7 +17,10 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
+
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -102,6 +105,8 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, queueConfig *v1alpha1.KaiwoQueueConfig) error {
 	logger := log.FromContext(ctx)
 
+	enforceKaiwoOwnership := strings.ToLower(baseutils.GetEnv("ENFORCE_KAIWO_KUEUE_OWNERSHIP", "true")) == "true"
+
 	existingFlavors := &kueuev1beta1.ResourceFlavorList{}
 	existingQueues := &kueuev1beta1.ClusterQueueList{}
 	existingLocalQueues := &kueuev1beta1.LocalQueueList{}
@@ -124,10 +129,10 @@ func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, que
 		return err
 	}
 
-	success := r.syncResourceFlavors(ctx, queueConfig, existingFlavors)
-	success = r.syncClusterQueues(ctx, queueConfig, existingQueues) && success
-	success = r.syncLocalQueues(ctx, queueConfig, existingLocalQueues) && success
-	success = r.syncWorkloadPriorityClasses(ctx, queueConfig, existingPriorityClasses) && success
+	success := r.syncResourceFlavors(ctx, queueConfig, existingFlavors, enforceKaiwoOwnership)
+	success = r.syncClusterQueues(ctx, queueConfig, existingQueues, enforceKaiwoOwnership) && success
+	success = r.syncLocalQueues(ctx, queueConfig, existingLocalQueues, enforceKaiwoOwnership) && success
+	success = r.syncWorkloadPriorityClasses(ctx, queueConfig, existingPriorityClasses, enforceKaiwoOwnership) && success
 
 	if success {
 		logger.Info("Successfully synced all Kueue resources")
@@ -136,7 +141,7 @@ func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, que
 	return fmt.Errorf("failed to sync some Kueue resources")
 }
 
-func (r *KaiwoQueueConfigReconciler) syncResourceFlavors(ctx context.Context, queueConfig *v1alpha1.KaiwoQueueConfig, existingFlavors *kueuev1beta1.ResourceFlavorList) bool {
+func (r *KaiwoQueueConfigReconciler) syncResourceFlavors(ctx context.Context, queueConfig *v1alpha1.KaiwoQueueConfig, existingFlavors *kueuev1beta1.ResourceFlavorList, enforceKaiwoOwnership bool) bool {
 	logger := log.FromContext(ctx)
 
 	success := true
@@ -168,7 +173,7 @@ func (r *KaiwoQueueConfigReconciler) syncResourceFlavors(ctx context.Context, qu
 	}
 
 	for _, existingFlavor := range existingFlavors.Items {
-		if _, exists := existingFlavorMap[existingFlavor.Name]; !exists && metav1.IsControlledBy(&existingFlavor, queueConfig) {
+		if _, exists := existingFlavorMap[existingFlavor.Name]; !exists && (!enforceKaiwoOwnership || metav1.IsControlledBy(&existingFlavor, queueConfig)) {
 			logger.Info("Deleting ResourceFlavor", "name", existingFlavor.Name)
 			if err := r.Delete(ctx, &existingFlavor); err != nil {
 				logger.Error(err, "Failed to delete ResourceFlavor", "name", existingFlavor.Name)
@@ -180,7 +185,7 @@ func (r *KaiwoQueueConfigReconciler) syncResourceFlavors(ctx context.Context, qu
 	return success
 }
 
-func (r *KaiwoQueueConfigReconciler) syncClusterQueues(ctx context.Context, queueConfig *v1alpha1.KaiwoQueueConfig, existingQueues *kueuev1beta1.ClusterQueueList) bool {
+func (r *KaiwoQueueConfigReconciler) syncClusterQueues(ctx context.Context, queueConfig *v1alpha1.KaiwoQueueConfig, existingQueues *kueuev1beta1.ClusterQueueList, enforceKaiwoOwnership bool) bool {
 	logger := log.FromContext(ctx)
 
 	success := true
@@ -232,7 +237,7 @@ func (r *KaiwoQueueConfigReconciler) syncClusterQueues(ctx context.Context, queu
 	}
 
 	for _, existingQueue := range existingQueues.Items {
-		if _, exists := expectedQueues[existingQueue.Name]; !exists && metav1.IsControlledBy(&existingQueue, queueConfig) {
+		if _, exists := expectedQueues[existingQueue.Name]; !exists && (!enforceKaiwoOwnership || metav1.IsControlledBy(&existingQueue, queueConfig)) {
 			logger.Info("Deleting ClusterQueue", "name", existingQueue.Name)
 			if err := r.Delete(ctx, &existingQueue); err != nil {
 				logger.Error(err, "Failed to delete ClusterQueue", "name", existingQueue.Name)
@@ -251,6 +256,7 @@ func (r *KaiwoQueueConfigReconciler) syncLocalQueues(
 	ctx context.Context,
 	kaiwoQueueConfig *v1alpha1.KaiwoQueueConfig,
 	existingLocalQueues *kueuev1beta1.LocalQueueList,
+	enforceKaiwoOwnership bool,
 ) bool {
 	logger := log.FromContext(ctx)
 	success := true
@@ -260,7 +266,7 @@ func (r *KaiwoQueueConfigReconciler) syncLocalQueues(
 
 	// Build map of all existing LocalQueues that are owned by the kaiwoQueueConfig
 	for _, localQueue := range existingLocalQueues.Items {
-		if !metav1.IsControlledBy(&localQueue, kaiwoQueueConfig) {
+		if !metav1.IsControlledBy(&localQueue, kaiwoQueueConfig) || !enforceKaiwoOwnership {
 			continue
 		}
 		if _, ok := staleQueues[localQueue.Name]; !ok {
@@ -332,7 +338,7 @@ func (r *KaiwoQueueConfigReconciler) syncLocalQueues(
 	return success
 }
 
-func (r *KaiwoQueueConfigReconciler) syncWorkloadPriorityClasses(ctx context.Context, queueConfig *v1alpha1.KaiwoQueueConfig, existingPriorityClasses *kueuev1beta1.WorkloadPriorityClassList) bool {
+func (r *KaiwoQueueConfigReconciler) syncWorkloadPriorityClasses(ctx context.Context, queueConfig *v1alpha1.KaiwoQueueConfig, existingPriorityClasses *kueuev1beta1.WorkloadPriorityClassList, enforceKaiwoOwnership bool) bool {
 	logger := log.FromContext(ctx)
 
 	success := true
@@ -368,7 +374,7 @@ func (r *KaiwoQueueConfigReconciler) syncWorkloadPriorityClasses(ctx context.Con
 	}
 
 	for _, existingPriorityClass := range existingPriorityClasses.Items {
-		if _, exists := expectedPriorityClasses[existingPriorityClass.Name]; !exists && metav1.IsControlledBy(&existingPriorityClass, queueConfig) {
+		if _, exists := expectedPriorityClasses[existingPriorityClass.Name]; !exists && (!enforceKaiwoOwnership || metav1.IsControlledBy(&existingPriorityClass, queueConfig)) {
 			logger.Info("Deleting WorkloadPriorityClass", "name", existingPriorityClass.Name)
 			if err := r.Delete(ctx, &existingPriorityClass); err != nil {
 				logger.Error(err, "Failed to delete WorkloadPriorityClass", "name", existingPriorityClass.Name)
