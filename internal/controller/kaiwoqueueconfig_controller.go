@@ -17,10 +17,7 @@ package controller
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
-
-	baseutils "github.com/silogen/kaiwo/pkg/utils"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -105,8 +102,6 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, queueConfig *v1alpha1.KaiwoQueueConfig) error {
 	logger := log.FromContext(ctx)
 
-	enforceKaiwoOwnership := strings.ToLower(baseutils.GetEnv("ENFORCE_KAIWO_KUEUE_OWNERSHIP", "true")) == "true"
-
 	existingFlavors := &kueuev1beta1.ResourceFlavorList{}
 	existingQueues := &kueuev1beta1.ClusterQueueList{}
 	existingLocalQueues := &kueuev1beta1.LocalQueueList{}
@@ -129,10 +124,10 @@ func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, que
 		return err
 	}
 
-	success := r.syncResourceFlavors(ctx, queueConfig, existingFlavors, enforceKaiwoOwnership)
-	success = r.syncClusterQueues(ctx, queueConfig, existingQueues, enforceKaiwoOwnership) && success
-	success = r.syncLocalQueues(ctx, queueConfig, existingLocalQueues, enforceKaiwoOwnership) && success
-	success = r.syncWorkloadPriorityClasses(ctx, queueConfig, existingPriorityClasses, enforceKaiwoOwnership) && success
+	success := r.syncResourceFlavors(ctx, queueConfig, existingFlavors)
+	success = r.syncClusterQueues(ctx, queueConfig, existingQueues) && success
+	success = r.syncLocalQueues(ctx, queueConfig, existingLocalQueues) && success
+	success = r.syncWorkloadPriorityClasses(ctx, queueConfig, existingPriorityClasses) && success
 
 	if success {
 		logger.Info("Successfully synced all Kueue resources")
@@ -141,7 +136,7 @@ func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, que
 	return fmt.Errorf("failed to sync some Kueue resources")
 }
 
-func (r *KaiwoQueueConfigReconciler) syncResourceFlavors(ctx context.Context, queueConfig *v1alpha1.KaiwoQueueConfig, existingFlavors *kueuev1beta1.ResourceFlavorList, enforceKaiwoOwnership bool) bool {
+func (r *KaiwoQueueConfigReconciler) syncResourceFlavors(ctx context.Context, queueConfig *v1alpha1.KaiwoQueueConfig, existingFlavors *kueuev1beta1.ResourceFlavorList) bool {
 	logger := log.FromContext(ctx)
 
 	success := true
@@ -173,7 +168,7 @@ func (r *KaiwoQueueConfigReconciler) syncResourceFlavors(ctx context.Context, qu
 	}
 
 	for _, existingFlavor := range existingFlavors.Items {
-		if _, exists := existingFlavorMap[existingFlavor.Name]; !exists && (!enforceKaiwoOwnership || metav1.IsControlledBy(&existingFlavor, queueConfig)) {
+		if _, exists := existingFlavorMap[existingFlavor.Name]; !exists {
 			logger.Info("Deleting ResourceFlavor", "name", existingFlavor.Name)
 			if err := r.Delete(ctx, &existingFlavor); err != nil {
 				logger.Error(err, "Failed to delete ResourceFlavor", "name", existingFlavor.Name)
@@ -185,7 +180,7 @@ func (r *KaiwoQueueConfigReconciler) syncResourceFlavors(ctx context.Context, qu
 	return success
 }
 
-func (r *KaiwoQueueConfigReconciler) syncClusterQueues(ctx context.Context, queueConfig *v1alpha1.KaiwoQueueConfig, existingQueues *kueuev1beta1.ClusterQueueList, enforceKaiwoOwnership bool) bool {
+func (r *KaiwoQueueConfigReconciler) syncClusterQueues(ctx context.Context, queueConfig *v1alpha1.KaiwoQueueConfig, existingQueues *kueuev1beta1.ClusterQueueList) bool {
 	logger := log.FromContext(ctx)
 
 	success := true
@@ -237,7 +232,7 @@ func (r *KaiwoQueueConfigReconciler) syncClusterQueues(ctx context.Context, queu
 	}
 
 	for _, existingQueue := range existingQueues.Items {
-		if _, exists := expectedQueues[existingQueue.Name]; !exists && (!enforceKaiwoOwnership || metav1.IsControlledBy(&existingQueue, queueConfig)) {
+		if _, exists := expectedQueues[existingQueue.Name]; !exists {
 			logger.Info("Deleting ClusterQueue", "name", existingQueue.Name)
 			if err := r.Delete(ctx, &existingQueue); err != nil {
 				logger.Error(err, "Failed to delete ClusterQueue", "name", existingQueue.Name)
@@ -256,7 +251,6 @@ func (r *KaiwoQueueConfigReconciler) syncLocalQueues(
 	ctx context.Context,
 	kaiwoQueueConfig *v1alpha1.KaiwoQueueConfig,
 	existingLocalQueues *kueuev1beta1.LocalQueueList,
-	enforceKaiwoOwnership bool,
 ) bool {
 	logger := log.FromContext(ctx)
 	success := true
@@ -264,11 +258,8 @@ func (r *KaiwoQueueConfigReconciler) syncLocalQueues(
 	// Map: clusterQueueName -> namespace -> LocalQueue
 	staleQueues := map[string]map[string]kueuev1beta1.LocalQueue{}
 
-	// Build map of all existing LocalQueues that are owned by the kaiwoQueueConfig
+	// Build map of all existing LocalQueues
 	for _, localQueue := range existingLocalQueues.Items {
-		if !metav1.IsControlledBy(&localQueue, kaiwoQueueConfig) || !enforceKaiwoOwnership {
-			continue
-		}
 		if _, ok := staleQueues[localQueue.Name]; !ok {
 			staleQueues[localQueue.Name] = map[string]kueuev1beta1.LocalQueue{}
 		}
@@ -277,6 +268,13 @@ func (r *KaiwoQueueConfigReconciler) syncLocalQueues(
 
 	// Reconcile expected LocalQueues
 	for _, clusterQueue := range kaiwoQueueConfig.Spec.ClusterQueues {
+		// Fetch the actual cluster queue to use for the owner reference
+		actualClusterQueue := &kueuev1beta1.ClusterQueue{}
+		if err := r.Get(ctx, client.ObjectKey{Name: clusterQueue.Name}, actualClusterQueue); err != nil {
+			logger.Error(err, "Failed to get ClusterQueue", "name", clusterQueue.Name)
+			success = false
+			continue
+		}
 		for _, namespace := range clusterQueue.Namespaces {
 			localQueue := &kueuev1beta1.LocalQueue{
 				ObjectMeta: metav1.ObjectMeta{
@@ -304,7 +302,7 @@ func (r *KaiwoQueueConfigReconciler) syncLocalQueues(
 
 			case errors.IsNotFound(err):
 				// Needs to be created
-				if err := ctrl.SetControllerReference(kaiwoQueueConfig, localQueue, r.Scheme); err != nil {
+				if err := ctrl.SetControllerReference(actualClusterQueue, localQueue, r.Scheme); err != nil {
 					logger.Error(err, "Failed to set owner reference", "name", clusterQueue.Name, "namespace", namespace)
 					success = false
 					continue
@@ -338,7 +336,7 @@ func (r *KaiwoQueueConfigReconciler) syncLocalQueues(
 	return success
 }
 
-func (r *KaiwoQueueConfigReconciler) syncWorkloadPriorityClasses(ctx context.Context, queueConfig *v1alpha1.KaiwoQueueConfig, existingPriorityClasses *kueuev1beta1.WorkloadPriorityClassList, enforceKaiwoOwnership bool) bool {
+func (r *KaiwoQueueConfigReconciler) syncWorkloadPriorityClasses(ctx context.Context, queueConfig *v1alpha1.KaiwoQueueConfig, existingPriorityClasses *kueuev1beta1.WorkloadPriorityClassList) bool {
 	logger := log.FromContext(ctx)
 
 	success := true
@@ -374,7 +372,7 @@ func (r *KaiwoQueueConfigReconciler) syncWorkloadPriorityClasses(ctx context.Con
 	}
 
 	for _, existingPriorityClass := range existingPriorityClasses.Items {
-		if _, exists := expectedPriorityClasses[existingPriorityClass.Name]; !exists && (!enforceKaiwoOwnership || metav1.IsControlledBy(&existingPriorityClass, queueConfig)) {
+		if _, exists := expectedPriorityClasses[existingPriorityClass.Name]; !exists {
 			logger.Info("Deleting WorkloadPriorityClass", "name", existingPriorityClass.Name)
 			if err := r.Delete(ctx, &existingPriorityClass); err != nil {
 				logger.Error(err, "Failed to delete WorkloadPriorityClass", "name", existingPriorityClass.Name)

@@ -22,26 +22,6 @@ spec:
           kind: Namespace
           metadata:
             name: namespace2
-    # Create a manual cluster queue
-    - apply:
-        resource:
-          apiVersion: "kueue.x-k8s.io/v1beta1"
-          kind: ClusterQueue
-          metadata:
-            name: test-queue
-          spec:
-            namespaceSelector: {}
-            resourceGroups: []
-      # Create a manual local queue (to ensure it is not affected by the kaiwo queue config)
-    - apply:
-        resource:
-          apiVersion: "kueue.x-k8s.io/v1beta1"
-          kind: LocalQueue
-          metadata:
-            name: test-queue
-            namespace: namespace2
-          spec:
-            clusterQueue: test-queue
     # Create the kaiwo queue config
     - apply:
         file: kaiwoqueueconfig1.yaml
@@ -79,16 +59,24 @@ spec:
           metadata:
             name: fizz
             namespace: namespace2
-    # Ensure that the manually created local queue still exists (even though it was in the same namespace that was deleted)
-    - assert:
+    # Update the config (which removes the whole cluster queue)
+    - apply:
+        file: kaiwoqueueconfig3.yaml
+    # Ensure the local queue was removed
+    - error:
         resource:
           apiVersion: "kueue.x-k8s.io/v1beta1"
           kind: LocalQueue
           metadata:
-            name: test-queue
-            namespace: namespace2
-          spec:
-            clusterQueue: test-queue
+            name: fizz
+            namespace: namespace1
+      # Ensure the cluster queue was removed
+    - error:
+        resource:
+          apiVersion: "kueue.x-k8s.io/v1beta1"
+          kind: ClusterQueue
+          metadata:
+            name: fizz
     # Apply the saved kaiwoqueueconfig for other tests to use
     finally:
     - script:
