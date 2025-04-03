@@ -76,36 +76,55 @@ jobs:
   sync-to-cluster-forge:
     runs-on: ubuntu-latest
     needs: build
+    env:
+      BRANCH: kaiwo-release-${{ env.VERSION }}
+      REPO: github.com/silogen/cluster-forge.git
 
     steps:
     - name: Checkout cluster-forge
       run: |
-        git clone https://x-access-token:${{ secrets.CLUSTER_FORGE_PAT }}@github.com/silogen/cluster-forge.git
+        git clone https://x-access-token:${{ secrets.CLUSTER_FORGE_PAT }}@${{ env.REPO }} cluster-forge 
         cd cluster-forge
-        git config user.name "github-actions"
-        git config user.email "github-actions@github.com"
-        git checkout -b kaiwo-release-${{ env.VERSION }}
+        git checkout -b ${{ env.BRANCH }}
 
     - name: Download install.yaml artifact
       uses: actions/download-artifact@v4
       with:
         name: install-yaml
 
-    - name: Copy install.yaml and commit if changed
+    - name: Check if install.yaml changed
+      id: check_diff
       run: |
-        set -e
         cp install.yaml cluster-forge/input/kaiwo/install.yaml
         cd cluster-forge
-        if ! git diff --quiet; then
-          git add input/kaiwo/install.yaml
-          git commit -m "Update kaiwo install.yaml for version ${{ env.VERSION }}"
-          git push origin kaiwo-release-${{ env.VERSION }}
+        if ! git diff --quiet input/kaiwo/install.yaml; then
+          echo "changed=true" >> "$GITHUB_OUTPUT"
         else
           echo "No changes to commit."
+          echo "changed=false" >> "$GITHUB_OUTPUT"
         fi
 
+    - name: Commit install.yaml via GitHub API
+      if: steps.check_diff.outputs.changed == 'true'
+      run: |
+        cd cluster-forge
+        FILE_PATH="input/kaiwo/install.yaml"
+        ENCODED_CONTENT=$(base64 -w0 $FILE_PATH)
+        HEAD_OID=$(git rev-parse HEAD)
+
+        gh api graphql \
+          -F githubRepository="${{ env.REPO }}" \
+          -F branchName="${{ env.BRANCH }}" \
+          -F expectedHeadOid="$HEAD_OID" \
+          -F commitMessage="Update kaiwo install.yaml for version ${{ env.VERSION }}" \
+          -F files[][path]="$FILE_PATH" \
+          -F files[][contents]="$ENCODED_CONTENT" \
+          -F 'query=@.github/api/createCommitOnBranch.gql'
+      env:
+        GH_TOKEN: ${{ secrets.CLUSTER_FORGE_PAT }}
+
     - name: Create Pull Request
-      if: ${{ success() }}
+      if: steps.check_diff.outputs.changed == 'true'
       uses: peter-evans/create-pull-request@v6
       with:
         token: ${{ secrets.CLUSTER_FORGE_PAT }}
