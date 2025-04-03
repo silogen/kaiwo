@@ -30,9 +30,10 @@ else
     create_cluster
 fi
 
+SCRIPT_PATH="$SCRIPT_DIR/../get-kaiwo.sh"
+
 if [ "$SKIP_DEPENDENCIES" = false ]; then
-  CONFIG_FILE="$SCRIPT_DIR/../get-kaiwo.sh --dependencies-only --local"
-  bash "$CONFIG_FILE"
+  bash "$SCRIPT_PATH" --dependencies-only --local
 else
   echo "Skipping standard dependency installation"
 fi
