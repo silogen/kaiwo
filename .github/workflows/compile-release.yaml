@@ -106,22 +106,29 @@ jobs:
     - name: Commit install.yaml via GitHub API
       if: steps.check_diff.outputs.changed == 'true'
       run: |
+        set -e
         cd cluster-forge
-        FILE_PATH="input/kaiwo/install.yaml"
-        ENCODED_CONTENT=$(base64 -w0 $FILE_PATH)
-        HEAD_OID=$(git rev-parse HEAD)
+        FILE_TO_COMMIT="input/kaiwo/install.yaml"
+        MESSAGE="Update kaiwo install.yaml for version ${{ env.VERSION }}"
 
-        gh api graphql \
-          -F githubRepository="${{ env.REPO }}" \
-          -F branchName="${{ env.BRANCH }}" \
-          -F expectedHeadOid="$HEAD_OID" \
-          -F commitMessage="Update kaiwo install.yaml for version ${{ env.VERSION }}" \
-          -F files[][path]="$FILE_PATH" \
-          -F files[][contents]="$ENCODED_CONTENT" \
-          -F 'query=@.github/api/createCommitOnBranch.gql'
+        SHA=""
+        if gh api /repos/silogen/cluster-forge/contents/$FILE_TO_COMMIT?ref=$DESTINATION_BRANCH >/dev/null 2>&1; then
+          SHA=$(gh api /repos/silogen/cluster-forge/contents/$FILE_TO_COMMIT?ref=$DESTINATION_BRANCH --jq .sha)
+        fi
+
+        CONTENT=$(base64 -w 0 "$FILE_TO_COMMIT")
+
+        gh api --method PUT /repos/silogen/cluster-forge/contents/$FILE_TO_COMMIT \
+        --field message="$MESSAGE" \
+        --field content="$CONTENT" \
+        --field encoding="base64" \
+        --field branch="$DESTINATION_BRANCH" \
+        ${SHA:+--field sha="$SHA"}
       env:
         # GH_TOKEN: ${{ secrets.CLUSTER_FORGE_PAT }}
         GH_TOKEN: ${{ github.token }}
+        FILE_TO_COMMIT: input/kaiwo/install.yaml
+        DESTINATION_BRANCH: kaiwo-release-${{ env.VERSION }}
 
     - name: Create Pull Request
       if: steps.check_diff.outputs.changed == 'true'
