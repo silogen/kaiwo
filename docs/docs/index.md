@@ -25,7 +25,7 @@ This documentation is intended for two main audiences:
 :   Effortlessly schedule distributed workloads across multiple Kubernetes nodes with Kaiwo Operator.
 
 **Broad Workload Support** with pre-built templates
-:   Supports running **Kubernetes Jobs**, **RayJobs** and **RayServices**.
+:   Supports running **Kubernetes Jobs, Deployments**, **RayJobs** and **RayServices**.
 
 **Integration with Ray and Kueue**
 :   Leverages the power of Ray for distributed computing and Kueue for efficient job queueing.

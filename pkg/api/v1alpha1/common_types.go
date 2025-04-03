@@ -288,7 +288,7 @@ type HuggingFaceDownloadItem struct {
 	RepoID string `json:"repoId" yaml:"repoId"`
 
 	// Files is an optional list of specific files to download from the repository. If omitted, the entire repository is downloaded.
-	Files []string `json:"files"`
+	Files  []string `json:"files,omitempty"`
 }
 
 // GitDownloadItem defines parameters for cloning a Git repository or parts of it.

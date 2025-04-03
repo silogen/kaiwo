@@ -1,0 +1,24 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoJob
+metadata:
+  name: hf-public-repo
+spec:
+  resources:
+    limits:
+      cpu: "100m"
+      memory: "100Mi"
+    requests:
+      cpu: "100m"
+      memory: "100Mi"
+  user: test@amd.com
+  image: busybox:latest
+  entrypoint: |
+    sleep 5
+  storage:
+    storageEnabled: true
+    storageClassName: "nfs-client"
+    huggingFace:
+      storageSize: "50Mi"
+      mountPath: "/.cache/huggingface"
+      preCacheRepos:
+      - repoId: timm/mobilenetv3_small_100.lamb_in1k

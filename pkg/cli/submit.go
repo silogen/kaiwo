@@ -206,7 +206,7 @@ func promptUserForConfig() (bool, error) {
 		return false, nil
 	}
 
-	queueValue := common.DefaultKaiwoQueueConfigName
+	queueValue := common.DefaultClusterQueueName
 	userEmail := ""
 
 	for {
