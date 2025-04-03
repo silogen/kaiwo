@@ -247,64 +247,83 @@ func (r *KaiwoQueueConfigReconciler) syncClusterQueues(ctx context.Context, queu
 // syncLocalQueues manages a set of LocalQueues based on the defined Cluster Queues and the namespaces that they apply to.
 // This function ensures that each namespace has its corresponding LocalQueue, and if the namespace (or ClusterQueue) is removed,
 // the corresponding LocalQueue is also deleted.
-func (r *KaiwoQueueConfigReconciler) syncLocalQueues(ctx context.Context, queueConfig *v1alpha1.KaiwoQueueConfig, existingLocalQueues *kueuev1beta1.LocalQueueList) bool {
+func (r *KaiwoQueueConfigReconciler) syncLocalQueues(
+	ctx context.Context,
+	kaiwoQueueConfig *v1alpha1.KaiwoQueueConfig,
+	existingLocalQueues *kueuev1beta1.LocalQueueList,
+) bool {
 	logger := log.FromContext(ctx)
 	success := true
 
-	// map of clusterQueueName (via cluster queue name) -> namespace -> Local queue
-	// the local queue name is the same as the cluster queue name
-	namespaceToLocalQueues := map[string]map[string]kueuev1beta1.LocalQueue{}
+	// Map: clusterQueueName -> namespace -> LocalQueue
+	staleQueues := map[string]map[string]kueuev1beta1.LocalQueue{}
 
+	// Build map of all existing LocalQueues that are owned by the kaiwoQueueConfig
 	for _, localQueue := range existingLocalQueues.Items {
-		// Skip local queues that are not automatically created
-		if !metav1.IsControlledBy(&localQueue, queueConfig) {
+		if !metav1.IsControlledBy(&localQueue, kaiwoQueueConfig) {
 			continue
 		}
-		if _, exists := namespaceToLocalQueues[localQueue.Name]; !exists {
-			namespaceToLocalQueues[localQueue.Name] = map[string]kueuev1beta1.LocalQueue{}
+		if _, ok := staleQueues[localQueue.Name]; !ok {
+			staleQueues[localQueue.Name] = map[string]kueuev1beta1.LocalQueue{}
 		}
-		namespaceToLocalQueues[localQueue.Name][localQueue.Namespace] = localQueue
+		staleQueues[localQueue.Name][localQueue.Namespace] = localQueue
 	}
 
-	for _, clusterQueue := range queueConfig.Spec.ClusterQueues {
+	// Reconcile expected LocalQueues
+	for _, clusterQueue := range kaiwoQueueConfig.Spec.ClusterQueues {
 		for _, namespace := range clusterQueue.Namespaces {
 			localQueue := &kueuev1beta1.LocalQueue{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      clusterQueue.Name,
 					Namespace: namespace,
 				},
+				Spec: kueuev1beta1.LocalQueueSpec{
+					ClusterQueue: kueuev1beta1.ClusterQueueReference(clusterQueue.Name),
+				},
 			}
 
-			if err := r.Get(ctx, client.ObjectKey{Name: clusterQueue.Name, Namespace: namespace}, localQueue); err != nil && !errors.IsNotFound(err) {
-				logger.Error(err, "Failed to get LocalQueue", "name", clusterQueue.Name)
-				success = false
-			} else if errors.IsNotFound(err) {
-				// Local queue does not exist, create it
-				if err := ctrl.SetControllerReference(queueConfig, localQueue, r.Scheme); err != nil {
-					logger.Error(err, "Failed to set owner reference", "name", clusterQueue.Name)
-					success = false
-				} else if err := r.Create(ctx, localQueue); err != nil {
-					logger.Error(err, "Failed to create LocalQueue", "name", clusterQueue.Name)
-					success = false
-				}
-			} else {
-				// Local queue exists, remove from lookup
-				// Checking that the objects exist in the map in case they have been created after the list operation was done
-				if _, nameExists := namespaceToLocalQueues[clusterQueue.Name]; nameExists {
-					if _, namespaceExists := namespaceToLocalQueues[clusterQueue.Name][namespace]; !namespaceExists {
-						delete(namespaceToLocalQueues[clusterQueue.Name], namespace)
+			key := client.ObjectKeyFromObject(localQueue)
+			existing := &kueuev1beta1.LocalQueue{}
+			err := r.Get(ctx, key, existing)
+
+			switch {
+			case err == nil:
+				// Already exists — remove it from the stale map
+				if namespaceMap, ok := staleQueues[clusterQueue.Name]; ok {
+					delete(namespaceMap, namespace)
+					if len(namespaceMap) == 0 {
+						delete(staleQueues, clusterQueue.Name)
 					}
 				}
+
+			case errors.IsNotFound(err):
+				// Needs to be created
+				if err := ctrl.SetControllerReference(kaiwoQueueConfig, localQueue, r.Scheme); err != nil {
+					logger.Error(err, "Failed to set owner reference", "name", clusterQueue.Name, "namespace", namespace)
+					success = false
+					continue
+				}
+				if err := r.Create(ctx, localQueue); err != nil {
+					logger.Error(err, "Failed to create LocalQueue", "name", clusterQueue.Name, "namespace", namespace)
+					success = false
+				} else {
+					logger.Info("Created LocalQueue", "name", clusterQueue.Name, "namespace", namespace)
+				}
+
+			default:
+				// Unexpected error
+				logger.Error(err, "Failed to get LocalQueue", "name", clusterQueue.Name, "namespace", namespace)
+				success = false
 			}
 		}
 	}
 
-	// Remove stale local queues
-	for _, localQueues := range namespaceToLocalQueues {
-		for namespace, localQueue := range localQueues {
-			logger.Info("Deleting LocalQueue", "name", localQueue.Name, "namespace", namespace)
+	// Clean up stale LocalQueues
+	for queueName, namespaceMap := range staleQueues {
+		for namespace, localQueue := range namespaceMap {
+			logger.Info("Deleting stale LocalQueue", "name", queueName, "namespace", namespace)
 			if err := r.Delete(ctx, &localQueue); err != nil {
-				logger.Error(err, "Failed to delete LocalQueue", "name", localQueue.Name, "namespace", namespace)
+				logger.Error(err, "Failed to delete stale LocalQueue", "name", queueName, "namespace", namespace)
 				success = false
 			}
 		}
