@@ -67,7 +67,7 @@ func UpdatePodSpec(kaiwoCommonMetaSpec v1alpha1.CommonMetaSpec, labelContext com
 
 	FillPodResources(&template.Spec, kaiwoCommonMetaSpec.Resources, false)
 
-	vendor := "AMD"
+	vendor := "amd"
 	if kaiwoCommonMetaSpec.GpuVendor != "" {
 		vendor = kaiwoCommonMetaSpec.GpuVendor
 	}

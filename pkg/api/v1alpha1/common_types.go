@@ -21,92 +21,130 @@ import (
 type Status string
 
 const (
-	StatusNew      Status = ""
-	StatusPending  Status = "PENDING"
+	// StatusNew indicates the resource has been created but not yet processed by the controller.
+	StatusNew Status = ""
+	// StatusPending indicates the resource is waiting for prerequisites (like download jobs or Kueue admission) to complete.
+	StatusPending Status = "PENDING"
+	// StatusStarting indicates the underlying workload (Job, Deployment, RayService) is being created or started.
 	StatusStarting Status = "STARTING"
-	StatusReady    Status = "READY"
-	StatusRunning  Status = "RUNNING"
+	// StatusReady indicates a KaiwoService is fully deployed and ready to serve requests (Deployment ready or RayService healthy). Not applicable to KaiwoJob.
+	StatusReady Status = "READY"
+	// StatusRunning indicates the workload pods are running. For KaiwoJob, this means the job has started execution. For KaiwoService, pods are up but may not yet be fully ready/healthy.
+	StatusRunning Status = "RUNNING"
+	// StatusComplete indicates a KaiwoJob has finished successfully.
 	StatusComplete Status = "COMPLETE"
-	StatusFailed   Status = "FAILED"
+	// StatusFailed indicates the workload (KaiwoJob or KaiwoService) or its prerequisites (like download jobs) encountered an error and cannot proceed or recover.
+	StatusFailed Status = "FAILED"
 )
 
 // CommonMetaSpec defines reusable metadata fields for workloads.
 type CommonMetaSpec struct {
-	// Annotations provides additional metadata for the workload.
-	Annotations map[string]string `json:"annotations,omitempty"`
-
-	// User specifies the owner or creator of the workload.
-	// If authentication is enabled, this must be email address which is checked against authenticated user for match.
+	// User specifies the owner or creator of the workload. It should typically be the user's email address. This value is primarily used for labeling (`kaiwo.silogen.ai/user`) the generated resources (like Pods, Jobs, Deployments) for identification and filtering (e.g., with `kaiwo list --user <email>`).
+	//
+	// In the future, if authentication is enabled, this must be the email address which is checked against authenticated user for match.
 	User string `json:"user,omitempty"`
 
+	// PodTemplateSpecLabels allows you to specify custom labels that will be added to the `template.metadata.labels` section of the generated Pods (within Jobs, Deployments, or RayCluster specs). Standard Kaiwo system labels (like `kaiwo.silogen.ai/user`, `kaiwo.silogen.ai/name`, etc.) are added automatically and take precedence if there are conflicts.
 	PodTemplateSpecLabels map[string]string `json:"podTemplateSpecLabels,omitempty"`
 
-	// Gpus specifies the total number of GPUs allocated to the workload.
-	// Default is 0.
+	// Gpus specifies the total number of GPUs allocated to the workload. See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor) for more details on how this field impacts scheduling.
 	// +kubebuilder:default=0
 	Gpus int `json:"gpus,omitempty"`
 
-	// GpuVendor specifies the GPU vendor (e.g., AMD, NVIDIA, etc.).
-	// Default is AMD.
-	// +kubebuilder:default=AMD
+	// GpuVendor specifies the GPU vendor (e.g., amd, nvidia, etc.). See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor) for more details on how this field impacts scheduling.
+	// +kubebuilder:default=amd
 	GpuVendor string `json:"gpuVendor,omitempty"`
 
-	// Version is an optional field specifying the version of the workload.
+	// Version allows you to specify an optional version string for the workload. This can be useful for tracking different iterations or configurations of the same logical workload. It does not directly affect resource creation but serves as metadata.
 	Version string `json:"version,omitempty"`
 
-	// Replicas specifies the number of replicas for the workload.
-	// If greater than one, the workload must use Ray.
-	// Default is 0.
+	// Replicas specifies the number of replicas for the workload. See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor) for more details on how this field impacts scheduling.
 	// +kubebuilder:default=1
 	Replicas *int `json:"replicas,omitempty"`
 
-	// GpusPerReplica specifies the number of GPUs allocated per replica.
+	// GpusPerReplica specifies the number of GPUs allocated per replica. See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor) for more details on how this field impacts scheduling.
+	//
+	// If you specify `gpusPerReplica`, you must also specify `replicas`.
 	GpusPerReplica int `json:"gpus-per-replica,omitempty"`
 
-	// Resources specify the default resource requirements applied for all pods inside the workflow
+	// Resources specify the default resource requirements applied for all pods inside the workflow.
+	//
+	// This field defines default Kubernetes `ResourceRequirements` (requests and limits for CPU,
+	// memory, ephemeral-storage) applied to *all* containers (including init containers) within
+	// the workload's pods.
+	//
+	// **Behavior:**
+	//
+	// These values act as **defaults**. If a container within the underlying Job, Deployment,
+	// or Ray spec (if provided by the user) already defines a specific request or limit
+	// (e.g., `memory` limit), the value from `resources` for that specific metric **will not** override it.
+	//
+	// **Interaction with GPU fields:** The GPU requests/limits (`amd.com/gpu` or `nvidia.com/gpu`)
+	// are controlled exclusively by the `gpus`, `gpusPerReplica`, and `gpuVendor` fields
+	// (and the associated calculation logic described above). Any GPU specifications within
+	// the `resources` field are **ignored**.
+	//
+	// **Default CPU/Memory with GPUs:** When Kaiwo *generates* the underlying
+	// Job/Deployment/RayCluster spec (i.e., the user did *not* provide `spec.job`,
+	// `spec.deployment`, or `spec.rayService`/`spec.rayJob`), and GPUs are requested
+	// (`gpusPerReplica` > 0), Kaiwo applies default CPU and Memory requests/limits
+	// based on the GPU count (e.g., 4 CPU cores and 32Gi Memory per GPU).
+	// These GPU-derived defaults *will* override any CPU/Memory settings defined in
+	// the `resources` field in this specific scenario. If the user *does* provide
+	// the underlying spec, these GPU-derived CPU/Memory defaults are not applied,
+	// respecting the user's definition or the values from the `resources` field.
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 
-	// Image defines the container image used for the workload.
+	// Image specifies the default container image to be used for the primary workload container(s).
+	//
+	// - If containers defined within the underlying Job, Deployment, or Ray spec do *not* specify an image, this image will be used.
+	// - If this field is also empty, the latest tag of ghcr.io/silogen/rocm-ray is used
 	Image string `json:"image,omitempty"`
 
-	// ImagePullSecrets contains the list of secrets used to pull the container image.
+	// ImagePullSecrets is a list of Kubernetes `LocalObjectReference` (containing just the secret `name`) referencing secrets needed to pull the container image(s). These are added to the `imagePullSecrets` field of the PodSpec for all generated pods.
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 
-	// Env specifies the environment variables to be passed to the container.
+	// Env is a list of Kubernetes `EnvVar` structs. These environment variables are added to the primary workload container(s) in the generated pods. They are appended to any environment variables already defined in the underlying Job, Deployment, or Ray spec.
 	Env []corev1.EnvVar `json:"env,omitempty"`
 
-	// SecretVolumes list the secret volumes that should be mounted
+	// SecretVolumes allows you to mount specific keys from Kubernetes Secrets as files into the workload containers.
 	SecretVolumes []SecretVolume `json:"secretVolumes,omitempty"`
 
 	// Ray determines whether the operator should use RayCluster for workload execution.
-	// Default is false.
+	// If `true`, Kaiwo will create Ray-specific resources.
+	// If `false` (default), Kaiwo will create standard Kubernetes resources (BatchJob for `KaiwoJob`, Deployment for `KaiwoService`).
+	// This setting dictates which underlying spec (`job`/`rayJob` or `deployment`/`rayService`) is primarily used.
 	// +kubebuilder:default=false
 	Ray bool `json:"ray,omitempty"`
 
-	// Storage configuration for the workload.
+	// Storage configures persistent storage using Kubernetes PersistentVolumeClaims (PVCs).
+	//
+	// Enabling `storage.data.download` or `storage.huggingFace.preCacheRepos` will cause Kaiwo to create a temporary Kubernetes Job (the "download job") before starting the main workload. This job runs a container that performs the downloads into the respective PVCs. The main workload only starts after the download job completes successfully.
 	Storage *StorageSpec `json:"storage,omitempty"`
 
-	// Dangerous disables adding the default security context to the containers
+	// Dangerous, if when set to `true`, Kaiwo will *not* add the default `PodSecurityContext` (which normally sets `runAsUser: 1000`, `runAsGroup: 1000`, `fsGroup: 1000`) to the generated pods. Use this only if you need to run containers as root or a different specific user and understand the security implications.
 	// +kubebuilder:default=false
 	Dangerous bool `json:"dangerous,omitempty"`
 }
 
 // StorageSpec defines the storage configuration for the workload.
 type StorageSpec struct {
-	// StorageEnabled tells whether to enable persistent storage.
+	// StorageEnabled must be `true` to enable the creation of any PersistentVolumeClaims defined within this spec. If `false`, `data` and `huggingFace` sections are ignored.
 	StorageEnabled bool `json:"storageEnabled,omitempty"`
 
-	// StorageClassName specifies the storage class used for PVC.
+	// StorageClassName specifies the name of the Kubernetes `StorageClass` to use when creating PersistentVolumeClaims for `data` and `huggingFace` volumes. Must refer to an existing StorageClass in the cluster.
 	StorageClassName string `json:"storageClassName,omitempty"`
 
-	// AccessMode determines the access mode for the storage
+	// AccessMode determines the access mode (e.g., `ReadWriteOnce`, `ReadWriteMany`, `ReadOnlyMany`) for the created PersistentVolumeClaims.
+	//
+	// In a multi-node setting, ReadWriteMany is generally required, as pods scheduled on different nodes cannot access ReadWriteOnce PVCs. This is true even when `replicas: 1` if you are using download jobs, as the download pod may get scheduled on a different pod than the main workload pod.
 	// +kubebuilder:default=ReadWriteMany
 	AccessMode corev1.PersistentVolumeAccessMode `json:"accessMode"`
 
-	// Data specifies the main workload PVC and optional object storage pre-downloads
+	// Data configures the main data PersistentVolumeClaim and optional pre-download tasks for it.
 	Data *DataStorageSpec `json:"data,omitempty"`
 
-	// HuggingFace specifies any hugging face models that should be cached before the workload starts
+	// HuggingFace configures a PersistentVolumeClaim specifically for caching Hugging Face models and datasets, with options for pre-caching.
 	HuggingFace *HfStorageSpec `json:"huggingFace,omitempty"`
 }
 
@@ -130,18 +168,28 @@ func (spec *StorageSpec) HasDownloads() bool {
 	return spec != nil && (spec.HasObjectStorageDownloads() || spec.HasHfDownloads())
 }
 
+// DownloadTaskConfig is an internal structure used to configure the data download job. It aggregates download tasks from both the Data and HuggingFace specs.
 type DownloadTaskConfig struct {
-	// DownloadRoot specifies the common root for all the downloads
+	// DownloadRoot specifies the common root directory within the download job's container where the 'data' PVC is mounted. Corresponds to `DataStorageSpec.MountPath`.
 	DownloadRoot string `json:"downloadRoot" yaml:"downloadRoot"`
 
-	// HfHome specifies path for $HF_HOME env variable
+	// HfHome specifies the path within the download job's container where the Hugging Face cache PVC is mounted. Corresponds to `HfStorageSpec.MountPath` and sets the `$HF_HOME` environment variable.
 	HfHome string `json:"hfHome" yaml:"hfHome"`
 
-	S3        []S3DownloadItem               `json:"s3,omitempty" yaml:"s3,omitempty"`
-	GCS       []GCSDownloadItem              `json:"gcs,omitempty" yaml:"gcs,omitempty"`
-	HF        []HuggingFaceDownloadItem      `json:"hf,omitempty" yaml:"hf,omitempty"`
+	// S3 lists S3 download tasks.
+	S3 []S3DownloadItem `json:"s3,omitempty" yaml:"s3,omitempty"`
+
+	// GCS lists Google Cloud Storage download tasks.
+	GCS []GCSDownloadItem `json:"gcs,omitempty" yaml:"gcs,omitempty"`
+
+	// HF lists Hugging Face pre-cache tasks.
+	HF []HuggingFaceDownloadItem `json:"hf,omitempty" yaml:"hf,omitempty"`
+
+	// AzureBlob lists Azure Blob Storage download tasks.
 	AzureBlob []AzureBlobStorageDownloadItem `json:"azureBlob,omitempty" yaml:"azureBlob,omitempty"`
-	Git       []GitDownloadItem              `json:"git,omitempty" yaml:"git,omitempty"`
+
+	// Git lists Git repository download tasks.
+	Git []GitDownloadItem `json:"git,omitempty" yaml:"git,omitempty"`
 }
 
 // CreateConfig creates the config required for the data downloader
@@ -172,14 +220,16 @@ func (spec *StorageSpec) CreateConfig() DownloadTaskConfig {
 	return config
 }
 
+// DataStorageSpec configures the primary data volume for the workload.
 type DataStorageSpec struct {
-	// MountPath specifies where the data PVC will be mounted to in each pod
+	// MountPath specifies the path inside the workload containers where the data PersistentVolumeClaim will be mounted.
+	//+kubebuilder:default=/workload
 	MountPath string `json:"mountPath,omitempty"`
 
-	// StorageSize specifies the amount of storage allocated to the data PVC
+	// StorageSize specifies the requested size for the data PersistentVolumeClaim (e.g., "100Gi", "1Ti"). If set, a PVC will be created.
 	StorageSize string `json:"storageSize,omitempty"`
 
-	// Download optional object storage pre-downloads
+	// Download configures optional tasks to download data from various sources into the data volume *before* the main workload starts. See `ObjectStorageDownloadSpec`.
 	Download ObjectStorageDownloadSpec `json:"download,omitempty"`
 }
 
@@ -187,77 +237,116 @@ func (spec *DataStorageSpec) IsRequested() bool {
 	return spec != nil && spec.StorageSize != ""
 }
 
+// ValueReference provides a way to reference sensitive values stored in Kubernetes Secrets, typically used for credentials needed by download tasks.
 type ValueReference struct {
-	// File determines the location of the secret value mounted on the disk
+	// File specifies the expected path within the download job's container where the secret value will be mounted as a file. This path is usually automatically generated by the controller based on SecretName and SecretKey.
 	File string `json:"file,omitempty"`
 
-	// SecretName is the name of the secret where the value is kept
+	// SecretName is the name of the Kubernetes Secret resource containing the value.
 	SecretName string `json:"secretName,omitempty" yaml:"secretName,omitempty"`
 
-	// SecretKey is the name of the key within the secret where the value is kept
+	// SecretKey is the key within the specified Secret whose value should be used.
 	SecretKey string `json:"secretKey,omitempty" yaml:"secretKey,omitempty"`
 }
 
+// S3DownloadItem defines parameters for downloading data from an S3-compatible object store.
 type S3DownloadItem struct {
-	// EndpointUrl is the endpoint of the S3 API
+	// EndpointUrl specifies the S3 API endpoint URL (e.g., "https://s3.us-east-1.amazonaws.com" or a MinIO endpoint).
 	EndpointUrl string `json:"endpointUrl" yaml:"endpointUrl"`
 
-	// AccessKeyId
-	AccessKeyId ValueReference        `json:"accessKeyId,omitempty" yaml:"accessKeyId,omitempty"`
-	SecretKey   ValueReference        `json:"secretKey,omitempty" yaml:"secretKey,omitempty"`
-	Buckets     []CloudDownloadBucket `json:"buckets"`
+	// AccessKeyId optionally references a Kubernetes Secret containing the S3 access key ID. See `ValueReference`.
+	AccessKeyId ValueReference `json:"accessKeyId,omitempty" yaml:"accessKeyId,omitempty"`
+
+	// SecretKey optionally references a Kubernetes Secret containing the S3 secret access key. See `ValueReference`.
+	SecretKey ValueReference `json:"secretKey,omitempty" yaml:"secretKey,omitempty"`
+
+	// Buckets lists the S3 buckets and the specific files/folders to download from them. See `CloudDownloadBucket`.
+	Buckets []CloudDownloadBucket `json:"buckets"`
 }
 
+// GCSDownloadItem defines parameters for downloading data from Google Cloud Storage.
 type GCSDownloadItem struct {
-	ApplicationCredentials ValueReference        `json:"applicationCredentials" yaml:"applicationCredentials"`
-	Buckets                []CloudDownloadBucket `json:"buckets"`
+	// ApplicationCredentials references a Kubernetes Secret containing the GCS service account key JSON file content. See `ValueReference`.
+	ApplicationCredentials ValueReference `json:"applicationCredentials" yaml:"applicationCredentials"`
+
+	// Buckets lists the GCS buckets and the specific files/folders to download from them. See `CloudDownloadBucket`.
+	Buckets []CloudDownloadBucket `json:"buckets"`
 }
 
+// AzureBlobStorageDownloadItem defines parameters for downloading data from Azure Blob Storage.
 type AzureBlobStorageDownloadItem struct {
-	ConnectionString ValueReference        `json:"connectionString" yaml:"connectionString"`
-	Containers       []CloudDownloadBucket `json:"containers"`
+	// ConnectionString references a Kubernetes Secret containing the Azure Storage connection string. See `ValueReference`.
+	ConnectionString ValueReference `json:"connectionString" yaml:"connectionString"`
+
+	// Containers lists the Azure Blob Storage containers and the specific files/folders to download from them. See `CloudDownloadBucket`.
+	Containers []CloudDownloadBucket `json:"containers"`
 }
 
+// HuggingFaceDownloadItem defines parameters for pre-caching a Hugging Face repository or specific files from it.
 type HuggingFaceDownloadItem struct {
-	RepoID string   `json:"repoId" yaml:"repoId"`
-	Files  []string `json:"files"`
+	// RepoID is the Hugging Face Hub repository ID (e.g., "meta-llama/Llama-2-7b-chat-hf").
+	RepoID string `json:"repoId" yaml:"repoId"`
+
+	// Files is an optional list of specific files to download from the repository. If omitted, the entire repository is downloaded.
+	Files  []string `json:"files,omitempty"`
 }
 
+// GitDownloadItem defines parameters for cloning a Git repository or parts of it.
 type GitDownloadItem struct {
+	// Repository specifies the Git repository URL (e.g., "https://github.com/user/repo.git").
 	Repository string `json:"repository" yaml:"repository,omitempty"`
 
-	// Branch specifies the branch to use, ignored if commit is given
+	// Branch specifies the branch to clone. This is ignored if `commit` is specified.
 	Branch string `json:"branch,omitempty" yaml:"branch,omitempty"`
 
-	// Commit specifies the commit to use, prioritized over branch
-	Commit   string          `json:"commit,omitempty" yaml:"commit,omitempty"`
-	Username *ValueReference `json:"username,omitempty" yaml:"username,omitempty"`
-	Token    *ValueReference `json:"token,omitempty" yaml:"token,omitempty"`
+	// Commit specifies the exact commit hash to check out. This takes precedence over `branch`.
+	Commit string `json:"commit,omitempty" yaml:"commit,omitempty"`
 
-	// Path denotes the path within the repository to copy. If not given, whole repository is copied
+	// Username optionally references a Secret containing the Git username for authentication. See `ValueReference`.
+	Username *ValueReference `json:"username,omitempty" yaml:"username,omitempty"`
+
+	// Token optionally references a Secret containing the Git token (or password) for authentication. See `ValueReference`.
+	Token *ValueReference `json:"token,omitempty" yaml:"token,omitempty"`
+
+	// Path specifies a sub-path within the repository to copy. If omitted, the entire repository is copied.
 	Path string `json:"path,omitempty" yaml:"path,omitempty"`
 
-	// TargetPath denotes where the path is copied to, relative to the data mount directory
+	// TargetPath specifies the destination path relative to the data volume's mount point (`DataStorageSpec.MountPath`) where the repository or `path` content should be copied.
 	TargetPath string `json:"targetPath" yaml:"targetPath"`
 }
 
+// CloudDownloadBucket represents a specific bucket (S3, GCS) or container (Azure) to download from.
 type CloudDownloadBucket struct {
-	Name    string                `json:"name"`
-	Files   []CloudDownloadFile   `json:"files,omitempty"`
+	// Name is the name of the bucket or container.
+	Name string `json:"name"`
+
+	// Files lists specific files to download from this bucket/container.
+	Files []CloudDownloadFile `json:"files,omitempty"`
+
+	// Folders lists specific folders (prefixes) to download from this bucket/container.
 	Folders []CloudDownloadFolder `json:"folders,omitempty"`
 }
 
+// CloudDownloadFolder specifies a folder (prefix) within a cloud bucket/container to download.
 type CloudDownloadFolder struct {
-	Path       string `json:"path"`
+	// Path is the source path (prefix) within the bucket/container (e.g., "data/images/").
+	Path string `json:"path"`
+	// TargetPath specifies the destination path relative to the data volume's mount point where the folder contents should be placed.
 	TargetPath string `json:"targetPath" yaml:"targetPath"`
-	Glob       string `json:"glob,omitempty" yaml:"glob,omitempty"`
+	// Glob provides an optional pattern (e.g., "*.jpg") to filter files within the source Path.
+	Glob string `json:"glob,omitempty" yaml:"glob,omitempty"`
 }
 
+// CloudDownloadFile specifies a single file within a cloud bucket/container to download.
 type CloudDownloadFile struct {
-	Path       string `json:"path"`
+	// Path is the full path to the source file within the bucket/container (e.g., "models/model.bin").
+	Path string `json:"path"`
+
+	// TargetPath specifies the destination path, including the filename, relative to the data volume's mount point where the file should be saved.
 	TargetPath string `json:"targetPath" yaml:"targetPath"`
 }
 
+// ObjectStorageDownloadSpec aggregates download tasks for various object storage and Git sources within the `DataStorageSpec`.
 type ObjectStorageDownloadSpec struct {
 	// S3 lists any S3 downloads
 	S3 []S3DownloadItem `json:"s3,omitempty"`
@@ -272,15 +361,17 @@ type ObjectStorageDownloadSpec struct {
 	Git []GitDownloadItem `json:"git,omitempty"`
 }
 
+// HfStorageSpec configures storage specifically for Hugging Face model caching.
 type HfStorageSpec struct {
-	// MountPath specifies where the data HF will be mounted to in each pod.
-	// This is also used to set the HF_HOME environmental variable into each container.
+	// MountPath specifies the path inside workload containers where the Hugging Face cache PVC will be mounted.
+	// This path is also automatically set as the `HF_HOME` environment variable in the containers.
+	//+kubebuilder:default=/.cache/huggingface
 	MountPath string `json:"mountPath,omitempty"`
 
-	// StorageSize specifies the amount of storage allocated to the HF PVC
+	// StorageSize specifies the requested size for the Hugging Face cache PersistentVolumeClaim (e.g., "50Gi", "200Gi"). If set, a PVC will be created.
 	StorageSize string `json:"storageSize,omitempty"`
 
-	// PreCacheRepos is a list of repositories (and their files) that should be cached before the workload starts
+	// PreCacheRepos is a list of Hugging Face repositories to download into the cache volume *before* the main workload starts.
 	PreCacheRepos []HuggingFaceDownloadItem `json:"preCacheRepos,omitempty"`
 }
 
@@ -288,10 +379,20 @@ func (spec *HfStorageSpec) IsRequested() bool {
 	return spec != nil && spec.StorageSize != ""
 }
 
+// SecretVolume defines how to mount a specific key from a Kubernetes Secret into the workload's containers.
 type SecretVolume struct {
-	Name       string `json:"name,omitempty"`
+	// Name defines the name of the Kubernetes Volume that will be created. Should be unique within the pod.
+	Name string `json:"name,omitempty"`
+
+	// SecretName specifies the name of the Kubernetes Secret resource to mount from.
 	SecretName string `json:"secretName,omitempty"`
-	Key        string `json:"key,omitempty"`
-	SubPath    string `json:"subPath,omitempty"`
-	MountPath  string `json:"mountPath,omitempty"`
+
+	// Key specifies the key within the Secret whose value should be mounted. If omitted, the entire secret might be mounted as files (depending on Kubernetes behavior).
+	Key string `json:"key,omitempty"`
+
+	// SubPath defines the filename within the `MountPath` directory where the secret `Key`'s content will be placed. Useful for mounting a single secret key as a file.
+	SubPath string `json:"subPath,omitempty"`
+
+	// MountPath defines the directory path inside the container where the secret volume (or the `SubPath` file) should be mounted.
+	MountPath string `json:"mountPath,omitempty"`
 }

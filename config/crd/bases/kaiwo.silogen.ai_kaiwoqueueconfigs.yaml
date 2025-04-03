@@ -20,7 +20,9 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: KaiwoQueueConfig manages Kueue resources.
+        description: |-
+          KaiwoQueueConfig manages Kueue resources like ClusterQueues, ResourceFlavors, and WorkloadPriorityClasses based on its spec. It acts as a central configuration point for Kaiwo's integration with Kueue. Typically, only one cluster-scoped resource named 'kaiwo' should exist. The controller ensures that the specified Kueue resources are created, updated, or deleted to match the desired state defined here.
+          KaiwoQueueConfig manages Kueue resources.
         properties:
           apiVersion:
             description: |-
@@ -40,19 +42,23 @@ spec:
           metadata:
             type: object
           spec:
-            description: KaiwoQueueConfigSpec defines the desired configuration for Kaiwo.
+            description: Spec defines the desired state for Kueue resources managed by Kaiwo.
             properties:
               clusterQueues:
+                description: ClusterQueues defines a list of Kueue ClusterQueues that Kaiwo should manage. Kaiwo ensures these ClusterQueues exist and match the provided specs.
                 items:
+                  description: ClusterQueue defines the configuration for a Kueue ClusterQueue managed by Kaiwo.
                   properties:
                     name:
+                      description: Name specifies the name of the Kueue ClusterQueue resource.
                       type: string
                     namespaces:
+                      description: Namespaces optionally lists Kubernetes namespaces where Kaiwo should automatically create a Kueue `LocalQueue` resource pointing to this ClusterQueue.
                       items:
                         type: string
                       type: array
                     spec:
-                      description: ClusterQueueSpec defines the desired state of ClusterQueue
+                      description: Spec contains the desired Kueue `ClusterQueueSpec`. Kaiwo ensures the corresponding ClusterQueue resource matches this spec. See Kueue documentation for `ClusterQueueSpec` fields like `resourceGroups`, `cohort`, `preemption`, etc.
                       properties:
                         admissionChecks:
                           description: |-
@@ -456,18 +462,21 @@ spec:
                 maxItems: 10
                 type: array
               resourceFlavors:
+                description: ResourceFlavors defines a list of Kueue ResourceFlavors that Kaiwo should manage. Kaiwo ensures these ResourceFlavors exist and match the provided specs. If omitted or empty, Kaiwo attempts to automatically discover node pools and create default flavors based on node labels.
                 items:
-                  description: ResourceFlavorSpec defines the configuration for a specific resource flavor.
+                  description: ResourceFlavorSpec defines the configuration for a Kueue ResourceFlavor managed by Kaiwo.
                   properties:
                     name:
+                      description: Name specifies the name of the Kueue ResourceFlavor resource (e.g., "amd-mi300-8gpu").
                       type: string
                     nodeLabels:
                       additionalProperties:
                         type: string
-                      description: NodeLabels must not exceed a reasonable limit to prevent CRD validation failures
+                      description: 'NodeLabels specifies the labels that pods requesting this flavor must match on nodes. This is used by Kueue for scheduling decisions. Keys and values should correspond to actual node labels. Example: `{"kaiwo/nodepool": "amd-gpu-nodes"}`'
                       maxProperties: 10
                       type: object
                     taints:
+                      description: Taints specifies a list of taints associated with this flavor.
                       items:
                         description: |-
                           The node this Taint is attached to has the "effect" on
@@ -498,7 +507,7 @@ spec:
                       maxItems: 5
                       type: array
                     tolerations:
-                      description: // +kubebuilder:validation:MaxItems=5
+                      description: Tolerations specifies a list of tolerations associated with this flavor. This is less common than using Taints; Kueue primarily uses Taints to derive Tolerations.
                       items:
                         description: |-
                           The pod this Toleration is attached to tolerates any taint that matches
@@ -535,12 +544,14 @@ spec:
                               If the operator is Exists, the value should be empty, otherwise just a regular string.
                             type: string
                         type: object
+                      maxItems: 5
                       type: array
                   required:
                   - name
                   type: object
                 type: array
               workloadPriorityClasses:
+                description: WorkloadPriorityClasses defines a list of Kueue WorkloadPriorityClasses that Kaiwo should manage. Kaiwo ensures these priority classes exist with the specified values. See Kueue documentation for `WorkloadPriorityClass`.
                 items:
                   description: WorkloadPriorityClass is the Schema for the workloadPriorityClass API
                   properties:
@@ -597,11 +608,10 @@ spec:
                 type: array
             type: object
           status:
-            description: KaiwoQueueConfigStatus represents the observed state of KaiwoQueueConfig.
+            description: Status reflects the most recently observed state of the Kueue resource synchronization.
             properties:
-              Status:
-                type: string
               conditions:
+                description: Conditions lists the observed conditions of the KaiwoQueueConfig resource, such as whether the managed Kueue resources are synchronized and ready.
                 items:
                   description: Condition contains details for one aspect of the current state of this API Resource.
                   properties:
@@ -656,6 +666,9 @@ spec:
                   - type
                   type: object
                 type: array
+              status:
+                description: Status reflects the overall status of the Kueue resource synchronization managed by this config (e.g., PENDING, READY, FAILED).
+                type: string
             type: object
         type: object
     served: true
