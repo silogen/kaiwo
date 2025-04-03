@@ -114,31 +114,31 @@ jobs:
         DESTINATION_BRANCH="kaiwo-release-$VERSION"
         MESSAGE="Update kaiwo install.yaml for version $VERSION"
 
-        # Get SHA if file already exists in branch
+        # Get SHA if file already exists
         SHA=""
         if gh api /repos/silogen/cluster-forge/contents/$FILE_TO_COMMIT?ref=$DESTINATION_BRANCH >/dev/null 2>&1; then
           SHA=$(gh api /repos/silogen/cluster-forge/contents/$FILE_TO_COMMIT?ref=$DESTINATION_BRANCH --jq .sha)
         fi
 
-        # Prepare base64-encoded file content
-        CONTENT=$(base64 -w 0 "$FILE_TO_COMMIT")
+        # Encode file content to base64 (in a separate file)
+        base64 -w 0 "$FILE_TO_COMMIT" > encoded.txt
 
-        # Build the JSON payload
-        echo '{}' | jq \
+        # Prepare the JSON payload using jq
+        jq -n \
           --arg msg "$MESSAGE" \
-          --arg content "$CONTENT" \
           --arg branch "$DESTINATION_BRANCH" \
-          --arg path "$FILE_TO_COMMIT" \
           --arg encoding "base64" \
+          --arg path "$FILE_TO_COMMIT" \
           --arg sha "$SHA" \
+          --arg content "$(cat encoded.txt)" \
           '{
             message: $msg,
             content: $content,
             encoding: $encoding,
             branch: $branch
-          } + ( $sha | length > 0 and { sha: $sha } or {} )' > payload.json
+          } + ( ($sha | length) > 0 | if . then { sha: $sha } else {} end )' > payload.json
 
-        # Commit using GitHub REST API
+        # Make the API call
         gh api --method PUT /repos/silogen/cluster-forge/contents/$FILE_TO_COMMIT --input payload.json
       env:
         # GH_TOKEN: ${{ secrets.CLUSTER_FORGE_PAT }}
