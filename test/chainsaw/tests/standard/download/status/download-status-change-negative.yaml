@@ -21,7 +21,7 @@ spec:
     storageClassName: "nfs-client"
     huggingFace:
       storageSize: "1Mi"
-      mountPath: "/.cache/huggingface"
+      mountPath: "/hf_cache"
       preCacheRepos:
       - repoId: TinyLlama/TinyLlama-1.1B-Chat-v1.0-NOT-EXISTS # Non-existing repo ID
         files:

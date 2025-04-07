@@ -32269,7 +32269,7 @@ spec:
                     description: HuggingFace configures a PersistentVolumeClaim specifically for caching Hugging Face models and datasets, with options for pre-caching.
                     properties:
                       mountPath:
-                        default: /.cache/huggingface
+                        default: /hf_cache
                         description: |-
                           MountPath specifies the path inside workload containers where the Hugging Face cache PVC will be mounted.
                           This path is also automatically set as the `HF_HOME` environment variable in the containers.

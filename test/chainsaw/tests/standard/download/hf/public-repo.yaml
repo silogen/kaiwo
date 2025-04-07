@@ -11,14 +11,17 @@ spec:
       cpu: "100m"
       memory: "100Mi"
   user: test@amd.com
-  image: busybox:latest
+  image: python:3.10-slim
   entrypoint: |
-    sleep 5
+    pip install timm && \
+    python -c "import timm; model = timm.create_model('mobilenetv3_small_100.lamb_in1k', pretrained=True, num_classes=0)" && \"
+    mkdir -p /hf_cache/hub/workload && \
+    echo "Hello World" > /hf_cache/hub/workload/hello.txt
   storage:
     storageEnabled: true
     storageClassName: "nfs-client"
     huggingFace:
       storageSize: "50Mi"
-      mountPath: "/.cache/huggingface"
+      mountPath: "/hf_cache"
       preCacheRepos:
       - repoId: timm/mobilenetv3_small_100.lamb_in1k
