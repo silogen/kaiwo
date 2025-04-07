@@ -104,6 +104,7 @@ func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, que
 
 	existingFlavors := &kueuev1beta1.ResourceFlavorList{}
 	existingQueues := &kueuev1beta1.ClusterQueueList{}
+	existingLocalQueues := &kueuev1beta1.LocalQueueList{}
 	existingPriorityClasses := &kueuev1beta1.WorkloadPriorityClassList{}
 
 	if err := r.List(ctx, existingFlavors); err != nil {
@@ -118,9 +119,14 @@ func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, que
 		logger.Error(err, "Failed to list WorkloadPriorityClasses")
 		return err
 	}
+	if err := r.List(ctx, existingLocalQueues); err != nil {
+		logger.Error(err, "Failed to list LocalQueues")
+		return err
+	}
 
 	success := r.syncResourceFlavors(ctx, queueConfig, existingFlavors)
 	success = r.syncClusterQueues(ctx, queueConfig, existingQueues) && success
+	success = r.syncLocalQueues(ctx, queueConfig, existingLocalQueues) && success
 	success = r.syncWorkloadPriorityClasses(ctx, queueConfig, existingPriorityClasses) && success
 
 	if success {
@@ -230,6 +236,98 @@ func (r *KaiwoQueueConfigReconciler) syncClusterQueues(ctx context.Context, queu
 			logger.Info("Deleting ClusterQueue", "name", existingQueue.Name)
 			if err := r.Delete(ctx, &existingQueue); err != nil {
 				logger.Error(err, "Failed to delete ClusterQueue", "name", existingQueue.Name)
+				success = false
+			}
+		}
+	}
+
+	return success
+}
+
+// syncLocalQueues manages a set of LocalQueues based on the defined Cluster Queues and the namespaces that they apply to.
+// This function ensures that each namespace has its corresponding LocalQueue, and if the namespace (or ClusterQueue) is removed,
+// the corresponding LocalQueue is also deleted.
+func (r *KaiwoQueueConfigReconciler) syncLocalQueues(
+	ctx context.Context,
+	kaiwoQueueConfig *v1alpha1.KaiwoQueueConfig,
+	existingLocalQueues *kueuev1beta1.LocalQueueList,
+) bool {
+	logger := log.FromContext(ctx)
+	success := true
+
+	// Map: clusterQueueName -> namespace -> LocalQueue
+	staleQueues := map[string]map[string]kueuev1beta1.LocalQueue{}
+
+	// Build map of all existing LocalQueues
+	for _, localQueue := range existingLocalQueues.Items {
+		if _, ok := staleQueues[localQueue.Name]; !ok {
+			staleQueues[localQueue.Name] = map[string]kueuev1beta1.LocalQueue{}
+		}
+		staleQueues[localQueue.Name][localQueue.Namespace] = localQueue
+	}
+
+	// Reconcile expected LocalQueues
+	for _, clusterQueue := range kaiwoQueueConfig.Spec.ClusterQueues {
+		// Fetch the actual cluster queue to use for the owner reference
+		actualClusterQueue := &kueuev1beta1.ClusterQueue{}
+		if err := r.Get(ctx, client.ObjectKey{Name: clusterQueue.Name}, actualClusterQueue); err != nil {
+			logger.Error(err, "Failed to get ClusterQueue", "name", clusterQueue.Name)
+			success = false
+			continue
+		}
+		for _, namespace := range clusterQueue.Namespaces {
+			localQueue := &kueuev1beta1.LocalQueue{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      clusterQueue.Name,
+					Namespace: namespace,
+				},
+				Spec: kueuev1beta1.LocalQueueSpec{
+					ClusterQueue: kueuev1beta1.ClusterQueueReference(clusterQueue.Name),
+				},
+			}
+
+			key := client.ObjectKeyFromObject(localQueue)
+			existing := &kueuev1beta1.LocalQueue{}
+			err := r.Get(ctx, key, existing)
+
+			switch {
+			case err == nil:
+				// Already exists — remove it from the stale map
+				if namespaceMap, ok := staleQueues[clusterQueue.Name]; ok {
+					delete(namespaceMap, namespace)
+					if len(namespaceMap) == 0 {
+						delete(staleQueues, clusterQueue.Name)
+					}
+				}
+
+			case errors.IsNotFound(err):
+				// Needs to be created
+				if err := ctrl.SetControllerReference(actualClusterQueue, localQueue, r.Scheme); err != nil {
+					logger.Error(err, "Failed to set owner reference", "name", clusterQueue.Name, "namespace", namespace)
+					success = false
+					continue
+				}
+				if err := r.Create(ctx, localQueue); err != nil {
+					logger.Error(err, "Failed to create LocalQueue", "name", clusterQueue.Name, "namespace", namespace)
+					success = false
+				} else {
+					logger.Info("Created LocalQueue", "name", clusterQueue.Name, "namespace", namespace)
+				}
+
+			default:
+				// Unexpected error
+				logger.Error(err, "Failed to get LocalQueue", "name", clusterQueue.Name, "namespace", namespace)
+				success = false
+			}
+		}
+	}
+
+	// Clean up stale LocalQueues
+	for queueName, namespaceMap := range staleQueues {
+		for namespace, localQueue := range namespaceMap {
+			logger.Info("Deleting stale LocalQueue", "name", queueName, "namespace", namespace)
+			if err := r.Delete(ctx, &localQueue); err != nil {
+				logger.Error(err, "Failed to delete stale LocalQueue", "name", queueName, "namespace", namespace)
 				success = false
 			}
 		}

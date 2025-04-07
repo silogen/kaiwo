@@ -1,0 +1,39 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoQueueConfig
+metadata:
+  name: kaiwo
+spec:
+  clusterQueues:
+  - name: fizz
+    namespaces:
+    - namespace1
+    spec:
+      flavorFungibility:
+        whenCanBorrow: Borrow
+        whenCanPreempt: TryNextFlavor
+      namespaceSelector: {}
+      preemption:
+        borrowWithinCohort:
+          policy: Never
+        reclaimWithinCohort: Never
+        withinClusterQueue: Never
+      queueingStrategy: BestEffortFIFO
+      resourceGroups:
+      - coveredResources:
+        - cpu
+        - memory
+        - nvidia.com/gpu
+        flavors:
+        - name: foo
+          resources:
+          - name: cpu
+            nominalQuota: "14"
+          - name: memory
+            nominalQuota: "13529146982"
+          - name: nvidia.com/gpu
+            nominalQuota: "8"
+      stopPolicy: None
+  resourceFlavors:
+  - name: foo
+    nodeLabels:
+      kaiwo/nodepool: foo
