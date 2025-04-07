@@ -42,7 +42,7 @@ const (
 
 var (
 	DefaultDataMountPath = baseutils.GetEnv("DEFAULT_DATA_MOUNT_PATH", "/workload")
-	DefaultHfMountPath   = baseutils.GetEnv("DEFAULT_HF_MOUNT_PATH", "/.cache/huggingface")
+	DefaultHfMountPath   = baseutils.GetEnv("DEFAULT_HF_MOUNT_PATH", "/hf_cache")
 )
 
 type DownloadJobConfigMapReconciler struct {
@@ -286,6 +286,9 @@ func (r *DownloadJobReconciler) Build(_ context.Context, _ client.Client) (*batc
 			BackoffLimit: baseutils.Pointer(int32(0)),
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
+					SecurityContext: &corev1.PodSecurityContext{
+						FSGroup: baseutils.Pointer(int64(1000)),
+					},
 					RestartPolicy: corev1.RestartPolicyNever,
 					Containers: []corev1.Container{
 						{

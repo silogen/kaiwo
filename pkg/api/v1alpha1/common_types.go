@@ -365,7 +365,7 @@ type ObjectStorageDownloadSpec struct {
 type HfStorageSpec struct {
 	// MountPath specifies the path inside workload containers where the Hugging Face cache PVC will be mounted.
 	// This path is also automatically set as the `HF_HOME` environment variable in the containers.
-	//+kubebuilder:default=/.cache/huggingface
+	//+kubebuilder:default=/hf_cache
 	MountPath string `json:"mountPath,omitempty"`
 
 	// StorageSize specifies the requested size for the Hugging Face cache PersistentVolumeClaim (e.g., "50Gi", "200Gi"). If set, a PVC will be created.

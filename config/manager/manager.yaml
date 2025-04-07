@@ -70,7 +70,7 @@ spec:
         - name: DEFAULT_DATA_MOUNT_PATH
           value: /workload
         - name: DEFAULT_HF_MOUNT_PATH
-          value: /.cache/huggingface
+          value: /hf_cache
         - name: DEFAULT_GPU_RESOURCE_KEY
           value: amd
         - name: EXCLUDE_MASTER_NODES_FROM_NODE_POOLS

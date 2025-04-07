@@ -5,7 +5,6 @@ metadata:
 data:
   access_key_id: bWluaW8= # minio
   secret_key: bWluaW8xMjM= # minio123
-
 ---
 
 apiVersion: kaiwo.silogen.ai/v1alpha1
@@ -72,7 +71,7 @@ spec:
           targetPath: code
     huggingFace:
       storageSize: "100Gi"
-      mountPath: "/.cache/huggingface" # Also sets the env var HF_HOME to this value in each container
+      mountPath: "/hf_cache" # Also sets the env var HF_HOME to this value in each container
       preCacheRepos:
       - repoId: OpenRLHF/Llama-3-8b-sft-mixture
         files: []

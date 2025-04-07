@@ -29,7 +29,6 @@ import (
 )
 
 var containerSelectColumns = []string{
-	"Logical group",
 	"Pod name",
 	"Pod phase",
 	"Container name",
@@ -123,8 +122,6 @@ func formatContainerRow(pod corev1.Pod, container corev1.ContainerStatus) []stri
 	}
 
 	return []string{
-		"TBC",
-		// pod.LogicalGroup,
 		pod.Name,
 		string(pod.Status.Phase),
 		container.Name,

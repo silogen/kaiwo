@@ -188,7 +188,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `mountPath` _string_ | MountPath specifies the path inside workload containers where the Hugging Face cache PVC will be mounted.<br />This path is also automatically set as the `HF_HOME` environment variable in the containers. | /.cache/huggingface |  |
+| `mountPath` _string_ | MountPath specifies the path inside workload containers where the Hugging Face cache PVC will be mounted.<br />This path is also automatically set as the `HF_HOME` environment variable in the containers. | /hf_cache |  |
 | `storageSize` _string_ | StorageSize specifies the requested size for the Hugging Face cache PersistentVolumeClaim (e.g., "50Gi", "200Gi"). If set, a PVC will be created. |  |  |
 | `preCacheRepos` _[HuggingFaceDownloadItem](#huggingfacedownloaditem) array_ | PreCacheRepos is a list of Hugging Face repositories to download into the cache volume *before* the main workload starts. |  |  |
 
