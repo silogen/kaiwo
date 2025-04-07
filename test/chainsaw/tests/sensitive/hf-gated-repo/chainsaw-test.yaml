@@ -42,7 +42,7 @@ spec:
               storageClassName: "nfs-client"
               huggingFace:
                 storageSize: "1Gi"
-                mountPath: "/.cache/huggingface"
+                mountPath: "/hf_cache"
                 preCacheRepos:
                 - repoId: siloai-eai-test/private-test
                   files:

@@ -52,7 +52,7 @@ spec:
               targetPath: azure/all
     huggingFace:
       storageSize: "2Gi"
-      mountPath: "/.cache/huggingface"  # Also sets the env var HF_HOME to this value in each container
+      mountPath: "/hf_cache" # Also sets the env var HF_HOME to this value in each container
       preCacheRepos:
       - repoId: TinyLlama/TinyLlama-1.1B-Chat-v1.0
         files:
