@@ -36,10 +36,11 @@ spec:
     value: "4"
   - name: MAX_NUM_BATCHED_TOKENS
     value: "32768"
-  - fromSecret:
-      name: "HF_TOKEN"
-      secret: "hf-token"
-      key: "hf-token"
+  - name: HF_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: hf-token
+        key: hf-token
   storage:
     storageEnabled: true
     storageClassName: multinode

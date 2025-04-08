@@ -110,11 +110,10 @@ spec:
         # More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
         resources:
           limits:
-            cpu: 500m
-            memory: 128Mi
+            memory: 4Gi
           requests:
-            cpu: 10m
-            memory: 64Mi
+            cpu: 500m
+            memory: 1Gi
         volumeMounts: []
       volumes: []
       serviceAccountName: kaiwo-controller-manager

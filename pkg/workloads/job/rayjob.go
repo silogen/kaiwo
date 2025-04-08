@@ -136,7 +136,7 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 		overrideDefaults = false
 	}
 
-	if err := workloadutils.UpdatePodSpec(r.KaiwoJob.Spec.CommonMetaSpec, labelContext, &rayJobSpec.RayClusterSpec.HeadGroupSpec.Template, r.KaiwoJob.Name, replicas, gpusPerReplica, false); err != nil {
+	if err := workloadutils.UpdatePodSpec(r.KaiwoJob.Spec.CommonMetaSpec, labelContext, &rayJobSpec.RayClusterSpec.HeadGroupSpec.Template, r.KaiwoJob.Name, replicas, 0, false); err != nil {
 		return nil, fmt.Errorf("failed to update job spec: %w", err)
 	}
 
