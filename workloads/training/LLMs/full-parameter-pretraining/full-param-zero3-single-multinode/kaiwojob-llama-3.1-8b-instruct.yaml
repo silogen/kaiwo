@@ -1,12 +1,3 @@
-apiVersion: v1
-kind: Secret
-metadata:
-  name: minio-secret
-data:
-  access_key_id: bWluaW8= # minio
-  secret_key: bWluaW8xMjM= # minio123
----
-
 apiVersion: kaiwo.silogen.ai/v1alpha1
 kind: KaiwoJob
 metadata:
@@ -18,26 +9,29 @@ spec:
   entrypoint: |
     python code/main.py \
     --model-name=meta-llama/Llama-3.1-8B-Instruct \
-    --ds-config=./mounted/zero_3_offload_optim_param.json \
-    --bucket=silogen-dev-ray \
+    --ds-config=./code/zero_3_offload_optim_param.json \
+    --bucket=silogen-dev \
     --num-epochs=1 \
     --num-devices=$NUM_GPUS \
     --batch-size-per-device=32 \
     --eval-batch-size-per-device=32 \
     --ctx-len=1024
   env:
-  - fromSecret:
-      name: "AWS_ACCESS_KEY_ID"
-      secret: "minio-secret"
-      key: "access_key_id"
-  - fromSecret:
-      name: "AWS_SECRET_ACCESS_KEY"
-      secret: "minio-secret"
-      key: "secret_key"
-  - fromSecret:
-      name: "HF_TOKEN"
-      secret: "hf-token"
-      key: "hf-token"
+  - name: AWS_ACCESS_KEY_ID
+    valueFrom:
+      secretKeyRef:
+        name: minio-secret
+        key: access_key_id
+  - name: AWS_SECRET_ACCESS_KEY
+    valueFrom:
+      secretKeyRef:
+        name: minio-secret
+        key: secret_key
+  - name: HF_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: hf-token
+        key: hf-token
   - name: MODEL_ID
     value: meta-llama/Llama-3.1-8B-Instruct
   storage:

@@ -1,5 +1,9 @@
 # DeepSpeed Zero3: Single and Multi-Node full-parameter training
 
+## Pre-requisites
+
+Make sure you have S3 endpoint and credentials set up in your environment. If you don't, you can deploy a minio instance with `workloads/dev-storage/s3-deployment.yaml`
+
 ## Dependencies
 - hf-token: Hugging Face API token for model download
 - s3-secret: S3 secret for model upload or GCS secret for model upload - refactor `env` section in manifest and code accordingly

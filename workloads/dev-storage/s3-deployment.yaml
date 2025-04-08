@@ -1,9 +1,4 @@
 apiVersion: v1
-kind: Namespace
-metadata:
-  name: kaiwo
----
-apiVersion: v1
 kind: Secret
 metadata:
   name: minio-secret
@@ -68,6 +63,37 @@ spec:
         volumeMounts:
         - name: minio-data
           mountPath: /data
+      - name: bucket-init
+        image: minio/mc
+        resources:
+          limits:
+            cpu: "1"
+            memory: "1Gi"
+          requests:
+            cpu: "1"
+            memory: "1Gi"
+        env:
+        - name: MINIO_ROOT_USER
+          valueFrom:
+            secretKeyRef:
+              name: minio-secret
+              key: access_key_id
+        - name: MINIO_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: minio-secret
+              key: secret_key
+        command:
+        - sh
+        - -c
+        - |
+          until /usr/bin/mc alias set local http://minio-service:9000 $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD; do
+            echo "Waiting for MinIO to be available..."
+            sleep 5
+          done
+          /usr/bin/mc mb -p local/silogen-dev || echo "Bucket already exists"
+          echo "Bucket init done, sleeping forever..."
+          tail -f /dev/null
       volumes:
       - name: minio-data
         persistentVolumeClaim:

@@ -1,5 +1,10 @@
 # DeepSpeed Zero3: Single and Multi-Node finetuning
 
+
+## Pre-requisites
+
+Make sure you have S3 endpoint and credentials set up in your environment. If you don't, you can deploy a minio instance with `workloads/dev-storage/s3-deployment.yaml`
+
 ## Overview
 
 This workload acts as a finetuning overlay over pre-training workload `workloads/training/LLMs/full-parameter-pretraining/full-param-zero3-single-multinode`.

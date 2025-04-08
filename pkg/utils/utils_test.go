@@ -41,7 +41,7 @@ var _ = Describe("ConvertMultilineEntrypoint", func() {
 			`python mounted/main.py
 --model-name=meta-llama/Llama-3.1-8B-Instruct
 --ds-config=./mounted/zero_3_offload_optim_param.json
---bucket=silogen-dev-ray
+--bucket=silogen-dev
 --num-epochs=2
 --num-devices=$NUM_GPUS
 --batch-size-per-device=32
@@ -50,7 +50,7 @@ var _ = Describe("ConvertMultilineEntrypoint", func() {
 			`python mounted/main.py
 --model-name=meta-llama/Llama-3.1-8B-Instruct
 --ds-config=./mounted/zero_3_offload_optim_param.json
---bucket=silogen-dev-ray
+--bucket=silogen-dev
 --num-epochs=2
 --num-devices=$NUM_GPUS
 --batch-size-per-device=32

@@ -1,16 +1,7 @@
-apiVersion: v1
-kind: Secret
-metadata:
-  name: minio-secret
-data:
-  access_key_id: bWluaW8= # minio
-  secret_key: bWluaW8xMjM= # minio123
----
-
 apiVersion: kaiwo.silogen.ai/v1alpha1
 kind: KaiwoJob
 metadata:
-  name: multinode-stage-zero3-finetuning-example
+  name: multinode-rlhf-example
 spec:
   user: test@amd.com
   gpus: 12
@@ -54,21 +45,14 @@ spec:
     --flash_attn \
     --gradient_checkpointing
   env:
-  - fromSecret:
-      name: "HF_TOKEN"
-      secret: "hf-token"
-      key: "hf-token"
+  - name: HF_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: hf-token
+        key: hf-token
   storage:
     storageEnabled: true
     storageClassName: multinode
-    data:
-      storageSize: 10Mi
-      mountPath: /workload
-      download:
-        git:
-        - repository: https://github.com/silogen/kaiwo.git
-          path: workloads/training/LLMs/rlhf-multinode
-          targetPath: code
     huggingFace:
       storageSize: "100Gi"
       mountPath: "/hf_cache" # Also sets the env var HF_HOME to this value in each container
