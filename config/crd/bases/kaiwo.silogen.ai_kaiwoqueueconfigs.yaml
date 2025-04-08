@@ -14,7 +14,7 @@ spec:
   scope: Cluster
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .status.Status
+    - jsonPath: .status.status
       name: Status
       type: string
     name: v1alpha1
