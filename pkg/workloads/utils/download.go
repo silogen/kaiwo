@@ -287,7 +287,9 @@ func (r *DownloadJobReconciler) Build(_ context.Context, _ client.Client) (*batc
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					SecurityContext: &corev1.PodSecurityContext{
-						FSGroup: baseutils.Pointer(int64(1000)),
+						RunAsUser:  baseutils.Pointer(int64(1000)),
+						RunAsGroup: baseutils.Pointer(int64(1000)),
+						FSGroup:    baseutils.Pointer(int64(1000)),
 					},
 					RestartPolicy: corev1.RestartPolicyNever,
 					Containers: []corev1.Container{

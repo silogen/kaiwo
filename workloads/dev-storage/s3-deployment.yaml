@@ -77,7 +77,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: minio-service
-  namespace: kaiwo-test
+  namespace: kaiwo
 spec:
   selector:
     app: minio

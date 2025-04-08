@@ -101,6 +101,6 @@ As our example above shows, Kaiwo makes it possible to download artifacts (model
 ## Distributed training
 
 
-## Inference
+## Batch inference (single- and multi-node)
 
-## Distributed inference
+## Online inference (single- and multi-node)

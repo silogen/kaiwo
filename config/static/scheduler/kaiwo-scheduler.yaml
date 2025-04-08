@@ -339,9 +339,11 @@ spec:
             port: 10259
             scheme: HTTPS
         resources:
+          limits:
+            memory: 4Gi
           requests:
-            cpu: 100m
-            memory: 128Mi
+            cpu: 200m
+            memory: 256Mi
         securityContext:
           privileged: false
         volumeMounts:
