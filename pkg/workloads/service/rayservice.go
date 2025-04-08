@@ -190,13 +190,19 @@ func (r *RayServiceReconciler) Build(ctx context.Context, k8sClient client.Clien
 		return nil, fmt.Errorf("failed to marshal RayServiceSpec: %w", err)
 	}
 
+	labels := map[string]string{
+		common.QueueLabel: r.KaiwoService.Labels[common.QueueLabel],
+	}
+
+	if r.KaiwoService.Spec.PriorityClass != "" {
+		labels[common.WorkloadPriorityClassLabel] = r.KaiwoService.Spec.PriorityClass
+	}
+
 	appWrapper := &appwrapperv1beta2.AppWrapper{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      r.KaiwoService.Name,
 			Namespace: r.KaiwoService.Namespace,
-			Labels: map[string]string{
-				common.QueueLabel: r.KaiwoService.Labels[common.QueueLabel],
-			},
+			Labels:    labels,
 		},
 		Spec: appwrapperv1beta2.AppWrapperSpec{
 			Components: []appwrapperv1beta2.AppWrapperComponent{

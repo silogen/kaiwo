@@ -100,6 +100,9 @@ func (r *DeploymentReconciler) Build(ctx context.Context, _ client.Client) (*app
 	depSpec.Template.ObjectMeta.Labels["app"] = r.ObjectKey.Name
 
 	depSpec.Template.ObjectMeta.Labels[common.QueueLabel] = r.KaiwoService.Labels[common.QueueLabel]
+	if r.KaiwoService.Spec.PriorityClass != "" {
+		depSpec.Template.ObjectMeta.Labels[common.WorkloadPriorityClassLabel] = r.KaiwoService.Spec.PriorityClass
+	}
 
 	if svcSpec.Replicas != nil {
 		depSpec.Replicas = baseutils.Pointer(int32(*svcSpec.Replicas))

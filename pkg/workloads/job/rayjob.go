@@ -170,6 +170,9 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 	common.SetKaiwoSystemLabels(labelContext, &rayJob.ObjectMeta)
 
 	rayJob.ObjectMeta.Labels[common.QueueLabel] = r.KaiwoJob.Labels[common.QueueLabel]
+	if r.KaiwoJob.Spec.PriorityClass != "" {
+		rayJob.ObjectMeta.Labels[common.WorkloadPriorityClassLabel] = r.KaiwoJob.Spec.PriorityClass
+	}
 
 	return rayJob, nil
 }

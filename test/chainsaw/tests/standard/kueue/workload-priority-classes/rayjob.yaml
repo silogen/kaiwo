@@ -1,0 +1,18 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoJob
+metadata:
+  name: kaiwojob-1
+spec:
+  priorityClass: test-workload-priority-class
+  ray: true
+  user: test-user
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "100Mi"
+    limits:
+      cpu: "100m"
+      memory: "100Mi"
+  image: busybox:latest
+  entrypoint: |
+    sleep 1

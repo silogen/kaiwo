@@ -1,0 +1,5 @@
+apiVersion: "kueue.x-k8s.io/v1beta1"
+kind: WorkloadPriorityClass
+metadata:
+  name: test-workload-priority-class
+value: 42

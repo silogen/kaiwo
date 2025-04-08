@@ -21,13 +21,14 @@ import (
 )
 
 const (
-	KaiwoLabelBase    = "kaiwo.silogen.ai"
-	KaiwoUserLabel    = KaiwoLabelBase + "/user"
-	KaiwoNameLabel    = KaiwoLabelBase + "/name"
-	KaiwoTypeLabel    = KaiwoLabelBase + "/type"
-	KaiwoRunIdLabel   = KaiwoLabelBase + "/run-id"
-	KaiwoManagedLabel = KaiwoLabelBase + "/managed"
-	QueueLabel        = "kueue.x-k8s.io/queue-name"
+	KaiwoLabelBase             = "kaiwo.silogen.ai"
+	KaiwoUserLabel             = KaiwoLabelBase + "/user"
+	KaiwoNameLabel             = KaiwoLabelBase + "/name"
+	KaiwoTypeLabel             = KaiwoLabelBase + "/type"
+	KaiwoRunIdLabel            = KaiwoLabelBase + "/run-id"
+	KaiwoManagedLabel          = KaiwoLabelBase + "/managed"
+	QueueLabel                 = "kueue.x-k8s.io/queue-name"
+	WorkloadPriorityClassLabel = "kueue.x-k8s.io/priority-class"
 )
 
 type KaiwoLabelContext struct {
