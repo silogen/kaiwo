@@ -326,7 +326,8 @@ func CreateClusterQueue(nodePoolResources map[string]kueuev1beta1.FlavorQuotas, 
 
 	// Create ClusterQueue
 	return v1alpha1.ClusterQueue{
-		Name: name,
+		Name:       name,
+		Namespaces: []string{"kaiwo"},
 		Spec: kueuev1beta1.ClusterQueueSpec{
 			NamespaceSelector: &metav1.LabelSelector{},
 			ResourceGroups:    resourceGroups,
