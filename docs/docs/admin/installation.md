@@ -40,7 +40,7 @@ curl -sSL https://raw.githubusercontent.com/silogen/kaiwo/refs/heads/main/depend
 **Or if you have cloned the repostiory**
 
 ```bash
-bash dependencies/install_depedencies.sh --local
+bash dependencies/install_dependencies.sh --local
 ```
 
 !!!warning "GPU Operator Not Included"
