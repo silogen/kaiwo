@@ -37,7 +37,7 @@ You can install the dependencies using the convenience script:
 curl -sSL https://raw.githubusercontent.com/silogen/kaiwo/refs/heads/main/dependencies/install_dependencies.sh | bash -s --
 ```
 
-**Or if you have cloned the repostiory**
+**Or if you have cloned the repository**
 
 ```bash
 bash dependencies/install_dependencies.sh --local
