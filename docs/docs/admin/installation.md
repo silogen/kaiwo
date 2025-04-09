@@ -31,11 +31,15 @@ There are several different ways that you can install the Kaiwo dependencies and
 
 You can install the dependencies using the convenience script:
 
-```bash
-# From the remote script
-curl -sSL https://raw.githubusercontent.com/silogen/kaiwo/main/dependencies/install_depedencies.sh | bash -s --
+**From the remote script**
 
-# Or if you have cloned the repostiory
+```bash
+curl -sSL https://raw.githubusercontent.com/silogen/kaiwo/refs/heads/main/dependencies/install_dependencies.sh | bash -s --
+```
+
+**Or if you have cloned the repostiory**
+
+```bash
 bash dependencies/install_depedencies.sh --local
 ```
 
