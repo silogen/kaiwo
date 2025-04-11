@@ -1,0 +1,16 @@
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ClusterQueue
+metadata:
+  name: workload-priority-class-test-cluster-queue
+spec:
+  namespaceSelector: {} # All namespaces
+  queueingStrategy: BestEffortFIFO
+  resourceGroups:
+  - coveredResources: ["cpu", "memory"]
+    flavors:
+    - name: "default"
+      resources:
+      - name: cpu
+        nominalQuota: 500m
+      - name: memory
+        nominalQuota: 2Gi

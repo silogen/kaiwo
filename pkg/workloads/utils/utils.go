@@ -421,7 +421,12 @@ func CheckPodStatus(ctx context.Context, k8sClient client.Client, name string, n
 		return nil, status, err
 	}
 
-	var runningPods, pendingPods []corev1.Pod
+	// FIXME
+	// Interpreting pending pods to mean starting status is disabled for now, as this leads
+	// KaiwoService (ray: false) to be interpreted as starting, even when it is still pending admission
+
+	// var runningPods, pendingPods []corev1.Pod
+	var runningPods []corev1.Pod
 
 	for _, pod := range podList.Items {
 		switch pod.Status.Phase {
@@ -432,8 +437,8 @@ func CheckPodStatus(ctx context.Context, k8sClient client.Client, name string, n
 					earliestRunningTime = pod.Status.StartTime
 				}
 			}
-		case corev1.PodPending:
-			pendingPods = append(pendingPods, pod)
+			// case corev1.PodPending:
+			//	pendingPods = append(pendingPods, pod)
 		}
 	}
 
@@ -443,8 +448,8 @@ func CheckPodStatus(ctx context.Context, k8sClient client.Client, name string, n
 
 	if len(runningPods) > 0 {
 		status = v1alpha1.StatusRunning
-	} else if len(pendingPods) > 0 {
-		status = v1alpha1.StatusStarting
+		//} else if len(pendingPods) > 0 {
+		//	status = v1alpha1.StatusStarting
 	} else {
 		status = v1alpha1.StatusPending
 	}

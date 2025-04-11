@@ -185,6 +185,13 @@ func (r *RayServiceReconciler) Build(ctx context.Context, k8sClient client.Clien
 	common.CopyLabels(r.KaiwoService.GetLabels(), &rayService.ObjectMeta)
 	common.SetKaiwoSystemLabels(labelContext, &rayService.ObjectMeta)
 
+	if r.KaiwoService.Spec.PriorityClass != "" {
+		rayServiceSpec.RayClusterSpec.HeadGroupSpec.Template.Spec.PriorityClassName = r.KaiwoService.Spec.PriorityClass
+		for i := range rayServiceSpec.RayClusterSpec.WorkerGroupSpecs {
+			rayServiceSpec.RayClusterSpec.WorkerGroupSpecs[i].Template.Spec.PriorityClassName = r.KaiwoService.Spec.PriorityClass
+		}
+	}
+
 	rayServiceSpecBytes, err := json.Marshal(rayServiceSpec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal RayServiceSpec: %w", err)
