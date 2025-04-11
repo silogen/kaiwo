@@ -1,19 +1,22 @@
 apiVersion: kaiwo.silogen.ai/v1alpha1
 kind: KaiwoService
 metadata:
-  name: kaiwoservice-1
+  name: kaiwoservice-deployment-low
 spec:
+  clusterQueue: test-local-queue
+  priorityClass: low-priority
   user: test-user
-  priorityClass: test-workload-priority-class
   resources:
     requests:
       cpu: "100m"
-      memory: "100Mi"
+      memory: "1.5Gi"
     limits:
       cpu: "100m"
-      memory: "100Mi"
+      memory: "1.5Gi"
   image: busybox:latest
   entrypoint: |
+    trap "echo 'Termination signal received. Exiting...'; exit" SIGTERM
+
     while true; do
       echo "Hello, world!"
       sleep 1
