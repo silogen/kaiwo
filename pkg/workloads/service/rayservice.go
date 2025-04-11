@@ -197,15 +197,13 @@ func (r *RayServiceReconciler) Build(ctx context.Context, k8sClient client.Clien
 		return nil, fmt.Errorf("failed to marshal RayServiceSpec: %w", err)
 	}
 
-	labels := map[string]string{
-		common.QueueLabel: r.KaiwoService.Labels[common.QueueLabel],
-	}
-
 	appWrapper := &appwrapperv1beta2.AppWrapper{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      r.KaiwoService.Name,
 			Namespace: r.KaiwoService.Namespace,
-			Labels:    labels,
+			Labels: map[string]string{
+				common.QueueLabel: r.KaiwoService.Labels[common.QueueLabel],
+			},
 		},
 		Spec: appwrapperv1beta2.AppWrapperSpec{
 			Components: []appwrapperv1beta2.AppWrapperComponent{
