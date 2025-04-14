@@ -1,0 +1,54 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: workload-priority-class-kaiwoservice-rayservice
+spec:
+  concurrent: false
+  timeouts:
+    cleanup: 60s
+  steps:
+  - name: Create resources
+    try:
+    - apply:
+            # The resource flavor must be added first, so that it gets deleted last. It sets finalizers on the
+            # cluster queue, and won't get deleted before the cluster queue is deleted
+        file: ../resource-flavor.yaml
+    - apply:
+        file: ../priority-classes.yaml
+    - apply:
+        file: ../cluster-queue-fit-none.yaml
+    - apply:
+        file: ../local-queue.yaml
+  - name: RayService
+    try:
+    - description: Create low-priority Kaiwo ray service
+      apply:
+        file: kaiwoservice-ray-low.yaml
+    - sleep:
+        duration: "1s"
+    - description: Create high-priority Kaiwo ray service
+      apply:
+        file: kaiwoservice-ray-high.yaml
+    - sleep:
+        duration: "1s"
+    - description: Increase the quota for the cluster queue to admit a workload
+      apply:
+        file: ../cluster-queue-fit-ray.yaml
+    - description: Ensure the high-priority workload is running, despite being added last
+      assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoService
+          metadata:
+            name: kaiwoservice-ray-high
+          status:
+            status: RUNNING
+    - description: Ensure the low-priority workload is still pending, despite being added first
+      assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoService
+          metadata:
+            name: kaiwoservice-ray-low
+          status:
+            status: PENDING

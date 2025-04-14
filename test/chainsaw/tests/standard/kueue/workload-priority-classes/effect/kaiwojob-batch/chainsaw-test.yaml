@@ -1,0 +1,52 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: workload-priority-class-kaiwojob-batch
+spec:
+  concurrent: false
+  steps:
+  - name: Create resources
+    try:
+    - apply:
+            # The resource flavor must be added first, so that it gets deleted last. It sets finalizers on the
+            # cluster queue, and won't get deleted before the cluster queue is deleted
+        file: ../resource-flavor.yaml
+    - apply:
+        file: ../priority-classes.yaml
+    - apply:
+        file: ../cluster-queue-fit-none.yaml
+    - apply:
+        file: ../local-queue.yaml
+  - name: Batch job
+    try:
+    - description: Create low-priority Kaiwo batch job
+      apply:
+        file: kaiwojob-batch-low.yaml
+    - sleep:
+        duration: "1s"
+    - description: Create high-priority Kaiwo batch job
+      apply:
+        file: kaiwojob-batch-high.yaml
+    - sleep:
+        duration: "1s"
+    - description: Increase the quota for the cluster queue to admit a workload
+      apply:
+        file: ../cluster-queue-fit-one.yaml
+    - description: Ensure the high-priority workload is running, despite being added last
+      assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: kaiwojob-batch-high
+          status:
+            status: RUNNING
+    - description: Ensure the low-priority workload is still pending, despite being added first
+      assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: kaiwojob-batch-low
+          status:
+            status: PENDING
