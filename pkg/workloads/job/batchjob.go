@@ -118,6 +118,9 @@ func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batch
 	common.SetKaiwoSystemLabels(labelContext, &job.ObjectMeta)
 
 	job.ObjectMeta.Labels[common.QueueLabel] = r.KaiwoJob.Labels[common.QueueLabel]
+	if r.KaiwoJob.Spec.PriorityClass != "" {
+		job.Spec.Template.Spec.PriorityClassName = r.KaiwoJob.Spec.PriorityClass
+	}
 
 	return job, nil
 }
