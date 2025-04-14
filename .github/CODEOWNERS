@@ -14,10 +14,10 @@
 /k8s-templates @AVSuni
 
 # Packages
-/pkg @AVSuni
+/pkg @AVSuni @salexo
 
 # Workloads
-/workloads @AVSuni
+/workloads @AVSuni @salexo
 
 # main.go
 main.go @AVSuni
