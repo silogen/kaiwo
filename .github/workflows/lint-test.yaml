@@ -1,6 +1,15 @@
 name: lint-and-test
 on:
   push:
+    paths:
+    - Dockerfile
+    - pkg/**
+    - cmd/**
+    - internal/**
+    - python/**
+    - test/**
+    - dependencies/**
+    - config/**
     branches:
     - main
     - master
