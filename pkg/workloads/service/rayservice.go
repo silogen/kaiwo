@@ -142,7 +142,7 @@ func (r *RayServiceReconciler) Build(ctx context.Context, k8sClient client.Clien
 			&rayServiceSpec.RayClusterSpec.HeadGroupSpec.Template,
 			r.KaiwoService.Name,
 			replicas,
-			gpusPerReplica,
+			0,
 			false,
 		); err != nil {
 			return nil, fmt.Errorf("failed to update head group spec: %w", err)
