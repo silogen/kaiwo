@@ -44,3 +44,22 @@ kubectl rollout status deployment/kueue-controller-manager -n kueue-system --tim
 kubectl rollout status deployment/kuberay-operator --timeout=5m
 kubectl rollout status deployment/appwrapper-controller-manager -n appwrapper-system --timeout=5m
 echo "Other dependencies deployed"
+
+echo "Deploying Prometheus Operator Stack"
+kubectl apply --server-side -k kustomization-server-side/prometheus-operator
+
+kubectl wait \
+	--for condition=Established \
+	--all CustomResourceDefinition \
+	--namespace=monitoring
+
+kubectl apply -k kustomization-client-side/prometheus-operator
+echo "Waiting for Prometheus to be deployed..."
+
+kubectl rollout status deployment/kube-state-metrics -n monitoring --timeout=5m
+kubectl rollout status deployment/prometheus-adapter -n monitoring --timeout=5m
+kubectl rollout status deployment/prometheus-operator -n monitoring --timeout=5m
+
+echo "Prometheus deployed"
+
+echo "All dependencies are deployed"

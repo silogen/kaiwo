@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/refs/heads/main/manifests/setup/0alertmanagerConfigCustomResourceDefinition.yaml
+- https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/refs/heads/main/manifests/setup/0alertmanagerCustomResourceDefinition.yaml
+- https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/refs/heads/main/manifests/setup/0podmonitorCustomResourceDefinition.yaml
+- https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/refs/heads/main/manifests/setup/0probeCustomResourceDefinition.yaml
+- https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/refs/heads/main/manifests/setup/0prometheusCustomResourceDefinition.yaml
+- https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/refs/heads/main/manifests/setup/0prometheusagentCustomResourceDefinition.yaml
+- https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/refs/heads/main/manifests/setup/0prometheusruleCustomResourceDefinition.yaml
+- https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/refs/heads/main/manifests/setup/0scrapeconfigCustomResourceDefinition.yaml
+- https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/refs/heads/main/manifests/setup/0servicemonitorCustomResourceDefinition.yaml
+- https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/refs/heads/main/manifests/setup/0thanosrulerCustomResourceDefinition.yaml
+- https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/refs/heads/main/manifests/setup/namespace.yaml
