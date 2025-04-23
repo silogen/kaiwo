@@ -25,7 +25,7 @@ spec:
           status:
             (conditions[?type == 'ResourceUnderutilization']):
             - status: "True"
-              reason: "CpuUtilizationUnderThreshold"
+              reason: "CpuUtilizationLow"
     - assert:
         resource:
           apiVersion: kaiwo.silogen.ai/v1alpha1
