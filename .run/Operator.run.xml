@@ -4,6 +4,14 @@
     <working_directory value="$PROJECT_DIR$" />
     <parameters value="--zap-log-level=debug" />
     <envs>
+      <env name="RESOURCE_MONITORING_AVERAGING_INTERVAL" value="60s" />
+      <env name="RESOURCE_MONITORING_ENABLED" value="true" />
+      <env name="RESOURCE_MONITORING_LOW_UTILIZATION_THRESHOLD" value="50" />
+      <env name="RESOURCE_MONITORING_MIN_ALIVE_TIME" value="30s" />
+      <env name="RESOURCE_MONITORING_POLLING_INTERVAL" value="15s" />
+      <env name="RESOURCE_MONITORING_PROFILE" value="cpu" />
+      <env name="RESOURCE_MONITORING_PROMETHEUS_ENDPOINT" value="http://localhost:9090" />
+      <env name="RESOURCE_MONITORING_TARGET_NAMESPACES" value="kaiwo-test-monitoring-conditions" />
       <env name="WEBHOOK_CERT_DIRECTORY" value="certs" />
     </envs>
     <kind value="FILE" />
