@@ -76,20 +76,7 @@ type KaiwoServiceSpec struct {
 
 // KaiwoServiceStatus defines the observed state of KaiwoService.
 type KaiwoServiceStatus struct {
-	// StartTime records the timestamp when the first pod associated with the KaiwoService started running.
-	StartTime *metav1.Time `json:"startTime,omitempty"`
-
-	// Conditions lists the observed conditions of the KaiwoService resource, following standard Kubernetes conventions. May include conditions reflecting the underlying Deployment or RayService state.
-	Conditions []metav1.Condition `json:"conditions,omitempty"`
-
-	// Status reflects the current high-level phase of the KaiwoService lifecycle (e.g., PENDING, STARTING, READY, FAILED).
-	Status Status `json:"status,omitempty"`
-
-	// Duration indicates how long the service has been running since StartTime, in seconds. Calculated periodically while running.
-	Duration int64 `json:"duration,omitempty"`
-
-	// ObservedGeneration records the `.metadata.generation` of the KaiwoService resource that was last processed by the controller.
-	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+	CommonStatusSpec `json:",inline"`
 }
 
 // KaiwoService represents a long-running service workload managed by Kaiwo. It encapsulates either a standard Kubernetes Deployment  or a RayService (via an AppWrapper), along with common metadata, storage configurations, and scheduling preferences. The Kaiwo controller reconciles this resource to create and manage the underlying workload objects.

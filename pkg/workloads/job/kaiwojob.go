@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"reflect"
 
+	"k8s.io/apimachinery/pkg/api/meta"
+
 	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
@@ -254,6 +256,17 @@ func (r *KaiwoJobReconciler) GatherStatus(ctx context.Context, k8sClient client.
 	kaiwoJob := r.Object
 
 	currentStatus := previousStatus.DeepCopy()
+
+	// Set default condition if none is found
+	cond := meta.FindStatusCondition(r.Object.Status.Conditions, v1alpha1.KaiwoResourceUtilizationType)
+	if cond == nil {
+		meta.SetStatusCondition(&r.Object.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.KaiwoResourceUtilizationType,
+			Status:  metav1.ConditionFalse,
+			Reason:  string(v1alpha1.ResourceUtilizationUnknown),
+			Message: "Resource utilization currently unknown",
+		})
+	}
 
 	// Check if download job has failed
 	if downloadJob != nil {

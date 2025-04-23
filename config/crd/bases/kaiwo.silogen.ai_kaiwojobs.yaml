@@ -32322,7 +32322,7 @@ spec:
                 format: date-time
                 type: string
               conditions:
-                description: Conditions lists the observed conditions of the KaiwoJob resource, following standard Kubernetes conventions.
+                description: Conditions lists the observed conditions of the workload resource, following standard Kubernetes conventions. May include conditions reflecting the underlying Deployment or RayService state.
                 items:
                   description: Condition contains details for one aspect of the current state of this API Resource.
                   properties:
@@ -32378,19 +32378,19 @@ spec:
                   type: object
                 type: array
               duration:
-                description: Duration indicates the total time the job ran, calculated from StartTime to CompletionTime, in seconds.
+                description: Duration indicates how long the service has been running since StartTime, in seconds. Calculated periodically while running.
                 format: int64
                 type: integer
               observedGeneration:
-                description: ObservedGeneration records the `.metadata.generation` of the KaiwoJob resource that was last processed by the controller.
+                description: ObservedGeneration records the `.metadata.generation` of the workload resource that was last processed by the controller.
                 format: int64
                 type: integer
               startTime:
-                description: StartTime records the timestamp when the first pod associated with the KaiwoJob started running.
+                description: StartTime records the timestamp when the first pod associated with the workload started running.
                 format: date-time
                 type: string
               status:
-                description: Status reflects the current high-level phase of the KaiwoJob lifecycle (e.g., PENDING, RUNNING, COMPLETE, FAILED).
+                description: Status reflects the current high-level phase of the workload lifecycle (e.g., PENDING, STARTING, READY, FAILED).
                 type: string
             type: object
         type: object

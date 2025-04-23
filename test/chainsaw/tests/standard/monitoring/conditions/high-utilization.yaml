@@ -1,0 +1,20 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoService
+metadata:
+  name: kaiwoservice-high
+  namespace: kaiwo-test-monitoring-conditions
+spec:
+  user: test-user
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "64Mi"
+    limits:
+      cpu: "100m"
+      memory: "64Mi"
+  image: busybox:latest
+  entrypoint: |-
+    trap "echo 'Termination signal received. Exiting...'; exit" SIGTERM
+
+    while true; do :;
+    done

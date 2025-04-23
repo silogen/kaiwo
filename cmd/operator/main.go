@@ -22,6 +22,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/silogen/kaiwo/pkg/utils/monitoring"
+
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -292,6 +294,26 @@ func main() {
 			setupLog.Error(err, "unable to add webhook certificate watcher to manager")
 			os.Exit(1)
 		}
+	}
+
+	if monitoring.IsMetricsMonitoringEnabled() {
+		setupLog.Info("Adding metrics watcher")
+		metricsWatcher, err := monitoring.NewMetricsWatcherFromEnv(
+			mgr.GetClient(),
+			mgr.GetScheme(),
+			mgr.GetEventRecorderFor(monitoring.MetricsComponentName),
+		)
+		if err != nil {
+			setupLog.Error(err, "unable to create metrics watcher")
+			os.Exit(1)
+		}
+
+		if err := mgr.Add(metricsWatcher); err != nil {
+			setupLog.Error(err, "unable to add metrics watcher to manager")
+			os.Exit(1)
+		}
+	} else {
+		setupLog.Info("Metrics watcher is not enabled")
 	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
