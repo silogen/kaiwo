@@ -394,6 +394,62 @@ var _ = Describe("Manager", Ordered, func() {
 			))
 		})
 
+		It("should ensure the Prometheus endpoint is serving metrics", func() {
+			prometheusServiceName := "prometheus-k8s"
+			prometheusNamespace := "monitoring"
+
+			By("validating that the Prometheus service is available")
+			cmd := exec.Command("kubectl", "get", "service", prometheusServiceName, "-n", prometheusNamespace)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Prometheus service should exist")
+
+			By("waiting for the Prometheus endpoint to be ready")
+			verifyMetricsEndpointReady := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "endpoints", prometheusServiceName, "-n", prometheusNamespace)
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(ContainSubstring("9090"), "Prometheus endpoint is not ready")
+			}
+			Eventually(verifyMetricsEndpointReady).Should(Succeed())
+
+			By("creating the curl-prometheus pod to access the Prometheus endpoint")
+			cmd = exec.Command("kubectl", "run", "curl-prometheus", "--restart=Never",
+				"--namespace", namespace,
+				"--image=alpine/curl:8.12.1",
+				"--overrides", fmt.Sprintf(`{
+			  "spec": {
+				"containers": [{
+				  "name": "curl",
+				  "image": "alpine/curl:8.12.1",
+				  "command": ["/bin/sh", "-c"],
+				  "args": [
+					"curl -sf http://%s.%s.svc.cluster.local:9090/-/ready"
+				  ],
+				  "securityContext": {
+					"allowPrivilegeEscalation": false,
+					"capabilities": { "drop": ["ALL"] },
+					"runAsNonRoot": true,
+					"runAsUser": 1000,
+					"seccompProfile": { "type": "RuntimeDefault" }
+				  }
+				}]
+			  }
+			}`, prometheusServiceName, prometheusNamespace))
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create curl-prometheus pod")
+
+			By("waiting for the curl-prometheus pod to complete.")
+			verifyCurlUp := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "pods", "curl-prometheus",
+					"-o", "jsonpath={.status.phase}",
+					"-n", namespace)
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("Succeeded"), "curl pod in wrong status")
+			}
+			Eventually(verifyCurlUp, 5*time.Minute).Should(Succeed())
+		})
+
 		It("should provisioned cert-manager", func() {
 			By("validating that cert-manager has the certificate Secret")
 			verifyCertManager := func(g Gomega) {
