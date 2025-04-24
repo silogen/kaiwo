@@ -256,6 +256,15 @@ var _ = Describe("Manager", Ordered, func() {
 				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get curl-metrics logs: %s", err)
 			}
 
+			By("Fetching curl-prometheus logs")
+			cmd = exec.Command("kubectl", "logs", "curl-prometheus", "-n", namespace)
+			prometheusOutput, err := utils.Run(cmd)
+			if err == nil {
+				_, _ = fmt.Fprintf(GinkgoWriter, "Prometheus logs:\n %s", prometheusOutput)
+			} else {
+				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get curl-prometheus logs: %s", err)
+			}
+
 			By("Fetching controller manager pod description")
 			cmd = exec.Command("kubectl", "describe", "pod", controllerPodName, "-n", namespace)
 			podDescription, err := utils.Run(cmd)
@@ -448,14 +457,6 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(output).To(Equal("Succeeded"), "curl pod in wrong status")
 			}
 			Eventually(verifyCurlUp, 1*time.Minute).Should(Succeed())
-
-			By("dumping logs from curl-prometheus")
-			out, err := exec.Command(
-				"kubectl", "logs", "curl-prometheus",
-				"-n", namespace,
-			).CombinedOutput()
-			Expect(err).NotTo(HaveOccurred(), "failed to fetch logs from curl-prometheus")
-			GinkgoWriter.Printf("=== curl-prometheus logs ===\n%s\n", string(out))
 		})
 
 		It("should provisioned cert-manager", func() {
