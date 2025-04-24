@@ -423,7 +423,10 @@ var _ = Describe("Manager", Ordered, func() {
 				  "image": "alpine/curl:8.12.1",
 				  "command": ["/bin/sh", "-c"],
 				  "args": [
-					"curl -sf http://%s.%s.svc.cluster.local:9090/-/ready"
+					"echo '=== /etc/resolv.conf ==='; cat /etc/resolv.conf; \
+					 echo '=== getent hosts ==='; getent hosts %[1]s.%[2]s.svc.cluster.local || true; \
+					 echo '=== ip route ==='; ip route; \
+					 echo '=== curl verbose ==='; curl --verbose --fail --show-error --max-time 30 http://%[1]s.%[2]s.svc.cluster.local:9090/-/ready"
 				  ],
 				  "securityContext": {
 					"allowPrivilegeEscalation": false,
@@ -442,12 +445,12 @@ var _ = Describe("Manager", Ordered, func() {
 			verifyCurlUp := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "pods", "curl-prometheus",
 					"-o", "jsonpath={.status.phase}",
-					"-n", namespace)
+					"-n", prometheusNamespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("Succeeded"), "curl pod in wrong status")
 			}
-			Eventually(verifyCurlUp, 5*time.Minute).Should(Succeed())
+			Eventually(verifyCurlUp, 40*time.Second).Should(Succeed())
 		})
 
 		It("should provisioned cert-manager", func() {
