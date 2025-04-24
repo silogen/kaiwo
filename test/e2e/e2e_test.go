@@ -417,27 +417,24 @@ var _ = Describe("Manager", Ordered, func() {
 				"--namespace", namespace,
 				"--image=alpine/curl:8.12.1",
 				"--overrides", fmt.Sprintf(`{
-			  "spec": {
-				"containers": [{
-				  "name": "curl",
-				  "image": "alpine/curl:8.12.1",
-				  "command": ["/bin/sh", "-c"],
-				  "args": [
-					"echo '=== /etc/resolv.conf ==='; cat /etc/resolv.conf; \
-					 echo '=== getent hosts ==='; getent hosts %[1]s.%[2]s.svc.cluster.local || true; \
-					 echo '=== ip route ==='; ip route; \
-					 echo '=== curl verbose ==='; curl --verbose --fail --show-error --max-time 30 http://%[1]s.%[2]s.svc.cluster.local:9090/-/ready"
-				  ],
-				  "securityContext": {
-					"allowPrivilegeEscalation": false,
-					"capabilities": { "drop": ["ALL"] },
-					"runAsNonRoot": true,
-					"runAsUser": 1000,
-					"seccompProfile": { "type": "RuntimeDefault" }
-				  }
-				}]
-			  }
-			}`, prometheusServiceName, prometheusNamespace))
+				"spec": {
+				  "containers": [{
+					"name": "curl",
+					"image": "alpine/curl:8.12.1",
+					"command": [ "sh", "-c" ],
+					"args": [
+					  "echo '=== /etc/resolv.conf ===\n'; cat /etc/resolv.conf; echo '=== getent hosts ==='; getent hosts %[1]s.%[2]s.svc.cluster.local || true; echo '=== ip route ==='; ip route; echo '=== curl verbose ==='; curl -fSv --connect-timeout 5 --max-time 30 http://%[1]s.%[2]s.svc.cluster.local:9090/-/ready"
+					],
+					"securityContext": {
+					  "allowPrivilegeEscalation": false,
+					  "capabilities": { "drop": ["ALL"] },
+					  "runAsNonRoot": true,
+					  "runAsUser": 1000,
+					  "seccompProfile": { "type": "RuntimeDefault" }
+					}
+				  }]
+				}
+			  }`, prometheusServiceName, prometheusNamespace))
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create curl-prometheus pod")
 
@@ -445,12 +442,20 @@ var _ = Describe("Manager", Ordered, func() {
 			verifyCurlUp := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "pods", "curl-prometheus",
 					"-o", "jsonpath={.status.phase}",
-					"-n", prometheusNamespace)
+					"-n", namespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("Succeeded"), "curl pod in wrong status")
 			}
-			Eventually(verifyCurlUp, 40*time.Second).Should(Succeed())
+			Eventually(verifyCurlUp, 1*time.Minute).Should(Succeed())
+
+			By("dumping logs from curl-prometheus")
+			out, err := exec.Command(
+				"kubectl", "logs", "curl-prometheus",
+				"-n", namespace,
+			).CombinedOutput()
+			Expect(err).NotTo(HaveOccurred(), "failed to fetch logs from curl-prometheus")
+			GinkgoWriter.Printf("=== curl-prometheus logs ===\n%s\n", string(out))
 		})
 
 		It("should provisioned cert-manager", func() {
