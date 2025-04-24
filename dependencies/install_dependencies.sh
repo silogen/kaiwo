@@ -66,6 +66,13 @@ echo "Waiting for Prometheus endpoints to be available"
 kubectl rollout status statefulset/prometheus-k8s -n monitoring --timeout=5m
 kubectl wait endpoints/prometheus-k8s -n monitoring --for=jsonpath='{.subsets[0].addresses}' --timeout=2m
 
+POD_IP=$(kubectl get pod prometheus-k8s-0 -n monitoring \
+  -o jsonpath='{.status.podIP}')
+
+kubectl run --rm -i --restart=Never -n monitoring debug-curl \
+  --image=curlimages/curl -- sh -c \
+    "curl -sv http://$POD_IP:9090/-/ready"
+
 echo "Prometheus deployed"
 
 echo "All dependencies are deployed"
