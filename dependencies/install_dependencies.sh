@@ -62,6 +62,10 @@ kubectl rollout status deployment/kube-state-metrics -n monitoring --timeout=5m
 kubectl rollout status deployment/prometheus-adapter -n monitoring --timeout=5m
 kubectl rollout status deployment/prometheus-operator -n monitoring --timeout=5m
 
+echo "Waiting for Prometheus endpoints to be available"
+kubectl rollout status statefulset/prometheus-k8s -n monitoring --timeout=5m
+kubectl wait endpoints/prometheus-k8s -n monitoring --for=jsonpath='{.subsets[0].addresses}' --timeout=2m
+
 echo "Prometheus deployed"
 
 echo "All dependencies are deployed"
