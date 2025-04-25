@@ -73,6 +73,8 @@ kubectl wait endpoints/prometheus-k8s -n monitoring --for=jsonpath='{.subsets[0]
 kubectl get services -n monitoring
 kubectl get endpoints -n monitoring
 
+kubectl logs -n kube-system -l k8s-app=kube-proxy
+
 echo "Prometheus deployed"
 
 echo "All dependencies are deployed"
