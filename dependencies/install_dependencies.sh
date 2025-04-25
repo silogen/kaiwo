@@ -112,6 +112,7 @@ kubectl run nettest -n monitoring \
   --restart=Never \
   --overrides="$(cat nettest.json)" \
   --image=alpine/curl:8.12.1 \
+  --labels=app.kubernetes.io/name=prometheus \
   --command -- sleep 300
 
 # 4) Wait for it to show up
