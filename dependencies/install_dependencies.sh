@@ -79,7 +79,12 @@ echo "== Prometheus logs =="
 kubectl logs -n monitoring prometheus-k8s-0
 
 POD_IP=$(kubectl get pod prometheus-k8s-0 -n monitoring -o jsonpath='{.status.podIP}')
-kubectl run -n monitoring test-pod --image=alpine/curl:8.12.1 --restart=Never -- sh -c "curl -v http://$POD_IP:9090/-/ready"
+kubectl run -n monitoring test-pod --image=alpine/curl:8.12.1 --restart=Never -- sh -c "curl -v --max-time 10 http://$POD_IP:9090/-/ready"
+sleep 15
+echo "== Test pod logs"
+kubectl logs test-pod -n monitoring
+
+
 
 echo "Prometheus deployed"
 
