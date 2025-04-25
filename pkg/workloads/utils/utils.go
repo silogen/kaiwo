@@ -31,7 +31,7 @@ import (
 	common "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
-func UpdatePodSpec(kaiwoCommonMetaSpec v1alpha1.CommonMetaSpec, labelContext common.KaiwoLabelContext, template *corev1.PodTemplateSpec, name string, replicas int, gpusPerReplica int, override bool) error {
+func UpdatePodSpec(kaiwoCommonMetaSpec v1alpha1.CommonMetaSpec, labelContext common.KaiwoLabelContext, template *corev1.PodTemplateSpec, name string, replicas int, gpusPerReplica int, override bool, rayhead bool) error {
 	// Update labels
 	if template.ObjectMeta.Labels == nil {
 		template.ObjectMeta.Labels = map[string]string{}
@@ -82,7 +82,7 @@ func UpdatePodSpec(kaiwoCommonMetaSpec v1alpha1.CommonMetaSpec, labelContext com
 	}
 
 	// Adjust resource requests and limits based on GPUs
-	if err := adjustResourceRequestsAndLimits(vendor, gpus, replicas, gpusPerReplica, template, override); err != nil {
+	if err := adjustResourceRequestsAndLimits(vendor, gpus, replicas, gpusPerReplica, template, override, rayhead); err != nil {
 		return fmt.Errorf("failed to adjust resource requests and limits: %w", err)
 	}
 
@@ -226,7 +226,7 @@ func GetPodTemplate(dshmSize resource.Quantity, dangerous bool, resources corev1
 	return podTemplate
 }
 
-func adjustResourceRequestsAndLimits(gpuVendor string, gpuCount int, replicas int, gpusPerReplica int, podTemplateSpec *corev1.PodTemplateSpec, override bool) error {
+func adjustResourceRequestsAndLimits(gpuVendor string, gpuCount int, replicas int, gpusPerReplica int, podTemplateSpec *corev1.PodTemplateSpec, override bool, rayhead bool) error {
 	if len(podTemplateSpec.Spec.Containers) == 0 {
 		err := fmt.Errorf("podTemplateSpec has no containers to modify")
 		return err
@@ -235,7 +235,7 @@ func adjustResourceRequestsAndLimits(gpuVendor string, gpuCount int, replicas in
 	gpuResourceKey := getGpuResourceKey(gpuVendor)
 
 	// Modify resource requests/limits only if GPUs are requested
-	if gpusPerReplica > 0 {
+	if gpusPerReplica > 0 && !rayhead {
 		updatedResources := getResourceRequestsAndLimits(gpuResourceKey, int32(gpusPerReplica))
 		// Update the resources that have not been set yet (allowing the user to override the defaults here)
 		fillContainerResources(&podTemplateSpec.Spec.Containers[0], &updatedResources, override)

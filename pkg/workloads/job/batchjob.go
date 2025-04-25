@@ -86,7 +86,7 @@ func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batch
 		overrideDefaults = false
 	}
 
-	if err := workloadutils.UpdatePodSpec(r.KaiwoJob.Spec.CommonMetaSpec, labelContext, &jobSpec.Template, r.KaiwoJob.Name, 1, r.KaiwoJob.Spec.CommonMetaSpec.Gpus, overrideDefaults); err != nil {
+	if err := workloadutils.UpdatePodSpec(r.KaiwoJob.Spec.CommonMetaSpec, labelContext, &jobSpec.Template, r.KaiwoJob.Name, 1, r.KaiwoJob.Spec.CommonMetaSpec.Gpus, overrideDefaults, false); err != nil {
 		return nil, fmt.Errorf("failed to update job spec: %w", err)
 	}
 

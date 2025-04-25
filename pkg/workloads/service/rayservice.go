@@ -144,6 +144,7 @@ func (r *RayServiceReconciler) Build(ctx context.Context, k8sClient client.Clien
 			replicas,
 			gpusPerReplica,
 			false,
+			true,
 		); err != nil {
 			return nil, fmt.Errorf("failed to update head group spec: %w", err)
 		}
@@ -157,6 +158,7 @@ func (r *RayServiceReconciler) Build(ctx context.Context, k8sClient client.Clien
 				replicas,
 				gpusPerReplica,
 				overrideDefaults,
+				false,
 			); err != nil {
 				return nil, fmt.Errorf("failed to update worker group spec for index %d: %w", i, err)
 			}

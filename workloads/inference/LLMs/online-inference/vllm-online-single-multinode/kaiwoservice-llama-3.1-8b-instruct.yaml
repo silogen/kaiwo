@@ -10,7 +10,9 @@ spec:
     applications:
     - name: llm
       route_prefix: /
-      import_path: code:deployment
+      import_path: workloads.inference.LLMs.online-inference.vllm-online-single-multinode:deployment
+      runtime_env:
+          working_dir: "https://github.com/silogen/kaiwo/archive/87ec66a4617debf36e72332155da5d8b872308a3.zip"
       deployments:
       - name: VLLMDeployment
         autoscaling_config:
@@ -44,14 +46,6 @@ spec:
   storage:
     storageEnabled: true
     storageClassName: multinode
-    data:
-      storageSize: 10Mi
-      mountPath: /workload
-      download:
-        git:
-        - repository: https://github.com/silogen/kaiwo.git
-          path: workloads/inference/LLMs/online-inference/vllm-online-single-multinode
-          targetPath: code
     huggingFace:
       storageSize: "100Gi"
       mountPath: "/hf_cache" # Also sets the env var HF_HOME to this value in each container
