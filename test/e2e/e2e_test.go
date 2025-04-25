@@ -424,7 +424,6 @@ var _ = Describe("Manager", Ordered, func() {
 			By("creating the curl-prometheus pod to access the Prometheus endpoint")
 			cmd = exec.Command("kubectl", "run", "curl-prometheus", "--restart=Never",
 				"--namespace", namespace,
-				//"--labels=app.kubernetes.io/name=prometheus",
 				"--image=alpine/curl:8.12.1",
 				"--overrides", fmt.Sprintf(`{
 				"spec": {
