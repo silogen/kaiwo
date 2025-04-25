@@ -70,6 +70,9 @@ kubectl wait endpoints/prometheus-k8s -n monitoring --for=jsonpath='{.subsets[0]
 
 #kubectl run --rm --restart=Never -n monitoring debug-curl --image=curlimages/curl -- sh -c "curl -sv http://$POD_IP:9090/-/ready"
 
+kubectl get services -n monitoring
+kubectl get endpoints -n monitoring
+
 echo "Prometheus deployed"
 
 echo "All dependencies are deployed"
