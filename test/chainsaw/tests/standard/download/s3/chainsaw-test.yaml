@@ -12,6 +12,15 @@ spec:
         file: download-from-public-bucket.yaml
     - apply:
         file: s3-deployment.yaml
+    - wait:
+        apiVersion: apps/v1
+        kind: Deployment
+        name: minio-deployment
+        timeout: 1m
+        for:
+          condition:
+            name: Available
+            value: 'true'
     - apply:
         file: data-uploader.yaml
     - apply:
@@ -22,7 +31,6 @@ spec:
           kind: KaiwoJob
           metadata:
             name: download-from-public-bucket
-            namespace: kaiwo-test
           status:
             status: COMPLETE
     - assert:
@@ -31,7 +39,6 @@ spec:
           kind: KaiwoJob
           metadata:
             name: download-from-private-bucket
-            namespace: kaiwo-test
           status:
             status: COMPLETE
     catch:
@@ -40,4 +47,6 @@ spec:
         env:
         - name: PRINT_LEVEL
           value: ($values.print_level)
-        args: ["debug", "chainsaw", "--namespace=kaiwo-test", "--print-level=$PRINT_LEVEL"]
+        - name: NAMESPACE
+          value: ($namespace)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
