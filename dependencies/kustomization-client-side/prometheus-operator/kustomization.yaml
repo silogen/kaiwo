@@ -53,7 +53,7 @@ resources:
 - https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/refs/heads/main/manifests/nodeExporter-serviceMonitor.yaml
 - https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/refs/heads/main/manifests/prometheus-clusterRole.yaml
 - https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/refs/heads/main/manifests/prometheus-clusterRoleBinding.yaml
-- https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/refs/heads/main/manifests/prometheus-networkPolicy.yaml
+#- https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/refs/heads/main/manifests/prometheus-networkPolicy.yaml
 - https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/refs/heads/main/manifests/prometheus-podDisruptionBudget.yaml
 - https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/refs/heads/main/manifests/prometheus-prometheus.yaml
 - https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/refs/heads/main/manifests/prometheus-prometheusRule.yaml
