@@ -39,6 +39,7 @@ nav:
   - "Configuration": "admin/configuration.md"
   - "Maintenance": "admin/maintenance.md"
   - "Monitoring": "admin/monitoring.md"
+  - "Resource monitoring": "admin/resource-monitoring.md"
   - "Authentication & Authorization": "admin/auth.md"
   - "Troubleshooting": "admin/troubleshooting.md"
 - "Reference":
