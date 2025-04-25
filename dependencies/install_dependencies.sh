@@ -79,12 +79,64 @@ echo "== Prometheus logs =="
 kubectl logs -n monitoring prometheus-k8s-0
 
 POD_IP=$(kubectl get pod prometheus-k8s-0 -n monitoring -o jsonpath='{.status.podIP}')
-kubectl run -n monitoring test-pod --image=alpine/curl:8.12.1 --restart=Never -- sh -c "curl -v --max-time 10 http://$POD_IP:9090/-/ready"
-sleep 15
-echo "== Test pod logs"
-kubectl logs test-pod -n monitoring
 
+cat <<EOF > nettest.json
+{
+  "spec": {
+    "containers": [{
+      "name": "nettest",
+      "image": "alpine/curl:8.12.1",
+      "command": ["sh","-c"],
+      "args": [
+        "echo '=== /etc/resolv.conf ==='; \
+         cat /etc/resolv.conf; \
+         echo '=== DNS lookup (svc) ==='; \
+         getent hosts prometheus-k8s.monitoring.svc.cluster.local || true; \
+         echo '=== DNS lookup (clusterIP) ==='; \
+         getent hosts 10.96.85.226 || true; \
+         echo '=== ip route ==='; \
+         ip route; \
+         echo '=== Pod-IP test ==='; \
+         curl -v --connect-timeout 5 http://$POD_IP:9090/-/ready || true; \
+         echo '=== ClusterIP test ==='; \
+         curl -v --connect-timeout 5 http://prometheus-k8s.monitoring.svc.cluster.local:9090/-/ready || true"
+      ]
+    }],
+    "restartPolicy": "Never"
+  }
+}
+EOF
 
+# 3) Create the Pod
+kubectl run nettest -n monitoring \
+  --restart=Never \
+  --overrides="$(cat nettest.json)" \
+  --image=alpine/curl:8.12.1 \
+  --command -- sleep 300
+
+# 4) Wait for it to show up
+until kubectl get pod nettest -n monitoring &>/dev/null; do
+  echo "⏳ waiting for nettest Pod…"
+  sleep 1
+done
+
+# 5) Wait for it to finish (Succeeded or Failed)
+while true; do
+  PHASE=$(kubectl get pod nettest -n monitoring -o jsonpath='{.status.phase}')
+  if [[ "$PHASE" == "Succeeded" || "$PHASE" == "Failed" ]]; then
+    echo "✅ nettest Pod is in terminal phase: $PHASE"
+    break
+  fi
+  echo "⏳ nettest Pod phase: $PHASE"
+  sleep 1
+done
+
+# 6) Dump its logs
+echo "📜 nettest logs:"
+kubectl logs nettest -n monitoring
+
+# 7) Clean up
+kubectl delete pod nettest -n monitoring --ignore-not-found
 
 echo "Prometheus deployed"
 
