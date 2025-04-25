@@ -138,6 +138,61 @@ kubectl logs nettest -n monitoring
 # 7) Clean up
 kubectl delete pod nettest -n monitoring --ignore-not-found
 
+echo "== NODE TEST =="
+
+NODE=$(kubectl get pod prometheus-k8s-0 \
+         -n monitoring \
+         -o jsonpath='{.spec.nodeName}')
+
+# 2) generate an overrides snippet that pins to that node
+cat <<EOF > nettest-same-node.json
+{
+  "spec": {
+    "nodeName": "$NODE",
+    "containers": [{
+      "name": "nettest",
+      "image": "alpine/curl:8.12.1",
+      "command": ["sh","-c"],
+      "args": [
+        "echo '=== Pod-IP test ==='; \
+         curl -v --connect-timeout 5 http://$(kubectl get pod prometheus-k8s-0 -n monitoring -o jsonpath='{.status.podIP}'):9090/-/ready || true; \
+         echo; echo '=== ClusterIP test ==='; \
+         curl -v --connect-timeout 5 http://prometheus-k8s.monitoring.svc.cluster.local:9090/-/ready || true"
+      ]
+    }],
+    "restartPolicy": "Never"
+  }
+}
+EOF
+
+# 3) launch the pod
+kubectl run nettest-same-node \
+  -n monitoring \
+  --restart=Never \
+  --overrides="$(cat nettest-same-node.json)" \
+  --image=alpine/curl:8.12.1 \
+  --command -- sleep 300
+
+# 4) wait & collect logs (same pattern as before)
+until kubectl get pod nettest-same-node -n monitoring &> /dev/null; do sleep 1; done
+while [[ "$(kubectl get pod nettest-same-node -n monitoring -o jsonpath='{.status.phase}')" \
+       != "Succeeded" && "$(kubectl get pod nettest-same-node -n monitoring -o jsonpath='{.status.phase}')" \
+       != "Failed" ]]; do sleep 1; done
+
+echo "=== nettest-same-node logs ==="
+kubectl logs nettest-same-node -n monitoring
+kubectl delete pod nettest-same-node -n monitoring --ignore-not-found
+
+echo "== Dcoker TEST =="
+# is IP forwarding on?
+docker exec kind-control-plane sysctl net.ipv4.ip_forward
+
+# what does your FORWARD chain look like?
+docker exec kind-control-plane iptables -L FORWARD -v
+
+# check NAT rules for pods
+docker exec kind-control-plane iptables-save -t nat | grep -E 'POSTROUTING.*10\.244\.'
+
 echo "Prometheus deployed"
 
 echo "All dependencies are deployed"
