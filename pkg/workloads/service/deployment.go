@@ -118,6 +118,7 @@ func (r *DeploymentReconciler) Build(ctx context.Context, _ client.Client) (*app
 		int(*depSpec.Replicas),
 		gpus,
 		overrideDefaults,
+		false,
 	); err != nil {
 		return nil, fmt.Errorf("failed to update deployment template: %w", err)
 	}
