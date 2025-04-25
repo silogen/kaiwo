@@ -185,13 +185,13 @@ kubectl delete pod nettest-same-node -n monitoring --ignore-not-found
 
 echo "== Dcoker TEST =="
 # is IP forwarding on?
-docker exec kind-control-plane sysctl net.ipv4.ip_forward
+docker exec kaiwo-test-control-plane sysctl net.ipv4.ip_forward
 
 # what does your FORWARD chain look like?
-docker exec kind-control-plane iptables -L FORWARD -v
+docker exec kaiwo-test-control-plane iptables -L FORWARD -v
 
 # check NAT rules for pods
-docker exec kind-control-plane iptables-save -t nat | grep -E 'POSTROUTING.*10\.244\.'
+docker exec kaiwo-test-control-plane iptables-save -t nat | grep -E 'POSTROUTING.*10\.244\.'
 
 echo "Prometheus deployed"
 
