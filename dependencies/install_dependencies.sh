@@ -68,7 +68,7 @@ kubectl wait endpoints/prometheus-k8s -n monitoring --for=jsonpath='{.subsets[0]
 
 POD_IP=$(kubectl get pod prometheus-k8s-0 -n monitoring -o jsonpath='{.status.podIP}')
 
-kubectl run --rm -i --restart=Never -n monitoring debug-curl --image=curlimages/curl -- sh -c "curl -sv http://$POD_IP:9090/-/ready"
+kubectl run --rm --restart=Never -n monitoring debug-curl --image=curlimages/curl -- sh -c "curl -sv http://$POD_IP:9090/-/ready"
 
 echo "Prometheus deployed"
 
