@@ -110,6 +110,7 @@ def build_app() -> serve.Application:
         tokenizer_pool_type="ray",
         distributed_executor_backend="ray",
         trust_remote_code=True,
+        enforce_eager=False,
     )
     engine_args.worker_use_ray = True
 
