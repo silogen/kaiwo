@@ -64,6 +64,7 @@ config = vLLMEngineProcessorConfig(
         "tokenizer_pool_size": 4,
         "tokenizer_pool_type": "ray",
         "trust_remote_code": True,
+        "device": "cuda",
     },
     concurrency=int(os.getenv("NUM_REPLICAS", "1")),  # set the number of parallel vLLM replicas
     batch_size=64,
