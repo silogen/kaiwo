@@ -43,15 +43,15 @@ class GitDownloadTaskConfig(DownloadTaskConfigBase):
                 auth = f"{self.username.get_value()}:" + auth
 
             auth_url = self.repository.replace("https://", f"https://{auth}")
-            repo = git.Repo.clone_from(auth_url, temp_dir, depth=1)
+            repo = git.Repo.clone_from(auth_url, temp_dir)
 
             if self.commit is not None:
                 logger.info(f"Using commit: {self.commit}")
-                repo.git.fetch("origin", self.commit, depth=1)
+                repo.git.fetch("origin", self.commit)
                 repo.git.checkout(self.commit)
             elif self.branch is not None:
                 logger.info(f"Using branch: {self.branch}")
-                repo.git.fetch("origin", self.branch, depth=1)
+                repo.git.fetch("origin", self.branch)
                 repo.git.checkout(self.branch)
 
             path = self.path if self.path is not None else "."

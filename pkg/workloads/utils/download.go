@@ -294,7 +294,7 @@ func (r *DownloadJobReconciler) Build(_ context.Context, _ client.Client) (*batc
 					RestartPolicy: corev1.RestartPolicyNever,
 					Containers: []corev1.Container{
 						{
-							Image: "ghcr.io/silogen/kaiwo-python:0.5",
+							Image: "ghcr.io/silogen/kaiwo-python:0.6",
 							Name:  "data-downloader",
 							Command: []string{
 								"python",

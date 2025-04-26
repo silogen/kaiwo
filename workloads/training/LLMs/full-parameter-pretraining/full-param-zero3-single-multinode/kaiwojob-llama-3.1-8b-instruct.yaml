@@ -38,7 +38,7 @@ spec:
     storageEnabled: true
     storageClassName: multinode
     data:
-      storageSize: 10Mi
+      storageSize: 20Mi
       mountPath: /workload
       download:
         git:

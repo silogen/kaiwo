@@ -5,17 +5,11 @@ set -e
 TEST_NAME=${TEST_NAME:-"kaiwo-test"}
 NFS_DIR="/nfs-data"
 
-RAY_IMAGE=rayproject/ray:2.41.0
-
 SKIP_DEPENDENCIES=false
-LOAD_RAY_IMAGE=false
 
 for arg in "$@"; do
   if [[ "$arg" == "--no-dependencies" ]]; then
     SKIP_DEPENDENCIES=true
-  fi
-  if [[ "$arg" == "--load-ray-image" ]]; then
-    LOAD_RAY_IMAGE=true
   fi
 done
 
@@ -93,13 +87,6 @@ helm install nfs-subdir-external-provisioner nfs-subdir-external-provisioner/nfs
 echo "NFS provisioner deployed successfully!"
 
 kubectl create ns "$TEST_NAME"
-
-if [ "$LOAD_RAY_IMAGE" = true ]; then
-  echo "Loading ray image"
-  docker pull $RAY_IMAGE
-  kind load docker-image "$RAY_IMAGE" --name="$TEST_NAME"
-  bash "$SCRIPT_PATH" --local
-fi
 
 echo "Cluster is ready!"
 
