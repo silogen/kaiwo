@@ -4,7 +4,8 @@ metadata:
   name: batch-inference-vllm-example
 spec:
   user: test@amd.com
-  gpusPerReplica: 8
+  # gpusPerReplica: 8
+  gpus-per-replica: 8
   replicas: 1
   ray: true
   entrypoint: python code/main.py
@@ -26,6 +27,7 @@ spec:
         git:
         - repository: https://github.com/silogen/kaiwo.git
           path: workloads/inference/LLMs/offline-inference/vllm-batch-single-multinode
+          branch: rocm6.4
           targetPath: code
     huggingFace:
       storageSize: "100Gi"
