@@ -17,7 +17,7 @@
 
 import logging
 import os
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 from fastapi import FastAPI
 from ray import serve
@@ -32,7 +32,6 @@ from vllm.entrypoints.openai.protocol import (
     ErrorResponse,
 )
 from vllm.entrypoints.openai.serving_chat import OpenAIServingChat
-from vllm.entrypoints.openai.serving_engine import PromptAdapterPath
 
 logger = logging.getLogger("ray.serve")
 
@@ -46,7 +45,6 @@ class VLLMDeployment:
         self,
         engine_args: AsyncEngineArgs,
         response_role: str,
-        prompt_adapters: Optional[List[PromptAdapterPath]] = None,
         request_logger: Optional[RequestLogger] = None,
         chat_template: Optional[str] = None,
         chat_template_content_format: Optional[str] = "openai",
@@ -55,7 +53,6 @@ class VLLMDeployment:
         self.openai_serving_chat = None
         self.engine_args = engine_args
         self.response_role = response_role
-        self.prompt_adapters = prompt_adapters
         self.request_logger = request_logger
         self.chat_template = chat_template
         self.chat_template_content_format = chat_template_content_format
