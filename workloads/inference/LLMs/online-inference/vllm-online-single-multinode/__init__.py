@@ -17,7 +17,7 @@
 
 import logging
 import os
-from typing import Dict, Optional
+from typing import Optional
 
 from fastapi import FastAPI
 from ray import serve
@@ -94,14 +94,7 @@ class VLLMDeployment:
             return JSONResponse(content=generator.model_dump())
 
 
-def build_app(cli_args: Dict[str, str]) -> serve.Application:
-    """Builds the Serve app based on CLI arguments.
-
-    See https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html#command-line-arguments-for-the-server
-    for the complete set of arguments.
-
-    Supported engine arguments: https://docs.vllm.ai/en/latest/models/engine_args.html.
-    """  # noqa: E501
+def build_app() -> serve.Application:
     engine_args = AsyncEngineArgs(
         model=os.getenv("MODEL_ID", "meta-llama/Meta-Llama-3-8B-Instruct"),
         disable_log_requests=True,
