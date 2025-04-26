@@ -61,7 +61,6 @@ config = vLLMEngineProcessorConfig(
         "max_model_len": 16384,
         "tensor_parallel_size": int(os.getenv("NUM_GPUS_PER_REPLICA", "8")),
         "distributed_executor_backend": "ray",
-        "device": "cuda",
         "tokenizer_pool_size": 4,
         "tokenizer_pool_type": "ray",
         "trust_remote_code": True,
