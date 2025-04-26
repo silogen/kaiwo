@@ -41,7 +41,7 @@ func Trace(logger logr.Logger, fmt string, keysAndValues ...any) {
 
 var (
 	DefaultNamespace = GetEnv("DEFAULT_WORKLOAD_NAMESPACE", "kaiwo")
-	DefaultRayImage  = GetEnv("DEFAULT_WORKLOAD_IMAGE", "ghcr.io/silogen/rocm-ray:v0.8")
+	DefaultRayImage  = GetEnv("DEFAULT_WORKLOAD_IMAGE", "ghcr.io/silogen/rocm-ray:v0.9")
 )
 
 func SanitizeStringForKubernetes(str string) string {

@@ -1,4 +1,4 @@
-FROM rocm/vllm-dev:20250104
+FROM rocm/vllm-dev:nightly_main_20250425
 
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -29,7 +29,6 @@ RUN pip install --force-reinstall \
     'https://github.com/bitsandbytes-foundation/bitsandbytes/releases/download/continuous-release_multi-backend-refactor/bitsandbytes-0.44.1.dev0-py3-none-manylinux_2_24_x86_64.whl' \
     --no-deps --no-cache-dir 
 
-RUN sudo sysctl kernel.numa_balancing=0
 
 RUN pip install --no-deps jsonlines loralib optimum transformers_stream_generator && \
     git clone https://github.com/OpenRLHF/OpenRLHF.git && cd OpenRLHF && \
