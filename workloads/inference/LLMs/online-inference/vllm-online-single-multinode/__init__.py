@@ -32,7 +32,7 @@ from vllm.entrypoints.openai.protocol import (
     ErrorResponse,
 )
 from vllm.entrypoints.openai.serving_chat import OpenAIServingChat
-from vllm.entrypoints.openai.serving_engine import LoRAModulePath, PromptAdapterPath
+from vllm.entrypoints.openai.serving_engine import PromptAdapterPath
 
 logger = logging.getLogger("ray.serve")
 
@@ -46,7 +46,6 @@ class VLLMDeployment:
         self,
         engine_args: AsyncEngineArgs,
         response_role: str,
-        lora_modules: Optional[List[LoRAModulePath]] = None,
         prompt_adapters: Optional[List[PromptAdapterPath]] = None,
         request_logger: Optional[RequestLogger] = None,
         chat_template: Optional[str] = None,
@@ -56,7 +55,6 @@ class VLLMDeployment:
         self.openai_serving_chat = None
         self.engine_args = engine_args
         self.response_role = response_role
-        self.lora_modules = lora_modules
         self.prompt_adapters = prompt_adapters
         self.request_logger = request_logger
         self.chat_template = chat_template
