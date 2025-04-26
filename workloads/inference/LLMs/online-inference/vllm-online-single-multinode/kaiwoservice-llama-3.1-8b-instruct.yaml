@@ -1,10 +1,10 @@
 apiVersion: kaiwo.silogen.ai/v1alpha1
 kind: KaiwoService
 metadata:
-  name: online-inference-vllm-example
+  name: online-inference-vllm-example9
 spec:
   user: test@amd.com
-  gpus: 16
+  gpus: 8
   ray: true
   serveConfigV2: |
     applications:
@@ -12,7 +12,7 @@ spec:
       route_prefix: /
       import_path: workloads.inference.LLMs.online-inference.vllm-online-single-multinode:deployment
       runtime_env:
-          working_dir: "https://github.com/silogen/kaiwo/archive/87ec66a4617debf36e72332155da5d8b872308a3.zip"
+          working_dir: "https://github.com/silogen/kaiwo/archive/8b170070f7cc2d9b33f1511c9ea96eda288b08e0.zip"
       deployments:
       - name: VLLMDeployment
         autoscaling_config:
