@@ -65,7 +65,7 @@ type CommonMetaSpec struct {
 	// GpusPerReplica specifies the number of GPUs allocated per replica. See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor) for more details on how this field impacts scheduling.
 	//
 	// If you specify `gpusPerReplica`, you must also specify `replicas`.
-	GpusPerReplica int `json:"gpus-per-replica,omitempty"`
+	GpusPerReplica int `json:"gpusPerReplica,omitempty"`
 
 	// Resources specify the default resource requirements applied for all pods inside the workflow.
 	//
