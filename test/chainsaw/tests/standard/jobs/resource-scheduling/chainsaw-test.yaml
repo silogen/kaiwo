@@ -13,6 +13,7 @@ spec:
             name: kaiwojob-job-resource-scheduling
           spec:
             user: test@amd.com
+            image: busybox:latest
             gpuVendor: "nvidia"
             gpus: 8
             entrypoint: sleep 1
@@ -63,7 +64,7 @@ spec:
                     value: "1"
                   - name: NUM_GPUS_PER_REPLICA
                     value: "8"
-                  image: ghcr.io/silogen/rocm-ray:v0.8
+                  image: busybox:latest
                   imagePullPolicy: Always
                   name: workload
                   resources:
@@ -136,6 +137,7 @@ spec:
             name: kaiwojob-job-resource-scheduling-no-gpu
           spec:
             user: test@amd.com
+            image: busybox:latest
             gpuVendor: "nvidia"
             gpus: 0
             entrypoint: sleep 1
@@ -185,7 +187,7 @@ spec:
                     value: "1"
                   - name: NUM_GPUS_PER_REPLICA
                     value: "0"
-                  image: ghcr.io/silogen/rocm-ray:v0.8
+                  image: busybox:latest
                   imagePullPolicy: Always
                   name: workload
                   resources:

@@ -5,6 +5,7 @@ metadata:
 spec:
   user: test@amd.com
   ray: true
+  image: rayproject/ray:2.41.0
   gpuVendor: "nvidia"
   gpus: 17
   entrypoint: sleep 1
