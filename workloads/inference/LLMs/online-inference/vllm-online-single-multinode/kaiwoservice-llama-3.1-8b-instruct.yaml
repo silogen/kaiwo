@@ -1,7 +1,7 @@
 apiVersion: kaiwo.silogen.ai/v1alpha1
 kind: KaiwoService
 metadata:
-  name: online-inference-vllm-example9
+  name: online-inference-vllm-example
 spec:
   user: test@amd.com
   gpus: 4
