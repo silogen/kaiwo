@@ -71,10 +71,14 @@ class VLLMDeployment:
             self.openai_serving_chat = OpenAIServingChat(
                 self.engine,
                 model_config,
-                OpenAIServingModels(self.engine, model_config, base_model_paths),
+                OpenAIServingModels(
+                    self.engine,
+                    model_config,
+                    base_model_paths,
+                    lora_modules=self.lora_modules,
+                    prompt_adapters=self.prompt_adapters,
+                ),
                 self.response_role,
-                lora_modules=self.lora_modules,
-                prompt_adapters=self.prompt_adapters,
                 request_logger=self.request_logger,
                 chat_template=self.chat_template,
                 chat_template_content_format=self.chat_template_content_format,
