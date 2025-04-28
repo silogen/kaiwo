@@ -4,7 +4,7 @@ metadata:
   name: online-inference-vllm-example9
 spec:
   user: test@amd.com
-  gpus: 8
+  gpus: 4
   ray: true
   serveConfigV2: |
     applications:
