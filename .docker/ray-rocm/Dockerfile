@@ -1,4 +1,4 @@
-FROM rocm/vllm-dev:nightly_main_20250425
+FROM rocm/vllm-dev:nightly_main_20250427
 
 ARG DEBIAN_FRONTEND=noninteractive
 
