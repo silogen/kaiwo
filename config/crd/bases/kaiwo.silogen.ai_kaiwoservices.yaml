@@ -25263,7 +25263,7 @@ spec:
             description: Status reflects the most recently observed state of the KaiwoService, including its phase, start time, duration, and conditions.
             properties:
               conditions:
-                description: Conditions lists the observed conditions of the KaiwoService resource, following standard Kubernetes conventions. May include conditions reflecting the underlying Deployment or RayService state.
+                description: Conditions lists the observed conditions of the workload resource, following standard Kubernetes conventions. May include conditions reflecting the underlying Deployment or RayService state.
                 items:
                   description: Condition contains details for one aspect of the current state of this API Resource.
                   properties:
@@ -25323,15 +25323,15 @@ spec:
                 format: int64
                 type: integer
               observedGeneration:
-                description: ObservedGeneration records the `.metadata.generation` of the KaiwoService resource that was last processed by the controller.
+                description: ObservedGeneration records the `.metadata.generation` of the workload resource that was last processed by the controller.
                 format: int64
                 type: integer
               startTime:
-                description: StartTime records the timestamp when the first pod associated with the KaiwoService started running.
+                description: StartTime records the timestamp when the first pod associated with the workload started running.
                 format: date-time
                 type: string
               status:
-                description: Status reflects the current high-level phase of the KaiwoService lifecycle (e.g., PENDING, STARTING, READY, FAILED).
+                description: Status reflects the current high-level phase of the workload lifecycle (e.g., PENDING, STARTING, READY, FAILED).
                 type: string
             type: object
         type: object

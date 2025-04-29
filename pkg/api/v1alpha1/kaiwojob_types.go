@@ -88,23 +88,10 @@ func (spec *KaiwoJobSpec) IsRayJob() bool {
 
 // KaiwoJobStatus defines the observed state of KaiwoJob.
 type KaiwoJobStatus struct {
-	// StartTime records the timestamp when the first pod associated with the KaiwoJob started running.
-	StartTime *metav1.Time `json:"startTime,omitempty"`
+	CommonStatusSpec `json:",inline"`
 
 	// CompletionTime records the timestamp when the KaiwoJob finished execution (either successfully or with failure).
 	CompletionTime *metav1.Time `json:"completionTime,omitempty"`
-
-	// Conditions lists the observed conditions of the KaiwoJob resource, following standard Kubernetes conventions.
-	Conditions []metav1.Condition `json:"conditions,omitempty"`
-
-	// Status reflects the current high-level phase of the KaiwoJob lifecycle (e.g., PENDING, RUNNING, COMPLETE, FAILED).
-	Status Status `json:"status,omitempty"`
-
-	// Duration indicates the total time the job ran, calculated from StartTime to CompletionTime, in seconds.
-	Duration int64 `json:"duration,omitempty"`
-
-	// ObservedGeneration records the `.metadata.generation` of the KaiwoJob resource that was last processed by the controller.
-	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
 // KaiwoJob represents a batch workload managed by Kaiwo. It encapsulates either a standard Kubernetes Job or a RayJob, along with common metadata, storage configurations, and scheduling preferences. The Kaiwo controller reconciles this resource to create and manage the underlying workload objects.

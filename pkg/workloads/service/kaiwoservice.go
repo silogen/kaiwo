@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"reflect"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -158,6 +160,17 @@ func (r *KaiwoServiceReconciler) Reconcile(
 		if err := controllerutils.EnsureNamespaceKueueManaged(ctx, k8sClient, r.ObjectKey.Namespace); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to ensure namespace is Kueue managed: %w", err)
 		}
+	}
+
+	// Set default condition if none is found
+	cond := meta.FindStatusCondition(r.Object.Status.Conditions, v1alpha1.KaiwoResourceUtilizationType)
+	if cond == nil {
+		meta.SetStatusCondition(&r.Object.Status.Conditions, metav1.Condition{
+			Type:    v1alpha1.KaiwoResourceUtilizationType,
+			Status:  metav1.ConditionFalse,
+			Reason:  string(v1alpha1.ResourceUtilizationUnknown),
+			Message: "Resource utilization currently unknown",
+		})
 	}
 
 	if storageSpec != nil && storageSpec.StorageEnabled {
