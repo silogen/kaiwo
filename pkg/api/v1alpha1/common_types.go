@@ -16,6 +16,7 @@ package v1alpha1
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type Status string
@@ -125,6 +126,23 @@ type CommonMetaSpec struct {
 	// Dangerous, if when set to `true`, Kaiwo will *not* add the default `PodSecurityContext` (which normally sets `runAsUser: 1000`, `runAsGroup: 1000`, `fsGroup: 1000`) to the generated pods. Use this only if you need to run containers as root or a different specific user and understand the security implications.
 	// +kubebuilder:default=false
 	Dangerous bool `json:"dangerous,omitempty"`
+}
+
+type CommonStatusSpec struct {
+	// StartTime records the timestamp when the first pod associated with the workload started running.
+	StartTime *metav1.Time `json:"startTime,omitempty"`
+
+	// Conditions lists the observed conditions of the workload resource, following standard Kubernetes conventions. May include conditions reflecting the underlying Deployment or RayService state.
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// Status reflects the current high-level phase of the workload lifecycle (e.g., PENDING, STARTING, READY, FAILED).
+	Status Status `json:"status,omitempty"`
+
+	// Duration indicates how long the service has been running since StartTime, in seconds. Calculated periodically while running.
+	Duration int64 `json:"duration,omitempty"`
+
+	// ObservedGeneration records the `.metadata.generation` of the workload resource that was last processed by the controller.
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
 // StorageSpec defines the storage configuration for the workload.
@@ -396,3 +414,14 @@ type SecretVolume struct {
 	// MountPath defines the directory path inside the container where the secret volume (or the `SubPath` file) should be mounted.
 	MountPath string `json:"mountPath,omitempty"`
 }
+
+type KaiwoResourceUtilizationStatus string
+
+const (
+	KaiwoResourceUtilizationType                                = "ResourceUnderutilization"
+	GpuResourceUtilizationNormal KaiwoResourceUtilizationStatus = "GpuUtilizationNormal"
+	GpuResourceUtilizationLow    KaiwoResourceUtilizationStatus = "GpuUtilizationLow"
+	CpuResourceUtilizationNormal KaiwoResourceUtilizationStatus = "CpuUtilizationNormal"
+	CpuResourceUtilizationLow    KaiwoResourceUtilizationStatus = "CpuUtilizationLow"
+	ResourceUtilizationUnknown   KaiwoResourceUtilizationStatus = "UtilizationUnknown"
+)

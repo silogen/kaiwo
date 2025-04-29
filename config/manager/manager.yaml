@@ -87,6 +87,24 @@ spec:
           value: "kaiwo-scheduler"
         - name: ADD_TAINTS_TO_GPU_NODES
           value: "false"
+
+          # Resource monitoring (update values below to suit your needs and environment)
+        - name: RESOURCE_MONITORING_ENABLED
+          value: "false"  # Change to true to enable
+        - name: RESOURCE_MONITORING_AVERAGING_INTERVAL
+          value: "60s"
+        - name: RESOURCE_MONITORING_LOW_UTILIZATION_THRESHOLD
+          value: "50"
+        - name: RESOURCE_MONITORING_MIN_ALIVE_TIME
+          value: "30s"
+        - name: RESOURCE_MONITORING_POLLING_INTERVAL
+          value: "15s"
+        - name: RESOURCE_MONITORING_PROFILE
+          value: "cpu"
+        - name: RESOURCE_MONITORING_PROMETHEUS_ENDPOINT
+          value: "http://prometheus-k8s.monitoring.svc.cluster.local:9090"
+        - name: RESOURCE_MONITORING_TARGET_NAMESPACES
+          value: "kaiwo"
         name: manager
         ports: []
         securityContext:

@@ -18,10 +18,12 @@ for arg in "$@"; do
 done
 
 CERT_MANAGER_PATH="dependencies/kustomization-client-side"
-DEPS_PATH="dependencies/kustomization-server-side"
+SERVER_SIDE_DEPS_PATH="dependencies/kustomization-server-side"
+CLIENT_SIDE_DEPS_PATH="dependencies/kustomization-client-side"
 if [ "$USE_LOCAL" != "true" ]; then
   CERT_MANAGER_PATH="github.com/silogen/kaiwo//$CERT_MANAGER_PATH?ref=main"
-  DEPS_PATH="github.com/silogen/kaiwo//$DEPS_PATH?ref=main"
+  SERVER_SIDE_DEPS_PATH="github.com/silogen/kaiwo//$SERVER_SIDE_DEPS_PATH?ref=main"
+  CLIENT_SIDE_DEPS_PATH="github.com/silogen/kaiwo//$CLIENT_SIDE_DEPS_PATH?ref=main"
 fi
 
 echo "Deploying Cert-Manager"
@@ -38,9 +40,32 @@ done
 echo "Cert-Manager deployed"
 
 echo "Deploying other dependencies"
-kubectl apply --server-side -k "$DEPS_PATH"
+kubectl apply --server-side -k "$SERVER_SIDE_DEPS_PATH"
 echo "Waiting for other dependencies to be deployed..."
 kubectl rollout status deployment/kueue-controller-manager -n kueue-system --timeout=5m
 kubectl rollout status deployment/kuberay-operator --timeout=5m
 kubectl rollout status deployment/appwrapper-controller-manager -n appwrapper-system --timeout=5m
 echo "Other dependencies deployed"
+
+echo "Deploying Prometheus Operator Stack"
+kubectl apply --server-side -k "$SERVER_SIDE_DEPS_PATH/prometheus-operator"
+
+kubectl wait \
+	--for condition=Established \
+	--all CustomResourceDefinition \
+	--namespace=monitoring
+
+kubectl apply -k "$CLIENT_SIDE_DEPS_PATH/prometheus-operator"
+echo "Waiting for Prometheus to be deployed..."
+
+kubectl rollout status deployment/kube-state-metrics -n monitoring --timeout=5m
+kubectl rollout status deployment/prometheus-adapter -n monitoring --timeout=5m
+kubectl rollout status deployment/prometheus-operator -n monitoring --timeout=5m
+
+echo "Waiting for Prometheus endpoints to be available"
+kubectl rollout status statefulset/prometheus-k8s -n monitoring --timeout=5m
+kubectl wait endpoints/prometheus-k8s -n monitoring --for=jsonpath='{.subsets[0].addresses}' --timeout=2m
+
+echo "Prometheus deployed"
+
+echo "All dependencies are deployed"
