@@ -24,16 +24,16 @@ The CPU profile tracks CPU utilization, and looks at the percentage ratio betwee
 
 Resource monitoring is enabled and configured via the following environmental variables. 
 
-| Parameter                                        | Description                                                                                                         | Default      |
-|--------------------------------------------------|---------------------------------------------------------------------------------------------------------------------| ------------ |
-| `RESOURCE_MONITORING_ENABLED`                    | Enable or disable monitoring (`true`/`false`)                                                                       | `false`      |
-| `RESOURCE_MONITORING_PROFILE`                    | `gpu` or `cpu`                                                                                                      | `gpu`        |
-| `RESOURCE_MONITORING_PROMETHEUS_ENDPOINT`        | URL of your Prometheus server                                                                                       | _(required)_ |
-| `RESOURCE_MONITORING_POLLING_INTERVAL`           | How often to check metrics (e.g. `30s`, `1m`)                                                                       | _(required)_ |
-| `RESOURCE_MONITORING_AVERAGING_INTERVAL`         | Window over which to compute average utilization (e.g. `5m`)                                                        | _(required)_ |
-| `RESOURCE_MONITORING_MIN_ALIVE_TIME`             | Minimum pod age before monitoring starts (e.g. `1m`)                                                                | _(required)_ |
-| `RESOURCE_MONITORING_LOW_UTILIZATION_THRESHOLD`  | Utilization % below which a workload is underutilized (e.g. `20`)                                                   | _(required)_ |
-| `RESOURCE_MONITORING_TARGET_NAMESPACES`          | Comma-separated list of namespaces to include (e.g. `ml,ai`). If not provided or empty, all namespaces are included | _(optional)_ |
+| Parameter                                        | Description                                                                                                                              | Default      |
+|--------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------| ------------ |
+| `RESOURCE_MONITORING_ENABLED`                    | Enable or disable monitoring (`true`/`false`)                                                                                            | `false`      |
+| `RESOURCE_MONITORING_PROFILE`                    | `gpu` or `cpu`                                                                                                                           | `gpu`        |
+| `RESOURCE_MONITORING_PROMETHEUS_ENDPOINT`        | URL of your Prometheus server                                                                                                            | _(required)_ |
+| `RESOURCE_MONITORING_POLLING_INTERVAL`           | How often to check metrics (e.g. `30s`, `1m`)                                                                                            | _(required)_ |
+| `RESOURCE_MONITORING_AVERAGING_INTERVAL`         | Window over which to compute average utilization (e.g. `5m`)                                                                             | _(required)_ |
+| `RESOURCE_MONITORING_MIN_ALIVE_TIME`             | Minimum pod age before monitoring starts (e.g. `1m`)                                                                                     | _(required)_ |
+| `RESOURCE_MONITORING_LOW_UTILIZATION_THRESHOLD`  | Utilization % below which a workload is underutilized (e.g. `20`)                                                                        | _(required)_ |
+| `RESOURCE_MONITORING_TARGET_NAMESPACES`          | Comma-separated list of namespaces to include (e.g. `ml,ai`). If not provided or empty, all namespaces are included (except `kube-system`) | _(optional)_ |
 
 ---
 
@@ -68,8 +68,8 @@ kubectl describe <kaiwojob|kaiwoservice> my-workload
 - **Right-size your thresholds**  
   Choose a sensible cutoff (e.g. 10–30%) so you catch idle pods without false positives.
 - **Tune polling & averaging**
-    - Short windows (1–2 min) react faster but can be noisy.
-    - Longer windows (5–10 min) smooth out spikes.
+    - Short windows (5–10 min) react faster but can be noisy.
+    - Longer windows (30–120 min) smooth out spikes.
 - **Namespace filtering**  
   Use `TARGET_NAMESPACES` to restrict monitoring to critical workloads only.
 

@@ -237,7 +237,8 @@ func selectTemplate(profile string) string {
 func buildNsFilter(namespaces []string) string {
 	switch len(namespaces) {
 	case 0:
-		return ""
+		// Exclude kube-system namespace by default
+		return `, namespace!="kube-system"`
 	case 1:
 		return fmt.Sprintf(`, namespace="%s"`, namespaces[0])
 	default:
