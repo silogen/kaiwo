@@ -1,4 +1,4 @@
-# VLLM-based online inference
+# vLLM-based online inference
 
 ## Dependencies
 - Secret `hf-token`: Hugging Face API token for model download

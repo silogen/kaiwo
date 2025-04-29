@@ -12,7 +12,7 @@ spec:
       route_prefix: /
       import_path: workloads.inference.LLMs.online-inference.vllm-online-single-multinode:deployment
       runtime_env:
-          working_dir: "https://github.com/silogen/kaiwo/archive/8b170070f7cc2d9b33f1511c9ea96eda288b08e0.zip"
+          working_dir: "https://github.com/silogen/kaiwo/archive/b66c14303f3beadc08e11a89fd53d7f71b2a15cd.zip"
       deployments:
       - name: VLLMDeployment
         autoscaling_config:
