@@ -1,6 +1,6 @@
 Kaiwo releases can be found on the [Kaiwo releases page](https://github.com/silogen/kaiwo/releases). 
 
-Each release includes a changelog that lists the new features, bug fixes, and other changes made in that version. in terms of assets, each release includes the following:
+Each release includes a changelog that lists the new features, bug fixes, and other changes made in that version. In terms of assets, each release includes the following:
 
 - **install.yaml**: The install.yaml file is used to install Kaiwo Operator on your system. For more information on how to install Kaiwo Operator, please refer to the [installation guide](https://silogen.github.io/kaiwo/admin/installation).
 - **kaiwo**: The Kaiwo CLI tool, which is the second main component of the Kaiwo project. This is single binary. We release it for all platforms.
