@@ -26,7 +26,6 @@ spec:
         git:
         - repository: https://github.com/silogen/kaiwo.git
           path: workloads/inference/LLMs/offline-inference/vllm-batch-single-multinode
-          branch: rocm6.4
           targetPath: code
     huggingFace:
       storageSize: "100Gi"
