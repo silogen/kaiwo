@@ -4,7 +4,7 @@ metadata:
   name: batch-inference-vllm-example
 spec:
   user: test@amd.com
-  gpusPerReplica: 8
+  gpusPerReplica: 4
   replicas: 1
   ray: true
   entrypoint: python code/main.py
@@ -20,7 +20,7 @@ spec:
     storageEnabled: true
     storageClassName: multinode
     data:
-      storageSize: 10Mi
+      storageSize: 20Mi
       mountPath: /workload
       download:
         git:

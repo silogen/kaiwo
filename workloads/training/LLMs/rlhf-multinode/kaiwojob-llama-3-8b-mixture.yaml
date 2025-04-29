@@ -6,6 +6,7 @@ spec:
   user: test@amd.com
   gpus: 12
   ray: true
+  image: ghcr.io/silogen/rocm-ray:v0.8
   entrypoint: |
     python3 -m openrlhf.cli.train_ppo_ray \
     --ref_num_nodes 1 \

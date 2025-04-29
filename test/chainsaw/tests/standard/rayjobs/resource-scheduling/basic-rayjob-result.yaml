@@ -27,7 +27,7 @@ spec:
             kaiwo.silogen.ai/user: test-amd.com
         spec:
           containers:
-          - image: ghcr.io/silogen/rocm-ray:v0.8
+          - image: rayproject/ray:2.41.0
             imagePullPolicy: Always
             name: ray-head
             resources:
@@ -73,7 +73,7 @@ spec:
               value: "2"
             - name: NUM_GPUS_PER_REPLICA
               value: "8"
-            image: ghcr.io/silogen/rocm-ray:v0.8
+            image: rayproject/ray:2.41.0
             imagePullPolicy: Always
             name: ray-worker
             resources:

@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import logging
 import os
 from typing import List, Optional
@@ -31,7 +32,7 @@ from vllm.entrypoints.openai.protocol import (
     ErrorResponse,
 )
 from vllm.entrypoints.openai.serving_chat import OpenAIServingChat
-from vllm.entrypoints.openai.serving_engine import BaseModelPath, LoRAModulePath, PromptAdapterPath
+from vllm.entrypoints.openai.serving_models import BaseModelPath, LoRAModulePath, OpenAIServingModels, PromptAdapterPath
 
 logger = logging.getLogger("ray.serve")
 
@@ -70,10 +71,14 @@ class VLLMDeployment:
             self.openai_serving_chat = OpenAIServingChat(
                 self.engine,
                 model_config,
-                base_model_paths,
+                OpenAIServingModels(
+                    self.engine,
+                    model_config,
+                    base_model_paths,
+                    lora_modules=self.lora_modules,
+                    prompt_adapters=self.prompt_adapters,
+                ),
                 self.response_role,
-                lora_modules=self.lora_modules,
-                prompt_adapters=self.prompt_adapters,
                 request_logger=self.request_logger,
                 chat_template=self.chat_template,
                 chat_template_content_format=self.chat_template_content_format,
