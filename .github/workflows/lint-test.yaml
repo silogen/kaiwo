@@ -10,10 +10,6 @@ on:
     - test/**
     - dependencies/**
     - config/**
-    branches:
-    - main
-    - master
-
 
 permissions:
   contents: read
