@@ -26,8 +26,10 @@ func GetRayClusterTemplate(dangerous bool, resourceRequirements v1.ResourceRequi
 	return &rayv1.RayClusterSpec{
 		EnableInTreeAutoscaling: baseutils.Pointer(false),
 		HeadGroupSpec: rayv1.HeadGroupSpec{
-			RayStartParams: map[string]string{},
-			Template:       GetPodTemplate(resource.MustParse("1Gi"), dangerous, resourceRequirements, "ray-head"),
+			RayStartParams: map[string]string{
+				"dashboard-host": "0.0.0.0",
+			},
+			Template: GetPodTemplate(resource.MustParse("1Gi"), dangerous, resourceRequirements, "ray-head"),
 		},
 		WorkerGroupSpecs: []rayv1.WorkerGroupSpec{
 			{

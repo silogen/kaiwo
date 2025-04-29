@@ -78,7 +78,7 @@ var _ = Describe("Workload defaults", func() {
 	})
 
 	JustBeforeEach(func() {
-		err := workloadutils.UpdatePodSpec(kaiwoCommonMetaSpec, labelContext, &podTemplateSpec, name, replicas, gpusPerReplica, false)
+		err := workloadutils.UpdatePodSpec(kaiwoCommonMetaSpec, labelContext, &podTemplateSpec, name, replicas, gpusPerReplica, false, false)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
