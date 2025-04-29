@@ -54,8 +54,9 @@ type KaiwoServiceReconciler struct {
 	RayServiceReconciler *RayServiceReconciler
 }
 
-func NewKaiwoServiceReconciler(kaiwoService *v1alpha1.KaiwoService) KaiwoServiceReconciler {
-	sanitize(kaiwoService)
+func NewKaiwoServiceReconciler(ctx context.Context, kaiwoService *v1alpha1.KaiwoService) KaiwoServiceReconciler {
+	config := controllerutils.ConfigFromContext(ctx)
+	sanitize(kaiwoService, config)
 
 	objectKey := client.ObjectKeyFromObject(kaiwoService)
 	r := KaiwoServiceReconciler{
@@ -102,7 +103,7 @@ func NewKaiwoServiceReconciler(kaiwoService *v1alpha1.KaiwoService) KaiwoService
 
 	clusterQueue := kaiwoService.Spec.ClusterQueue
 	if clusterQueue == "" {
-		clusterQueue = common.DefaultClusterQueueName
+		clusterQueue = config.Kueue.DefaultClusterQueueName
 	}
 	r.LocalQueue = common.NewLocalQueueReconciler(
 		client.ObjectKey{Namespace: objectKey.Namespace, Name: clusterQueue},
@@ -117,7 +118,7 @@ func NewKaiwoServiceReconciler(kaiwoService *v1alpha1.KaiwoService) KaiwoService
 	return r
 }
 
-func sanitize(kaiwoService *v1alpha1.KaiwoService) {
+func sanitize(kaiwoService *v1alpha1.KaiwoService, config controllerutils.KaiwoConfigContext) {
 	storageSpec := kaiwoService.Spec.Storage
 
 	if storageSpec != nil && storageSpec.StorageEnabled {
@@ -125,11 +126,11 @@ func sanitize(kaiwoService *v1alpha1.KaiwoService) {
 		// Ensure mount paths are set
 		if storageSpec.Data != nil && storageSpec.Data.IsRequested() && storageSpec.Data.MountPath == "" {
 			// logger.Info("Data storage mount path not set, using default:" + defaultDataMountPath)
-			storageSpec.Data.MountPath = workloadutils.DefaultDataMountPath
+			storageSpec.Data.MountPath = config.Data.DefaultDataMountPath
 		}
 		if storageSpec.HuggingFace != nil && storageSpec.HuggingFace.IsRequested() && storageSpec.HuggingFace.MountPath == "" {
 			// logger.Info("Hugging Face storage mount path not set, using default:" + defaultHfMountPath)
-			storageSpec.HuggingFace.MountPath = workloadutils.DefaultHfMountPath
+			storageSpec.HuggingFace.MountPath = config.Data.DefaultHfMountPath
 		}
 	}
 
@@ -138,7 +139,7 @@ func sanitize(kaiwoService *v1alpha1.KaiwoService) {
 	}
 
 	if kaiwoService.Spec.ClusterQueue == "" {
-		kaiwoService.Labels[common.QueueLabel] = common.DefaultClusterQueueName
+		kaiwoService.Labels[common.QueueLabel] = config.Kueue.DefaultClusterQueueName
 	} else {
 		kaiwoService.Labels[common.QueueLabel] = kaiwoService.Spec.ClusterQueue
 	}

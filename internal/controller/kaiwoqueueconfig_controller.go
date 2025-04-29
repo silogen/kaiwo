@@ -30,8 +30,6 @@ import (
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
-	common "github.com/silogen/kaiwo/pkg/workloads/common"
-
 	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 )
 
@@ -53,9 +51,14 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, fmt.Errorf("only a KaiwoQueueConfig named 'kaiwo' is allowed")
 	}
 
+	ctx, err := controllerutils.GetContextWithConfig(ctx, r.Client)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("could not get config context: %w", err)
+	}
+
 	// Fetch the requested KaiwoQueueConfig
 	var queueConfig v1alpha1.KaiwoQueueConfig
-	err := r.Get(ctx, req.NamespacedName, &queueConfig)
+	err = r.Get(ctx, req.NamespacedName, &queueConfig)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			logger.Info("KaiwoQueueConfig not found, ignoring reconciliation", "name", req.Name)
@@ -409,9 +412,10 @@ func (r *KaiwoQueueConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *KaiwoQueueConfigReconciler) EnsureDefaultKaiwoQueueConfig(ctx context.Context) error {
 	logger := log.FromContext(ctx)
+	config := controllerutils.ConfigFromContext(ctx)
 
 	var queueConfig v1alpha1.KaiwoQueueConfig
-	err := r.Get(ctx, client.ObjectKey{Name: common.DefaultKaiwoQueueConfigName}, &queueConfig)
+	err := r.Get(ctx, client.ObjectKey{Name: config.DefaultKaiwoQueueConfigName}, &queueConfig)
 	if err == nil {
 		return nil
 	} else if !errors.IsNotFound(err) {
@@ -421,7 +425,7 @@ func (r *KaiwoQueueConfigReconciler) EnsureDefaultKaiwoQueueConfig(ctx context.C
 
 	logger.Info("Default KaiwoQueueConfig does not exist. Creating it now...")
 
-	if err := r.CreateDefaultKaiwoQueueConfig(ctx, common.DefaultKaiwoQueueConfigName); err != nil {
+	if err := r.CreateDefaultKaiwoQueueConfig(ctx, config.DefaultKaiwoQueueConfigName); err != nil {
 		logger.Error(err, "Failed to create default KaiwoQueueConfig")
 		return err
 	}
@@ -432,6 +436,7 @@ func (r *KaiwoQueueConfigReconciler) EnsureDefaultKaiwoQueueConfig(ctx context.C
 
 func (r *KaiwoQueueConfigReconciler) CreateDefaultKaiwoQueueConfig(ctx context.Context, name string) error {
 	logger := log.FromContext(ctx)
+	config := controllerutils.ConfigFromContext(ctx)
 
 	resourceFlavors, nodePoolResources, err := controllerutils.CreateDefaultResourceFlavors(ctx, r.Client)
 	if err != nil {
@@ -439,7 +444,7 @@ func (r *KaiwoQueueConfigReconciler) CreateDefaultKaiwoQueueConfig(ctx context.C
 		return err
 	}
 
-	clusterQueue := controllerutils.CreateClusterQueue(nodePoolResources, common.DefaultClusterQueueName)
+	clusterQueue := controllerutils.CreateClusterQueue(nodePoolResources, config.Kueue.DefaultClusterQueueName)
 
 	defaultQueueConfig := v1alpha1.KaiwoQueueConfig{
 		ObjectMeta: metav1.ObjectMeta{

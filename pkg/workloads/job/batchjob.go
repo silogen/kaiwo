@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
+
 	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -38,11 +40,11 @@ const (
 	defaultTTLSecondsAfterFinished = int32(3600)
 )
 
-func GetDefaultJobSpec(dangerous bool, resourceRequirements corev1.ResourceRequirements) batchv1.JobSpec {
+func GetDefaultJobSpec(config controllerutils.KaiwoConfigContext, dangerous bool, resourceRequirements corev1.ResourceRequirements) batchv1.JobSpec {
 	return batchv1.JobSpec{
 		TTLSecondsAfterFinished: baseutils.Pointer(defaultTTLSecondsAfterFinished),
 		BackoffLimit:            baseutils.Pointer(int32(0)),
-		Template:                workloadutils.GetPodTemplate(*resource.NewQuantity(1*1024*1024*1024, resource.BinarySI), dangerous, resourceRequirements, "workload"),
+		Template:                workloadutils.GetPodTemplate(config, *resource.NewQuantity(1*1024*1024*1024, resource.BinarySI), dangerous, resourceRequirements, "workload"),
 	}
 }
 
@@ -64,6 +66,7 @@ func NewBatchJobReconciler(kaiwoJob *v1alpha1.KaiwoJob) *BatchJobReconciler {
 
 func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batchv1.Job, error) {
 	logger := log.FromContext(ctx)
+	config := controllerutils.ConfigFromContext(ctx)
 
 	spec := r.KaiwoJob.Spec
 	labelContext := common.GetKaiwoLabelContext(r.KaiwoJob)
@@ -74,7 +77,7 @@ func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batch
 	var overrideDefaults bool
 
 	if spec.Job == nil {
-		jobSpec = GetDefaultJobSpec(spec.Dangerous, baseutils.ValueOrDefault(spec.Resources))
+		jobSpec = GetDefaultJobSpec(config, spec.Dangerous, baseutils.ValueOrDefault(spec.Resources))
 		if r.KaiwoJob.Spec.CommonMetaSpec.Gpus > 0 {
 			overrideDefaults = true
 		}
@@ -86,7 +89,7 @@ func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batch
 		overrideDefaults = false
 	}
 
-	if err := workloadutils.UpdatePodSpec(r.KaiwoJob.Spec.CommonMetaSpec, labelContext, &jobSpec.Template, r.KaiwoJob.Name, 1, r.KaiwoJob.Spec.CommonMetaSpec.Gpus, overrideDefaults, false); err != nil {
+	if err := workloadutils.UpdatePodSpec(config, r.KaiwoJob.Spec.CommonMetaSpec, labelContext, &jobSpec.Template, r.KaiwoJob.Name, 1, r.KaiwoJob.Spec.CommonMetaSpec.Gpus, overrideDefaults, false); err != nil {
 		return nil, fmt.Errorf("failed to update job spec: %w", err)
 	}
 

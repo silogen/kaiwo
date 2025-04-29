@@ -40,11 +40,6 @@ const (
 	KaiwoDownloadTypeLabelValue = "downloader"
 )
 
-var (
-	DefaultDataMountPath = baseutils.GetEnv("DEFAULT_DATA_MOUNT_PATH", "/workload")
-	DefaultHfMountPath   = baseutils.GetEnv("DEFAULT_HF_MOUNT_PATH", "/hf_cache")
-)
-
 type DownloadJobConfigMapReconciler struct {
 	common.ResourceReconcilerBase[*corev1.ConfigMap]
 	StorageSpec *v1alpha1.StorageSpec

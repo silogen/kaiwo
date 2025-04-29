@@ -33,7 +33,6 @@ import (
 
 	cliutils "github.com/silogen/kaiwo/pkg/cli/utils"
 	k8sUtils "github.com/silogen/kaiwo/pkg/k8s"
-	common "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 var (
@@ -219,7 +218,7 @@ func promptUserForConfig() (bool, error) {
 		return false, nil
 	}
 
-	queueValue := common.DefaultClusterQueueName
+	queueValue := "kaiwo"
 	userEmail := ""
 
 	for {

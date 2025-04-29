@@ -61,6 +61,13 @@ func (j *JobWebhook) Default(ctx context.Context, obj runtime.Object) error {
 		return fmt.Errorf("expected a Job object but got %T", obj)
 	}
 
+	ctx, err := controllerutils.GetContextWithConfig(ctx, j.Client)
+	config := controllerutils.ConfigFromContext(ctx)
+
+	if err != nil {
+		return fmt.Errorf("could not get kaiwo config: %w", err)
+	}
+
 	logger := logf.FromContext(ctx)
 
 	if job.DeletionTimestamp != nil {
@@ -83,7 +90,7 @@ func (j *JobWebhook) Default(ctx context.Context, obj runtime.Object) error {
 
 	if kaiwoManages(job) {
 		if job.Labels[common.QueueLabel] == "" {
-			job.Labels[common.QueueLabel] = common.DefaultClusterQueueName
+			job.Labels[common.QueueLabel] = config.Kueue.DefaultClusterQueueName
 		}
 		if job.Spec.Template.Spec.TerminationGracePeriodSeconds == nil {
 			job.Spec.Template.Spec.TerminationGracePeriodSeconds = baseutils.Pointer(int64(0))
@@ -120,6 +127,8 @@ func (j *JobWebhook) ensureKaiwoJob(ctx context.Context, job *batchv1.Job, authe
 	logger := logf.FromContext(ctx)
 	logger.Info("Ensuring KaiwoJob exists for Job", "JobName", job.Name)
 
+	config := controllerutils.ConfigFromContext(ctx)
+
 	kaiwoJob := &v1alpha1.KaiwoJob{}
 
 	err := j.Client.Get(ctx, client.ObjectKey{Name: job.Name, Namespace: job.Namespace}, kaiwoJob)
@@ -137,7 +146,7 @@ func (j *JobWebhook) ensureKaiwoJob(ctx context.Context, job *batchv1.Job, authe
 	}
 
 	if _, exists := kaiwoJobLabels[common.QueueLabel]; !exists {
-		kaiwoJobLabels[common.QueueLabel] = common.DefaultClusterQueueName
+		kaiwoJobLabels[common.QueueLabel] = config.Kueue.DefaultClusterQueueName
 	}
 
 	kaiwoJob = &v1alpha1.KaiwoJob{

@@ -192,7 +192,7 @@ spec:
                 default: 0
                 description: Gpus specifies the total number of GPUs allocated to the workload. See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor) for more details on how this field impacts scheduling.
                 type: integer
-              gpus-per-replica:
+              gpusPerReplica:
                 description: |-
                   GpusPerReplica specifies the number of GPUs allocated per replica. See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor) for more details on how this field impacts scheduling.
 

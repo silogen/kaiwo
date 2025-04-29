@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"strings"
 
+	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
+
 	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 
 	common "github.com/silogen/kaiwo/pkg/workloads/common"
@@ -76,7 +78,12 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, nil
 	}
 
-	reconciler := workloadjob.NewKaiwoJobReconciler(&kaiwoJob)
+	ctx, err := controllerutils.GetContextWithConfig(ctx, r.Client)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to fetch config: %w", err)
+	}
+
+	reconciler := workloadjob.NewKaiwoJobReconciler(ctx, &kaiwoJob)
 
 	result, err := reconciler.Reconcile(ctx, r.Client, r.Scheme)
 	if err != nil {

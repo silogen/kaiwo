@@ -20,6 +20,8 @@ import (
 	"context"
 	"fmt"
 
+	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -62,7 +64,12 @@ func (r *KaiwoServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, nil
 	}
 
-	reconciler := workloadservice.NewKaiwoServiceReconciler(&kaiwoService)
+	ctx, err := controllerutils.GetContextWithConfig(ctx, r.Client)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to fetch config: %w", err)
+	}
+
+	reconciler := workloadservice.NewKaiwoServiceReconciler(ctx, &kaiwoService)
 
 	result, err := reconciler.Reconcile(ctx, r.Client, r.Scheme)
 	if err != nil {

@@ -50,8 +50,9 @@ type KaiwoJobReconciler struct {
 	RayJob               *RayJobReconciler
 }
 
-func NewKaiwoJobReconciler(kaiwoJob *v1alpha1.KaiwoJob) KaiwoJobReconciler {
-	sanitize(kaiwoJob)
+func NewKaiwoJobReconciler(ctx context.Context, kaiwoJob *v1alpha1.KaiwoJob) KaiwoJobReconciler {
+	config := controllerutils.ConfigFromContext(ctx)
+	sanitize(kaiwoJob, config)
 
 	objectKey := client.ObjectKeyFromObject(kaiwoJob)
 
@@ -100,7 +101,7 @@ func NewKaiwoJobReconciler(kaiwoJob *v1alpha1.KaiwoJob) KaiwoJobReconciler {
 
 	clusterQueue := kaiwoJob.Spec.ClusterQueue
 	if clusterQueue == "" {
-		clusterQueue = common.DefaultClusterQueueName
+		clusterQueue = config.Kueue.DefaultClusterQueueName
 	}
 	reconciler.LocalQueue = common.NewLocalQueueReconciler(client.ObjectKey{Namespace: objectKey.Namespace, Name: clusterQueue})
 
@@ -115,7 +116,7 @@ func NewKaiwoJobReconciler(kaiwoJob *v1alpha1.KaiwoJob) KaiwoJobReconciler {
 	return reconciler
 }
 
-func sanitize(kaiwoJob *v1alpha1.KaiwoJob) {
+func sanitize(kaiwoJob *v1alpha1.KaiwoJob, config controllerutils.KaiwoConfigContext) {
 	storageSpec := kaiwoJob.Spec.Storage
 
 	if storageSpec != nil && storageSpec.StorageEnabled {
@@ -123,11 +124,11 @@ func sanitize(kaiwoJob *v1alpha1.KaiwoJob) {
 		// Ensure mount paths are set
 		if storageSpec.Data != nil && storageSpec.Data.IsRequested() && storageSpec.Data.MountPath == "" {
 			// logger.Info("Data storage mount path not set, using default:" + defaultDataMountPath)
-			storageSpec.Data.MountPath = workloadutils.DefaultDataMountPath
+			storageSpec.Data.MountPath = config.Data.DefaultDataMountPath
 		}
 		if storageSpec.HuggingFace != nil && storageSpec.HuggingFace.IsRequested() && storageSpec.HuggingFace.MountPath == "" {
 			// logger.Info("Hugging Face storage mount path not set, using default:" + defaultHfMountPath)
-			storageSpec.HuggingFace.MountPath = workloadutils.DefaultHfMountPath
+			storageSpec.HuggingFace.MountPath = config.Data.DefaultHfMountPath
 		}
 	}
 
@@ -136,7 +137,7 @@ func sanitize(kaiwoJob *v1alpha1.KaiwoJob) {
 	}
 
 	if kaiwoJob.Spec.ClusterQueue == "" {
-		kaiwoJob.Labels[common.QueueLabel] = common.DefaultClusterQueueName
+		kaiwoJob.Labels[common.QueueLabel] = config.Kueue.DefaultClusterQueueName
 	} else {
 		kaiwoJob.Labels[common.QueueLabel] = kaiwoJob.Spec.ClusterQueue
 	}

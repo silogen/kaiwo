@@ -18,22 +18,19 @@ import (
 	"context"
 	"time"
 
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
 const (
 	Finalizer = "kaiwo.silogen.ai/finalizer"
 )
 
-var (
-	DefaultKaiwoQueueConfigName = baseutils.GetEnv("DEFAULT_KAIWO_QUEUE_CONFIG_NAME", "kaiwo")
-	DefaultClusterQueueName     = baseutils.GetEnv("DEFAULT_CLUSTER_QUEUE_NAME", "kaiwo")
-	DefaultGPUTaintKey          = baseutils.GetEnv("DEFAULT_GPU_TAINT_KEY", "kaiwo.silogen.ai/gpu")
-)
+// DefaultClusterQueueName = baseutils.GetEnv("DEFAULT_CLUSTER_QUEUE_NAME", "kaiwo")
+var DefaultGPUTaintKey = baseutils.GetEnv("DEFAULT_GPU_TAINT_KEY", "kaiwo.silogen.ai/gpu")
 
 var DefaultRequeueDuration = 2 * time.Second
 

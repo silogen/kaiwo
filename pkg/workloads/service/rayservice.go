@@ -18,7 +18,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 
 	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
@@ -42,9 +41,9 @@ import (
 	common "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
-func GetDefaultRayServiceSpec(dangerous bool, resourceRequirements v1.ResourceRequirements) rayv1.RayServiceSpec {
+func GetDefaultRayServiceSpec(config controllerutils.KaiwoConfigContext, dangerous bool, resourceRequirements v1.ResourceRequirements) rayv1.RayServiceSpec {
 	return rayv1.RayServiceSpec{
-		RayClusterSpec: *workloadutils.GetRayClusterTemplate(dangerous, resourceRequirements),
+		RayClusterSpec: *workloadutils.GetRayClusterTemplate(config, dangerous, resourceRequirements),
 	}
 }
 
@@ -66,6 +65,7 @@ func NewRayServiceReconciler(kaiwoService *v1alpha1.KaiwoService) *RayServiceRec
 
 func (r *RayServiceReconciler) Build(ctx context.Context, k8sClient client.Client) (*appwrapperv1beta2.AppWrapper, error) {
 	logger := log.FromContext(ctx)
+	config := controllerutils.ConfigFromContext(ctx)
 
 	spec := r.KaiwoService.Spec
 
@@ -73,6 +73,7 @@ func (r *RayServiceReconciler) Build(ctx context.Context, k8sClient client.Clien
 
 	if spec.RayService == nil {
 		rayServiceSpec = GetDefaultRayServiceSpec(
+			config,
 			spec.Dangerous,
 			baseutils.ValueOrDefault(spec.Resources),
 		)
@@ -80,7 +81,7 @@ func (r *RayServiceReconciler) Build(ctx context.Context, k8sClient client.Clien
 		rayServiceSpec = spec.RayService.Spec
 	}
 
-	if headMemoryOverride := os.Getenv("RAY_HEAD_POD_MEMORY"); len(headMemoryOverride) > 0 {
+	if headMemoryOverride := config.Ray.HeadPodMemory; len(headMemoryOverride) > 0 {
 		quantity, err := resource.ParseQuantity(headMemoryOverride)
 		if err != nil {
 			msg := fmt.Sprintf("Failed to parse HEAD_POD_MEMORY %s", headMemoryOverride)
@@ -137,6 +138,7 @@ func (r *RayServiceReconciler) Build(ctx context.Context, k8sClient client.Clien
 
 	if spec.RayService == nil {
 		if err := workloadutils.UpdatePodSpec(
+			config,
 			r.KaiwoService.Spec.CommonMetaSpec,
 			labelContext,
 			&rayServiceSpec.RayClusterSpec.HeadGroupSpec.Template,
@@ -151,6 +153,7 @@ func (r *RayServiceReconciler) Build(ctx context.Context, k8sClient client.Clien
 
 		for i := range rayServiceSpec.RayClusterSpec.WorkerGroupSpecs {
 			if err := workloadutils.UpdatePodSpec(
+				config,
 				r.KaiwoService.Spec.CommonMetaSpec,
 				labelContext,
 				&rayServiceSpec.RayClusterSpec.WorkerGroupSpecs[i].Template,

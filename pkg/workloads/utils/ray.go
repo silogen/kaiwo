@@ -19,17 +19,19 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 
+	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
+
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
-func GetRayClusterTemplate(dangerous bool, resourceRequirements v1.ResourceRequirements) *rayv1.RayClusterSpec {
+func GetRayClusterTemplate(config controllerutils.KaiwoConfigContext, dangerous bool, resourceRequirements v1.ResourceRequirements) *rayv1.RayClusterSpec {
 	return &rayv1.RayClusterSpec{
 		EnableInTreeAutoscaling: baseutils.Pointer(false),
 		HeadGroupSpec: rayv1.HeadGroupSpec{
 			RayStartParams: map[string]string{
 				"dashboard-host": "0.0.0.0",
 			},
-			Template: GetPodTemplate(resource.MustParse("1Gi"), dangerous, resourceRequirements, "ray-head"),
+			Template: GetPodTemplate(config, resource.MustParse("1Gi"), dangerous, resourceRequirements, "ray-head"),
 		},
 		WorkerGroupSpecs: []rayv1.WorkerGroupSpec{
 			{
@@ -38,7 +40,7 @@ func GetRayClusterTemplate(dangerous bool, resourceRequirements v1.ResourceRequi
 				MinReplicas:    baseutils.Pointer(int32(1)),
 				MaxReplicas:    baseutils.Pointer(int32(1)),
 				RayStartParams: map[string]string{},
-				Template:       GetPodTemplate(resource.MustParse("200Gi"), dangerous, resourceRequirements, "ray-worker"), // TODO: add to CRD as configurable field
+				Template:       GetPodTemplate(config, resource.MustParse("200Gi"), dangerous, resourceRequirements, "ray-worker"), // TODO: add to CRD as configurable field
 			},
 		},
 	}

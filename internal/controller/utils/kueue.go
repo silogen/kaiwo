@@ -33,13 +33,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
-	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
-var (
-	excludeMasterNodes   = baseutils.GetEnv("EXCLUDE_MASTER_NODES_FROM_NODE_POOLS", "false")
-	DefaultNodePoolLabel = "kaiwo/nodepool"
-)
+var DefaultNodePoolLabel = "kaiwo/nodepool"
 
 func EnsureNamespaceKueueManaged(ctx context.Context, k8sClient client.Client, namespaceName string) error {
 	logger := log.FromContext(ctx)
@@ -72,6 +68,7 @@ func EnsureNamespaceKueueManaged(ctx context.Context, k8sClient client.Client, n
 
 func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]v1alpha1.ResourceFlavorSpec, map[string]kueuev1beta1.FlavorQuotas, error) {
 	logger := log.FromContext(ctx)
+	config := ConfigFromContext(ctx)
 
 	var resourceFlavors []v1alpha1.ResourceFlavorSpec
 	nodePoolResources := make(map[string]kueuev1beta1.FlavorQuotas)
@@ -82,7 +79,7 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]v1alp
 	// Get node list dynamically
 	nodeList := GetNodeResources(ctx, c)
 
-	if strings.ToLower(excludeMasterNodes) == "true" {
+	if config.Kueue.ExcludeMasterNodesFromNodePools {
 		logger.Info("Excluding master/control-plane nodes from nodepools. Set EXCLUDE_MASTER_NODES_FROM_NODE_POOLS=false to include them")
 	} else {
 		logger.Info("Including master/control-plane nodes in nodepools. Set EXCLUDE_MASTER_NODES_FROM_NODE_POOLS=true to exclude them")
@@ -90,7 +87,7 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]v1alp
 
 	for _, node := range nodeList {
 		// **Skip Control Plane Nodes**
-		if strings.ToLower(excludeMasterNodes) == "true" {
+		if config.Kueue.ExcludeMasterNodesFromNodePools {
 			if _, exists := node.Labels["node-role.kubernetes.io/control-plane"]; exists {
 				continue
 			}
@@ -157,8 +154,6 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]v1alp
 		}
 	}
 
-	addTaints := strings.ToLower(baseutils.GetEnv("ADD_TAINTS_TO_GPU_NODES", "true")) == "true"
-
 	for flavorName := range nodePools {
 		resourceQuotas := []kueuev1beta1.ResourceQuota{
 			{
@@ -207,6 +202,12 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]v1alp
 
 	resourceFlavors = RemoveDuplicateResourceFlavors(resourceFlavors)
 
+	gpuTaint := corev1.Taint{
+		Key:    config.DefaultGpuTaintKey,
+		Value:  "true",
+		Effect: corev1.TaintEffectNoSchedule,
+	}
+
 	for flavorName, nodeNames := range nodePools {
 		for _, nodeName := range nodeNames {
 			err := LabelNode(ctx, c, nodeName, DefaultNodePoolLabel, flavorName)
@@ -215,9 +216,9 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]v1alp
 			} else {
 				return nil, nil, fmt.Errorf("failed to label node %s: %w", nodeName, err)
 			}
-			if addTaints {
+			if config.Kueue.AddTaintsToGpuNodes {
 				if !strings.HasPrefix(flavorName, "cpu-only") {
-					err = TaintNode(ctx, c, nodeName, GPUTaint)
+					err = TaintNode(ctx, c, nodeName, gpuTaint)
 					if err != nil {
 						logger.Error(err, "Failed to taint GPU node", "node", nodeName)
 					}

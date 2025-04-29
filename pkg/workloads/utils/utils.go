@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"strings"
 
+	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,7 +33,7 @@ import (
 	common "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
-func UpdatePodSpec(kaiwoCommonMetaSpec v1alpha1.CommonMetaSpec, labelContext common.KaiwoLabelContext, template *corev1.PodTemplateSpec, name string, replicas int, gpusPerReplica int, override bool, rayhead bool) error {
+func UpdatePodSpec(config controllerutils.KaiwoConfigContext, kaiwoCommonMetaSpec v1alpha1.CommonMetaSpec, labelContext common.KaiwoLabelContext, template *corev1.PodTemplateSpec, name string, replicas int, gpusPerReplica int, override bool, rayhead bool) error {
 	// Update labels
 	if template.ObjectMeta.Labels == nil {
 		template.ObjectMeta.Labels = map[string]string{}
@@ -49,7 +51,7 @@ func UpdatePodSpec(kaiwoCommonMetaSpec v1alpha1.CommonMetaSpec, labelContext com
 				template.Spec.Containers[i].Image = kaiwoCommonMetaSpec.Image
 			} else {
 				// Otherwise use the default Ray image
-				template.Spec.Containers[i].Image = baseutils.DefaultRayImage
+				template.Spec.Containers[i].Image = config.Ray.DefaultRayImage
 			}
 		}
 	}
@@ -75,14 +77,14 @@ func UpdatePodSpec(kaiwoCommonMetaSpec v1alpha1.CommonMetaSpec, labelContext com
 	gpus := kaiwoCommonMetaSpec.Gpus
 
 	if kaiwoCommonMetaSpec.Gpus == 0 {
-		gpuResourceKey := corev1.ResourceName(getGpuResourceKey(vendor))
+		gpuResourceKey := corev1.ResourceName(getGpuResourceKey(vendor, config.DefaultGpuResourceKey))
 		if gpuQuantity, exists := template.Spec.Containers[0].Resources.Requests[gpuResourceKey]; exists {
 			gpus = int(gpuQuantity.Value())
 		}
 	}
 
 	// Adjust resource requests and limits based on GPUs
-	if err := adjustResourceRequestsAndLimits(vendor, gpus, replicas, gpusPerReplica, template, override, rayhead); err != nil {
+	if err := adjustResourceRequestsAndLimits(config, vendor, gpus, replicas, gpusPerReplica, template, override, rayhead); err != nil {
 		return fmt.Errorf("failed to adjust resource requests and limits: %w", err)
 	}
 
@@ -157,14 +159,12 @@ func fillResourceList(dest *corev1.ResourceList, src corev1.ResourceList, overri
 	}
 }
 
-var DefaultGpuResourceKey = baseutils.GetEnv("DEFAULT_GPU_RESOURCE_KEY", "amd.com/gpu")
-
 var (
 	DefaultMemory = resource.MustParse("16Gi")
 	DefaultCPU    = resource.MustParse("2")
 )
 
-func GetPodTemplate(dshmSize resource.Quantity, dangerous bool, resources corev1.ResourceRequirements, workloadContainerName string) corev1.PodTemplateSpec {
+func GetPodTemplate(config controllerutils.KaiwoConfigContext, dshmSize resource.Quantity, dangerous bool, resources corev1.ResourceRequirements, workloadContainerName string) corev1.PodTemplateSpec {
 	resourceRequirements := resources.DeepCopy()
 	if resourceRequirements.Requests == nil {
 		resourceRequirements.Requests = corev1.ResourceList{}
@@ -185,11 +185,9 @@ func GetPodTemplate(dshmSize resource.Quantity, dangerous bool, resources corev1
 		resourceRequirements.Requests[corev1.ResourceCPU] = DefaultCPU
 	}
 
-	schedulerName := baseutils.GetEnv("CUSTOM_KUBE_SCHEDULER_NAME", "default-scheduler")
-
 	podTemplate := corev1.PodTemplateSpec{
 		Spec: corev1.PodSpec{
-			SchedulerName: schedulerName,
+			SchedulerName: config.KubeSchedulerName,
 			RestartPolicy: corev1.RestartPolicyNever,
 			Containers: []corev1.Container{
 				{
@@ -226,13 +224,13 @@ func GetPodTemplate(dshmSize resource.Quantity, dangerous bool, resources corev1
 	return podTemplate
 }
 
-func adjustResourceRequestsAndLimits(gpuVendor string, gpuCount int, replicas int, gpusPerReplica int, podTemplateSpec *corev1.PodTemplateSpec, override bool, rayhead bool) error {
+func adjustResourceRequestsAndLimits(config controllerutils.KaiwoConfigContext, gpuVendor string, gpuCount int, replicas int, gpusPerReplica int, podTemplateSpec *corev1.PodTemplateSpec, override bool, rayhead bool) error {
 	if len(podTemplateSpec.Spec.Containers) == 0 {
 		err := fmt.Errorf("podTemplateSpec has no containers to modify")
 		return err
 	}
 
-	gpuResourceKey := getGpuResourceKey(gpuVendor)
+	gpuResourceKey := getGpuResourceKey(gpuVendor, config.DefaultGpuResourceKey)
 
 	// Modify resource requests/limits only if GPUs are requested
 	if gpusPerReplica > 0 && !rayhead {
@@ -252,8 +250,7 @@ func adjustResourceRequestsAndLimits(gpuVendor string, gpuCount int, replicas in
 	podTemplateSpec.Spec.Containers[0].Env = append(podTemplateSpec.Spec.Containers[0].Env, envVarsToAppend...)
 
 	// Check all containers for any GPU resource requests
-	addTaints := strings.ToLower(baseutils.GetEnv("ADD_TAINTS_TO_GPU_NODES", "true")) == "true"
-	if addTaints {
+	if config.Kueue.AddTaintsToGpuNodes {
 		for _, container := range podTemplateSpec.Spec.Containers {
 			requests := container.Resources.Requests
 			if requests != nil {
@@ -270,7 +267,7 @@ func adjustResourceRequestsAndLimits(gpuVendor string, gpuCount int, replicas in
 
 AddToleration:
 	podTemplateSpec.Spec.Tolerations = append(podTemplateSpec.Spec.Tolerations, corev1.Toleration{
-		Key:      common.DefaultGPUTaintKey,
+		Key:      config.DefaultGpuTaintKey,
 		Operator: corev1.TolerationOpExists,
 		Effect:   corev1.TaintEffectNoSchedule,
 	})
@@ -308,7 +305,7 @@ func addEnvVars(UserEnvVars []corev1.EnvVar, podTemplateSpec *corev1.PodTemplate
 	return nil
 }
 
-func getGpuResourceKey(vendor string) string {
+func getGpuResourceKey(vendor string, defaultVendor string) string {
 	vendor = strings.ToUpper(vendor)
 	switch vendor {
 	case "NVIDIA":
@@ -316,7 +313,7 @@ func getGpuResourceKey(vendor string) string {
 	case "AMD":
 		return "amd.com/gpu"
 	default:
-		return DefaultGpuResourceKey
+		return defaultVendor
 	}
 }
 
