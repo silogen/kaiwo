@@ -20,6 +20,8 @@ import (
 	"path/filepath"
 	"sync"
 
+	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
+
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	"github.com/sirupsen/logrus"
 	batchv1 "k8s.io/api/batch/v1"
@@ -34,8 +36,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
-
-	kaiwov1 "github.com/silogen/kaiwo/pkg/api/v1alpha1"
 )
 
 var (
@@ -133,7 +133,7 @@ func buildScheme() (*runtime.Scheme, error) {
 		return nil, fmt.Errorf("failed to add RayService types to scheme: %v", err)
 	}
 
-	if err := kaiwov1.AddToScheme(scheme); err != nil {
+	if err := kaiwo.AddToScheme(scheme); err != nil {
 		return nil, fmt.Errorf("failed to add Kaiwo types to scheme: %v", err)
 	}
 

@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
+
 	common "github.com/silogen/kaiwo/pkg/workloads/common"
 
 	"gopkg.in/yaml.v3"
@@ -30,7 +32,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 

@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"strings"
 
+	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
+
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 
 	corev1 "k8s.io/api/core/v1"
@@ -28,12 +30,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 	common "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
-func UpdatePodSpec(config controllerutils.KaiwoConfigContext, kaiwoCommonMetaSpec v1alpha1.CommonMetaSpec, labelContext common.KaiwoLabelContext, template *corev1.PodTemplateSpec, name string, replicas int, gpusPerReplica int, override bool, rayhead bool) error {
+func UpdatePodSpec(config controllerutils.KaiwoConfigContext, kaiwoCommonMetaSpec kaiwo.CommonMetaSpec, labelContext common.KaiwoLabelContext, template *corev1.PodTemplateSpec, name string, replicas int, gpusPerReplica int, override bool, rayhead bool) error {
 	// Update labels
 	if template.ObjectMeta.Labels == nil {
 		template.ObjectMeta.Labels = map[string]string{}
@@ -77,7 +78,7 @@ func UpdatePodSpec(config controllerutils.KaiwoConfigContext, kaiwoCommonMetaSpe
 	gpus := kaiwoCommonMetaSpec.Gpus
 
 	if kaiwoCommonMetaSpec.Gpus == 0 {
-		gpuResourceKey := corev1.ResourceName(getGpuResourceKey(vendor, config.DefaultGpuResourceKey))
+		gpuResourceKey := corev1.ResourceName(getGpuResourceKey(vendor, config.Nodes.DefaultGpuResourceKey))
 		if gpuQuantity, exists := template.Spec.Containers[0].Resources.Requests[gpuResourceKey]; exists {
 			gpus = int(gpuQuantity.Value())
 		}
@@ -101,7 +102,7 @@ func UpdatePodSpec(config controllerutils.KaiwoConfigContext, kaiwoCommonMetaSpe
 	return nil
 }
 
-func addSecretVolumes(template *corev1.PodTemplateSpec, secretVolumes []v1alpha1.SecretVolume) {
+func addSecretVolumes(template *corev1.PodTemplateSpec, secretVolumes []kaiwo.SecretVolume) {
 	for _, volume := range secretVolumes {
 		template.Spec.Volumes = append(template.Spec.Volumes, corev1.Volume{
 			Name: volume.Name,
@@ -187,7 +188,7 @@ func GetPodTemplate(config controllerutils.KaiwoConfigContext, dshmSize resource
 
 	podTemplate := corev1.PodTemplateSpec{
 		Spec: corev1.PodSpec{
-			SchedulerName: config.KubeSchedulerName,
+			SchedulerName: config.Scheduling.KubeSchedulerName,
 			RestartPolicy: corev1.RestartPolicyNever,
 			Containers: []corev1.Container{
 				{
@@ -230,7 +231,7 @@ func adjustResourceRequestsAndLimits(config controllerutils.KaiwoConfigContext, 
 		return err
 	}
 
-	gpuResourceKey := getGpuResourceKey(gpuVendor, config.DefaultGpuResourceKey)
+	gpuResourceKey := getGpuResourceKey(gpuVendor, config.Nodes.DefaultGpuResourceKey)
 
 	// Modify resource requests/limits only if GPUs are requested
 	if gpusPerReplica > 0 && !rayhead {
@@ -250,7 +251,7 @@ func adjustResourceRequestsAndLimits(config controllerutils.KaiwoConfigContext, 
 	podTemplateSpec.Spec.Containers[0].Env = append(podTemplateSpec.Spec.Containers[0].Env, envVarsToAppend...)
 
 	// Check all containers for any GPU resource requests
-	if config.Kueue.AddTaintsToGpuNodes {
+	if config.Nodes.AddTaintsToGpuNodes {
 		for _, container := range podTemplateSpec.Spec.Containers {
 			requests := container.Resources.Requests
 			if requests != nil {
@@ -267,7 +268,7 @@ func adjustResourceRequestsAndLimits(config controllerutils.KaiwoConfigContext, 
 
 AddToleration:
 	podTemplateSpec.Spec.Tolerations = append(podTemplateSpec.Spec.Tolerations, corev1.Toleration{
-		Key:      config.DefaultGpuTaintKey,
+		Key:      config.Nodes.DefaultGpuTaintKey,
 		Operator: corev1.TolerationOpExists,
 		Effect:   corev1.TaintEffectNoSchedule,
 	})
@@ -332,7 +333,7 @@ func getResourceRequestsAndLimits(gpuResourceKey string, gpuCount int32) corev1.
 	}
 }
 
-func updatePodSpecStorage(podSpec *corev1.PodSpec, storageSpec v1alpha1.StorageSpec, ownerName string) {
+func updatePodSpecStorage(podSpec *corev1.PodSpec, storageSpec kaiwo.StorageSpec, ownerName string) {
 	if !storageSpec.StorageEnabled || storageSpec.Data == nil {
 		return
 	}
@@ -408,7 +409,7 @@ func GetEarliestPodStartTime(ctx context.Context, k8sClient client.Client, name 
 	return earliestStartTime
 }
 
-func CheckPodStatus(ctx context.Context, k8sClient client.Client, name string, namespace string, startTime *metav1.Time) (earliestRunningTime *metav1.Time, status v1alpha1.Status, err error) {
+func CheckPodStatus(ctx context.Context, k8sClient client.Client, name string, namespace string, startTime *metav1.Time) (earliestRunningTime *metav1.Time, status kaiwo.Status, err error) {
 	logger := log.FromContext(ctx)
 
 	podList := &corev1.PodList{}
@@ -444,11 +445,11 @@ func CheckPodStatus(ctx context.Context, k8sClient client.Client, name string, n
 	}
 
 	if len(runningPods) > 0 {
-		status = v1alpha1.StatusRunning
+		status = kaiwo.StatusRunning
 		//} else if len(pendingPods) > 0 {
 		//	status = v1alpha1.StatusStarting
 	} else {
-		status = v1alpha1.StatusPending
+		status = kaiwo.StatusPending
 	}
 
 	return earliestRunningTime, status, nil

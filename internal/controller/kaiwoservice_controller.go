@@ -20,6 +20,8 @@ import (
 	"context"
 	"fmt"
 
+	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
+
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -35,7 +37,6 @@ import (
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	"k8s.io/client-go/tools/record"
 
-	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 	workloadservice "github.com/silogen/kaiwo/pkg/workloads/service"
 )
@@ -50,12 +51,13 @@ type KaiwoServiceReconciler struct {
 // +kubebuilder:rbac:groups=kaiwo.silogen.ai,resources=kaiwoservices,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=kaiwo.silogen.ai,resources=kaiwoservices/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=kaiwo.silogen.ai,resources=kaiwoservices/finalizers,verbs=update
+// +kubebuilder:rbac:groups=config.kaiwo.silogen.ai,resources=kaiwoconfigs,verbs=get;list;watch;create;update;patch;delete
 
 func (r *KaiwoServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 	baseutils.Debug(logger, "Running KaiwoService reconciliation")
 
-	var kaiwoService v1alpha1.KaiwoService
+	var kaiwoService kaiwo.KaiwoService
 	if err := r.Get(ctx, req.NamespacedName, &kaiwoService); err != nil {
 		if client.IgnoreNotFound(err) != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to get KaiwoService: %w", err)
@@ -88,7 +90,7 @@ func (r *KaiwoServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Recorder = mgr.GetEventRecorderFor("kaiwoservice-controller")
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.KaiwoService{}).
+		For(&kaiwo.KaiwoService{}).
 		Watches(
 			&appsv1.Deployment{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {

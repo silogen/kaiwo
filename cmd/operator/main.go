@@ -17,10 +17,20 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
+	"time"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
+
+	configapi "github.com/silogen/kaiwo/apis/config/v1alpha1"
+	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
 	"github.com/silogen/kaiwo/pkg/utils/monitoring"
 
@@ -39,10 +49,9 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	"github.com/silogen/kaiwo/internal/controller"
-	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
-
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
+	"github.com/silogen/kaiwo/internal/controller"
 
 	webhookv1 "github.com/silogen/kaiwo/internal/webhook/v1"
 
@@ -65,7 +74,8 @@ var certDirectory = baseutils.GetEnv("WEBHOOK_CERT_DIRECTORY", "")
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	utilruntime.Must(v1alpha1.AddToScheme(scheme))
+	utilruntime.Must(kaiwo.AddToScheme(scheme))
+	utilruntime.Must(configapi.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 
 	utilruntime.Must(kueuev1beta1.AddToScheme(scheme))
@@ -316,6 +326,12 @@ func main() {
 		setupLog.Info("Metrics watcher is not enabled")
 	}
 
+	// Ensure that the config exists
+	if err := ensureConfigExists(mgr); err != nil {
+		setupLog.Error(err, "unable to ensure config exists")
+		os.Exit(1)
+	}
+
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
@@ -330,4 +346,21 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+func ensureConfigExists(mgr ctrl.Manager) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	logger := ctrl.Log.WithName("configFetcher")
+	ctx = ctrl.LoggerInto(ctx, logger)
+
+	apiReader, err := client.New(mgr.GetConfig(), client.Options{Scheme: mgr.GetScheme()})
+	if err != nil {
+		return fmt.Errorf("unable to create client: %w", err)
+	}
+
+	if err := controllerutils.EnsureConfig(ctx, apiReader); err != nil {
+		return fmt.Errorf("unable to ensure config exists: %w", err)
+	}
+	return nil
 }

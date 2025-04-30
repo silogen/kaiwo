@@ -30,6 +30,11 @@ rules:
   - "kaiwoservices"
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
+- apiGroups: ["config.kaiwo.silogen.ai"]
+  resources:
+  - "kaiwoconfigs"
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
 - apiGroups: ["kaiwo.silogen.ai"]
   resources:
   - "kaiwojobs/status"

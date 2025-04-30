@@ -43,5 +43,6 @@ nav:
   - "Authentication & Authorization": "admin/auth.md"
   - "Troubleshooting": "admin/troubleshooting.md"
 - "Reference":
-  - "CRD Reference": "reference/crds/kaiwo.silogen.ai.md"
+  - "Kaiwo API": "reference/crds/kaiwo.silogen.ai.md"
+  - "Kaiwo Configuration API": "reference/crds/config.kaiwo.silogen.ai.md"
 

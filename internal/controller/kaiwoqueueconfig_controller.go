@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"time"
 
+	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
+
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -30,7 +32,6 @@ import (
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
-	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 )
 
 // KaiwoQueueConfigReconciler reconciles a KaiwoQueueConfig object
@@ -42,6 +43,7 @@ type KaiwoQueueConfigReconciler struct {
 // +kubebuilder:rbac:groups=kaiwo.silogen.ai,resources=kaiwoqueueconfigs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=kaiwo.silogen.ai,resources=kaiwoqueueconfigs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=kaiwo.silogen.ai,resources=kaiwoqueueconfigs/finalizers,verbs=update
+// +kubebuilder:rbac:groups=config.kaiwo.silogen.ai,resources=kaiwoconfigs,verbs=get;list;watch;create;update;patch;delete
 
 func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -57,7 +59,7 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	// Fetch the requested KaiwoQueueConfig
-	var queueConfig v1alpha1.KaiwoQueueConfig
+	var queueConfig kaiwo.KaiwoQueueConfig
 	err = r.Get(ctx, req.NamespacedName, &queueConfig)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -71,7 +73,7 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// **Check if Status is already correct before updating**
 	previousStatus := queueConfig.Status.Status
 	if previousStatus == "" {
-		queueConfig.Status.Status = v1alpha1.StatusPending
+		queueConfig.Status.Status = kaiwo.StatusPending
 	}
 
 	// **Sync Kueue Resources**
@@ -80,9 +82,9 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	if err != nil {
 		logger.Error(err, "Failed to sync Kueue resources for KaiwoQueueConfig")
-		queueConfig.Status.Status = v1alpha1.StatusFailed
+		queueConfig.Status.Status = kaiwo.StatusFailed
 	} else {
-		queueConfig.Status.Status = v1alpha1.StatusReady
+		queueConfig.Status.Status = kaiwo.StatusReady
 	}
 
 	// **Only Update Status If It Has Changed**
@@ -95,14 +97,14 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	// Requeue only if status is still pending
-	if queueConfig.Status.Status == v1alpha1.StatusPending {
+	if queueConfig.Status.Status == kaiwo.StatusPending {
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	return ctrl.Result{}, nil
 }
 
-func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, queueConfig *v1alpha1.KaiwoQueueConfig) error {
+func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, queueConfig *kaiwo.KaiwoQueueConfig) error {
 	logger := log.FromContext(ctx)
 
 	existingFlavors := &kueuev1beta1.ResourceFlavorList{}
@@ -139,7 +141,7 @@ func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, que
 	return fmt.Errorf("failed to sync some Kueue resources")
 }
 
-func (r *KaiwoQueueConfigReconciler) syncResourceFlavors(ctx context.Context, queueConfig *v1alpha1.KaiwoQueueConfig, existingFlavors *kueuev1beta1.ResourceFlavorList) bool {
+func (r *KaiwoQueueConfigReconciler) syncResourceFlavors(ctx context.Context, queueConfig *kaiwo.KaiwoQueueConfig, existingFlavors *kueuev1beta1.ResourceFlavorList) bool {
 	logger := log.FromContext(ctx)
 
 	success := true
@@ -183,7 +185,7 @@ func (r *KaiwoQueueConfigReconciler) syncResourceFlavors(ctx context.Context, qu
 	return success
 }
 
-func (r *KaiwoQueueConfigReconciler) syncClusterQueues(ctx context.Context, queueConfig *v1alpha1.KaiwoQueueConfig, existingQueues *kueuev1beta1.ClusterQueueList) bool {
+func (r *KaiwoQueueConfigReconciler) syncClusterQueues(ctx context.Context, queueConfig *kaiwo.KaiwoQueueConfig, existingQueues *kueuev1beta1.ClusterQueueList) bool {
 	logger := log.FromContext(ctx)
 
 	success := true
@@ -252,7 +254,7 @@ func (r *KaiwoQueueConfigReconciler) syncClusterQueues(ctx context.Context, queu
 // the corresponding LocalQueue is also deleted.
 func (r *KaiwoQueueConfigReconciler) syncLocalQueues(
 	ctx context.Context,
-	kaiwoQueueConfig *v1alpha1.KaiwoQueueConfig,
+	kaiwoQueueConfig *kaiwo.KaiwoQueueConfig,
 	existingLocalQueues *kueuev1beta1.LocalQueueList,
 ) bool {
 	logger := log.FromContext(ctx)
@@ -339,7 +341,7 @@ func (r *KaiwoQueueConfigReconciler) syncLocalQueues(
 	return success
 }
 
-func (r *KaiwoQueueConfigReconciler) syncWorkloadPriorityClasses(ctx context.Context, queueConfig *v1alpha1.KaiwoQueueConfig, existingPriorityClasses *kueuev1beta1.WorkloadPriorityClassList) bool {
+func (r *KaiwoQueueConfigReconciler) syncWorkloadPriorityClasses(ctx context.Context, queueConfig *kaiwo.KaiwoQueueConfig, existingPriorityClasses *kueuev1beta1.WorkloadPriorityClassList) bool {
 	logger := log.FromContext(ctx)
 
 	success := true
@@ -392,6 +394,10 @@ func (r *KaiwoQueueConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	// Add a startup function to ensure default KaiwoQueueConfig exists
 	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+		ctx, err := controllerutils.GetContextWithConfig(ctx, mgr.GetClient())
+		if err != nil {
+			return fmt.Errorf("could not get config: %w", err)
+		}
 		logger.Info("Ensuring default KaiwoQueueConfig exists on startup...")
 		if err := r.EnsureDefaultKaiwoQueueConfig(ctx); err != nil {
 			logger.Error(err, "Failed to ensure default KaiwoQueueConfig on startup")
@@ -405,7 +411,7 @@ func (r *KaiwoQueueConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	// Register the controller with the manager
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.KaiwoQueueConfig{}).
+		For(&kaiwo.KaiwoQueueConfig{}).
 		Named("kaiwoqueueconfig").
 		Complete(r)
 }
@@ -414,7 +420,7 @@ func (r *KaiwoQueueConfigReconciler) EnsureDefaultKaiwoQueueConfig(ctx context.C
 	logger := log.FromContext(ctx)
 	config := controllerutils.ConfigFromContext(ctx)
 
-	var queueConfig v1alpha1.KaiwoQueueConfig
+	var queueConfig kaiwo.KaiwoQueueConfig
 	err := r.Get(ctx, client.ObjectKey{Name: config.DefaultKaiwoQueueConfigName}, &queueConfig)
 	if err == nil {
 		return nil
@@ -446,12 +452,12 @@ func (r *KaiwoQueueConfigReconciler) CreateDefaultKaiwoQueueConfig(ctx context.C
 
 	clusterQueue := controllerutils.CreateClusterQueue(nodePoolResources, config.Kueue.DefaultClusterQueueName)
 
-	defaultQueueConfig := v1alpha1.KaiwoQueueConfig{
+	defaultQueueConfig := kaiwo.KaiwoQueueConfig{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
-		Spec: v1alpha1.KaiwoQueueConfigSpec{
-			ClusterQueues:   []v1alpha1.ClusterQueue{clusterQueue},
+		Spec: kaiwo.KaiwoQueueConfigSpec{
+			ClusterQueues:   []kaiwo.ClusterQueue{clusterQueue},
 			ResourceFlavors: resourceFlavors,
 		},
 	}

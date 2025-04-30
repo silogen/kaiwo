@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
+
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 
 	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
@@ -31,7 +33,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 	common "github.com/silogen/kaiwo/pkg/workloads/common"
 )
@@ -50,10 +51,10 @@ func GetDefaultJobSpec(config controllerutils.KaiwoConfigContext, dangerous bool
 
 type BatchJobReconciler struct {
 	common.ResourceReconcilerBase[*batchv1.Job]
-	KaiwoJob *v1alpha1.KaiwoJob
+	KaiwoJob *kaiwo.KaiwoJob
 }
 
-func NewBatchJobReconciler(kaiwoJob *v1alpha1.KaiwoJob) *BatchJobReconciler {
+func NewBatchJobReconciler(kaiwoJob *kaiwo.KaiwoJob) *BatchJobReconciler {
 	reconciler := &BatchJobReconciler{
 		ResourceReconcilerBase: common.ResourceReconcilerBase[*batchv1.Job]{
 			ObjectKey: client.ObjectKeyFromObject(kaiwoJob),

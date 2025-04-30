@@ -19,10 +19,11 @@ import (
 	"fmt"
 	"strings"
 
+	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
+
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	common "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
@@ -48,9 +49,9 @@ func GetWorkload(ctx context.Context, k8sClient client.Client, workloadSelector 
 	name := parts[1]
 	var obj client.Object
 	if type_ == "job" {
-		obj = &v1alpha1.KaiwoJob{}
+		obj = &kaiwo.KaiwoJob{}
 	} else if type_ == "service" {
-		obj = &v1alpha1.KaiwoService{}
+		obj = &kaiwo.KaiwoService{}
 	} else {
 		return nil, fmt.Errorf("invalid workload type: %s, must be either 'job' or 'service'", type_)
 	}

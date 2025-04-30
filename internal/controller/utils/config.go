@@ -17,24 +17,74 @@ package controllerutils
 import (
 	"context"
 	"fmt"
+	"time"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	configapi "github.com/silogen/kaiwo/apis/config/v1alpha1"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
-var configName = baseutils.GetEnv("CONFIG_NAME", "kaiwo")
+var (
+	configName            = baseutils.GetEnv("CONFIG_NAME", "kaiwo")
+	generateDefaultConfig = baseutils.GetEnv("CONFIG_GENERATE_DEFAULT", "false")
+)
 
 type cfgKey struct{}
+
+// EnsureConfig ensures that a Kaiwo configuration exists within the cluster. It provides a way to either create
+// one automatically, or to give some time for another system to create one while the controller is starting.
+func EnsureConfig(ctx context.Context, k8sClient client.Client) error {
+	logger := log.FromContext(ctx)
+	config := &configapi.KaiwoConfig{}
+	if err := k8sClient.Get(ctx, client.ObjectKey{Name: configName}, config); err == nil {
+		logger.Info("Kaiwo Config exists", "configName", configName)
+	} else if errors.IsNotFound(err) {
+		logger.Info("Default Kaiwo Config not found", "configName", configName)
+		if generateDefaultConfig == "true" { // nolint:goconst
+			if _, err := createDefaultConfig(ctx, k8sClient); err != nil {
+				return fmt.Errorf("could not create default Kaiwo Config: %w", err)
+			} else {
+				logger.Info("Default Kaiwo Config created", "configName", configName)
+			}
+		} else {
+			logger.Info("Waiting for Kaiwo Config to be available...", "configName", configName)
+			ticker := time.NewTicker(1 * time.Second)
+			defer ticker.Stop()
+
+			for {
+				select {
+				case <-ctx.Done():
+					return fmt.Errorf("timeout waiting for Kaiwo Config with name '%s': %w", configName, ctx.Err())
+				case <-ticker.C:
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: configName}, config)
+					if err == nil {
+						logger.Info("Kaiwo Config found", "configName", configName)
+						return nil
+					}
+					if !errors.IsNotFound(err) {
+						logger.Error(err, "Unexpected error while polling for Kaiwo Config")
+						return fmt.Errorf("error while polling for Kaiwo Config: %w", err)
+					}
+				}
+			}
+		}
+	} else {
+		return fmt.Errorf("could not get Kaiwo Config with name '%s': %w", configName, err)
+	}
+	return nil
+}
 
 // GetContextWithConfig fetches the latest config and attaches it to a given context
 func GetContextWithConfig(ctx context.Context, k8sClient client.Client) (context.Context, error) {
 	logger := log.FromContext(ctx)
-	config := &v1alpha1.KaiwoConfig{}
+	config := &configapi.KaiwoConfig{}
 	if err := k8sClient.Get(ctx, client.ObjectKey{Name: configName}, config); err != nil {
 		return ctx, fmt.Errorf("could not get Kaiwo Config with name '%s': %w", configName, err)
 	} else if errors.IsNotFound(err) {
@@ -50,8 +100,12 @@ func GetContextWithConfig(ctx context.Context, k8sClient client.Client) (context
 	}), nil
 }
 
-func createDefaultConfig(ctx context.Context, k8sClient client.Client) (*v1alpha1.KaiwoConfig, error) {
-	config := &v1alpha1.KaiwoConfig{}
+func createDefaultConfig(ctx context.Context, k8sClient client.Client) (*configapi.KaiwoConfig, error) {
+	config := &configapi.KaiwoConfig{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: configName,
+		},
+	}
 	if err := k8sClient.Create(ctx, config); err != nil {
 		return nil, err
 	}
@@ -70,5 +124,5 @@ func ConfigFromContext(ctx context.Context) KaiwoConfigContext {
 // KaiwoConfigContext holds the config that is relevant for a particular context
 // In the future it can be extended with namespace-specific configuration as well
 type KaiwoConfigContext struct {
-	v1alpha1.KaiwoConfigSpec
+	configapi.KaiwoConfigSpec
 }
