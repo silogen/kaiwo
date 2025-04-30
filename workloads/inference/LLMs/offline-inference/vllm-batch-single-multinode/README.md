@@ -1,4 +1,4 @@
-# VLLM-based batch inference
+# vLLM-based batch inference
 
 ## Gated models
 

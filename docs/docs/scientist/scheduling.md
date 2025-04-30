@@ -9,7 +9,7 @@ These fields collectively control the number of workload instances and how GPUs 
 *   `replicas`: Sets the desired number of instances (pods). Default: 1. *Ignored for non-Ray Jobs.*
 *   `gpus`: Specifies the *total* number of GPUs requested across all replicas. Default: 0.
 *   `gpusPerReplica`: Specifies the number of GPUs requested *per* replica. Default: 0.
-*   `gpuVendor`: Determines the GPU resource key (e.g., `amd.com/gpu`, `nvidia.com/gpu`). Default: "amd".
+*   `gpuVendor`: Either `amd` (default) or `nvidia`. Determines the GPU resource key (e.g., `amd.com/gpu`, `nvidia.com/gpu`).
 
 **Behavior:**
 
