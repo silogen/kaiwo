@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"strings"
 
-	v1alpha2 "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
+	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
 	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -130,7 +130,7 @@ func (j *JobWebhook) ensureKaiwoJob(ctx context.Context, job *batchv1.Job, authe
 
 	config := controllerutils.ConfigFromContext(ctx)
 
-	kaiwoJob := &v1alpha2.KaiwoJob{}
+	kaiwoJob := &kaiwo.KaiwoJob{}
 
 	err := j.Client.Get(ctx, client.ObjectKey{Name: job.Name, Namespace: job.Namespace}, kaiwoJob)
 	if err == nil {
@@ -150,15 +150,15 @@ func (j *JobWebhook) ensureKaiwoJob(ctx context.Context, job *batchv1.Job, authe
 		kaiwoJobLabels[common.QueueLabel] = config.Kueue.DefaultClusterQueueName
 	}
 
-	kaiwoJob = &v1alpha2.KaiwoJob{
+	kaiwoJob = &kaiwo.KaiwoJob{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      job.Name,
 			Namespace: job.Namespace,
 			Labels:    kaiwoJobLabels,
 		},
-		Spec: v1alpha2.KaiwoJobSpec{
+		Spec: kaiwo.KaiwoJobSpec{
 			Job: job,
-			CommonMetaSpec: v1alpha2.CommonMetaSpec{
+			CommonMetaSpec: kaiwo.CommonMetaSpec{
 				User: authenticatedUser,
 			},
 		},
@@ -259,7 +259,7 @@ func (j *JobWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) (ad
 		break
 	}
 
-	kaiwoJob := &v1alpha2.KaiwoJob{}
+	kaiwoJob := &kaiwo.KaiwoJob{}
 	err := j.Client.Get(ctx, client.ObjectKey{Name: job.Name, Namespace: job.Namespace}, kaiwoJob)
 	if err == nil {
 		logger.Info("Deleting associated KaiwoJob", "KaiwoJob", kaiwoJob.Name)
