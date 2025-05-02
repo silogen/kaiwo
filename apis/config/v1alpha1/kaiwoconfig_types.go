@@ -30,9 +30,9 @@ type KaiwoConfigSpec struct {
 	// +kubebuilder:default={}
 	Ray KaiwoRayConfig `json:"ray,omitempty"`
 
-	// Data defines the data-specific settings
+	// Storage defines the storage-specific settings
 	// +kubebuilder:default={}
-	Data KaiwoDataConfig `json:"data,omitempty"`
+	Storage KaiwoStorageConfig `json:"data,omitempty"`
 
 	// Nodes defines the node configuration settings
 	// +kubebuilder:default={}
@@ -61,7 +61,10 @@ type KaiwoRayConfig struct {
 	HeadPodMemory resource.Quantity `json:"headPodMemory,omitempty"`
 }
 
-type KaiwoDataConfig struct {
+type KaiwoStorageConfig struct {
+	// DefaultStorageClass is the storage class that is used for workloads that don't explicitly specify a storage class.
+	DefaultStorageClass string `json:"defaultStorageClass,omitempty"`
+
 	// DefaultDataMountPath is the default path for the data storage and downloads that gets mounted in the workload pods.
 	// This value can be overwritten in the workload CRD.
 	// +kubebuilder:default="/workload"

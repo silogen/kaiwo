@@ -32125,10 +32125,10 @@ spec:
                               description: GitDownloadItem defines parameters for cloning a Git repository or parts of it.
                               properties:
                                 branch:
-                                  description: Branch specifies the branch to clone. This is ignored if `commit` is specified.
+                                  description: Branch specifies the branch to clone. This takes precedence over `commit`.
                                   type: string
                                 commit:
-                                  description: Commit specifies the exact commit hash to check out. This takes precedence over `branch`.
+                                  description: Commit specifies the exact commit hash to check out. This is ignored if `commit` is specified.
                                   type: string
                                 path:
                                   description: Path specifies a sub-path within the repository to copy. If omitted, the entire repository is copied.

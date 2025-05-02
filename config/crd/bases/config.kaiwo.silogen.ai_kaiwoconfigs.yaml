@@ -40,7 +40,7 @@ spec:
             properties:
               data:
                 default: {}
-                description: Data defines the data-specific settings
+                description: Storage defines the storage-specific settings
                 properties:
                   defaultDataMountPath:
                     default: /workload
@@ -53,6 +53,9 @@ spec:
                     description: |-
                       DefaultHfMountPath is the default path for the HuggingFace that gets mounted in the workload pods. The `HF_HOME` environmental variable
                       is also set to this value. This value can be overwritten in the workload CRD.
+                    type: string
+                  defaultStorageClass:
+                    description: DefaultStorageClass is the storage class that is used for workloads that don't explicitly specify a storage class.
                     type: string
                 type: object
               defaultKaiwoQueueConfigName:

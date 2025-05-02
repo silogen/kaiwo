@@ -183,8 +183,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `repository` _string_ | Repository specifies the Git repository URL (e.g., "https://github.com/user/repo.git"). |  |  |
-| `branch` _string_ | Branch specifies the branch to clone. This is ignored if `commit` is specified. |  |  |
-| `commit` _string_ | Commit specifies the exact commit hash to check out. This takes precedence over `branch`. |  |  |
+| `branch` _string_ | Branch specifies the branch to clone. This takes precedence over `commit`. |  |  |
+| `commit` _string_ | Commit specifies the exact commit hash to check out. This is ignored if `commit` is specified. |  |  |
 | `username` _[ValueReference](#valuereference)_ | Username optionally references a Secret containing the Git username for authentication. See `ValueReference`. |  |  |
 | `token` _[ValueReference](#valuereference)_ | Token optionally references a Secret containing the Git token (or password) for authentication. See `ValueReference`. |  |  |
 | `path` _string_ | Path specifies a sub-path within the repository to copy. If omitted, the entire repository is copied. |  |  |

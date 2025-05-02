@@ -66,28 +66,11 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `ray` _[KaiwoRayConfig](#kaiworayconfig)_ | Ray defines the Ray-specific settings | \{  \} |  |
-| `data` _[KaiwoDataConfig](#kaiwodataconfig)_ | Data defines the data-specific settings | \{  \} |  |
+| `data` _[KaiwoStorageConfig](#kaiwostorageconfig)_ | Storage defines the storage-specific settings | \{  \} |  |
 | `nodes` _[KaiwoNodeConfig](#kaiwonodeconfig)_ | Nodes defines the node configuration settings | \{  \} |  |
 | `scheduling` _[KaiwoSchedulingConfig](#kaiwoschedulingconfig)_ | Scheduling contains the configuration Kaiwo uses for workload scheduling | \{  \} |  |
 | `resourceMonitoring` _[KaiwoResourceMonitoringConfig](#kaiworesourcemonitoringconfig)_ | ResourceMonitoring defines the resource-monitoring specific settings | \{  \} |  |
 | `defaultKaiwoQueueConfigName` _string_ | DefaultKaiwoQueueConfigName is the name of the singleton Kaiwo Queue Config object that is used | kaiwo |  |
-
-
-#### KaiwoDataConfig
-
-
-
-
-
-
-
-_Appears in:_
-- [KaiwoConfigSpec](#kaiwoconfigspec)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `defaultDataMountPath` _string_ | DefaultDataMountPath is the default path for the data storage and downloads that gets mounted in the workload pods.<br />This value can be overwritten in the workload CRD. | /workload |  |
-| `defaultHfMountPath` _string_ | DefaultHfMountPath is the default path for the HuggingFace that gets mounted in the workload pods. The `HF_HOME` environmental variable<br />is also set to this value. This value can be overwritten in the workload CRD. | /hf_cache |  |
 
 
 #### KaiwoNodeConfig
@@ -166,5 +149,23 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `kubeSchedulerName` _string_ | KubeSchedulerName defines the default scheduler name that is used to schedule the workload | kaiwo-scheduler |  |
+
+
+#### KaiwoStorageConfig
+
+
+
+
+
+
+
+_Appears in:_
+- [KaiwoConfigSpec](#kaiwoconfigspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `defaultStorageClass` _string_ | DefaultStorageClass is the storage class that is used for workloads that don't explicitly specify a storage class. |  |  |
+| `defaultDataMountPath` _string_ | DefaultDataMountPath is the default path for the data storage and downloads that gets mounted in the workload pods.<br />This value can be overwritten in the workload CRD. | /workload |  |
+| `defaultHfMountPath` _string_ | DefaultHfMountPath is the default path for the HuggingFace that gets mounted in the workload pods. The `HF_HOME` environmental variable<br />is also set to this value. This value can be overwritten in the workload CRD. | /hf_cache |  |
 
 

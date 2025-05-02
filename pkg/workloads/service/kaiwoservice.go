@@ -72,6 +72,7 @@ func NewKaiwoServiceReconciler(ctx context.Context, kaiwoService *kaiwo.KaiwoSer
 	if storageSpec != nil && storageSpec.StorageEnabled {
 		if storageSpec.HasData() {
 			r.DataPVC = common.NewStorageReconciler(
+				config.Storage,
 				client.ObjectKey{
 					Name:      baseutils.FormatNameWithPostfix(objectKey.Name, common.DataStoragePostfix),
 					Namespace: objectKey.Namespace,
@@ -83,6 +84,7 @@ func NewKaiwoServiceReconciler(ctx context.Context, kaiwoService *kaiwo.KaiwoSer
 		}
 		if storageSpec.HasHfDownloads() {
 			r.HuggingFacePVC = common.NewStorageReconciler(
+				config.Storage,
 				client.ObjectKey{
 					Name:      baseutils.FormatNameWithPostfix(objectKey.Name, common.HfStoragePostfix),
 					Namespace: objectKey.Namespace,
@@ -126,12 +128,12 @@ func sanitize(kaiwoService *kaiwo.KaiwoService, config controllerutils.KaiwoConf
 
 		// Ensure mount paths are set
 		if storageSpec.Data != nil && storageSpec.Data.IsRequested() && storageSpec.Data.MountPath == "" {
-			// logger.Info("Data storage mount path not set, using default:" + defaultDataMountPath)
-			storageSpec.Data.MountPath = config.Data.DefaultDataMountPath
+			// logger.Info("Storage storage mount path not set, using default:" + defaultDataMountPath)
+			storageSpec.Data.MountPath = config.Storage.DefaultDataMountPath
 		}
 		if storageSpec.HuggingFace != nil && storageSpec.HuggingFace.IsRequested() && storageSpec.HuggingFace.MountPath == "" {
 			// logger.Info("Hugging Face storage mount path not set, using default:" + defaultHfMountPath)
-			storageSpec.HuggingFace.MountPath = config.Data.DefaultHfMountPath
+			storageSpec.HuggingFace.MountPath = config.Storage.DefaultHfMountPath
 		}
 	}
 

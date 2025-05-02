@@ -17,6 +17,8 @@ package common
 import (
 	"context"
 
+	configapi "github.com/silogen/kaiwo/apis/config/v1alpha1"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,11 +37,16 @@ type StorageReconciler struct {
 	AccessMode       corev1.PersistentVolumeAccessMode
 }
 
-func NewStorageReconciler(objectKey client.ObjectKey,
+func NewStorageReconciler(
+	storageConfig configapi.KaiwoStorageConfig,
+	objectKey client.ObjectKey,
 	accessMode corev1.PersistentVolumeAccessMode,
 	storageClassName string,
 	amount string,
 ) *StorageReconciler {
+	if storageClassName == "" {
+		storageClassName = storageConfig.DefaultStorageClass
+	}
 	reconciler := &StorageReconciler{
 		ResourceReconcilerBase: ResourceReconcilerBase[*corev1.PersistentVolumeClaim]{
 			ObjectKey: objectKey,
