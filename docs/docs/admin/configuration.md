@@ -1,10 +1,16 @@
 # Configuration Guide
 
-Administrators configure Kaiwo primarily through the cluster-scoped `KaiwoQueueConfig` Custom Resource Definition (CRD) and environment variables or flags passed to the Kaiwo operator. Users configure the CLI tool separately.
+Administrators configure Kaiwo primarily through
+
+* The cluster-scoped `KaiwoQueueConfig` Custom Resource Definition (CRD)
+* The cluster-scoped `KaiwoConfig` CRD
+* Environment variables or flags passed to the Kaiwo operator
+
+Users configure the CLI tool separately.
 
 ## KaiwoQueueConfig CRD
 
-This is the central point for managing how Kaiwo interacts with Kueue. There can be only **one** `KaiwoQueueConfig` resource in the cluster, and its `metadata.name` **must be `kaiwo`** (or the value specified by the `DEFAULT_KAIWO_QUEUE_CONFIG_NAME` environment variable, which defaults to `kaiwo`).
+This is the central point for managing how Kaiwo interacts with Kueue. There can be only **one** `KaiwoQueueConfig` resource in the cluster, and its `metadata.name` **must be `kaiwo`** (or the value specified in the KaiwoConfig Custom Resource field `spec.defaultKaiwoQueueConfigName`, which defaults to `kaiwo`, see more below).
 
 **Default Configuration on Startup:**
 
@@ -121,24 +127,73 @@ The `KaiwoQueueConfigController` acts as a translator, continuously ensuring tha
 
 The controller updates the `status.status` field of the `KaiwoQueueConfig` resource (`Pending`, `Ready`, or `Failed`) to indicate the current state of synchronization between the desired configuration and the actual Kueue resources in the cluster. This continuous reconciliation keeps the Kueue setup aligned with the central `KaiwoQueueConfig`.
 
-## Kaiwo Operator Configuration
+## KaiwoConfig CRD
 
-The Kaiwo operator deployment itself can be configured using environment variables or command-line flags.
+The Kaiwo Operator's runtime configuration is managed through the `KaiwoConfig` Custom Resource Definition (CRD). This approach allows Kubernetes administrators to dynamically adjust operator behavior without requiring a restart. The operator always retrieves the most recent configuration values during each reconcile loop.
 
-**Key Environment Variables:**
+### Configuration Structure
 
-*   `DEFAULT_KAIWO_QUEUE_CONFIG_NAME` (Default: `kaiwo`): The expected name of the single `KaiwoQueueConfig` resource the controller manages.
-*   `DEFAULT_CLUSTER_QUEUE_NAME` (Default: `kaiwo`): The default Kueue `ClusterQueue` name used by the startup logic when creating the default `KaiwoQueueConfig` and used by workloads that do not include the `clusterQueue` field.
-*   `DEFAULT_GPU_TAINT_KEY` (Default: `kaiwo.silogen.ai/gpu`): The taint key applied to GPU nodes if automatic tainting is enabled.
-*   `ADD_TAINTS_TO_GPU_NODES` (Default: `false`): If `true`, the `KaiwoQueueConfigController` will attempt to taint nodes identified as having GPUs (based on flavor discovery/definition) with the `DEFAULT_GPU_TAINT_KEY`.
-*   `EXCLUDE_MASTER_NODES_FROM_NODE_POOLS` (Default: `false`): If `true`, control-plane/master nodes are excluded during automatic `ResourceFlavor` discovery in the startup logic.
-*   `RAY_HEAD_POD_MEMORY`: (Optional) Override the default memory request/limit for Ray head pods created by Kaiwo (which is `16Gi`).
+The primary configuration resource is the `KaiwoConfig` CRD, typically maintained as a singleton within the Kubernetes cluster. Its key components are encapsulated in the `KaiwoConfigSpec`, which briefly includes:
+
+- **`kueue`**: Configures default integration settings with Kueue, including the default cluster queue name.
+- **`ray`**: Specifies Ray-specific parameters, including default container images and memory allocations.
+- **`data`**: Manages default filesystem paths for mounting data storage and HuggingFace caches.
+- **`nodes`**: Defines node-specific settings such as GPU resource keys, GPU node taints, and node pool exclusions.
+- **`scheduling`**: Sets scheduling-related configurations, like the Kubernetes scheduler name.
+- **`resourceMonitoring`**: Configures resource monitoring, including averaging intervals, utilization thresholds, and targeted namespaces.
+- **`defaultKaiwoQueueConfigName`**: Specifies the default name for the Kaiwo queue configuration object.
+
+### Specifying the Configuration CR
+
+The Kaiwo Operator identifies its configuration resource via the environment variable `CONFIG_NAME`. By default, this is set to `kaiwo`. Ensure that a `KaiwoConfig` resource with this exact name exists in your cluster. Alternatively, setting the environment variable `CONFIG_GENERATE_DEFAULT=true` instructs the operator to automatically create a default configuration at startup if none exists.
+
+!!!note 
+    The operator waits up to **30 seconds** for the specified configuration resource to be found. If no resource is detected within this period, the operator pod will fail with an error.
+
+### Example KaiwoConfig CR
+
+Here's a minimal example of a valid `KaiwoConfig` definition:
+
+```yaml
+apiVersion: config.kaiwo.silogen.ai/v1alpha1
+kind: KaiwoConfig
+metadata:
+  name: kaiwo
+spec:
+  defaultKaiwoQueueConfigName: "kaiwo"
+  scheduling:
+    kubeSchedulerName: "default-scheduler"
+  resourceMonitoring:
+    averagingTime: "20m"
+    lowUtilizationThreshold: 20
+    profile: "gpu"
+```
+
+!!!note
+    You can safely use the default values or create a default config by setting the environment variable `CONFIG_GENERATE_DEFAULT` to true.
+
+### Environment Variables for Resource Monitoring
+
+To enable and configure resource monitoring within the Kaiwo Operator, the following environment variables **must** be set on the operator deployment:
+
+- `RESOURCE_MONITORING_ENABLED=true` – Enables the resource monitoring component.
+- `RESOURCE_MONITORING_PROMETHEUS_ENDPOINT=<prometheus-endpoint>` – Specifies the Prometheus endpoint to query metrics from.
+- `RESOURCE_MONITORING_POLLING_INTERVAL=10m` – Sets the interval between metric polling queries.
+
+These variables cannot be updated dynamically and require a restart of the operator pod to take effect.
+
+---
+
+For detailed descriptions of individual configuration fields, please see the [full API reference](../reference/crds/config.kaiwo.silogen.ai.md).
+
+## Other configuration options
+
 *   `WEBHOOK_CERT_DIRECTORY`: Path to manually provided webhook certificates (overrides automatic management if set). See [Installation](./installation.md).
 
 !!! info "Forthcoming feature"
     `ENFORCE_KAIWO_ON_GPU_WORKLOADS` (Default: `false`): If `true`, the mutating admission webhook for `batchv1.Job` will automatically add the `kaiwo.silogen.ai/managed: "true"` label to any job requesting GPU resources, forcing it to be managed by Kaiwo/Kueue.
 
-These are typically set in the operator's `Deployment` manifest.
+All environmental variables are typically set in the operator's `Deployment` manifest.
 
 **Command-Line Flags:**
 
