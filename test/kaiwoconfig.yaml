@@ -3,6 +3,8 @@ kind: KaiwoConfig
 metadata:
   name: kaiwo-test
 spec:
+  scheduling:
+    kubeSchedulerName: kaiwo-scheduler
   resourceMonitoring:
     averagingTime: 60s
     lowUtilizationThreshold: 50
@@ -10,3 +12,5 @@ spec:
     profile: cpu
     targetNamespaces:
     - "kaiwo-test-monitoring-conditions"
+  ray:
+    headPodMemory: 1Gi

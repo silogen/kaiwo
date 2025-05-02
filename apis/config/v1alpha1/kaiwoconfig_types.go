@@ -98,7 +98,7 @@ type KaiwoNodeConfig struct {
 	ExcludeMasterNodesFromNodePools bool `json:"excludeMasterNodesFromNodePools,omitempty"`
 
 	// AddTaintsToGpuNodes if set to true, will add the DefaultGpuTaintKey taint to the GPU nodes
-	// +kubebuilder:default=true
+	// +kubebuilder:default=false
 	AddTaintsToGpuNodes bool `json:"addTaintsToGpuNodes,omitempty"`
 }
 
@@ -137,7 +137,7 @@ type KaiwoResourceMonitoringConfig struct {
 type KaiwoSchedulingConfig struct {
 	// KubeSchedulerName defines the default scheduler name that is used to schedule the workload
 	// +kubebuilder:default="default-scheduler"
-	KubeSchedulerName string `json:"kube-scheduler-name,omitempty"`
+	KubeSchedulerName string `json:"kubeSchedulerName,omitempty"`
 }
 
 // KaiwoConfig manages the Kaiwo operator's configuration which can be modified during runtime.
