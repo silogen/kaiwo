@@ -128,6 +128,22 @@ func (job *KaiwoJob) GetType() string {
 	return "job"
 }
 
+func (j *KaiwoJob) GetDuration() *metav1.Duration {
+	return j.Spec.Duration
+}
+
+func (j *KaiwoJob) GetStartTime() *metav1.Time {
+	return j.Status.StartTime
+}
+
+func (j *KaiwoJob) GetClusterQueue() string {
+	return j.Spec.ClusterQueue
+}
+
+func (s *KaiwoJob) GetGPUVendor() string {
+	return s.Spec.GpuVendor
+}
+
 func (job *KaiwoJob) GetPods(ctx context.Context, k8sClient client.Client) ([]corev1.Pod, error) {
 	podList := &corev1.PodList{}
 	if err := k8sClient.List(ctx, podList, client.InNamespace(job.Namespace), client.MatchingLabels{

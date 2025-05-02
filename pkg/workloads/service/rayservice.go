@@ -78,6 +78,9 @@ func (r *RayServiceReconciler) Build(ctx context.Context, k8sClient client.Clien
 		)
 	} else {
 		rayServiceSpec = spec.RayService.Spec
+		for i := range rayServiceSpec.RayClusterSpec.WorkerGroupSpecs {
+			workloadutils.SyncGpuMetaFromPodSpec(rayServiceSpec.RayClusterSpec.WorkerGroupSpecs[i].Template.Spec, &r.KaiwoService.Spec.CommonMetaSpec)
+		}
 	}
 
 	if headMemoryOverride := config.Ray.HeadPodMemory; headMemoryOverride.Value() > 0 {

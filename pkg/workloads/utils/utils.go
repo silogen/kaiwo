@@ -18,12 +18,19 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 
+	"k8s.io/apimachinery/pkg/types"
+
+	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
+	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	metautil "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -409,7 +416,7 @@ func GetEarliestPodStartTime(ctx context.Context, k8sClient client.Client, name 
 	return earliestStartTime
 }
 
-func CheckPodStatus(ctx context.Context, k8sClient client.Client, name string, namespace string, startTime *metav1.Time) (earliestRunningTime *metav1.Time, status kaiwo.Status, err error) {
+func CheckPodStatus(ctx context.Context, k8sClient client.Client, name string, namespace string, startTime *metav1.Time) (lastStartTime *metav1.Time, status kaiwo.Status, err error) {
 	logger := log.FromContext(ctx)
 
 	podList := &corev1.PodList{}
@@ -431,28 +438,24 @@ func CheckPodStatus(ctx context.Context, k8sClient client.Client, name string, n
 		case corev1.PodRunning:
 			runningPods = append(runningPods, pod)
 			if pod.Status.StartTime != nil {
-				if earliestRunningTime == nil || pod.Status.StartTime.Before(earliestRunningTime) {
-					earliestRunningTime = pod.Status.StartTime
+				if lastStartTime == nil || pod.Status.StartTime.After(lastStartTime.Time) {
+					lastStartTime = pod.Status.StartTime
 				}
 			}
-			// case corev1.PodPending:
-			//	pendingPods = append(pendingPods, pod)
 		}
 	}
 
-	if earliestRunningTime != nil && startTime == nil {
-		return earliestRunningTime, status, nil
+	if lastStartTime != nil && startTime == nil {
+		return lastStartTime, status, nil
 	}
 
 	if len(runningPods) > 0 {
 		status = kaiwo.StatusRunning
-		//} else if len(pendingPods) > 0 {
-		//	status = v1alpha1.StatusStarting
 	} else {
 		status = kaiwo.StatusPending
 	}
 
-	return earliestRunningTime, status, nil
+	return lastStartTime, status, nil
 }
 
 func ValidateKaiwoResourceBeforeCreateOrUpdate(ctx context.Context, actual client.Object, kaiwoObjectMeta metav1.ObjectMeta) (*ctrl.Result, error) {
@@ -462,4 +465,133 @@ func ValidateKaiwoResourceBeforeCreateOrUpdate(ctx context.Context, actual clien
 		return &ctrl.Result{}, nil
 	}
 	return nil, nil
+}
+
+func ShouldPreempt(ctx context.Context, obj common.KaiwoWorkload, k8sClient client.Client) bool {
+	duration := obj.GetDuration()
+	startTime := obj.GetStartTime()
+	if duration == nil || obj.GetStatus() != string(kaiwo.StatusRunning) {
+		return false
+	}
+	now := time.Now()
+	deadline := startTime.Time.Add(duration.Duration)
+	if now.After(deadline) {
+		var queue string
+		if obj.GetClusterQueue() == "" {
+			queue = common.DefaultClusterQueueName
+		} else {
+			queue = obj.GetClusterQueue()
+		}
+		hasDemand, err := ClusterHasGpuDemand(ctx, k8sClient, queue, obj.GetGPUVendor())
+		if err != nil {
+			return false
+		}
+		return hasDemand
+	}
+	return false
+}
+
+func ClusterHasGpuDemand(ctx context.Context, k8sClient client.Client, clusterQueue string, gpuVendor string) (bool, error) {
+	var jobs kaiwo.KaiwoJobList
+	if err := k8sClient.List(ctx, &jobs); err != nil {
+		return false, err
+	}
+	for _, job := range jobs.Items {
+		if job.Spec.ClusterQueue == "" {
+			job.Spec.ClusterQueue = common.DefaultClusterQueueName
+		}
+		if job.Status.Status == kaiwo.StatusPending &&
+			job.Spec.CommonMetaSpec.Gpus > 0 &&
+			job.Spec.ClusterQueue == clusterQueue &&
+			job.Spec.CommonMetaSpec.GpuVendor == gpuVendor &&
+			isPendingForLong(ctx, job.ObjectMeta) {
+			return true, nil
+		}
+	}
+
+	var services kaiwo.KaiwoServiceList
+	if err := k8sClient.List(ctx, &services); err != nil {
+		return false, err
+	}
+	for _, svc := range services.Items {
+		if svc.Spec.ClusterQueue == "" {
+			svc.Spec.ClusterQueue = common.DefaultClusterQueueName
+		}
+		if svc.Status.Status == kaiwo.StatusPending &&
+			svc.Spec.Gpus > 0 &&
+			svc.Spec.ClusterQueue == clusterQueue &&
+			svc.Spec.GpuVendor == gpuVendor &&
+			isPendingForLong(ctx, svc.ObjectMeta) {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func isPendingForLong(ctx context.Context, meta metav1.ObjectMeta) bool {
+	config := controllerutils.ConfigFromContext(ctx)
+	age := time.Since(meta.CreationTimestamp.Time)
+	return age > config.Scheduling.PendingThresholdForPreemption.Duration
+}
+
+func SyncGpuMetaFromPodSpec(podSpec corev1.PodSpec, meta *kaiwo.CommonMetaSpec) {
+	if meta.Gpus == 0 {
+		for _, c := range podSpec.Containers {
+			for _, gpuKey := range []string{"amd.com/gpu", "nvidia.com/gpu"} {
+				if gpuQty, ok := c.Resources.Requests[corev1.ResourceName(gpuKey)]; ok {
+					if gpuVal := gpuQty.Value(); gpuVal > 0 {
+						meta.Gpus = int(gpuVal)
+						meta.GpuVendor = strings.Split(gpuKey, ".")[0]
+						return
+					}
+				}
+			}
+		}
+	}
+}
+
+func DeleteUnderlyingWorkload(ctx context.Context, uid types.UID, name string, namespace string, k8sClient client.Client) error {
+	workloadTypes := []client.ObjectList{
+		&appsv1.DeploymentList{},
+		&rayv1.RayServiceList{},
+		&batchv1.JobList{},
+		&rayv1.RayJobList{},
+	}
+
+	var deletedAny bool
+
+	for _, list := range workloadTypes {
+		if err := k8sClient.List(ctx, list, client.InNamespace(namespace)); err != nil {
+			return fmt.Errorf("failed to list workloads: %w", err)
+		}
+
+		items, err := metautil.ExtractList(list)
+		if err != nil {
+			return fmt.Errorf("failed to extract items: %w", err)
+		}
+
+		for _, item := range items {
+			obj, ok := item.(client.Object)
+			if !ok {
+				continue
+			}
+			for _, owner := range obj.GetOwnerReferences() {
+				if owner.UID == uid && owner.Controller != nil && *owner.Controller {
+					foreground := metav1.DeletePropagationForeground
+					if err := k8sClient.Delete(ctx, obj, &client.DeleteOptions{
+						PropagationPolicy: &foreground,
+					}); err != nil {
+						return fmt.Errorf("failed to delete workload %s/%s: %w", obj.GetNamespace(), obj.GetName(), err)
+					}
+					deletedAny = true
+				}
+			}
+		}
+	}
+
+	if !deletedAny {
+		return fmt.Errorf("no owned workloads found to delete for KaiwoService %s", name)
+	}
+	return nil
 }
