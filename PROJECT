@@ -15,7 +15,7 @@ resources:
   domain: silogen.ai
   group: kaiwo
   kind: KaiwoJob
-  path: github.com/silogen/kaiwo/pkg/api/v1alpha1
+  path: github.com/silogen/kaiwo/apis/kaiwo/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1alpha1
@@ -24,7 +24,7 @@ resources:
   domain: silogen.ai
   group: kaiwo
   kind: KaiwoService
-  path: github.com/silogen/kaiwo/pkg/api/v1alpha1
+  path: github.com/silogen/kaiwo/apis/kaiwo/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1alpha1
@@ -33,7 +33,16 @@ resources:
   domain: silogen.ai
   group: kaiwo
   kind: KaiwoQueueConfig
-  path: github.com/silogen/kaiwo/pkg/api/v1alpha1
+  path: github.com/silogen/kaiwo/apis/kaiwo/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1alpha1
+    namespaced: false
+  controller: true
+  domain: silogen.ai
+  group: config.kaiwo
+  kind: KaiwoQueueConfig
+  path: github.com/silogen/kaiwo/apis/config/v1alpha1
   version: v1alpha1
 - core: true
   group: batch

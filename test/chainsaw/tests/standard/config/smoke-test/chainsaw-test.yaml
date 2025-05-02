@@ -1,0 +1,76 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: test-config-smoke-ray-head-pod-memory
+spec:
+  steps:
+  - try:
+    - assert:
+        resource:
+          apiVersion: config.kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoConfig
+          metadata:
+            name: kaiwo-test
+          spec:
+            ray:
+              headPodMemory: 1Gi
+    - apply:
+        file: rayjob1.yaml
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            labels:
+              kaiwo.silogen.ai/name: "kaiwojob-config-smoke-ray-1"
+              ray.io/is-ray-node: "yes"
+          spec:
+            containers:
+            - name: ray-head
+              resources:
+                requests:
+                  memory: "1Gi"
+    - patch:
+        resource:
+          apiVersion: config.kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoConfig
+          metadata:
+            name: kaiwo-test
+          spec:
+            ray:
+              headPodMemory: 2Gi
+    - apply:
+        file: rayjob2.yaml
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            labels:
+              kaiwo.silogen.ai/name: "kaiwojob-config-smoke-ray-2"
+              ray.io/is-ray-node: "yes"
+          spec:
+            containers:
+            - name: ray-head
+              resources:
+                requests:
+                  memory: "2Gi"
+        # Return the value to the original one
+    - patch:
+        resource:
+          apiVersion: config.kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoConfig
+          metadata:
+            name: kaiwo-test
+          spec:
+            ray:
+              headPodMemory: 1Gi
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]

@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"strings"
 
+	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
+
 	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,7 +36,6 @@ import (
 	common "github.com/silogen/kaiwo/pkg/workloads/common"
 
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
-	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 )
 
 var (
@@ -59,6 +60,11 @@ func (j *JobWebhook) Default(ctx context.Context, obj runtime.Object) error {
 	job, ok := obj.(*batchv1.Job)
 	if !ok {
 		return fmt.Errorf("expected a Job object but got %T", obj)
+	}
+
+	ctx, err := controllerutils.GetContextWithConfig(ctx, j.Client)
+	if err != nil {
+		return fmt.Errorf("could not get kaiwo config: %w", err)
 	}
 
 	logger := logf.FromContext(ctx)
@@ -120,7 +126,7 @@ func (j *JobWebhook) ensureKaiwoJob(ctx context.Context, job *batchv1.Job, authe
 	logger := logf.FromContext(ctx)
 	logger.Info("Ensuring KaiwoJob exists for Job", "JobName", job.Name)
 
-	kaiwoJob := &v1alpha1.KaiwoJob{}
+	kaiwoJob := &kaiwo.KaiwoJob{}
 
 	err := j.Client.Get(ctx, client.ObjectKey{Name: job.Name, Namespace: job.Namespace}, kaiwoJob)
 	if err == nil {
@@ -140,15 +146,15 @@ func (j *JobWebhook) ensureKaiwoJob(ctx context.Context, job *batchv1.Job, authe
 		kaiwoJobLabels[common.QueueLabel] = common.DefaultClusterQueueName
 	}
 
-	kaiwoJob = &v1alpha1.KaiwoJob{
+	kaiwoJob = &kaiwo.KaiwoJob{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      job.Name,
 			Namespace: job.Namespace,
 			Labels:    kaiwoJobLabels,
 		},
-		Spec: v1alpha1.KaiwoJobSpec{
+		Spec: kaiwo.KaiwoJobSpec{
 			Job: job,
-			CommonMetaSpec: v1alpha1.CommonMetaSpec{
+			CommonMetaSpec: kaiwo.CommonMetaSpec{
 				User: authenticatedUser,
 			},
 		},
@@ -249,7 +255,7 @@ func (j *JobWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) (ad
 		break
 	}
 
-	kaiwoJob := &v1alpha1.KaiwoJob{}
+	kaiwoJob := &kaiwo.KaiwoJob{}
 	err := j.Client.Get(ctx, client.ObjectKey{Name: job.Name, Namespace: job.Namespace}, kaiwoJob)
 	if err == nil {
 		logger.Info("Deleting associated KaiwoJob", "KaiwoJob", kaiwoJob.Name)

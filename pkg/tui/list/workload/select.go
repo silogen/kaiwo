@@ -18,13 +18,14 @@ import (
 	"context"
 	"fmt"
 
+	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
+
 	common "github.com/silogen/kaiwo/pkg/workloads/common"
 
 	"github.com/charmbracelet/huh/spinner"
 	"github.com/sirupsen/logrus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	podlist "github.com/silogen/kaiwo/pkg/tui/list/pod"
 	"github.com/silogen/kaiwo/pkg/workloads"
 
@@ -64,7 +65,7 @@ func runSelectWorkload(ctx context.Context, clients k8s.KubernetesClients, state
 	var loadErr error
 	loadReferences := func() {
 		if state.WorkloadType == "job" {
-			jobList := &v1alpha1.KaiwoJobList{}
+			jobList := &kaiwo.KaiwoJobList{}
 			if err := clients.Client.List(ctx, jobList, labelSelector); err != nil {
 				loadErr = fmt.Errorf("failed to list Kaiwo jobs: %s", err)
 				return
@@ -73,7 +74,7 @@ func runSelectWorkload(ctx context.Context, clients k8s.KubernetesClients, state
 				workloadReferences = append(workloadReferences, &job)
 			}
 		} else if state.WorkloadType == "service" {
-			serviceList := &v1alpha1.KaiwoServiceList{}
+			serviceList := &kaiwo.KaiwoServiceList{}
 			if err := clients.Client.List(ctx, serviceList, labelSelector); err != nil {
 				loadErr = fmt.Errorf("failed to list Kaiwo services: %s", err)
 				return

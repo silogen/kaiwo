@@ -186,7 +186,7 @@ func (spec *StorageSpec) HasDownloads() bool {
 	return spec != nil && (spec.HasObjectStorageDownloads() || spec.HasHfDownloads())
 }
 
-// DownloadTaskConfig is an internal structure used to configure the data download job. It aggregates download tasks from both the Data and HuggingFace specs.
+// DownloadTaskConfig is an internal structure used to configure the data download job. It aggregates download tasks from both the Storage and HuggingFace specs.
 type DownloadTaskConfig struct {
 	// DownloadRoot specifies the common root directory within the download job's container where the 'data' PVC is mounted. Corresponds to `DataStorageSpec.MountPath`.
 	DownloadRoot string `json:"downloadRoot" yaml:"downloadRoot"`
@@ -314,10 +314,10 @@ type GitDownloadItem struct {
 	// Repository specifies the Git repository URL (e.g., "https://github.com/user/repo.git").
 	Repository string `json:"repository" yaml:"repository,omitempty"`
 
-	// Branch specifies the branch to clone. This is ignored if `commit` is specified.
+	// Branch specifies the branch to clone. This takes precedence over `commit`.
 	Branch string `json:"branch,omitempty" yaml:"branch,omitempty"`
 
-	// Commit specifies the exact commit hash to check out. This takes precedence over `branch`.
+	// Commit specifies the exact commit hash to check out. This is ignored if `commit` is specified.
 	Commit string `json:"commit,omitempty" yaml:"commit,omitempty"`
 
 	// Username optionally references a Secret containing the Git username for authentication. See `ValueReference`.

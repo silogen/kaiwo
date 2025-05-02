@@ -39,24 +39,6 @@ func Trace(logger logr.Logger, fmt string, keysAndValues ...any) {
 	logger.V(TraceLogLevel).Info(fmt, keysAndValues...)
 }
 
-var (
-	DefaultNamespace = GetEnv("DEFAULT_WORKLOAD_NAMESPACE", "kaiwo")
-	DefaultRayImage  = GetEnv("DEFAULT_WORKLOAD_IMAGE", "ghcr.io/silogen/rocm-ray:v0.9")
-)
-
-func SanitizeStringForKubernetes(str string) string {
-	replacer := strings.NewReplacer(
-		":", "-",
-		"/", "-",
-		"\\", "-",
-		"_", "-",
-		".", "-",
-	)
-	str = strings.ToLower(replacer.Replace(str))
-	str = MakeRFC1123Compliant(str)
-	return str
-}
-
 func MakeRFC1123Compliant(input string) string {
 	input = strings.ToLower(input)
 

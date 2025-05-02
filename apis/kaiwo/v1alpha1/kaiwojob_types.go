@@ -18,14 +18,14 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/silogen/kaiwo/pkg/workloads/common"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	common "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 // KaiwoJobSpec defines the desired state of KaiwoJob.

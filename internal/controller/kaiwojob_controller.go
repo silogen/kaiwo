@@ -21,9 +21,13 @@ import (
 	"fmt"
 	"strings"
 
-	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
+	"github.com/silogen/kaiwo/pkg/workloads/common"
 
-	common "github.com/silogen/kaiwo/pkg/workloads/common"
+	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
+
+	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
+
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 
@@ -39,7 +43,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
 
-	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	workloadjob "github.com/silogen/kaiwo/pkg/workloads/job"
 )
 
@@ -53,13 +56,14 @@ type KaiwoJobReconciler struct {
 // +kubebuilder:rbac:groups=kaiwo.silogen.ai,resources=kaiwojobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=kaiwo.silogen.ai,resources=kaiwojobs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=kaiwo.silogen.ai,resources=kaiwojobs/finalizers,verbs=update
+// +kubebuilder:rbac:groups=config.kaiwo.silogen.ai,resources=kaiwoconfigs,verbs=get;list;watch;create;update;patch;delete
 
 func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 	baseutils.Debug(logger, "Running reconciliation")
 
 	// Fetch the KaiwoJob instance
-	var kaiwoJob v1alpha1.KaiwoJob
+	var kaiwoJob kaiwo.KaiwoJob
 	if err := r.Get(ctx, req.NamespacedName, &kaiwoJob); err != nil {
 		if client.IgnoreNotFound(err) != nil {
 			return ctrl.Result{}, baseutils.LogErrorf(logger, "failed to get KaiwoJob", err)
@@ -68,15 +72,20 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, nil
 	}
 
-	if kaiwoJob.Status.Status == v1alpha1.StatusFailed {
+	if kaiwoJob.Status.Status == kaiwo.StatusFailed {
 		baseutils.Debug(logger, "Skipping reconciliation, as status is failed")
 		return ctrl.Result{}, nil
-	} else if kaiwoJob.Status.Status == v1alpha1.StatusComplete {
+	} else if kaiwoJob.Status.Status == kaiwo.StatusComplete {
 		baseutils.Debug(logger, "Skipping reconciliation, as status is complete")
 		return ctrl.Result{}, nil
 	}
 
-	reconciler := workloadjob.NewKaiwoJobReconciler(&kaiwoJob)
+	ctx, err := controllerutils.GetContextWithConfig(ctx, r.Client)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to fetch config: %w", err)
+	}
+
+	reconciler := workloadjob.NewKaiwoJobReconciler(ctx, &kaiwoJob)
 
 	result, err := reconciler.Reconcile(ctx, r.Client, r.Scheme)
 	if err != nil {
@@ -94,7 +103,7 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 func (r *KaiwoJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Recorder = mgr.GetEventRecorderFor("kaiwojob-controller")
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.KaiwoJob{}).
+		For(&kaiwo.KaiwoJob{}).
 		Watches(
 			&batchv1.Job{}, // Watching batchv1.Job
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {

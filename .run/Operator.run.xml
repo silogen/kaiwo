@@ -13,6 +13,7 @@
       <env name="RESOURCE_MONITORING_PROMETHEUS_ENDPOINT" value="http://localhost:9090" />
       <env name="RESOURCE_MONITORING_TARGET_NAMESPACES" value="kaiwo-test-monitoring-conditions" />
       <env name="WEBHOOK_CERT_DIRECTORY" value="certs" />
+      <env name="CONFIG_NAME" value="kaiwo-test" />
     </envs>
     <kind value="FILE" />
     <package value="github.com/silogen/kaiwo" />

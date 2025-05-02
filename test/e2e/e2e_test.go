@@ -193,6 +193,11 @@ var _ = Describe("Manager", Ordered, func() {
 		cmd = exec.Command("kubectl", "apply", "--server-side", "-k", "test/")
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to deploy kaiwo-operator")
+
+		By("deploying the kaiwo test config")
+		cmd = exec.Command("kubectl", "apply", "-f", "test/kaiwoconfig.yaml")
+		_, err = utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Failed to deploy kaiwo test config")
 	})
 
 	// After all tests have been executed, clean up by undeploying the controller, uninstalling CRDs,

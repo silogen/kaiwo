@@ -1,8 +1,3 @@
----
-hide:
-  - navigation
----
-
 # API Reference
 
 ## Packages
@@ -11,7 +6,7 @@ hide:
 
 ## kaiwo.silogen.ai/v1alpha1
 
-Package v1alpha1 contains API Schema definitions for the kaiwo v1 API group.
+Package v1alpha1 contains API Schema definitions for the kaiwo v1alpha1 API group.
 
 ### Resource Types
 - [KaiwoJob](#kaiwojob)
@@ -114,6 +109,27 @@ _Appears in:_
 | `dangerous` _boolean_ | Dangerous, if when set to `true`, Kaiwo will *not* add the default `PodSecurityContext` (which normally sets `runAsUser: 1000`, `runAsGroup: 1000`, `fsGroup: 1000`) to the generated pods. Use this only if you need to run containers as root or a different specific user and understand the security implications. | false |  |
 
 
+#### CommonStatusSpec
+
+
+
+
+
+
+
+_Appears in:_
+- [KaiwoJobStatus](#kaiwojobstatus)
+- [KaiwoServiceStatus](#kaiwoservicestatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `startTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | StartTime records the timestamp when the first pod associated with the workload started running. |  |  |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions lists the observed conditions of the workload resource, following standard Kubernetes conventions. May include conditions reflecting the underlying Deployment or RayService state. |  |  |
+| `status` _[Status](#status)_ | Status reflects the current high-level phase of the workload lifecycle (e.g., PENDING, STARTING, READY, FAILED). |  |  |
+| `duration` _integer_ | Duration indicates how long the service has been running since StartTime, in seconds. Calculated periodically while running. |  |  |
+| `observedGeneration` _integer_ | ObservedGeneration records the `.metadata.generation` of the workload resource that was last processed by the controller. |  |  |
+
+
 #### DataStorageSpec
 
 
@@ -167,8 +183,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `repository` _string_ | Repository specifies the Git repository URL (e.g., "https://github.com/user/repo.git"). |  |  |
-| `branch` _string_ | Branch specifies the branch to clone. This takes precedence over `commit`.  |  |  |
-| `commit` _string_ | Commit specifies the exact commit hash to check out. This is ignored if `branch` is specified. |  |  |
+| `branch` _string_ | Branch specifies the branch to clone. This takes precedence over `commit`. |  |  |
+| `commit` _string_ | Commit specifies the exact commit hash to check out. This is ignored if `commit` is specified. |  |  |
 | `username` _[ValueReference](#valuereference)_ | Username optionally references a Secret containing the Git username for authentication. See `ValueReference`. |  |  |
 | `token` _[ValueReference](#valuereference)_ | Token optionally references a Secret containing the Git token (or password) for authentication. See `ValueReference`. |  |  |
 | `path` _string_ | Path specifies a sub-path within the repository to copy. If omitted, the entire repository is copied. |  |  |
@@ -297,12 +313,12 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `startTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | StartTime records the timestamp when the first pod associated with the KaiwoJob started running. |  |  |
+| `startTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | StartTime records the timestamp when the first pod associated with the workload started running. |  |  |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions lists the observed conditions of the workload resource, following standard Kubernetes conventions. May include conditions reflecting the underlying Deployment or RayService state. |  |  |
+| `status` _[Status](#status)_ | Status reflects the current high-level phase of the workload lifecycle (e.g., PENDING, STARTING, READY, FAILED). |  |  |
+| `duration` _integer_ | Duration indicates how long the service has been running since StartTime, in seconds. Calculated periodically while running. |  |  |
+| `observedGeneration` _integer_ | ObservedGeneration records the `.metadata.generation` of the workload resource that was last processed by the controller. |  |  |
 | `completionTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | CompletionTime records the timestamp when the KaiwoJob finished execution (either successfully or with failure). |  |  |
-| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions lists the observed conditions of the KaiwoJob resource, following standard Kubernetes conventions. |  |  |
-| `status` _[Status](#status)_ | Status reflects the current high-level phase of the KaiwoJob lifecycle (e.g., PENDING, RUNNING, COMPLETE, FAILED). |  |  |
-| `duration` _integer_ | Duration indicates the total time the job ran, calculated from StartTime to CompletionTime, in seconds. |  |  |
-| `observedGeneration` _integer_ | ObservedGeneration records the `.metadata.generation` of the KaiwoJob resource that was last processed by the controller. |  |  |
 
 
 #### KaiwoQueueConfig
@@ -378,6 +394,8 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions lists the observed conditions of the KaiwoQueueConfig resource, such as whether the managed Kueue resources are synchronized and ready. |  |  |
 | `status` _[Status](#status)_ | Status reflects the overall status of the Kueue resource synchronization managed by this config (e.g., PENDING, READY, FAILED). |  |  |
+
+
 
 
 #### KaiwoService
@@ -467,11 +485,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `startTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | StartTime records the timestamp when the first pod associated with the KaiwoService started running. |  |  |
-| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions lists the observed conditions of the KaiwoService resource, following standard Kubernetes conventions. May include conditions reflecting the underlying Deployment or RayService state. |  |  |
-| `status` _[Status](#status)_ | Status reflects the current high-level phase of the KaiwoService lifecycle (e.g., PENDING, STARTING, READY, FAILED). |  |  |
+| `startTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | StartTime records the timestamp when the first pod associated with the workload started running. |  |  |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions lists the observed conditions of the workload resource, following standard Kubernetes conventions. May include conditions reflecting the underlying Deployment or RayService state. |  |  |
+| `status` _[Status](#status)_ | Status reflects the current high-level phase of the workload lifecycle (e.g., PENDING, STARTING, READY, FAILED). |  |  |
 | `duration` _integer_ | Duration indicates how long the service has been running since StartTime, in seconds. Calculated periodically while running. |  |  |
-| `observedGeneration` _integer_ | ObservedGeneration records the `.metadata.generation` of the KaiwoService resource that was last processed by the controller. |  |  |
+| `observedGeneration` _integer_ | ObservedGeneration records the `.metadata.generation` of the workload resource that was last processed by the controller. |  |  |
 
 
 #### ObjectStorageDownloadSpec
@@ -563,6 +581,7 @@ _Underlying type:_ _string_
 
 
 _Appears in:_
+- [CommonStatusSpec](#commonstatusspec)
 - [KaiwoJobStatus](#kaiwojobstatus)
 - [KaiwoQueueConfigStatus](#kaiwoqueueconfigstatus)
 - [KaiwoServiceStatus](#kaiwoservicestatus)

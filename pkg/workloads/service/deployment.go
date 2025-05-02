@@ -18,6 +18,10 @@ import (
 	"context"
 	"fmt"
 
+	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
+
+	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
+
 	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -29,18 +33,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 	common "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
-func GetDefaultDeploymentSpec(dangerous bool, resourceRequirements corev1.ResourceRequirements) appsv1.DeploymentSpec {
+func GetDefaultDeploymentSpec(config controllerutils.KaiwoConfigContext, dangerous bool, resourceRequirements corev1.ResourceRequirements) appsv1.DeploymentSpec {
 	return appsv1.DeploymentSpec{
 		Replicas: baseutils.Pointer(int32(1)),
 		Selector: &metav1.LabelSelector{
 			MatchLabels: map[string]string{},
 		},
 		Template: workloadutils.GetPodTemplate(
+			config,
 			*resource.NewQuantity(1*1024*1024*1024, resource.BinarySI),
 			dangerous,
 			resourceRequirements,
@@ -51,10 +55,10 @@ func GetDefaultDeploymentSpec(dangerous bool, resourceRequirements corev1.Resour
 
 type DeploymentReconciler struct {
 	common.ResourceReconcilerBase[*appsv1.Deployment]
-	KaiwoService *v1alpha1.KaiwoService
+	KaiwoService *kaiwo.KaiwoService
 }
 
-func NewDeploymentReconciler(svc *v1alpha1.KaiwoService) *DeploymentReconciler {
+func NewDeploymentReconciler(svc *kaiwo.KaiwoService) *DeploymentReconciler {
 	reconciler := &DeploymentReconciler{
 		ResourceReconcilerBase: common.ResourceReconcilerBase[*appsv1.Deployment]{
 			ObjectKey: client.ObjectKeyFromObject(svc),
@@ -67,6 +71,7 @@ func NewDeploymentReconciler(svc *v1alpha1.KaiwoService) *DeploymentReconciler {
 
 func (r *DeploymentReconciler) Build(ctx context.Context, _ client.Client) (*appsv1.Deployment, error) {
 	logger := log.FromContext(ctx)
+	config := controllerutils.ConfigFromContext(ctx)
 
 	svcSpec := r.KaiwoService.Spec
 	labelContext := common.GetKaiwoLabelContext(r.KaiwoService)
@@ -76,6 +81,7 @@ func (r *DeploymentReconciler) Build(ctx context.Context, _ client.Client) (*app
 
 	if svcSpec.Deployment == nil {
 		depSpec = GetDefaultDeploymentSpec(
+			config,
 			svcSpec.Dangerous,
 			baseutils.ValueOrDefault(svcSpec.Resources),
 		)
@@ -111,6 +117,7 @@ func (r *DeploymentReconciler) Build(ctx context.Context, _ client.Client) (*app
 	gpus := r.KaiwoService.Spec.CommonMetaSpec.Gpus
 
 	if err := workloadutils.UpdatePodSpec(
+		config,
 		r.KaiwoService.Spec.CommonMetaSpec,
 		labelContext,
 		&depSpec.Template,

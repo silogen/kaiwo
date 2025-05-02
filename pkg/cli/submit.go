@@ -22,6 +22,8 @@ import (
 	"path/filepath"
 	"regexp"
 
+	"github.com/silogen/kaiwo/pkg/workloads/common"
+
 	"github.com/charmbracelet/huh"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -33,7 +35,6 @@ import (
 
 	cliutils "github.com/silogen/kaiwo/pkg/cli/utils"
 	k8sUtils "github.com/silogen/kaiwo/pkg/k8s"
-	common "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 var (

@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"reflect"
 
+	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
@@ -36,13 +38,12 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
-	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 	common "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 type KaiwoServiceReconciler struct {
-	common.ReconcilerBase[*v1alpha1.KaiwoService]
+	common.ReconcilerBase[*kaiwo.KaiwoService]
 
 	DownloadJobConfigMap *workloadutils.DownloadJobConfigMapReconciler
 	DownloadJob          *workloadutils.DownloadJobReconciler
@@ -54,12 +55,13 @@ type KaiwoServiceReconciler struct {
 	RayServiceReconciler *RayServiceReconciler
 }
 
-func NewKaiwoServiceReconciler(kaiwoService *v1alpha1.KaiwoService) KaiwoServiceReconciler {
-	sanitize(kaiwoService)
+func NewKaiwoServiceReconciler(ctx context.Context, kaiwoService *kaiwo.KaiwoService) KaiwoServiceReconciler {
+	config := controllerutils.ConfigFromContext(ctx)
+	sanitize(kaiwoService, config)
 
 	objectKey := client.ObjectKeyFromObject(kaiwoService)
 	r := KaiwoServiceReconciler{
-		ReconcilerBase: common.ReconcilerBase[*v1alpha1.KaiwoService]{
+		ReconcilerBase: common.ReconcilerBase[*kaiwo.KaiwoService]{
 			Object:    kaiwoService,
 			ObjectKey: objectKey,
 		},
@@ -70,6 +72,7 @@ func NewKaiwoServiceReconciler(kaiwoService *v1alpha1.KaiwoService) KaiwoService
 	if storageSpec != nil && storageSpec.StorageEnabled {
 		if storageSpec.HasData() {
 			r.DataPVC = common.NewStorageReconciler(
+				config.Storage,
 				client.ObjectKey{
 					Name:      baseutils.FormatNameWithPostfix(objectKey.Name, common.DataStoragePostfix),
 					Namespace: objectKey.Namespace,
@@ -81,6 +84,7 @@ func NewKaiwoServiceReconciler(kaiwoService *v1alpha1.KaiwoService) KaiwoService
 		}
 		if storageSpec.HasHfDownloads() {
 			r.HuggingFacePVC = common.NewStorageReconciler(
+				config.Storage,
 				client.ObjectKey{
 					Name:      baseutils.FormatNameWithPostfix(objectKey.Name, common.HfStoragePostfix),
 					Namespace: objectKey.Namespace,
@@ -117,19 +121,19 @@ func NewKaiwoServiceReconciler(kaiwoService *v1alpha1.KaiwoService) KaiwoService
 	return r
 }
 
-func sanitize(kaiwoService *v1alpha1.KaiwoService) {
+func sanitize(kaiwoService *kaiwo.KaiwoService, config controllerutils.KaiwoConfigContext) {
 	storageSpec := kaiwoService.Spec.Storage
 
 	if storageSpec != nil && storageSpec.StorageEnabled {
 
 		// Ensure mount paths are set
 		if storageSpec.Data != nil && storageSpec.Data.IsRequested() && storageSpec.Data.MountPath == "" {
-			// logger.Info("Data storage mount path not set, using default:" + defaultDataMountPath)
-			storageSpec.Data.MountPath = workloadutils.DefaultDataMountPath
+			// logger.Info("Storage storage mount path not set, using default:" + defaultDataMountPath)
+			storageSpec.Data.MountPath = config.Storage.DefaultDataMountPath
 		}
 		if storageSpec.HuggingFace != nil && storageSpec.HuggingFace.IsRequested() && storageSpec.HuggingFace.MountPath == "" {
 			// logger.Info("Hugging Face storage mount path not set, using default:" + defaultHfMountPath)
-			storageSpec.HuggingFace.MountPath = workloadutils.DefaultHfMountPath
+			storageSpec.HuggingFace.MountPath = config.Storage.DefaultHfMountPath
 		}
 	}
 
@@ -163,12 +167,12 @@ func (r *KaiwoServiceReconciler) Reconcile(
 	}
 
 	// Set default condition if none is found
-	cond := meta.FindStatusCondition(r.Object.Status.Conditions, v1alpha1.KaiwoResourceUtilizationType)
+	cond := meta.FindStatusCondition(r.Object.Status.Conditions, kaiwo.KaiwoResourceUtilizationType)
 	if cond == nil {
 		meta.SetStatusCondition(&r.Object.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.KaiwoResourceUtilizationType,
+			Type:    kaiwo.KaiwoResourceUtilizationType,
 			Status:  metav1.ConditionFalse,
-			Reason:  string(v1alpha1.ResourceUtilizationUnknown),
+			Reason:  string(kaiwo.ResourceUtilizationUnknown),
 			Message: "Resource utilization currently unknown",
 		})
 	}
@@ -232,7 +236,7 @@ func (r *KaiwoServiceReconciler) Reconcile(
 	}
 
 	if reflect.DeepEqual(previousStatus, status) {
-		if status.Status == v1alpha1.StatusPending {
+		if status.Status == kaiwo.StatusPending {
 			logger.Info("Still pending, requeuing...")
 			return ctrl.Result{RequeueAfter: common.DefaultRequeueDuration}, nil
 		}
@@ -263,20 +267,20 @@ func (r *KaiwoServiceReconciler) Reconcile(
 func (r *KaiwoServiceReconciler) GatherStatus(
 	ctx context.Context,
 	k8sClient client.Client,
-	previousStatus v1alpha1.KaiwoServiceStatus,
+	previousStatus kaiwo.KaiwoServiceStatus,
 	downloadJob *batchv1.Job,
-) (*v1alpha1.KaiwoServiceStatus, error) {
+) (*kaiwo.KaiwoServiceStatus, error) {
 	svc := r.Object
 	currentStatus := previousStatus.DeepCopy()
 
 	// 1. Check download job first. If it's ongoing or failed, that decides overall state.
 	if downloadJob != nil {
 		if downloadJob.Status.Failed > 0 {
-			currentStatus.Status = v1alpha1.StatusFailed
+			currentStatus.Status = kaiwo.StatusFailed
 			return currentStatus, nil
 		} else if downloadJob.Status.Succeeded == 0 {
 			// Not succeeded yet => Pending
-			currentStatus.Status = v1alpha1.StatusPending
+			currentStatus.Status = kaiwo.StatusPending
 			return currentStatus, nil
 		}
 		// If the download job is succeeded (>0) we continue checking RayService or Deployment
@@ -300,21 +304,21 @@ func (r *KaiwoServiceReconciler) GatherStatus(
 		err := k8sClient.Get(ctx, client.ObjectKey{Name: svc.Name, Namespace: svc.Namespace}, &rayService)
 		if err != nil {
 			if errors.IsNotFound(err) {
-				currentStatus.Status = v1alpha1.StatusPending
+				currentStatus.Status = kaiwo.StatusPending
 				return currentStatus, nil
 			}
-			currentStatus.Status = v1alpha1.StatusFailed
+			currentStatus.Status = kaiwo.StatusFailed
 			return currentStatus, nil
 		}
 
 		if meta.IsStatusConditionTrue(rayService.Status.Conditions, string(rayv1.RayServiceReady)) {
-			currentStatus.Status = v1alpha1.StatusRunning
+			currentStatus.Status = kaiwo.StatusRunning
 			return currentStatus, nil
 		}
 
 		for _, appStat := range rayService.Status.ActiveServiceStatus.Applications {
 			if appStat.Status == "UNHEALTHY" || appStat.Status == "DEPLOY_FAILED" {
-				currentStatus.Status = v1alpha1.StatusFailed
+				currentStatus.Status = kaiwo.StatusFailed
 				return currentStatus, nil
 			}
 		}
@@ -325,20 +329,20 @@ func (r *KaiwoServiceReconciler) GatherStatus(
 		if err != nil {
 			if errors.IsNotFound(err) {
 				// maybe the Deployment is not created yet
-				currentStatus.Status = v1alpha1.StatusPending
+				currentStatus.Status = kaiwo.StatusPending
 			} else {
-				currentStatus.Status = v1alpha1.StatusFailed
+				currentStatus.Status = kaiwo.StatusFailed
 			}
 			return currentStatus, nil
 		}
 
 		if isDeploymentFailed(dep) {
-			currentStatus.Status = v1alpha1.StatusFailed
+			currentStatus.Status = kaiwo.StatusFailed
 			return currentStatus, nil
 		}
 
 		if dep.Status.ReadyReplicas == dep.Status.Replicas && dep.Status.Replicas > 0 {
-			currentStatus.Status = v1alpha1.StatusRunning
+			currentStatus.Status = kaiwo.StatusRunning
 			return currentStatus, nil
 		}
 	}

@@ -22,6 +22,8 @@ import (
 	"strconv"
 	"strings"
 
+	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -31,15 +33,9 @@ import (
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
-	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
-var (
-	excludeMasterNodes   = baseutils.GetEnv("EXCLUDE_MASTER_NODES_FROM_NODE_POOLS", "false")
-	DefaultNodePoolLabel = "kaiwo/nodepool"
-)
+var DefaultNodePoolLabel = "kaiwo/nodepool"
 
 func EnsureNamespaceKueueManaged(ctx context.Context, k8sClient client.Client, namespaceName string) error {
 	logger := log.FromContext(ctx)
@@ -70,10 +66,11 @@ func EnsureNamespaceKueueManaged(ctx context.Context, k8sClient client.Client, n
 	return nil
 }
 
-func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]v1alpha1.ResourceFlavorSpec, map[string]kueuev1beta1.FlavorQuotas, error) {
+func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo.ResourceFlavorSpec, map[string]kueuev1beta1.FlavorQuotas, error) {
 	logger := log.FromContext(ctx)
+	config := ConfigFromContext(ctx)
 
-	var resourceFlavors []v1alpha1.ResourceFlavorSpec
+	var resourceFlavors []kaiwo.ResourceFlavorSpec
 	nodePoolResources := make(map[string]kueuev1beta1.FlavorQuotas)
 	nodePools := make(map[string][]string)
 
@@ -82,7 +79,7 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]v1alp
 	// Get node list dynamically
 	nodeList := GetNodeResources(ctx, c)
 
-	if strings.ToLower(excludeMasterNodes) == "true" {
+	if config.Nodes.ExcludeMasterNodesFromNodePools {
 		logger.Info("Excluding master/control-plane nodes from nodepools. Set EXCLUDE_MASTER_NODES_FROM_NODE_POOLS=false to include them")
 	} else {
 		logger.Info("Including master/control-plane nodes in nodepools. Set EXCLUDE_MASTER_NODES_FROM_NODE_POOLS=true to exclude them")
@@ -90,7 +87,7 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]v1alp
 
 	for _, node := range nodeList {
 		// **Skip Control Plane Nodes**
-		if strings.ToLower(excludeMasterNodes) == "true" {
+		if config.Nodes.ExcludeMasterNodesFromNodePools {
 			if _, exists := node.Labels["node-role.kubernetes.io/control-plane"]; exists {
 				continue
 			}
@@ -157,8 +154,6 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]v1alp
 		}
 	}
 
-	addTaints := strings.ToLower(baseutils.GetEnv("ADD_TAINTS_TO_GPU_NODES", "true")) == "true"
-
 	for flavorName := range nodePools {
 		resourceQuotas := []kueuev1beta1.ResourceQuota{
 			{
@@ -187,7 +182,7 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]v1alp
 			Resources: resourceQuotas,
 		}
 
-		flavor := v1alpha1.ResourceFlavorSpec{
+		flavor := kaiwo.ResourceFlavorSpec{
 			Name: flavorName,
 			NodeLabels: map[string]string{
 				DefaultNodePoolLabel: flavorName,
@@ -207,6 +202,12 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]v1alp
 
 	resourceFlavors = RemoveDuplicateResourceFlavors(resourceFlavors)
 
+	gpuTaint := corev1.Taint{
+		Key:    config.Nodes.DefaultGpuTaintKey,
+		Value:  "true",
+		Effect: corev1.TaintEffectNoSchedule,
+	}
+
 	for flavorName, nodeNames := range nodePools {
 		for _, nodeName := range nodeNames {
 			err := LabelNode(ctx, c, nodeName, DefaultNodePoolLabel, flavorName)
@@ -215,9 +216,9 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]v1alp
 			} else {
 				return nil, nil, fmt.Errorf("failed to label node %s: %w", nodeName, err)
 			}
-			if addTaints {
+			if config.Nodes.AddTaintsToGpuNodes {
 				if !strings.HasPrefix(flavorName, "cpu-only") {
-					err = TaintNode(ctx, c, nodeName, GPUTaint)
+					err = TaintNode(ctx, c, nodeName, gpuTaint)
 					if err != nil {
 						logger.Error(err, "Failed to taint GPU node", "node", nodeName)
 					}
@@ -232,20 +233,20 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]v1alp
 	return resourceFlavors, nodePoolResources, nil
 }
 
-func RemoveDuplicateResourceFlavors(flavors []v1alpha1.ResourceFlavorSpec) []v1alpha1.ResourceFlavorSpec {
-	uniqueMap := make(map[string]v1alpha1.ResourceFlavorSpec)
+func RemoveDuplicateResourceFlavors(flavors []kaiwo.ResourceFlavorSpec) []kaiwo.ResourceFlavorSpec {
+	uniqueMap := make(map[string]kaiwo.ResourceFlavorSpec)
 	for _, flavor := range flavors {
 		uniqueMap[flavor.Name] = flavor
 	}
 
-	uniqueFlavors := make([]v1alpha1.ResourceFlavorSpec, 0, len(uniqueMap))
+	uniqueFlavors := make([]kaiwo.ResourceFlavorSpec, 0, len(uniqueMap))
 	for _, flavor := range uniqueMap {
 		uniqueFlavors = append(uniqueFlavors, flavor)
 	}
 	return uniqueFlavors
 }
 
-func CreateClusterQueue(nodePoolResources map[string]kueuev1beta1.FlavorQuotas, name string) v1alpha1.ClusterQueue {
+func CreateClusterQueue(nodePoolResources map[string]kueuev1beta1.FlavorQuotas, name string) kaiwo.ClusterQueue {
 	var resourceGroups []kueuev1beta1.ResourceGroup
 	coveredResources := make(map[corev1.ResourceName]struct{})
 
@@ -325,7 +326,7 @@ func CreateClusterQueue(nodePoolResources map[string]kueuev1beta1.FlavorQuotas, 
 	})
 
 	// Create ClusterQueue
-	return v1alpha1.ClusterQueue{
+	return kaiwo.ClusterQueue{
 		Name:       name,
 		Namespaces: []string{"kaiwo"},
 		Spec: kueuev1beta1.ClusterQueueSpec{
@@ -335,7 +336,7 @@ func CreateClusterQueue(nodePoolResources map[string]kueuev1beta1.FlavorQuotas, 
 	}
 }
 
-func ConvertKaiwoToKueueResourceFlavors(kaiwoFlavors []v1alpha1.ResourceFlavorSpec) []kueuev1beta1.ResourceFlavor {
+func ConvertKaiwoToKueueResourceFlavors(kaiwoFlavors []kaiwo.ResourceFlavorSpec) []kueuev1beta1.ResourceFlavor {
 	var kueueFlavors []kueuev1beta1.ResourceFlavor
 	for _, rf := range kaiwoFlavors {
 		kueueFlavors = append(kueueFlavors, ConvertKaiwoToKueueResourceFlavor(rf))
@@ -343,7 +344,7 @@ func ConvertKaiwoToKueueResourceFlavors(kaiwoFlavors []v1alpha1.ResourceFlavorSp
 	return kueueFlavors
 }
 
-func ConvertKaiwoToKueueResourceFlavor(kaiwoFlavor v1alpha1.ResourceFlavorSpec) kueuev1beta1.ResourceFlavor {
+func ConvertKaiwoToKueueResourceFlavor(kaiwoFlavor kaiwo.ResourceFlavorSpec) kueuev1beta1.ResourceFlavor {
 	return kueuev1beta1.ResourceFlavor{
 		ObjectMeta: metav1.ObjectMeta{Name: kaiwoFlavor.Name},
 		Spec: kueuev1beta1.ResourceFlavorSpec{
@@ -353,7 +354,7 @@ func ConvertKaiwoToKueueResourceFlavor(kaiwoFlavor v1alpha1.ResourceFlavorSpec) 
 	}
 }
 
-func ConvertKaiwoToKueueClusterQueue(kaiwoQueue v1alpha1.ClusterQueue) kueuev1beta1.ClusterQueue {
+func ConvertKaiwoToKueueClusterQueue(kaiwoQueue kaiwo.ClusterQueue) kueuev1beta1.ClusterQueue {
 	return kueuev1beta1.ClusterQueue{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: kaiwoQueue.Name,

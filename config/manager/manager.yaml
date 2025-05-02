@@ -65,46 +65,25 @@ spec:
         - --health-probe-bind-address=:8081
         image: controller:latest
         env:
-        - name: STORAGECLASS
-          value: mlstorage
-        - name: DEFAULT_DATA_MOUNT_PATH
-          value: /workload
-        - name: DEFAULT_HF_MOUNT_PATH
-          value: /hf_cache
-        - name: DEFAULT_GPU_RESOURCE_KEY
-          value: amd
-        - name: EXCLUDE_MASTER_NODES_FROM_NODE_POOLS
-          value: "false"
-        - name: ENFORCE_KAIWO_ON_GPU_WORKLOADS
-          value: "false"
-        - name: RAY_HEAD_POD_MEMORY
-          value: "16Gi"
+          # Setting this to true automatically creates a default kaiwo configuration object
+          # If you want to set up your own configuration from the start, set this to false or remove the variable completely,
+          # and create your KaiwoConfig object separately 
+        - name: CONFIG_GENERATE_DEFAULT
+          value: "true"
+
         - name: DEFAULT_KAIWO_QUEUE_CONFIG_NAME
           value: "kaiwo"
         - name: DEFAULT_CLUSTER_QUEUE_NAME
           value: "kaiwo"
-        - name: CUSTOM_KUBE_SCHEDULER_NAME
-          value: "kaiwo-scheduler"
-        - name: ADD_TAINTS_TO_GPU_NODES
-          value: "false"
 
           # Resource monitoring (update values below to suit your needs and environment)
         - name: RESOURCE_MONITORING_ENABLED
           value: "false"  # Change to true to enable
-        - name: RESOURCE_MONITORING_AVERAGING_INTERVAL
-          value: "60s"
-        - name: RESOURCE_MONITORING_LOW_UTILIZATION_THRESHOLD
-          value: "50"
-        - name: RESOURCE_MONITORING_MIN_ALIVE_TIME
-          value: "30s"
         - name: RESOURCE_MONITORING_POLLING_INTERVAL
           value: "15s"
-        - name: RESOURCE_MONITORING_PROFILE
-          value: "cpu"
         - name: RESOURCE_MONITORING_PROMETHEUS_ENDPOINT
           value: "http://prometheus-k8s.monitoring.svc.cluster.local:9090"
-        - name: RESOURCE_MONITORING_TARGET_NAMESPACES
-          value: "kaiwo"
+
         name: manager
         ports: []
         securityContext:

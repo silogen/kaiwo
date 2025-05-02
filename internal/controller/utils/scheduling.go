@@ -28,8 +28,6 @@ import (
 	klog "k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	common "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 const (
@@ -41,18 +39,6 @@ type NodeResourceInfo struct {
 	CPU    int
 	Memory int
 	Labels map[string]string
-}
-
-var GPUTaint = corev1.Taint{
-	Key:    common.DefaultGPUTaintKey,
-	Value:  "true",
-	Effect: corev1.TaintEffectNoSchedule,
-}
-
-var GPUToleration = corev1.Toleration{
-	Key:      common.DefaultGPUTaintKey,
-	Operator: corev1.TolerationOpExists,
-	Effect:   corev1.TaintEffectNoSchedule,
 }
 
 func GetNodeResources(ctx context.Context, c client.Client) []NodeResourceInfo {

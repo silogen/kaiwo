@@ -1,0 +1,14 @@
+apiVersion: config.kaiwo.silogen.ai/v1alpha1
+kind: KaiwoConfig
+metadata:
+  name: kaiwo-test
+spec:
+  resourceMonitoring:
+    averagingTime: 60s
+    lowUtilizationThreshold: 50
+    minAliveTime: 30s
+    profile: cpu
+    targetNamespaces:
+    - "kaiwo-test-monitoring-conditions"
+  ray:
+    headPodMemory: 1Gi

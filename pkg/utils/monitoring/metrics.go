@@ -20,10 +20,17 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"text/template"
 	"time"
+
+	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
+
+	configapi "github.com/silogen/kaiwo/apis/config/v1alpha1"
+
+	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -32,7 +39,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 
-	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	"github.com/silogen/kaiwo/pkg/workloads/common"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -57,21 +63,6 @@ const (
 
 	// EnvPollingInterval is the polling interval to run the GPU metrics poller
 	EnvPollingInterval = envPrefix + "POLLING_INTERVAL"
-
-	// EnvAveragingTime is the time to use to average the GPU metrics over
-	EnvAveragingTime = envPrefix + "AVERAGING_INTERVAL"
-
-	// EnvMinAliveTime is the time that a pod must have been alive for in order to qualify for inspection
-	EnvMinAliveTime = envPrefix + "MIN_ALIVE_TIME"
-
-	// EnvLowUtilizationThreshold is the threshold which, if the metric goes under, the GPU is considered underutilized
-	EnvLowUtilizationThreshold = envPrefix + "LOW_UTILIZATION_THRESHOLD"
-
-	// EnvTargetNamespaces is a comma-separated list of namespaces to filter on (e.g. "ns1,ns2" )
-	EnvTargetNamespaces = envPrefix + "TARGET_NAMESPACES"
-
-	// EnvProfile selects the monitoring profile (gpu or cpu)
-	EnvProfile = envPrefix + "PROFILE"
 )
 
 const (
@@ -87,15 +78,11 @@ func IsMetricsMonitoringEnabled() bool {
 type MetricsWatcher struct {
 	logger logr.Logger
 
-	prometheusEndpoint      string
-	pollInterval            time.Duration
-	averagingInterval       time.Duration
-	minAliveForInterval     time.Duration
-	lowUtilizationThreshold float64
-	query                   string
-	profile                 string // "gpu" or "cpu"
+	prometheusEndpoint string
+	pollInterval       time.Duration
 
-	statusCache map[string]bool
+	previousConfig *configapi.KaiwoResourceMonitoringConfig
+	statusCache    map[string]bool
 
 	k8sClient client.Client
 	scheme    *runtime.Scheme
@@ -113,50 +100,14 @@ func NewMetricsWatcherFromEnv(
 		return nil, fmt.Errorf("environment variable %s not set", EnvPrometheusEndpoint)
 	}
 
-	var namespaces []string
-	nsFilter := os.Getenv(EnvTargetNamespaces)
-	if nsFilter != "" {
-		namespaces = strings.Split(nsFilter, ",")
-	}
-
 	pollInterval, err := parseIntervalFromEnv(EnvPollingInterval)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse poll interval: %v", err)
 	}
 
-	averagingInterval, err := parseIntervalFromEnv(EnvAveragingTime)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse averaging interval: %v", err)
-	}
-
-	minAliveForInterval, err := parseIntervalFromEnv(EnvMinAliveTime)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse min alive interval: %v", err)
-	}
-
-	lowUtilizationThresholdStr := os.Getenv(EnvLowUtilizationThreshold)
-	if lowUtilizationThresholdStr == "" {
-		return nil, fmt.Errorf("environment variable %s not set", EnvLowUtilizationThreshold)
-	}
-	lowUtilizationThreshold, err := strconv.ParseFloat(lowUtilizationThresholdStr, 64)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse low utilization threshold %s: %v", lowUtilizationThresholdStr, err)
-	}
-
-	// Read the profile; default to "gpu" if not specified.
-	profile := os.Getenv(EnvProfile)
-	if profile == "" {
-		profile = gpuProfileName
-	}
-
 	return NewMetricsWatcher(
-		profile,
 		endpoint,
-		namespaces,
 		pollInterval,
-		averagingInterval,
-		minAliveForInterval,
-		lowUtilizationThreshold,
 		k8sClient,
 		scheme,
 		recorder,
@@ -174,52 +125,21 @@ func parseIntervalFromEnv(envVar string) (time.Duration, error) {
 
 // NewMetricsWatcher creates a watcher; check template.Err on parse.
 func NewMetricsWatcher(
-	profile string,
 	endpoint string,
-	namespaces []string,
 	pollInterval time.Duration,
-	averagingInterval time.Duration,
-	minAliveForInterval time.Duration,
-	lowUtilizationThreshold float64,
 	k8sClient client.Client,
 	scheme *runtime.Scheme,
 	recorder record.EventRecorder,
 ) (*MetricsWatcher, error) {
-	tmplSrc := selectTemplate(profile)
-	tmpl, err := template.New(profile).Parse(tmplSrc)
-	if err != nil {
-		return nil, fmt.Errorf("parsing %s template: %w", profile, err)
-	}
-
-	data := struct {
-		NsFilter string
-		Range    string
-		MinAge   int
-	}{
-		NsFilter: buildNsFilter(namespaces),
-		Range:    averagingInterval.String(),
-		MinAge:   int(minAliveForInterval.Seconds()),
-	}
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, data); err != nil {
-		return nil, fmt.Errorf("executing %s template: %w", profile, err)
-	}
-
-	logger := log.Log.WithName(fmt.Sprintf("%sMetricsWatcher", profile))
-
+	logger := log.Log.WithName("MetricsWatcher")
 	return &MetricsWatcher{
-		logger:                  logger,
-		prometheusEndpoint:      endpoint,
-		pollInterval:            pollInterval,
-		averagingInterval:       averagingInterval,
-		minAliveForInterval:     minAliveForInterval,
-		lowUtilizationThreshold: lowUtilizationThreshold,
-		query:                   buf.String(),
-		profile:                 strings.ToLower(profile),
-		statusCache:             map[string]bool{},
-		k8sClient:               k8sClient,
-		scheme:                  scheme,
-		recorder:                recorder,
+		logger:             logger,
+		prometheusEndpoint: endpoint,
+		pollInterval:       pollInterval,
+		statusCache:        map[string]bool{},
+		k8sClient:          k8sClient,
+		scheme:             scheme,
+		recorder:           recorder,
 	}, nil
 }
 
@@ -248,7 +168,6 @@ func buildNsFilter(namespaces []string) string {
 
 // Start runs the periodic poll loop until ctx.Done().
 func (m *MetricsWatcher) Start(ctx context.Context) error {
-	m.logger.Info("starting", "query", m.query)
 	ticker := time.NewTicker(m.pollInterval)
 	defer ticker.Stop()
 
@@ -258,6 +177,11 @@ func (m *MetricsWatcher) Start(ctx context.Context) error {
 			m.logger.Info("shutting down")
 			return nil
 		case <-ticker.C:
+			ctx, err := controllerutils.GetContextWithConfig(ctx, m.k8sClient)
+			if err != nil {
+				m.logger.Error(err, "failed to get Kaiwo config")
+				continue
+			}
 			if err := m.pollMetrics(ctx); err != nil {
 				m.logger.Error(err, "pollMetrics")
 			}
@@ -267,7 +191,47 @@ func (m *MetricsWatcher) Start(ctx context.Context) error {
 
 // pollMetrics fetches Prometheus data and processes each result.
 func (m *MetricsWatcher) pollMetrics(ctx context.Context) error {
-	resp, err := QueryPrometheusMetrics(ctx, m.prometheusEndpoint, m.query)
+	config := controllerutils.ConfigFromContext(ctx)
+
+	if m.previousConfig != nil && !reflect.DeepEqual(m.previousConfig, &config.ResourceMonitoring) {
+		// Clear cache if the configuration has changed
+		m.statusCache = map[string]bool{}
+	}
+	m.previousConfig = &config.ResourceMonitoring
+
+	profile := config.ResourceMonitoring.Profile
+	tmplSrc := selectTemplate(profile)
+	tmpl, err := template.New(profile).Parse(tmplSrc)
+	if err != nil {
+		return fmt.Errorf("parsing %s template: %w", profile, err)
+	}
+
+	averagingTime, err := time.ParseDuration(config.ResourceMonitoring.AveragingTime)
+	if err != nil {
+		return fmt.Errorf("parsing duration: %s : %w", config.ResourceMonitoring.AveragingTime, err)
+	}
+	minAge, err := time.ParseDuration(config.ResourceMonitoring.MinAliveTime)
+	if err != nil {
+		return fmt.Errorf("parsing duration: %s : %w", config.ResourceMonitoring.MinAliveTime, err)
+	}
+
+	data := struct {
+		NsFilter string
+		Range    string
+		MinAge   int
+	}{
+		NsFilter: buildNsFilter(config.ResourceMonitoring.TargetNamespaces),
+		Range:    averagingTime.String(),
+		MinAge:   int(minAge.Seconds()),
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return fmt.Errorf("executing %s template: %w", profile, err)
+	}
+
+	query := buf.String()
+
+	resp, err := QueryPrometheusMetrics(ctx, m.prometheusEndpoint, query)
 	if err != nil {
 		return err
 	}
@@ -280,7 +244,7 @@ func (m *MetricsWatcher) pollMetrics(ctx context.Context) error {
 		if err := m.processResult(ctx, r); err != nil {
 			m.logger.Error(err, "processResult", "metric", r.Metric)
 		}
-		key := m.resultKey(r.Metric)
+		key := m.resultKey(r.Metric, profile)
 		seen[key] = struct{}{}
 	}
 
@@ -306,8 +270,8 @@ func (m *MetricsWatcher) processResult(ctx context.Context, r PrometheusResult) 
 }
 
 // resultKey builds the cache key.
-func (m *MetricsWatcher) resultKey(met map[string]string) string {
-	if m.profile == gpuProfileName {
+func (m *MetricsWatcher) resultKey(met map[string]string, profile string) string {
+	if profile == gpuProfileName {
 		return fmt.Sprintf("%s/%s/%s", met["namespace"], met["pod"], met["gpu_id"])
 	}
 	return fmt.Sprintf("%s/%s", met["namespace"], met["pod"])
@@ -321,13 +285,16 @@ func (m *MetricsWatcher) handlePodUtilization(
 	gpuID string,
 	percentageUtilization float64,
 ) error {
+	config := controllerutils.ConfigFromContext(ctx)
+	profile := config.ResourceMonitoring.Profile
+
 	key := namespace + "/" + podName
 	if gpuID != "" {
 		key += "/" + gpuID
 	}
 
 	wasHealthy, seen := m.statusCache[key]
-	isHealthy := percentageUtilization >= m.lowUtilizationThreshold
+	isHealthy := percentageUtilization >= config.ResourceMonitoring.LowUtilizationThreshold
 
 	if seen && isHealthy == wasHealthy {
 		// no change
@@ -336,15 +303,15 @@ func (m *MetricsWatcher) handlePodUtilization(
 	m.statusCache[key] = isHealthy
 
 	// decide reason / message / eventType
-	var reason v1alpha1.KaiwoResourceUtilizationStatus
+	var reason kaiwo.KaiwoResourceUtilizationStatus
 	var msg, eventType string
 	if isHealthy {
-		reason = mapProfile(m.profile, v1alpha1.GpuResourceUtilizationNormal, v1alpha1.CpuResourceUtilizationNormal)
-		msg = fmt.Sprintf("%s utilization normal", strings.ToUpper(m.profile))
+		reason = mapProfile(profile, kaiwo.GpuResourceUtilizationNormal, kaiwo.CpuResourceUtilizationNormal)
+		msg = fmt.Sprintf("%s utilization normal", strings.ToUpper(profile))
 		eventType = corev1.EventTypeNormal
 	} else {
-		reason = mapProfile(m.profile, v1alpha1.GpuResourceUtilizationLow, v1alpha1.CpuResourceUtilizationLow)
-		msg = fmt.Sprintf("%s under threshold", strings.ToUpper(m.profile))
+		reason = mapProfile(profile, kaiwo.GpuResourceUtilizationLow, kaiwo.CpuResourceUtilizationLow)
+		msg = fmt.Sprintf("%s under threshold", strings.ToUpper(profile))
 		eventType = corev1.EventTypeWarning
 	}
 
@@ -390,9 +357,9 @@ func GetKaiwoWorkload(ctx context.Context, k8sClient client.Client, name string,
 	var obj client.Object
 	switch workloadType {
 	case "job":
-		obj = &v1alpha1.KaiwoJob{}
+		obj = &kaiwo.KaiwoJob{}
 	case "service":
-		obj = &v1alpha1.KaiwoService{}
+		obj = &kaiwo.KaiwoService{}
 	default:
 		return nil, fmt.Errorf("workload type %s not recognized", workloadType)
 	}
@@ -403,7 +370,7 @@ func GetKaiwoWorkload(ctx context.Context, k8sClient client.Client, name string,
 }
 
 // mapProfile picks GPU or CPU variant.
-func mapProfile(profile string, gpuVal v1alpha1.KaiwoResourceUtilizationStatus, cpuVal v1alpha1.KaiwoResourceUtilizationStatus) v1alpha1.KaiwoResourceUtilizationStatus {
+func mapProfile(profile string, gpuVal kaiwo.KaiwoResourceUtilizationStatus, cpuVal kaiwo.KaiwoResourceUtilizationStatus) kaiwo.KaiwoResourceUtilizationStatus {
 	if profile == gpuProfileName {
 		return gpuVal
 	}
@@ -414,13 +381,13 @@ func mapProfile(profile string, gpuVal v1alpha1.KaiwoResourceUtilizationStatus, 
 func (m *MetricsWatcher) syncKaiwoStatus(
 	ctx context.Context,
 	kaiwoWorkload common.KaiwoWorkload,
-	reason v1alpha1.KaiwoResourceUtilizationStatus,
+	reason kaiwo.KaiwoResourceUtilizationStatus,
 	msg string,
 	healthy bool,
 ) error {
 	// 3. Set the status condition.
 	cond := metav1.Condition{
-		Type:               v1alpha1.KaiwoResourceUtilizationType,
+		Type:               kaiwo.KaiwoResourceUtilizationType,
 		Status:             healthyString(healthy),
 		Reason:             string(reason),
 		Message:            msg,
@@ -428,9 +395,9 @@ func (m *MetricsWatcher) syncKaiwoStatus(
 	}
 
 	switch o := kaiwoWorkload.(type) {
-	case *v1alpha1.KaiwoJob:
+	case *kaiwo.KaiwoJob:
 		meta.SetStatusCondition(&o.Status.Conditions, cond)
-	case *v1alpha1.KaiwoService:
+	case *kaiwo.KaiwoService:
 		meta.SetStatusCondition(&o.Status.Conditions, cond)
 	default:
 		// this should never happen, but guard just in case
@@ -454,7 +421,7 @@ func healthyString(healthy bool) metav1.ConditionStatus {
 // recordEvent uses EventRecorder for correct aggregation.
 func (m *MetricsWatcher) recordEvent(
 	workload common.KaiwoWorkload,
-	reason v1alpha1.KaiwoResourceUtilizationStatus,
+	reason kaiwo.KaiwoResourceUtilizationStatus,
 	msg string,
 	eventType string,
 ) error {

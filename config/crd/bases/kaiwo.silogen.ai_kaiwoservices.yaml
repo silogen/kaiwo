@@ -7803,7 +7803,7 @@ spec:
                 default: 0
                 description: Gpus specifies the total number of GPUs allocated to the workload. See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor) for more details on how this field impacts scheduling.
                 type: integer
-              gpus-per-replica:
+              gpusPerReplica:
                 description: |-
                   GpusPerReplica specifies the number of GPUs allocated per replica. See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor) for more details on how this field impacts scheduling.
 
@@ -25070,10 +25070,10 @@ spec:
                               description: GitDownloadItem defines parameters for cloning a Git repository or parts of it.
                               properties:
                                 branch:
-                                  description: Branch specifies the branch to clone. This is ignored if `commit` is specified.
+                                  description: Branch specifies the branch to clone. This takes precedence over `commit`.
                                   type: string
                                 commit:
-                                  description: Commit specifies the exact commit hash to check out. This takes precedence over `branch`.
+                                  description: Commit specifies the exact commit hash to check out. This is ignored if `commit` is specified.
                                   type: string
                                 path:
                                   description: Path specifies a sub-path within the repository to copy. If omitted, the entire repository is copied.

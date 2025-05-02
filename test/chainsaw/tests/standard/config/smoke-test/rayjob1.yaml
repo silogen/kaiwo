@@ -1,0 +1,9 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoJob
+metadata:
+  name: kaiwojob-config-smoke-ray-1
+spec:
+  user: test@amd.com
+  ray: true
+  image: busybox:latest
+  entrypoint: sleep 1

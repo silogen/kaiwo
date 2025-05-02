@@ -23,16 +23,18 @@ help: ## Display this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
 .PHONY: manifests
-manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole, and CustomResourceDefinition objects.
+manifests: controller-gen
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd:maxDescLen=512,allowDangerousTypes=true,generateEmbeddedObjectMeta=true \
-	paths="./pkg/api/v1alpha1/..." \
-	output:crd:artifacts:config=config/crd/bases
-	
+		paths=./apis/kaiwo/v1alpha1/... \
+		paths=./apis/config/v1alpha1/... \
+		output:crd:artifacts:config=config/crd/bases
 
 .PHONY: generate
-generate: controller-gen ## Generate DeepCopy and related methods.
+generate: controller-gen
 	@sed 's/^/\/\/ /' .copyright-template > .copyright-template.goheader
-	$(CONTROLLER_GEN) object:headerFile=".copyright-template.goheader" paths="./pkg/api/v1alpha1/..."
+	$(CONTROLLER_GEN) object:headerFile=".copyright-template.goheader" \
+		paths=./apis/kaiwo/v1alpha1/... \
+		paths=./apis/config/v1alpha1/...
 	@rm .copyright-template.goheader
 	
 .PHONY: fmt
@@ -190,8 +192,11 @@ $(GOLANGCI_LINT): $(LOCALBIN)
 .PHONY: generate-crd-docs
 generate-crd-docs:
 	go install github.com/elastic/crd-ref-docs@latest
-	crd-ref-docs --source-path pkg/api/v1alpha1/ --renderer=markdown --output-path=docs/docs/reference/crds/kaiwo.silogen.ai.md --config docs/crd-ref-cocs-config.yaml
-	sed -i '1i---\nhide:\n  - navigation\n---\n' docs/docs/reference/crds/kaiwo.silogen.ai.md
+	crd-ref-docs --source-path apis/kaiwo/v1alpha1/ --renderer=markdown --output-path=docs/docs/reference/crds/kaiwo.silogen.ai.md --config docs/crd-ref-cocs-config.yaml
+	#sed -i '1i---\nhide:\n  - navigation\n---\n' docs/docs/reference/crds/kaiwo.silogen.ai.md
+
+	crd-ref-docs --source-path apis/config/v1alpha1/ --renderer=markdown --output-path=docs/docs/reference/crds/config.kaiwo.silogen.ai.md --config docs/crd-ref-cocs-config.yaml
+	#sed -i '1i---\nhide:\n  - navigation\n---\n' docs/docs/reference/crds/config.kaiwo.silogen.ai.md
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary

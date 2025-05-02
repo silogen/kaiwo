@@ -17,8 +17,9 @@ package workloadjob
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
+
+	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
 	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 
@@ -30,31 +31,28 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"k8s.io/apimachinery/pkg/api/resource"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
-	"github.com/silogen/kaiwo/pkg/api/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
-func GetDefaultRayJobSpec(dangerous bool, resourceRequirements v1.ResourceRequirements) rayv1.RayJobSpec {
+func GetDefaultRayJobSpec(config controllerutils.KaiwoConfigContext, dangerous bool, resourceRequirements v1.ResourceRequirements) rayv1.RayJobSpec {
 	return rayv1.RayJobSpec{
 		ShutdownAfterJobFinishes: true,
-		RayClusterSpec:           workloadutils.GetRayClusterTemplate(dangerous, resourceRequirements),
+		RayClusterSpec:           workloadutils.GetRayClusterTemplate(config, dangerous, resourceRequirements),
 	}
 }
 
 type RayJobReconciler struct {
 	common.ResourceReconcilerBase[*rayv1.RayJob]
-	KaiwoJob *v1alpha1.KaiwoJob
+	KaiwoJob *kaiwo.KaiwoJob
 }
 
-func NewRayJobReconciler(kaiwoJob *v1alpha1.KaiwoJob) *RayJobReconciler {
+func NewRayJobReconciler(kaiwoJob *kaiwo.KaiwoJob) *RayJobReconciler {
 	reconciler := &RayJobReconciler{
 		ResourceReconcilerBase: common.ResourceReconcilerBase[*rayv1.RayJob]{
 			ObjectKey: client.ObjectKeyFromObject(kaiwoJob),
@@ -67,13 +65,14 @@ func NewRayJobReconciler(kaiwoJob *v1alpha1.KaiwoJob) *RayJobReconciler {
 
 func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (*rayv1.RayJob, error) {
 	logger := log.FromContext(ctx)
+	config := controllerutils.ConfigFromContext(ctx)
 
 	spec := r.KaiwoJob.Spec
 
 	var rayJobSpec rayv1.RayJobSpec
 
 	if spec.RayJob == nil {
-		rayJobSpec = GetDefaultRayJobSpec(spec.Dangerous, baseutils.ValueOrDefault(spec.Resources))
+		rayJobSpec = GetDefaultRayJobSpec(config, spec.Dangerous, baseutils.ValueOrDefault(spec.Resources))
 	} else {
 		rayJobSpec = spec.RayJob.Spec
 	}
@@ -84,19 +83,13 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 	}
 
 	// Override ray head pod memory, if the env var is set
-	if headMemoryOverride := os.Getenv("RAY_HEAD_POD_MEMORY"); len(headMemoryOverride) > 0 {
-		quantity, err := resource.ParseQuantity(headMemoryOverride)
-		if err != nil {
-			msg := fmt.Sprintf("Failed to parse HEAD_POD_MEMORY %s", headMemoryOverride)
-			logger.Error(err, msg)
-			panic(msg)
-		}
+	if headMemoryOverride := config.Ray.HeadPodMemory; headMemoryOverride.Value() > 0 {
 		workloadutils.FillPodResources(&rayJobSpec.RayClusterSpec.HeadGroupSpec.Template.Spec, &v1.ResourceRequirements{
 			Limits: v1.ResourceList{
-				v1.ResourceMemory: quantity,
+				v1.ResourceMemory: headMemoryOverride,
 			},
 			Requests: v1.ResourceList{
-				v1.ResourceMemory: quantity,
+				v1.ResourceMemory: headMemoryOverride,
 			},
 		}, true)
 	}
@@ -136,12 +129,32 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 		overrideDefaults = false
 	}
 
-	if err := workloadutils.UpdatePodSpec(r.KaiwoJob.Spec.CommonMetaSpec, labelContext, &rayJobSpec.RayClusterSpec.HeadGroupSpec.Template, r.KaiwoJob.Name, replicas, gpusPerReplica, false, true); err != nil {
+	if err := workloadutils.UpdatePodSpec(
+		config,
+		r.KaiwoJob.Spec.CommonMetaSpec,
+		labelContext,
+		&rayJobSpec.RayClusterSpec.HeadGroupSpec.Template,
+		r.KaiwoJob.Name,
+		replicas,
+		gpusPerReplica,
+		false,
+		true,
+	); err != nil {
 		return nil, fmt.Errorf("failed to update job spec: %w", err)
 	}
 
 	for i := range rayJobSpec.RayClusterSpec.WorkerGroupSpecs {
-		if err := workloadutils.UpdatePodSpec(r.KaiwoJob.Spec.CommonMetaSpec, labelContext, &rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Template, r.KaiwoJob.Name, replicas, gpusPerReplica, overrideDefaults, false); err != nil {
+		if err := workloadutils.UpdatePodSpec(
+			config,
+			r.KaiwoJob.Spec.CommonMetaSpec,
+			labelContext,
+			&rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Template,
+			r.KaiwoJob.Name,
+			replicas,
+			gpusPerReplica,
+			overrideDefaults,
+			false,
+		); err != nil {
 			return nil, fmt.Errorf("failed to update job spec for container %d: %w", i, err)
 		}
 	}
