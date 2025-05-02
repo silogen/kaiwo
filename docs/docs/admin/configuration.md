@@ -160,9 +160,8 @@ kind: KaiwoConfig
 metadata:
   name: kaiwo
 spec:
-  defaultKaiwoQueueConfigName: "kaiwo"
   scheduling:
-    kubeSchedulerName: "default-scheduler"
+    kubeSchedulerName: "kaiwo-scheduler"
   resourceMonitoring:
     averagingTime: "20m"
     lowUtilizationThreshold: 20
@@ -172,7 +171,20 @@ spec:
 !!!note
     You can safely use the default values or create a default config by setting the environment variable `CONFIG_GENERATE_DEFAULT` to true.
 
-### Environment Variables for Resource Monitoring
+---
+
+For detailed descriptions of individual configuration fields, please see the [full API reference](../reference/crds/config.kaiwo.silogen.ai.md).
+
+## Operator Environmental Variables
+
+Some configuration is not changeable during runtime, or they may be often referenced from other config maps or secrets, and thus they are stored as environmental variables. These settings are not dynamic, and the operator must be restarted in order for changes to these values to take effect.
+
+### Kueue
+
+- `DEFAULT_KAIWO_QUEUE_CONFIG_NAME`: The name of the singleton `KaiwoQueueConfig` custom resource to be used (defaults to `kaiwo`)
+- `DEFAULT_CLUSTER_QUEUE_NAME`: The name of the default Kueue cluster queue (defaults to `kaiwo`)
+
+### Resource Monitoring
 
 To enable and configure resource monitoring within the Kaiwo Operator, the following environment variables **must** be set on the operator deployment:
 
@@ -180,13 +192,7 @@ To enable and configure resource monitoring within the Kaiwo Operator, the follo
 - `RESOURCE_MONITORING_PROMETHEUS_ENDPOINT=<prometheus-endpoint>` – Specifies the Prometheus endpoint to query metrics from.
 - `RESOURCE_MONITORING_POLLING_INTERVAL=10m` – Sets the interval between metric polling queries.
 
-These variables cannot be updated dynamically and require a restart of the operator pod to take effect.
-
----
-
-For detailed descriptions of individual configuration fields, please see the [full API reference](../reference/crds/config.kaiwo.silogen.ai.md).
-
-## Other configuration options
+### Other configuration options
 
 *   `WEBHOOK_CERT_DIRECTORY`: Path to manually provided webhook certificates (overrides automatic management if set). See [Installation](./installation.md).
 

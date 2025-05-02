@@ -22,6 +22,8 @@ import (
 	"path/filepath"
 	"regexp"
 
+	"github.com/silogen/kaiwo/pkg/workloads/common"
+
 	"github.com/charmbracelet/huh"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -218,7 +220,7 @@ func promptUserForConfig() (bool, error) {
 		return false, nil
 	}
 
-	queueValue := "kaiwo"
+	queueValue := common.DefaultClusterQueueName
 	userEmail := ""
 
 	for {

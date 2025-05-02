@@ -26,10 +26,6 @@ type KaiwoConfigSpec struct {
 	// ENFORCE_KAIWO_ON_GPU_WORKLOADS false
 	// EnforceKaiwoOnGpuWorkloads bool `json:"enforceKaiwoOnGpuWorkloads"`
 
-	// Kueue defines the Kueue-specific settings
-	// +kubebuilder:default={}
-	Kueue KaiwoKueueConfig `json:"kueue,omitempty"`
-
 	// Ray defines the Ray-specific settings
 	// +kubebuilder:default={}
 	Ray KaiwoRayConfig `json:"ray,omitempty"`
@@ -63,13 +59,6 @@ type KaiwoRayConfig struct {
 
 	// HeadPodMemory is the amount of memory that is requested for the Ray head pod
 	HeadPodMemory resource.Quantity `json:"headPodMemory,omitempty"`
-}
-
-// KaiwoKueueConfig contains the Kueue-specific configuration that Kaiwo uses.
-type KaiwoKueueConfig struct {
-	// DefaultClusterQueueName is the default cluster queue name that is used, if none is provided in the workload CRD.
-	// +kubebuilder:default="kaiwo"
-	DefaultClusterQueueName string `json:"defaultClusterQueueName,omitempty"`
 }
 
 type KaiwoDataConfig struct {
@@ -136,7 +125,7 @@ type KaiwoResourceMonitoringConfig struct {
 // KaiwoSchedulingConfig contains the configuration Kaiwo uses for workload scheduling
 type KaiwoSchedulingConfig struct {
 	// KubeSchedulerName defines the default scheduler name that is used to schedule the workload
-	// +kubebuilder:default="default-scheduler"
+	// +kubebuilder:default="kaiwo-scheduler"
 	KubeSchedulerName string `json:"kubeSchedulerName,omitempty"`
 }
 

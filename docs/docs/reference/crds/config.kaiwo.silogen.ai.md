@@ -65,12 +65,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `kueue` _[KaiwoKueueConfig](#kaiwokueueconfig)_ | Kueue defines the Kueue-specific settings |  |  |
-| `ray` _[KaiwoRayConfig](#kaiworayconfig)_ | Ray defines the Ray-specific settings |  |  |
-| `data` _[KaiwoDataConfig](#kaiwodataconfig)_ | Data defines the data-specific settings |  |  |
-| `nodes` _[KaiwoNodeConfig](#kaiwonodeconfig)_ | Nodes defines the node configuration settings |  |  |
-| `scheduling` _[KaiwoSchedulingConfig](#kaiwoschedulingconfig)_ | Scheduling contains the configuration Kaiwo uses for workload scheduling |  |  |
-| `resourceMonitoring` _[KaiwoResourceMonitoringConfig](#kaiworesourcemonitoringconfig)_ | ResourceMonitoring defines the resource-monitoring specific settings |  |  |
+| `ray` _[KaiwoRayConfig](#kaiworayconfig)_ | Ray defines the Ray-specific settings | \{  \} |  |
+| `data` _[KaiwoDataConfig](#kaiwodataconfig)_ | Data defines the data-specific settings | \{  \} |  |
+| `nodes` _[KaiwoNodeConfig](#kaiwonodeconfig)_ | Nodes defines the node configuration settings | \{  \} |  |
+| `scheduling` _[KaiwoSchedulingConfig](#kaiwoschedulingconfig)_ | Scheduling contains the configuration Kaiwo uses for workload scheduling | \{  \} |  |
+| `resourceMonitoring` _[KaiwoResourceMonitoringConfig](#kaiworesourcemonitoringconfig)_ | ResourceMonitoring defines the resource-monitoring specific settings | \{  \} |  |
 | `defaultKaiwoQueueConfigName` _string_ | DefaultKaiwoQueueConfigName is the name of the singleton Kaiwo Queue Config object that is used | kaiwo |  |
 
 
@@ -91,22 +90,6 @@ _Appears in:_
 | `defaultHfMountPath` _string_ | DefaultHfMountPath is the default path for the HuggingFace that gets mounted in the workload pods. The `HF_HOME` environmental variable<br />is also set to this value. This value can be overwritten in the workload CRD. | /hf_cache |  |
 
 
-#### KaiwoKueueConfig
-
-
-
-KaiwoKueueConfig contains the Kueue-specific configuration that Kaiwo uses.
-
-
-
-_Appears in:_
-- [KaiwoConfigSpec](#kaiwoconfigspec)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `defaultClusterQueueName` _string_ | DefaultClusterQueueName is the default cluster queue name that is used, if none is provided in the workload CRD. | kaiwo |  |
-
-
 #### KaiwoNodeConfig
 
 
@@ -123,7 +106,7 @@ _Appears in:_
 | `defaultGpuResourceKey` _string_ | DefaultGpuResourceKey defines the default GPU resource key that is used to reserve GPU capacity for pods | amd.com/gpu |  |
 | `defaultGpuTaintKey` _string_ | DefaultGpuTaintKey is the key that is used to taint GPU nodes | kaiwo.silogen.ai/gpu |  |
 | `excludeMasterNodesFromNodePools` _boolean_ | ExcludeMasterNodesFromNodePools allows excluding the master node(s) from the node pools | false |  |
-| `addTaintsToGpuNodes` _boolean_ | AddTaintsToGpuNodes if set to true, will add the DefaultGpuTaintKey taint to the GPU nodes | true |  |
+| `addTaintsToGpuNodes` _boolean_ | AddTaintsToGpuNodes if set to true, will add the DefaultGpuTaintKey taint to the GPU nodes | false |  |
 
 
 #### KaiwoRayConfig
@@ -182,6 +165,6 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `kube-scheduler-name` _string_ | KubeSchedulerName defines the default scheduler name that is used to schedule the workload | default-scheduler |  |
+| `kubeSchedulerName` _string_ | KubeSchedulerName defines the default scheduler name that is used to schedule the workload | kaiwo-scheduler |  |
 
 

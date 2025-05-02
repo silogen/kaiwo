@@ -59,21 +59,12 @@ spec:
                 default: kaiwo
                 description: DefaultKaiwoQueueConfigName is the name of the singleton Kaiwo Queue Config object that is used
                 type: string
-              kueue:
-                default: {}
-                description: Kueue defines the Kueue-specific settings
-                properties:
-                  defaultClusterQueueName:
-                    default: kaiwo
-                    description: DefaultClusterQueueName is the default cluster queue name that is used, if none is provided in the workload CRD.
-                    type: string
-                type: object
               nodes:
                 default: {}
                 description: Nodes defines the node configuration settings
                 properties:
                   addTaintsToGpuNodes:
-                    default: true
+                    default: false
                     description: AddTaintsToGpuNodes if set to true, will add the DefaultGpuTaintKey taint to the GPU nodes
                     type: boolean
                   defaultGpuResourceKey:
@@ -141,8 +132,8 @@ spec:
                 default: {}
                 description: Scheduling contains the configuration Kaiwo uses for workload scheduling
                 properties:
-                  kube-scheduler-name:
-                    default: default-scheduler
+                  kubeSchedulerName:
+                    default: kaiwo-scheduler
                     description: KubeSchedulerName defines the default scheduler name that is used to schedule the workload
                     type: string
                 type: object

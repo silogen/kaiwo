@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/silogen/kaiwo/pkg/workloads/common"
+
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -418,10 +420,9 @@ func (r *KaiwoQueueConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *KaiwoQueueConfigReconciler) EnsureDefaultKaiwoQueueConfig(ctx context.Context) error {
 	logger := log.FromContext(ctx)
-	config := controllerutils.ConfigFromContext(ctx)
 
 	var queueConfig kaiwo.KaiwoQueueConfig
-	err := r.Get(ctx, client.ObjectKey{Name: config.DefaultKaiwoQueueConfigName}, &queueConfig)
+	err := r.Get(ctx, client.ObjectKey{Name: common.DefaultKaiwoQueueConfigName}, &queueConfig)
 	if err == nil {
 		return nil
 	} else if !errors.IsNotFound(err) {
@@ -431,7 +432,7 @@ func (r *KaiwoQueueConfigReconciler) EnsureDefaultKaiwoQueueConfig(ctx context.C
 
 	logger.Info("Default KaiwoQueueConfig does not exist. Creating it now...")
 
-	if err := r.CreateDefaultKaiwoQueueConfig(ctx, config.DefaultKaiwoQueueConfigName); err != nil {
+	if err := r.CreateDefaultKaiwoQueueConfig(ctx, common.DefaultKaiwoQueueConfigName); err != nil {
 		logger.Error(err, "Failed to create default KaiwoQueueConfig")
 		return err
 	}
@@ -442,7 +443,6 @@ func (r *KaiwoQueueConfigReconciler) EnsureDefaultKaiwoQueueConfig(ctx context.C
 
 func (r *KaiwoQueueConfigReconciler) CreateDefaultKaiwoQueueConfig(ctx context.Context, name string) error {
 	logger := log.FromContext(ctx)
-	config := controllerutils.ConfigFromContext(ctx)
 
 	resourceFlavors, nodePoolResources, err := controllerutils.CreateDefaultResourceFlavors(ctx, r.Client)
 	if err != nil {
@@ -450,7 +450,7 @@ func (r *KaiwoQueueConfigReconciler) CreateDefaultKaiwoQueueConfig(ctx context.C
 		return err
 	}
 
-	clusterQueue := controllerutils.CreateClusterQueue(nodePoolResources, config.Kueue.DefaultClusterQueueName)
+	clusterQueue := controllerutils.CreateClusterQueue(nodePoolResources, common.DefaultClusterQueueName)
 
 	defaultQueueConfig := kaiwo.KaiwoQueueConfig{
 		ObjectMeta: metav1.ObjectMeta{

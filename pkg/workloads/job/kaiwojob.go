@@ -102,7 +102,7 @@ func NewKaiwoJobReconciler(ctx context.Context, kaiwoJob *kaiwo.KaiwoJob) KaiwoJ
 
 	clusterQueue := kaiwoJob.Spec.ClusterQueue
 	if clusterQueue == "" {
-		clusterQueue = config.Kueue.DefaultClusterQueueName
+		clusterQueue = common.DefaultClusterQueueName
 	}
 	reconciler.LocalQueue = common.NewLocalQueueReconciler(client.ObjectKey{Namespace: objectKey.Namespace, Name: clusterQueue})
 
@@ -138,7 +138,7 @@ func sanitize(kaiwoJob *kaiwo.KaiwoJob, config controllerutils.KaiwoConfigContex
 	}
 
 	if kaiwoJob.Spec.ClusterQueue == "" {
-		kaiwoJob.Labels[common.QueueLabel] = config.Kueue.DefaultClusterQueueName
+		kaiwoJob.Labels[common.QueueLabel] = common.DefaultClusterQueueName
 	} else {
 		kaiwoJob.Labels[common.QueueLabel] = kaiwoJob.Spec.ClusterQueue
 	}
