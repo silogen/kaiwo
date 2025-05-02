@@ -22,8 +22,6 @@ import (
 	"reflect"
 	"strings"
 
-	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
-
 	"k8s.io/apimachinery/pkg/api/meta"
 
 	"sigs.k8s.io/kueue/apis/kueue/v1beta1"
@@ -60,7 +58,7 @@ func BuildStatsCmd() *cobra.Command {
 	return statsCmd
 }
 
-var gpuResourceName = v1.ResourceName(workloadutils.DefaultGpuResourceKey)
+var gpuResourceName = v1.ResourceName("amd.com/gpu")
 
 func fetchWithSpinner(ctx context.Context, k8sClient client.Client, list client.ObjectList) error {
 	t := reflect.TypeOf(list)
