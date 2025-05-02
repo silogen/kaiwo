@@ -5,4 +5,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: ghcr.io/silogen/kaiwo-operator
-  newTag: v.0.1
+  newTag: v-e2e

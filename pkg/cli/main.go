@@ -86,6 +86,7 @@ func RunCli() {
 		BuildListCmd(),
 		BuildMonitorCmd("monitor", cliutils.DefaultMonitorCommand),
 		BuildExecCommand(),
+		BuildStatsCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {

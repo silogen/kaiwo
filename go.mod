@@ -8,6 +8,7 @@ require (
 	github.com/charmbracelet/huh v0.6.0
 	github.com/charmbracelet/huh/spinner v0.0.0-20250324195341-f31a8c95fe4f
 	github.com/charmbracelet/lipgloss v1.1.0
+	github.com/olekukonko/tablewriter v0.0.5
 	github.com/onsi/ginkgo/v2 v2.23.0
 	github.com/onsi/gomega v1.36.2
 	github.com/project-codeflare/appwrapper v1.1.0
