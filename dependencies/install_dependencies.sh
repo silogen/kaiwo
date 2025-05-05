@@ -25,7 +25,7 @@ if [ "$USE_LOCAL" != "true" ]; then
   CERT_MANAGER_PATH="github.com/silogen/kaiwo//$CERT_MANAGER_PATH?ref=main"
   SERVER_SIDE_DEPS_PATH="github.com/silogen/kaiwo//$SERVER_SIDE_DEPS_PATH?ref=main"
   CLIENT_SIDE_DEPS_PATH="github.com/silogen/kaiwo//$CLIENT_SIDE_DEPS_PATH?ref=main"
-  PROMETHEUS_CLIENT_SIDE_PATH="github.com/silogen/kaiwo//$PROMETHEUS_CLIENT_SIDE?ref=main"
+  PROMETHEUS_CLIENT_SIDE_PATH="github.com/silogen/kaiwo//$PROMETHEUS_CLIENT_SIDE_PATH?ref=main"
 fi
 
 echo "Deploying Cert-Manager"
