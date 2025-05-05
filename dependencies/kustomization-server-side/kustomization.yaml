@@ -5,3 +5,4 @@ resources:
 - appwrapper
 - kueue
 - ray-operator
+- prometheus-operator
