@@ -104,6 +104,7 @@ You can use the Kaiwo CLI to
 * `kaiwo logs`: Fetch workload logs
 * `kaiwo monitor`: Monitor (GPU) workloads
 * `kaiwo exec`: Execute arbitrary commands inside the workload containers
+* `kaiwo stats`: Check the status of your cluster
 
 For a list of full functionality run `kaiwo --help`, or for a specific command, `kaiwo <command> --help`.
 
@@ -188,3 +189,16 @@ The following flags are supported:
 * `--command` to specify the command to execute
 * `-n / --namespace` to specify the namespace
 
+### Checking cluster status
+
+You can check the current resource availability (including GPUs) of your cluster by running: 
+
+```
+kaiwo stats nodes
+```
+
+You can check the current queue statuses for GPU jobs by running:
+
+```
+kaiwo stats queues
+```
