@@ -109,7 +109,7 @@ func NewKaiwoServiceReconciler(ctx context.Context, kaiwoService *kaiwo.KaiwoSer
 
 	clusterQueue := kaiwoService.Spec.ClusterQueue
 	if clusterQueue == "" {
-		clusterQueue = common.DefaultClusterQueueName
+		clusterQueue = config.DefaultClusterQueueName
 	}
 	r.LocalQueue = common.NewLocalQueueReconciler(
 		client.ObjectKey{Namespace: objectKey.Namespace, Name: clusterQueue},
@@ -145,7 +145,7 @@ func sanitize(kaiwoService *kaiwo.KaiwoService, config controllerutils.KaiwoConf
 	}
 
 	if kaiwoService.Spec.ClusterQueue == "" {
-		kaiwoService.Labels[common.QueueLabel] = common.DefaultClusterQueueName
+		kaiwoService.Labels[common.QueueLabel] = config.DefaultClusterQueueName
 	} else {
 		kaiwoService.Labels[common.QueueLabel] = kaiwoService.Spec.ClusterQueue
 	}

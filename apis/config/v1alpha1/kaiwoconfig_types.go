@@ -46,9 +46,15 @@ type KaiwoConfigSpec struct {
 	// +kubebuilder:default={}
 	ResourceMonitoring KaiwoResourceMonitoringConfig `json:"resourceMonitoring,omitempty"`
 
-	// DefaultKaiwoQueueConfigName is the name of the singleton Kaiwo Queue Config object that is used
+	// DefaultClusterQueueName is the name of the default cluster queue that is used for workloads that don't explicitly specify a cluster queue.
 	// +kubebuilder:default="kaiwo"
-	DefaultKaiwoQueueConfigName string `json:"defaultKaiwoQueueConfigName,omitempty"`
+	DefaultClusterQueueName string `json:"defaultClusterQueueName,omitempty"`
+
+	// DynamicallyUpdateDefaultClusterQueue defines whether the Kaiwo operator should dynamically update default "kaiwo" clusterqueue.
+	// If set to true, the operator will make sure that the default clusterqueue is always up to date and reflects total resources available.
+	// If nodes are added or removed, the operator will update the default clusterqueue to reflect the current state of the cluster.
+	// +kubebuilder:default=true
+	DynamicallyUpdateDefaultClusterQueue bool `json:"dynamicallyUpdateDefaultClusterQueue,omitempty"`
 }
 
 // KaiwoRayConfig contains the Ray-specific configuration that Kaiwo uses.

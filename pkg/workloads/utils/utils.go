@@ -476,13 +476,14 @@ func ShouldPreempt(ctx context.Context, obj common.KaiwoWorkload, k8sClient clie
 	now := time.Now()
 	deadline := startTime.Time.Add(duration.Duration)
 	if now.After(deadline) {
+		config := controllerutils.ConfigFromContext(ctx)
 		var queue string
 		if obj.GetClusterQueue() == "" {
-			queue = common.DefaultClusterQueueName
+			queue = config.DefaultClusterQueueName
 		} else {
 			queue = obj.GetClusterQueue()
 		}
-		hasDemand, err := ClusterHasGpuDemand(ctx, k8sClient, queue, obj.GetGPUVendor())
+		hasDemand, err := ClusterHasGpuDemand(ctx, k8sClient, queue, obj.GetGPUVendor(), config)
 		if err != nil {
 			return false
 		}
@@ -491,14 +492,14 @@ func ShouldPreempt(ctx context.Context, obj common.KaiwoWorkload, k8sClient clie
 	return false
 }
 
-func ClusterHasGpuDemand(ctx context.Context, k8sClient client.Client, clusterQueue string, gpuVendor string) (bool, error) {
+func ClusterHasGpuDemand(ctx context.Context, k8sClient client.Client, clusterQueue string, gpuVendor string, config controllerutils.KaiwoConfigContext) (bool, error) {
 	var jobs kaiwo.KaiwoJobList
 	if err := k8sClient.List(ctx, &jobs); err != nil {
 		return false, err
 	}
 	for _, job := range jobs.Items {
 		if job.Spec.ClusterQueue == "" {
-			job.Spec.ClusterQueue = common.DefaultClusterQueueName
+			job.Spec.ClusterQueue = config.DefaultClusterQueueName
 		}
 		if job.Status.Status == kaiwo.StatusPending &&
 			job.Spec.CommonMetaSpec.Gpus > 0 &&
@@ -515,7 +516,7 @@ func ClusterHasGpuDemand(ctx context.Context, k8sClient client.Client, clusterQu
 	}
 	for _, svc := range services.Items {
 		if svc.Spec.ClusterQueue == "" {
-			svc.Spec.ClusterQueue = common.DefaultClusterQueueName
+			svc.Spec.ClusterQueue = config.DefaultClusterQueueName
 		}
 		if svc.Status.Status == kaiwo.StatusPending &&
 			svc.Spec.Gpus > 0 &&

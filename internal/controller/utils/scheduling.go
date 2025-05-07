@@ -35,10 +35,11 @@ const (
 )
 
 type NodeResourceInfo struct {
-	Name   string
-	CPU    int
-	Memory int
-	Labels map[string]string
+	Name          string
+	CPU           int
+	Memory        int
+	Labels        map[string]string
+	Unschedulable bool
 }
 
 func GetNodeResources(ctx context.Context, c client.Client) []NodeResourceInfo {
@@ -52,12 +53,14 @@ func GetNodeResources(ctx context.Context, c client.Client) []NodeResourceInfo {
 	for _, node := range nodeList.Items {
 		cpu := node.Status.Capacity.Cpu().Value()
 		memory := node.Status.Capacity.Memory().Value() / (1024 * 1024 * 1024) // Convert to Gi
+		Unschedulable := node.Spec.Unschedulable
 
 		nodes = append(nodes, NodeResourceInfo{
-			Name:   node.Name,
-			CPU:    int(cpu),
-			Memory: int(memory),
-			Labels: node.Labels,
+			Name:          node.Name,
+			CPU:           int(cpu),
+			Memory:        int(memory),
+			Labels:        node.Labels,
+			Unschedulable: Unschedulable,
 		})
 	}
 
@@ -80,19 +83,21 @@ func MapGPUDeviceIDToName(gpuID string, vendor string) string {
 }
 
 func LabelNode(ctx context.Context, c client.Client, nodeName, key, value string) error {
-	var node corev1.Node
-	err := c.Get(ctx, client.ObjectKey{Name: nodeName}, &node)
-	if err != nil {
-		return err
-	}
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		var node corev1.Node
+		err := c.Get(ctx, client.ObjectKey{Name: nodeName}, &node)
+		if err != nil {
+			return err
+		}
 
-	// Add or update the label
-	if node.Labels == nil {
-		node.Labels = make(map[string]string)
-	}
-	node.Labels[key] = value
+		// Add or update the label
+		if node.Labels == nil {
+			node.Labels = make(map[string]string)
+		}
+		node.Labels[key] = value
 
-	return c.Update(ctx, &node)
+		return c.Update(ctx, &node)
+	})
 }
 
 func TaintNode(ctx context.Context, client client.Client, nodeName string, taint corev1.Taint) error {
