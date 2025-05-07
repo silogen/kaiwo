@@ -1,3 +1,5 @@
+# This test is temporarily skipped because of issues git clone leading to gnutls_handshake() failed error. 
+# This only happens in kind clusters. Using openssl instead of gnutls in the docker image does not help.
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:

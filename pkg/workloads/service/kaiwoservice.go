@@ -18,10 +18,11 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"time"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	// metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 
@@ -153,115 +154,178 @@ func (r *KaiwoServiceReconciler) Reconcile(
 	k8sClient client.Client,
 	scheme *runtime.Scheme,
 ) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
 	svc := r.Object
 
-	storageSpec := svc.Spec.Storage
-	var downloadJobResult *ctrl.Result
-	var downloadJob *batchv1.Job
-
-	if k8sClient != nil {
-		if err := controllerutils.EnsureNamespaceKueueManaged(ctx, k8sClient, r.ObjectKey.Namespace); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to ensure namespace is Kueue managed: %w", err)
-		}
+	if err := r.ensureNamespaceManaged(ctx, k8sClient); err != nil {
+		return ctrl.Result{}, err
 	}
 
-	// Set default condition if none is found
-	cond := meta.FindStatusCondition(r.Object.Status.Conditions, kaiwo.KaiwoResourceUtilizationType)
-	if cond == nil {
-		meta.SetStatusCondition(&r.Object.Status.Conditions, metav1.Condition{
-			Type:    kaiwo.KaiwoResourceUtilizationType,
-			Status:  metav1.ConditionFalse,
-			Reason:  string(kaiwo.ResourceUtilizationUnknown),
-			Message: "Resource utilization currently unknown",
-		})
+	if err := r.initializeStatus(ctx, k8sClient, svc); err != nil {
+		return ctrl.Result{}, err
 	}
 
-	if storageSpec != nil && storageSpec.StorageEnabled {
-		if storageSpec.HasData() {
-			_, _, err := r.DataPVC.Reconcile(ctx, k8sClient, scheme, svc)
-			if err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to reconcile data PVC: %w", err)
-			}
-		}
+	// if err := r.ensureDefaultCondition(ctx, k8sClient); err != nil {
+	// 	return ctrl.Result{}, err
+	// }
 
-		if storageSpec.HasHfDownloads() {
-			_, _, err := r.HuggingFacePVC.Reconcile(ctx, k8sClient, scheme, svc)
-			if err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to reconcile huggingface PVC: %w", err)
-			}
-		}
-
-		if storageSpec.HasDownloads() {
-			_, _, err := r.DownloadJobConfigMap.Reconcile(ctx, k8sClient, scheme, svc)
-			if err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to reconcile download configmap: %w", err)
-			}
-
-			downloadJob, downloadJobResult, err = r.DownloadJob.Reconcile(ctx, k8sClient, scheme, svc)
-			if err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to reconcile download job: %w", err)
-			}
-			if downloadJobResult != nil {
-				if downloadJobResult.Requeue || downloadJobResult.RequeueAfter > 0 {
-					return *downloadJobResult, nil
-				}
-			}
-		}
-	}
-
-	if downloadJobResult == nil {
-		_, _, err := r.LocalQueue.Reconcile(ctx, k8sClient, scheme, svc)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to reconcile local queue: %w", err)
-		}
-
-		if svc.Spec.IsRayService() {
-			_, _, err := r.RayServiceReconciler.Reconcile(ctx, k8sClient, scheme, svc)
-			if err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to reconcile RayService: %w", err)
-			}
-		} else {
-			_, _, err := r.DeploymentReconciler.Reconcile(ctx, k8sClient, scheme, svc)
-			if err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to reconcile Deployment: %w", err)
-			}
-		}
-	}
-
-	previousStatus := svc.Status.DeepCopy()
-	status, err := r.GatherStatus(ctx, k8sClient, *previousStatus, downloadJob)
+	downloadJob, downloadJobResult, err := r.reconcileStorageAndDownloads(ctx, k8sClient, scheme, svc)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to gather service status: %w", err)
+		return ctrl.Result{}, err
+	}
+	if downloadJobResult == nil {
+		if err := r.reconcileWorkload(ctx, k8sClient, scheme, svc); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
-	if reflect.DeepEqual(previousStatus, status) {
+	return r.handleStatusAndPreemption(ctx, k8sClient, downloadJob)
+}
+
+func (r *KaiwoServiceReconciler) ensureNamespaceManaged(ctx context.Context, k8sClient client.Client) error {
+	return controllerutils.EnsureNamespaceKueueManaged(ctx, k8sClient, r.ObjectKey.Namespace)
+}
+
+func (r *KaiwoServiceReconciler) initializeStatus(ctx context.Context, k8sClient client.Client, svc *kaiwo.KaiwoService) error {
+	logger := log.FromContext(ctx)
+	if svc.Status.Status == "" {
+		svc.Status.Status = kaiwo.StatusPending
+		if err := k8sClient.Status().Update(ctx, svc); err != nil {
+			logger.Error(err, "failed to initialize KaiwoService status to Pending")
+			return err
+		}
+		logger.Info("Initialized KaiwoService status to Pending")
+	}
+	return nil
+}
+
+// func (r *KaiwoServiceReconciler) ensureDefaultCondition(ctx context.Context, k8sClient client.Client) error {
+// 	logger := log.FromContext(ctx)
+// 	cond := meta.FindStatusCondition(r.Object.Status.Conditions, kaiwo.KaiwoResourceUtilizationType)
+// 	if cond == nil {
+// 		meta.SetStatusCondition(&r.Object.Status.Conditions, metav1.Condition{
+// 			Type:    kaiwo.KaiwoResourceUtilizationType,
+// 			Status:  metav1.ConditionFalse,
+// 			Reason:  string(kaiwo.ResourceUtilizationUnknown),
+// 			Message: "Resource utilization currently unknown",
+// 		})
+// 		if err := k8sClient.Status().Update(ctx, r.Object); err != nil {
+// 			logger.Error(err, "failed to update KaiwoService condition")
+// 			return err
+// 		}
+// 	}
+// 	return nil
+// }
+
+func (r *KaiwoServiceReconciler) reconcileWorkload(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme, svc *kaiwo.KaiwoService) error {
+	if _, _, err := r.LocalQueue.Reconcile(ctx, k8sClient, scheme, svc); err != nil {
+		return err
+	}
+	if svc.Spec.IsRayService() {
+		_, _, err := r.RayServiceReconciler.Reconcile(ctx, k8sClient, scheme, svc)
+		return err
+	} else {
+		_, _, err := r.DeploymentReconciler.Reconcile(ctx, k8sClient, scheme, svc)
+		return err
+	}
+}
+
+func (r *KaiwoServiceReconciler) handleStatusAndPreemption(ctx context.Context, k8sClient client.Client, downloadJob *batchv1.Job) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+	svc := r.Object
+	prev := svc.Status.DeepCopy()
+	status, err := r.GatherStatus(ctx, k8sClient, *prev, downloadJob)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if status.Status == kaiwo.StatusRunning && svc.Spec.Duration != nil && status.StartTime != nil {
+		elapsed := time.Since(status.StartTime.Time)
+		remaining := svc.Spec.Duration.Duration - elapsed
+		if remaining > 0 {
+			logger.Info("Requeueing KaiwoService before duration deadline", "remaining", remaining)
+			return ctrl.Result{RequeueAfter: remaining}, nil
+		}
+		logger.Info("Duration exceeded, triggering preemption check")
+	}
+
+	if workloadutils.ShouldPreempt(ctx, svc, k8sClient) {
+		logger.Info("Preempting KaiwoService due to expired duration and active GPU demand", "name", svc.Name)
+		svc.Status.Status = kaiwo.StatusTerminated
+		if err := k8sClient.Status().Update(ctx, svc); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := workloadutils.DeleteUnderlyingWorkload(ctx, svc.UID, svc.Name, svc.Namespace, k8sClient); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+
+	if reflect.DeepEqual(prev, status) {
 		if status.Status == kaiwo.StatusPending {
 			logger.Info("Still pending, requeuing...")
+			return ctrl.Result{RequeueAfter: common.DefaultRequeueDuration}, nil
+		} else if status.Status == kaiwo.StatusRunning && svc.Spec.Duration != nil {
+			logger.Info("Workload is running, requeueing due to duration")
 			return ctrl.Result{RequeueAfter: common.DefaultRequeueDuration}, nil
 		}
 		return ctrl.Result{}, nil
 	}
 
-	retryAttempts := 3
-	for i := 0; i < retryAttempts; i++ {
+	retries := 3
+	for i := 0; i < retries; i++ {
 		if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(svc), svc); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to get KaiwoService: %w", err)
+			return ctrl.Result{}, err
 		}
-
 		svc.Status = *status
 		logger.Info("Updating KaiwoService status", "status", svc.Status.Status)
-
 		if err := k8sClient.Status().Update(ctx, svc); err != nil {
 			if errors.IsConflict(err) {
-				baseutils.Debug(logger, "Conflict error during KaiwoService update, retrying", "attempt", i+1)
+				baseutils.Debug(logger, "Conflict updating KaiwoService, retrying", "attempt", i+1)
 				continue
 			}
-			return ctrl.Result{}, fmt.Errorf("failed to update KaiwoService status: %w", err)
+			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
 	}
 	return ctrl.Result{}, fmt.Errorf("failed to update KaiwoService status after retries")
+}
+
+func (r *KaiwoServiceReconciler) reconcileStorageAndDownloads(
+	ctx context.Context,
+	k8sClient client.Client,
+	scheme *runtime.Scheme,
+	svc *kaiwo.KaiwoService,
+) (*batchv1.Job, *ctrl.Result, error) {
+	spec := svc.Spec.Storage
+
+	if spec == nil || !spec.StorageEnabled {
+		return nil, nil, nil
+	}
+
+	if spec.HasData() {
+		if _, _, err := r.DataPVC.Reconcile(ctx, k8sClient, scheme, svc); err != nil {
+			return nil, nil, fmt.Errorf("reconcile data PVC: %w", err)
+		}
+	}
+
+	if spec.HasHfDownloads() {
+		if _, _, err := r.HuggingFacePVC.Reconcile(ctx, k8sClient, scheme, svc); err != nil {
+			return nil, nil, fmt.Errorf("reconcile HF PVC: %w", err)
+		}
+	}
+
+	if spec.HasDownloads() {
+		if _, _, err := r.DownloadJobConfigMap.Reconcile(ctx, k8sClient, scheme, svc); err != nil {
+			return nil, nil, fmt.Errorf("reconcile download configmap: %w", err)
+		}
+		job, result, err := r.DownloadJob.Reconcile(ctx, k8sClient, scheme, svc)
+		if err != nil {
+			return nil, nil, fmt.Errorf("reconcile download job: %w", err)
+		}
+		return job, result, nil
+	}
+
+	return nil, nil, nil
 }
 
 func (r *KaiwoServiceReconciler) GatherStatus(

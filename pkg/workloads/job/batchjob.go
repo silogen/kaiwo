@@ -88,6 +88,7 @@ func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batch
 	} else {
 		jobSpec = spec.Job.Spec
 		overrideDefaults = false
+		workloadutils.SyncGpuMetaFromPodSpec(jobSpec.Template.Spec, &r.KaiwoJob.Spec.CommonMetaSpec)
 	}
 
 	if err := workloadutils.UpdatePodSpec(config, r.KaiwoJob.Spec.CommonMetaSpec, labelContext, &jobSpec.Template, r.KaiwoJob.Name, 1, r.KaiwoJob.Spec.CommonMetaSpec.Gpus, overrideDefaults, false); err != nil {

@@ -7679,6 +7679,9 @@ spec:
                     type: object
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
+              duration:
+                description: Duration specifies the maximum duration over which the workload can run. This is useful for avoiding workloads running indefinitely.
+                type: string
               entrypoint:
                 description: |-
                   EntryPoint specifies the command or script executed in a Deployment.

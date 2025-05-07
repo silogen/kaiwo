@@ -1,0 +1,17 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoJob
+metadata:
+  name: gpu-demand-pressure
+spec:
+  user: test@amd.com
+  ray: true
+  image: rayproject/ray:2.41.0
+  gpuVendor: "nvidia"
+  gpus: 15
+  entrypoint: sleep 1
+  resources:
+    limits:
+      memory: 200M
+    requests:
+      memory: 100M
+      cpu: 100m

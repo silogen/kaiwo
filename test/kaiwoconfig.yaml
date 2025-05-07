@@ -1,7 +1,7 @@
 apiVersion: config.kaiwo.silogen.ai/v1alpha1
 kind: KaiwoConfig
 metadata:
-  name: kaiwo-test
+  name: kaiwo
 spec:
   resourceMonitoring:
     averagingTime: 60s
@@ -11,4 +11,7 @@ spec:
     targetNamespaces:
     - "kaiwo-test-monitoring-conditions"
   ray:
-    headPodMemory: 1Gi
+    headPodMemory: 100Mi
+  scheduling:
+    pendingThresholdForPreemption: 1s
+

@@ -22,8 +22,8 @@ import (
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
-	"k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/kueue/apis/kueue/v1beta1"
 )
@@ -142,19 +142,24 @@ func (in *CommonMetaSpec) DeepCopyInto(out *CommonMetaSpec) {
 		*out = new(int)
 		**out = **in
 	}
+	if in.Duration != nil {
+		in, out := &in.Duration, &out.Duration
+		*out = new(v1.Duration)
+		**out = **in
+	}
 	if in.Resources != nil {
 		in, out := &in.Resources, &out.Resources
-		*out = new(v1.ResourceRequirements)
+		*out = new(corev1.ResourceRequirements)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.ImagePullSecrets != nil {
 		in, out := &in.ImagePullSecrets, &out.ImagePullSecrets
-		*out = make([]v1.LocalObjectReference, len(*in))
+		*out = make([]corev1.LocalObjectReference, len(*in))
 		copy(*out, *in)
 	}
 	if in.Env != nil {
 		in, out := &in.Env, &out.Env
-		*out = make([]v1.EnvVar, len(*in))
+		*out = make([]corev1.EnvVar, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -190,7 +195,7 @@ func (in *CommonStatusSpec) DeepCopyInto(out *CommonStatusSpec) {
 	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = make([]metav1.Condition, len(*in))
+		*out = make([]v1.Condition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -568,7 +573,7 @@ func (in *KaiwoQueueConfigStatus) DeepCopyInto(out *KaiwoQueueConfigStatus) {
 	*out = *in
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = make([]metav1.Condition, len(*in))
+		*out = make([]v1.Condition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -741,14 +746,14 @@ func (in *ResourceFlavorSpec) DeepCopyInto(out *ResourceFlavorSpec) {
 	}
 	if in.Taints != nil {
 		in, out := &in.Taints, &out.Taints
-		*out = make([]v1.Taint, len(*in))
+		*out = make([]corev1.Taint, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
 	if in.Tolerations != nil {
 		in, out := &in.Tolerations, &out.Tolerations
-		*out = make([]v1.Toleration, len(*in))
+		*out = make([]corev1.Toleration, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}

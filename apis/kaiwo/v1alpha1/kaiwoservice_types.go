@@ -124,6 +124,22 @@ func (svc *KaiwoService) GetType() string {
 	return "service"
 }
 
+func (s *KaiwoService) GetDuration() *metav1.Duration {
+	return s.Spec.Duration
+}
+
+func (s *KaiwoService) GetStartTime() *metav1.Time {
+	return s.Status.StartTime
+}
+
+func (s *KaiwoService) GetClusterQueue() string {
+	return s.Spec.ClusterQueue
+}
+
+func (s *KaiwoService) GetGPUVendor() string {
+	return s.Spec.GpuVendor
+}
+
 func init() {
 	SchemeBuilder.Register(&KaiwoService{}, &KaiwoServiceList{})
 }

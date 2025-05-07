@@ -65,6 +65,9 @@ spec:
                 default: false
                 description: 'Dangerous, if when set to `true`, Kaiwo will *not* add the default `PodSecurityContext` (which normally sets `runAsUser: 1000`, `runAsGroup: 1000`, `fsGroup: 1000`) to the generated pods. Use this only if you need to run containers as root or a different specific user and understand the security implications.'
                 type: boolean
+              duration:
+                description: Duration specifies the maximum duration over which the workload can run. This is useful for avoiding workloads running indefinitely.
+                type: string
               entrypoint:
                 description: |-
                   EntryPoint defines the command or script that the primary container in the job's pod(s) should execute.

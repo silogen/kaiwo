@@ -10,10 +10,10 @@ spec:
           apiVersion: config.kaiwo.silogen.ai/v1alpha1
           kind: KaiwoConfig
           metadata:
-            name: kaiwo-test
+            name: kaiwo
           spec:
             ray:
-              headPodMemory: 1Gi
+              headPodMemory: 100Mi
     - apply:
         file: rayjob1.yaml
     - assert:
@@ -29,16 +29,16 @@ spec:
             - name: ray-head
               resources:
                 requests:
-                  memory: "1Gi"
+                  memory: "100Mi"
     - patch:
         resource:
           apiVersion: config.kaiwo.silogen.ai/v1alpha1
           kind: KaiwoConfig
           metadata:
-            name: kaiwo-test
+            name: kaiwo
           spec:
             ray:
-              headPodMemory: 2Gi
+              headPodMemory: 200Mi
     - apply:
         file: rayjob2.yaml
     - assert:
@@ -54,17 +54,17 @@ spec:
             - name: ray-head
               resources:
                 requests:
-                  memory: "2Gi"
+                  memory: "200Mi"
         # Return the value to the original one
     - patch:
         resource:
           apiVersion: config.kaiwo.silogen.ai/v1alpha1
           kind: KaiwoConfig
           metadata:
-            name: kaiwo-test
+            name: kaiwo
           spec:
             ray:
-              headPodMemory: 1Gi
+              headPodMemory: 100Mi
     catch:
     - command:
         entrypoint: kaiwo-dev

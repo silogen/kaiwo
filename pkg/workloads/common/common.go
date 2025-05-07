@@ -43,4 +43,8 @@ type KaiwoWorkload interface {
 	GetType() string
 	GetPods(ctx context.Context, k8sClient client.Client) ([]corev1.Pod, error)
 	GetServices(ctx context.Context, k8sClient client.Client) ([]corev1.Service, error)
+	GetDuration() *metav1.Duration
+	GetStartTime() *metav1.Time
+	GetClusterQueue() string
+	GetGPUVendor() string
 }
