@@ -31,10 +31,11 @@ import (
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
-var (
-	configName            = baseutils.GetEnv("CONFIG_NAME", "kaiwo")
-	generateDefaultConfig = baseutils.GetEnv("CONFIG_GENERATE_DEFAULT", "false")
+const (
+	configName = "kaiwo"
 )
+
+var generateDefaultConfig = baseutils.GetEnv("CONFIG_GENERATE_DEFAULT", "false")
 
 type cfgKey struct{}
 
