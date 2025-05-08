@@ -77,8 +77,10 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	err = r.Get(ctx, req.NamespacedName, &queueConfig)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			logger.Info("KaiwoQueueConfig not found, ignoring reconciliation", "name", req.Name)
-			return ctrl.Result{}, nil
+			if err := r.CreateDefaultKaiwoQueueConfig(ctx, common.KaiwoQueueConfigName, config.DefaultClusterQueueName); err != nil {
+				logger.Error(err, "Failed to create default KaiwoQueueConfig")
+				return ctrl.Result{}, err
+			}
 		}
 		logger.Error(err, "Failed to get KaiwoQueueConfig")
 		return ctrl.Result{}, err
