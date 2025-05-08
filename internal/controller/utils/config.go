@@ -29,10 +29,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
+	"github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 const (
-	configName = "kaiwo"
+	configName = common.KaiwoQueueConfigName
 )
 
 var generateDefaultConfig = baseutils.GetEnv("CONFIG_GENERATE_DEFAULT", "false")

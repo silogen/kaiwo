@@ -62,10 +62,13 @@ spec:
                 default: kaiwo
                 description: DefaultClusterQueueName is the name of the default cluster queue that is used for workloads that don't explicitly specify a cluster queue.
                 type: string
-              kaiwoQueueConfigName:
-                default: kaiwo
-                description: KaiwoQueueConfigName is the name of the singleton Kaiwo Queue Config object that is used
-                type: string
+              dynamicallyUpdateDefaultClusterQueue:
+                default: true
+                description: |-
+                  DynamicallyUpdateDefaultClusterQueue defines whether the Kaiwo operator should dynamically update default "kaiwo" clusterqueue.
+                  If set to true, the operator will make sure that the default clusterqueue is always up to date and reflects total resources available.
+                  If nodes are added or removed, the operator will update the default clusterqueue to reflect the current state of the cluster.
+                type: boolean
               nodes:
                 default: {}
                 description: Nodes defines the node configuration settings
@@ -150,10 +153,6 @@ spec:
                       If the workload is requesting GPUs and pending for longer than this threshold, kaiwo will start preempting workloads that have exceeded their duration deadline and are using GPUs of the same vendor as the pending workload.
                     type: string
                 type: object
-              watchNodes:
-                default: true
-                description: WatchNodes defines whether the Kaiwo operator should watch for node changes and update kaiwoqueueconfig accordingly.
-                type: boolean
             type: object
         type: object
     served: true

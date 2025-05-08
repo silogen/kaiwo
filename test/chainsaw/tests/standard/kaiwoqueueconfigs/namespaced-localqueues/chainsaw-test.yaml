@@ -80,7 +80,7 @@ spec:
     # Apply the saved kaiwoqueueconfig for other tests to use
     finally:
     - script:
-        content: kubectl replace --force -f /tmp/kaiwoqueueconfig.yaml
+        content: kubectl apply -f /tmp/kaiwoqueueconfig.yaml
     catch:
     - command:
         entrypoint: kaiwo-dev

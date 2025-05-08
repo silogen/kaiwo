@@ -19,8 +19,8 @@ import (
 	"fmt"
 	"time"
 
-	configapi "github.com/silogen/kaiwo/apis/config/v1alpha1"
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
+	"github.com/silogen/kaiwo/pkg/workloads/common"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -65,8 +65,8 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	config := controllerutils.ConfigFromContext(ctx)
 
-	if config.WatchNodes {
-		if err := r.CreateDefaultKaiwoQueueConfig(ctx, config.KaiwoQueueConfigName, config.DefaultClusterQueueName); err != nil {
+	if config.DynamicallyUpdateDefaultClusterQueue {
+		if err := r.CreateDefaultKaiwoQueueConfig(ctx, common.KaiwoQueueConfigName, config.DefaultClusterQueueName); err != nil {
 			logger.Error(err, "Failed to create default KaiwoQueueConfig")
 			return ctrl.Result{}, err
 		}
@@ -426,13 +426,8 @@ func (r *KaiwoQueueConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&corev1.Node{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-				config := &configapi.KaiwoConfig{}
-				err := r.Client.Get(ctx, client.ObjectKey{Name: "kaiwo"}, config)
-				if err != nil {
-					return nil
-				}
 				return []reconcile.Request{
-					{NamespacedName: types.NamespacedName{Name: config.Spec.KaiwoQueueConfigName}},
+					{NamespacedName: types.NamespacedName{Name: common.KaiwoQueueConfigName}},
 				}
 			}),
 		).
@@ -446,7 +441,7 @@ func (r *KaiwoQueueConfigReconciler) EnsureDefaultKaiwoQueueConfig(ctx context.C
 	config := controllerutils.ConfigFromContext(ctx)
 
 	var queueConfig kaiwo.KaiwoQueueConfig
-	err := r.Get(ctx, client.ObjectKey{Name: config.KaiwoQueueConfigName}, &queueConfig)
+	err := r.Get(ctx, client.ObjectKey{Name: common.KaiwoQueueConfigName}, &queueConfig)
 	if err == nil {
 		return nil
 	} else if !errors.IsNotFound(err) {
@@ -456,7 +451,7 @@ func (r *KaiwoQueueConfigReconciler) EnsureDefaultKaiwoQueueConfig(ctx context.C
 
 	logger.Info("Default KaiwoQueueConfig does not exist. Creating it now...")
 
-	if err := r.CreateDefaultKaiwoQueueConfig(ctx, config.KaiwoQueueConfigName, config.DefaultClusterQueueName); err != nil {
+	if err := r.CreateDefaultKaiwoQueueConfig(ctx, common.KaiwoQueueConfigName, config.DefaultClusterQueueName); err != nil {
 		logger.Error(err, "Failed to create default KaiwoQueueConfig")
 		return err
 	}
