@@ -7,9 +7,6 @@ spec:
   steps:
   - name: Check KaiwoQueueConfig ClusterQueue namespaces create local queues
     try:
-        # Save the current kaiwoqueueconfig for other tests to use later
-    - script:
-        content: kubectl get kaiwoqueueconfig kaiwo -o yaml > /tmp/kaiwoqueueconfig.yaml
     - apply:
         resource:
           apiVersion: v1
@@ -77,10 +74,10 @@ spec:
           kind: ClusterQueue
           metadata:
             name: fizz
-    # Apply the saved kaiwoqueueconfig for other tests to use
     finally:
+    # Delete patched kaiwoqueueconfig. Default kaiwoqueueconfig will be re-created by the operator
     - script:
-        content: kubectl replace --force -f /tmp/kaiwoqueueconfig.yaml
+        content: kubectl delete kaiwoqueueconfig kaiwo
     catch:
     - command:
         entrypoint: kaiwo-dev

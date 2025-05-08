@@ -25,13 +25,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var (
-	DefaultKaiwoQueueConfigName = baseutils.GetEnv("DEFAULT_KAIWO_QUEUE_CONFIG_NAME", "kaiwo")
-	DefaultClusterQueueName     = baseutils.GetEnv("DEFAULT_CLUSTER_QUEUE_NAME", "kaiwo")
-)
+var DefaultClusterQueueName = baseutils.GetEnv("DEFAULT_CLUSTER_QUEUE_NAME", "kaiwo")
 
 const (
-	Finalizer = "kaiwo.silogen.ai/finalizer"
+	Finalizer            = "kaiwo.silogen.ai/finalizer"
+	KaiwoQueueConfigName = "kaiwo"
 )
 
 var DefaultRequeueDuration = 2 * time.Second

@@ -79,9 +79,6 @@ spec:
           (contains($stdout, 'nodeLabels":{"kaiwo/nodepool":"cpu-only-0gpu')): true
           (contains($stdout, '"name":"nvidia-teslak80-8gpu')): true
           (contains($stdout, '"nodeLabels":{"kaiwo/nodepool":"nvidia-teslak80-8gpu')): true
-        # Save the current kaiwoqueueconfig for other tests to use later
-    - script:
-        content: kubectl get kaiwoqueueconfig kaiwo -o yaml > /tmp/kaiwoqueueconfig.yaml
     - apply:
         file: kaiwoqueueconfig1.yaml
     - script:
@@ -89,11 +86,11 @@ spec:
     - script:
         content: kubectl get resourceflavor --no-headers | wc -l
         check:
-          (contains($stdout, '5')): true
+          (contains($stdout, '7')): true
     - script:
         content: kubectl get clusterqueue --no-headers | wc -l
         check:
-          (contains($stdout, '2')): true
+          (contains($stdout, '3')): true
     - apply:
         file: kaiwoqueueconfig2.yaml
     - script:
@@ -101,11 +98,11 @@ spec:
     - script:
         content: kubectl get resourceflavor --no-headers | wc -l
         check:
-          (contains($stdout, '1')): true
+          (contains($stdout, '3')): true
     - script:
         content: kubectl get clusterqueue --no-headers | wc -l
         check:
-          (contains($stdout, '1')): true
+          (contains($stdout, '2')): true
     - script:
         content: kubectl get clusterqueue fizz -o json
         check:
@@ -116,9 +113,9 @@ spec:
         check:
           (contains($stdout, 'amd-rocks')): true
     finally:
-    # Apply the saved kaiwoqueueconfig for other tests to use
+    # Delete patched kaiwoqueueconfig. Default kaiwoqueueconfig will be re-created by the operator
     - script:
-        content: kubectl replace --force -f /tmp/kaiwoqueueconfig.yaml
+        content: kubectl delete kaiwoqueueconfig kaiwo
     catch:
     - command:
         entrypoint: kaiwo-dev
