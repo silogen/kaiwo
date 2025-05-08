@@ -83,19 +83,21 @@ func MapGPUDeviceIDToName(gpuID string, vendor string) string {
 }
 
 func LabelNode(ctx context.Context, c client.Client, nodeName, key, value string) error {
-	var node corev1.Node
-	err := c.Get(ctx, client.ObjectKey{Name: nodeName}, &node)
-	if err != nil {
-		return err
-	}
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		var node corev1.Node
+		err := c.Get(ctx, client.ObjectKey{Name: nodeName}, &node)
+		if err != nil {
+			return err
+		}
 
-	// Add or update the label
-	if node.Labels == nil {
-		node.Labels = make(map[string]string)
-	}
-	node.Labels[key] = value
+		// Add or update the label
+		if node.Labels == nil {
+			node.Labels = make(map[string]string)
+		}
+		node.Labels[key] = value
 
-	return c.Update(ctx, &node)
+		return c.Update(ctx, &node)
+	})
 }
 
 func TaintNode(ctx context.Context, client client.Client, nodeName string, taint corev1.Taint) error {
