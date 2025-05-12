@@ -71,6 +71,11 @@ func (r *KaiwoServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, fmt.Errorf("failed to fetch config: %w", err)
 	}
 
+	if kaiwoService.Status.Status == kaiwo.StatusTerminated {
+		baseutils.Debug(logger, "Skipping reconciliation, as status is terminated")
+		return ctrl.Result{}, nil
+	}
+
 	reconciler := workloadservice.NewKaiwoServiceReconciler(ctx, &kaiwoService)
 
 	result, err := reconciler.Reconcile(ctx, r.Client, r.Scheme)
@@ -91,69 +96,25 @@ func (r *KaiwoServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kaiwo.KaiwoService{}).
+		Owns(&appsv1.Deployment{}).
+		Owns(&rayv1.RayService{}).
+		Owns(&appwrapperv1beta2.AppWrapper{}).
 		Watches(
-			&appsv1.Deployment{},
+			&kaiwo.KaiwoJob{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-				return mapDeploymentToKaiwoService(obj)
-			}),
-		).
-		Watches(
-			&rayv1.RayService{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-				return mapRayServiceToKaiwoService(obj)
-			}),
-		).
-		Watches(
-			&appwrapperv1beta2.AppWrapper{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-				return mapAppWrapperToKaiwoService(obj)
+				var services kaiwo.KaiwoServiceList
+				if err := r.Client.List(ctx, &services); err != nil {
+					return nil
+				}
+				var requests []reconcile.Request
+				for _, svc := range services.Items {
+					if svc.Spec.Duration != nil && svc.Status.Status == kaiwo.StatusRunning {
+						requests = append(requests, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&svc)})
+					}
+				}
+				return requests
 			}),
 		).
 		Named("kaiwoservice").
 		Complete(r)
-}
-
-func mapDeploymentToKaiwoService(obj client.Object) []reconcile.Request {
-	dep, ok := obj.(*appsv1.Deployment)
-	if !ok {
-		return nil
-	}
-	return []reconcile.Request{
-		{
-			NamespacedName: client.ObjectKey{
-				Name:      dep.Name,
-				Namespace: dep.Namespace,
-			},
-		},
-	}
-}
-
-func mapRayServiceToKaiwoService(obj client.Object) []reconcile.Request {
-	raySrv, ok := obj.(*rayv1.RayService)
-	if !ok {
-		return nil
-	}
-	return []reconcile.Request{
-		{
-			NamespacedName: client.ObjectKey{
-				Name:      raySrv.Name,
-				Namespace: raySrv.Namespace,
-			},
-		},
-	}
-}
-
-func mapAppWrapperToKaiwoService(obj client.Object) []reconcile.Request {
-	appWrpr, ok := obj.(*appwrapperv1beta2.AppWrapper)
-	if !ok {
-		return nil
-	}
-	return []reconcile.Request{
-		{
-			NamespacedName: client.ObjectKey{
-				Name:      appWrpr.Name,
-				Namespace: appWrpr.Namespace,
-			},
-		},
-	}
 }

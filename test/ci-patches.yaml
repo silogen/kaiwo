@@ -13,12 +13,6 @@ spec:
       containers:
       - name: manager
         env:
-        - name: CONFIG_NAME
-          value: "kaiwo-test"
-        - name: RAY_HEAD_POD_MEMORY
-          value: "1Gi"
-
-        # Resource monitoring
         - name: RESOURCE_MONITORING_ENABLED
           value: "true"
         - name: RESOURCE_MONITORING_POLLING_INTERVAL

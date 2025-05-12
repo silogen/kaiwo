@@ -19,15 +19,10 @@ package controller
 import (
 	"context"
 	"fmt"
-	"strings"
-
-	"github.com/silogen/kaiwo/pkg/workloads/common"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
-
-	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 
@@ -78,6 +73,9 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	} else if kaiwoJob.Status.Status == kaiwo.StatusComplete {
 		baseutils.Debug(logger, "Skipping reconciliation, as status is complete")
 		return ctrl.Result{}, nil
+	} else if kaiwoJob.Status.Status == kaiwo.StatusTerminated {
+		baseutils.Debug(logger, "Skipping reconciliation, as status is terminated")
+		return ctrl.Result{}, nil
 	}
 
 	ctx, err := controllerutils.GetContextWithConfig(ctx, r.Client)
@@ -104,53 +102,24 @@ func (r *KaiwoJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Recorder = mgr.GetEventRecorderFor("kaiwojob-controller")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kaiwo.KaiwoJob{}).
+		Owns(&batchv1.Job{}).
+		Owns(&rayv1.RayJob{}).
 		Watches(
-			&batchv1.Job{}, // Watching batchv1.Job
+			&kaiwo.KaiwoService{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-				return mapJobToKaiwoJob(obj)
-			}),
-		).
-		Watches(
-			&rayv1.RayJob{}, // Watching RayJob
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-				return mapRayJobToKaiwoJob(obj)
+				var jobs kaiwo.KaiwoJobList
+				if err := r.Client.List(ctx, &jobs); err != nil {
+					return nil
+				}
+				var requests []reconcile.Request
+				for _, job := range jobs.Items {
+					if job.Spec.Duration != nil && job.Status.Status == kaiwo.StatusRunning {
+						requests = append(requests, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&job)})
+					}
+				}
+				return requests
 			}),
 		).
 		Named("kaiwojob").
 		Complete(r)
-}
-
-func mapJobToKaiwoJob(obj client.Object) []reconcile.Request {
-	job, ok := obj.(*batchv1.Job)
-	if !ok {
-		return nil
-	}
-
-	// If the job is a Download job, fetch the owning kaiwo job name
-	name := job.Name
-	if value, ok := job.Labels[common.KaiwoTypeLabel]; ok && value == workloadutils.KaiwoDownloadTypeLabelValue {
-		name = strings.TrimSuffix(name, "-download")
-	}
-
-	return []reconcile.Request{
-		{NamespacedName: client.ObjectKey{
-			// Map download jobs back to their owning Kaiwo Jobs
-			Name:      name,
-			Namespace: job.Namespace,
-		}},
-	}
-}
-
-func mapRayJobToKaiwoJob(obj client.Object) []reconcile.Request {
-	rayJob, ok := obj.(*rayv1.RayJob)
-	if !ok {
-		return nil
-	}
-
-	return []reconcile.Request{
-		{NamespacedName: client.ObjectKey{
-			Name:      rayJob.Name,
-			Namespace: rayJob.Namespace,
-		}},
-	}
 }

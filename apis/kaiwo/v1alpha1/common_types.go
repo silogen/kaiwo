@@ -36,6 +36,8 @@ const (
 	StatusComplete Status = "COMPLETE"
 	// StatusFailed indicates the workload (KaiwoJob or KaiwoService) or its prerequisites (like download jobs) encountered an error and cannot proceed or recover.
 	StatusFailed Status = "FAILED"
+	// StatusTerminated indicates the workload has been terminated by the user or system. This could be due to duration deadline being met and pressure for GPU demand.
+	StatusTerminated Status = "TERMINATED"
 )
 
 // CommonMetaSpec defines reusable metadata fields for workloads.
@@ -67,6 +69,9 @@ type CommonMetaSpec struct {
 	//
 	// If you specify `gpusPerReplica`, you must also specify `replicas`.
 	GpusPerReplica int `json:"gpusPerReplica,omitempty"`
+
+	// Duration specifies the maximum duration over which the workload can run. This is useful for avoiding workloads running indefinitely.
+	Duration *metav1.Duration `json:"duration,omitempty"`
 
 	// Resources specify the default resource requirements applied for all pods inside the workflow.
 	//

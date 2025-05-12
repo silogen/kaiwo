@@ -94,6 +94,7 @@ func (r *DeploymentReconciler) Build(ctx context.Context, _ client.Client) (*app
 	} else {
 		depSpec = svcSpec.Deployment.Spec
 		overrideDefaults = false
+		workloadutils.SyncGpuMetaFromPodSpec(depSpec.Template.Spec, &r.KaiwoService.Spec.CommonMetaSpec)
 	}
 
 	depSpec.Template.Spec.RestartPolicy = corev1.RestartPolicyAlways

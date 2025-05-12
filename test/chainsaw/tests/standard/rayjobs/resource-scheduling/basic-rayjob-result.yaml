@@ -33,10 +33,10 @@ spec:
             resources:
               limits:
                 cpu: "2"
-                memory: 1Gi
+                memory: 100Mi
               requests:
                 cpu: "2"
-                memory: 1Gi
+                memory: 100Mi
             volumeMounts:
             - mountPath: /dev/shm
               name: dshm

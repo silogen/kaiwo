@@ -75,6 +75,9 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 		rayJobSpec = GetDefaultRayJobSpec(config, spec.Dangerous, baseutils.ValueOrDefault(spec.Resources))
 	} else {
 		rayJobSpec = spec.RayJob.Spec
+		for i := range rayJobSpec.RayClusterSpec.WorkerGroupSpecs {
+			workloadutils.SyncGpuMetaFromPodSpec(rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Template.Spec, &r.KaiwoJob.Spec.CommonMetaSpec)
+		}
 	}
 
 	if baseutils.ValueOrDefault(rayJobSpec.BackoffLimit) > 0 {
@@ -82,7 +85,6 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 		rayJobSpec.BackoffLimit = baseutils.Pointer(int32(0))
 	}
 
-	// Override ray head pod memory, if the env var is set
 	if headMemoryOverride := config.Ray.HeadPodMemory; headMemoryOverride.Value() > 0 {
 		workloadutils.FillPodResources(&rayJobSpec.RayClusterSpec.HeadGroupSpec.Template.Spec, &v1.ResourceRequirements{
 			Limits: v1.ResourceList{

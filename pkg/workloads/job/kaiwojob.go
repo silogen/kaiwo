@@ -18,10 +18,13 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"time"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
-	"k8s.io/apimachinery/pkg/api/meta"
+	// "k8s.io/apimachinery/pkg/api/meta"
+
+	corev1 "k8s.io/api/core/v1"
 
 	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 
@@ -30,6 +33,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+
+	"k8s.io/client-go/tools/record"
 
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
@@ -42,6 +47,7 @@ import (
 
 type KaiwoJobReconciler struct {
 	common.ReconcilerBase[*kaiwo.KaiwoJob]
+	Recorder             record.EventRecorder
 	DownloadJobConfigMap *workloadutils.DownloadJobConfigMapReconciler
 	DownloadJob          *workloadutils.DownloadJobReconciler
 	HuggingFacePVC       *common.StorageReconciler
@@ -148,9 +154,11 @@ func sanitize(kaiwoJob *kaiwo.KaiwoJob, config controllerutils.KaiwoConfigContex
 
 // Reconcile reconciles the kaiwo job to ensure each resource exists and is in the desired state
 func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
 	kaiwoJob := r.Object
+
+	if err := r.ensureInitializedStatus(ctx, k8sClient); err != nil {
+		return ctrl.Result{}, err
+	}
 
 	storageSpec := kaiwoJob.Spec.Storage
 
@@ -199,24 +207,8 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, k8sClient client.Cli
 	}
 
 	if downloadJobResult == nil {
-
-		_, _, err := r.LocalQueue.Reconcile(ctx, k8sClient, scheme, kaiwoJob)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to reconcile local queue: %w", err)
-		}
-
-		if kaiwoJob.Spec.IsBatchJob() {
-			_, _, err := r.BatchJob.Reconcile(ctx, k8sClient, scheme, kaiwoJob)
-			if err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to reconcile BatchJob: %w", err)
-			}
-		} else if kaiwoJob.Spec.IsRayJob() {
-			_, _, err := r.RayJob.Reconcile(ctx, k8sClient, scheme, kaiwoJob)
-			if err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to reconcile RayJob: %w", err)
-			}
-		} else {
-			panic("Unsupported job configuration")
+		if err := r.reconcileJobType(ctx, k8sClient, scheme); err != nil {
+			return ctrl.Result{}, err
 		}
 	}
 
@@ -226,9 +218,107 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, k8sClient client.Cli
 		return ctrl.Result{}, fmt.Errorf("failed to gather status: %w", err)
 	}
 
-	if reflect.DeepEqual(previousStatus, status) {
-		if status.Status == kaiwo.StatusPending {
+	if res, done := r.handleDurationRequeue(ctx, status); done {
+		return res, nil
+	}
+
+	if done, err := r.handlePreemption(ctx, k8sClient); done || err != nil {
+		return ctrl.Result{}, err
+	}
+
+	return r.updateStatusIfChanged(ctx, k8sClient, previousStatus, status)
+}
+
+func (r *KaiwoJobReconciler) ensureInitializedStatus(ctx context.Context, k8sClient client.Client) error {
+	logger := log.FromContext(ctx)
+	if r.Object.Status.Status == "" {
+		r.Object.Status.Status = kaiwo.StatusPending
+		if err := k8sClient.Status().Update(ctx, r.Object); err != nil {
+			logger.Error(err, "failed to initialize KaiwoJob status")
+			return err
+		}
+		logger.Info("Initialized KaiwoJob status to Pending")
+	}
+
+	// cond := meta.FindStatusCondition(r.Object.Status.Conditions, kaiwo.KaiwoResourceUtilizationType)
+	// if cond == nil {
+	// 	meta.SetStatusCondition(&r.Object.Status.Conditions, metav1.Condition{
+	// 		Type:    kaiwo.KaiwoResourceUtilizationType,
+	// 		Status:  metav1.ConditionFalse,
+	// 		Reason:  string(kaiwo.ResourceUtilizationUnknown),
+	// 		Message: "Resource utilization currently unknown",
+	// 	})
+	// 	return k8sClient.Status().Update(ctx, r.Object)
+	// }
+	return nil
+}
+
+func (r *KaiwoJobReconciler) reconcileJobType(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme) error {
+	kaiwoJob := r.Object
+	_, _, err := r.LocalQueue.Reconcile(ctx, k8sClient, scheme, kaiwoJob)
+	if err != nil {
+		return fmt.Errorf("failed to reconcile local queue: %w", err)
+	}
+
+	if kaiwoJob.Spec.IsBatchJob() {
+		_, _, err := r.BatchJob.Reconcile(ctx, k8sClient, scheme, kaiwoJob)
+		return err
+	} else if kaiwoJob.Spec.IsRayJob() {
+		_, _, err := r.RayJob.Reconcile(ctx, k8sClient, scheme, kaiwoJob)
+		return err
+	}
+	return fmt.Errorf("unsupported job configuration")
+}
+
+func (r *KaiwoJobReconciler) handleDurationRequeue(ctx context.Context, status *kaiwo.KaiwoJobStatus) (ctrl.Result, bool) {
+	logger := log.FromContext(ctx)
+	kaiwoJob := r.Object
+	if status.Status == kaiwo.StatusRunning && kaiwoJob.Spec.Duration != nil && status.StartTime != nil {
+		elapsed := time.Since(status.StartTime.Time)
+		remaining := kaiwoJob.Spec.Duration.Duration - elapsed
+		if remaining > 0 {
+			logger.Info("Requeueing KaiwoJob before duration deadline", "remaining", remaining)
+			return ctrl.Result{RequeueAfter: remaining}, true
+		}
+		logger.Info("Duration exceeded, triggering preemption check")
+	}
+	return ctrl.Result{}, false
+}
+
+func (r *KaiwoJobReconciler) handlePreemption(ctx context.Context, k8sClient client.Client) (bool, error) {
+	logger := log.FromContext(ctx)
+	kaiwoJob := r.Object
+	if workloadutils.ShouldPreempt(ctx, kaiwoJob, k8sClient) {
+		logger.Info("Preempting KaiwoJob due to expired duration and active GPU demand", "name", kaiwoJob.Name)
+		kaiwoJob.Status.Status = kaiwo.StatusTerminated
+		if err := k8sClient.Status().Update(ctx, kaiwoJob); err != nil {
+			return true, fmt.Errorf("failed to update status: %w", err)
+		}
+		if err := workloadutils.DeleteUnderlyingResource(ctx, kaiwoJob.UID, kaiwoJob.Name, kaiwoJob.Namespace, k8sClient); err != nil {
+			return true, fmt.Errorf("failed to delete workload: %w", err)
+		}
+		r.Recorder.Eventf(
+			kaiwoJob,
+			corev1.EventTypeWarning,
+			"KaiwoJobPreemptionWarning",
+			"Preempted KaiwoJob %s/%s due to expired duration and active GPU demand",
+			kaiwoJob.Namespace,
+			kaiwoJob.Name,
+		)
+		return true, nil
+	}
+	return false, nil
+}
+
+func (r *KaiwoJobReconciler) updateStatusIfChanged(ctx context.Context, k8sClient client.Client, prev, curr *kaiwo.KaiwoJobStatus) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+	kaiwoJob := r.Object
+	if reflect.DeepEqual(prev, curr) {
+		if curr.Status == kaiwo.StatusPending {
 			logger.Info("Still pending, requeuing...")
+			return ctrl.Result{RequeueAfter: common.DefaultRequeueDuration}, nil
+		} else if curr.Status == kaiwo.StatusRunning && kaiwoJob.Spec.Duration != nil {
+			logger.Info("Workload is running with duration set, requeuing...")
 			return ctrl.Result{RequeueAfter: common.DefaultRequeueDuration}, nil
 		}
 		return ctrl.Result{}, nil
@@ -237,40 +327,26 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, k8sClient client.Cli
 	retryAttempts := 3
 	for i := 0; i < retryAttempts; i++ {
 		if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(kaiwoJob), kaiwoJob); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to get kaiwoJob: %w", err)
+			return ctrl.Result{}, fmt.Errorf("failed to refetch KaiwoJob: %w", err)
 		}
-
-		kaiwoJob.Status = *status
-		logger.Info(fmt.Sprintf("Updating status to: %s", string(kaiwoJob.Status.Status)), "status", kaiwoJob.Status)
-
+		kaiwoJob.Status = *curr
 		if err := k8sClient.Status().Update(ctx, kaiwoJob); err != nil {
 			if errors.IsConflict(err) {
-				baseutils.Debug(logger, "Conflict error during KaiwoJob update, retrying", "attempt", i+1)
+				baseutils.Debug(logger, "Conflict during status update, retrying", "attempt", i+1)
 				continue
 			}
-			return ctrl.Result{}, fmt.Errorf("failed to update kaiwoJob status: %w", err)
+			return ctrl.Result{}, fmt.Errorf("failed to update KaiwoJob status: %w", err)
 		}
-
+		logger.Info("Updated KaiwoJob status", "status", curr.Status)
 		return ctrl.Result{}, nil
 	}
-	return ctrl.Result{}, fmt.Errorf("failed to update kaiwoJob status")
+	return ctrl.Result{}, fmt.Errorf("failed to update KaiwoJob status after retries")
 }
 
 func (r *KaiwoJobReconciler) GatherStatus(ctx context.Context, k8sClient client.Client, previousStatus kaiwo.KaiwoJobStatus, downloadJob *batchv1.Job) (*kaiwo.KaiwoJobStatus, error) {
 	kaiwoJob := r.Object
 
 	currentStatus := previousStatus.DeepCopy()
-
-	// Set default condition if none is found
-	cond := meta.FindStatusCondition(r.Object.Status.Conditions, kaiwo.KaiwoResourceUtilizationType)
-	if cond == nil {
-		meta.SetStatusCondition(&r.Object.Status.Conditions, metav1.Condition{
-			Type:    kaiwo.KaiwoResourceUtilizationType,
-			Status:  metav1.ConditionFalse,
-			Reason:  string(kaiwo.ResourceUtilizationUnknown),
-			Message: "Resource utilization currently unknown",
-		})
-	}
 
 	// Check if download job has failed
 	if downloadJob != nil {
