@@ -20,7 +20,7 @@ import (
 	"reflect"
 	"time"
 
-	"k8s.io/client-go/tools/record"
+	"k8s.io/apimachinery/pkg/api/meta"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
@@ -161,8 +161,6 @@ func (r *KaiwoJobReconciler) Reconcile(
 	scheme *runtime.Scheme,
 	recorder record.EventRecorder,
 ) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
 	kaiwoJob := r.Object
 
 	if err := r.ensureInitializedStatus(ctx, k8sClient); err != nil {
@@ -264,16 +262,16 @@ func (r *KaiwoJobReconciler) ensureInitializedStatus(ctx context.Context, k8sCli
 
 func (r *KaiwoJobReconciler) reconcileJobType(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme) error {
 	kaiwoJob := r.Object
-	_, _, err := r.LocalQueue.Reconcile(ctx, k8sClient, scheme, kaiwoJob)
+	_, _, err := r.LocalQueue.Reconcile(ctx, k8sClient, scheme, kaiwoJob, r.Recorder)
 	if err != nil {
 		return fmt.Errorf("failed to reconcile local queue: %w", err)
 	}
 
 	if kaiwoJob.Spec.IsBatchJob() {
-		_, _, err := r.BatchJob.Reconcile(ctx, k8sClient, scheme, kaiwoJob)
+		_, _, err := r.BatchJob.Reconcile(ctx, k8sClient, scheme, kaiwoJob, r.Recorder)
 		return err
 	} else if kaiwoJob.Spec.IsRayJob() {
-		_, _, err := r.RayJob.Reconcile(ctx, k8sClient, scheme, kaiwoJob)
+		_, _, err := r.RayJob.Reconcile(ctx, k8sClient, scheme, kaiwoJob, r.Recorder)
 		return err
 	}
 	return fmt.Errorf("unsupported job configuration")

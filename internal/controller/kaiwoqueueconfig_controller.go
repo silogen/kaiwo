@@ -25,8 +25,6 @@ import (
 
 	"k8s.io/client-go/tools/record"
 
-	"github.com/silogen/kaiwo/pkg/workloads/common"
-
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 	"github.com/silogen/kaiwo/pkg/workloads/common"
 
