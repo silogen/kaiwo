@@ -4,6 +4,8 @@ metadata:
   name: workload-priority-class-kaiwoservice-deployment
 spec:
   concurrent: false
+  timeouts:
+    cleanup: 120s
   steps:
   - name: Create resources
     try:

@@ -5,7 +5,7 @@ metadata:
 spec:
   concurrent: false
   timeouts:
-    cleanup: 60s
+    cleanup: 120s
   steps:
   - name: Create resources
     try:

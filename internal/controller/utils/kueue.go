@@ -86,6 +86,10 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 	}
 
 	for _, node := range nodeList {
+		if node.Unschedulable {
+			logger.Info("Skipping cordoned node", "node", node.Name)
+			continue
+		}
 		// **Skip Control Plane Nodes**
 		if config.Nodes.ExcludeMasterNodesFromNodePools {
 			if _, exists := node.Labels["node-role.kubernetes.io/control-plane"]; exists {

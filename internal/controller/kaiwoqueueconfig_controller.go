@@ -19,18 +19,21 @@ import (
 	"fmt"
 	"time"
 
+	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 	"github.com/silogen/kaiwo/pkg/workloads/common"
 
-	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
-
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
@@ -60,13 +63,24 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, fmt.Errorf("could not get config context: %w", err)
 	}
 
+	config := controllerutils.ConfigFromContext(ctx)
+
+	if config.DynamicallyUpdateDefaultClusterQueue {
+		if err := r.EnsureKaiwoQueueConfig(ctx, common.KaiwoQueueConfigName, config.DefaultClusterQueueName); err != nil {
+			logger.Error(err, "Failed to create default KaiwoQueueConfig")
+			return ctrl.Result{}, err
+		}
+	}
+
 	// Fetch the requested KaiwoQueueConfig
 	var queueConfig kaiwo.KaiwoQueueConfig
 	err = r.Get(ctx, req.NamespacedName, &queueConfig)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			logger.Info("KaiwoQueueConfig not found, ignoring reconciliation", "name", req.Name)
-			return ctrl.Result{}, nil
+			if err := r.EnsureKaiwoQueueConfig(ctx, common.KaiwoQueueConfigName, config.DefaultClusterQueueName); err != nil {
+				logger.Error(err, "Failed to create default KaiwoQueueConfig")
+				return ctrl.Result{}, err
+			}
 		}
 		logger.Error(err, "Failed to get KaiwoQueueConfig")
 		return ctrl.Result{}, err
@@ -394,81 +408,108 @@ func (r *KaiwoQueueConfigReconciler) syncWorkloadPriorityClasses(ctx context.Con
 func (r *KaiwoQueueConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	logger := log.Log.WithName("SetupWithManager")
 
-	// Add a startup function to ensure default KaiwoQueueConfig exists
 	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
 		ctx, err := controllerutils.GetContextWithConfig(ctx, mgr.GetClient())
 		if err != nil {
 			return fmt.Errorf("could not get config: %w", err)
 		}
 		logger.Info("Ensuring default KaiwoQueueConfig exists on startup...")
-		if err := r.EnsureDefaultKaiwoQueueConfig(ctx); err != nil {
+		config := controllerutils.ConfigFromContext(ctx)
+		if err := r.EnsureKaiwoQueueConfig(ctx, common.KaiwoQueueConfigName, config.DefaultClusterQueueName); err != nil {
 			logger.Error(err, "Failed to ensure default KaiwoQueueConfig on startup")
 			return err
 		}
-
 		return nil
 	})); err != nil {
 		return err
 	}
 
-	// Register the controller with the manager
-	return ctrl.NewControllerManagedBy(mgr).
+	return builder.ControllerManagedBy(mgr).
 		For(&kaiwo.KaiwoQueueConfig{}).
+		Watches(
+			&corev1.Node{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				return []reconcile.Request{
+					{NamespacedName: types.NamespacedName{Name: common.KaiwoQueueConfigName}},
+				}
+			}),
+		).
 		Named("kaiwoqueueconfig").
 		Complete(r)
 }
 
-func (r *KaiwoQueueConfigReconciler) EnsureDefaultKaiwoQueueConfig(ctx context.Context) error {
+func (r *KaiwoQueueConfigReconciler) EnsureKaiwoQueueConfig(ctx context.Context, kaiwoQueueConfigName string, clusterQueueName string) error {
 	logger := log.FromContext(ctx)
 
-	var queueConfig kaiwo.KaiwoQueueConfig
-	err := r.Get(ctx, client.ObjectKey{Name: common.DefaultKaiwoQueueConfigName}, &queueConfig)
-	if err == nil {
-		return nil
-	} else if !errors.IsNotFound(err) {
-		logger.Error(err, "Failed to check for existing KaiwoQueueConfig")
-		return err
-	}
-
-	logger.Info("Default KaiwoQueueConfig does not exist. Creating it now...")
-
-	if err := r.CreateDefaultKaiwoQueueConfig(ctx, common.DefaultKaiwoQueueConfigName); err != nil {
-		logger.Error(err, "Failed to create default KaiwoQueueConfig")
-		return err
-	}
-
-	logger.Info("Successfully created default KaiwoQueueConfig")
-	return nil
-}
-
-func (r *KaiwoQueueConfigReconciler) CreateDefaultKaiwoQueueConfig(ctx context.Context, name string) error {
-	logger := log.FromContext(ctx)
-
-	resourceFlavors, nodePoolResources, err := controllerutils.CreateDefaultResourceFlavors(ctx, r.Client)
+	// Generate new flavors and clusterQueue
+	newResourceFlavors, nodePoolResources, err := controllerutils.CreateDefaultResourceFlavors(ctx, r.Client)
 	if err != nil {
 		logger.Error(err, "Failed to create default resource flavors")
 		return err
 	}
 
-	clusterQueue := controllerutils.CreateClusterQueue(nodePoolResources, common.DefaultClusterQueueName)
+	newClusterQueue := controllerutils.CreateClusterQueue(nodePoolResources, clusterQueueName)
 
-	defaultQueueConfig := kaiwo.KaiwoQueueConfig{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-		},
-		Spec: kaiwo.KaiwoQueueConfigSpec{
-			ClusterQueues:   []kaiwo.ClusterQueue{clusterQueue},
-			ResourceFlavors: resourceFlavors,
-		},
-	}
+	var existingConfig kaiwo.KaiwoQueueConfig
+	err = r.Get(ctx, client.ObjectKey{Name: kaiwoQueueConfigName}, &existingConfig)
+	notFound := errors.IsNotFound(err)
 
-	logger.Info("Creating the following kaiwoQueueConfig", name, defaultQueueConfig)
+	if notFound {
+		logger.Info("KaiwoQueueConfig does not exist, creating from scratch")
+		newConfig := kaiwo.KaiwoQueueConfig{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: kaiwoQueueConfigName,
+			},
+			Spec: kaiwo.KaiwoQueueConfigSpec{
+				ClusterQueues:   []kaiwo.ClusterQueue{newClusterQueue},
+				ResourceFlavors: newResourceFlavors,
+			},
+		}
 
-	if err := r.Create(ctx, &defaultQueueConfig); err != nil {
-		logger.Error(err, "Failed to create default KaiwoQueueConfig")
+		if err := r.Create(ctx, &newConfig); err != nil {
+			logger.Error(err, "Failed to create KaiwoQueueConfig")
+			return err
+		}
+
+		logger.Info("Successfully created KaiwoQueueConfig", "name", newConfig.Name)
+		return nil
+	} else if err != nil {
+		logger.Error(err, "Failed to fetch existing KaiwoQueueConfig")
 		return err
 	}
 
-	logger.Info("Successfully created default KaiwoQueueConfig", "name", defaultQueueConfig.Name)
+	logger.Info("Merging with existing KaiwoQueueConfig")
+
+	flavorMap := make(map[string]kaiwo.ResourceFlavorSpec)
+	for _, rf := range existingConfig.Spec.ResourceFlavors {
+		flavorMap[rf.Name] = rf
+	}
+	for _, rf := range newResourceFlavors {
+		flavorMap[rf.Name] = rf
+	}
+	mergedFlavors := make([]kaiwo.ResourceFlavorSpec, 0, len(flavorMap))
+	for _, rf := range flavorMap {
+		mergedFlavors = append(mergedFlavors, rf)
+	}
+
+	queueMap := make(map[string]kaiwo.ClusterQueue)
+	for _, cq := range existingConfig.Spec.ClusterQueues {
+		queueMap[cq.Name] = cq
+	}
+	queueMap[newClusterQueue.Name] = newClusterQueue
+	mergedQueues := make([]kaiwo.ClusterQueue, 0, len(queueMap))
+	for _, cq := range queueMap {
+		mergedQueues = append(mergedQueues, cq)
+	}
+
+	existingConfig.Spec.ResourceFlavors = mergedFlavors
+	existingConfig.Spec.ClusterQueues = mergedQueues
+
+	if err := r.Update(ctx, &existingConfig); err != nil {
+		logger.Error(err, "Failed to update KaiwoQueueConfig with merged values")
+		return err
+	}
+
+	logger.Info("Successfully updated KaiwoQueueConfig", "name", existingConfig.Name)
 	return nil
 }

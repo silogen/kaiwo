@@ -70,7 +70,8 @@ _Appears in:_
 | `nodes` _[KaiwoNodeConfig](#kaiwonodeconfig)_ | Nodes defines the node configuration settings | \{  \} |  |
 | `scheduling` _[KaiwoSchedulingConfig](#kaiwoschedulingconfig)_ | Scheduling contains the configuration Kaiwo uses for workload scheduling | \{  \} |  |
 | `resourceMonitoring` _[KaiwoResourceMonitoringConfig](#kaiworesourcemonitoringconfig)_ | ResourceMonitoring defines the resource-monitoring specific settings | \{  \} |  |
-| `defaultKaiwoQueueConfigName` _string_ | DefaultKaiwoQueueConfigName is the name of the singleton Kaiwo Queue Config object that is used | kaiwo |  |
+| `defaultClusterQueueName` _string_ | DefaultClusterQueueName is the name of the default cluster queue that is used for workloads that don't explicitly specify a cluster queue. | kaiwo |  |
+| `dynamicallyUpdateDefaultClusterQueue` _boolean_ | DynamicallyUpdateDefaultClusterQueue defines whether the Kaiwo operator should dynamically update default "kaiwo" clusterqueue.<br />If set to true, the operator will make sure that the default clusterqueue is always up to date and reflects total resources available.<br />If nodes are added or removed, the operator will update the default clusterqueue to reflect the current state of the cluster. | true |  |
 
 
 #### KaiwoNodeConfig
@@ -149,6 +150,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `kubeSchedulerName` _string_ | KubeSchedulerName defines the default scheduler name that is used to schedule the workload | kaiwo-scheduler |  |
+| `pendingThresholdForPreemption` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#duration-v1-meta)_ | PendingThresholdForPreemption is the threshold that is used to determine if a workload is awaiting for compute resources to be available.<br />If the workload is requesting GPUs and pending for longer than this threshold, kaiwo will start preempting workloads that have exceeded their duration deadline and are using GPUs of the same vendor as the pending workload. | 5m |  |
 
 
 #### KaiwoStorageConfig
