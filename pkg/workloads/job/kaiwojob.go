@@ -159,7 +159,6 @@ func (r *KaiwoJobReconciler) Reconcile(
 	ctx context.Context,
 	k8sClient client.Client,
 	scheme *runtime.Scheme,
-	recorder record.EventRecorder,
 ) (ctrl.Result, error) {
 	kaiwoJob := r.Object
 
@@ -181,7 +180,7 @@ func (r *KaiwoJobReconciler) Reconcile(
 	if storageSpec != nil && storageSpec.StorageEnabled {
 
 		if storageSpec.HasData() {
-			_, _, err := r.DataPVC.Reconcile(ctx, k8sClient, scheme, kaiwoJob, recorder)
+			_, _, err := r.DataPVC.Reconcile(ctx, k8sClient, scheme, kaiwoJob, r.Recorder)
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to reconcile data PVC: %w", err)
 			}
@@ -189,19 +188,19 @@ func (r *KaiwoJobReconciler) Reconcile(
 
 		if storageSpec.HasHfDownloads() {
 			// Add HuggingFace PVC
-			_, _, err := r.HuggingFacePVC.Reconcile(ctx, k8sClient, scheme, kaiwoJob, recorder)
+			_, _, err := r.HuggingFacePVC.Reconcile(ctx, k8sClient, scheme, kaiwoJob, r.Recorder)
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to reconcile HuggingFace PVC: %w", err)
 			}
 		}
 
 		if storageSpec.HasDownloads() {
-			_, _, err := r.DownloadJobConfigMap.Reconcile(ctx, k8sClient, scheme, kaiwoJob, recorder)
+			_, _, err := r.DownloadJobConfigMap.Reconcile(ctx, k8sClient, scheme, kaiwoJob, r.Recorder)
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to reconcile DownloadJobConfigMap: %w", err)
 			}
 
-			downloadJob, downloadJobResult, err = r.DownloadJob.Reconcile(ctx, k8sClient, scheme, kaiwoJob, recorder)
+			downloadJob, downloadJobResult, err = r.DownloadJob.Reconcile(ctx, k8sClient, scheme, kaiwoJob, r.Recorder)
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to reconcile DownloadJob: %w", err)
 			}

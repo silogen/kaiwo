@@ -47,7 +47,7 @@ type ReconcilerBase[T client.Object] struct {
 // Reconciler manages the reconciliation of a Kaiwo resource (job or service)
 type Reconciler[T client.Object] interface {
 	// Reconcile runs through the reconciliation loop
-	Reconcile(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme, recorder record.EventRecorder) (ctrl.Result, error)
+	Reconcile(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme) (ctrl.Result, error)
 }
 
 type ResourceReconcilerBase[T client.Object] struct {

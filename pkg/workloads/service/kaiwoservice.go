@@ -157,7 +157,6 @@ func (r *KaiwoServiceReconciler) Reconcile(
 	ctx context.Context,
 	k8sClient client.Client,
 	scheme *runtime.Scheme,
-	recorder record.EventRecorder,
 ) (ctrl.Result, error) {
 	svc := r.Object
 
