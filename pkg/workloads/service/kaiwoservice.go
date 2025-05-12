@@ -20,6 +20,8 @@ import (
 	"reflect"
 	"time"
 
+	"k8s.io/client-go/tools/record"
+
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
 	// metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -155,6 +157,7 @@ func (r *KaiwoServiceReconciler) Reconcile(
 	ctx context.Context,
 	k8sClient client.Client,
 	scheme *runtime.Scheme,
+	recorder record.EventRecorder,
 ) (ctrl.Result, error) {
 	svc := r.Object
 

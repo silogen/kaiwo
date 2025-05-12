@@ -20,6 +20,8 @@ import (
 	"reflect"
 	"time"
 
+	"k8s.io/client-go/tools/record"
+
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
 	// "k8s.io/apimachinery/pkg/api/meta"
@@ -153,7 +155,14 @@ func sanitize(kaiwoJob *kaiwo.KaiwoJob, config controllerutils.KaiwoConfigContex
 }
 
 // Reconcile reconciles the kaiwo job to ensure each resource exists and is in the desired state
-func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme) (ctrl.Result, error) {
+func (r *KaiwoJobReconciler) Reconcile(
+	ctx context.Context,
+	k8sClient client.Client,
+	scheme *runtime.Scheme,
+	recorder record.EventRecorder,
+) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
 	kaiwoJob := r.Object
 
 	if err := r.ensureInitializedStatus(ctx, k8sClient); err != nil {
@@ -174,7 +183,7 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, k8sClient client.Cli
 	if storageSpec != nil && storageSpec.StorageEnabled {
 
 		if storageSpec.HasData() {
-			_, _, err := r.DataPVC.Reconcile(ctx, k8sClient, scheme, kaiwoJob)
+			_, _, err := r.DataPVC.Reconcile(ctx, k8sClient, scheme, kaiwoJob, recorder)
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to reconcile data PVC: %w", err)
 			}
@@ -182,19 +191,19 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, k8sClient client.Cli
 
 		if storageSpec.HasHfDownloads() {
 			// Add HuggingFace PVC
-			_, _, err := r.HuggingFacePVC.Reconcile(ctx, k8sClient, scheme, kaiwoJob)
+			_, _, err := r.HuggingFacePVC.Reconcile(ctx, k8sClient, scheme, kaiwoJob, recorder)
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to reconcile HuggingFace PVC: %w", err)
 			}
 		}
 
 		if storageSpec.HasDownloads() {
-			_, _, err := r.DownloadJobConfigMap.Reconcile(ctx, k8sClient, scheme, kaiwoJob)
+			_, _, err := r.DownloadJobConfigMap.Reconcile(ctx, k8sClient, scheme, kaiwoJob, recorder)
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to reconcile DownloadJobConfigMap: %w", err)
 			}
 
-			downloadJob, downloadJobResult, err = r.DownloadJob.Reconcile(ctx, k8sClient, scheme, kaiwoJob)
+			downloadJob, downloadJobResult, err = r.DownloadJob.Reconcile(ctx, k8sClient, scheme, kaiwoJob, recorder)
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to reconcile DownloadJob: %w", err)
 			}
@@ -347,6 +356,17 @@ func (r *KaiwoJobReconciler) GatherStatus(ctx context.Context, k8sClient client.
 	kaiwoJob := r.Object
 
 	currentStatus := previousStatus.DeepCopy()
+
+	// Set default condition if none is found
+	cond := meta.FindStatusCondition(r.Object.Status.Conditions, kaiwo.KaiwoResourceUtilizationType)
+	if cond == nil {
+		meta.SetStatusCondition(&r.Object.Status.Conditions, metav1.Condition{
+			Type:    kaiwo.KaiwoResourceUtilizationType,
+			Status:  metav1.ConditionFalse,
+			Reason:  string(kaiwo.ResourceUtilizationUnknown),
+			Message: "Resource utilization currently unknown",
+		})
+	}
 
 	// Check if download job has failed
 	if downloadJob != nil {
