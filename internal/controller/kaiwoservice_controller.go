@@ -96,7 +96,6 @@ func (r *KaiwoServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kaiwo.KaiwoService{}).
-		Owns(&corev1.Pod{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&rayv1.RayService{}).
 		Owns(&appwrapperv1beta2.AppWrapper{}).

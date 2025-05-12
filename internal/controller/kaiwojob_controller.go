@@ -104,7 +104,6 @@ func (r *KaiwoJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&kaiwo.KaiwoJob{}).
 		Owns(&batchv1.Job{}).
 		Owns(&rayv1.RayJob{}).
-		Owns(&corev1.Pod{}).
 		Watches(
 			&kaiwo.KaiwoService{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {

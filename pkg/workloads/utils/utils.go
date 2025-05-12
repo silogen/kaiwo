@@ -591,7 +591,7 @@ func DeleteUnderlyingWorkload(ctx context.Context, uid types.UID, name string, n
 	}
 
 	if !deletedAny {
-		return fmt.Errorf("no owned workloads found to delete for KaiwoService %s", name)
+		return fmt.Errorf("no owned workloads found to delete for %s", name)
 	}
 	return nil
 }
