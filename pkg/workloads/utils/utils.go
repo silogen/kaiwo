@@ -551,19 +551,20 @@ func SyncGpuMetaFromPodSpec(podSpec corev1.PodSpec, meta *kaiwo.CommonMetaSpec) 
 	}
 }
 
-func DeleteUnderlyingWorkload(ctx context.Context, uid types.UID, name string, namespace string, k8sClient client.Client) error {
-	workloadTypes := []client.ObjectList{
+func DeleteUnderlyingResource(ctx context.Context, uid types.UID, name string, namespace string, k8sClient client.Client) error {
+	resourceTypes := []client.ObjectList{
 		&appsv1.DeploymentList{},
 		&rayv1.RayServiceList{},
 		&batchv1.JobList{},
 		&rayv1.RayJobList{},
+		&corev1.PersistentVolumeClaimList{},
 	}
 
 	var deletedAny bool
 
-	for _, list := range workloadTypes {
+	for _, list := range resourceTypes {
 		if err := k8sClient.List(ctx, list, client.InNamespace(namespace)); err != nil {
-			return fmt.Errorf("failed to list workloads: %w", err)
+			return fmt.Errorf("failed to list resources: %w", err)
 		}
 
 		items, err := metautil.ExtractList(list)
@@ -582,7 +583,7 @@ func DeleteUnderlyingWorkload(ctx context.Context, uid types.UID, name string, n
 					if err := k8sClient.Delete(ctx, obj, &client.DeleteOptions{
 						PropagationPolicy: &foreground,
 					}); err != nil {
-						return fmt.Errorf("failed to delete workload %s/%s: %w", obj.GetNamespace(), obj.GetName(), err)
+						return fmt.Errorf("failed to delete resource %s/%s: %w", obj.GetNamespace(), obj.GetName(), err)
 					}
 					deletedAny = true
 				}
@@ -591,7 +592,7 @@ func DeleteUnderlyingWorkload(ctx context.Context, uid types.UID, name string, n
 	}
 
 	if !deletedAny {
-		return fmt.Errorf("no owned workloads found to delete for %s", name)
+		return fmt.Errorf("no owned resources found to delete for %s", name)
 	}
 	return nil
 }

@@ -24,6 +24,8 @@ import (
 
 	// "k8s.io/apimachinery/pkg/api/meta"
 
+	corev1 "k8s.io/api/core/v1"
+
 	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
@@ -31,6 +33,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+
+	"k8s.io/client-go/tools/record"
 
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
@@ -43,6 +47,7 @@ import (
 
 type KaiwoJobReconciler struct {
 	common.ReconcilerBase[*kaiwo.KaiwoJob]
+	Recorder             record.EventRecorder
 	DownloadJobConfigMap *workloadutils.DownloadJobConfigMapReconciler
 	DownloadJob          *workloadutils.DownloadJobReconciler
 	HuggingFacePVC       *common.StorageReconciler
@@ -289,9 +294,17 @@ func (r *KaiwoJobReconciler) handlePreemption(ctx context.Context, k8sClient cli
 		if err := k8sClient.Status().Update(ctx, kaiwoJob); err != nil {
 			return true, fmt.Errorf("failed to update status: %w", err)
 		}
-		if err := workloadutils.DeleteUnderlyingWorkload(ctx, kaiwoJob.UID, kaiwoJob.Name, kaiwoJob.Namespace, k8sClient); err != nil {
+		if err := workloadutils.DeleteUnderlyingResource(ctx, kaiwoJob.UID, kaiwoJob.Name, kaiwoJob.Namespace, k8sClient); err != nil {
 			return true, fmt.Errorf("failed to delete workload: %w", err)
 		}
+		r.Recorder.Eventf(
+			kaiwoJob,
+			corev1.EventTypeWarning,
+			"KaiwoJobPreemptionWarning",
+			"Preempted KaiwoJob %s/%s due to expired duration and active GPU demand",
+			kaiwoJob.Namespace,
+			kaiwoJob.Name,
+		)
 		return true, nil
 	}
 	return false, nil

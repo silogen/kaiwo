@@ -37,6 +37,7 @@ import (
 
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/tools/record"
 
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
@@ -45,6 +46,7 @@ import (
 
 type KaiwoServiceReconciler struct {
 	common.ReconcilerBase[*kaiwo.KaiwoService]
+	Recorder record.EventRecorder
 
 	DownloadJobConfigMap *workloadutils.DownloadJobConfigMapReconciler
 	DownloadJob          *workloadutils.DownloadJobReconciler
@@ -254,9 +256,17 @@ func (r *KaiwoServiceReconciler) handleStatusAndPreemption(ctx context.Context, 
 		if err := k8sClient.Status().Update(ctx, svc); err != nil {
 			return ctrl.Result{}, err
 		}
-		if err := workloadutils.DeleteUnderlyingWorkload(ctx, svc.UID, svc.Name, svc.Namespace, k8sClient); err != nil {
+		if err := workloadutils.DeleteUnderlyingResource(ctx, svc.UID, svc.Name, svc.Namespace, k8sClient); err != nil {
 			return ctrl.Result{}, err
 		}
+		r.Recorder.Eventf(
+			svc,
+			corev1.EventTypeWarning,
+			"KaiwoServicePreemptionWarning",
+			"Preempted KaiwoService %s/%s due to expired duration and active GPU demand",
+			svc.Namespace,
+			svc.Name,
+		)
 		return ctrl.Result{}, nil
 	}
 
