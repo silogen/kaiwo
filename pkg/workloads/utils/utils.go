@@ -610,6 +610,7 @@ func TerminateWorkload(
 		Message: message,
 	})
 
+	// Update status first to avoid doing any further reconciliation
 	if err := k8sClient.Status().Update(ctx, obj); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
 	}
