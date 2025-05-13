@@ -26,8 +26,6 @@ import (
 
 	// "k8s.io/apimachinery/pkg/api/meta"
 
-	corev1 "k8s.io/api/core/v1"
-
 	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
@@ -311,22 +309,16 @@ func (r *KaiwoJobReconciler) handlePreemption(ctx context.Context, k8sClient cli
 	kaiwoJob := r.Object
 	if workloadutils.ShouldPreempt(ctx, kaiwoJob, k8sClient) {
 		logger.Info("Preempting KaiwoJob due to expired duration and active GPU demand", "name", kaiwoJob.Name)
-		kaiwoJob.Status.Status = kaiwo.StatusTerminated
-		if err := k8sClient.Status().Update(ctx, kaiwoJob); err != nil {
-			return true, fmt.Errorf("failed to update status: %w", err)
-		}
-		if err := workloadutils.DeleteUnderlyingResource(ctx, kaiwoJob.UID, kaiwoJob.Name, kaiwoJob.Namespace, k8sClient); err != nil {
-			return true, fmt.Errorf("failed to delete workload: %w", err)
-		}
-		r.Recorder.Eventf(
+		if err := workloadutils.TerminateWorkload(
+			ctx,
+			k8sClient,
+			r.Recorder,
 			kaiwoJob,
-			corev1.EventTypeWarning,
-			"KaiwoJobPreemptionWarning",
-			"Preempted KaiwoJob %s/%s due to expired duration and active GPU demand",
-			kaiwoJob.Namespace,
-			kaiwoJob.Name,
-		)
-		return true, nil
+			"KaiwoJobPreempted",
+			fmt.Sprintf("Preempted KaiwoJob %s/%s due to expired duration and active GPU demand", kaiwoJob.Namespace, kaiwoJob.Name),
+		); err != nil {
+			return true, fmt.Errorf("failed to terminate workload: %w", err)
+		}
 	}
 	return false, nil
 }
