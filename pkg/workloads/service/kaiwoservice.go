@@ -20,6 +20,10 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/silogen/kaiwo/pkg/workloads/common"
+
+	"k8s.io/client-go/tools/record"
+
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
 	// metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,11 +41,9 @@ import (
 
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/tools/record"
 
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	common "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 type KaiwoServiceReconciler struct {
@@ -219,14 +221,14 @@ func (r *KaiwoServiceReconciler) initializeStatus(ctx context.Context, k8sClient
 // }
 
 func (r *KaiwoServiceReconciler) reconcileWorkload(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme, svc *kaiwo.KaiwoService) error {
-	if _, _, err := r.LocalQueue.Reconcile(ctx, k8sClient, scheme, svc); err != nil {
+	if _, _, err := r.LocalQueue.Reconcile(ctx, k8sClient, scheme, svc, r.Recorder); err != nil {
 		return err
 	}
 	if svc.Spec.IsRayService() {
-		_, _, err := r.RayServiceReconciler.Reconcile(ctx, k8sClient, scheme, svc)
+		_, _, err := r.RayServiceReconciler.Reconcile(ctx, k8sClient, scheme, svc, r.Recorder)
 		return err
 	} else {
-		_, _, err := r.DeploymentReconciler.Reconcile(ctx, k8sClient, scheme, svc)
+		_, _, err := r.DeploymentReconciler.Reconcile(ctx, k8sClient, scheme, svc, r.Recorder)
 		return err
 	}
 }
@@ -313,22 +315,22 @@ func (r *KaiwoServiceReconciler) reconcileStorageAndDownloads(
 	}
 
 	if spec.HasData() {
-		if _, _, err := r.DataPVC.Reconcile(ctx, k8sClient, scheme, svc); err != nil {
+		if _, _, err := r.DataPVC.Reconcile(ctx, k8sClient, scheme, svc, r.Recorder); err != nil {
 			return nil, nil, fmt.Errorf("reconcile data PVC: %w", err)
 		}
 	}
 
 	if spec.HasHfDownloads() {
-		if _, _, err := r.HuggingFacePVC.Reconcile(ctx, k8sClient, scheme, svc); err != nil {
+		if _, _, err := r.HuggingFacePVC.Reconcile(ctx, k8sClient, scheme, svc, r.Recorder); err != nil {
 			return nil, nil, fmt.Errorf("reconcile HF PVC: %w", err)
 		}
 	}
 
 	if spec.HasDownloads() {
-		if _, _, err := r.DownloadJobConfigMap.Reconcile(ctx, k8sClient, scheme, svc); err != nil {
+		if _, _, err := r.DownloadJobConfigMap.Reconcile(ctx, k8sClient, scheme, svc, r.Recorder); err != nil {
 			return nil, nil, fmt.Errorf("reconcile download configmap: %w", err)
 		}
-		job, result, err := r.DownloadJob.Reconcile(ctx, k8sClient, scheme, svc)
+		job, result, err := r.DownloadJob.Reconcile(ctx, k8sClient, scheme, svc, r.Recorder)
 		if err != nil {
 			return nil, nil, fmt.Errorf("reconcile download job: %w", err)
 		}

@@ -19,6 +19,12 @@ import (
 	"fmt"
 	"time"
 
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
+
+	v1 "k8s.io/api/core/v1"
+
+	"k8s.io/client-go/tools/record"
+
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 	"github.com/silogen/kaiwo/pkg/workloads/common"
 
@@ -42,7 +48,8 @@ import (
 // KaiwoQueueConfigReconciler reconciles a KaiwoQueueConfig object
 type KaiwoQueueConfigReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=kaiwo.silogen.ai,resources=kaiwoqueueconfigs,verbs=get;list;watch;create;update;patch;delete
@@ -120,6 +127,34 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	return ctrl.Result{}, nil
 }
 
+func (r *KaiwoQueueConfigReconciler) emitEvent(queueConfig *kaiwo.KaiwoQueueConfig, target string, action string, obj client.Object, err error) {
+	reason := fmt.Sprintf("KaiwoQueueConfig%s%s", workloadutils.ToPascalCase(target), workloadutils.ToPascalCase(action))
+
+	var key string
+	if obj != nil {
+		key = fmt.Sprintf("%s/%s", obj.GetNamespace(), obj.GetName())
+	} else {
+		key = ""
+	}
+
+	eventType := v1.EventTypeNormal
+	var message string
+	if err != nil {
+		eventType = v1.EventTypeWarning
+		reason += "Failed"
+		message = fmt.Sprintf("Failed to %s %s %s: %v", action, target, key, err)
+	} else {
+		reason += "d"
+		message = fmt.Sprintf("%sd %s %s", action, target, key)
+	}
+	r.Recorder.Eventf(
+		queueConfig,
+		eventType,
+		reason,
+		message,
+	)
+}
+
 func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, queueConfig *kaiwo.KaiwoQueueConfig) error {
 	logger := log.FromContext(ctx)
 
@@ -171,19 +206,26 @@ func (r *KaiwoQueueConfigReconciler) syncResourceFlavors(ctx context.Context, qu
 			if err := ctrl.SetControllerReference(queueConfig, &kueueFlavor, r.Scheme); err != nil {
 				logger.Error(err, "Failed to set owner reference", "name", kueueFlavor.Name)
 				success = false
+				r.emitEvent(queueConfig, "resource flavor", "owner reference", &kueueFlavor, err)
 				continue
 			}
-			if err := r.Create(ctx, &kueueFlavor); err != nil {
+			err := r.Create(ctx, &kueueFlavor)
+			if err != nil {
 				logger.Error(err, "Failed to create ResourceFlavor", "name", kueueFlavor.Name)
 				success = false
 			}
+			r.emitEvent(queueConfig, "resource flavor", "create", &kueueFlavor, err)
+
 		} else if !controllerutils.CompareResourceFlavors(existingFlavor, kueueFlavor) {
 			logger.Info("Updating ResourceFlavor", "name", kueueFlavor.Name)
 			existingFlavor.Spec = kueueFlavor.Spec
-			if err := r.Update(ctx, &existingFlavor); err != nil {
+			err := r.Update(ctx, &existingFlavor)
+			if err != nil {
 				logger.Error(err, "Failed to update ResourceFlavor", "name", kueueFlavor.Name)
 				success = false
 			}
+			r.emitEvent(queueConfig, "resource flavor", "update", &existingFlavor, err)
+
 		}
 		existingFlavorMap[kueueFlavor.Name] = kueueFlavor
 	}
@@ -191,10 +233,12 @@ func (r *KaiwoQueueConfigReconciler) syncResourceFlavors(ctx context.Context, qu
 	for _, existingFlavor := range existingFlavors.Items {
 		if _, exists := existingFlavorMap[existingFlavor.Name]; !exists {
 			logger.Info("Deleting ResourceFlavor", "name", existingFlavor.Name)
-			if err := r.Delete(ctx, &existingFlavor); err != nil {
+			err := r.Delete(ctx, &existingFlavor)
+			if err != nil {
 				logger.Error(err, "Failed to delete ResourceFlavor", "name", existingFlavor.Name)
 				success = false
 			}
+			r.emitEvent(queueConfig, "resource flavor", "delete", &existingFlavor, err)
 		}
 	}
 
@@ -232,22 +276,29 @@ func (r *KaiwoQueueConfigReconciler) syncClusterQueues(ctx context.Context, queu
 			if err := ctrl.SetControllerReference(queueConfig, &kueueQueue, r.Scheme); err != nil {
 				logger.Error(err, "Failed to set owner reference", "name", kueueQueue.Name)
 				success = false
+				r.emitEvent(queueConfig, "cluster queue", "owner reference", &kueueQueue, err)
 				continue
 			}
-			if err := r.Create(ctx, &kueueQueue); err != nil {
+			err := r.Create(ctx, &kueueQueue)
+			if err != nil {
 				logger.Error(err, "Failed to create ClusterQueue", "name", kueueQueue.Name)
 				success = false
 			}
+			r.emitEvent(queueConfig, "cluster queue", "create", &kueueQueue, err)
+
 		} else if err != nil {
 			logger.Error(err, "Failed to get ClusterQueue", "name", kueueQueue.Name)
+			r.emitEvent(queueConfig, "cluster queue", "get", &kueueQueue, err)
 			success = false
 		} else if !controllerutils.CompareClusterQueues(*existingQueue, kueueQueue) {
 			logger.Info("Updating ClusterQueue", "name", kueueQueue.Name)
 			existingQueue.Spec = kueueQueue.Spec
-			if err := r.Update(ctx, existingQueue); err != nil {
+			err := r.Update(ctx, existingQueue)
+			if err != nil {
 				logger.Error(err, "Failed to update ClusterQueue", "name", kueueQueue.Name)
 				success = false
 			}
+			r.emitEvent(queueConfig, "cluster queue", "update", existingQueue, err)
 		}
 		expectedQueues[kueueQueue.Name] = kueueQueue
 	}
@@ -255,10 +306,12 @@ func (r *KaiwoQueueConfigReconciler) syncClusterQueues(ctx context.Context, queu
 	for _, existingQueue := range existingQueues.Items {
 		if _, exists := expectedQueues[existingQueue.Name]; !exists {
 			logger.Info("Deleting ClusterQueue", "name", existingQueue.Name)
-			if err := r.Delete(ctx, &existingQueue); err != nil {
+			err := r.Delete(ctx, &existingQueue)
+			if err != nil {
 				logger.Error(err, "Failed to delete ClusterQueue", "name", existingQueue.Name)
 				success = false
 			}
+			r.emitEvent(queueConfig, "cluster queue", "delete", &existingQueue, err)
 		}
 	}
 
@@ -294,6 +347,7 @@ func (r *KaiwoQueueConfigReconciler) syncLocalQueues(
 		if err := r.Get(ctx, client.ObjectKey{Name: clusterQueue.Name}, actualClusterQueue); err != nil {
 			logger.Error(err, "Failed to get ClusterQueue", "name", clusterQueue.Name)
 			success = false
+			r.emitEvent(kaiwoQueueConfig, "cluster queue", "get", actualClusterQueue, err)
 			continue
 		}
 		for _, namespace := range clusterQueue.Namespaces {
@@ -326,18 +380,22 @@ func (r *KaiwoQueueConfigReconciler) syncLocalQueues(
 				if err := ctrl.SetControllerReference(actualClusterQueue, localQueue, r.Scheme); err != nil {
 					logger.Error(err, "Failed to set owner reference", "name", clusterQueue.Name, "namespace", namespace)
 					success = false
+					r.emitEvent(kaiwoQueueConfig, "local queue", "owner reference", localQueue, err)
 					continue
 				}
-				if err := r.Create(ctx, localQueue); err != nil {
+				err := r.Create(ctx, localQueue)
+				if err != nil {
 					logger.Error(err, "Failed to create LocalQueue", "name", clusterQueue.Name, "namespace", namespace)
 					success = false
 				} else {
 					logger.Info("Created LocalQueue", "name", clusterQueue.Name, "namespace", namespace)
 				}
+				r.emitEvent(kaiwoQueueConfig, "local queue", "create", localQueue, err)
 
 			default:
 				// Unexpected error
 				logger.Error(err, "Failed to get LocalQueue", "name", clusterQueue.Name, "namespace", namespace)
+				r.emitEvent(kaiwoQueueConfig, "local queue", "get", nil, err)
 				success = false
 			}
 		}
@@ -347,10 +405,12 @@ func (r *KaiwoQueueConfigReconciler) syncLocalQueues(
 	for queueName, namespaceMap := range staleQueues {
 		for namespace, localQueue := range namespaceMap {
 			logger.Info("Deleting stale LocalQueue", "name", queueName, "namespace", namespace)
-			if err := r.Delete(ctx, &localQueue); err != nil {
+			err := r.Delete(ctx, &localQueue)
+			if err != nil {
 				logger.Error(err, "Failed to delete stale LocalQueue", "name", queueName, "namespace", namespace)
 				success = false
 			}
+			r.emitEvent(kaiwoQueueConfig, "local queue", "delete", &localQueue, err)
 		}
 	}
 
@@ -372,22 +432,28 @@ func (r *KaiwoQueueConfigReconciler) syncWorkloadPriorityClasses(ctx context.Con
 			if err := ctrl.SetControllerReference(queueConfig, &priorityClassSpec, r.Scheme); err != nil {
 				logger.Error(err, "Failed to set owner reference", "name", priorityClassSpec.Name)
 				success = false
+				r.emitEvent(queueConfig, "workload priority class", "owner reference", &priorityClassSpec, err)
 				continue
 			}
-			if err := r.Create(ctx, &priorityClassSpec); err != nil {
+			err := r.Create(ctx, &priorityClassSpec)
+			if err != nil {
 				logger.Error(err, "Failed to create WorkloadPriorityClass", "name", priorityClassSpec.Name)
 				success = false
 			}
+			r.emitEvent(queueConfig, "workload priority class", "create", &priorityClassSpec, err)
 		} else if err != nil {
 			logger.Error(err, "Failed to get WorkloadPriorityClass", "name", priorityClassSpec.Name)
 			success = false
+			r.emitEvent(queueConfig, "workload priority class", "get", &priorityClassSpec, err)
 		} else if !controllerutils.ComparePriorityClasses(*existingPriorityClass, priorityClassSpec) {
 			logger.Info("Updating WorkloadPriorityClass", "name", priorityClassSpec.Name)
 			existingPriorityClass.Value = priorityClassSpec.Value
-			if err := r.Update(ctx, existingPriorityClass); err != nil {
+			err := r.Update(ctx, existingPriorityClass)
+			if err != nil {
 				logger.Error(err, "Failed to update WorkloadPriorityClass", "name", priorityClassSpec.Name)
 				success = false
 			}
+			r.emitEvent(queueConfig, "workload priority class", "update", existingPriorityClass, err)
 		}
 		expectedPriorityClasses[priorityClassSpec.Name] = priorityClassSpec
 	}
@@ -395,10 +461,12 @@ func (r *KaiwoQueueConfigReconciler) syncWorkloadPriorityClasses(ctx context.Con
 	for _, existingPriorityClass := range existingPriorityClasses.Items {
 		if _, exists := expectedPriorityClasses[existingPriorityClass.Name]; !exists {
 			logger.Info("Deleting WorkloadPriorityClass", "name", existingPriorityClass.Name)
-			if err := r.Delete(ctx, &existingPriorityClass); err != nil {
+			err := r.Delete(ctx, &existingPriorityClass)
+			if err != nil {
 				logger.Error(err, "Failed to delete WorkloadPriorityClass", "name", existingPriorityClass.Name)
 				success = false
 			}
+			r.emitEvent(queueConfig, "workload priority class", "delete", &existingPriorityClass, err)
 		}
 	}
 
@@ -407,6 +475,7 @@ func (r *KaiwoQueueConfigReconciler) syncWorkloadPriorityClasses(ctx context.Con
 
 func (r *KaiwoQueueConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	logger := log.Log.WithName("SetupWithManager")
+	r.Recorder = mgr.GetEventRecorderFor("kaiwoqueueconfig-controller")
 
 	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
 		ctx, err := controllerutils.GetContextWithConfig(ctx, mgr.GetClient())

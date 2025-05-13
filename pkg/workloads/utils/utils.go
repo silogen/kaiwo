@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
@@ -465,6 +467,26 @@ func ValidateKaiwoResourceBeforeCreateOrUpdate(ctx context.Context, actual clien
 		return &ctrl.Result{}, nil
 	}
 	return nil, nil
+}
+
+// capitalize returns s with its first rune upper-cased (handles Unicode).
+func capitalize(s string) string {
+	if s == "" {
+		return ""
+	}
+	r, size := utf8.DecodeRuneInString(s)
+	return string(unicode.ToUpper(r)) + s[size:]
+}
+
+// ToPascalCase transforms a string like "hello there" into "HelloThere".
+func ToPascalCase(s string) string {
+	// Split on any whitespace
+	words := strings.Fields(s)
+	var b strings.Builder
+	for _, w := range words {
+		b.WriteString(capitalize(w))
+	}
+	return b.String()
 }
 
 func ShouldPreempt(ctx context.Context, obj common.KaiwoWorkload, k8sClient client.Client) bool {

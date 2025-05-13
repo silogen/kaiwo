@@ -18,6 +18,11 @@ import (
 	"context"
 	"fmt"
 
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/tools/record"
+
 	appwrapperv1beta2 "github.com/project-codeflare/appwrapper/api/v1beta2"
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -51,17 +56,34 @@ type ResourceReconcilerBase[T client.Object] struct {
 	Desired   T
 }
 
-func (d *ResourceReconcilerBase[T]) Create(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme, desired T, owner client.Object) error {
+func (d *ResourceReconcilerBase[T]) Create(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme, desired T, owner client.Object, recorder record.EventRecorder) error {
 	if owner != nil {
 		if err := ctrl.SetControllerReference(owner, desired, scheme); err != nil {
 			return fmt.Errorf("failed to set controller reference: %w", err)
 		}
 	}
-	return k8sClient.Create(ctx, desired)
+	gvk, err := apiutil.GVKForObject(desired, scheme)
+	if err != nil {
+		// fallback if scheme lookup fails
+		gvk = desired.GetObjectKind().GroupVersionKind()
+	}
+	key := client.ObjectKeyFromObject(desired).String()
+
+	if err := k8sClient.Create(ctx, desired); err != nil {
+		// The main reconciler function catches this error and emits an event, so no extra event is emitted here
+		return err
+	}
+	recorder.Event(
+		owner,
+		corev1.EventTypeNormal,
+		"CreateSucceeded",
+		fmt.Sprintf("Created %s %s", gvk.Kind, key),
+	)
+	return nil
 }
 
 // Update updates the object. By default, nothing is done, and desired is set to actual
-func (d *ResourceReconcilerBase[T]) Update(_ context.Context, _ client.Client, desired *T, actual T) error {
+func (d *ResourceReconcilerBase[T]) Update(_ context.Context, _ client.Client, desired *T, actual T, recorder record.EventRecorder) error {
 	*desired = actual
 	return nil
 }
@@ -69,7 +91,7 @@ func (d *ResourceReconcilerBase[T]) Update(_ context.Context, _ client.Client, d
 // Reconcile ensures that the resource exists and is in the desired state.
 // The object is first built based on the reconciler object (kaiwo job or service), and the remote object is fetched.
 // If it exists, it is updated, otherwise it is created.
-func (d *ResourceReconcilerBase[T]) Reconcile(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme, owner client.Object) (actual T, result *ctrl.Result, err error) {
+func (d *ResourceReconcilerBase[T]) Reconcile(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme, owner client.Object, recorder record.EventRecorder) (actual T, result *ctrl.Result, err error) {
 	logger := log.FromContext(ctx)
 
 	var empty T // nil or default value
@@ -123,7 +145,7 @@ func (d *ResourceReconcilerBase[T]) Reconcile(ctx context.Context, k8sClient cli
 			baseutils.Debug(logger, "Skipping owner reference update since object is neither a BatchJob nor a RayJob", "ObjectType", fmt.Sprintf("%T", actual))
 		}
 
-		err = d.Update(ctx, k8sClient, &desired, actual)
+		err = d.Update(ctx, k8sClient, &desired, actual, recorder)
 		if err != nil {
 			return empty, nil, fmt.Errorf("failed to update object: %w", err)
 		}
@@ -131,7 +153,7 @@ func (d *ResourceReconcilerBase[T]) Reconcile(ctx context.Context, k8sClient cli
 	} else if errors.IsNotFound(err) {
 		logger.Info(fmt.Sprintf("creating %s (%s/%s)", gvk.String(), desired.GetNamespace(), desired.GetName()))
 		// Object doesn't exist
-		err = d.Create(ctx, k8sClient, scheme, desired, owner)
+		err = d.Create(ctx, k8sClient, scheme, desired, owner, recorder)
 		actual = desired
 		if err != nil {
 			return empty, nil, fmt.Errorf("failed to create object: %w", err)
@@ -176,13 +198,13 @@ type ResourceReconciler[T client.Object] interface {
 	Get(ctx context.Context, k8sClient client.Client) (actual T, err error)
 
 	// Create will create the client object
-	Create(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme, desired T, owner client.Object) error
+	Create(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme, desired T, owner client.Object, recorder record.EventRecorder) error
 
 	// Update will update the client object
-	Update(ctx context.Context, k8sClient client.Client, desired *T, actual T) error
+	Update(ctx context.Context, k8sClient client.Client, desired *T, actual T, recorder record.EventRecorder) error
 
 	// Reconcile will build and then create
-	Reconcile(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme, owner client.Object) (actual T, result *ctrl.Result, err error)
+	Reconcile(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme, owner client.Object, recorder record.EventRecorder) (actual T, result *ctrl.Result, err error)
 
 	// ShouldContinue returns a reconciliation result if there is an intermediate result to return
 	ShouldContinue(ctx context.Context, actual T) *ctrl.Result
