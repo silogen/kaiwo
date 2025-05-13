@@ -134,6 +134,7 @@ _Appears in:_
 | `lowUtilizationThreshold` _float_ | LowUtilizationThreshold is the threshold which, if the metric goes under, the workload is considered underutilized. The threshold is interpreted as the percentage utilization versus the requested capacity. | 20 | Minimum: 0 <br /> |
 | `targetNamespaces` _string array_ | TargetNamespaces is a list of namespaces to apply the monitoring to. If not supplied or empty, all namespaces apart from kube-system will be inspected. However, only pods associated with KaiwoJobs or KaiwoServices are impacted. |  |  |
 | `profile` _string_ | Profile chooses the target resource to monitor. | gpu | Enum: [gpu cpu] <br /> |
+| `terminateUnderutilized` _boolean_ | TerminateUnderutilized will terminate workloads that are underutilizing resources if set to `true` | false |  |
 
 
 #### KaiwoSchedulingConfig
