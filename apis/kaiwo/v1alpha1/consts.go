@@ -12,19 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tuicomponents
+package v1alpha1
 
-import (
-	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/utils"
-	cliutils "github.com/silogen/kaiwo/pkg/cli/utils"
+const (
+	KaiwoLabelBase    = "kaiwo.silogen.ai"
+	KaiwoUserLabel    = KaiwoLabelBase + "/user"
+	KaiwoNameLabel    = KaiwoLabelBase + "/name"
+	KaiwoTypeLabel    = KaiwoLabelBase + "/type"
+	KaiwoRunIdLabel   = KaiwoLabelBase + "/run-id"
+	KaiwoManagedLabel = KaiwoLabelBase + "/managed"
+	QueueLabel        = "kueue.x-k8s.io/queue-name"
 )
-
-type RunState struct {
-	Workload               kaiwo.KaiwoWorkload
-	WorkloadType           string
-	User                   string
-	Namespace              string
-	PodName                string
-	ContainerName          string
-	PodSelectionPredicates []cliutils.PodSelectionPredicate
-}

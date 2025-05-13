@@ -20,6 +20,8 @@ import (
 	"reflect"
 	"time"
 
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"github.com/silogen/kaiwo/pkg/workloads/common"
 
 	"k8s.io/client-go/tools/record"
@@ -147,9 +149,9 @@ func sanitize(kaiwoService *kaiwo.KaiwoService, config controllerutils.KaiwoConf
 	}
 
 	if kaiwoService.Spec.ClusterQueue == "" {
-		kaiwoService.Labels[common.QueueLabel] = config.DefaultClusterQueueName
+		kaiwoService.Labels[kaiwo.QueueLabel] = config.DefaultClusterQueueName
 	} else {
-		kaiwoService.Labels[common.QueueLabel] = kaiwoService.Spec.ClusterQueue
+		kaiwoService.Labels[kaiwo.QueueLabel] = kaiwoService.Spec.ClusterQueue
 	}
 }
 
