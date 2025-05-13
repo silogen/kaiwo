@@ -160,6 +160,22 @@ func (r *KaiwoServiceReconciler) Reconcile(
 ) (ctrl.Result, error) {
 	svc := r.Object
 
+	if condition := meta.FindStatusCondition(svc.Status.Conditions, kaiwo.KaiwoResourceUtilizationType); condition != nil && condition.Status == v1.ConditionTrue {
+		cfg := controllerutils.ConfigFromContext(ctx)
+		if cfg.ResourceMonitoring.TerminateUnderutilized {
+			if err := workloadutils.TerminateWorkload(
+				ctx,
+				k8sClient,
+				r.Recorder,
+				svc,
+				workloadutils.WorkloadTerminationReason(condition.Reason),
+				"Terminating KaiwoService due to resource underutilization",
+			); err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to terminate workload: %w", err)
+			}
+		}
+	}
+
 	if err := r.ensureNamespaceManaged(ctx, k8sClient); err != nil {
 		return ctrl.Result{}, err
 	}

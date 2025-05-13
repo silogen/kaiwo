@@ -128,6 +128,10 @@ type KaiwoResourceMonitoringConfig struct {
 	// +kubebuilder:validation:Enum="gpu";"cpu"
 	// +kubebuilder:default="gpu"
 	Profile string `json:"profile,omitempty"`
+
+	// TerminateUnderutilized will terminate workloads that are underutilizing resources if set to `true`
+	// +kubebuilder:default=false
+	TerminateUnderutilized bool `json:"terminateUnderutilized,omitempty"`
 }
 
 // KaiwoSchedulingConfig contains the configuration Kaiwo uses for workload scheduling

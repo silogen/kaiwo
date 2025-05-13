@@ -8,6 +8,7 @@ spec:
     lowUtilizationThreshold: 50
     minAliveTime: 30s
     profile: cpu
+    terminateUnderutilized: true
     targetNamespaces:
     - "kaiwo-test-monitoring-conditions"
   ray:

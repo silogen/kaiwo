@@ -580,6 +580,47 @@ func SyncGpuMetaFromPodSpec(podSpec corev1.PodSpec, meta *kaiwo.CommonMetaSpec) 
 	}
 }
 
+const WorkloadEarlyTerminationConditionType = "WorkloadTerminatedEarly"
+
+type WorkloadTerminationReason string
+
+// TerminateWorkload terminates a given workload by deleting all the child objects and setting
+// an early termination condition and emitting an event
+func TerminateWorkload(
+	ctx context.Context,
+	k8sClient client.Client,
+	recorder record.EventRecorder,
+	workload utils.KaiwoWorkload,
+	reason WorkloadTerminationReason,
+	message string,
+) error {
+	statusSpec := workload.GetCommonStatusSpec()
+	statusSpec.Status = kaiwo.StatusTerminated
+
+	obj := workload.(client.Object)
+
+	metautil.SetStatusCondition(&statusSpec.Conditions, metav1.Condition{
+		Type:    WorkloadEarlyTerminationConditionType,
+		Status:  metav1.ConditionTrue,
+		Reason:  string(reason),
+		Message: message,
+	})
+
+	if err := k8sClient.Status().Update(ctx, obj); err != nil {
+		return fmt.Errorf("failed to update status: %w", err)
+	}
+
+	if err := DeleteUnderlyingResource(ctx, obj.GetUID(), obj.GetName(), obj.GetNamespace(), k8sClient); err != nil {
+		return fmt.Errorf("failed to delete workload resources: %w", err)
+	}
+
+	if recorder != nil {
+		recorder.Event(obj, corev1.EventTypeWarning, string(reason), message)
+	}
+
+	return nil
+}
+
 func DeleteUnderlyingResource(ctx context.Context, uid types.UID, name string, namespace string, k8sClient client.Client) error {
 	resourceTypes := []client.ObjectList{
 		&appsv1.DeploymentList{},
