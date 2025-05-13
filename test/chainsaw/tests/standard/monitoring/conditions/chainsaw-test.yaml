@@ -23,7 +23,11 @@ spec:
             name: kaiwoservice-low
             namespace: kaiwo-test-monitoring-conditions
           status:
+            status: TERMINATED
             (conditions[?type == 'ResourceUnderutilization']):
+            - status: "True"
+              reason: "CpuUtilizationLow"
+            (conditions[?type == 'WorkloadTerminatedEarly']):
             - status: "True"
               reason: "CpuUtilizationLow"
     - assert:
@@ -34,6 +38,7 @@ spec:
             name: kaiwoservice-high
             namespace: kaiwo-test-monitoring-conditions
           status:
+            status: RUNNING
             (conditions[?type == 'ResourceUnderutilization']):
             - status: "False"
               reason: "CpuUtilizationNormal"

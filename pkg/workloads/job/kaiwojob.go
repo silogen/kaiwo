@@ -161,6 +161,21 @@ func (r *KaiwoJobReconciler) Reconcile(
 	scheme *runtime.Scheme,
 ) (ctrl.Result, error) {
 	kaiwoJob := r.Object
+	if condition := meta.FindStatusCondition(kaiwoJob.Status.Conditions, kaiwo.KaiwoResourceUtilizationType); condition != nil && condition.Status == metav1.ConditionTrue {
+		cfg := controllerutils.ConfigFromContext(ctx)
+		if cfg.ResourceMonitoring.TerminateUnderutilized {
+			if err := workloadutils.TerminateWorkload(
+				ctx,
+				k8sClient,
+				r.Recorder,
+				kaiwoJob,
+				workloadutils.WorkloadTerminationReason(condition.Reason),
+				"Terminating KaiwoJob due to resource underutilization",
+			); err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to terminate workload: %w", err)
+			}
+		}
+	}
 
 	if err := r.ensureInitializedStatus(ctx, k8sClient); err != nil {
 		return ctrl.Result{}, err
