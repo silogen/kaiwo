@@ -106,7 +106,7 @@ func (r *DeploymentReconciler) Build(ctx context.Context, _ client.Client) (*app
 	depSpec.Selector.MatchLabels["app"] = r.ObjectKey.Name
 	depSpec.Template.ObjectMeta.Labels["app"] = r.ObjectKey.Name
 
-	depSpec.Template.ObjectMeta.Labels[common.QueueLabel] = r.KaiwoService.Labels[common.QueueLabel]
+	depSpec.Template.ObjectMeta.Labels[kaiwo.QueueLabel] = r.KaiwoService.Labels[kaiwo.QueueLabel]
 	if r.KaiwoService.Spec.PriorityClass != "" {
 		depSpec.Template.Spec.PriorityClassName = r.KaiwoService.Spec.PriorityClass
 	}

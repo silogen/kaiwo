@@ -26,6 +26,8 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/silogen/kaiwo/apis/kaiwo/utils"
+
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
 	configapi "github.com/silogen/kaiwo/apis/config/v1alpha1"
@@ -38,8 +40,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
-
-	"github.com/silogen/kaiwo/pkg/workloads/common"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -336,15 +336,15 @@ func (m *MetricsWatcher) handlePodUtilization(
 	return nil
 }
 
-func GetKaiwoWorkloadFromPod(ctx context.Context, k8sClient client.Client, namespace string, podName string) (common.KaiwoWorkload, error) {
+func GetKaiwoWorkloadFromPod(ctx context.Context, k8sClient client.Client, namespace string, podName string) (utils.KaiwoWorkload, error) {
 	logger := log.FromContext(ctx).WithValues("pod", podName, "namespace", namespace)
 
 	var pod corev1.Pod
 	if err := k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: podName}, &pod); err != nil {
 		return nil, fmt.Errorf("get pod: %w", err)
 	}
-	workloadType, workloadTypeFound := pod.Labels[common.KaiwoTypeLabel]
-	workloadName, workloadNameFound := pod.Labels[common.KaiwoNameLabel]
+	workloadType, workloadTypeFound := pod.Labels[kaiwo.KaiwoTypeLabel]
+	workloadName, workloadNameFound := pod.Labels[kaiwo.KaiwoNameLabel]
 	if !workloadTypeFound || !workloadNameFound || workloadName == "" {
 		logger.V(1).Info("not a Kaiwo workload, skipping")
 		return nil, nil
@@ -353,7 +353,7 @@ func GetKaiwoWorkloadFromPod(ctx context.Context, k8sClient client.Client, names
 	return GetKaiwoWorkload(ctx, k8sClient, workloadName, namespace, workloadType)
 }
 
-func GetKaiwoWorkload(ctx context.Context, k8sClient client.Client, name string, namespace string, workloadType string) (common.KaiwoWorkload, error) {
+func GetKaiwoWorkload(ctx context.Context, k8sClient client.Client, name string, namespace string, workloadType string) (utils.KaiwoWorkload, error) {
 	var obj client.Object
 	switch workloadType {
 	case "job":
@@ -366,7 +366,7 @@ func GetKaiwoWorkload(ctx context.Context, k8sClient client.Client, name string,
 	if err := k8sClient.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, obj); err != nil {
 		return nil, fmt.Errorf("failed to fetch Kaiwo workload: %w", err)
 	}
-	return obj.(common.KaiwoWorkload), nil
+	return obj.(utils.KaiwoWorkload), nil
 }
 
 // mapProfile picks GPU or CPU variant.
@@ -380,7 +380,7 @@ func mapProfile(profile string, gpuVal kaiwo.KaiwoResourceUtilizationStatus, cpu
 // syncKaiwoStatus finds the parent Kaiwo resource, applies a condition, and updates status.subresource.
 func (m *MetricsWatcher) syncKaiwoStatus(
 	ctx context.Context,
-	kaiwoWorkload common.KaiwoWorkload,
+	kaiwoWorkload utils.KaiwoWorkload,
 	reason kaiwo.KaiwoResourceUtilizationStatus,
 	msg string,
 	healthy bool,
@@ -420,7 +420,7 @@ func healthyString(healthy bool) metav1.ConditionStatus {
 
 // recordEvent uses EventRecorder for correct aggregation.
 func (m *MetricsWatcher) recordEvent(
-	workload common.KaiwoWorkload,
+	workload utils.KaiwoWorkload,
 	reason kaiwo.KaiwoResourceUtilizationStatus,
 	msg string,
 	eventType string,

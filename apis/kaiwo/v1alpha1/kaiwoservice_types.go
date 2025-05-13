@@ -23,8 +23,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	common "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 // KaiwoServiceSpec defines the desired state of KaiwoService.
@@ -116,7 +114,7 @@ func (spec *KaiwoServiceSpec) IsRayService() bool {
 	return spec.RayService != nil || spec.Ray
 }
 
-func (svc *KaiwoService) GetStatus() string {
+func (svc *KaiwoService) GetStatusString() string {
 	return string(svc.Status.Status)
 }
 
@@ -140,6 +138,10 @@ func (s *KaiwoService) GetGPUVendor() string {
 	return s.Spec.GpuVendor
 }
 
+func (s *KaiwoService) GetCommonStatusSpec() *CommonStatusSpec {
+	return &s.Status.CommonStatusSpec
+}
+
 func init() {
 	SchemeBuilder.Register(&KaiwoService{}, &KaiwoServiceList{})
 }
@@ -147,7 +149,7 @@ func init() {
 func (svc *KaiwoService) GetPods(ctx context.Context, k8sClient client.Client) ([]corev1.Pod, error) {
 	podList := &corev1.PodList{}
 	if err := k8sClient.List(ctx, podList, client.InNamespace(svc.Namespace), client.MatchingLabels{
-		common.KaiwoRunIdLabel: string(svc.UID),
+		KaiwoRunIdLabel: string(svc.UID),
 	}); err != nil {
 		return nil, fmt.Errorf("failed to list pods: %w", err)
 	}

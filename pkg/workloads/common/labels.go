@@ -17,17 +17,11 @@ package common
 import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	baseutils "github.com/silogen/kaiwo/pkg/utils"
-)
+	"github.com/silogen/kaiwo/apis/kaiwo/utils"
 
-const (
-	KaiwoLabelBase    = "kaiwo.silogen.ai"
-	KaiwoUserLabel    = KaiwoLabelBase + "/user"
-	KaiwoNameLabel    = KaiwoLabelBase + "/name"
-	KaiwoTypeLabel    = KaiwoLabelBase + "/type"
-	KaiwoRunIdLabel   = KaiwoLabelBase + "/run-id"
-	KaiwoManagedLabel = KaiwoLabelBase + "/managed"
-	QueueLabel        = "kueue.x-k8s.io/queue-name"
+	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
+
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
 type KaiwoLabelContext struct {
@@ -43,19 +37,19 @@ func SetKaiwoSystemLabels(kaiwoLabelContext KaiwoLabelContext, objectMeta *v1.Ob
 	if objectMeta.Labels == nil {
 		objectMeta.Labels = make(map[string]string)
 	}
-	objectMeta.Labels[KaiwoUserLabel] = baseutils.MakeRFC1123Compliant(kaiwoLabelContext.User)
-	objectMeta.Labels[KaiwoNameLabel] = kaiwoLabelContext.Name
-	objectMeta.Labels[KaiwoTypeLabel] = kaiwoLabelContext.Type
-	objectMeta.Labels[KaiwoRunIdLabel] = kaiwoLabelContext.RunId
+	objectMeta.Labels[kaiwo.KaiwoUserLabel] = baseutils.MakeRFC1123Compliant(kaiwoLabelContext.User)
+	objectMeta.Labels[kaiwo.KaiwoNameLabel] = kaiwoLabelContext.Name
+	objectMeta.Labels[kaiwo.KaiwoTypeLabel] = kaiwoLabelContext.Type
+	objectMeta.Labels[kaiwo.KaiwoRunIdLabel] = kaiwoLabelContext.RunId
 	if kaiwoLabelContext.Managed != "" {
-		objectMeta.Labels[KaiwoManagedLabel] = kaiwoLabelContext.Managed
+		objectMeta.Labels[kaiwo.KaiwoManagedLabel] = kaiwoLabelContext.Managed
 	}
 }
 
 // CopyLabels copies labels from kaiwoLabels to objectMeta.Labels, skipping keys that already exist
 func CopyLabels(kaiwoLabels map[string]string, objectMeta *v1.ObjectMeta) {
 	for kaiwoLabelKey, kaiwoLabelValue := range kaiwoLabels {
-		if kaiwoLabelKey == QueueLabel {
+		if kaiwoLabelKey == kaiwo.QueueLabel {
 			continue
 		}
 		if _, exists := objectMeta.Labels[kaiwoLabelKey]; !exists {
@@ -64,13 +58,13 @@ func CopyLabels(kaiwoLabels map[string]string, objectMeta *v1.ObjectMeta) {
 	}
 }
 
-func GetKaiwoLabelContext(k KaiwoWorkload) KaiwoLabelContext {
+func GetKaiwoLabelContext(k utils.KaiwoWorkload) KaiwoLabelContext {
 	objectMeta := k.GetObjectMeta()
 	return KaiwoLabelContext{
 		User:    k.GetUser(),
 		Name:    objectMeta.Name,
 		Type:    k.GetType(),
 		RunId:   string(objectMeta.UID),
-		Managed: objectMeta.Labels[KaiwoManagedLabel],
+		Managed: objectMeta.Labels[kaiwo.KaiwoManagedLabel],
 	}
 }

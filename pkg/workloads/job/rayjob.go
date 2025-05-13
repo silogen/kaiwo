@@ -186,7 +186,7 @@ func (r *RayJobReconciler) Build(ctx context.Context, k8sClient client.Client) (
 	common.CopyLabels(r.KaiwoJob.ObjectMeta.Labels, &rayJob.ObjectMeta)
 	common.SetKaiwoSystemLabels(labelContext, &rayJob.ObjectMeta)
 
-	rayJob.ObjectMeta.Labels[common.QueueLabel] = r.KaiwoJob.Labels[common.QueueLabel]
+	rayJob.ObjectMeta.Labels[kaiwo.QueueLabel] = r.KaiwoJob.Labels[kaiwo.QueueLabel]
 	if r.KaiwoJob.Spec.PriorityClass != "" {
 		rayJob.Spec.RayClusterSpec.HeadGroupSpec.Template.Spec.PriorityClassName = r.KaiwoJob.Spec.PriorityClass
 		for i := range rayJobSpec.RayClusterSpec.WorkerGroupSpecs {

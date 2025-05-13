@@ -205,7 +205,7 @@ func (r *RayServiceReconciler) Build(ctx context.Context, k8sClient client.Clien
 			Name:      r.KaiwoService.Name,
 			Namespace: r.KaiwoService.Namespace,
 			Labels: map[string]string{
-				common.QueueLabel: r.KaiwoService.Labels[common.QueueLabel],
+				kaiwo.QueueLabel: r.KaiwoService.Labels[kaiwo.QueueLabel],
 			},
 		},
 		Spec: appwrapperv1beta2.AppWrapperSpec{

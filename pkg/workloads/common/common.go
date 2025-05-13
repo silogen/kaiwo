@@ -15,14 +15,9 @@
 package common
 
 import (
-	"context"
 	"time"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var DefaultClusterQueueName = baseutils.GetEnv("DEFAULT_CLUSTER_QUEUE_NAME", "kaiwo")
@@ -33,16 +28,3 @@ const (
 )
 
 var DefaultRequeueDuration = 2 * time.Second
-
-type KaiwoWorkload interface {
-	GetUser() string
-	GetObjectMeta() *metav1.ObjectMeta
-	GetStatus() string
-	GetType() string
-	GetPods(ctx context.Context, k8sClient client.Client) ([]corev1.Pod, error)
-	GetServices(ctx context.Context, k8sClient client.Client) ([]corev1.Service, error)
-	GetDuration() *metav1.Duration
-	GetStartTime() *metav1.Time
-	GetClusterQueue() string
-	GetGPUVendor() string
-}

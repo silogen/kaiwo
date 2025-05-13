@@ -22,6 +22,10 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/silogen/kaiwo/apis/kaiwo/utils"
+
+	"k8s.io/client-go/tools/record"
+
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
@@ -403,7 +407,7 @@ func updatePodSpecStorage(podSpec *corev1.PodSpec, storageSpec kaiwo.StorageSpec
 
 func GetEarliestPodStartTime(ctx context.Context, k8sClient client.Client, name string, namespace string) *metav1.Time {
 	podList := &corev1.PodList{}
-	if err := k8sClient.List(ctx, podList, client.InNamespace(namespace), client.MatchingLabels{common.KaiwoNameLabel: name}); err != nil {
+	if err := k8sClient.List(ctx, podList, client.InNamespace(namespace), client.MatchingLabels{kaiwo.KaiwoNameLabel: name}); err != nil {
 		return nil
 	}
 
@@ -422,7 +426,7 @@ func CheckPodStatus(ctx context.Context, k8sClient client.Client, name string, n
 	logger := log.FromContext(ctx)
 
 	podList := &corev1.PodList{}
-	err = k8sClient.List(ctx, podList, client.InNamespace(namespace), client.MatchingLabels{common.KaiwoNameLabel: name})
+	err = k8sClient.List(ctx, podList, client.InNamespace(namespace), client.MatchingLabels{kaiwo.KaiwoNameLabel: name})
 	if err != nil {
 		logger.Error(err, "Failed to list pods for job", "KaiwoJob", name)
 		return nil, status, err
@@ -461,7 +465,7 @@ func CheckPodStatus(ctx context.Context, k8sClient client.Client, name string, n
 }
 
 func ValidateKaiwoResourceBeforeCreateOrUpdate(ctx context.Context, actual client.Object, kaiwoObjectMeta metav1.ObjectMeta) (*ctrl.Result, error) {
-	if actual == nil && kaiwoObjectMeta.Labels != nil && kaiwoObjectMeta.Labels[common.KaiwoManagedLabel] == "true" {
+	if actual == nil && kaiwoObjectMeta.Labels != nil && kaiwoObjectMeta.Labels[kaiwo.KaiwoManagedLabel] == "true" {
 		logger := log.FromContext(ctx)
 		baseutils.Debug(logger, "Aborting reconciliation to avoid recreating a webhook-managed object")
 		return &ctrl.Result{}, nil
@@ -489,10 +493,10 @@ func ToPascalCase(s string) string {
 	return b.String()
 }
 
-func ShouldPreempt(ctx context.Context, obj common.KaiwoWorkload, k8sClient client.Client) bool {
+func ShouldPreempt(ctx context.Context, obj utils.KaiwoWorkload, k8sClient client.Client) bool {
 	duration := obj.GetDuration()
 	startTime := obj.GetStartTime()
-	if duration == nil || obj.GetStatus() != string(kaiwo.StatusRunning) {
+	if duration == nil || obj.GetStatusString() != string(kaiwo.StatusRunning) {
 		return false
 	}
 	now := time.Now()
