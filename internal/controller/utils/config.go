@@ -36,7 +36,7 @@ const (
 	configName = common.KaiwoQueueConfigName
 )
 
-var generateDefaultConfig = baseutils.GetEnv("CONFIG_GENERATE_DEFAULT", "false")
+var generateDefaultConfig = baseutils.GetEnv("CONFIG_GENERATE_DEFAULT", "true")
 
 type cfgKey struct{}
 
