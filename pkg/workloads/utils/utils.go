@@ -553,9 +553,15 @@ func ClusterHasGpuDemand(ctx context.Context, k8sClient client.Client, clusterQu
 }
 
 func isPendingForLong(ctx context.Context, meta metav1.ObjectMeta) bool {
+	logger := log.FromContext(ctx)
 	config := controllerutils.ConfigFromContext(ctx)
 	age := time.Since(meta.CreationTimestamp.Time)
-	return age > config.Scheduling.PendingThresholdForPreemption.Duration
+	duration, err := time.ParseDuration(config.Scheduling.PendingThresholdForPreemption)
+	if err != nil {
+		logger.Error(err, "Failed to parse duration", "duration", config.Scheduling.PendingThresholdForPreemption)
+		return false
+	}
+	return age > duration
 }
 
 func SyncGpuMetaFromPodSpec(podSpec corev1.PodSpec, meta *kaiwo.CommonMetaSpec) {
