@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/api/resource"
+
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
 	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
@@ -83,7 +85,7 @@ func (r *RayServiceReconciler) Build(ctx context.Context, k8sClient client.Clien
 		}
 	}
 
-	if headMemoryOverride := config.Ray.HeadPodMemory; headMemoryOverride.Value() > 0 {
+	if headMemoryOverride := resource.MustParse(config.Ray.HeadPodMemory); headMemoryOverride.Value() > 0 {
 		workloadutils.FillPodResources(
 			&rayServiceSpec.RayClusterSpec.HeadGroupSpec.Template.Spec,
 			&v1.ResourceRequirements{

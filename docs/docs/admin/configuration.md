@@ -145,7 +145,7 @@ The primary configuration resource is the `KaiwoConfig` CRD, typically maintaine
 
 ### Specifying the Configuration CR
 
-The Kaiwo Operator identifies its configuration resource via the environment variable `CONFIG_NAME`. By default, this is set to `kaiwo`. Ensure that a `KaiwoConfig` resource with this exact name exists in your cluster. Alternatively, setting the environment variable `CONFIG_GENERATE_DEFAULT=true` instructs the operator to automatically create a default configuration at startup if none exists.
+The Kaiwo Operator identifies its configuration resource via the environment variable `CONFIG_NAME`. By default, this is set to `kaiwo`. Ensure that a `KaiwoConfig` resource with this exact name exists in your cluster. The operator automatically creates a default configuration at startup if none exists.
 
 !!!note 
     The operator waits up to **30 seconds** for the specified configuration resource to be found. If no resource is detected within this period, the operator pod will fail with an error.
@@ -167,9 +167,6 @@ spec:
     lowUtilizationThreshold: 20
     profile: "gpu"
 ```
-
-!!!note
-    You can safely use the default values or create a default config by setting the environment variable `CONFIG_GENERATE_DEFAULT` to true.
 
 ---
 

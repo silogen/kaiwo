@@ -15,8 +15,6 @@
 package v1alpha1
 
 import (
-	"k8s.io/apimachinery/pkg/api/resource"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -60,11 +58,12 @@ type KaiwoConfigSpec struct {
 // KaiwoRayConfig contains the Ray-specific configuration that Kaiwo uses.
 type KaiwoRayConfig struct {
 	// DefaultRayImage is the image that is used for Ray workloads if no image is provided in the workload CRD
-	// +kubebuilder:default="ghcr.io/silogen/rocm-ray:v0.9"
+	// +kubebuilder:default="ghcr.io/silogen/rocm-ray:6.4"
 	DefaultRayImage string `json:"defaultRayImage,omitempty"`
 
 	// HeadPodMemory is the amount of memory that is requested for the Ray head pod
-	HeadPodMemory resource.Quantity `json:"headPodMemory,omitempty"`
+	// +kubebuilder:default="16Gi"
+	HeadPodMemory string `json:"headPodMemory,omitempty"`
 }
 
 type KaiwoStorageConfig struct {
@@ -139,7 +138,7 @@ type KaiwoSchedulingConfig struct {
 	// PendingThresholdForPreemption is the threshold that is used to determine if a workload is awaiting for compute resources to be available.
 	// If the workload is requesting GPUs and pending for longer than this threshold, kaiwo will start preempting workloads that have exceeded their duration deadline and are using GPUs of the same vendor as the pending workload.
 	// +kubebuilder:default="5m"
-	PendingThresholdForPreemption metav1.Duration `json:"pendingThresholdForPreemption,omitempty"`
+	PendingThresholdForPreemption string `json:"pendingThresholdForPreemption,omitempty"`
 }
 
 // KaiwoConfig manages the Kaiwo operator's configuration which can be modified during runtime.
