@@ -17,7 +17,6 @@ package controllerutils
 import (
 	"context"
 	"fmt"
-	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -28,15 +27,12 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	baseutils "github.com/silogen/kaiwo/pkg/utils"
 	"github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 const (
 	configName = common.KaiwoQueueConfigName
 )
-
-var generateDefaultConfig = baseutils.GetEnv("CONFIG_GENERATE_DEFAULT", "false")
 
 type cfgKey struct{}
 
@@ -47,38 +43,12 @@ func EnsureConfig(ctx context.Context, k8sClient client.Client) error {
 	config := &configapi.KaiwoConfig{}
 	if err := k8sClient.Get(ctx, client.ObjectKey{Name: configName}, config); err == nil {
 		logger.Info("Kaiwo Config exists", "configName", configName)
-	} else if errors.IsNotFound(err) {
-		logger.Info("Default Kaiwo Config not found", "configName", configName)
-		if generateDefaultConfig == "true" { // nolint:goconst
-			if _, err := createDefaultConfig(ctx, k8sClient); err != nil {
-				return fmt.Errorf("could not create default Kaiwo Config: %w", err)
-			} else {
-				logger.Info("Default Kaiwo Config created", "configName", configName)
-			}
-		} else {
-			logger.Info("Waiting for Kaiwo Config to be available...", "configName", configName)
-			ticker := time.NewTicker(1 * time.Second)
-			defer ticker.Stop()
-
-			for {
-				select {
-				case <-ctx.Done():
-					return fmt.Errorf("timeout waiting for Kaiwo Config with name '%s': %w", configName, ctx.Err())
-				case <-ticker.C:
-					err := k8sClient.Get(ctx, client.ObjectKey{Name: configName}, config)
-					if err == nil {
-						logger.Info("Kaiwo Config found", "configName", configName)
-						return nil
-					}
-					if !errors.IsNotFound(err) {
-						logger.Error(err, "Unexpected error while polling for Kaiwo Config")
-						return fmt.Errorf("error while polling for Kaiwo Config: %w", err)
-					}
-				}
-			}
-		}
 	} else {
-		return fmt.Errorf("could not get Kaiwo Config with name '%s': %w", configName, err)
+		if _, err := createDefaultConfig(ctx, k8sClient); err != nil {
+			return fmt.Errorf("could not create default Kaiwo Config: %w", err)
+		} else {
+			logger.Info("Default Kaiwo Config created", "configName", configName)
+		}
 	}
 	return nil
 }

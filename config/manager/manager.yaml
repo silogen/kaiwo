@@ -68,8 +68,6 @@ spec:
           # Setting this to true automatically creates a default kaiwo configuration object
           # If you want to set up your own configuration from the start, set this to false or remove the variable completely,
           # and create your KaiwoConfig object separately 
-        - name: CONFIG_GENERATE_DEFAULT
-          value: "true"
 
         - name: DEFAULT_KAIWO_QUEUE_CONFIG_NAME
           value: "kaiwo"

@@ -194,11 +194,15 @@ The following flags are supported:
 You can check the current resource availability (including GPUs) of your cluster by running: 
 
 ```
-kaiwo stats nodes
+kaiwo status amd
+```
+or
+```
+kaiwo status nvidia
 ```
 
 You can check the current queue statuses for GPU jobs by running:
 
 ```
-kaiwo stats queues
+kaiwo status queues
 ```

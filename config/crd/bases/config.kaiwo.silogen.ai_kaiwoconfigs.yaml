@@ -95,16 +95,13 @@ spec:
                 description: Ray defines the Ray-specific settings
                 properties:
                   defaultRayImage:
-                    default: ghcr.io/silogen/rocm-ray:v0.9
+                    default: ghcr.io/silogen/rocm-ray:6.4
                     description: DefaultRayImage is the image that is used for Ray workloads if no image is provided in the workload CRD
                     type: string
                   headPodMemory:
-                    anyOf:
-                    - type: integer
-                    - type: string
+                    default: 16Gi
                     description: HeadPodMemory is the amount of memory that is requested for the Ray head pod
-                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                    x-kubernetes-int-or-string: true
+                    type: string
                 type: object
               resourceMonitoring:
                 default: {}
