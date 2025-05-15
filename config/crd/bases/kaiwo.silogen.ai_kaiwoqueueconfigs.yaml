@@ -1,3 +1,4 @@
+---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -42,23 +43,33 @@ spec:
           metadata:
             type: object
           spec:
-            description: Spec defines the desired state for Kueue resources managed by Kaiwo.
+            description: Spec defines the desired state for Kueue resources managed
+              by Kaiwo.
             properties:
               clusterQueues:
-                description: ClusterQueues defines a list of Kueue ClusterQueues that Kaiwo should manage. Kaiwo ensures these ClusterQueues exist and match the provided specs.
+                description: ClusterQueues defines a list of Kueue ClusterQueues that
+                  Kaiwo should manage. Kaiwo ensures these ClusterQueues exist and
+                  match the provided specs.
                 items:
-                  description: ClusterQueue defines the configuration for a Kueue ClusterQueue managed by Kaiwo.
+                  description: ClusterQueue defines the configuration for a Kueue
+                    ClusterQueue managed by Kaiwo.
                   properties:
                     name:
-                      description: Name specifies the name of the Kueue ClusterQueue resource.
+                      description: Name specifies the name of the Kueue ClusterQueue
+                        resource.
                       type: string
                     namespaces:
-                      description: Namespaces optionally lists Kubernetes namespaces where Kaiwo should automatically create a Kueue `LocalQueue` resource pointing to this ClusterQueue.
+                      description: Namespaces optionally lists Kubernetes namespaces
+                        where Kaiwo should automatically create a Kueue `LocalQueue`
+                        resource pointing to this ClusterQueue.
                       items:
                         type: string
                       type: array
                     spec:
-                      description: Spec contains the desired Kueue `ClusterQueueSpec`. Kaiwo ensures the corresponding ClusterQueue resource matches this spec. See Kueue documentation for `ClusterQueueSpec` fields like `resourceGroups`, `cohort`, `preemption`, etc.
+                      description: Spec contains the desired Kueue `ClusterQueueSpec`.
+                        Kaiwo ensures the corresponding ClusterQueue resource matches
+                        this spec. See Kueue documentation for `ClusterQueueSpec`
+                        fields like `resourceGroups`, `cohort`, `preemption`, etc.
                       properties:
                         admissionChecks:
                           description: |-
@@ -73,9 +84,11 @@ spec:
                             This property cannot be used in conjunction with the 'admissionChecks' property.
                           properties:
                             admissionChecks:
-                              description: admissionChecks is a list of strategies for AdmissionChecks
+                              description: admissionChecks is a list of strategies
+                                for AdmissionChecks
                               items:
-                                description: AdmissionCheckStrategyRule defines rules for a single AdmissionCheck
+                                description: AdmissionCheckStrategyRule defines rules
+                                  for a single AdmissionCheck
                                 properties:
                                   name:
                                     description: name is an AdmissionCheck's name.
@@ -85,7 +98,8 @@ spec:
                                       onFlavors is a list of ResourceFlavors' names that this AdmissionCheck should run for.
                                       If empty, the AdmissionCheck will run for all workloads submitted to the ClusterQueue.
                                     items:
-                                      description: ResourceFlavorReference is the name of the ResourceFlavor.
+                                      description: ResourceFlavorReference is the
+                                        name of the ResourceFlavor.
                                       maxLength: 253
                                       pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
                                       type: string
@@ -175,14 +189,16 @@ spec:
                             If set to an empty selector `{}`, then all namespaces are eligible.
                           properties:
                             matchExpressions:
-                              description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                              description: matchExpressions is a list of label selector
+                                requirements. The requirements are ANDed.
                               items:
                                 description: |-
                                   A label selector requirement is a selector that contains values, a key, and an operator that
                                   relates the key and values.
                                 properties:
                                   key:
-                                    description: key is the label key that the selector applies to.
+                                    description: key is the label key that the selector
+                                      applies to.
                                     type: string
                                   operator:
                                     description: |-
@@ -294,7 +310,8 @@ spec:
                           type: object
                           x-kubernetes-validations:
                           - message: reclaimWithinCohort=Never and borrowWithinCohort.Policy!=Never
-                            rule: '!(self.reclaimWithinCohort == ''Never'' && has(self.borrowWithinCohort) &&  self.borrowWithinCohort.policy != ''Never'')'
+                            rule: '!(self.reclaimWithinCohort == ''Never'' && has(self.borrowWithinCohort)
+                              &&  self.borrowWithinCohort.policy != ''Never'')'
                         queueingStrategy:
                           default: BestEffortFIFO
                           description: |-
@@ -328,7 +345,8 @@ spec:
                                   Examples: cpu, memory, vendor.com/gpu.
                                   The list cannot be empty and it can contain up to 16 resources.
                                 items:
-                                  description: ResourceName is the name identifying various resources in a ResourceList.
+                                  description: ResourceName is the name identifying
+                                    various resources in a ResourceList.
                                   type: string
                                 maxItems: 16
                                 minItems: 1
@@ -431,7 +449,8 @@ spec:
                             - flavors
                             type: object
                             x-kubernetes-validations:
-                            - message: flavors must have the same number of resources as the coveredResources
+                            - message: flavors must have the same number of resources
+                                as the coveredResources
                               rule: self.flavors.all(x, size(x.resources) == size(self.coveredResources))
                           maxItems: 16
                           type: array
@@ -455,28 +474,40 @@ spec:
                       type: object
                       x-kubernetes-validations:
                       - message: borrowingLimit must be nil when cohort is empty
-                        rule: '!has(self.cohort) && has(self.resourceGroups) ? self.resourceGroups.all(rg, rg.flavors.all(f, f.resources.all(r, !has(r.borrowingLimit)))) : true'
+                        rule: '!has(self.cohort) && has(self.resourceGroups) ? self.resourceGroups.all(rg,
+                          rg.flavors.all(f, f.resources.all(r, !has(r.borrowingLimit))))
+                          : true'
                   required:
                   - name
                   type: object
                 maxItems: 10
                 type: array
               resourceFlavors:
-                description: ResourceFlavors defines a list of Kueue ResourceFlavors that Kaiwo should manage. Kaiwo ensures these ResourceFlavors exist and match the provided specs. If omitted or empty, Kaiwo attempts to automatically discover node pools and create default flavors based on node labels.
+                description: ResourceFlavors defines a list of Kueue ResourceFlavors
+                  that Kaiwo should manage. Kaiwo ensures these ResourceFlavors exist
+                  and match the provided specs. If omitted or empty, Kaiwo attempts
+                  to automatically discover node pools and create default flavors
+                  based on node labels.
                 items:
-                  description: ResourceFlavorSpec defines the configuration for a Kueue ResourceFlavor managed by Kaiwo.
+                  description: ResourceFlavorSpec defines the configuration for a
+                    Kueue ResourceFlavor managed by Kaiwo.
                   properties:
                     name:
-                      description: Name specifies the name of the Kueue ResourceFlavor resource (e.g., "amd-mi300-8gpu").
+                      description: Name specifies the name of the Kueue ResourceFlavor
+                        resource (e.g., "amd-mi300-8gpu").
                       type: string
                     nodeLabels:
                       additionalProperties:
                         type: string
-                      description: 'NodeLabels specifies the labels that pods requesting this flavor must match on nodes. This is used by Kueue for scheduling decisions. Keys and values should correspond to actual node labels. Example: `{"kaiwo/nodepool": "amd-gpu-nodes"}`'
+                      description: 'NodeLabels specifies the labels that pods requesting
+                        this flavor must match on nodes. This is used by Kueue for
+                        scheduling decisions. Keys and values should correspond to
+                        actual node labels. Example: `{"kaiwo/nodepool": "amd-gpu-nodes"}`'
                       maxProperties: 10
                       type: object
                     taints:
-                      description: Taints specifies a list of taints associated with this flavor.
+                      description: Taints specifies a list of taints associated with
+                        this flavor.
                       items:
                         description: |-
                           The node this Taint is attached to has the "effect" on
@@ -489,7 +520,8 @@ spec:
                               Valid effects are NoSchedule, PreferNoSchedule and NoExecute.
                             type: string
                           key:
-                            description: Required. The taint key to be applied to a node.
+                            description: Required. The taint key to be applied to
+                              a node.
                             type: string
                           timeAdded:
                             description: |-
@@ -498,7 +530,8 @@ spec:
                             format: date-time
                             type: string
                           value:
-                            description: The taint value corresponding to the taint key.
+                            description: The taint value corresponding to the taint
+                              key.
                             type: string
                         required:
                         - effect
@@ -507,7 +540,9 @@ spec:
                       maxItems: 5
                       type: array
                     tolerations:
-                      description: Tolerations specifies a list of tolerations associated with this flavor. This is less common than using Taints; Kueue primarily uses Taints to derive Tolerations.
+                      description: Tolerations specifies a list of tolerations associated
+                        with this flavor. This is less common than using Taints; Kueue
+                        primarily uses Taints to derive Tolerations.
                       items:
                         description: |-
                           The pod this Toleration is attached to tolerates any taint that matches
@@ -551,9 +586,12 @@ spec:
                   type: object
                 type: array
               workloadPriorityClasses:
-                description: WorkloadPriorityClasses defines a list of Kueue WorkloadPriorityClasses that Kaiwo should manage. Kaiwo ensures these priority classes exist with the specified values. See Kueue documentation for `WorkloadPriorityClass`.
+                description: WorkloadPriorityClasses defines a list of Kueue WorkloadPriorityClasses
+                  that Kaiwo should manage. Kaiwo ensures these priority classes exist
+                  with the specified values. See Kueue documentation for `WorkloadPriorityClass`.
                 items:
-                  description: WorkloadPriorityClass is the Schema for the workloadPriorityClass API
+                  description: WorkloadPriorityClass is the Schema for the workloadPriorityClass
+                    API
                   properties:
                     apiVersion:
                       description: |-
@@ -608,12 +646,16 @@ spec:
                 type: array
             type: object
           status:
-            description: Status reflects the most recently observed state of the Kueue resource synchronization.
+            description: Status reflects the most recently observed state of the Kueue
+              resource synchronization.
             properties:
               conditions:
-                description: Conditions lists the observed conditions of the KaiwoQueueConfig resource, such as whether the managed Kueue resources are synchronized and ready.
+                description: Conditions lists the observed conditions of the KaiwoQueueConfig
+                  resource, such as whether the managed Kueue resources are synchronized
+                  and ready.
                 items:
-                  description: Condition contains details for one aspect of the current state of this API Resource.
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
                   properties:
                     lastTransitionTime:
                       description: |-
@@ -667,7 +709,8 @@ spec:
                   type: object
                 type: array
               status:
-                description: Status reflects the overall status of the Kueue resource synchronization managed by this config (e.g., PENDING, READY, FAILED).
+                description: Status reflects the overall status of the Kueue resource
+                  synchronization managed by this config (e.g., PENDING, READY, FAILED).
                 type: string
             type: object
         type: object

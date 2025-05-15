@@ -1,3 +1,4 @@
+---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -16,7 +17,8 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: KaiwoConfig manages the Kaiwo operator's configuration which can be modified during runtime.
+        description: KaiwoConfig manages the Kaiwo operator's configuration which
+          can be modified during runtime.
         properties:
           apiVersion:
             description: |-
@@ -55,12 +57,15 @@ spec:
                       is also set to this value. This value can be overwritten in the workload CRD.
                     type: string
                   defaultStorageClass:
-                    description: DefaultStorageClass is the storage class that is used for workloads that don't explicitly specify a storage class.
+                    description: DefaultStorageClass is the storage class that is
+                      used for workloads that don't explicitly specify a storage class.
                     type: string
                 type: object
               defaultClusterQueueName:
                 default: kaiwo
-                description: DefaultClusterQueueName is the name of the default cluster queue that is used for workloads that don't explicitly specify a cluster queue.
+                description: DefaultClusterQueueName is the name of the default cluster
+                  queue that is used for workloads that don't explicitly specify a
+                  cluster queue.
                 type: string
               dynamicallyUpdateDefaultClusterQueue:
                 default: true
@@ -75,19 +80,23 @@ spec:
                 properties:
                   addTaintsToGpuNodes:
                     default: false
-                    description: AddTaintsToGpuNodes if set to true, will add the DefaultGpuTaintKey taint to the GPU nodes
+                    description: AddTaintsToGpuNodes if set to true, will add the
+                      DefaultGpuTaintKey taint to the GPU nodes
                     type: boolean
                   defaultGpuResourceKey:
                     default: amd.com/gpu
-                    description: DefaultGpuResourceKey defines the default GPU resource key that is used to reserve GPU capacity for pods
+                    description: DefaultGpuResourceKey defines the default GPU resource
+                      key that is used to reserve GPU capacity for pods
                     type: string
                   defaultGpuTaintKey:
                     default: kaiwo.silogen.ai/gpu
-                    description: DefaultGpuTaintKey is the key that is used to taint GPU nodes
+                    description: DefaultGpuTaintKey is the key that is used to taint
+                      GPU nodes
                     type: string
                   excludeMasterNodesFromNodePools:
                     default: false
-                    description: ExcludeMasterNodesFromNodePools allows excluding the master node(s) from the node pools
+                    description: ExcludeMasterNodesFromNodePools allows excluding
+                      the master node(s) from the node pools
                     type: boolean
                 type: object
               ray:
@@ -96,30 +105,38 @@ spec:
                 properties:
                   defaultRayImage:
                     default: ghcr.io/silogen/rocm-ray:6.4
-                    description: DefaultRayImage is the image that is used for Ray workloads if no image is provided in the workload CRD
+                    description: DefaultRayImage is the image that is used for Ray
+                      workloads if no image is provided in the workload CRD
                     type: string
                   headPodMemory:
                     default: 16Gi
-                    description: HeadPodMemory is the amount of memory that is requested for the Ray head pod
+                    description: HeadPodMemory is the amount of memory that is requested
+                      for the Ray head pod
                     type: string
                 type: object
               resourceMonitoring:
                 default: {}
-                description: ResourceMonitoring defines the resource-monitoring specific settings
+                description: ResourceMonitoring defines the resource-monitoring specific
+                  settings
                 properties:
                   averagingTime:
                     default: 20m
-                    description: AveragingTime is the time to use to average the metrics over
+                    description: AveragingTime is the time to use to average the metrics
+                      over
                     pattern: ^([0-9]+(s|m|h))+$
                     type: string
                   lowUtilizationThreshold:
                     default: 20
-                    description: LowUtilizationThreshold is the threshold which, if the metric goes under, the workload is considered underutilized. The threshold is interpreted as the percentage utilization versus the requested capacity.
+                    description: LowUtilizationThreshold is the threshold which, if
+                      the metric goes under, the workload is considered underutilized.
+                      The threshold is interpreted as the percentage utilization versus
+                      the requested capacity.
                     minimum: 0
                     type: number
                   minAliveTime:
                     default: 20m
-                    description: MinAliveTime is the time that a pod must have been alive for in order to qualify for inspection
+                    description: MinAliveTime is the time that a pod must have been
+                      alive for in order to qualify for inspection
                     pattern: ^([0-9]+(s|m|h))+$
                     type: string
                   profile:
@@ -130,18 +147,23 @@ spec:
                     - cpu
                     type: string
                   targetNamespaces:
-                    description: TargetNamespaces is a list of namespaces to apply the monitoring to. If not supplied or empty, all namespaces apart from kube-system will be inspected. However, only pods associated with KaiwoJobs or KaiwoServices are impacted.
+                    description: TargetNamespaces is a list of namespaces to apply
+                      the monitoring to. If not supplied or empty, all namespaces
+                      apart from kube-system will be inspected. However, only pods
+                      associated with KaiwoJobs or KaiwoServices are impacted.
                     items:
                       type: string
                     type: array
                 type: object
               scheduling:
                 default: {}
-                description: Scheduling contains the configuration Kaiwo uses for workload scheduling
+                description: Scheduling contains the configuration Kaiwo uses for
+                  workload scheduling
                 properties:
                   kubeSchedulerName:
                     default: kaiwo-scheduler
-                    description: KubeSchedulerName defines the default scheduler name that is used to schedule the workload
+                    description: KubeSchedulerName defines the default scheduler name
+                      that is used to schedule the workload
                     type: string
                   pendingThresholdForPreemption:
                     default: 5m

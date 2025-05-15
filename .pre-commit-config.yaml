@@ -1,6 +1,24 @@
 repos:
 - repo: local
   hooks:
+  - id: make-generate
+    name: Run make generate
+    entry: make generate
+    language: system
+    pass_filenames: false
+
+  - id: make-manifests
+    name: Run make manifests
+    entry: make manifests
+    language: system
+    pass_filenames: false
+
+  - id: make-generate-crd-docs
+    name: Run make generate-crd-docs
+    entry: make generate-crd-docs
+    language: system
+    pass_filenames: false
+
   - id: golangci-lint
     name: golangci-lint
     description: Fast linters runner for Go. Note that only modified files are linted, so linters like 'unused' that need to scan all files won't work as expected.
@@ -15,7 +33,7 @@ repos:
   hooks:
   - id: yamlfmt
     args: [--offset, "0", --sequence, "2", --mapping, "2", "--width", "4096", "--preserve-quotes", "--implicit_start", "--preserve_null"]
-    exclude: "(^config/prometheus/.*\\.ya?ml$)|(^docs/mkdocs\\.ya?ml$)"
+    exclude: "(^config/prometheus/.*\\.ya?ml$)|(^docs/mkdocs\\.ya?ml$)|(^config/crd/.*\\.ya?ml$)"
 
 - repo: https://github.com/psf/black
   rev: 25.1.0
