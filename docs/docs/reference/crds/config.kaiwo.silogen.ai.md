@@ -106,8 +106,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `defaultRayImage` _string_ | DefaultRayImage is the image that is used for Ray workloads if no image is provided in the workload CRD | ghcr.io/silogen/rocm-ray:v0.9 |  |
-| `headPodMemory` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#quantity-resource-api)_ | HeadPodMemory is the amount of memory that is requested for the Ray head pod |  |  |
+| `defaultRayImage` _string_ | DefaultRayImage is the image that is used for Ray workloads if no image is provided in the workload CRD | ghcr.io/silogen/rocm-ray:6.4 |  |
+| `headPodMemory` _string_ | HeadPodMemory is the amount of memory that is requested for the Ray head pod | 16Gi |  |
 
 
 #### KaiwoResourceMonitoringConfig
@@ -150,7 +150,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `kubeSchedulerName` _string_ | KubeSchedulerName defines the default scheduler name that is used to schedule the workload | kaiwo-scheduler |  |
-| `pendingThresholdForPreemption` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#duration-v1-meta)_ | PendingThresholdForPreemption is the threshold that is used to determine if a workload is awaiting for compute resources to be available.<br />If the workload is requesting GPUs and pending for longer than this threshold, kaiwo will start preempting workloads that have exceeded their duration deadline and are using GPUs of the same vendor as the pending workload. | 5m |  |
+| `pendingThresholdForPreemption` _string_ | PendingThresholdForPreemption is the threshold that is used to determine if a workload is awaiting for compute resources to be available.<br />If the workload is requesting GPUs and pending for longer than this threshold, kaiwo will start preempting workloads that have exceeded their duration deadline and are using GPUs of the same vendor as the pending workload. | 5m |  |
 
 
 #### KaiwoStorageConfig
