@@ -154,6 +154,10 @@ spec:
                     items:
                       type: string
                     type: array
+                  terminateUnderutilized:
+                    default: false
+                    description: TerminateUnderutilized will terminate workloads that are underutilizing resources if set to `true`
+                    type: boolean
                 type: object
               scheduling:
                 default: {}
