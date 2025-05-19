@@ -143,11 +143,14 @@ spec:
                     type: array
                   terminateUnderutilized:
                     default: false
-                    description: TerminateUnderutilized will terminate workloads that are underutilizing resources if set to `true`
+                    description: TerminateUnderutilized will terminate workloads that
+                      are underutilizing resources if set to `true`
                     type: boolean
                   terminateUnderutilizedAfter:
                     default: 4h
-                    description: TerminateUnderutilizedAfter specifies the duration after which the workload will be terminated if it has been underutilizing resources (for this amount of time)
+                    description: TerminateUnderutilizedAfter specifies the duration
+                      after which the workload will be terminated if it has been underutilizing
+                      resources (for this amount of time)
                     pattern: ^([0-9]+(s|m|h))+$
                     type: string
                 type: object
