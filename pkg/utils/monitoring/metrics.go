@@ -24,6 +24,12 @@ import (
 	"slices"
 	"time"
 
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
+
+	"k8s.io/apimachinery/pkg/api/errors"
+
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
+
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
 
@@ -89,7 +95,7 @@ func NewMetricsWatcherFromEnv(
 		return nil, fmt.Errorf("environment variable %s not set", EnvMetricsEndpoint)
 	}
 
-	pollInterval, err := parseIntervalFromEnv(EnvPollingInterval)
+	pollInterval, err := ParseIntervalFromEnv(EnvPollingInterval)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse poll interval: %v", err)
 	}
@@ -103,8 +109,8 @@ func NewMetricsWatcherFromEnv(
 	)
 }
 
-// parseIntervalFromEnv retrieves a duration from an environment variable.
-func parseIntervalFromEnv(envVar string) (time.Duration, error) {
+// ParseIntervalFromEnv retrieves a duration from an environment variable.
+func ParseIntervalFromEnv(envVar string) (time.Duration, error) {
 	interval := os.Getenv(envVar)
 	if interval == "" {
 		return 0, fmt.Errorf("environment variable %s not set", envVar)
@@ -133,6 +139,8 @@ func NewMetricsWatcher(
 
 // Start runs the periodic poll loop until ctx.Done().
 func (m *MetricsWatcher) Start(ctx context.Context) error {
+	logger := log.FromContext(ctx).WithName("MetricsWatcher")
+	logger.Info("Starting metrics watcher")
 	ticker := time.NewTicker(m.pollInterval)
 	defer ticker.Stop()
 
@@ -175,7 +183,8 @@ func (entry *GpuMetricsEntry) IsValid() bool {
 // pollMetrics fetches Prometheus data and processes each result.
 func (m *MetricsWatcher) pollMetrics(ctx context.Context) error {
 	config := controllerutils.ConfigFromContext(ctx)
-
+	logger := log.FromContext(ctx).WithName("MetricsWatcher")
+	baseutils.Debug(logger, "Polling for metrics")
 	metrics, err := scrapeMetrics(m.metricsEndpoint)
 	if err != nil {
 		return fmt.Errorf("failed to scrape metrics: %v", err)
@@ -193,7 +202,7 @@ func (m *MetricsWatcher) pollMetrics(ctx context.Context) error {
 }
 
 func filterForKaiwoPods(config controllerutils.KaiwoConfigContext, metrics *dto.MetricFamily) map[string]GpuMetricsEntry {
-	var kaiwoPods map[string]GpuMetricsEntry
+	kaiwoPods := make(map[string]GpuMetricsEntry)
 
 	// Find all pods that are underutilizing the GPU
 	for _, m := range metrics.Metric {
@@ -203,8 +212,8 @@ func filterForKaiwoPods(config controllerutils.KaiwoConfigContext, metrics *dto.
 
 		entry := GpuMetricsEntry{
 			Namespace:             labels["namespace"],
-			PodName:               labels["pod_name"],
-			ContainerName:         labels["container_name"],
+			PodName:               labels["pod"],
+			ContainerName:         labels["container"],
 			GpuID:                 labels["gpu_id"],
 			GpuPartitionID:        labels["gpu_partition_id"],
 			UtilizationPercentage: utilizationPercentage,
@@ -227,12 +236,18 @@ func filterForKaiwoPods(config controllerutils.KaiwoConfigContext, metrics *dto.
 }
 
 func fetchKaiwoWorkloads(ctx context.Context, k8sClient client.Client, kaiwoPods map[string]GpuMetricsEntry) (map[string][]GpuMetricsEntry, error) {
+	logger := log.FromContext(ctx)
 	kaiwoWorkloads := map[string][]GpuMetricsEntry{}
 	for key := range kaiwoPods {
 		entry := kaiwoPods[key]
 		pod := &corev1.Pod{}
 		if err := k8sClient.Get(ctx, client.ObjectKey{Namespace: entry.Namespace, Name: entry.PodName}, pod); err != nil {
-			return nil, fmt.Errorf("failed to get pod %s/%s: %v", entry.Namespace, entry.PodName, err)
+			if errors.IsNotFound(err) {
+				logger.Info("Pod not found", "namespace", entry.Namespace, "name", entry.PodName)
+				continue
+			} else {
+				return nil, fmt.Errorf("failed to get pod %s/%s: %v", entry.Namespace, entry.PodName, err)
+			}
 		}
 
 		// Skip if not a Kaiwo workload pod
@@ -258,17 +273,26 @@ func (m *MetricsWatcher) handleKaiwoWorkloads(ctx context.Context, config contro
 
 		kaiwoWorkload, err := GetKaiwoWorkload(ctx, m.k8sClient, kaiwoWorkloadName, pod.Namespace, kaiwoWorkloadType)
 		if err != nil {
-			return fmt.Errorf("failed to get Kaiwo workload %s: %v", kaiwoWorkloadName, err)
+			if errors.IsNotFound(err) {
+				m.logger.Info("failed to get Kaiwo workload", "workloadName", kaiwoWorkloadName)
+				continue
+			} else {
+				return fmt.Errorf("failed to get Kaiwo workload %s: %v", kaiwoWorkloadName, err)
+			}
+		}
+
+		switch kaiwoWorkload.GetCommonStatusSpec().Status {
+		case kaiwo.StatusTerminating, kaiwo.StatusTerminated, kaiwo.StatusFailed, kaiwo.StatusComplete:
+			continue
 		}
 
 		anyUnderutilizing := false
 
-		obj := kaiwoWorkload.(client.Object)
 		for _, entry := range entries {
 			if entry.UtilizationPercentage < config.ResourceMonitoring.LowUtilizationThreshold {
 				anyUnderutilizing = true
 				m.recorder.Eventf(
-					obj,
+					kaiwoWorkload,
 					corev1.EventTypeWarning,
 					string(kaiwo.GpuResourceUtilizationLow),
 					"Pod '%s' is underutilizing GPU %s/%s",
@@ -298,6 +322,9 @@ func (m *MetricsWatcher) handleKaiwoWorkloads(ctx context.Context, config contro
 		}
 		if err != nil {
 			return fmt.Errorf("failed to sync Kaiwo workload status: %v", err)
+		}
+		if err := m.flagIfUnderutilized(ctx, config, kaiwoWorkload); err != nil {
+			return fmt.Errorf("failed to flag underutilized Kaiwo workload status: %v", err)
 		}
 	}
 	return nil
@@ -376,6 +403,27 @@ func (m *MetricsWatcher) syncKaiwoStatus(
 
 	if err := m.k8sClient.Status().Update(ctx, kaiwoWorkload.(client.Object)); err != nil {
 		return fmt.Errorf("status update: %w", err)
+	}
+	return nil
+}
+
+func (m *MetricsWatcher) flagIfUnderutilized(
+	ctx context.Context,
+	config controllerutils.KaiwoConfigContext,
+	kaiwoWorkload utils.KaiwoWorkload,
+) error {
+	condition := meta.FindStatusCondition(kaiwoWorkload.GetCommonStatusSpec().Conditions, kaiwo.KaiwoResourceUtilizationType)
+	if condition == nil || condition.Status == metav1.ConditionFalse {
+		return nil
+	}
+	terminateAfter, err := time.ParseDuration(config.ResourceMonitoring.TerminateUnderutilizedAfter)
+	if err != nil {
+		return fmt.Errorf("failed to parse terminate_underutilized_after: %w", err)
+	}
+	if time.Since(condition.LastTransitionTime.Time) > terminateAfter {
+		if err := workloadutils.SetEarlyTermination(ctx, m.k8sClient, kaiwoWorkload, condition.Reason, "Workload reached early termination limit"); err != nil {
+			return fmt.Errorf("failed to set early termination: %v", err)
+		}
 	}
 	return nil
 }

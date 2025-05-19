@@ -1,7 +1,7 @@
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
-  name: monitoring-conditions-cpu
+  name: monitoring-conditions-gpu
 spec:
   timeouts:
     assert: 60s
@@ -18,27 +18,27 @@ spec:
     - assert:
         resource:
           apiVersion: kaiwo.silogen.ai/v1alpha1
-          kind: KaiwoService
+          kind: KaiwoJob
           metadata:
-            name: kaiwoservice-low
+            name: low-utilization
             namespace: kaiwo-test-monitoring-conditions
           status:
             status: TERMINATED
             (conditions[?type == 'ResourceUnderutilization']):
             - status: "True"
-              reason: "CpuUtilizationLow"
+              reason: "GpuUtilizationLow"
             (conditions[?type == 'WorkloadTerminatedEarly']):
             - status: "True"
-              reason: "CpuUtilizationLow"
+              reason: "GpuUtilizationLow"
     - assert:
         resource:
           apiVersion: kaiwo.silogen.ai/v1alpha1
-          kind: KaiwoService
+          kind: KaiwoJob
           metadata:
-            name: kaiwoservice-high
+            name: high-utilization
             namespace: kaiwo-test-monitoring-conditions
           status:
             status: RUNNING
             (conditions[?type == 'ResourceUnderutilization']):
             - status: "False"
-              reason: "CpuUtilizationNormal"
+              reason: "GpuUtilizationNormal"

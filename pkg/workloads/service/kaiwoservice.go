@@ -20,8 +20,6 @@ import (
 	"reflect"
 	"time"
 
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"github.com/silogen/kaiwo/pkg/workloads/common"
 
 	"k8s.io/client-go/tools/record"
@@ -162,20 +160,19 @@ func (r *KaiwoServiceReconciler) Reconcile(
 ) (ctrl.Result, error) {
 	svc := r.Object
 
-	if condition := meta.FindStatusCondition(svc.Status.Conditions, kaiwo.KaiwoResourceUtilizationType); condition != nil && condition.Status == v1.ConditionTrue {
-		cfg := controllerutils.ConfigFromContext(ctx)
-		if cfg.ResourceMonitoring.TerminateUnderutilized {
-			if err := workloadutils.TerminateWorkload(
-				ctx,
-				k8sClient,
-				r.Recorder,
-				svc,
-				workloadutils.WorkloadTerminationReason(condition.Reason),
-				"Terminating KaiwoService due to resource underutilization",
-			); err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to terminate workload: %w", err)
-			}
+	switch svc.Status.Status {
+	case kaiwo.StatusTerminating:
+		if err := workloadutils.TerminateWorkload(
+			ctx,
+			k8sClient,
+			r.Recorder,
+			svc,
+		); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to terminate workload: %w", err)
 		}
+		return ctrl.Result{}, nil
+	case kaiwo.StatusFailed, kaiwo.StatusTerminated, kaiwo.StatusComplete:
+		return ctrl.Result{}, nil
 	}
 
 	if err := r.ensureNamespaceManaged(ctx, k8sClient); err != nil {
@@ -185,10 +182,6 @@ func (r *KaiwoServiceReconciler) Reconcile(
 	if err := r.initializeStatus(ctx, k8sClient, svc); err != nil {
 		return ctrl.Result{}, err
 	}
-
-	// if err := r.ensureDefaultCondition(ctx, k8sClient); err != nil {
-	// 	return ctrl.Result{}, err
-	// }
 
 	downloadJob, downloadJobResult, err := r.reconcileStorageAndDownloads(ctx, k8sClient, scheme, svc)
 	if err != nil {
@@ -208,35 +201,19 @@ func (r *KaiwoServiceReconciler) ensureNamespaceManaged(ctx context.Context, k8s
 }
 
 func (r *KaiwoServiceReconciler) initializeStatus(ctx context.Context, k8sClient client.Client, svc *kaiwo.KaiwoService) error {
-	logger := log.FromContext(ctx)
 	if svc.Status.Status == "" {
-		svc.Status.Status = kaiwo.StatusPending
-		if err := k8sClient.Status().Update(ctx, svc); err != nil {
-			logger.Error(err, "failed to initialize KaiwoService status to Pending")
-			return err
+		if err := workloadutils.RetryForWorkload(ctx, k8sClient, svc, func(obj *kaiwo.KaiwoService) error {
+			obj.Status.Status = kaiwo.StatusPending
+			if err := k8sClient.Status().Update(ctx, obj); err != nil {
+				return err
+			}
+			return nil
+		}); err != nil {
+			return fmt.Errorf("failed to initialize KaiwoService status: %w", err)
 		}
-		logger.Info("Initialized KaiwoService status to Pending")
 	}
 	return nil
 }
-
-// func (r *KaiwoServiceReconciler) ensureDefaultCondition(ctx context.Context, k8sClient client.Client) error {
-// 	logger := log.FromContext(ctx)
-// 	cond := meta.FindStatusCondition(r.Object.Status.Conditions, kaiwo.KaiwoResourceUtilizationType)
-// 	if cond == nil {
-// 		meta.SetStatusCondition(&r.Object.Status.Conditions, metav1.Condition{
-// 			Type:    kaiwo.KaiwoResourceUtilizationType,
-// 			Status:  metav1.ConditionFalse,
-// 			Reason:  string(kaiwo.ResourceUtilizationUnknown),
-// 			Message: "Resource utilization currently unknown",
-// 		})
-// 		if err := k8sClient.Status().Update(ctx, r.Object); err != nil {
-// 			logger.Error(err, "failed to update KaiwoService condition")
-// 			return err
-// 		}
-// 	}
-// 	return nil
-// }
 
 func (r *KaiwoServiceReconciler) reconcileWorkload(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme, svc *kaiwo.KaiwoService) error {
 	if _, _, err := r.LocalQueue.Reconcile(ctx, k8sClient, scheme, svc, r.Recorder); err != nil {
@@ -272,17 +249,16 @@ func (r *KaiwoServiceReconciler) handleStatusAndPreemption(ctx context.Context, 
 
 	if workloadutils.ShouldPreempt(ctx, svc, k8sClient) {
 		logger.Info("Preempting KaiwoService due to expired duration and active GPU demand", "name", svc.Name)
-		if err := workloadutils.TerminateWorkload(
+		if err := workloadutils.SetEarlyTermination(
 			ctx,
 			k8sClient,
-			r.Recorder,
 			svc,
-			"KaiwoServicePreempted",
-			fmt.Sprintf("Preempted KaiwoService %s/%s due to expired duration and active GPU demand", svc.Namespace, svc.Name),
+			string(workloadutils.WorkloadPreempted),
+			"Preempted KaiwoService due to expired duration and active GPU demand",
 		); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to terminate workload: %w", err)
+			return ctrl.Result{}, fmt.Errorf("failed to set early termination: %w", err)
 		}
-		return ctrl.Result{}, nil
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	if reflect.DeepEqual(prev, status) {

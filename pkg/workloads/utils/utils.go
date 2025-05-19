@@ -22,6 +22,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"k8s.io/client-go/util/retry"
+
 	"github.com/silogen/kaiwo/apis/kaiwo/utils"
 
 	"k8s.io/client-go/tools/record"
@@ -44,7 +46,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	common "github.com/silogen/kaiwo/pkg/workloads/common"
+	"github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 func UpdatePodSpec(config controllerutils.KaiwoConfigContext, kaiwoCommonMetaSpec kaiwo.CommonMetaSpec, labelContext common.KaiwoLabelContext, template *corev1.PodTemplateSpec, name string, replicas int, gpusPerReplica int, override bool, rayhead bool) error {
@@ -493,6 +495,10 @@ func ToPascalCase(s string) string {
 	return b.String()
 }
 
+const WorkloadPreempted WorkloadPreemptedReason = "WorkloadPreempted"
+
+type WorkloadPreemptedReason string
+
 func ShouldPreempt(ctx context.Context, obj utils.KaiwoWorkload, k8sClient client.Client) bool {
 	duration := obj.GetDuration()
 	startTime := obj.GetStartTime()
@@ -584,6 +590,18 @@ func SyncGpuMetaFromPodSpec(podSpec corev1.PodSpec, meta *kaiwo.CommonMetaSpec) 
 	}
 }
 
+// RetryForWorkload provides a wrapper for an atomic action on a workload object by first reading a fresh copy of the object
+// and passing it to the function, and retrying on conflict
+func RetryForWorkload[T utils.KaiwoWorkload](ctx context.Context, k8sClient client.Client, workload T, fn func(T) error) error {
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		copyObj := workload.DeepCopyObject().(T)
+		if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(workload), copyObj); err != nil {
+			return err
+		}
+		return fn(copyObj)
+	})
+}
+
 const WorkloadEarlyTerminationConditionType = "WorkloadTerminatedEarly"
 
 type WorkloadTerminationReason string
@@ -595,38 +613,51 @@ func TerminateWorkload(
 	k8sClient client.Client,
 	recorder record.EventRecorder,
 	workload utils.KaiwoWorkload,
-	reason WorkloadTerminationReason,
-	message string,
 ) error {
-	statusSpec := workload.GetCommonStatusSpec()
-	statusSpec.Status = kaiwo.StatusTerminated
+	logger := log.FromContext(ctx)
+	var condition *metav1.Condition
+	if err := RetryForWorkload(ctx, k8sClient, workload, func(obj utils.KaiwoWorkload) error {
+		statusSpec := obj.GetCommonStatusSpec()
+		statusSpec.Status = kaiwo.StatusTerminated
 
-	obj := workload.(client.Object)
+		condition = metautil.FindStatusCondition(statusSpec.Conditions, WorkloadEarlyTerminationConditionType)
+		if condition == nil {
+			condition = &metav1.Condition{
+				Type:    WorkloadEarlyTerminationConditionType,
+				Status:  metav1.ConditionTrue,
+				Reason:  "EarlyTermination",
+				Message: "Workload terminated early (check events and other conditions for likely causes)",
+			}
+			metautil.SetStatusCondition(&statusSpec.Conditions, *condition)
+		} else {
+			// Conditional already exists (created when setting the TERMINATING status), just update to true
+			condition.Status = metav1.ConditionTrue
+			metautil.SetStatusCondition(&statusSpec.Conditions, *condition)
+		}
 
-	metautil.SetStatusCondition(&statusSpec.Conditions, metav1.Condition{
-		Type:    WorkloadEarlyTerminationConditionType,
-		Status:  metav1.ConditionTrue,
-		Reason:  string(reason),
-		Message: message,
-	})
+		// Update status first to avoid doing any further reconciliation
+		if err := k8sClient.Status().Update(ctx, obj); err != nil {
+			return fmt.Errorf("failed to update status: %w", err)
+		}
 
-	// Update status first to avoid doing any further reconciliation
-	if err := k8sClient.Status().Update(ctx, obj); err != nil {
+		return nil
+	}); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
 	}
 
-	if err := DeleteUnderlyingResource(ctx, obj.GetUID(), obj.GetName(), obj.GetNamespace(), k8sClient); err != nil {
+	logger.Info("Terminating workload", "reason", condition.Reason, "message", condition.Message)
+
+	if err := DeleteUnderlyingResources(ctx, workload.GetUID(), workload.GetName(), workload.GetNamespace(), k8sClient); err != nil {
 		return fmt.Errorf("failed to delete workload resources: %w", err)
 	}
 
-	if recorder != nil {
-		recorder.Event(obj, corev1.EventTypeWarning, string(reason), message)
-	}
+	recorder.Event(workload, corev1.EventTypeWarning, condition.Reason, condition.Message)
 
 	return nil
 }
 
-func DeleteUnderlyingResource(ctx context.Context, uid types.UID, name string, namespace string, k8sClient client.Client) error {
+// DeleteUnderlyingResources deletes all the underlying resources that a workload owns
+func DeleteUnderlyingResources(ctx context.Context, uid types.UID, name string, namespace string, k8sClient client.Client) error {
 	resourceTypes := []client.ObjectList{
 		&appsv1.DeploymentList{},
 		&rayv1.RayServiceList{},
@@ -669,5 +700,58 @@ func DeleteUnderlyingResource(ctx context.Context, uid types.UID, name string, n
 	if !deletedAny {
 		return fmt.Errorf("no owned resources found to delete for %s", name)
 	}
+	return nil
+}
+
+// CheckKaiwoWorkloadShouldBeTerminatedForUnderutilization checks if the Kaiwo workload should be terminated due to resource underutilization
+func CheckKaiwoWorkloadShouldBeTerminatedForUnderutilization(ctx context.Context, workload utils.KaiwoWorkload) (bool, string) {
+	config := controllerutils.ConfigFromContext(ctx)
+	logger := log.FromContext(ctx).WithName("CheckKaiwoWorkloadShouldBeTerminatedForUnderutilization")
+
+	if !config.ResourceMonitoring.TerminateUnderutilized {
+		return false, ""
+	}
+
+	condition := metautil.FindStatusCondition(workload.GetCommonStatusSpec().Conditions, kaiwo.KaiwoResourceUtilizationType)
+	if condition == nil || condition.Status == metav1.ConditionFalse {
+		return false, ""
+	}
+
+	terminateAfter, err := time.ParseDuration(config.ResourceMonitoring.TerminateUnderutilizedAfter)
+	if err != nil {
+		logger.Error(err, "Failed to parse duration", "duration", config.ResourceMonitoring.TerminateUnderutilizedAfter)
+		return false, ""
+	}
+
+	if time.Since(condition.LastTransitionTime.Time) > terminateAfter {
+		return true, condition.Reason
+	}
+
+	return false, ""
+}
+
+// SetEarlyTermination flags a workload for early termination by
+// 1. Setting the status to TERMINATING
+// 2. Creating the WorkloadTerminatedEarly condition, but keeping its status as False (in order to record the reason)
+func SetEarlyTermination(ctx context.Context, k8sClient client.Client, workload utils.KaiwoWorkload, reason string, message string) error {
+	logger := log.FromContext(ctx)
+
+	logger.Info("Flagging workload for early termination", "reason", reason, "message", message)
+
+	statusSpec := workload.GetCommonStatusSpec()
+	statusSpec.Status = kaiwo.StatusTerminating
+
+	metautil.SetStatusCondition(&statusSpec.Conditions, metav1.Condition{
+		Type:    WorkloadEarlyTerminationConditionType,
+		Status:  metav1.ConditionFalse,
+		Reason:  reason,
+		Message: message,
+	})
+
+	// mutate and Status().Update
+	if err := k8sClient.Status().Update(ctx, workload); err != nil {
+		return fmt.Errorf("failed to update status: %w", err)
+	}
+
 	return nil
 }

@@ -4,11 +4,9 @@ metadata:
   name: kaiwo
 spec:
   resourceMonitoring:
-    averagingTime: 60s
     lowUtilizationThreshold: 50
-    minAliveTime: 30s
-    profile: cpu
     terminateUnderutilized: true
+    terminateUnderutilizedAfter: 30s
     targetNamespaces:
     - "kaiwo-test-monitoring-conditions"
   ray:

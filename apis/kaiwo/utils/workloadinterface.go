@@ -25,6 +25,7 @@ import (
 )
 
 type KaiwoWorkload interface {
+	client.Object
 	GetUser() string
 	GetObjectMeta() *metav1.ObjectMeta
 	GetStatusString() string
