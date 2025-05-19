@@ -115,7 +115,7 @@ type KaiwoResourceMonitoringConfig struct {
 	TargetNamespaces []string `json:"targetNamespaces,omitempty"`
 
 	// Profile chooses the target resource to monitor.
-	// +kubebuilder:validation:Enum="gpu";"cpu"
+	// +kubebuilder:validation:Enum="gpu"
 	// +kubebuilder:default="gpu"
 	Profile string `json:"profile,omitempty"`
 
