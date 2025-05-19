@@ -14,8 +14,4 @@ spec:
       - name: manager
         env:
         - name: RESOURCE_MONITORING_ENABLED
-          value: "true"
-        - name: RESOURCE_MONITORING_POLLING_INTERVAL
-          value: "15s"
-        - name: RESOURCE_MONITORING_PROMETHEUS_ENDPOINT
-          value: "http://prometheus-k8s.monitoring.svc.cluster.local:9090"
+          value: "false"
