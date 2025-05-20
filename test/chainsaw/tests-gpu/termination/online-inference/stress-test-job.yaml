@@ -1,0 +1,40 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: stress-test-job
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: stress-test
+        image: ellerbrock/alpine-bash-curl-ssl:latest
+        command: ["/bin/bash"]
+        resources:
+          requests:
+            cpu: 200m
+            memory: 2Gi
+          limits:
+            cpu: 200m
+            memory: 2Gi
+        args:
+        - /scripts/stress-test.sh
+        env:
+        - name: SERVICE_URL
+          value: "http://online-inference-vllm-example-serve-svc:8000/v1/chat/completions"
+        - name: CONCURRENCY
+          value: "10"
+        - name: DURATION
+          value: "30"
+        - name: MODEL
+          value: "meta-llama/Llama-3.1-8B-Instruct"
+        volumeMounts:
+        - name: script-volume
+          mountPath: /scripts
+          readOnly: true
+      volumes:
+      - name: script-volume
+        configMap:
+          name: stress-test-script
+          defaultMode: 0755

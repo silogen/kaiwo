@@ -8,10 +8,8 @@ spec:
     terminateUnderutilized: true
     terminateUnderutilizedAfter: 30s
     targetNamespaces:
-    - "kaiwo-test-monitoring-conditions"
     - "kaiwo"
   ray:
     headPodMemory: 16Gi
   scheduling:
     pendingThresholdForPreemption: 1s
-

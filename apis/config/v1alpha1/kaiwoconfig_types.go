@@ -103,8 +103,8 @@ type KaiwoNodeConfig struct {
 // Note that the following must be set as environmental variables inside the Kaiwo controller manager as these cannot be updated without restarting the operator process.
 //
 // * Enabling the resource monitoring feature (`RESOURCE_MONITORING_ENABLED=true`)
-// * Setting the Prometheus endpoint (`RESOURCE_MONITORING_PROMETHEUS_ENDPOINT=...`)
-// * Setting the polling interval (`RESOURCE_MONITORING_POLLING_INTERVAL=10m`)
+// * Setting the metrics endpoint (`RESOURCE_MONITORING_METRICS_ENDPOINT=...`)
+// * Setting the polling interval (`RESOURCE_MONITORING_POLLING_INTERVAL=30s`)
 type KaiwoResourceMonitoringConfig struct {
 	// LowUtilizationThreshold is the threshold which, if the metric goes under, the workload is considered underutilized. The threshold is interpreted as the percentage utilization versus the requested capacity.
 	// +kubebuilder:default=20
@@ -120,7 +120,7 @@ type KaiwoResourceMonitoringConfig struct {
 	Profile string `json:"profile,omitempty"`
 
 	// TerminateUnderutilized will terminate workloads that are underutilizing resources if set to `true`
-	// +kubebuilder:default=false
+	// +kubebuilder:default=true
 	TerminateUnderutilized bool `json:"terminateUnderutilized,omitempty"`
 
 	// TerminateUnderutilizedAfter specifies the duration after which the workload will be terminated if it has been underutilizing resources (for this amount of time)

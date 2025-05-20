@@ -2,7 +2,6 @@ apiVersion: kaiwo.silogen.ai/v1alpha1
 kind: KaiwoJob
 metadata:
   name: high-utilization
-  namespace: kaiwo-test-monitoring-conditions
 spec:
   gpus: 1
   dangerous: true  # TODO check how to run without (security context blocks access to GPU)

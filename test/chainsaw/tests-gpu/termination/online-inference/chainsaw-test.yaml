@@ -1,0 +1,120 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: online-inference-termination
+spec:
+  concurrent: false
+  timeouts:
+    cleanup: 60s
+  steps:
+  - name: "Configure"
+    try:
+    - patch:
+        resource:
+          apiVersion: config.kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoConfig
+          metadata:
+            name: kaiwo
+          spec:
+            resourceMonitoring:
+              lowUtilizationThreshold: 10
+                  # Set termination to false for now
+              terminateUnderutilized: false
+              terminateUnderutilizedAfter: 30s
+              targetNamespaces:
+              - ($namespace)
+            ray:
+              headPodMemory: 16Gi
+    - description: Copy HF token from kaiwo namespace
+      script:
+        content: |
+          kubectl get secret hf-token \
+            --namespace=kaiwo \
+            -o yaml \
+          | sed -e '/^\s*namespace:/d' \
+                -e '/^\s*resourceVersion:/d' \
+                -e '/^\s*uid:/d' \
+                -e '/^\s*creationTimestamp:/d' \
+          | kubectl apply --namespace=$NAMESPACE -f -
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+  - name: "Create workload"
+    try:
+    - apply:
+        file: ../../../../../workloads/inference/LLMs/online-inference/vllm-online-single-multinode/kaiwoservice-llama-3.1-8b-instruct.yaml
+  - name: "Wait for workload to be ready"
+    try:
+    - assert:
+        timeout: 600s      # time for download job to finish and for RayService to start
+        resource:
+          apiVersion: "v1"
+          kind: Service
+          metadata:
+            name: online-inference-vllm-example-serve-svc
+  - name: "Stress the workload"
+    try:
+    - apply:
+        file: stress-test-cm.yaml
+    - apply:
+        file: stress-test-job.yaml
+    - sleep:
+        duration: 5s
+    - assert:
+        resource:
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: stress-test-job
+          status:
+            active: 1
+    - description: Once the stress test job is underway, set termination of underutilized to true
+      patch:
+        resource:
+          apiVersion: config.kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoConfig
+          metadata:
+            name: kaiwo
+          spec:
+            resourceMonitoring:
+              terminateUnderutilized: true
+  - name: "Ensure workload healthy"
+    try:
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoService
+          metadata:
+            name: online-inference-vllm-example
+          status:
+            status: RUNNING
+            (conditions[?type == 'ResourceUnderutilization']):
+            - status: "False"
+              reason: "GpuUtilizationNormal"
+  - name: "Wait for workload to be terminated"
+    try:
+    - description: Wait for the stress-test job to finish
+      assert:
+        resource:
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: stress-test-job
+          status:
+            succeeded: 1
+    - description: Wait for the workload to be terminated by the operator
+      assert:
+        timeout: 60s
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoService
+          metadata:
+            name: online-inference-vllm-example
+          status:
+            status: TERMINATED
+            (conditions[?type == 'ResourceUnderutilization']):
+            - status: "True"
+              reason: "GpuUtilizationLow"
+            (conditions[?type == 'WorkloadTerminatedEarly']):
+            - status: "True"
+              reason: "GpuUtilizationLow"

@@ -22,6 +22,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/project-codeflare/appwrapper/api/v1beta2"
+
 	"k8s.io/client-go/util/retry"
 
 	"github.com/silogen/kaiwo/apis/kaiwo/utils"
@@ -661,10 +663,13 @@ func DeleteUnderlyingResources(ctx context.Context, uid types.UID, name string, 
 	resourceTypes := []client.ObjectList{
 		&appsv1.DeploymentList{},
 		&rayv1.RayServiceList{},
+		&v1beta2.AppWrapperList{},
 		&batchv1.JobList{},
 		&rayv1.RayJobList{},
 		&corev1.PersistentVolumeClaimList{},
 	}
+
+	logger := log.FromContext(ctx)
 
 	var deletedAny bool
 
@@ -691,6 +696,7 @@ func DeleteUnderlyingResources(ctx context.Context, uid types.UID, name string, 
 					}); err != nil {
 						return fmt.Errorf("failed to delete resource %s/%s: %w", obj.GetNamespace(), obj.GetName(), err)
 					}
+					logger.Info("Deleted resource", "namespace", obj.GetNamespace(), "name", obj.GetName(), "kind", obj.GetObjectKind().GroupVersionKind().Kind)
 					deletedAny = true
 				}
 			}

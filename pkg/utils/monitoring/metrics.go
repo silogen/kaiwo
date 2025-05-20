@@ -323,8 +323,10 @@ func (m *MetricsWatcher) handleKaiwoWorkloads(ctx context.Context, config contro
 		if err != nil {
 			return fmt.Errorf("failed to sync Kaiwo workload status: %v", err)
 		}
-		if err := m.flagIfUnderutilized(ctx, config, kaiwoWorkload); err != nil {
-			return fmt.Errorf("failed to flag underutilized Kaiwo workload status: %v", err)
+		if config.ResourceMonitoring.TerminateUnderutilized {
+			if err := m.flagIfUnderutilized(ctx, config, kaiwoWorkload); err != nil {
+				return fmt.Errorf("failed to flag underutilized Kaiwo workload status: %v", err)
+			}
 		}
 	}
 	return nil

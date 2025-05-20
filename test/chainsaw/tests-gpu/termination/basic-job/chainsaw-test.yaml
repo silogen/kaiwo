@@ -3,12 +3,25 @@ kind: Test
 metadata:
   name: monitoring-conditions-gpu
 spec:
+  concurrent: false
   timeouts:
     assert: 60s
+    cleanup: 60s
   steps:
   - try:
-    - apply:
-        file: namespace.yaml
+    - patch:
+        resource:
+          apiVersion: config.kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoConfig
+          metadata:
+            name: kaiwo
+          spec:
+            resourceMonitoring:
+              lowUtilizationThreshold: 10
+              terminateUnderutilized: true
+              terminateUnderutilizedAfter: 30s
+              targetNamespaces:
+              - ($namespace)
     - apply:
         file: low-utilization.yaml
     - apply:
@@ -21,7 +34,6 @@ spec:
           kind: KaiwoJob
           metadata:
             name: low-utilization
-            namespace: kaiwo-test-monitoring-conditions
           status:
             status: TERMINATED
             (conditions[?type == 'ResourceUnderutilization']):
@@ -36,7 +48,6 @@ spec:
           kind: KaiwoJob
           metadata:
             name: high-utilization
-            namespace: kaiwo-test-monitoring-conditions
           status:
             status: RUNNING
             (conditions[?type == 'ResourceUnderutilization']):
