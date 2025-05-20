@@ -533,26 +533,6 @@ _Appears in:_
 | `tolerations` _[Toleration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#toleration-v1-core) array_ | Tolerations specifies a list of tolerations associated with this flavor. This is less common than using Taints; Kueue primarily uses Taints to derive Tolerations. |  | MaxItems: 5 <br /> |
 
 
-
-
-#### ResourceUtilizationPoint
-
-
-
-
-
-
-
-_Appears in:_
-- [ResourceUtilizationHistory](#resourceutilizationhistory)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `absoluteUtilization` _float_ | AbsoluteUtilization is the absolute amount that was being utilized |  |  |
-| `relativeUtilization` _float_ | RelativeUtilization is the amount relative to the requested resource that was being utilized |  |  |
-| `timestamp` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | Timestamp is the time that this measurement was taken |  |  |
-
-
 #### S3DownloadItem
 
 

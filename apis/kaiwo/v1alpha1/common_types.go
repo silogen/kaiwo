@@ -16,7 +16,6 @@ package v1alpha1
 
 import (
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -151,29 +150,6 @@ type CommonStatusSpec struct {
 
 	// ObservedGeneration records the `.metadata.generation` of the workload resource that was last processed by the controller.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-}
-
-type ResourceUtilizationHistory struct {
-	// TargetMetric is the metric that is being watched
-	// +kubebuilder:default=gpu
-	TargetMetric string `json:"targetMetric,omitempty"`
-
-	// RequestedQuantity is the amount
-	RequestedQuantity resource.Quantity `json:"requestedQuantity,omitempty"`
-
-	// History keeps track of the recent utilization history for this workload
-	History []ResourceUtilizationPoint `json:"history,omitempty"`
-}
-
-type ResourceUtilizationPoint struct {
-	// AbsoluteUtilization is the absolute amount that was being utilized
-	AbsoluteUtilization float64 `json:"absoluteUtilization,omitempty"`
-
-	// RelativeUtilization is the amount relative to the requested resource that was being utilized
-	RelativeUtilization float64 `json:"relativeUtilization,omitempty"`
-
-	// Timestamp is the time that this measurement was taken
-	Timestamp metav1.Time `json:"timestamp,omitempty"`
 }
 
 // StorageSpec defines the storage configuration for the workload.
@@ -452,7 +428,5 @@ const (
 	KaiwoResourceUtilizationType                                = "ResourceUnderutilization"
 	GpuResourceUtilizationNormal KaiwoResourceUtilizationStatus = "GpuUtilizationNormal"
 	GpuResourceUtilizationLow    KaiwoResourceUtilizationStatus = "GpuUtilizationLow"
-	CpuResourceUtilizationNormal KaiwoResourceUtilizationStatus = "CpuUtilizationNormal"
-	CpuResourceUtilizationLow    KaiwoResourceUtilizationStatus = "CpuUtilizationLow"
 	ResourceUtilizationUnknown   KaiwoResourceUtilizationStatus = "UtilizationUnknown"
 )
