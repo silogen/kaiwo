@@ -59,6 +59,26 @@ func DebugTest(ctx context.Context, clientset *kubernetes.Clientset, namespace s
 		}
 	}
 
+	// List Kueue controller logs
+	if kaiwoControllerLogs, err := listKueueControllerLogsForNamespace(ctx, clientset, "kueue-system"); err != nil {
+		return fmt.Errorf("error listing Kueue controller logs: %w", err)
+	} else {
+		var kueueLogs []LogEntry
+		for _, log := range kaiwoControllerLogs {
+			// Only include logs from the given namespace
+			if len(log.ParsedContext) > 0 {
+				if logNamespace, exists := log.ParsedContext["namespace"]; exists && logNamespace == namespace {
+					kueueLogs = append(kueueLogs, log)
+				}
+			}
+		}
+		if len(kueueLogs) == 0 {
+			fmt.Println("No Kueue controller logs found")
+		} else {
+			logs = append(logs, kueueLogs...)
+		}
+	}
+
 	// List namespace pod logs
 	if namespacePodLogs, err := listAllNamespacePodLogs(ctx, clientset, namespace); err != nil {
 		return fmt.Errorf("error listing all namespace pod logs: %w", err)
@@ -416,4 +436,22 @@ func printLogs(logs []LogEntry, printLevel string, writeTo string) {
 			panic(err)
 		}
 	}
+}
+
+func listKueueControllerLogsForNamespace(ctx context.Context, clientset *kubernetes.Clientset, namespace string) ([]LogEntry, error) {
+	pods, err := clientset.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: "app.kubernetes.io/name=kueue,control-plane=controller-manager",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error listing kueue controller pods: %v", err)
+	}
+	var logs []LogEntry
+	for _, pod := range pods.Items {
+		if podLogs, err := listPodLogs(ctx, clientset, namespace, pod); err != nil {
+			return nil, fmt.Errorf("error listing kueuecontroller pod logs: %v", err)
+		} else {
+			logs = append(logs, podLogs...)
+		}
+	}
+	return logs, nil
 }
