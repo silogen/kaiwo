@@ -1,16 +1,32 @@
-apiVersion: kueue.x-k8s.io/v1beta1
-kind: ClusterQueue
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoQueueConfig
 metadata:
-  name: workload-priority-class-test-cluster-queue
+  name: kaiwo
 spec:
-  namespaceSelector: {} # All namespaces
-  queueingStrategy: BestEffortFIFO
-  resourceGroups:
-  - coveredResources: ["cpu", "memory"]
-    flavors:
-    - name: "default"
-      resources:
-      - name: cpu
-        nominalQuota: 4000m
-      - name: memory
-        nominalQuota: 4Gi
+  clusterQueues:
+  - name: workload-priority-class-test-queue
+    namespaces:
+    - "($namespace)"
+    spec:
+      namespaceSelector: {}   # All namespaces
+      queueingStrategy: BestEffortFIFO
+      resourceGroups:
+      - coveredResources: ["cpu", "memory"]
+        flavors:
+        - name: "default"
+          resources:
+          - name: cpu
+            nominalQuota: 4000m
+          - name: memory
+            nominalQuota: 4Gi
+  resourceFlavors:
+  - name: default
+  workloadPriorityClasses:
+  - metadata:
+      name: high-priority
+    value: 1000
+    description: "High priority class"
+  - metadata:
+      name: low-priority
+    value: 10
+    description: "Low priority class"

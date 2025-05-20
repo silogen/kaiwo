@@ -599,6 +599,7 @@ _Appears in:_
 | `COMPLETE` | StatusComplete indicates a KaiwoJob has finished successfully.<br /> |
 | `FAILED` | StatusFailed indicates the workload (KaiwoJob or KaiwoService) or its prerequisites (like download jobs) encountered an error and cannot proceed or recover.<br /> |
 | `TERMINATED` | StatusTerminated indicates the workload has been terminated by the user or system. This could be due to duration deadline being met and pressure for GPU demand.<br /> |
+| `TERMINATING` | StatusTerminating indicates that the workload should begin to terminate the underlying resources<br /> |
 
 
 #### StorageSpec

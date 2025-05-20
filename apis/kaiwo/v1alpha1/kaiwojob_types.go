@@ -16,9 +16,6 @@ package v1alpha1
 
 import (
 	"context"
-	"fmt"
-
-	"github.com/silogen/kaiwo/pkg/workloads/common"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -120,7 +117,7 @@ func (job *KaiwoJob) GetObjectMeta() *metav1.ObjectMeta {
 	return &job.ObjectMeta
 }
 
-func (job *KaiwoJob) GetStatus() string {
+func (job *KaiwoJob) GetStatusString() string {
 	return string(job.Status.Status)
 }
 
@@ -144,14 +141,8 @@ func (s *KaiwoJob) GetGPUVendor() string {
 	return s.Spec.GpuVendor
 }
 
-func (job *KaiwoJob) GetPods(ctx context.Context, k8sClient client.Client) ([]corev1.Pod, error) {
-	podList := &corev1.PodList{}
-	if err := k8sClient.List(ctx, podList, client.InNamespace(job.Namespace), client.MatchingLabels{
-		common.KaiwoRunIdLabel: string(job.UID),
-	}); err != nil {
-		return nil, fmt.Errorf("failed to list pods: %w", err)
-	}
-	return podList.Items, nil
+func (s *KaiwoJob) GetCommonStatusSpec() *CommonStatusSpec {
+	return &s.Status.CommonStatusSpec
 }
 
 func (job *KaiwoJob) GetServices(ctx context.Context, k8sClient client.Client) ([]corev1.Service, error) {

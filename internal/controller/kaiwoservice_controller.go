@@ -20,6 +20,9 @@ import (
 	"context"
 	"fmt"
 
+	"sigs.k8s.io/controller-runtime/pkg/builder"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
@@ -77,6 +80,7 @@ func (r *KaiwoServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	reconciler := workloadservice.NewKaiwoServiceReconciler(ctx, &kaiwoService)
+	reconciler.Recorder = r.Recorder
 
 	result, err := reconciler.Reconcile(ctx, r.Client, r.Scheme)
 	if err != nil {
@@ -95,7 +99,9 @@ func (r *KaiwoServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Recorder = mgr.GetEventRecorderFor("kaiwoservice-controller")
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&kaiwo.KaiwoService{}).
+		For(&kaiwo.KaiwoService{},
+			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+		).
 		Owns(&appsv1.Deployment{}).
 		Owns(&rayv1.RayService{}).
 		Owns(&appwrapperv1beta2.AppWrapper{}).

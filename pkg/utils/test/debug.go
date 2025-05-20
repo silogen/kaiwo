@@ -28,6 +28,8 @@ import (
 	"strings"
 	"time"
 
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
+
 	"github.com/charmbracelet/lipgloss"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -56,6 +58,26 @@ func DebugTest(ctx context.Context, clientset *kubernetes.Clientset, namespace s
 			fmt.Println("No Kaiwo controller logs found")
 		} else {
 			logs = append(logs, kaiwoLogs...)
+		}
+	}
+
+	// List Kueue controller logs
+	if kaiwoControllerLogs, err := listKueueControllerLogsForNamespace(ctx, clientset, "kueue-system"); err != nil {
+		return fmt.Errorf("error listing Kueue controller logs: %w", err)
+	} else {
+		var kueueLogs []LogEntry
+		for _, log := range kaiwoControllerLogs {
+			// Only include logs from the given namespace
+			if len(log.ParsedContext) > 0 {
+				if logNamespace, exists := log.ParsedContext["namespace"]; exists && logNamespace == namespace {
+					kueueLogs = append(kueueLogs, log)
+				}
+			}
+		}
+		if len(kueueLogs) == 0 {
+			fmt.Println("No Kueue controller logs found")
+		} else {
+			logs = append(logs, kueueLogs...)
 		}
 	}
 
@@ -196,8 +218,9 @@ func listPodLogs(ctx context.Context, clientset *kubernetes.Clientset, namespace
 func listContainerLogs(ctx context.Context, clientset *kubernetes.Clientset, namespace string, pod corev1.Pod, containerName string) ([]LogEntry, error) {
 	var logs []LogEntry
 	podLogOpts := &corev1.PodLogOptions{
-		Container:  containerName,
-		Timestamps: true,
+		Container:    containerName,
+		Timestamps:   true,
+		SinceSeconds: baseutils.Pointer(int64(300)),
 	}
 	req := clientset.CoreV1().Pods(namespace).GetLogs(pod.Name, podLogOpts)
 	podLogs, err := req.Stream(ctx)
@@ -416,4 +439,22 @@ func printLogs(logs []LogEntry, printLevel string, writeTo string) {
 			panic(err)
 		}
 	}
+}
+
+func listKueueControllerLogsForNamespace(ctx context.Context, clientset *kubernetes.Clientset, namespace string) ([]LogEntry, error) {
+	pods, err := clientset.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: "app.kubernetes.io/name=kueue,control-plane=controller-manager",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error listing kueue controller pods: %v", err)
+	}
+	var logs []LogEntry
+	for _, pod := range pods.Items {
+		if podLogs, err := listPodLogs(ctx, clientset, namespace, pod); err != nil {
+			return nil, fmt.Errorf("error listing kueuecontroller pod logs: %v", err)
+		} else {
+			logs = append(logs, podLogs...)
+		}
+	}
+	return logs, nil
 }

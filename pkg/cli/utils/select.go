@@ -19,12 +19,12 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/silogen/kaiwo/pkg/workloads/common"
+
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	common "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 type PodSelectionPredicate func(pod corev1.Pod) bool

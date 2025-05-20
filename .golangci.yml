@@ -31,7 +31,7 @@ issues:
   # restore some of the defaults
   # (fill in the rest as needed)
   exclude-rules:
-  - path: "pkg/api/*"
+  - path: "apis/*"
     linters:
     - lll
   - path: "internal/*"

@@ -119,32 +119,19 @@ spec:
                 description: ResourceMonitoring defines the resource-monitoring specific
                   settings
                 properties:
-                  averagingTime:
-                    default: 20m
-                    description: AveragingTime is the time to use to average the metrics
-                      over
-                    pattern: ^([0-9]+(s|m|h))+$
-                    type: string
                   lowUtilizationThreshold:
-                    default: 20
+                    default: 1
                     description: LowUtilizationThreshold is the threshold which, if
                       the metric goes under, the workload is considered underutilized.
                       The threshold is interpreted as the percentage utilization versus
                       the requested capacity.
                     minimum: 0
                     type: number
-                  minAliveTime:
-                    default: 20m
-                    description: MinAliveTime is the time that a pod must have been
-                      alive for in order to qualify for inspection
-                    pattern: ^([0-9]+(s|m|h))+$
-                    type: string
                   profile:
                     default: gpu
                     description: Profile chooses the target resource to monitor.
                     enum:
                     - gpu
-                    - cpu
                     type: string
                   targetNamespaces:
                     description: TargetNamespaces is a list of namespaces to apply
@@ -154,6 +141,18 @@ spec:
                     items:
                       type: string
                     type: array
+                  terminateUnderutilized:
+                    default: true
+                    description: TerminateUnderutilized will terminate workloads that
+                      are underutilizing resources if set to `true`
+                    type: boolean
+                  terminateUnderutilizedAfter:
+                    default: 24h
+                    description: TerminateUnderutilizedAfter specifies the duration
+                      after which the workload will be terminated if it has been underutilizing
+                      resources (for this amount of time)
+                    pattern: ^([0-9]+(s|m|h))+$
+                    type: string
                 type: object
               scheduling:
                 default: {}

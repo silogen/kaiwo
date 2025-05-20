@@ -265,6 +265,6 @@ spec:
           fi
         env:
         - name: NAMESPACE
-          value: $(namespace)
+          value: ($namespace)
         check:
           ($error == null): true

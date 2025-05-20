@@ -10,15 +10,9 @@ spec:
   - name: Create resources
     try:
     - apply:
-            # The resource flavor must be added first, so that it gets deleted last. It sets finalizers on the
-            # cluster queue, and won't get deleted before the cluster queue is deleted
-        file: ../resource-flavor.yaml
-    - apply:
         file: ../priority-classes.yaml
     - apply:
         file: ../cluster-queue-fit-none.yaml
-    - apply:
-        file: ../local-queue.yaml
   - name: Deployment
     try:
     - description: Create low-priority Kaiwo deployment service
@@ -52,3 +46,15 @@ spec:
             name: kaiwoservice-deployment-low
           status:
             status: PENDING
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+    finally:
+    - script:
+        content: kubectl delete kaiwoqueueconfig kaiwo

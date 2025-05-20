@@ -119,8 +119,8 @@ Note that the following must be set as environmental variables inside the Kaiwo 
 
 
 * Enabling the resource monitoring feature (`RESOURCE_MONITORING_ENABLED=true`)
-* Setting the Prometheus endpoint (`RESOURCE_MONITORING_PROMETHEUS_ENDPOINT=...`)
-* Setting the polling interval (`RESOURCE_MONITORING_POLLING_INTERVAL=10m`)
+* Setting the metrics endpoint (`RESOURCE_MONITORING_METRICS_ENDPOINT=...`)
+* Setting the polling interval (`RESOURCE_MONITORING_POLLING_INTERVAL=30s`)
 
 
 
@@ -129,11 +129,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `averagingTime` _string_ | AveragingTime is the time to use to average the metrics over | 20m | Pattern: `^([0-9]+(s\|m\|h))+$` <br /> |
-| `minAliveTime` _string_ | MinAliveTime is the time that a pod must have been alive for in order to qualify for inspection | 20m | Pattern: `^([0-9]+(s\|m\|h))+$` <br /> |
-| `lowUtilizationThreshold` _float_ | LowUtilizationThreshold is the threshold which, if the metric goes under, the workload is considered underutilized. The threshold is interpreted as the percentage utilization versus the requested capacity. | 20 | Minimum: 0 <br /> |
+| `lowUtilizationThreshold` _float_ | LowUtilizationThreshold is the threshold which, if the metric goes under, the workload is considered underutilized. The threshold is interpreted as the percentage utilization versus the requested capacity. | 1 | Minimum: 0 <br /> |
 | `targetNamespaces` _string array_ | TargetNamespaces is a list of namespaces to apply the monitoring to. If not supplied or empty, all namespaces apart from kube-system will be inspected. However, only pods associated with KaiwoJobs or KaiwoServices are impacted. |  |  |
-| `profile` _string_ | Profile chooses the target resource to monitor. | gpu | Enum: [gpu cpu] <br /> |
+| `profile` _string_ | Profile chooses the target resource to monitor. | gpu | Enum: [gpu] <br /> |
+| `terminateUnderutilized` _boolean_ | TerminateUnderutilized will terminate workloads that are underutilizing resources if set to `true` | true |  |
+| `terminateUnderutilizedAfter` _string_ | TerminateUnderutilizedAfter specifies the duration after which the workload will be terminated if it has been underutilizing resources (for this amount of time) | 24h | Pattern: `^([0-9]+(s\|m\|h))+$` <br /> |
 
 
 #### KaiwoSchedulingConfig

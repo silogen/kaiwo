@@ -103,21 +103,11 @@ type KaiwoNodeConfig struct {
 // Note that the following must be set as environmental variables inside the Kaiwo controller manager as these cannot be updated without restarting the operator process.
 //
 // * Enabling the resource monitoring feature (`RESOURCE_MONITORING_ENABLED=true`)
-// * Setting the Prometheus endpoint (`RESOURCE_MONITORING_PROMETHEUS_ENDPOINT=...`)
-// * Setting the polling interval (`RESOURCE_MONITORING_POLLING_INTERVAL=10m`)
+// * Setting the metrics endpoint (`RESOURCE_MONITORING_METRICS_ENDPOINT=...`)
+// * Setting the polling interval (`RESOURCE_MONITORING_POLLING_INTERVAL=30s`)
 type KaiwoResourceMonitoringConfig struct {
-	// AveragingTime is the time to use to average the metrics over
-	// +kubebuilder:validation:Pattern=`^([0-9]+(s|m|h))+$`
-	// +kubebuilder:default="20m"
-	AveragingTime string `json:"averagingTime,omitempty"`
-
-	// MinAliveTime is the time that a pod must have been alive for in order to qualify for inspection
-	// +kubebuilder:validation:Pattern=`^([0-9]+(s|m|h))+$`
-	// +kubebuilder:default="20m"
-	MinAliveTime string `json:"minAliveTime,omitempty"`
-
 	// LowUtilizationThreshold is the threshold which, if the metric goes under, the workload is considered underutilized. The threshold is interpreted as the percentage utilization versus the requested capacity.
-	// +kubebuilder:default=20
+	// +kubebuilder:default=1
 	// +kubebuilder:validation:Minimum=0
 	LowUtilizationThreshold float64 `json:"lowUtilizationThreshold,omitempty"`
 
@@ -125,9 +115,18 @@ type KaiwoResourceMonitoringConfig struct {
 	TargetNamespaces []string `json:"targetNamespaces,omitempty"`
 
 	// Profile chooses the target resource to monitor.
-	// +kubebuilder:validation:Enum="gpu";"cpu"
+	// +kubebuilder:validation:Enum="gpu"
 	// +kubebuilder:default="gpu"
 	Profile string `json:"profile,omitempty"`
+
+	// TerminateUnderutilized will terminate workloads that are underutilizing resources if set to `true`
+	// +kubebuilder:default=true
+	TerminateUnderutilized bool `json:"terminateUnderutilized,omitempty"`
+
+	// TerminateUnderutilizedAfter specifies the duration after which the workload will be terminated if it has been underutilizing resources (for this amount of time)
+	// +kubebuilder:validation:Pattern=`^([0-9]+(s|m|h))+$`
+	// +kubebuilder:default="24h"
+	TerminateUnderutilizedAfter string `json:"terminateUnderutilizedAfter,omitempty"`
 }
 
 // KaiwoSchedulingConfig contains the configuration Kaiwo uses for workload scheduling

@@ -20,6 +20,9 @@ import (
 	"context"
 	"fmt"
 
+	"sigs.k8s.io/controller-runtime/pkg/builder"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
@@ -84,6 +87,7 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 
 	reconciler := workloadjob.NewKaiwoJobReconciler(ctx, &kaiwoJob)
+	reconciler.Recorder = r.Recorder
 
 	result, err := reconciler.Reconcile(ctx, r.Client, r.Scheme)
 	if err != nil {
@@ -101,7 +105,9 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 func (r *KaiwoJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Recorder = mgr.GetEventRecorderFor("kaiwojob-controller")
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&kaiwo.KaiwoJob{}).
+		For(&kaiwo.KaiwoJob{},
+			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+		).
 		Owns(&batchv1.Job{}).
 		Owns(&rayv1.RayJob{}).
 		Watches(

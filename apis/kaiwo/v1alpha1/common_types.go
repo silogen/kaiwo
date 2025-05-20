@@ -38,6 +38,8 @@ const (
 	StatusFailed Status = "FAILED"
 	// StatusTerminated indicates the workload has been terminated by the user or system. This could be due to duration deadline being met and pressure for GPU demand.
 	StatusTerminated Status = "TERMINATED"
+	// StatusTerminating indicates that the workload should begin to terminate the underlying resources
+	StatusTerminating Status = "TERMINATING"
 )
 
 // CommonMetaSpec defines reusable metadata fields for workloads.
@@ -426,7 +428,5 @@ const (
 	KaiwoResourceUtilizationType                                = "ResourceUnderutilization"
 	GpuResourceUtilizationNormal KaiwoResourceUtilizationStatus = "GpuUtilizationNormal"
 	GpuResourceUtilizationLow    KaiwoResourceUtilizationStatus = "GpuUtilizationLow"
-	CpuResourceUtilizationNormal KaiwoResourceUtilizationStatus = "CpuUtilizationNormal"
-	CpuResourceUtilizationLow    KaiwoResourceUtilizationStatus = "CpuUtilizationLow"
 	ResourceUtilizationUnknown   KaiwoResourceUtilizationStatus = "UtilizationUnknown"
 )

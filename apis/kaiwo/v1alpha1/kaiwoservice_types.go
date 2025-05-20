@@ -16,15 +16,12 @@ package v1alpha1
 
 import (
 	"context"
-	"fmt"
 
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	common "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 // KaiwoServiceSpec defines the desired state of KaiwoService.
@@ -116,7 +113,7 @@ func (spec *KaiwoServiceSpec) IsRayService() bool {
 	return spec.RayService != nil || spec.Ray
 }
 
-func (svc *KaiwoService) GetStatus() string {
+func (svc *KaiwoService) GetStatusString() string {
 	return string(svc.Status.Status)
 }
 
@@ -124,34 +121,28 @@ func (svc *KaiwoService) GetType() string {
 	return "service"
 }
 
-func (s *KaiwoService) GetDuration() *metav1.Duration {
-	return s.Spec.Duration
+func (svc *KaiwoService) GetDuration() *metav1.Duration {
+	return svc.Spec.Duration
 }
 
-func (s *KaiwoService) GetStartTime() *metav1.Time {
-	return s.Status.StartTime
+func (svc *KaiwoService) GetStartTime() *metav1.Time {
+	return svc.Status.StartTime
 }
 
-func (s *KaiwoService) GetClusterQueue() string {
-	return s.Spec.ClusterQueue
+func (svc *KaiwoService) GetClusterQueue() string {
+	return svc.Spec.ClusterQueue
 }
 
-func (s *KaiwoService) GetGPUVendor() string {
-	return s.Spec.GpuVendor
+func (svc *KaiwoService) GetGPUVendor() string {
+	return svc.Spec.GpuVendor
+}
+
+func (svc *KaiwoService) GetCommonStatusSpec() *CommonStatusSpec {
+	return &svc.Status.CommonStatusSpec
 }
 
 func init() {
 	SchemeBuilder.Register(&KaiwoService{}, &KaiwoServiceList{})
-}
-
-func (svc *KaiwoService) GetPods(ctx context.Context, k8sClient client.Client) ([]corev1.Pod, error) {
-	podList := &corev1.PodList{}
-	if err := k8sClient.List(ctx, podList, client.InNamespace(svc.Namespace), client.MatchingLabels{
-		common.KaiwoRunIdLabel: string(svc.UID),
-	}); err != nil {
-		return nil, fmt.Errorf("failed to list pods: %w", err)
-	}
-	return podList.Items, nil
 }
 
 func (svc *KaiwoService) GetServices(ctx context.Context, k8sClient client.Client) ([]corev1.Service, error) {

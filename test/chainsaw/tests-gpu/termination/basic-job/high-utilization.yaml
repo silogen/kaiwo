@@ -1,0 +1,23 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoJob
+metadata:
+  name: high-utilization
+spec:
+  gpus: 1
+  dangerous: true  # TODO check how to run without (security context blocks access to GPU)
+  image: rocm/pytorch:rocm6.4_ubuntu24.04_py3.12_pytorch_release_2.6.0
+  resources:
+    requests:
+      cpu: "2"
+      memory: "8Gi"
+    limits:
+      cpu: "2"
+      memory: "8Gi"
+  entrypoint: |
+    python3 - << 'EOF'
+    import torch
+    dev = torch.device('cuda')
+    a = torch.rand((4096, 4096), device=dev)
+    while True:
+      _ = torch.mm(a, a)
+    EOF

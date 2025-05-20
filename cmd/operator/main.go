@@ -136,10 +136,15 @@ func main() {
 	// Create watchers for metrics and webhooks certificates
 	var metricsCertWatcher, webhookCertWatcher *certwatcher.CertWatcher
 
+	webhooksEnabled := !(os.Getenv("DISABLE_WEBHOOKS") == "true")
+	if !webhooksEnabled {
+		setupLog.Info("webhooks disabled")
+	}
+
 	// Initial webhook TLS options
 	webhookTLSOpts := tlsOpts
 
-	if len(webhookCertPath) > 0 {
+	if len(webhookCertPath) > 0 && webhooksEnabled {
 		setupLog.Info("Initializing webhook certificate watcher using provided certificates",
 			"webhook-cert-path", webhookCertPath, "webhook-cert-name", webhookCertName, "webhook-cert-key", webhookCertKey)
 
@@ -155,17 +160,6 @@ func main() {
 
 		webhookTLSOpts = append(webhookTLSOpts, func(config *tls.Config) {
 			config.GetCertificate = webhookCertWatcher.GetCertificate
-		})
-	}
-
-	var webhookServer webhook.Server
-	if certDirectory != "" {
-		webhookServer = webhook.NewServer(webhook.Options{
-			CertDir: certDirectory,
-		})
-	} else {
-		webhookServer = webhook.NewServer(webhook.Options{
-			TLSOpts: webhookTLSOpts,
 		})
 	}
 
@@ -185,6 +179,37 @@ func main() {
 		// can access the metrics endpoint. The RBAC are configured in 'config/rbac/kustomization.yaml'. More info:
 		// https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.20.0/pkg/metrics/filters#WithAuthenticationAndAuthorization
 		metricsServerOptions.FilterProvider = filters.WithAuthenticationAndAuthorization
+	}
+
+	managerOptions := ctrl.Options{
+		Scheme:                 scheme,
+		Metrics:                metricsServerOptions,
+		HealthProbeBindAddress: probeAddr,
+		LeaderElection:         enableLeaderElection,
+		LeaderElectionID:       "83fc2279.silogen.ai",
+		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
+		// when the Manager ends. This requires the binary to immediately end when the
+		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
+		// speeds up voluntary leader transitions as the new leader don't have to wait
+		// LeaseDuration time first.
+		//
+		// In the default scaffold provided, the program ends immediately after
+		// the manager stops, so would be fine to enable this option. However,
+		// if you are doing or is intended to do any operation such as perform cleanups
+		// after the manager stops then its usage might be unsafe.
+		// LeaderElectionReleaseOnCancel: true,
+	}
+
+	if webhooksEnabled {
+		if certDirectory != "" {
+			managerOptions.WebhookServer = webhook.NewServer(webhook.Options{
+				CertDir: certDirectory,
+			})
+		} else {
+			managerOptions.WebhookServer = webhook.NewServer(webhook.Options{
+				TLSOpts: webhookTLSOpts,
+			})
+		}
 	}
 
 	// If the certificate is not specified, controller-runtime will automatically
@@ -214,25 +239,7 @@ func main() {
 		})
 	}
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:                 scheme,
-		Metrics:                metricsServerOptions,
-		WebhookServer:          webhookServer,
-		HealthProbeBindAddress: probeAddr,
-		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "83fc2279.silogen.ai",
-		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
-		// when the Manager ends. This requires the binary to immediately end when the
-		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
-		// speeds up voluntary leader transitions as the new leader don't have to wait
-		// LeaseDuration time first.
-		//
-		// In the default scaffold provided, the program ends immediately after
-		// the manager stops, so would be fine to enable this option. However,
-		// if you are doing or is intended to do any operation such as perform cleanups
-		// after the manager stops then its usage might be unsafe.
-		// LeaderElectionReleaseOnCancel: true,
-	})
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), managerOptions)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
@@ -260,7 +267,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
+	if webhooksEnabled {
 		decoder := admission.NewDecoder(scheme)
 
 		jobWebhook := &webhookv1.JobWebhook{}
@@ -286,7 +293,6 @@ func main() {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Deployment")
 			os.Exit(1)
 		}
-
 	}
 	// +kubebuilder:scaffold:builder
 
@@ -298,7 +304,7 @@ func main() {
 		}
 	}
 
-	if webhookCertWatcher != nil {
+	if webhookCertWatcher != nil && webhooksEnabled {
 		setupLog.Info("Adding webhook certificate watcher to manager")
 		if err := mgr.Add(webhookCertWatcher); err != nil {
 			setupLog.Error(err, "unable to add webhook certificate watcher to manager")

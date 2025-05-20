@@ -26,8 +26,6 @@ import (
 
 	// "k8s.io/apimachinery/pkg/api/meta"
 
-	corev1 "k8s.io/api/core/v1"
-
 	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
@@ -40,7 +38,7 @@ import (
 
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	common "github.com/silogen/kaiwo/pkg/workloads/common"
+	"github.com/silogen/kaiwo/pkg/workloads/common"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -162,6 +160,21 @@ func (r *KaiwoJobReconciler) Reconcile(
 ) (ctrl.Result, error) {
 	kaiwoJob := r.Object
 
+	switch kaiwoJob.Status.Status {
+	case kaiwo.StatusTerminating:
+		if err := workloadutils.TerminateWorkload(
+			ctx,
+			k8sClient,
+			r.Recorder,
+			kaiwoJob,
+		); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to terminate workload: %w", err)
+		}
+		return ctrl.Result{}, nil
+	case kaiwo.StatusFailed, kaiwo.StatusTerminated, kaiwo.StatusComplete:
+		return ctrl.Result{}, nil
+	}
+
 	if err := r.ensureInitializedStatus(ctx, k8sClient); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -236,26 +249,17 @@ func (r *KaiwoJobReconciler) Reconcile(
 }
 
 func (r *KaiwoJobReconciler) ensureInitializedStatus(ctx context.Context, k8sClient client.Client) error {
-	logger := log.FromContext(ctx)
 	if r.Object.Status.Status == "" {
-		r.Object.Status.Status = kaiwo.StatusPending
-		if err := k8sClient.Status().Update(ctx, r.Object); err != nil {
-			logger.Error(err, "failed to initialize KaiwoJob status")
-			return err
+		if err := workloadutils.RetryForWorkload(ctx, k8sClient, r.Object, func(obj *kaiwo.KaiwoJob) error {
+			obj.Status.Status = kaiwo.StatusPending
+			if err := k8sClient.Status().Update(ctx, obj); err != nil {
+				return err
+			}
+			return nil
+		}); err != nil {
+			return fmt.Errorf("failed to initialize KaiwoJob status: %w", err)
 		}
-		logger.Info("Initialized KaiwoJob status to Pending")
 	}
-
-	// cond := meta.FindStatusCondition(r.Object.Status.Conditions, kaiwo.KaiwoResourceUtilizationType)
-	// if cond == nil {
-	// 	meta.SetStatusCondition(&r.Object.Status.Conditions, metav1.Condition{
-	// 		Type:    kaiwo.KaiwoResourceUtilizationType,
-	// 		Status:  metav1.ConditionFalse,
-	// 		Reason:  string(kaiwo.ResourceUtilizationUnknown),
-	// 		Message: "Resource utilization currently unknown",
-	// 	})
-	// 	return k8sClient.Status().Update(ctx, r.Object)
-	// }
 	return nil
 }
 
@@ -296,22 +300,10 @@ func (r *KaiwoJobReconciler) handlePreemption(ctx context.Context, k8sClient cli
 	kaiwoJob := r.Object
 	if workloadutils.ShouldPreempt(ctx, kaiwoJob, k8sClient) {
 		logger.Info("Preempting KaiwoJob due to expired duration and active GPU demand", "name", kaiwoJob.Name)
-		kaiwoJob.Status.Status = kaiwo.StatusTerminated
-		if err := k8sClient.Status().Update(ctx, kaiwoJob); err != nil {
-			return true, fmt.Errorf("failed to update status: %w", err)
+
+		if err := workloadutils.SetEarlyTermination(ctx, k8sClient, kaiwoJob, string(workloadutils.WorkloadPreempted), "Preempted KaiwoJob due to expired duration and active GPU demand"); err != nil {
+			return true, fmt.Errorf("failed to set early termination: %w", err)
 		}
-		if err := workloadutils.DeleteUnderlyingResource(ctx, kaiwoJob.UID, kaiwoJob.Name, kaiwoJob.Namespace, k8sClient); err != nil {
-			return true, fmt.Errorf("failed to delete workload: %w", err)
-		}
-		r.Recorder.Eventf(
-			kaiwoJob,
-			corev1.EventTypeWarning,
-			"KaiwoJobPreemptionWarning",
-			"Preempted KaiwoJob %s/%s due to expired duration and active GPU demand",
-			kaiwoJob.Namespace,
-			kaiwoJob.Name,
-		)
-		return true, nil
 	}
 	return false, nil
 }

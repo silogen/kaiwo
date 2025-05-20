@@ -1,41 +1,35 @@
 # Resource Monitoring
 
-The Kaiwo Operator includes a resource monitoring utility which continuously watches your Kaiwo workloads (Jobs or Services) and checks their CPU or GPU utilization via Prometheus. If a workload’s average utilization over a configurable time window falls below a threshold, the operator marks it **Underutilized** and emits an event, letting you identify idle resources in your cluster.
-
-!!! info "Future feature"
-    A feature will soon be available which can be used to automatically terminate Kaiwo workloads that are marked as Underutilized
+The Kaiwo Operator includes a resource monitoring utility which continuously watches your Kaiwo workloads (Jobs or Services) and checks their GPU utilization via metrics endpoints. If any pod of a workload that reserves GPUs is underutilizing the GPU, the operator marks the workload as **Underutilized** and emits an event. If the workload does not utilize the GPU for a given amount of time, it is automatically terminated. This termination feature is enabled by default if resource monitoring is enabled, but it can be disabled in case you want to implement your own termination logic.
 
 In order for workloads to be monitored, they must be deployed via Kaiwo CRDs (`KaiwoJob` or `KaiwoService`). This ensures that the created resources have the correct labels and are inspected by the resource monitor.
 
-## Monitoring Profiles
+## Configuration
 
-You can choose one of two metrics profiles:
+### Operator Environmental Variables
 
-**GPU Profile**
+Resource monitoring is enabled via environmental variables given to the Kaiwo operator: 
 
-The GPU profile tracks GPU utilization, and looks at all GPUs individually. This means that if even one GPU is underutilized, the workload is flagged.
+| Parameter                                       | Description                                                                                                                              | Default      |
+|-------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------| ------------ |
+| `RESOURCE_MONITORING_ENABLED`                   | Enable or disable monitoring (`true`/`false`)                                                                                            | `false`      |
+| `RESOURCE_MONITORING_METRICS_ENDPOINT`          | URL of your metrics endpoint                                                                                                             | _(required)_ |
+| `RESOURCE_MONITORING_POLLING_INTERVAL`          | How often to check metrics (e.g. `30s`, `1m`)                                                                                            | _(required)_ |
 
-**CPU Profile**
+!!!note
+  Setting the polling interval very long with workloads that only use GPUs occasionally may end up causing false early terminations, if the GPU is not in use during the polling check. Ensure that your polling interval is low enough to catch GPU usage based on your workload.
 
-The CPU profile tracks CPU utilization, and looks at the percentage ratio between what has been requested for the workload and what the workload is actually using. This calculation is done based on the total that all the pods in the workload are using.
+These options are set as the operator environment variables and cannot be changed during runtime.
 
+### `resourceMonitoring` field in KaiwoConfig
 
-## Configuration Parameters
+Please see the [CRD documentation](../reference/crds/config.kaiwo.silogen.ai.md#kaiworesourcemonitoringconfig) for the available options for setting the runtime configuration for the resource monitoring. Changing these fields takes effect immediately.
 
-Resource monitoring is enabled and configured via the following environmental variables. 
+By default, `terminateUnderutilizingAfter` is set to 24 hours and `lowUtilizationThreshold` is set to 1 (percent). This means that if a workload reaches at least 1 % GPU utilization at least once over 24 hours, it will not be terminated. These values should most likely be changed to suit your environment.
 
-| Parameter                                        | Description                                                                                                                              | Default      |
-|--------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------| ------------ |
-| `RESOURCE_MONITORING_ENABLED`                    | Enable or disable monitoring (`true`/`false`)                                                                                            | `false`      |
-| `RESOURCE_MONITORING_PROFILE`                    | `gpu` or `cpu`                                                                                                                           | `gpu`        |
-| `RESOURCE_MONITORING_PROMETHEUS_ENDPOINT`        | URL of your Prometheus server                                                                                                            | _(required)_ |
-| `RESOURCE_MONITORING_POLLING_INTERVAL`           | How often to check metrics (e.g. `30s`, `1m`)                                                                                            | _(required)_ |
-| `RESOURCE_MONITORING_AVERAGING_INTERVAL`         | Window over which to compute average utilization (e.g. `5m`)                                                                             | _(required)_ |
-| `RESOURCE_MONITORING_MIN_ALIVE_TIME`             | Minimum pod age before monitoring starts (e.g. `1m`)                                                                                     | _(required)_ |
-| `RESOURCE_MONITORING_LOW_UTILIZATION_THRESHOLD`  | Utilization % below which a workload is underutilized (e.g. `20`)                                                                        | _(required)_ |
-| `RESOURCE_MONITORING_TARGET_NAMESPACES`          | Comma-separated list of namespaces to include (e.g. `ml,ai`). If not provided or empty, all namespaces are included (except `kube-system`) | _(optional)_ |
+## Terminating Underutilizing Workloads
 
----
+If the KaiwoConfig field `spec.resourceMonitoring.terminateUnderutilizing` is `true` (the default), once a workload has been underutilizing one or more GPUs **continuously** for the time specified in the field `spec.resourceMonitoring.terminateUnderutilizingAfter`, it is flagged for termination by setting the early termination condition and setting the status to `TERMINATING`. The Kaiwo operator will then take care of deleting the dependent resources, but keeps the Kaiwo workload object available to provide a way to inspect the reason for termination.
 
 ## Status Conditions
 
@@ -43,44 +37,31 @@ Once monitoring begins, each KaiwoWorkload will have a condition under `.status.
 
 ```yaml
 - type: ResourceUnderutilization
-  status: "True"    # “True” means Underutilized, “False” means Normal
-  reason: GpuUtilizationNormal    # or GpuUtilizationLow, CpuUtilizationNormal, CpuUtilizationLow
+  status: "False"    # “True” means Underutilized, “False” means Normal
+  reason: GpuUtilizationNormal    # or GpuUtilizationLow
   message: "GPU utilization normal"
 ```
 
----
+If a workload is flagged for early termination, it will have an additional condition:
 
-## Viewing Events
-
-The operator also emits Events on the workload object:
-
-- **Warning** when utilization drops below threshold
-- **Normal** when it returns above threshold
-
-You can inspect them with:
-
-```bash
-kubectl describe <kaiwojob|kaiwoservice> my-workload
+```yaml
+- type: WorkloadTerminatedEarly
+  status: "True"
+  reason: GpuUtilizationLow    # or GpuUtilizationLow
+  message: "Early termination due to low GPU usage"
 ```
 
 ## Best Practices
 
 - **Right-size your thresholds**  
-  Choose a sensible cutoff (e.g. 10–30%) so you catch idle pods without false positives.
-- **Tune polling & averaging**
-    - Short windows (5–10 min) react faster but can be noisy.
-    - Longer windows (30–120 min) smooth out spikes.
+  Choose a sensible cutoff (e.g. 10–30%) so you catch idle pods without false positives
 - **Namespace filtering**  
-  Use `TARGET_NAMESPACES` to restrict monitoring to critical workloads only.
+  Use the KaiwoConfig field `spec.resourceMonitoring.targetNamespaces` to restrict monitoring to critical workloads only.
 
 ## Troubleshooting
 
 - **No status updates?**
-    - Ensure `ENABLED=true` and `PROMETHEUS_ENDPOINT` is reachable.
+    - Ensure `ENABLED=true` and `METRICS_ENDPOINT` is reachable.
     - Check operator logs for query errors.
-- **Threshold never crossed?**
-    - Verify your query window (`AVERAGING_INTERVAL`) aligns with real workload patterns.
-    - Inspect raw Prometheus metrics to confirm values.
 - **Excessive events?**
-    - Increase `LOW_UTILIZATION_THRESHOLD` to reduce sensitivity.
-    - Lengthen `POLLING_INTERVAL` to batch state changes.
+    - Increase `lowUtilizationThreshold` to reduce sensitivity.
