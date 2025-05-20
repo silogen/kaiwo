@@ -397,10 +397,13 @@ var _ = Describe("Manager", Ordered, func() {
 			Eventually(verifyCurlUp, 5*time.Minute).Should(Succeed())
 
 			By("getting the metrics by checking curl-metrics logs")
-			metricsOutput := getMetricsOutput()
-			Expect(metricsOutput).To(ContainSubstring(
-				"controller_runtime_reconcile_total",
-			))
+			verifyMetricsOutput := func(g Gomega) {
+				metricsOutput := getMetricsOutput()
+				g.Expect(metricsOutput).To(ContainSubstring(
+					"controller_runtime_reconcile_total",
+				))
+			}
+			Eventually(verifyMetricsOutput).WithTimeout(5 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
 		})
 
 		It("should provisioned cert-manager", func() {
