@@ -11,6 +11,8 @@ spec:
   - name: Create resources
     try:
     - apply:
+        file: ../priority-classes.yaml
+    - apply:
         file: ../cluster-queue-fit-none.yaml
   - name: RayService
     try:
