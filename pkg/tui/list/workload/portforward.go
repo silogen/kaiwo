@@ -27,6 +27,8 @@ import (
 	"syscall"
 	"time"
 
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
+
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/huh/spinner"
 	"github.com/sirupsen/logrus"
@@ -69,7 +71,7 @@ func runPortForward(ctx context.Context, clients k8s.KubernetesClients, state *t
 	}
 
 	// TODO add spinner
-	workloadPods, err := workloadReference.GetPods(ctx, clients.Client)
+	workloadPods, err := workloadutils.GetWorkloadPods(ctx, clients.Client, workloadReference)
 	if err != nil {
 		return tuicomponents.StepResultErr, nil, fmt.Errorf("failed to get pods for workload %v", err)
 	}

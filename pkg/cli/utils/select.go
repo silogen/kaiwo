@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/silogen/kaiwo/apis/kaiwo/utils"
+	"github.com/silogen/kaiwo/pkg/workloads/common"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
@@ -40,7 +40,7 @@ func IsGPUPod(pod corev1.Pod) bool {
 	return false
 }
 
-func GetWorkload(ctx context.Context, k8sClient client.Client, workloadSelector string, namespace string) (utils.KaiwoWorkload, error) {
+func GetWorkload(ctx context.Context, k8sClient client.Client, workloadSelector string, namespace string) (common.KaiwoWorkload, error) {
 	parts := strings.Split(workloadSelector, "/")
 	if len(parts) != 2 {
 		return nil, fmt.Errorf("invalid workload selector, must be type/name: %s", workloadSelector)
@@ -58,5 +58,5 @@ func GetWorkload(ctx context.Context, k8sClient client.Client, workloadSelector 
 	if err := k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, obj); err != nil {
 		return nil, fmt.Errorf("error getting Kaiwo %s %s/%s: %v", type_, namespace, name, err)
 	}
-	return obj.(utils.KaiwoWorkload), nil
+	return obj.(common.KaiwoWorkload), nil
 }

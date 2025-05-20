@@ -19,7 +19,9 @@ import (
 	"fmt"
 	"time"
 
-	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/utils"
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
+
+	kaiwo "github.com/silogen/kaiwo/pkg/workloads/common"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -53,7 +55,7 @@ func ChoosePodAndContainer(ctx context.Context, clients k8s.KubernetesClients, r
 }
 
 func RunSelectPodAndContainer(ctx context.Context, clients k8s.KubernetesClients, state *tuicomponents.RunState) (tuicomponents.StepResult, tuicomponents.RunStep[tuicomponents.RunState], error) {
-	allPods, err := state.Workload.GetPods(ctx, clients.Client)
+	allPods, err := workloadutils.GetWorkloadPods(ctx, clients.Client, state.Workload)
 	if err != nil {
 		return tuicomponents.StepResultErr, nil, fmt.Errorf("failed to list pods: %w", err)
 	}

@@ -26,8 +26,6 @@ import (
 
 	"k8s.io/client-go/util/retry"
 
-	"github.com/silogen/kaiwo/apis/kaiwo/utils"
-
 	"k8s.io/client-go/tools/record"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
@@ -411,7 +409,7 @@ func updatePodSpecStorage(podSpec *corev1.PodSpec, storageSpec kaiwo.StorageSpec
 
 func GetEarliestPodStartTime(ctx context.Context, k8sClient client.Client, name string, namespace string) *metav1.Time {
 	podList := &corev1.PodList{}
-	if err := k8sClient.List(ctx, podList, client.InNamespace(namespace), client.MatchingLabels{kaiwo.KaiwoNameLabel: name}); err != nil {
+	if err := k8sClient.List(ctx, podList, client.InNamespace(namespace), client.MatchingLabels{common.KaiwoNameLabel: name}); err != nil {
 		return nil
 	}
 
@@ -430,7 +428,7 @@ func CheckPodStatus(ctx context.Context, k8sClient client.Client, name string, n
 	logger := log.FromContext(ctx)
 
 	podList := &corev1.PodList{}
-	err = k8sClient.List(ctx, podList, client.InNamespace(namespace), client.MatchingLabels{kaiwo.KaiwoNameLabel: name})
+	err = k8sClient.List(ctx, podList, client.InNamespace(namespace), client.MatchingLabels{common.KaiwoNameLabel: name})
 	if err != nil {
 		logger.Error(err, "Failed to list pods for job", "KaiwoJob", name)
 		return nil, status, err
@@ -469,7 +467,7 @@ func CheckPodStatus(ctx context.Context, k8sClient client.Client, name string, n
 }
 
 func ValidateKaiwoResourceBeforeCreateOrUpdate(ctx context.Context, actual client.Object, kaiwoObjectMeta metav1.ObjectMeta) (*ctrl.Result, error) {
-	if actual == nil && kaiwoObjectMeta.Labels != nil && kaiwoObjectMeta.Labels[kaiwo.KaiwoManagedLabel] == "true" {
+	if actual == nil && kaiwoObjectMeta.Labels != nil && kaiwoObjectMeta.Labels[common.KaiwoManagedLabel] == "true" {
 		logger := log.FromContext(ctx)
 		baseutils.Debug(logger, "Aborting reconciliation to avoid recreating a webhook-managed object")
 		return &ctrl.Result{}, nil
@@ -501,7 +499,7 @@ const WorkloadPreempted WorkloadPreemptedReason = "WorkloadPreempted"
 
 type WorkloadPreemptedReason string
 
-func ShouldPreempt(ctx context.Context, obj utils.KaiwoWorkload, k8sClient client.Client) bool {
+func ShouldPreempt(ctx context.Context, obj common.KaiwoWorkload, k8sClient client.Client) bool {
 	duration := obj.GetDuration()
 	startTime := obj.GetStartTime()
 	if duration == nil || obj.GetStatusString() != string(kaiwo.StatusRunning) {
@@ -594,7 +592,7 @@ func SyncGpuMetaFromPodSpec(podSpec corev1.PodSpec, meta *kaiwo.CommonMetaSpec) 
 
 // RetryForWorkload provides a wrapper for an atomic action on a workload object by first reading a fresh copy of the object
 // and passing it to the function, and retrying on conflict
-func RetryForWorkload[T utils.KaiwoWorkload](ctx context.Context, k8sClient client.Client, workload T, fn func(T) error) error {
+func RetryForWorkload[T common.KaiwoWorkload](ctx context.Context, k8sClient client.Client, workload T, fn func(T) error) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		copyObj := workload.DeepCopyObject().(T)
 		if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(workload), copyObj); err != nil {
@@ -614,11 +612,11 @@ func TerminateWorkload(
 	ctx context.Context,
 	k8sClient client.Client,
 	recorder record.EventRecorder,
-	workload utils.KaiwoWorkload,
+	workload common.KaiwoWorkload,
 ) error {
 	logger := log.FromContext(ctx)
 	var condition *metav1.Condition
-	if err := RetryForWorkload(ctx, k8sClient, workload, func(obj utils.KaiwoWorkload) error {
+	if err := RetryForWorkload(ctx, k8sClient, workload, func(obj common.KaiwoWorkload) error {
 		statusSpec := obj.GetCommonStatusSpec()
 		statusSpec.Status = kaiwo.StatusTerminated
 
@@ -710,7 +708,7 @@ func DeleteUnderlyingResources(ctx context.Context, uid types.UID, name string, 
 }
 
 // CheckKaiwoWorkloadShouldBeTerminatedForUnderutilization checks if the Kaiwo workload should be terminated due to resource underutilization
-func CheckKaiwoWorkloadShouldBeTerminatedForUnderutilization(ctx context.Context, workload utils.KaiwoWorkload) (bool, string) {
+func CheckKaiwoWorkloadShouldBeTerminatedForUnderutilization(ctx context.Context, workload common.KaiwoWorkload) (bool, string) {
 	config := controllerutils.ConfigFromContext(ctx)
 	logger := log.FromContext(ctx).WithName("CheckKaiwoWorkloadShouldBeTerminatedForUnderutilization")
 
@@ -739,7 +737,7 @@ func CheckKaiwoWorkloadShouldBeTerminatedForUnderutilization(ctx context.Context
 // SetEarlyTermination flags a workload for early termination by
 // 1. Setting the status to TERMINATING
 // 2. Creating the WorkloadTerminatedEarly condition, but keeping its status as False (in order to record the reason)
-func SetEarlyTermination(ctx context.Context, k8sClient client.Client, workload utils.KaiwoWorkload, reason string, message string) error {
+func SetEarlyTermination(ctx context.Context, k8sClient client.Client, workload common.KaiwoWorkload, reason string, message string) error {
 	logger := log.FromContext(ctx)
 
 	logger.Info("Flagging workload for early termination", "reason", reason, "message", message)
@@ -760,4 +758,14 @@ func SetEarlyTermination(ctx context.Context, k8sClient client.Client, workload 
 	}
 
 	return nil
+}
+
+func GetWorkloadPods(ctx context.Context, k8sClient client.Client, workload common.KaiwoWorkload) ([]corev1.Pod, error) {
+	podList := &corev1.PodList{}
+	if err := k8sClient.List(ctx, podList, client.InNamespace(workload.GetNamespace()), client.MatchingLabels{
+		common.KaiwoRunIdLabel: string(workload.GetUID()),
+	}); err != nil {
+		return nil, fmt.Errorf("failed to list pods: %w", err)
+	}
+	return podList.Items, nil
 }

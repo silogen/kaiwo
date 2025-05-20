@@ -146,9 +146,9 @@ func sanitize(kaiwoJob *kaiwo.KaiwoJob, config controllerutils.KaiwoConfigContex
 	}
 
 	if kaiwoJob.Spec.ClusterQueue == "" {
-		kaiwoJob.Labels[kaiwo.QueueLabel] = config.DefaultClusterQueueName
+		kaiwoJob.Labels[common.QueueLabel] = config.DefaultClusterQueueName
 	} else {
-		kaiwoJob.Labels[kaiwo.QueueLabel] = kaiwoJob.Spec.ClusterQueue
+		kaiwoJob.Labels[common.QueueLabel] = kaiwoJob.Spec.ClusterQueue
 	}
 }
 

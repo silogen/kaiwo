@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package utils
+package common
 
 import (
 	"context"
@@ -30,7 +30,6 @@ type KaiwoWorkload interface {
 	GetObjectMeta() *metav1.ObjectMeta
 	GetStatusString() string
 	GetType() string
-	GetPods(ctx context.Context, k8sClient client.Client) ([]corev1.Pod, error)
 	GetServices(ctx context.Context, k8sClient client.Client) ([]corev1.Service, error)
 	GetDuration() *metav1.Duration
 	GetStartTime() *metav1.Time

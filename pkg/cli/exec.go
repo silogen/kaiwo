@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
+
 	utils2 "github.com/silogen/kaiwo/pkg/cli/utils"
 
 	list "github.com/silogen/kaiwo/pkg/tui/list/pod"
@@ -94,7 +96,7 @@ func executeContainerCommand(args []string, command []string, gpuPodsOnly bool) 
 		return fmt.Errorf("failed to get workload and object key: %w", err)
 	}
 
-	allPods, err := workload.GetPods(ctx, clients.Client)
+	allPods, err := workloadutils.GetWorkloadPods(ctx, clients.Client, workload)
 	if err != nil {
 		return fmt.Errorf("failed to get pods: %w", err)
 	}

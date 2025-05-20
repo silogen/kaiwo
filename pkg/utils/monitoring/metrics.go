@@ -24,6 +24,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/silogen/kaiwo/pkg/workloads/common"
+
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -34,8 +36,6 @@ import (
 	"github.com/prometheus/common/expfmt"
 
 	"k8s.io/apimachinery/pkg/api/meta"
-
-	"github.com/silogen/kaiwo/apis/kaiwo/utils"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
@@ -251,7 +251,7 @@ func fetchKaiwoWorkloads(ctx context.Context, k8sClient client.Client, kaiwoPods
 		}
 
 		// Skip if not a Kaiwo workload pod
-		kaiwoWorkloadId, isKaiwoWorkload := pod.Labels[kaiwo.KaiwoRunIdLabel]
+		kaiwoWorkloadId, isKaiwoWorkload := pod.Labels[common.KaiwoRunIdLabel]
 		if !isKaiwoWorkload {
 			continue
 		}
@@ -268,8 +268,8 @@ func fetchKaiwoWorkloads(ctx context.Context, k8sClient client.Client, kaiwoPods
 func (m *MetricsWatcher) handleKaiwoWorkloads(ctx context.Context, config controllerutils.KaiwoConfigContext, kaiwoWorkloads map[string][]GpuMetricsEntry) error {
 	for kaiwoWorkloadId, entries := range kaiwoWorkloads {
 		pod := kaiwoWorkloads[kaiwoWorkloadId][0].AssociatedPod
-		kaiwoWorkloadType := pod.Labels[kaiwo.KaiwoTypeLabel]
-		kaiwoWorkloadName := pod.Labels[kaiwo.KaiwoNameLabel]
+		kaiwoWorkloadType := pod.Labels[common.KaiwoTypeLabel]
+		kaiwoWorkloadName := pod.Labels[common.KaiwoNameLabel]
 
 		kaiwoWorkload, err := GetKaiwoWorkload(ctx, m.k8sClient, kaiwoWorkloadName, pod.Namespace, kaiwoWorkloadType)
 		if err != nil {
@@ -361,7 +361,7 @@ func parseLabels(metric *dto.Metric) map[string]string {
 	return labelLookup
 }
 
-func GetKaiwoWorkload(ctx context.Context, k8sClient client.Client, name string, namespace string, workloadType string) (utils.KaiwoWorkload, error) {
+func GetKaiwoWorkload(ctx context.Context, k8sClient client.Client, name string, namespace string, workloadType string) (common.KaiwoWorkload, error) {
 	var obj client.Object
 	switch workloadType {
 	case "job":
@@ -374,13 +374,13 @@ func GetKaiwoWorkload(ctx context.Context, k8sClient client.Client, name string,
 	if err := k8sClient.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, obj); err != nil {
 		return nil, fmt.Errorf("failed to fetch Kaiwo workload: %w", err)
 	}
-	return obj.(utils.KaiwoWorkload), nil
+	return obj.(common.KaiwoWorkload), nil
 }
 
 // syncKaiwoStatus updates the condition of the Kaiwo workload
 func (m *MetricsWatcher) syncKaiwoStatus(
 	ctx context.Context,
-	kaiwoWorkload utils.KaiwoWorkload,
+	kaiwoWorkload common.KaiwoWorkload,
 	reason kaiwo.KaiwoResourceUtilizationStatus,
 	msg string,
 	healthy bool,
@@ -412,7 +412,7 @@ func (m *MetricsWatcher) syncKaiwoStatus(
 func (m *MetricsWatcher) flagIfUnderutilized(
 	ctx context.Context,
 	config controllerutils.KaiwoConfigContext,
-	kaiwoWorkload utils.KaiwoWorkload,
+	kaiwoWorkload common.KaiwoWorkload,
 ) error {
 	condition := meta.FindStatusCondition(kaiwoWorkload.GetCommonStatusSpec().Conditions, kaiwo.KaiwoResourceUtilizationType)
 	if condition == nil || condition.Status == metav1.ConditionFalse {

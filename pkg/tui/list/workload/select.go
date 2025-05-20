@@ -18,7 +18,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/silogen/kaiwo/apis/kaiwo/utils"
+	"github.com/silogen/kaiwo/pkg/workloads/common"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
@@ -60,7 +60,7 @@ func runSelectWorkload(ctx context.Context, clients k8s.KubernetesClients, state
 
 	var err error
 
-	var workloadReferences []utils.KaiwoWorkload
+	var workloadReferences []common.KaiwoWorkload
 
 	var loadErr error
 	loadReferences := func() {

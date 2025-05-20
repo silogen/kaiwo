@@ -16,7 +16,6 @@ package v1alpha1
 
 import (
 	"context"
-	"fmt"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -144,16 +143,6 @@ func (s *KaiwoJob) GetGPUVendor() string {
 
 func (s *KaiwoJob) GetCommonStatusSpec() *CommonStatusSpec {
 	return &s.Status.CommonStatusSpec
-}
-
-func (job *KaiwoJob) GetPods(ctx context.Context, k8sClient client.Client) ([]corev1.Pod, error) {
-	podList := &corev1.PodList{}
-	if err := k8sClient.List(ctx, podList, client.InNamespace(job.Namespace), client.MatchingLabels{
-		KaiwoRunIdLabel: string(job.UID),
-	}); err != nil {
-		return nil, fmt.Errorf("failed to list pods: %w", err)
-	}
-	return podList.Items, nil
 }
 
 func (job *KaiwoJob) GetServices(ctx context.Context, k8sClient client.Client) ([]corev1.Service, error) {

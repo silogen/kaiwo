@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
+
 	utils2 "github.com/silogen/kaiwo/pkg/cli/utils"
 
 	"github.com/spf13/cobra"
@@ -72,7 +74,7 @@ func executeLogsCommand(_ *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get workload and object key: %w", err)
 	}
 
-	allPods, err := workload.GetPods(ctx, clients.Client)
+	allPods, err := workloadutils.GetWorkloadPods(ctx, clients.Client, workload)
 	if err != nil {
 		return fmt.Errorf("failed to get pods: %w", err)
 	}

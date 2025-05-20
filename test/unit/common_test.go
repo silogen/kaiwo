@@ -84,10 +84,10 @@ var _ = Describe("Workload defaults", func() {
 
 	When("a workload pod spec is being updated", func() {
 		It("sets the kaiwo system flags", func() {
-			Expect(podTemplateSpec.Labels[v1alpha1.KaiwoTypeLabel]).To(Equal(labelContext.Type))
-			Expect(podTemplateSpec.Labels[v1alpha1.KaiwoUserLabel]).To(Equal(labelContext.User))
-			Expect(podTemplateSpec.Labels[v1alpha1.KaiwoNameLabel]).To(Equal(labelContext.Name))
-			Expect(podTemplateSpec.Labels[v1alpha1.KaiwoRunIdLabel]).To(Equal(labelContext.RunId))
+			Expect(podTemplateSpec.Labels[common.KaiwoTypeLabel]).To(Equal(labelContext.Type))
+			Expect(podTemplateSpec.Labels[common.KaiwoUserLabel]).To(Equal(labelContext.User))
+			Expect(podTemplateSpec.Labels[common.KaiwoNameLabel]).To(Equal(labelContext.Name))
+			Expect(podTemplateSpec.Labels[common.KaiwoRunIdLabel]).To(Equal(labelContext.RunId))
 		})
 
 		It("keeps any existing flags", func() {
