@@ -3,7 +3,7 @@ kind: KaiwoJob
 metadata:
   name: kaiwojob-ray-low
 spec:
-  clusterQueue: test-local-queue
+  clusterQueue: workload-priority-class-test-queue
   priorityClass: low-priority
   ray: true
   user: test-user

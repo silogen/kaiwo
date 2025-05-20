@@ -3,7 +3,7 @@ kind: KaiwoService
 metadata:
   name: kaiwoservice-ray-low
 spec:
-  clusterQueue: test-local-queue
+  clusterQueue: workload-priority-class-test-queue
   priorityClass: low-priority
   user: test-user
   resources:
