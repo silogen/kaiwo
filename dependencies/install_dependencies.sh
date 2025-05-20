@@ -18,14 +18,12 @@ for arg in "$@"; do
 done
 
 CERT_MANAGER_PATH="dependencies/kustomization-client-side"
-PROMETHEUS_CLIENT_SIDE_PATH="dependencies/kustomization-client-side/prometheus-operator"
 SERVER_SIDE_DEPS_PATH="dependencies/kustomization-server-side"
 CLIENT_SIDE_DEPS_PATH="dependencies/kustomization-client-side"
 if [ "$USE_LOCAL" != "true" ]; then
   CERT_MANAGER_PATH="github.com/silogen/kaiwo//$CERT_MANAGER_PATH?ref=main"
   SERVER_SIDE_DEPS_PATH="github.com/silogen/kaiwo//$SERVER_SIDE_DEPS_PATH?ref=main"
   CLIENT_SIDE_DEPS_PATH="github.com/silogen/kaiwo//$CLIENT_SIDE_DEPS_PATH?ref=main"
-  PROMETHEUS_CLIENT_SIDE_PATH="github.com/silogen/kaiwo//$PROMETHEUS_CLIENT_SIDE_PATH?ref=main"
 fi
 
 echo "Deploying Cert-Manager"
@@ -53,19 +51,5 @@ kubectl wait \
 	--for condition=Established \
 	--all CustomResourceDefinition \
 	--namespace=monitoring
-
-echo "Deploying actual Prometheus stack"
-kubectl apply -k "$PROMETHEUS_CLIENT_SIDE_PATH"
-echo "Waiting for Prometheus to be deployed..."
-
-kubectl rollout status deployment/kube-state-metrics -n monitoring --timeout=5m
-kubectl rollout status deployment/prometheus-adapter -n monitoring --timeout=5m
-kubectl rollout status deployment/prometheus-operator -n monitoring --timeout=5m
-
-echo "Waiting for Prometheus endpoints to be available"
-kubectl rollout status statefulset/prometheus-k8s -n monitoring --timeout=5m
-kubectl wait endpoints/prometheus-k8s -n monitoring --for=jsonpath='{.subsets[0].addresses}' --timeout=2m
-
-echo "Prometheus deployed"
 
 echo "All dependencies are deployed"
