@@ -13,7 +13,7 @@ spec:
             name: kaiwo
           spec:
             ray:
-              headPodMemory: 100Mi
+              headPodMemory: 1Gi
     - apply:
         file: rayjob1.yaml
     - assert:
@@ -29,7 +29,7 @@ spec:
             - name: ray-head
               resources:
                 requests:
-                  memory: "100Mi"
+                  memory: "1Gi"
     - patch:
         resource:
           apiVersion: config.kaiwo.silogen.ai/v1alpha1
@@ -64,7 +64,7 @@ spec:
             name: kaiwo
           spec:
             ray:
-              headPodMemory: 100Mi
+              headPodMemory: 1Gi
     catch:
     - command:
         entrypoint: kaiwo-dev

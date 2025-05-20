@@ -5,13 +5,12 @@ metadata:
 spec:
   resourceMonitoring:
     lowUtilizationThreshold: 50
-    terminateUnderutilized: true
-    terminateUnderutilizedAfter: 30s
+    terminateUnderutilized: false
     targetNamespaces:
     - "kaiwo-test-monitoring-conditions"
     - "kaiwo"
   ray:
-    headPodMemory: 16Gi
+    headPodMemory: 1Gi
   scheduling:
     pendingThresholdForPreemption: 1s
 
