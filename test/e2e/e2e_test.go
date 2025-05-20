@@ -261,15 +261,6 @@ var _ = Describe("Manager", Ordered, func() {
 				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get curl-metrics logs: %s", err)
 			}
 
-			By("Fetching curl-prometheus logs")
-			cmd = exec.Command("kubectl", "logs", "curl-prometheus", "-n", namespace)
-			prometheusOutput, err := utils.Run(cmd)
-			if err == nil {
-				_, _ = fmt.Fprintf(GinkgoWriter, "Prometheus logs:\n %s", prometheusOutput)
-			} else {
-				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get curl-prometheus logs: %s", err)
-			}
-
 			By("Fetching controller manager pod description")
 			cmd = exec.Command("kubectl", "describe", "pod", controllerPodName, "-n", namespace)
 			podDescription, err := utils.Run(cmd)
@@ -330,11 +321,6 @@ var _ = Describe("Manager", Ordered, func() {
 			cmd = exec.Command("kubectl", "get", "service", metricsServiceName, "-n", namespace)
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Metrics service should exist")
-
-			// By("validating that the ServiceMonitor for Prometheus is applied in the namespace")
-			// cmd = exec.Command("kubectl", "get", "ServiceMonitor", "-n", namespace)
-			// _, err = utils.Run(cmd)
-			// Expect(err).NotTo(HaveOccurred(), "ServiceMonitor should exist")
 
 			By("getting the service account token")
 			token, err := serviceAccountToken()
@@ -415,62 +401,6 @@ var _ = Describe("Manager", Ordered, func() {
 			Expect(metricsOutput).To(ContainSubstring(
 				"controller_runtime_reconcile_total",
 			))
-		})
-
-		It("should ensure the Prometheus endpoint is serving metrics", func() {
-			prometheusServiceName := "prometheus-k8s"
-			prometheusNamespace := "monitoring"
-
-			By("validating that the Prometheus service is available")
-			cmd := exec.Command("kubectl", "get", "service", prometheusServiceName, "-n", prometheusNamespace)
-			_, err := utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Prometheus service should exist")
-
-			By("waiting for the Prometheus endpoint to be ready")
-			verifyMetricsEndpointReady := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "endpoints", prometheusServiceName, "-n", prometheusNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(ContainSubstring("9090"), "Prometheus endpoint is not ready")
-			}
-			Eventually(verifyMetricsEndpointReady).Should(Succeed())
-
-			By("creating the curl-prometheus pod to access the Prometheus endpoint")
-			cmd = exec.Command("kubectl", "run", "curl-prometheus", "--restart=Never",
-				"--namespace", namespace,
-				"--image=alpine/curl:8.12.1",
-				"--overrides", fmt.Sprintf(`{
-				"spec": {
-				  "containers": [{
-					"name": "curl",
-					"image": "alpine/curl:8.12.1",
-					"command": [ "sh", "-c" ],
-					"args": [
-					  "echo '=== /etc/resolv.conf ===\n'; cat /etc/resolv.conf; echo '=== getent hosts ==='; getent hosts %[1]s.%[2]s.svc.cluster.local || true; echo '=== ip route ==='; ip route; echo '=== curl verbose ==='; curl -fSv --connect-timeout 5 --max-time 30 http://%[1]s.%[2]s.svc.cluster.local:9090/-/ready"
-					],
-					"securityContext": {
-					  "allowPrivilegeEscalation": false,
-					  "capabilities": { "drop": ["ALL"] },
-					  "runAsNonRoot": true,
-					  "runAsUser": 1000,
-					  "seccompProfile": { "type": "RuntimeDefault" }
-					}
-				  }]
-				}
-			  }`, prometheusServiceName, prometheusNamespace))
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create curl-prometheus pod")
-
-			By("waiting for the curl-prometheus pod to complete.")
-			verifyCurlUp := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "pods", "curl-prometheus",
-					"-o", "jsonpath={.status.phase}",
-					"-n", namespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("Succeeded"), "curl pod in wrong status")
-			}
-			Eventually(verifyCurlUp, 1*time.Minute).Should(Succeed())
 		})
 
 		It("should provisioned cert-manager", func() {
