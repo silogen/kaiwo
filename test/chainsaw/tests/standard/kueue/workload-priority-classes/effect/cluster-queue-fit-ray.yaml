@@ -5,6 +5,8 @@ metadata:
 spec:
   clusterQueues:
   - name: workload-priority-class-test-queue
+    namespaces:
+    - "($namespace)"
     spec:
       namespaceSelector: {}   # All namespaces
       queueingStrategy: BestEffortFIFO
@@ -17,3 +19,14 @@ spec:
             nominalQuota: 4000m
           - name: memory
             nominalQuota: 4Gi
+  resourceFlavors:
+  - name: default
+  workloadPriorityClasses:
+  - metadata:
+      name: high-priority
+    value: 1000
+    description: "High priority class"
+  - metadata:
+      name: low-priority
+    value: 10
+    description: "Low priority class"

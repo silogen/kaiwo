@@ -28,6 +28,8 @@ import (
 	"strings"
 	"time"
 
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
+
 	"github.com/charmbracelet/lipgloss"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -216,8 +218,9 @@ func listPodLogs(ctx context.Context, clientset *kubernetes.Clientset, namespace
 func listContainerLogs(ctx context.Context, clientset *kubernetes.Clientset, namespace string, pod corev1.Pod, containerName string) ([]LogEntry, error) {
 	var logs []LogEntry
 	podLogOpts := &corev1.PodLogOptions{
-		Container:  containerName,
-		Timestamps: true,
+		Container:    containerName,
+		Timestamps:   true,
+		SinceSeconds: baseutils.Pointer(int64(300)),
 	}
 	req := clientset.CoreV1().Pods(namespace).GetLogs(pod.Name, podLogOpts)
 	podLogs, err := req.Stream(ctx)

@@ -6,19 +6,12 @@ spec:
   concurrent: false
   timeouts:
     cleanup: 60s
+    assert: 120s
   steps:
   - name: Create resources
     try:
     - apply:
-            # The resource flavor must be added first, so that it gets deleted last. It sets finalizers on the
-            # cluster queue, and won't get deleted before the cluster queue is deleted
-        file: ../resource-flavor.yaml
-    - apply:
-        file: ../priority-classes.yaml
-    - apply:
         file: ../cluster-queue-fit-none.yaml
-    - apply:
-        file: ../local-queue.yaml
   - name: RayService
     try:
     - description: Create low-priority Kaiwo ray service
