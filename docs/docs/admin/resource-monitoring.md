@@ -23,7 +23,9 @@ These options are set as the operator environment variables and cannot be change
 
 ### `resourceMonitoring` field in KaiwoConfig
 
-Please see the [CRD documentation](../reference/crds/config.kaiwo.silogen.ai.md#kaiworesourcemonitoringconfig) for the available options for setting the runtime configuration for the resource monitoring. Changing these fields takes effect immediately. 
+Please see the [CRD documentation](../reference/crds/config.kaiwo.silogen.ai.md#kaiworesourcemonitoringconfig) for the available options for setting the runtime configuration for the resource monitoring. Changing these fields takes effect immediately.
+
+By default, `terminateUnderutilizingAfter` is set to 24 hours and `lowUtilizationThreshold` is set to 1 (percent). This means that if a workload reaches at least 1 % GPU utilization at least once over 24 hours, it will not be terminated. These values should most likely be changed to suit your environment.
 
 ## Terminating Underutilizing Workloads
 

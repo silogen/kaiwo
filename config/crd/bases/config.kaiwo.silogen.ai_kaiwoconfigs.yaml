@@ -120,7 +120,7 @@ spec:
                   settings
                 properties:
                   lowUtilizationThreshold:
-                    default: 20
+                    default: 1
                     description: LowUtilizationThreshold is the threshold which, if
                       the metric goes under, the workload is considered underutilized.
                       The threshold is interpreted as the percentage utilization versus
@@ -147,7 +147,7 @@ spec:
                       are underutilizing resources if set to `true`
                     type: boolean
                   terminateUnderutilizedAfter:
-                    default: 4h
+                    default: 24h
                     description: TerminateUnderutilizedAfter specifies the duration
                       after which the workload will be terminated if it has been underutilizing
                       resources (for this amount of time)

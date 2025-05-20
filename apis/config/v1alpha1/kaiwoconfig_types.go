@@ -107,7 +107,7 @@ type KaiwoNodeConfig struct {
 // * Setting the polling interval (`RESOURCE_MONITORING_POLLING_INTERVAL=30s`)
 type KaiwoResourceMonitoringConfig struct {
 	// LowUtilizationThreshold is the threshold which, if the metric goes under, the workload is considered underutilized. The threshold is interpreted as the percentage utilization versus the requested capacity.
-	// +kubebuilder:default=20
+	// +kubebuilder:default=1
 	// +kubebuilder:validation:Minimum=0
 	LowUtilizationThreshold float64 `json:"lowUtilizationThreshold,omitempty"`
 
@@ -125,7 +125,7 @@ type KaiwoResourceMonitoringConfig struct {
 
 	// TerminateUnderutilizedAfter specifies the duration after which the workload will be terminated if it has been underutilizing resources (for this amount of time)
 	// +kubebuilder:validation:Pattern=`^([0-9]+(s|m|h))+$`
-	// +kubebuilder:default="4h"
+	// +kubebuilder:default="24h"
 	TerminateUnderutilizedAfter string `json:"terminateUnderutilizedAfter,omitempty"`
 }
 
