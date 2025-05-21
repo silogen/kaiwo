@@ -142,7 +142,7 @@ spec:
                       type: string
                     type: array
                   terminateUnderutilized:
-                    default: true
+                    default: false
                     description: TerminateUnderutilized will terminate workloads that
                       are underutilizing resources if set to `true`
                     type: boolean
