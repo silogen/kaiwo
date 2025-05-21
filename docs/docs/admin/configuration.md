@@ -16,7 +16,7 @@ This is the central point for managing how Kaiwo interacts with Kueue. There can
 
 The Kaiwo operator includes a startup routine that checks if a `KaiwoQueueConfig` named `kaiwo` exists. If it does not, the operator automatically creates a default one. This default configuration aims to provide a functional baseline:
 
-*   It attempts to **auto-discover** node pools based on common GPU labels (e.g., `amd.com/gpu.device-id`, `nvidia.com/gpu.product`, `nvidia.com/gpu.count`) and CPU/Memory capacity.
+*   It attempts to **auto-discover** node pools based on common GPU labels (e.g., `amd.com/gpu.product-name`, `nvidia.com/gpu.product`, `nvidia.com/gpu.count`) and CPU/Memory capacity.
 *   It creates corresponding Kueue `ResourceFlavor` resources based on this discovery, labeling the nodes with `kaiwo/nodepool=<generated-flavor-name>`.
 *   It defines a single Kueue `ClusterQueue` named `kaiwo` (or the value of `DEFAULT_CLUSTER_QUEUE_NAME`), configured to use all discovered `ResourceFlavors` and their estimated capacities as `nominalQuota`.
 *   It specifies that this default `ClusterQueue` should have a corresponding `LocalQueue` automatically created in the `kaiwo` namespace.

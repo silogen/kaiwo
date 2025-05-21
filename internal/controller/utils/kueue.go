@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
+	"github.com/silogen/kaiwo/pkg/workloads/common"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -34,8 +35,6 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
-
-var DefaultNodePoolLabel = "kaiwo/nodepool"
 
 func EnsureNamespaceKueueManaged(ctx context.Context, k8sClient client.Client, namespaceName string) error {
 	logger := log.FromContext(ctx)
@@ -104,9 +103,8 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 		gpuType := "only"
 
 		// Identify AMD GPU Nodes
-		if gpuID, exists := node.Labels["amd.com/gpu.device-id"]; exists {
-			gpuID = strings.Replace(strings.ToLower(gpuID), "-", "", -1)
-			gpuType = MapGPUDeviceIDToName(gpuID, "amd")
+		if gpuID, exists := node.Labels["amd.com/gpu.product-name"]; exists {
+			gpuType = CleanAMDGPUName(gpuID)
 			if count, ok := node.Labels["beta.amd.com/gpu.family.AI"]; ok {
 				gpuCount, _ = strconv.Atoi(count)
 				gpuVendor = "amd"
@@ -189,7 +187,7 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 		flavor := kaiwo.ResourceFlavorSpec{
 			Name: flavorName,
 			NodeLabels: map[string]string{
-				DefaultNodePoolLabel: flavorName,
+				common.DefaultNodePoolLabel: flavorName,
 			},
 		}
 
@@ -214,12 +212,23 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 
 	for flavorName, nodeNames := range nodePools {
 		for _, nodeName := range nodeNames {
-			err := LabelNode(ctx, c, nodeName, DefaultNodePoolLabel, flavorName)
+
+			err := LabelNode(ctx, c, nodeName, common.DefaultNodePoolLabel, flavorName)
 			if err == nil {
-				logger.Info("Labeled node", "node", nodeName, "label", DefaultNodePoolLabel, "value", flavorName)
+				logger.Info("Labeled node", "node", nodeName, "label", common.DefaultNodePoolLabel, "value", flavorName)
 			} else {
 				return nil, nil, fmt.Errorf("failed to label node %s: %w", nodeName, err)
 			}
+
+			if !strings.Contains(flavorName, "cpu-only") {
+				err = LabelNode(ctx, c, nodeName, common.GPUModelLabel, strings.Split(flavorName, "-")[1])
+				if err == nil {
+					logger.Info("Labeled node", "node", nodeName, "label", common.GPUModelLabel, "value", strings.Split(flavorName, "-")[1])
+				} else {
+					return nil, nil, fmt.Errorf("failed to label node %s: %w", nodeName, err)
+				}
+			}
+
 			if config.Nodes.AddTaintsToGpuNodes {
 				if !strings.HasPrefix(flavorName, "cpu-only") {
 					err = TaintNode(ctx, c, nodeName, gpuTaint)

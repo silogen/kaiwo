@@ -69,6 +69,18 @@ func BuildStatsCmd() *cobra.Command {
 
 var defaultGPUResourceName = v1.ResourceName("amd.com/gpu")
 
+func extractGPUModel(poolLabel string) string {
+	if strings.HasPrefix(poolLabel, "cpu-only") {
+		return "cpu-only"
+	}
+
+	parts := strings.Split(poolLabel, "-")
+	if len(parts) < 2 {
+		return "unknown"
+	}
+	return parts[1]
+}
+
 func fetchWithSpinner(ctx context.Context, k8sClient client.Client, list client.ObjectList) error {
 	t := reflect.TypeOf(list)
 	if t.Kind() == reflect.Ptr {
@@ -142,7 +154,7 @@ func runNodesStatsCmd(gpuResourceName v1.ResourceName) func(cmd *cobra.Command, 
 		}
 
 		nodesTable := tablewriter.NewWriter(os.Stdout)
-		nodesTable.SetHeader([]string{"NODE", "GPU (used/alloc %)", "CPU (used/alloc %)", "MEM (used/alloc %)", "PODS (used/alloc %)"})
+		nodesTable.SetHeader([]string{"NODE", "GPU MODEL", "GPU (used/alloc %)", "CPU (used/alloc %)", "MEM (used/alloc %)", "PODS (used/alloc %)"})
 		nodesTable.SetAutoWrapText(false)
 		nodesTable.SetAlignment(tablewriter.ALIGN_LEFT)
 		nodesTable.SetCaption(true, fmt.Sprintf("GPU requests are looked up by the resource name '%s'", gpuResourceName))
@@ -155,6 +167,7 @@ func runNodesStatsCmd(gpuResourceName v1.ResourceName) func(cmd *cobra.Command, 
 			// GPU
 			allocGPU := allocatable[name][gpuResourceName]
 			usedGPU := requested[name][gpuResourceName]
+			gpuModel := extractGPUModel(node.Labels["kaiwo/nodepool"])
 			gpuPct := float64(usedGPU.Value()) / float64(allocGPU.Value()) * 100
 			if math.IsNaN(gpuPct) {
 				gpuPct = 0
@@ -184,7 +197,7 @@ func runNodesStatsCmd(gpuResourceName v1.ResourceName) func(cmd *cobra.Command, 
 			podsPct := float64(usedPods) / float64(allocPodsV) * 100
 			podCell := fmt.Sprintf("%d/%d (%.1f%%)", usedPods, allocPodsV, podsPct)
 
-			nodesTable.Append([]string{name, gpuCell, cpuCell, memCell, podCell})
+			nodesTable.Append([]string{name, gpuModel, gpuCell, cpuCell, memCell, podCell})
 		}
 
 		nodesTable.Render()
