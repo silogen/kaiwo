@@ -120,7 +120,7 @@ type KaiwoResourceMonitoringConfig struct {
 	Profile string `json:"profile,omitempty"`
 
 	// TerminateUnderutilized will terminate workloads that are underutilizing resources if set to `true`
-	// +kubebuilder:default=true
+	// +kubebuilder:default=false
 	TerminateUnderutilized bool `json:"terminateUnderutilized,omitempty"`
 
 	// TerminateUnderutilizedAfter specifies the duration after which the workload will be terminated if it has been underutilizing resources (for this amount of time)

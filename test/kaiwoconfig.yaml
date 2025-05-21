@@ -3,12 +3,6 @@ kind: KaiwoConfig
 metadata:
   name: kaiwo
 spec:
-  resourceMonitoring:
-    lowUtilizationThreshold: 50
-    terminateUnderutilized: false
-    targetNamespaces:
-    - "kaiwo-test-monitoring-conditions"
-    - "kaiwo"
   ray:
     headPodMemory: 1Gi
   scheduling:
