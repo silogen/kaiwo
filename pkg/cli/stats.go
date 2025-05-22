@@ -36,6 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/silogen/kaiwo/pkg/k8s"
+	"github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 func BuildStatsCmd() *cobra.Command {
@@ -70,8 +71,8 @@ func BuildStatsCmd() *cobra.Command {
 var defaultGPUResourceName = v1.ResourceName("amd.com/gpu")
 
 func extractGPUModel(poolLabel string) string {
-	if strings.HasPrefix(poolLabel, "cpu-only") {
-		return "cpu-only"
+	if strings.HasPrefix(poolLabel, common.CPUOnly) {
+		return common.CPUOnly
 	}
 
 	parts := strings.Split(poolLabel, "-")

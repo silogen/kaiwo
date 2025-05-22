@@ -220,7 +220,7 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 				return nil, nil, fmt.Errorf("failed to label node %s: %w", nodeName, err)
 			}
 
-			if !strings.Contains(flavorName, "cpu-only") {
+			if !strings.Contains(flavorName, common.CPUOnly) {
 				err = LabelNode(ctx, c, nodeName, common.GPUModelLabel, strings.Split(flavorName, "-")[1])
 				if err == nil {
 					logger.Info("Labeled node", "node", nodeName, "label", common.GPUModelLabel, "value", strings.Split(flavorName, "-")[1])
@@ -230,7 +230,7 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 			}
 
 			if config.Nodes.AddTaintsToGpuNodes {
-				if !strings.HasPrefix(flavorName, "cpu-only") {
+				if !strings.HasPrefix(flavorName, common.CPUOnly) {
 					err = TaintNode(ctx, c, nodeName, gpuTaint)
 					if err != nil {
 						logger.Error(err, "Failed to taint GPU node", "node", nodeName)
