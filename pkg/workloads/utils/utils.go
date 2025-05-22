@@ -104,6 +104,10 @@ func UpdatePodSpec(config controllerutils.KaiwoConfigContext, kaiwoCommonMetaSpe
 		return fmt.Errorf("failed to adjust resource requests and limits: %w", err)
 	}
 
+	if len(kaiwoCommonMetaSpec.GpuModels) > 0 && !rayhead {
+		UpdatePodSpecWithGPUModelAffinity(template, kaiwoCommonMetaSpec.GpuModels, common.GPUModelLabel)
+	}
+
 	// Add environmental variables
 	if err := addEnvVars(kaiwoCommonMetaSpec.Env, template); err != nil {
 		return fmt.Errorf("failed to add env vars: %w", err)
@@ -115,6 +119,34 @@ func UpdatePodSpec(config controllerutils.KaiwoConfigContext, kaiwoCommonMetaSpe
 	}
 
 	return nil
+}
+
+func UpdatePodSpecWithGPUModelAffinity(template *corev1.PodTemplateSpec, gpuModels []string, gpuModelLabel string) {
+	if len(gpuModels) == 0 {
+		return
+	}
+
+	selectorTerm := corev1.NodeSelectorTerm{
+		MatchExpressions: []corev1.NodeSelectorRequirement{
+			{
+				Key:      gpuModelLabel,
+				Operator: corev1.NodeSelectorOpIn,
+				Values:   gpuModels,
+			},
+		},
+	}
+
+	nodeAffinity := &corev1.NodeAffinity{
+		RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+			NodeSelectorTerms: []corev1.NodeSelectorTerm{selectorTerm},
+		},
+	}
+
+	if template.Spec.Affinity == nil {
+		template.Spec.Affinity = &corev1.Affinity{}
+	}
+
+	template.Spec.Affinity.NodeAffinity = nodeAffinity
 }
 
 func addSecretVolumes(template *corev1.PodTemplateSpec, secretVolumes []kaiwo.SecretVolume) {

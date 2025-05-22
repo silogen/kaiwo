@@ -19,7 +19,7 @@ spec:
         env:
         - name: NAMESPACE
           value: ($namespace)
-        content: ../../../scripts/assert_kueue_admitted.sh $NAMESPACE kaiwojob-1
+        content: ../../../scripts/find_string_in_events.sh $NAMESPACE kaiwojob-1 "Admitted by clusterQueue kaiwo"
         check:
           ($error == null): true
     catch:
@@ -31,7 +31,6 @@ spec:
         - name: PRINT_LEVEL
           value: ($values.print_level)
         args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
-
 ---
 
 apiVersion: chainsaw.kyverno.io/v1alpha1
@@ -67,7 +66,7 @@ spec:
         env:
         - name: NAMESPACE
           value: ($namespace)
-        content: ../../../scripts/assert_kueue_admitted.sh $NAMESPACE kaiwoservice-1
+        content: ../../../scripts/find_string_in_events.sh $NAMESPACE kaiwoservice-1 "Admitted by clusterQueue kaiwo"
         check:
           ($error == null): true
     catch:
@@ -79,7 +78,6 @@ spec:
         - name: PRINT_LEVEL
           value: ($values.print_level)
         args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
-
 ---
 
 apiVersion: chainsaw.kyverno.io/v1alpha1
@@ -115,7 +113,7 @@ spec:
         env:
         - name: NAMESPACE
           value: ($namespace)
-        content: ../../../scripts/assert_kueue_admitted.sh $NAMESPACE kaiwoservice-2
+        content: ../../../scripts/find_string_in_events.sh $NAMESPACE kaiwoservice-2 "Admitted by clusterQueue kaiwo"
         check:
           ($error == null): true
     catch:

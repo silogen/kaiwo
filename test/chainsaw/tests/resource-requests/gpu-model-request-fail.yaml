@@ -1,0 +1,26 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoJob
+metadata:
+  name: gpu-model-request-fail
+spec:
+  user: test@amd.com
+  gpuModels: ["teslav100"]
+  gpus: 1
+  gpuVendor: "nvidia"
+  resources:
+    limits:
+      cpu: 1
+      memory: 2Gi
+    requests:
+      cpu: 1
+      memory: 2Gi
+  job:
+    apiVersion: batch/v1
+    kind: Job
+    spec:
+      template:
+        spec:
+          containers:
+          - name: hello-world
+            image: busybox:latest
+          restartPolicy: Never

@@ -22,4 +22,5 @@ const (
 	KaiwoRunIdLabel   = KaiwoLabelBase + "/run-id"
 	KaiwoManagedLabel = KaiwoLabelBase + "/managed"
 	QueueLabel        = "kueue.x-k8s.io/queue-name"
+	CPUOnly           = "cpu-only"
 )

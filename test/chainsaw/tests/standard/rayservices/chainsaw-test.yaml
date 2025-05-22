@@ -41,7 +41,7 @@ spec:
         env:
         - name: NAMESPACE
           value: ($namespace)
-        content: ../../../scripts/assert_kueue_admitted.sh $NAMESPACE kaiwoservice-1
+        content: ../../../scripts/find_string_in_events.sh $NAMESPACE kaiwoservice-1 "Admitted by clusterQueue kaiwo"
         check:
           ($error == null): true
 

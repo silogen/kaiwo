@@ -24,6 +24,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 
+	"github.com/silogen/kaiwo/pkg/workloads/common"
+
 	corev1 "k8s.io/api/core/v1"
 	klog "k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -40,6 +42,26 @@ type NodeResourceInfo struct {
 	Memory        int
 	Labels        map[string]string
 	Unschedulable bool
+}
+
+func CleanAMDGPUName(gpuID string) string {
+	gpuType := strings.ToLower(gpuID)
+
+	unwanted := []string{
+		"instinct",
+		"radeon",
+		"_",
+		"oam",
+		"amd",
+		"series",
+		"gpu",
+	}
+
+	for _, word := range unwanted {
+		gpuType = strings.ReplaceAll(gpuType, word, "")
+	}
+
+	return strings.TrimSpace(gpuType)
 }
 
 func GetNodeResources(ctx context.Context, c client.Client) []NodeResourceInfo {
@@ -65,21 +87,6 @@ func GetNodeResources(ctx context.Context, c client.Client) []NodeResourceInfo {
 	}
 
 	return nodes
-}
-
-func MapGPUDeviceIDToName(gpuID string, vendor string) string {
-	knownGPUs := map[string]string{
-		"740c": "mi250",
-		"74a1": "mi300",
-	}
-
-	if vendor == "amd" {
-		if name, exists := knownGPUs[gpuID]; exists {
-			return name
-		}
-		return fmt.Sprintf("amd-%s", gpuID)
-	}
-	return gpuID
 }
 
 func LabelNode(ctx context.Context, c client.Client, nodeName, key, value string) error {
@@ -178,7 +185,7 @@ func CalculateNumberOfReplicas(ctx context.Context, k8sClient client.Client, gpu
 	for _, node := range nodeList.Items {
 
 		// Extract GPU info from DefaultNodePoolLabel
-		nodepoolLabel, exists := node.Labels[DefaultNodePoolLabel]
+		nodepoolLabel, exists := node.Labels[common.DefaultNodePoolLabel]
 		if !exists {
 			continue
 		}
