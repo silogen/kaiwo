@@ -25,9 +25,16 @@ import (
 	"path/filepath"
 	"time"
 
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	controllerutils "github.com/silogen/kaiwo/pkg/workloads/common"
 
-	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
+	"github.com/go-logr/logr"
+
+	"github.com/go-logr/zapr"
+
+	uberzap "go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	configapi "github.com/silogen/kaiwo/apis/config/v1alpha1"
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
@@ -83,6 +90,32 @@ func init() {
 	utilruntime.Must(appwrapperv1beta2.AddToScheme(scheme))
 }
 
+func setupFormattedLogOutput() logr.Logger {
+	cfg := uberzap.NewProductionConfig()
+	cfg.Encoding = "console"
+	cfg.Level = uberzap.NewAtomicLevelAt(uberzap.DebugLevel)
+	cfg.EncoderConfig = zapcore.EncoderConfig{
+		TimeKey:  "ts",
+		LevelKey: "level",
+		NameKey:  "logger",
+		// CallerKey:      "caller",
+		MessageKey:     "msg",
+		StacktraceKey:  "stacktrace",
+		LineEnding:     zapcore.DefaultLineEnding,
+		EncodeLevel:    zapcore.CapitalColorLevelEncoder, // <-- colored levels
+		EncodeTime:     zapcore.ISO8601TimeEncoder,       // human-readable timestamps
+		EncodeDuration: zapcore.StringDurationEncoder,
+		EncodeCaller:   zapcore.ShortCallerEncoder,
+	}
+	rawLogger, err := cfg.Build(uberzap.AddCaller())
+	if err != nil {
+		panic(err)
+	}
+	defer func() { _ = rawLogger.Sync() }()
+
+	return zapr.NewLogger(rawLogger)
+}
+
 // nolint:gocyclo
 func main() {
 	var metricsAddr string
@@ -116,7 +149,11 @@ func main() {
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	if os.Getenv("FORMATTED_LOGS") == "true" {
+		ctrl.SetLogger(setupFormattedLogOutput())
+	} else {
+		ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	}
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will

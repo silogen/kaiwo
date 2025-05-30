@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package workloadutils
+package common
 
 import (
 	"context"
@@ -21,16 +21,12 @@ import (
 
 	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
-	common "github.com/silogen/kaiwo/pkg/workloads/common"
-
 	"gopkg.in/yaml.v3"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
@@ -41,25 +37,32 @@ const (
 	KaiwoDownloadTypeLabelValue = "downloader"
 )
 
-type DownloadJobConfigMapReconciler struct {
-	common.ResourceReconcilerBase[*corev1.ConfigMap]
-	StorageSpec *v1alpha1.StorageSpec
+type DownloadConfigMapReconciler struct {
+	ObjectKey   client.ObjectKey
+	StorageSpec v1alpha1.StorageSpec
 }
 
-func NewDownloadJobConfigMapReconciler(objectKey client.ObjectKey, storageSpec *v1alpha1.StorageSpec) *DownloadJobConfigMapReconciler {
-	reconciler := &DownloadJobConfigMapReconciler{
-		ResourceReconcilerBase: common.ResourceReconcilerBase[*corev1.ConfigMap]{
-			ObjectKey: objectKey,
-		},
+func NewDownloadConfigMapReconciler(objectKey client.ObjectKey, storageSpec v1alpha1.StorageSpec) *DownloadConfigMapReconciler {
+	return &DownloadConfigMapReconciler{
+		ObjectKey:   objectKey,
 		StorageSpec: storageSpec,
 	}
-	reconciler.Self = reconciler
-	return reconciler
 }
 
-func (r *DownloadJobConfigMapReconciler) Build(ctx context.Context, _ client.Client) (*corev1.ConfigMap, error) {
-	logger := log.FromContext(ctx)
+func (r *DownloadConfigMapReconciler) GetInitializedObject() client.Object {
+	return &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: corev1.SchemeGroupVersion.String(),
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      baseutils.FormatNameWithPostfix(r.ObjectKey.Name, "download"),
+			Namespace: r.ObjectKey.Namespace,
+		},
+	}
+}
 
+func (r *DownloadConfigMapReconciler) BuildDesired(ctx context.Context, clusterCtx ClusterContext) (client.Object, error) {
 	if r.StorageSpec.HasObjectStorageDownloads() {
 		// Update secret paths
 		setSecretPath := func(ref *v1alpha1.ValueReference) {
@@ -99,50 +102,68 @@ func (r *DownloadJobConfigMapReconciler) Build(ctx context.Context, _ client.Cli
 	downloadConfig := r.StorageSpec.CreateConfig()
 	yamlData, err := yaml.Marshal(downloadConfig)
 	if err != nil {
-		return nil, baseutils.LogErrorf(logger, "failed to marshal download job config to yaml", err)
+		return nil, fmt.Errorf("failed to marshal download job config to yaml: %w", err)
 	}
-	objectKey := r.ObjectKey
 
-	configMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      objectKey.Name,
-			Namespace: objectKey.Namespace,
-		},
-		Data: map[string]string{
-			configMapFilename: string(yamlData),
-		},
+	configMap := r.GetInitializedObject().(*corev1.ConfigMap)
+	configMap.Data = map[string]string{
+		configMapFilename: string(yamlData),
 	}
 
 	return configMap, nil
 }
 
-func (r *DownloadJobConfigMapReconciler) GetEmptyObject() *corev1.ConfigMap {
-	return &corev1.ConfigMap{}
+func (r *DownloadConfigMapReconciler) MutateActual(ctx context.Context, clusterCtx ClusterContext, actual client.Object) error {
+	// TODO
+	return nil
 }
 
+func (r *DownloadConfigMapReconciler) ObserveStatus(ctx context.Context, k8sClient client.Client, obj client.Object, previousWorkloadStatus v1alpha1.WorkloadStatus) (*v1alpha1.WorkloadStatus, []metav1.Condition, error) {
+	return nil, nil, nil
+}
+
+type DownloadJobSucceededReason string
+
+const (
+	DownloadJobSucceededConditionType = "DownloadJobSucceeded"
+
+	DownloadJobFailed     DownloadJobSucceededReason = "JobFailed"
+	DownloadJobInProgress DownloadJobSucceededReason = "JobInProgress"
+	DownloadJobCompleted  DownloadJobSucceededReason = "JobCompleted"
+	DownloadJobPending    DownloadJobSucceededReason = "JobPending"
+)
+
 type DownloadJobReconciler struct {
-	common.ResourceReconcilerBase[*batchv1.Job]
-	StorageSpec *v1alpha1.StorageSpec
-	PvcBaseName string
+	ObjectKey   client.ObjectKey
+	StorageSpec v1alpha1.StorageSpec
 	UserEnvVars []corev1.EnvVar
 }
 
-func NewDownloadJobReconciler(objectKey client.ObjectKey, storageSpec *v1alpha1.StorageSpec, pvcBaseName string, userEnvVars []corev1.EnvVar) *DownloadJobReconciler {
-	reconciler := &DownloadJobReconciler{
-		ResourceReconcilerBase: common.ResourceReconcilerBase[*batchv1.Job]{
-			ObjectKey: objectKey,
-		},
+func NewDownloadJobReconciler(objectKey client.ObjectKey, storageSpec v1alpha1.StorageSpec, userEnvVars []corev1.EnvVar) *DownloadJobReconciler {
+	return &DownloadJobReconciler{
+		ObjectKey:   objectKey,
 		StorageSpec: storageSpec,
-		PvcBaseName: pvcBaseName,
 		UserEnvVars: userEnvVars,
 	}
-	reconciler.Self = reconciler
-	return reconciler
 }
 
-func (r *DownloadJobReconciler) Build(_ context.Context, _ client.Client) (*batchv1.Job, error) {
-	// logger := log.FromContext(ctx)
+func (r *DownloadJobReconciler) GetInitializedObject() client.Object {
+	return &batchv1.Job{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "batch/v1",
+			Kind:       "Job",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      baseutils.FormatNameWithPostfix(r.ObjectKey.Name, "download"),
+			Namespace: r.ObjectKey.Namespace,
+			Labels: map[string]string{
+				KaiwoTypeLabel: KaiwoDownloadTypeLabelValue,
+			},
+		},
+	}
+}
 
+func (r *DownloadJobReconciler) BuildDesired(ctx context.Context, clusterCtx ClusterContext) (client.Object, error) {
 	configMount := "/config"
 
 	downloadConfig := r.StorageSpec.CreateConfig()
@@ -153,8 +174,7 @@ func (r *DownloadJobReconciler) Build(_ context.Context, _ client.Client) (*batc
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						// Use the same name as the job itself
-						Name: r.ObjectKey.Name,
+						Name: baseutils.FormatNameWithPostfix(r.ObjectKey.Name, "download"),
 					},
 				},
 			},
@@ -175,7 +195,7 @@ func (r *DownloadJobReconciler) Build(_ context.Context, _ client.Client) (*batc
 			Name: "data",
 			VolumeSource: corev1.VolumeSource{
 				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-					ClaimName: baseutils.FormatNameWithPostfix(r.PvcBaseName, common.DataStoragePostfix),
+					ClaimName: baseutils.FormatNameWithPostfix(r.ObjectKey.Name, DataStoragePostfix),
 				},
 			},
 		}
@@ -199,7 +219,6 @@ func (r *DownloadJobReconciler) Build(_ context.Context, _ client.Client) (*batc
 						},
 					},
 				}
-				// logger.Info("Added secret volume source", "secret_name", ref.SecretName)
 			}
 
 			path := ref.SecretKey
@@ -253,12 +272,11 @@ func (r *DownloadJobReconciler) Build(_ context.Context, _ client.Client) (*batc
 			Name: "hf",
 			VolumeSource: corev1.VolumeSource{
 				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-					ClaimName: baseutils.FormatNameWithPostfix(r.PvcBaseName, common.HfStoragePostfix),
+					ClaimName: baseutils.FormatNameWithPostfix(r.ObjectKey.Name, HfStoragePostfix),
 				},
 			},
 		}
 		volumes = append(volumes, volume)
-		// logger.Info("HF caching enabled", "pvc_name", volume.PersistentVolumeClaim.ClaimName, "mount_path", downloadConfig.HfHome)
 
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
 			Name:      "hf",
@@ -270,52 +288,44 @@ func (r *DownloadJobReconciler) Build(_ context.Context, _ client.Client) (*batc
 		})
 	}
 
-	downloadJob := &batchv1.Job{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      r.ObjectKey.Name,
-			Namespace: r.ObjectKey.Namespace,
-			Labels: map[string]string{
-				common.KaiwoTypeLabel: KaiwoDownloadTypeLabelValue,
-			},
-		},
-		Spec: batchv1.JobSpec{
-			BackoffLimit: baseutils.Pointer(int32(0)),
-			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					SecurityContext: &corev1.PodSecurityContext{
-						RunAsUser:  baseutils.Pointer(int64(1000)),
-						RunAsGroup: baseutils.Pointer(int64(1000)),
-						FSGroup:    baseutils.Pointer(int64(1000)),
-					},
-					RestartPolicy: corev1.RestartPolicyNever,
-					Containers: []corev1.Container{
-						{
-							Image:           "ghcr.io/silogen/kaiwo-python:0.6",
-							ImagePullPolicy: corev1.PullAlways,
-							Name:            "data-downloader",
-							Command: []string{
-								"python",
-								"-m",
-								"kaiwo.downloader",
-								"--log-level=DEBUG",
-								filepath.Join(configMount, configMapFilename),
+	downloadJob := r.GetInitializedObject().(*batchv1.Job)
+	downloadJob.Spec = batchv1.JobSpec{
+		BackoffLimit: baseutils.Pointer(int32(0)),
+		Template: corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{
+				SecurityContext: &corev1.PodSecurityContext{
+					RunAsUser:  baseutils.Pointer(int64(1000)),
+					RunAsGroup: baseutils.Pointer(int64(1000)),
+					FSGroup:    baseutils.Pointer(int64(1000)),
+				},
+				RestartPolicy: corev1.RestartPolicyNever,
+				Containers: []corev1.Container{
+					{
+						Image:           "ghcr.io/silogen/kaiwo-python:0.6",
+						ImagePullPolicy: corev1.PullAlways,
+						Name:            "data-downloader",
+						Command: []string{
+							"python",
+							"-m",
+							"kaiwo.downloader",
+							"--log-level=INFO",
+							filepath.Join(configMount, configMapFilename),
+						},
+						Env:          envs,
+						VolumeMounts: volumeMounts,
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse("1"),
+								corev1.ResourceMemory: resource.MustParse("1Gi"),
 							},
-							Env:          envs,
-							VolumeMounts: volumeMounts,
-							Resources: corev1.ResourceRequirements{
-								Requests: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse("1"),
-									corev1.ResourceMemory: resource.MustParse("1Gi"),
-								},
-								Limits: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse("2"),
-									corev1.ResourceMemory: resource.MustParse("4Gi"),
-								},
+							Limits: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse("2"),
+								corev1.ResourceMemory: resource.MustParse("4Gi"),
 							},
 						},
 					},
-					Volumes: volumes,
 				},
+				Volumes: volumes,
 			},
 		},
 	}
@@ -327,22 +337,60 @@ func (r *DownloadJobReconciler) Build(_ context.Context, _ client.Client) (*batc
 	return downloadJob, nil
 }
 
-func (r *DownloadJobReconciler) GetEmptyObject() *batchv1.Job {
-	return &batchv1.Job{}
+func (r *DownloadJobReconciler) MutateActual(ctx context.Context, clusterCtx ClusterContext, actual client.Object) error {
+	// TODO
+	return nil
 }
 
-func (r *DownloadJobReconciler) ShouldContinue(ctx context.Context, actual *batchv1.Job) *ctrl.Result {
-	logger := log.FromContext(ctx)
-	if actual.Status.Succeeded >= 1 {
-		baseutils.Debug(logger, "Download job succeeded")
-		return nil
-	} else if actual.Status.Failed >= 1 {
-		baseutils.Debug(logger, "Download job failed")
-		return &ctrl.Result{}
-	} else {
-		baseutils.Debug(logger, "Download job still in progress, requeuing until it is complete")
+func (r *DownloadJobReconciler) ObserveStatus(ctx context.Context, k8sClient client.Client, obj client.Object, previousWorkloadStatus v1alpha1.WorkloadStatus) (*v1alpha1.WorkloadStatus, []metav1.Condition, error) {
+	job := obj.(*batchv1.Job)
+
+	status, err := ObserveBatchJob(job, previousWorkloadStatus)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error observing batch job: %w", err)
+	}
+	var condition metav1.Condition
+
+	switch status {
+	case v1alpha1.WorkloadStatusPending:
+		status = v1alpha1.WorkloadStatusRunning
+		condition = metav1.Condition{
+			Type:    DownloadJobSucceededConditionType,
+			Status:  metav1.ConditionFalse,
+			Reason:  string(DownloadJobPending),
+			Message: "Download job pending",
+		}
+	case v1alpha1.WorkloadStatusRunning:
+		condition = metav1.Condition{
+			Type:    DownloadJobSucceededConditionType,
+			Status:  metav1.ConditionFalse,
+			Reason:  string(DownloadJobInProgress),
+			Message: "Download job in progress",
+		}
+	case v1alpha1.WorkloadStatusStarting:
+		condition = metav1.Condition{
+			Type:    DownloadJobSucceededConditionType,
+			Status:  metav1.ConditionFalse,
+			Reason:  string(DownloadJobInProgress),
+			Message: "Download job starting",
+		}
+	case v1alpha1.WorkloadStatusFailed:
+		condition = metav1.Condition{
+			Type:    DownloadJobSucceededConditionType,
+			Status:  metav1.ConditionFalse,
+			Reason:  string(DownloadJobFailed),
+			Message: "Download job failed",
+		}
+	case v1alpha1.WorkloadStatusComplete:
+		condition = metav1.Condition{
+			Type:    DownloadJobSucceededConditionType,
+			Status:  metav1.ConditionTrue,
+			Reason:  string(DownloadJobCompleted),
+			Message: "Download job succeeded",
+		}
+	default:
+		return nil, nil, fmt.Errorf("unexpected job status: %s", status)
 	}
 
-	// Requeue after some time to check again if the job has completed
-	return &ctrl.Result{RequeueAfter: common.DefaultRequeueDuration}
+	return baseutils.Pointer(status), []metav1.Condition{condition}, nil
 }

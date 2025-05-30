@@ -30,9 +30,10 @@ import (
 
 func runDeleteWorkload(ctx context.Context, clients k8s.KubernetesClients, state *tuicomponents.RunState) (tuicomponents.StepResult, tuicomponents.RunStep[tuicomponents.RunState], error) {
 	confirmDelete := false
+	obj := state.Workload.GetKaiwoWorkloadObject()
 	resourceDescription := fmt.Sprintf("Confirm that you want to delete the %s workload '%s' in namespace %s. "+
 		"This will also remove any linked resources, such as automatically created PVCs and ConfigMaps",
-		state.WorkloadType, state.Workload.GetObjectMeta().Name, state.Namespace)
+		state.WorkloadType, obj.GetName(), state.Namespace)
 
 	f := huh.NewForm(huh.NewGroup(huh.NewConfirm().Title(resourceDescription).Value(&confirmDelete)))
 
@@ -65,7 +66,7 @@ func runDeleteWorkload(ctx context.Context, clients k8s.KubernetesClients, state
 		return tuicomponents.StepResultErr, nil, fmt.Errorf("failed to delete workload: %w", err)
 	}
 
-	logrus.Infof("Successfully deleted workload %s/%s", state.WorkloadType, state.Workload.GetObjectMeta().Name)
+	logrus.Infof("Successfully deleted workload %s/%s", state.WorkloadType, obj.GetName())
 
 	// Quit as otherwise would need to return two screens, TODO make it possible to implement a custom number of return steps later
 	return tuicomponents.StepResultQuit, nil, nil

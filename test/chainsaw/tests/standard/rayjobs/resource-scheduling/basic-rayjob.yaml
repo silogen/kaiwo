@@ -7,5 +7,5 @@ spec:
   ray: true
   image: rayproject/ray:2.41.0
   gpuVendor: "nvidia"
-  gpus: 17
+  gpus: 14
   entrypoint: sleep 1

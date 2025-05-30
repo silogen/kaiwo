@@ -94,17 +94,18 @@ func runSelectWorkload(ctx context.Context, clients k8s.KubernetesClients, state
 
 	columns := []string{
 		"Name",
-		"Status",
+		"WorkloadStatus",
 		"Kaiwo user",
 	}
 
 	var data [][]string
 
 	for _, workloadReference := range workloadReferences {
+		obj := workloadReference.GetKaiwoWorkloadObject()
 		data = append(data, []string{
-			workloadReference.GetObjectMeta().Name,
-			workloadReference.GetStatusString(),
-			workloadReference.GetUser(),
+			obj.GetName(),
+			string(workloadReference.GetCommonStatusSpec().Status),
+			workloadReference.GetCommonSpec().User,
 		})
 	}
 

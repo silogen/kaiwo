@@ -17,9 +17,10 @@ package controller
 import (
 	"context"
 	"fmt"
-	"time"
+	"reflect"
 
-	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	v1 "k8s.io/api/core/v1"
 
@@ -65,12 +66,12 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, fmt.Errorf("only a KaiwoQueueConfig named 'kaiwo' is allowed")
 	}
 
-	ctx, err := controllerutils.GetContextWithConfig(ctx, r.Client)
+	ctx, err := common.GetContextWithConfig(ctx, r.Client)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("could not get config context: %w", err)
 	}
 
-	config := controllerutils.ConfigFromContext(ctx)
+	config := common.ConfigFromContext(ctx)
 
 	if config.DynamicallyUpdateDefaultClusterQueue {
 		if err := r.EnsureKaiwoQueueConfig(ctx, common.KaiwoQueueConfigName, config.DefaultClusterQueueName); err != nil {
@@ -88,16 +89,14 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				logger.Error(err, "Failed to create default KaiwoQueueConfig")
 				return ctrl.Result{}, err
 			}
+		} else {
+			logger.Error(err, "Failed to get KaiwoQueueConfig")
+			return ctrl.Result{}, err
 		}
-		logger.Error(err, "Failed to get KaiwoQueueConfig")
-		return ctrl.Result{}, err
 	}
 
-	// **Check if Status is already correct before updating**
+	// **Check if WorkloadStatus is already correct before updating**
 	previousStatus := queueConfig.Status.Status
-	if previousStatus == "" {
-		queueConfig.Status.Status = kaiwo.StatusPending
-	}
 
 	// **Sync Kueue Resources**
 	logger.Info("Syncing Kueue resources for KaiwoQueueConfig", "name", queueConfig.Name)
@@ -105,30 +104,25 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	if err != nil {
 		logger.Error(err, "Failed to sync Kueue resources for KaiwoQueueConfig")
-		queueConfig.Status.Status = kaiwo.StatusFailed
+		queueConfig.Status.Status = kaiwo.QueueConfigStatusFailed
 	} else {
-		queueConfig.Status.Status = kaiwo.StatusReady
+		queueConfig.Status.Status = kaiwo.QueueConfigStatusReady
 	}
 
-	// **Only Update Status If It Has Changed**
+	// **Only Update WorkloadStatus If It Has Changed**
 	if previousStatus != queueConfig.Status.Status {
 		if err := r.Status().Update(ctx, &queueConfig); err != nil {
 			logger.Error(err, "Failed to update KaiwoQueueConfig status")
 			return ctrl.Result{}, err
 		}
-		logger.Info("Updated KaiwoQueueConfig status", "name", queueConfig.Name, "Status", queueConfig.Status.Status)
-	}
-
-	// Requeue only if status is still pending
-	if queueConfig.Status.Status == kaiwo.StatusPending {
-		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		logger.Info("Updated KaiwoQueueConfig status", "name", queueConfig.Name, "WorkloadStatus", queueConfig.Status.Status)
 	}
 
 	return ctrl.Result{}, nil
 }
 
 func (r *KaiwoQueueConfigReconciler) emitEvent(queueConfig *kaiwo.KaiwoQueueConfig, target string, action string, obj client.Object, err error) {
-	reason := fmt.Sprintf("KaiwoQueueConfig%s%s", workloadutils.ToPascalCase(target), workloadutils.ToPascalCase(action))
+	reason := fmt.Sprintf("KaiwoQueueConfig%s%s", common.ToPascalCase(target), common.ToPascalCase(action))
 
 	var key string
 	if obj != nil {
@@ -350,6 +344,17 @@ func (r *KaiwoQueueConfigReconciler) syncLocalQueues(
 			r.emitEvent(kaiwoQueueConfig, "cluster queue", "get", actualClusterQueue, err)
 			continue
 		}
+
+		// If the ClusterQueue doesn't have any namespaces listed, ensure any existing LocalQueue for this ClusterQueue is not removed
+		if len(clusterQueue.Namespaces) == 0 {
+			if namespaceMap, ok := staleQueues[clusterQueue.Name]; ok {
+				if len(namespaceMap) == 0 {
+					delete(staleQueues, clusterQueue.Name)
+				}
+			}
+			continue
+		}
+
 		for _, namespace := range clusterQueue.Namespaces {
 			localQueue := &kueuev1beta1.LocalQueue{
 				ObjectMeta: metav1.ObjectMeta{
@@ -473,17 +478,40 @@ func (r *KaiwoQueueConfigReconciler) syncWorkloadPriorityClasses(ctx context.Con
 	return success
 }
 
+// nodeResourceChanged returns true if any of the fields that we watch changed
+func nodeResourceChanged(oldNode, newNode *corev1.Node) bool {
+	if oldNode.Spec.Unschedulable != newNode.Spec.Unschedulable {
+		return true
+	}
+
+	cpu := newNode.Status.Capacity.Cpu()
+	if oldNode.Status.Capacity.Cpu().Cmp(*cpu) != 0 {
+		return true
+	}
+
+	memory := newNode.Status.Capacity.Memory()
+	if oldNode.Status.Capacity.Memory().Cmp(*memory) != 0 {
+		return true
+	}
+
+	if !reflect.DeepEqual(oldNode.Labels, newNode.Labels) {
+		return true
+	}
+
+	return false
+}
+
 func (r *KaiwoQueueConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	logger := log.Log.WithName("SetupWithManager")
 	r.Recorder = mgr.GetEventRecorderFor("kaiwoqueueconfig-controller")
 
 	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
-		ctx, err := controllerutils.GetContextWithConfig(ctx, mgr.GetClient())
+		ctx, err := common.GetContextWithConfig(ctx, mgr.GetClient())
 		if err != nil {
 			return fmt.Errorf("could not get config: %w", err)
 		}
 		logger.Info("Ensuring default KaiwoQueueConfig exists on startup...")
-		config := controllerutils.ConfigFromContext(ctx)
+		config := common.ConfigFromContext(ctx)
 		if err := r.EnsureKaiwoQueueConfig(ctx, common.KaiwoQueueConfigName, config.DefaultClusterQueueName); err != nil {
 			logger.Error(err, "Failed to ensure default KaiwoQueueConfig on startup")
 			return err
@@ -491,6 +519,24 @@ func (r *KaiwoQueueConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return nil
 	})); err != nil {
 		return err
+	}
+
+	// Create a predicate to filter when to run the reconciliation on node changes
+	nodePred := predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			return true
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			return true
+		},
+		GenericFunc: func(e event.GenericEvent) bool {
+			return false
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldNode := e.ObjectOld.(*corev1.Node)
+			newNode := e.ObjectNew.(*corev1.Node)
+			return nodeResourceChanged(oldNode, newNode)
+		},
 	}
 
 	return builder.ControllerManagedBy(mgr).
@@ -502,6 +548,7 @@ func (r *KaiwoQueueConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 					{NamespacedName: types.NamespacedName{Name: common.KaiwoQueueConfigName}},
 				}
 			}),
+			builder.WithPredicates(nodePred),
 		).
 		Named("kaiwoqueueconfig").
 		Complete(r)

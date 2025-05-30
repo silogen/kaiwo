@@ -37,7 +37,7 @@ spec:
           metadata:
             name: kaiwojob-ray-high
           status:
-            status: RUNNING
+            status: STARTING
     - description: Ensure the low-priority workload is still pending, despite being added first
       assert:
         resource:

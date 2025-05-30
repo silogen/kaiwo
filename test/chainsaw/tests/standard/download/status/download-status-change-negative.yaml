@@ -2,7 +2,6 @@ apiVersion: kaiwo.silogen.ai/v1alpha1
 kind: KaiwoJob
 metadata:
   name: download-job-status-change-negative
-  namespace: kaiwo-test
 spec:
   user: test@amd.com
   gpus: 0

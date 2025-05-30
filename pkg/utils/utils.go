@@ -58,8 +58,12 @@ func MakeRFC1123Compliant(input string) string {
 	return input
 }
 
-func FormatNameWithPostfix(name string, postfix string) string {
-	return MakeRFC1123Compliant(fmt.Sprintf("%s-%s", name, postfix))
+func FormatNameWithPostfix(name string, postfix ...string) string {
+	builtName := name
+	for _, postfix := range postfix {
+		builtName += fmt.Sprintf("-%s", postfix)
+	}
+	return MakeRFC1123Compliant(builtName)
 }
 
 func GetEnv(key, defaultValue string) string {

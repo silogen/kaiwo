@@ -20,15 +20,13 @@ import (
 	"context"
 	"fmt"
 
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
+	"github.com/silogen/kaiwo/pkg/workloads/common"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
-	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
-
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -69,52 +67,43 @@ func (r *KaiwoServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, nil
 	}
 
-	ctx, err := controllerutils.GetContextWithConfig(ctx, r.Client)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to fetch config: %w", err)
+	workloadHandler := workloadservice.NewKaiwoServiceHandler(r.Scheme, &kaiwoService)
+	reconciler := common.Reconciler{
+		WorkloadHandler: workloadHandler,
+		StorageHandler:  common.NewStorageHandler(workloadHandler),
+		Client:          r.Client,
+		Scheme:          r.Scheme,
+		Recorder:        r.Recorder,
 	}
 
-	if kaiwoService.Status.Status == kaiwo.StatusTerminated {
-		baseutils.Debug(logger, "Skipping reconciliation, as status is terminated")
-		return ctrl.Result{}, nil
+	if result, err := reconciler.Reconcile(ctx); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to reconcile KaiwoJob: %w", err)
+	} else {
+		return result, err
 	}
-
-	reconciler := workloadservice.NewKaiwoServiceReconciler(ctx, &kaiwoService)
-	reconciler.Recorder = r.Recorder
-
-	result, err := reconciler.Reconcile(ctx, r.Client, r.Scheme)
-	if err != nil {
-		r.Recorder.Eventf(
-			&kaiwoService,
-			corev1.EventTypeWarning,
-			"KaiwoServiceReconcileError",
-			"Failed to reconcile KaiwoService: %v", err,
-		)
-		return ctrl.Result{}, fmt.Errorf("failed to reconcile KaiwoService: %v", err)
-	}
-	return result, nil
 }
 
 func (r *KaiwoServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Recorder = mgr.GetEventRecorderFor("kaiwoservice-controller")
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&kaiwo.KaiwoService{},
-			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
-		).
+		WithEventFilter(predicate.ResourceVersionChangedPredicate{}). // Catch status changes as well
+		For(&kaiwo.KaiwoService{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&rayv1.RayService{}).
 		Owns(&appwrapperv1beta2.AppWrapper{}).
 		Watches(
 			&kaiwo.KaiwoJob{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				fmt.Println("Ping from service")
 				var services kaiwo.KaiwoServiceList
 				if err := r.Client.List(ctx, &services); err != nil {
 					return nil
 				}
 				var requests []reconcile.Request
 				for _, svc := range services.Items {
-					if svc.Spec.Duration != nil && svc.Status.Status == kaiwo.StatusRunning {
+					if svc.Spec.Duration != nil && svc.Status.Status == kaiwo.WorkloadStatusRunning {
+						fmt.Println("Svc", client.ObjectKeyFromObject(&svc))
 						requests = append(requests, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&svc)})
 					}
 				}

@@ -27,7 +27,7 @@ import (
 	"syscall"
 	"time"
 
-	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads/common"
 
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/huh/spinner"
@@ -50,7 +50,7 @@ func runPortForward(ctx context.Context, clients k8s.KubernetesClients, state *t
 	var services []v1.Service
 
 	loadServices := func() {
-		services, err = workloadReference.GetServices(ctx, clients.Client)
+		services, err = workloadutils.GetWorkloadServices(ctx, clients.Client, workloadReference)
 	}
 
 	if spinnerErr := spinner.New().Title("Discovering services").Action(loadServices).Run(); spinnerErr != nil {

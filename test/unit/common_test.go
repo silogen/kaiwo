@@ -19,11 +19,7 @@ import (
 
 	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
-	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
-
 	common "github.com/silogen/kaiwo/pkg/workloads/common"
-
-	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -78,7 +74,7 @@ var _ = Describe("Workload defaults", func() {
 	})
 
 	JustBeforeEach(func() {
-		err := workloadutils.UpdatePodSpec(controllerutils.KaiwoConfigContext{}, kaiwoCommonMetaSpec, labelContext, &podTemplateSpec, name, replicas, gpusPerReplica, false, false)
+		err := common.UpdatePodSpec(common.KaiwoConfigContext{}, kaiwoCommonMetaSpec, labelContext, &podTemplateSpec, name, replicas, gpusPerReplica, false, false)
 		Expect(err).NotTo(HaveOccurred())
 	})
 

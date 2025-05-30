@@ -58,9 +58,9 @@ spec:
             properties:
               clusterQueue:
                 description: |-
-                  ClusterQueue specifies the name of the Kueue `ClusterQueue` that the job should be submitted to for scheduling and resource management.
+                  ClusterQueue specifies the name of the Kueue `ClusterQueue` that the workload should be submitted to for scheduling and resource management.
 
-                  This value is set as the `kueue.x-k8s.io/queue-name` label on the underlying Kubernetes Job or RayJob.
+                  This value is set as the `kueue.x-k8s.io/queue-name` label on the underlying resources.
 
                   If omitted, it defaults to the value specified by the `DEFAULT_CLUSTER_QUEUE_NAME` environment variable in the Kaiwo controller (typically "kaiwo"), which is set during installation.
 

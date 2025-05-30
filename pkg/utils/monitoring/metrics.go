@@ -30,16 +30,12 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/errors"
 
-	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
-
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
-
-	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -150,7 +146,7 @@ func (m *MetricsWatcher) Start(ctx context.Context) error {
 			m.logger.Info("shutting down")
 			return nil
 		case <-ticker.C:
-			ctx2, err := controllerutils.GetContextWithConfig(ctx, m.k8sClient)
+			ctx2, err := common.GetContextWithConfig(ctx, m.k8sClient)
 			if err != nil {
 				m.logger.Error(err, "failed to get Kaiwo config")
 				continue
@@ -182,7 +178,7 @@ func (entry *GpuMetricsEntry) IsValid() bool {
 
 // pollMetrics fetches Prometheus data and processes each result.
 func (m *MetricsWatcher) pollMetrics(ctx context.Context) error {
-	config := controllerutils.ConfigFromContext(ctx)
+	config := common.ConfigFromContext(ctx)
 	logger := log.FromContext(ctx).WithName("MetricsWatcher")
 	baseutils.Debug(logger, "Polling for metrics")
 	metrics, err := scrapeMetrics(m.metricsEndpoint)
@@ -201,7 +197,7 @@ func (m *MetricsWatcher) pollMetrics(ctx context.Context) error {
 	return nil
 }
 
-func filterForKaiwoPods(config controllerutils.KaiwoConfigContext, metrics *dto.MetricFamily) map[string]GpuMetricsEntry {
+func filterForKaiwoPods(config common.KaiwoConfigContext, metrics *dto.MetricFamily) map[string]GpuMetricsEntry {
 	kaiwoPods := make(map[string]GpuMetricsEntry)
 
 	// Find all pods that are underutilizing the GPU
@@ -265,7 +261,7 @@ func fetchKaiwoWorkloads(ctx context.Context, k8sClient client.Client, kaiwoPods
 	return kaiwoWorkloads, nil
 }
 
-func (m *MetricsWatcher) handleKaiwoWorkloads(ctx context.Context, config controllerutils.KaiwoConfigContext, kaiwoWorkloads map[string][]GpuMetricsEntry) error {
+func (m *MetricsWatcher) handleKaiwoWorkloads(ctx context.Context, config common.KaiwoConfigContext, kaiwoWorkloads map[string][]GpuMetricsEntry) error {
 	for kaiwoWorkloadId, entries := range kaiwoWorkloads {
 		pod := kaiwoWorkloads[kaiwoWorkloadId][0].AssociatedPod
 		kaiwoWorkloadType := pod.Labels[common.KaiwoTypeLabel]
@@ -282,9 +278,11 @@ func (m *MetricsWatcher) handleKaiwoWorkloads(ctx context.Context, config contro
 		}
 
 		switch kaiwoWorkload.GetCommonStatusSpec().Status {
-		case kaiwo.StatusTerminating, kaiwo.StatusTerminated, kaiwo.StatusFailed, kaiwo.StatusComplete:
+		case kaiwo.WorkloadStatusTerminating, kaiwo.WorkloadStatusTerminated, kaiwo.WorkloadStatusFailed, kaiwo.WorkloadStatusComplete:
 			continue
 		}
+
+		obj := kaiwoWorkload.GetKaiwoWorkloadObject()
 
 		anyUnderutilizing := false
 
@@ -292,9 +290,9 @@ func (m *MetricsWatcher) handleKaiwoWorkloads(ctx context.Context, config contro
 			if entry.UtilizationPercentage < config.ResourceMonitoring.LowUtilizationThreshold {
 				anyUnderutilizing = true
 				m.recorder.Eventf(
-					kaiwoWorkload,
+					obj,
 					corev1.EventTypeWarning,
-					string(kaiwo.GpuResourceUtilizationLow),
+					string(common.GpuResourceUtilizationLow),
 					"Pod '%s' is underutilizing GPU %s/%s",
 					entry.PodName,
 					entry.GpuID,
@@ -307,7 +305,7 @@ func (m *MetricsWatcher) handleKaiwoWorkloads(ctx context.Context, config contro
 			err = m.syncKaiwoStatus(
 				ctx,
 				kaiwoWorkload,
-				kaiwo.GpuResourceUtilizationLow,
+				common.GpuResourceUtilizationLow,
 				"One or more GPUs are underutilizing requested resources",
 				false,
 			)
@@ -315,7 +313,7 @@ func (m *MetricsWatcher) handleKaiwoWorkloads(ctx context.Context, config contro
 			err = m.syncKaiwoStatus(
 				ctx,
 				kaiwoWorkload,
-				kaiwo.GpuResourceUtilizationNormal,
+				common.GpuResourceUtilizationNormal,
 				"GPU utilization is normal",
 				true,
 			)
@@ -324,7 +322,7 @@ func (m *MetricsWatcher) handleKaiwoWorkloads(ctx context.Context, config contro
 			return fmt.Errorf("failed to sync Kaiwo workload status: %v", err)
 		}
 		if config.ResourceMonitoring.TerminateUnderutilized {
-			if err := m.flagIfUnderutilized(ctx, config, kaiwoWorkload); err != nil {
+			if err := m.flagIfUnderutilized(ctx, kaiwoWorkload); err != nil {
 				return fmt.Errorf("failed to flag underutilized Kaiwo workload status: %v", err)
 			}
 		}
@@ -381,12 +379,12 @@ func GetKaiwoWorkload(ctx context.Context, k8sClient client.Client, name string,
 func (m *MetricsWatcher) syncKaiwoStatus(
 	ctx context.Context,
 	kaiwoWorkload common.KaiwoWorkload,
-	reason kaiwo.KaiwoResourceUtilizationStatus,
+	reason common.ResourceUnderutilizationStatus,
 	msg string,
 	healthy bool,
 ) error {
 	cond := metav1.Condition{
-		Type:               kaiwo.KaiwoResourceUtilizationType,
+		Type:               common.KaiwoResourceUtilizationType,
 		Status:             healthyString(healthy),
 		Reason:             string(reason),
 		Message:            msg,
@@ -411,21 +409,12 @@ func (m *MetricsWatcher) syncKaiwoStatus(
 
 func (m *MetricsWatcher) flagIfUnderutilized(
 	ctx context.Context,
-	config controllerutils.KaiwoConfigContext,
-	kaiwoWorkload common.KaiwoWorkload,
+	workload common.KaiwoWorkload,
 ) error {
-	condition := meta.FindStatusCondition(kaiwoWorkload.GetCommonStatusSpec().Conditions, kaiwo.KaiwoResourceUtilizationType)
-	if condition == nil || condition.Status == metav1.ConditionFalse {
-		return nil
-	}
-	terminateAfter, err := time.ParseDuration(config.ResourceMonitoring.TerminateUnderutilizedAfter)
-	if err != nil {
-		return fmt.Errorf("failed to parse terminate_underutilized_after: %w", err)
-	}
-	if time.Since(condition.LastTransitionTime.Time) > terminateAfter {
-		if err := workloadutils.SetEarlyTermination(ctx, m.k8sClient, kaiwoWorkload, condition.Reason, "Workload reached early termination limit"); err != nil {
-			return fmt.Errorf("failed to set early termination: %v", err)
-		}
+	common.SetEarlyTerminationIfLowUtilizationThresholdExceeded(ctx, workload)
+	obj := workload.GetKaiwoWorkloadObject()
+	if err := m.k8sClient.Status().Update(ctx, obj); err != nil {
+		return fmt.Errorf("failed to update status: %w", err)
 	}
 	return nil
 }

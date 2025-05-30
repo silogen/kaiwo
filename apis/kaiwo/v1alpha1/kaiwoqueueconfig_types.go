@@ -20,6 +20,14 @@ import (
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 )
 
+type QueueConfigStatusDescription string
+
+// StatusReady indicates a KaiwoService is fully deployed and ready to serve requests (Deployment ready or RayService healthy). Not applicable to KaiwoJob.
+const (
+	QueueConfigStatusReady  QueueConfigStatusDescription = "READY"
+	QueueConfigStatusFailed QueueConfigStatusDescription = "FAILED"
+)
+
 // KaiwoQueueConfigSpec defines the desired configuration for Kaiwo's management of Kueue resources.
 // There should typically be only one KaiwoQueueConfig resource in the cluster, named 'kaiwo'.
 type KaiwoQueueConfigSpec struct {
@@ -44,6 +52,8 @@ type ClusterQueue struct {
 	Spec kueuev1beta1.ClusterQueueSpec `json:"spec,omitempty"`
 
 	// Namespaces optionally lists Kubernetes namespaces where Kaiwo should automatically create a Kueue `LocalQueue` resource pointing to this ClusterQueue.
+	// If one or more namespaces are provided, the KaiwoQueueConfig controller takes over managing the LocalQueues for this ClusterQueue.
+	// Leave this empty if you want to be able to create your own LocalQueues for this ClusterQueue.
 	Namespaces []string `json:"namespaces,omitempty"`
 }
 
@@ -70,15 +80,15 @@ type KaiwoQueueConfigStatus struct {
 	// Conditions lists the observed conditions of the KaiwoQueueConfig resource, such as whether the managed Kueue resources are synchronized and ready.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// Status reflects the overall status of the Kueue resource synchronization managed by this config (e.g., PENDING, READY, FAILED).
-	Status Status `json:"status,omitempty"`
+	// Status reflects the overall status of the Kueue resource synchronization managed by this config (e.g., READY, FAILED).
+	Status QueueConfigStatusDescription `json:"status,omitempty"`
 }
 
 // KaiwoQueueConfig manages Kueue resources like ClusterQueues, ResourceFlavors, and WorkloadPriorityClasses based on its spec. It acts as a central configuration point for Kaiwo's integration with Kueue. Typically, only one cluster-scoped resource named 'kaiwo' should exist. The controller ensures that the specified Kueue resources are created, updated, or deleted to match the desired state defined here.
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.status"
+// +kubebuilder:printcolumn:name="WorkloadStatus",type="string",JSONPath=".status.status"
 // KaiwoQueueConfig manages Kueue resources.
 type KaiwoQueueConfig struct {
 	metav1.TypeMeta   `json:",inline"`

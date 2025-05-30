@@ -19,28 +19,63 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-type Status string
+type WorkloadStatus string
 
 const (
-	// StatusNew indicates the resource has been created but not yet processed by the controller.
-	StatusNew Status = ""
-	// StatusPending indicates the resource is waiting for prerequisites (like download jobs or Kueue admission) to complete.
-	StatusPending Status = "PENDING"
-	// StatusStarting indicates the underlying workload (Job, Deployment, RayService) is being created or started.
-	StatusStarting Status = "STARTING"
-	// StatusReady indicates a KaiwoService is fully deployed and ready to serve requests (Deployment ready or RayService healthy). Not applicable to KaiwoJob.
-	StatusReady Status = "READY"
-	// StatusRunning indicates the workload pods are running. For KaiwoJob, this means the job has started execution. For KaiwoService, pods are up but may not yet be fully ready/healthy.
-	StatusRunning Status = "RUNNING"
-	// StatusComplete indicates a KaiwoJob has finished successfully.
-	StatusComplete Status = "COMPLETE"
-	// StatusFailed indicates the workload (KaiwoJob or KaiwoService) or its prerequisites (like download jobs) encountered an error and cannot proceed or recover.
-	StatusFailed Status = "FAILED"
-	// StatusTerminated indicates the workload has been terminated by the user or system. This could be due to duration deadline being met and pressure for GPU demand.
-	StatusTerminated Status = "TERMINATED"
-	// StatusTerminating indicates that the workload should begin to terminate the underlying resources
-	StatusTerminating Status = "TERMINATING"
+	// WorkloadStatusNew indicates the resource has been created but not yet processed by the controller.
+	WorkloadStatusNew WorkloadStatus = ""
+
+	// WorkloadStatusDownloading indicates that the resource is currently running the download job
+	WorkloadStatusDownloading WorkloadStatus = "DOWNLOADING"
+
+	// WorkloadStatusPending indicates the resource is waiting for prerequisites (like Kueue admission) to complete.
+	WorkloadStatusPending WorkloadStatus = "PENDING"
+
+	// WorkloadStatusStarting indicates the Kaiwo workload has been admitted, and the underlying workload (Job, Deployment, RayService) is being created or started.
+	WorkloadStatusStarting WorkloadStatus = "STARTING"
+
+	// WorkloadStatusRunning indicates the workload pods are running. For KaiwoJob, this means the job has started execution. For KaiwoService, pods are up but may not yet be fully ready/healthy.
+	WorkloadStatusRunning WorkloadStatus = "RUNNING"
+
+	// WorkloadStatusComplete indicates a KaiwoJob has finished successfully.
+	WorkloadStatusComplete WorkloadStatus = "COMPLETE"
+
+	// WorkloadStatusError indicates the workload encountered an error which can be recovered from.
+	WorkloadStatusError WorkloadStatus = "ERROR"
+
+	// WorkloadStatusFailed indicates the workload (KaiwoJob or KaiwoService) encountered an error and cannot proceed or recover.
+	WorkloadStatusFailed WorkloadStatus = "FAILED"
+
+	// WorkloadStatusTerminating indicates that the workload should begin to terminate the underlying resources.
+	WorkloadStatusTerminating WorkloadStatus = "TERMINATING"
+
+	// WorkloadStatusTerminated indicates the workload has been terminated by the user or system. This could be due to duration deadline being met and pressure for GPU demand.
+	WorkloadStatusTerminated WorkloadStatus = "TERMINATED"
 )
+
+var workloadStatusRank = map[WorkloadStatus]int{
+	WorkloadStatusRunning:     0,
+	WorkloadStatusComplete:    1,
+	WorkloadStatusPending:     2,
+	WorkloadStatusStarting:    3,
+	WorkloadStatusError:       4,
+	WorkloadStatusFailed:      5,
+	WorkloadStatusTerminating: 6,
+	WorkloadStatusTerminated:  7,
+}
+
+// DetermineOverallStatus chooses an overall status value from a list of statuses
+func DetermineOverallStatus(statuses []WorkloadStatus) WorkloadStatus {
+	var overallStatus WorkloadStatus
+	currentStatusRank := -1
+	for _, status := range statuses {
+		statusRank := workloadStatusRank[status]
+		if statusRank > currentStatusRank {
+			overallStatus = status
+		}
+	}
+	return overallStatus
+}
 
 // CommonMetaSpec defines reusable metadata fields for workloads.
 type CommonMetaSpec struct {
@@ -137,6 +172,20 @@ type CommonMetaSpec struct {
 	// Dangerous, if when set to `true`, Kaiwo will *not* add the default `PodSecurityContext` (which normally sets `runAsUser: 1000`, `runAsGroup: 1000`, `fsGroup: 1000`) to the generated pods. Use this only if you need to run containers as root or a different specific user and understand the security implications.
 	// +kubebuilder:default=false
 	Dangerous bool `json:"dangerous,omitempty"`
+
+	// ClusterQueue specifies the name of the Kueue `ClusterQueue` that the workload should be submitted to for scheduling and resource management.
+	//
+	// This value is set as the `kueue.x-k8s.io/queue-name` label on the underlying resources.
+	//
+	// If omitted, it defaults to the value specified by the `DEFAULT_CLUSTER_QUEUE_NAME` environment variable in the Kaiwo controller (typically "kaiwo"), which is set during installation.
+	//
+	// Note! If the applied KaiwoQueueConfig includes no quota for the default queue, no workload will run that tries to fall back on it.
+	//
+	// The `kaiwo submit` CLI command can override this using the `--queue` flag or the `clusterQueue` field in the `kaiwoconfig.yaml` file.
+	ClusterQueue string `json:"clusterQueue,omitempty"`
+
+	// PriorityClass specifies the name of a Kubernetes `PriorityClass` to be assigned to the job's pods. This influences the scheduling priority relative to other pods in the cluster.
+	PriorityClass string `json:"priorityClass,omitempty"`
 }
 
 type CommonStatusSpec struct {
@@ -147,7 +196,7 @@ type CommonStatusSpec struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
 	// Status reflects the current high-level phase of the workload lifecycle (e.g., PENDING, STARTING, READY, FAILED).
-	Status Status `json:"status,omitempty"`
+	Status WorkloadStatus `json:"status,omitempty"`
 
 	// Duration indicates how long the service has been running since StartTime, in seconds. Calculated periodically while running.
 	Duration int64 `json:"duration,omitempty"`
@@ -425,12 +474,3 @@ type SecretVolume struct {
 	// MountPath defines the directory path inside the container where the secret volume (or the `SubPath` file) should be mounted.
 	MountPath string `json:"mountPath,omitempty"`
 }
-
-type KaiwoResourceUtilizationStatus string
-
-const (
-	KaiwoResourceUtilizationType                                = "ResourceUnderutilization"
-	GpuResourceUtilizationNormal KaiwoResourceUtilizationStatus = "GpuUtilizationNormal"
-	GpuResourceUtilizationLow    KaiwoResourceUtilizationStatus = "GpuUtilizationLow"
-	ResourceUtilizationUnknown   KaiwoResourceUtilizationStatus = "UtilizationUnknown"
-)

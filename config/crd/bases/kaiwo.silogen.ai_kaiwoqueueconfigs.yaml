@@ -16,7 +16,7 @@ spec:
   versions:
   - additionalPrinterColumns:
     - jsonPath: .status.status
-      name: Status
+      name: WorkloadStatus
       type: string
     name: v1alpha1
     schema:
@@ -59,9 +59,10 @@ spec:
                         resource.
                       type: string
                     namespaces:
-                      description: Namespaces optionally lists Kubernetes namespaces
-                        where Kaiwo should automatically create a Kueue `LocalQueue`
-                        resource pointing to this ClusterQueue.
+                      description: |-
+                        Namespaces optionally lists Kubernetes namespaces where Kaiwo should automatically create a Kueue `LocalQueue` resource pointing to this ClusterQueue.
+                        If one or more namespaces are provided, the KaiwoQueueConfig controller takes over managing the LocalQueues for this ClusterQueue.
+                        Leave this empty if you want to be able to create your own LocalQueues for this ClusterQueue.
                       items:
                         type: string
                       type: array
@@ -710,7 +711,7 @@ spec:
                 type: array
               status:
                 description: Status reflects the overall status of the Kueue resource
-                  synchronization managed by this config (e.g., PENDING, READY, FAILED).
+                  synchronization managed by this config (e.g., READY, FAILED).
                 type: string
             type: object
         type: object

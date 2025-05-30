@@ -28,14 +28,14 @@ func runMonitorAction(ctx context.Context, clients k8s.KubernetesClients, state 
 	if err := cliutils.ValidateCommand(command[0]); err != nil {
 		return tuicomponents.StepResultErr, nil, fmt.Errorf("failed to validate command: %w", err)
 	}
-
+	obj := state.Workload.GetKaiwoWorkloadObject()
 	if err := cliutils.ExecInContainer(
 		ctx,
 		clients.Clientset,
 		clients.Kubeconfig,
 		state.PodName,
 		state.ContainerName,
-		state.Workload.GetObjectMeta().Namespace,
+		obj.GetNamespace(),
 		command,
 		true,
 		true,

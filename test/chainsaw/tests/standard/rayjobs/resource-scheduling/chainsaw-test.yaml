@@ -7,22 +7,17 @@ spec:
   - try:
     - apply:
         file: basic-rayjob.yaml
+    - wait:
+        apiVersion: kaiwo.silogen.ai/v1alpha1
+        kind: KaiwoJob
+        name: kaiwojob-rayjob-resource-scheduling
+        timeout: 5s
+        for:
+          condition:
+            name: Schedulable
+            value: 'true'
     - assert:
         file: basic-rayjob-result.yaml
-    - assert:
-        resource:
-          apiVersion: kaiwo.silogen.ai/v1alpha1
-          kind: KaiwoJob
-          metadata:
-            name: kaiwojob-rayjob-resource-scheduling
-          spec:
-            dangerous: false
-            entrypoint: sleep 1
-            gpuVendor: nvidia
-            gpus: 17
-            ray: true
-            replicas: 1
-            user: test@amd.com
     catch:
     - command:
         entrypoint: kaiwo-dev
@@ -43,12 +38,23 @@ spec:
   - try:
     - apply:
         file: basic-rayjob-no-gpus-available.yaml
-    - script:
-        content: sleep 5
-    - script:
-        content: kubectl describe kaiwojob kaiwojob-rayjob-no-gpus-available -n kaiwo-test
-        check:
-          (contains($stdout, 'no AMD GPUs found in the cluster')): true
+    - wait:
+        apiVersion: kaiwo.silogen.ai/v1alpha1
+        kind: KaiwoJob
+        name: kaiwojob-rayjob-no-gpus-available
+        timeout: 5s
+        for:
+          condition:
+            name: Schedulable
+            value: 'false'
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: kaiwojob-rayjob-no-gpus-available
+          status:
+            status: ERROR
     catch:
     - command:
         entrypoint: kaiwo-dev

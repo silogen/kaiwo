@@ -5,13 +5,13 @@
     <parameters value="--zap-log-level=debug" />
     <envs>
       <env name="CONFIG_NAME" value="kaiwo" />
-      <env name="KUBECONFIG" value="$USER_HOME$/configs/mi300.yaml" />
-      <env name="RESOURCE_MONITORING_ENABLED" value="true" />
+      <env name="DISABLE_WEBHOOKS" value="true" />
+      <env name="FORMATTED_LOGS" value="true" />
+      <env name="RESOURCE_MONITORING_ENABLED" value="false" />
       <env name="RESOURCE_MONITORING_METRICS_ENDPOINT" value="http://localhost:5000/metrics" />
       <env name="RESOURCE_MONITORING_POLLING_INTERVAL" value="10s" />
       <env name="RESOURCE_MONITORING_TARGET_NAMESPACES" value="kaiwo-test-monitoring-conditions" />
       <env name="WEBHOOK_CERT_DIRECTORY" value="certs" />
-      <env name="DISABLE_WEBHOOKS" value="true" />
     </envs>
     <kind value="FILE" />
     <package value="github.com/silogen/kaiwo" />

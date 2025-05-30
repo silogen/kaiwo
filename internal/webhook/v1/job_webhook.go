@@ -62,7 +62,7 @@ func (j *JobWebhook) Default(ctx context.Context, obj runtime.Object) error {
 		return fmt.Errorf("expected a Job object but got %T", obj)
 	}
 
-	ctx, err := controllerutils.GetContextWithConfig(ctx, j.Client)
+	ctx, err := common.GetContextWithConfig(ctx, j.Client)
 	if err != nil {
 		return fmt.Errorf("could not get kaiwo config: %w", err)
 	}
