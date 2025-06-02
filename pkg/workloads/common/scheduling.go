@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"math"
 
+	v1 "k8s.io/api/core/v1"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -26,6 +28,9 @@ type SchedulingConfig struct {
 	TotalGpus      int
 	Replicas       int
 	GpusPerReplica int
+	GpuVendor      string
+
+	DefaultResources *v1.ResourceRequirements
 }
 
 // CalculateSchedulingConfig calculates the workload scheduling config based on the requested GPUs and available cluster resources
@@ -38,6 +43,13 @@ func CalculateSchedulingConfig(
 	spec := workload.GetCommonSpec()
 	gpuStats := clusterCtx.GpuStats
 
+	schedulingConfig := SchedulingConfig{
+		GpuVendor: spec.GpuVendor,
+	}
+	if spec.Resources != nil {
+		schedulingConfig.DefaultResources = spec.Resources.DeepCopy()
+	}
+
 	userRequestedGpus := 0
 	if spec.Replicas != nil {
 		userRequestedGpus = *spec.Replicas * spec.GpusPerReplica
@@ -49,20 +61,18 @@ func CalculateSchedulingConfig(
 		if spec.Replicas != nil {
 			replicas = *spec.Replicas
 		}
-		return SchedulingConfig{
-			TotalGpus:      0,
-			Replicas:       replicas,
-			GpusPerReplica: 0,
-		}
+		schedulingConfig.Replicas = replicas
+
+		return schedulingConfig
 	}
 
 	// If user has already provided the GPUs per replica and the replicas, use those
 	if spec.Replicas != nil && *spec.Replicas > 0 && spec.GpusPerReplica > 0 && totalUserRequestedGpus <= gpuStats.TotalClusterGPUs {
-		return SchedulingConfig{
-			TotalGpus:      totalUserRequestedGpus,
-			GpusPerReplica: spec.GpusPerReplica,
-			Replicas:       *spec.Replicas,
-		}
+		schedulingConfig.Replicas = *spec.Replicas
+		schedulingConfig.TotalGpus = totalUserRequestedGpus
+		schedulingConfig.GpusPerReplica = spec.GpusPerReplica
+
+		return schedulingConfig
 	}
 
 	minGpusPerNode := gpuStats.MinGPUsPerNode
@@ -86,11 +96,11 @@ func CalculateSchedulingConfig(
 	replicas := (totalUserRequestedGpus + minGpusPerNode - 1) / minGpusPerNode // Round up
 	gpusPerReplica := totalUserRequestedGpus / replicas
 
-	return SchedulingConfig{
-		TotalGpus:      totalUserRequestedGpus,
-		Replicas:       replicas,
-		GpusPerReplica: gpusPerReplica,
-	}
+	schedulingConfig.TotalGpus = totalUserRequestedGpus
+	schedulingConfig.GpusPerReplica = gpusPerReplica
+	schedulingConfig.Replicas = replicas
+
+	return schedulingConfig
 }
 
 type SchedulingReason string

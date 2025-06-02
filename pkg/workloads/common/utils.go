@@ -145,7 +145,6 @@ func ObserveOverallStatus(ctx context.Context, k8sClient client.Client, reconcil
 			conditions = append(conditions, reconcilerConditions...)
 			if reconcilerStatus != nil {
 				statuses = append(statuses, *reconcilerStatus)
-				fmt.Printf("%s %s: %s\n", obj.GetObjectKind().GroupVersionKind().String(), obj.GetName(), *reconcilerStatus)
 			}
 		} else if errors.IsNotFound(err) {
 			return baseutils.Pointer(kaiwo.WorkloadStatusNew), nil, nil
@@ -159,12 +158,13 @@ func ObserveOverallStatus(ctx context.Context, k8sClient client.Client, reconcil
 	return baseutils.Pointer(kaiwo.DetermineOverallStatus(statuses)), conditions, nil
 }
 
+// ConditionsEqual checks if two sets of conditions are the same, ignoring the LastTransitionTime
 func ConditionsEqual(a, b []metav1.Condition) bool {
-	// 1) Sort so the slices are in a consistent order
+	// Sort so the slices are in a consistent order
 	sort.Slice(a, func(i, j int) bool { return a[i].Type < a[j].Type })
 	sort.Slice(b, func(i, j int) bool { return b[i].Type < b[j].Type })
 
-	// 2) Use cmpopts to ignore LastTransitionTime
+	// Use cmpopts to ignore LastTransitionTime
 	return cmp.Equal(a, b,
 		cmpopts.IgnoreFields(metav1.Condition{}, "LastTransitionTime"),
 	)

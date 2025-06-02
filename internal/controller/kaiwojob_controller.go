@@ -131,7 +131,6 @@ func (r *KaiwoJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&kaiwo.KaiwoService{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-				fmt.Println("Ping from job")
 				var jobs kaiwo.KaiwoJobList
 				if err := r.Client.List(ctx, &jobs); err != nil {
 					return nil
@@ -139,7 +138,6 @@ func (r *KaiwoJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				var requests []reconcile.Request
 				for _, job := range jobs.Items {
 					if job.Spec.Duration != nil && job.Status.Status == kaiwo.WorkloadStatusRunning {
-						fmt.Println("Job", client.ObjectKeyFromObject(&job))
 						requests = append(requests, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&job)})
 					}
 				}

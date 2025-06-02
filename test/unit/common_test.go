@@ -19,7 +19,7 @@ import (
 
 	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
-	common "github.com/silogen/kaiwo/pkg/workloads/common"
+	"github.com/silogen/kaiwo/pkg/workloads/common"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -74,8 +74,19 @@ var _ = Describe("Workload defaults", func() {
 	})
 
 	JustBeforeEach(func() {
-		err := common.UpdatePodSpec(common.KaiwoConfigContext{}, kaiwoCommonMetaSpec, labelContext, &podTemplateSpec, name, replicas, gpusPerReplica, false, false)
-		Expect(err).NotTo(HaveOccurred())
+		schedulingConfig := common.SchedulingConfig{
+			Replicas:       replicas,
+			GpusPerReplica: gpusPerReplica,
+		}
+		workload := &v1alpha1.KaiwoJob{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: name,
+			},
+			Spec: v1alpha1.KaiwoJobSpec{
+				CommonMetaSpec: kaiwoCommonMetaSpec,
+			},
+		}
+		common.UpdatePodSpec(common.KaiwoConfigContext{}, workload, schedulingConfig, &podTemplateSpec)
 	})
 
 	When("a workload pod spec is being updated", func() {

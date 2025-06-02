@@ -17,8 +17,6 @@ package common
 import (
 	"context"
 
-	corev1 "k8s.io/api/core/v1"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -97,63 +95,4 @@ func (h StorageHandler) ObserveStatus(ctx context.Context, k8sClient client.Clie
 		return "", conditions, err
 	}
 	return *status, conditions, err
-}
-
-func updatePodSpecStorage(podSpec *corev1.PodSpec, storageSpec v1alpha1.StorageSpec, ownerName string) {
-	if !storageSpec.StorageEnabled {
-		return
-	}
-
-	addStorageVolume := func(name string, claimName string) {
-		podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
-			Name: name,
-			VolumeSource: corev1.VolumeSource{
-				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-					ClaimName: claimName,
-				},
-			},
-		})
-	}
-
-	// Add volumes
-	if storageSpec.Data.IsRequested() {
-		addStorageVolume(DataStoragePostfix, baseutils.FormatNameWithPostfix(ownerName, DataStoragePostfix))
-	}
-
-	if storageSpec.HuggingFace.IsRequested() {
-		addStorageVolume(HfStoragePostfix, baseutils.FormatNameWithPostfix(ownerName, HfStoragePostfix))
-	}
-
-	addVolumeMount := func(container *corev1.Container, name string, path string) {
-		// logger.Info(fmt.Sprintf("Adding %s volume mount to %s", name, container.Name))
-		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
-			Name:      name,
-			MountPath: path,
-		})
-	}
-
-	addEnvVar := func(container *corev1.Container, name string, value string) {
-		// logger.Info(fmt.Sprintf("Adding %s env var to %s", name, container.Name))
-		container.Env = append(container.Env, corev1.EnvVar{
-			Name:  name,
-			Value: value,
-		})
-	}
-
-	addContainerInfo := func(container *corev1.Container) {
-		if storageSpec.Data.IsRequested() {
-			addVolumeMount(container, DataStoragePostfix, storageSpec.Data.MountPath)
-		}
-		if storageSpec.HuggingFace.IsRequested() {
-			addVolumeMount(container, HfStoragePostfix, storageSpec.HuggingFace.MountPath)
-			addEnvVar(container, "HF_HOME", storageSpec.HuggingFace.MountPath)
-		}
-	}
-
-	for i := range podSpec.Containers {
-		addContainerInfo(&podSpec.Containers[i])
-	}
-	for i := range podSpec.InitContainers {
-		addContainerInfo(&podSpec.InitContainers[i])
-	}
 }

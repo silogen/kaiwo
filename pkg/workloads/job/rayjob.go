@@ -23,11 +23,7 @@ import (
 
 	"github.com/silogen/kaiwo/pkg/workloads/utils"
 
-	"k8s.io/apimachinery/pkg/api/resource"
-
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
-
-	v1 "k8s.io/api/core/v1"
 
 	"github.com/silogen/kaiwo/pkg/workloads/common"
 
@@ -41,10 +37,10 @@ import (
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
-func GetDefaultRayJobSpec(config common.KaiwoConfigContext, dangerous bool, resourceRequirements v1.ResourceRequirements) rayv1.RayJobSpec {
+func GetDefaultRayJobSpec(config common.KaiwoConfigContext, dangerous bool) rayv1.RayJobSpec {
 	return rayv1.RayJobSpec{
 		ShutdownAfterJobFinishes: true,
-		RayClusterSpec:           utils.GetRayClusterTemplate(config, dangerous, resourceRequirements),
+		RayClusterSpec:           utils.GetRayClusterTemplate(config, dangerous),
 	}
 }
 
@@ -88,100 +84,32 @@ func (handler *RayJobHandler) BuildDesired(ctx context.Context, clusterCtx commo
 	var rayJobSpec rayv1.RayJobSpec
 
 	if spec.RayJob == nil {
-		rayJobSpec = GetDefaultRayJobSpec(config, spec.Dangerous, baseutils.ValueOrDefault(spec.Resources))
+		rayJobSpec = GetDefaultRayJobSpec(config, spec.Dangerous)
 	} else {
 		rayJobSpec = spec.RayJob.Spec
-		for i := range rayJobSpec.RayClusterSpec.WorkerGroupSpecs {
-			common.SyncGpuMetaFromPodSpec(rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Template.Spec, &handler.KaiwoJob.Spec.CommonMetaSpec)
-		}
 	}
 
+	// Ensure backoff limit is 0
 	if baseutils.ValueOrDefault(rayJobSpec.BackoffLimit) > 0 {
 		logger.Info("Warning! BackOffLimit can currently only be 0, overriding the given value")
 		rayJobSpec.BackoffLimit = baseutils.Pointer(int32(0))
 	}
 
-	if headMemoryOverride := resource.MustParse(config.Ray.HeadPodMemory); headMemoryOverride.Value() > 0 {
-		common.FillPodResources(&rayJobSpec.RayClusterSpec.HeadGroupSpec.Template.Spec, &v1.ResourceRequirements{
-			Limits: v1.ResourceList{
-				v1.ResourceMemory: headMemoryOverride,
-			},
-			Requests: v1.ResourceList{
-				v1.ResourceMemory: headMemoryOverride,
-			},
-		}, true)
-	}
-
-	labelContext := common.GetKaiwoLabelContext(handler.KaiwoJob)
-
-	schedulingConfig := common.CalculateSchedulingConfig(ctx, clusterCtx, handler.KaiwoJob, true)
-	spec.Replicas = &schedulingConfig.Replicas
-	spec.GpusPerReplica = schedulingConfig.GpusPerReplica
-
-	var overrideDefaults bool
-
-	if schedulingConfig.TotalGpus > 0 && spec.RayJob == nil {
-		overrideDefaults = true
-	} else {
-		overrideDefaults = false
-	}
-
-	if err := common.UpdatePodSpec(
-		config,
-		handler.KaiwoJob.Spec.CommonMetaSpec,
-		labelContext,
-		&rayJobSpec.RayClusterSpec.HeadGroupSpec.Template,
-		handler.KaiwoJob.Name,
-		schedulingConfig.Replicas,
-		schedulingConfig.GpusPerReplica,
-		false,
-		true,
-	); err != nil {
-		return nil, fmt.Errorf("failed to update job spec: %w", err)
-	}
-
-	for i := range rayJobSpec.RayClusterSpec.WorkerGroupSpecs {
-		if err := common.UpdatePodSpec(
-			config,
-			handler.KaiwoJob.Spec.CommonMetaSpec,
-			labelContext,
-			&rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Template,
-			handler.KaiwoJob.Name,
-			schedulingConfig.Replicas,
-			schedulingConfig.GpusPerReplica,
-			overrideDefaults,
-			false,
-		); err != nil {
-			return nil, fmt.Errorf("failed to update job spec for container %d: %w", i, err)
-		}
-	}
-
+	// Convert entrypoint
 	if spec.EntryPoint != "" {
 		rayJobSpec.Entrypoint = baseutils.ConvertMultilineEntrypoint(spec.EntryPoint, true).(string)
 	}
 
-	// Adjust resource requests & limits
-	for i := range rayJobSpec.RayClusterSpec.WorkerGroupSpecs {
-		rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Replicas = baseutils.Pointer(int32(schedulingConfig.Replicas))
-		rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].MinReplicas = baseutils.Pointer(int32(schedulingConfig.Replicas))
-		rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].MaxReplicas = baseutils.Pointer(int32(schedulingConfig.Replicas))
-	}
+	// Update ray cluster specs
+	utils.UpdateRayClusterSpec(ctx, clusterCtx, handler.KaiwoJob, rayJobSpec.RayClusterSpec)
 
 	rayJob := handler.GetInitializedObject().(*rayv1.RayJob)
 	rayJob.ObjectMeta.Labels = rayJobSpec.RayClusterSpec.HeadGroupSpec.Template.ObjectMeta.Labels
 	rayJob.Spec = rayJobSpec
 
-	common.CopyLabels(handler.KaiwoJob.ObjectMeta.Labels, &rayJob.ObjectMeta)
-	common.SetKaiwoSystemLabels(labelContext, &rayJob.ObjectMeta)
+	common.UpdateLabels(handler.KaiwoJob, &rayJob.ObjectMeta)
 
-	// TODO set in update pod spec
 	rayJob.ObjectMeta.Labels[common.QueueLabel] = common.GetClusterQueueName(ctx, handler)
-	if handler.KaiwoJob.Spec.PriorityClass != "" {
-		rayJob.Spec.RayClusterSpec.HeadGroupSpec.Template.Spec.PriorityClassName = handler.KaiwoJob.Spec.PriorityClass
-		for i := range rayJobSpec.RayClusterSpec.WorkerGroupSpecs {
-			rayJobSpec.RayClusterSpec.WorkerGroupSpecs[i].Template.Spec.PriorityClassName = handler.KaiwoJob.Spec.PriorityClass
-		}
-	}
 
 	return rayJob, nil
 }

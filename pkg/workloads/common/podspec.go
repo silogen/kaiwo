@@ -26,76 +26,48 @@ import (
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 )
 
-func UpdatePodSpec(config KaiwoConfigContext, kaiwoCommonMetaSpec kaiwo.CommonMetaSpec, labelContext KaiwoLabelContext, template *corev1.PodTemplateSpec, name string, replicas int, gpusPerReplica int, override bool, rayhead bool) error {
-	// Update labels
+func UpdatePodSpec(config KaiwoConfigContext, workload KaiwoWorkload, schedulingConfig SchedulingConfig, template *corev1.PodTemplateSpec) {
+	commonMetaSpec := workload.GetCommonSpec()
+	workloadName := workload.GetKaiwoWorkloadObject().GetName()
+
+	// Propagate labels
 	if template.ObjectMeta.Labels == nil {
-		template.ObjectMeta.Labels = map[string]string{}
+		template.ObjectMeta.Labels = make(map[string]string)
 	}
-	CopyLabels(kaiwoCommonMetaSpec.PodTemplateSpecLabels, &template.ObjectMeta)
-	SetKaiwoSystemLabels(labelContext, &template.ObjectMeta)
+	for key, value := range commonMetaSpec.PodTemplateSpecLabels {
+		template.ObjectMeta.Labels[key] = value
+	}
+	UpdateLabels(workload, &template.ObjectMeta)
 
-	// Make sure there is an image set for each container
-	// init containers are not included, as they are assumed to always be user given
-	for i := range template.Spec.Containers {
-		// If the container has no image set
-		if template.Spec.Containers[i].Image == "" {
-			if kaiwoCommonMetaSpec.Image != "" {
-				// If a default image is provided, use it
-				template.Spec.Containers[i].Image = kaiwoCommonMetaSpec.Image
-			} else {
-				// Otherwise use the default Ray image
-				template.Spec.Containers[i].Image = config.Ray.DefaultRayImage
-			}
+	// Add image pull secrets
+	if commonMetaSpec.ImagePullSecrets != nil {
+		template.Spec.ImagePullSecrets = append(template.Spec.ImagePullSecrets, commonMetaSpec.ImagePullSecrets...)
+	}
+
+	if commonMetaSpec.Storage != nil && commonMetaSpec.Storage.StorageEnabled {
+
+		addStorageVolume := func(name string, claimName string) {
+			template.Spec.Volumes = append(template.Spec.Volumes, corev1.Volume{
+				Name: name,
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: claimName,
+					},
+				},
+			})
+		}
+
+		if commonMetaSpec.Storage.Data.IsRequested() {
+			addStorageVolume(DataStoragePostfix, baseutils.FormatNameWithPostfix(workloadName, DataStoragePostfix))
+		}
+
+		if commonMetaSpec.Storage.HuggingFace.IsRequested() {
+			addStorageVolume(HfStoragePostfix, baseutils.FormatNameWithPostfix(workloadName, HfStoragePostfix))
 		}
 	}
 
-	// Ensure that all image pull secrets are set
-	if kaiwoCommonMetaSpec.ImagePullSecrets != nil {
-		template.Spec.ImagePullSecrets = append(template.Spec.ImagePullSecrets, kaiwoCommonMetaSpec.ImagePullSecrets...)
-	}
-
-	if kaiwoCommonMetaSpec.SecretVolumes != nil {
-		addSecretVolumes(template, kaiwoCommonMetaSpec.SecretVolumes)
-	}
-
-	// Update resources if specified in the CRD
-
-	FillPodResources(&template.Spec, kaiwoCommonMetaSpec.Resources, false)
-
-	vendor := "amd"
-	if kaiwoCommonMetaSpec.GpuVendor != "" {
-		vendor = kaiwoCommonMetaSpec.GpuVendor
-	}
-
-	gpus := kaiwoCommonMetaSpec.Gpus
-
-	if kaiwoCommonMetaSpec.Gpus == 0 {
-		gpuResourceKey := corev1.ResourceName(getGpuResourceKey(vendor, config.Nodes.DefaultGpuResourceKey))
-		if gpuQuantity, exists := template.Spec.Containers[0].Resources.Requests[gpuResourceKey]; exists {
-			gpus = int(gpuQuantity.Value())
-		}
-	}
-
-	// Adjust resource requests and limits based on GPUs
-	if err := adjustResourceRequestsAndLimits(config, vendor, gpus, replicas, gpusPerReplica, template, override, rayhead); err != nil {
-		return fmt.Errorf("failed to adjust resource requests and limits: %w", err)
-	}
-
-	// Add environmental variables
-	if err := addEnvVars(kaiwoCommonMetaSpec.Env, template); err != nil {
-		return fmt.Errorf("failed to add env vars: %w", err)
-	}
-
-	// Attach storage
-	if kaiwoCommonMetaSpec.Storage != nil && kaiwoCommonMetaSpec.Storage.StorageEnabled {
-		updatePodSpecStorage(&template.Spec, *kaiwoCommonMetaSpec.Storage, name)
-	}
-
-	return nil
-}
-
-func addSecretVolumes(template *corev1.PodTemplateSpec, secretVolumes []kaiwo.SecretVolume) {
-	for _, volume := range secretVolumes {
+	// Add secret volumes
+	for _, volume := range commonMetaSpec.SecretVolumes {
 		template.Spec.Volumes = append(template.Spec.Volumes, corev1.Volume{
 			Name: volume.Name,
 			VolumeSource: corev1.VolumeSource{
@@ -104,44 +76,116 @@ func addSecretVolumes(template *corev1.PodTemplateSpec, secretVolumes []kaiwo.Se
 				},
 			},
 		})
-		for i := range template.Spec.Containers {
-			template.Spec.Containers[i].VolumeMounts = append(template.Spec.Containers[i].VolumeMounts, corev1.VolumeMount{
-				Name:      volume.Name,
-				MountPath: volume.MountPath,
-				SubPath:   volume.SubPath,
-			})
+	}
+
+	// Update container specs
+	for i := range template.Spec.Containers {
+		updateMainContainer(config, commonMetaSpec, schedulingConfig, &template.Spec.Containers[i])
+	}
+	for i := range template.Spec.InitContainers {
+		updateInitContainer(commonMetaSpec, &template.Spec.InitContainers[i])
+	}
+
+	// Add tolerations
+	addToleration := func() {
+		template.Spec.Tolerations = append(template.Spec.Tolerations, corev1.Toleration{
+			Key:      config.Nodes.DefaultGpuTaintKey,
+			Operator: corev1.TolerationOpExists,
+			Effect:   corev1.TaintEffectNoSchedule,
+		})
+	}
+
+	// Check all containers for any GPU resource requests
+	if config.Nodes.AddTaintsToGpuNodes {
+		for _, container := range template.Spec.Containers {
+			requests := container.Resources.Requests
+			if requests != nil {
+				if _, ok := requests[corev1.ResourceName("nvidia.com/gpu")]; ok {
+					addToleration()
+					break
+				}
+				if _, ok := requests[corev1.ResourceName("amd.com/gpu")]; ok {
+					addToleration()
+					break
+				}
+			}
 		}
-		for i := range template.Spec.InitContainers {
-			template.Spec.InitContainers[i].VolumeMounts = append(template.Spec.InitContainers[i].VolumeMounts, corev1.VolumeMount{
-				Name:      volume.Name,
-				MountPath: volume.MountPath,
-				SubPath:   volume.SubPath,
-			})
-		}
+	}
+
+	// Set priority class
+	if commonMetaSpec.PriorityClass != "" {
+		template.Spec.PriorityClassName = commonMetaSpec.PriorityClass
 	}
 }
 
-func GetPodTemplate(config KaiwoConfigContext, dshmSize resource.Quantity, dangerous bool, resources corev1.ResourceRequirements, workloadContainerName string) corev1.PodTemplateSpec {
-	resourceRequirements := resources.DeepCopy()
-	if resourceRequirements.Requests == nil {
-		resourceRequirements.Requests = corev1.ResourceList{}
-	}
-	if resourceRequirements.Limits == nil {
-		resourceRequirements.Limits = corev1.ResourceList{}
-	}
-	if _, ok := resourceRequirements.Limits[corev1.ResourceMemory]; !ok {
-		resourceRequirements.Limits[corev1.ResourceMemory] = DefaultMemory
-	}
-	if _, ok := resourceRequirements.Limits[corev1.ResourceCPU]; !ok {
-		resourceRequirements.Limits[corev1.ResourceCPU] = DefaultCPU
-	}
-	if _, ok := resourceRequirements.Requests[corev1.ResourceMemory]; !ok {
-		resourceRequirements.Requests[corev1.ResourceMemory] = DefaultMemory
-	}
-	if _, ok := resourceRequirements.Requests[corev1.ResourceCPU]; !ok {
-		resourceRequirements.Requests[corev1.ResourceCPU] = DefaultCPU
+// updateMainContainer updates the container specifications for main containers
+func updateMainContainer(config KaiwoConfigContext, kaiwoCommonMetaSpec kaiwo.CommonMetaSpec, schedulingConfig SchedulingConfig, container *corev1.Container) {
+	// Update base
+	updateContainerBase(kaiwoCommonMetaSpec, container)
+
+	// Update resources
+	containerResourceRequirements := CreateResourceRequirements(config, schedulingConfig)
+	fillContainerResources(container, &containerResourceRequirements, false)
+
+	envVarsToAppend := []corev1.EnvVar{
+		{Name: "NUM_GPUS", Value: fmt.Sprintf("%d", schedulingConfig.TotalGpus)},
+		{Name: "NUM_REPLICAS", Value: fmt.Sprintf("%d", schedulingConfig.Replicas)},
+		{Name: "NUM_GPUS_PER_REPLICA", Value: fmt.Sprintf("%d", schedulingConfig.GpusPerReplica)},
 	}
 
+	if container.Image == "" {
+		container.Image = kaiwoCommonMetaSpec.Image
+	}
+
+	// Append to existing environment variables
+	container.Env = append(container.Env, envVarsToAppend...)
+}
+
+// updateMainContainer updates the container specifications for init containers
+func updateInitContainer(kaiwoCommonMetaSpec kaiwo.CommonMetaSpec, container *corev1.Container) {
+	updateContainerBase(kaiwoCommonMetaSpec, container)
+}
+
+// updateContainerBase updates the container specifications for all containers (init and main)
+func updateContainerBase(kaiwoCommonMetaSpec kaiwo.CommonMetaSpec, container *corev1.Container) {
+	// Add storage mounts
+	addVolumeMount := func(name string, path string) {
+		// logger.Info(fmt.Sprintf("Adding %s volume mount to %s", name, container.Name))
+		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
+			Name:      name,
+			MountPath: path,
+		})
+	}
+	envVars := kaiwoCommonMetaSpec.Env
+
+	if kaiwoCommonMetaSpec.Storage != nil && kaiwoCommonMetaSpec.Storage.StorageEnabled {
+		if kaiwoCommonMetaSpec.Storage.Data.IsRequested() {
+			addVolumeMount(DataStoragePostfix, kaiwoCommonMetaSpec.Storage.Data.MountPath)
+		}
+
+		if kaiwoCommonMetaSpec.Storage.HuggingFace.IsRequested() {
+			addVolumeMount(HfStoragePostfix, kaiwoCommonMetaSpec.Storage.HuggingFace.MountPath)
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  "HF_HOME",
+				Value: kaiwoCommonMetaSpec.Storage.HuggingFace.MountPath,
+			})
+		}
+	}
+
+	// Add env vars
+	container.Env = append(container.Env, envVars...)
+
+	// Secret volumes
+	for _, volume := range kaiwoCommonMetaSpec.SecretVolumes {
+		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
+			Name:      volume.Name,
+			MountPath: volume.MountPath,
+			SubPath:   volume.SubPath,
+		})
+	}
+}
+
+func GetPodTemplate(config KaiwoConfigContext, dshmSize resource.Quantity, dangerous bool, workloadContainerName string) corev1.PodTemplateSpec {
 	podTemplate := corev1.PodTemplateSpec{
 		Spec: corev1.PodSpec{
 			SchedulerName: config.Scheduling.KubeSchedulerName,
@@ -150,7 +194,6 @@ func GetPodTemplate(config KaiwoConfigContext, dshmSize resource.Quantity, dange
 				{
 					Name:            workloadContainerName,
 					ImagePullPolicy: corev1.PullAlways,
-					Resources:       *resourceRequirements,
 					VolumeMounts: []corev1.VolumeMount{
 						{Name: "dshm", MountPath: "/dev/shm"},
 					},

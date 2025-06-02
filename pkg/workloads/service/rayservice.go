@@ -19,8 +19,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 
@@ -28,13 +26,10 @@ import (
 
 	"github.com/silogen/kaiwo/pkg/workloads/utils"
 
-	"k8s.io/apimachinery/pkg/api/resource"
-
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
 	appwrapperv1beta2 "github.com/project-codeflare/appwrapper/api/v1beta2"
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -75,129 +70,19 @@ func (handler *RayServiceHandler) GetInitializedObject() client.Object {
 }
 
 func (handler *RayServiceHandler) BuildDesired(ctx context.Context, clusterCtx common.ClusterContext) (client.Object, error) {
-	config := common.ConfigFromContext(ctx)
+	rayService := handler.buildRayService(ctx, clusterCtx)
 
-	spec := handler.KaiwoService.Spec
-
-	var rayServiceSpec rayv1.RayServiceSpec
-
-	if spec.RayService == nil {
-		rayServiceSpec = GetDefaultRayServiceSpec(
-			config,
-			spec.Dangerous,
-			baseutils.ValueOrDefault(spec.Resources),
-		)
-	} else {
-		rayServiceSpec = spec.RayService.Spec
-		for i := range rayServiceSpec.RayClusterSpec.WorkerGroupSpecs {
-			common.SyncGpuMetaFromPodSpec(rayServiceSpec.RayClusterSpec.WorkerGroupSpecs[i].Template.Spec, &handler.KaiwoService.Spec.CommonMetaSpec)
-		}
-	}
-
-	if headMemoryOverride := resource.MustParse(config.Ray.HeadPodMemory); headMemoryOverride.Value() > 0 {
-		common.FillPodResources(
-			&rayServiceSpec.RayClusterSpec.HeadGroupSpec.Template.Spec,
-			&v1.ResourceRequirements{
-				Limits: v1.ResourceList{
-					v1.ResourceMemory: headMemoryOverride,
-				},
-				Requests: v1.ResourceList{
-					v1.ResourceMemory: headMemoryOverride,
-				},
-			},
-			true,
-		)
-	}
-
-	labelContext := common.GetKaiwoLabelContext(handler.KaiwoService)
-
+	// Wrap the RayService with an AppWrapper
 	schedulingConfig := common.CalculateSchedulingConfig(ctx, clusterCtx, handler.KaiwoService, true)
-	spec.Replicas = &schedulingConfig.Replicas
-	spec.GpusPerReplica = schedulingConfig.GpusPerReplica
 
-	var overrideDefaults bool
-	if schedulingConfig.TotalGpus > 0 && spec.RayService == nil {
-		overrideDefaults = true
-	} else {
-		overrideDefaults = false
-	}
-
-	if spec.RayService == nil {
-		if err := common.UpdatePodSpec(
-			config,
-			handler.KaiwoService.Spec.CommonMetaSpec,
-			labelContext,
-			&rayServiceSpec.RayClusterSpec.HeadGroupSpec.Template,
-			handler.KaiwoService.Name,
-			schedulingConfig.Replicas,
-			schedulingConfig.GpusPerReplica,
-			false,
-			true,
-		); err != nil {
-			return nil, fmt.Errorf("failed to update head group spec: %w", err)
-		}
-
-		for i := range rayServiceSpec.RayClusterSpec.WorkerGroupSpecs {
-			if err := common.UpdatePodSpec(
-				config,
-				handler.KaiwoService.Spec.CommonMetaSpec,
-				labelContext,
-				&rayServiceSpec.RayClusterSpec.WorkerGroupSpecs[i].Template,
-				handler.KaiwoService.Name,
-				schedulingConfig.Replicas,
-				schedulingConfig.GpusPerReplica,
-				overrideDefaults,
-				false,
-			); err != nil {
-				return nil, fmt.Errorf("failed to update worker group spec for index %d: %w", i, err)
-			}
-		}
-
-		for i := range rayServiceSpec.RayClusterSpec.WorkerGroupSpecs {
-			rayServiceSpec.RayClusterSpec.WorkerGroupSpecs[i].Replicas = baseutils.Pointer(int32(schedulingConfig.Replicas))
-			rayServiceSpec.RayClusterSpec.WorkerGroupSpecs[i].MinReplicas = baseutils.Pointer(int32(schedulingConfig.Replicas))
-			rayServiceSpec.RayClusterSpec.WorkerGroupSpecs[i].MaxReplicas = baseutils.Pointer(int32(schedulingConfig.Replicas))
-		}
-	}
-
-	if spec.ServeConfigV2 != "" {
-		rayServiceSpec.ServeConfigV2 = spec.ServeConfigV2
-	}
-
-	rayService := &rayv1.RayService{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: rayv1.SchemeGroupVersion.String(),
-			Kind:       "RayService",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      handler.KaiwoService.Name,
-			Namespace: handler.KaiwoService.Namespace,
-			Labels:    rayServiceSpec.RayClusterSpec.HeadGroupSpec.Template.ObjectMeta.Labels,
-		},
-		Spec: rayServiceSpec,
-	}
-
-	if err := controllerutil.SetControllerReference(handler.KaiwoService, rayService, handler.Scheme); err != nil {
-		return nil, fmt.Errorf("failed to set owner reference for ray service: %w", err)
-	}
-
-	common.CopyLabels(handler.KaiwoService.GetLabels(), &rayService.ObjectMeta)
-	common.SetKaiwoSystemLabels(labelContext, &rayService.ObjectMeta)
-
-	if handler.KaiwoService.Spec.PriorityClass != "" {
-		rayServiceSpec.RayClusterSpec.HeadGroupSpec.Template.Spec.PriorityClassName = handler.KaiwoService.Spec.PriorityClass
-		for i := range rayServiceSpec.RayClusterSpec.WorkerGroupSpecs {
-			rayServiceSpec.RayClusterSpec.WorkerGroupSpecs[i].Template.Spec.PriorityClassName = handler.KaiwoService.Spec.PriorityClass
-		}
-	}
-
-	if err := controllerutil.SetOwnerReference(handler.KaiwoService, rayService, handler.Scheme); err != nil {
-		return nil, fmt.Errorf("failed to set owner reference for handler: %w", err)
-	}
-
-	rayServiceSpecBytes, err := json.Marshal(rayServiceSpec)
+	rayServiceSpecBytes, err := json.Marshal(rayService.Spec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal RayServiceSpec: %w", err)
+	}
+
+	labelsBytes, err := json.Marshal(rayService.Labels)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal labels: %w", err)
 	}
 
 	appWrapper := handler.GetInitializedObject().(*appwrapperv1beta2.AppWrapper)
@@ -217,16 +102,59 @@ func (handler *RayServiceHandler) BuildDesired(ctx context.Context, clusterCtx c
 				    "kind": "RayService",
 				    "metadata": {
 					"name": "%s",
-					"namespace": "%s"
+					"namespace": "%s",
+					"labels": %s
 				    },
 				    "spec": %s
-				}`, handler.KaiwoService.Name, handler.KaiwoService.Namespace, rayServiceSpecBytes)),
+				}`, handler.KaiwoService.Name, handler.KaiwoService.Namespace, labelsBytes, rayServiceSpecBytes)),
 				},
 			},
 		},
 	}
 
+	common.UpdateLabels(handler.KaiwoService, &appWrapper.ObjectMeta)
+
 	return appWrapper, nil
+}
+
+func (handler *RayServiceHandler) buildRayService(ctx context.Context, clusterCtx common.ClusterContext) rayv1.RayService {
+	config := common.ConfigFromContext(ctx)
+
+	spec := handler.KaiwoService.Spec
+
+	var rayServiceSpec rayv1.RayServiceSpec
+
+	if spec.RayService == nil {
+		rayServiceSpec = GetDefaultRayServiceSpec(
+			config,
+			spec.Dangerous,
+		)
+	} else {
+		rayServiceSpec = spec.RayService.Spec
+	}
+
+	if spec.ServeConfigV2 != "" {
+		rayServiceSpec.ServeConfigV2 = spec.ServeConfigV2
+	}
+
+	// Update ray cluster specs
+	utils.UpdateRayClusterSpec(ctx, clusterCtx, handler.KaiwoService, &rayServiceSpec.RayClusterSpec)
+
+	rayService := rayv1.RayService{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: rayv1.SchemeGroupVersion.String(),
+			Kind:       "RayService",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      handler.KaiwoService.Name,
+			Namespace: handler.KaiwoService.Namespace,
+			Labels:    rayServiceSpec.RayClusterSpec.HeadGroupSpec.Template.ObjectMeta.Labels,
+		},
+		Spec: rayServiceSpec,
+	}
+
+	common.UpdateLabels(handler.KaiwoService, &rayService.ObjectMeta)
+	return rayService
 }
 
 func (handler *RayServiceHandler) MutateActual(ctx context.Context, clusterCtx common.ClusterContext, actual client.Object) error {
@@ -277,8 +205,8 @@ func (handler *RayServiceHandler) HandleStatusChange(ctx context.Context, k8sCli
 	return nil
 }
 
-func GetDefaultRayServiceSpec(config common.KaiwoConfigContext, dangerous bool, resourceRequirements v1.ResourceRequirements) rayv1.RayServiceSpec {
+func GetDefaultRayServiceSpec(config common.KaiwoConfigContext, dangerous bool) rayv1.RayServiceSpec {
 	return rayv1.RayServiceSpec{
-		RayClusterSpec: *utils.GetRayClusterTemplate(config, dangerous, resourceRequirements),
+		RayClusterSpec: *utils.GetRayClusterTemplate(config, dangerous),
 	}
 }

@@ -35,7 +35,7 @@ import (
 	"github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
-func GetDefaultDeploymentSpec(config common.KaiwoConfigContext, dangerous bool, resourceRequirements corev1.ResourceRequirements) appsv1.DeploymentSpec {
+func GetDefaultDeploymentSpec(config common.KaiwoConfigContext, dangerous bool) appsv1.DeploymentSpec {
 	return appsv1.DeploymentSpec{
 		Replicas: baseutils.Pointer(int32(1)),
 		Selector: &metav1.LabelSelector{
@@ -45,7 +45,6 @@ func GetDefaultDeploymentSpec(config common.KaiwoConfigContext, dangerous bool, 
 			config,
 			*resource.NewQuantity(1*1024*1024*1024, resource.BinarySI),
 			dangerous,
-			resourceRequirements,
 			"workload",
 		),
 	}
@@ -88,62 +87,26 @@ func (handler *DeploymentHandler) BuildDesired(ctx context.Context, clusterCtx c
 
 	svc := handler.KaiwoService
 	svcSpec := svc.Spec
-	commonMetaSpec := svc.Spec.CommonMetaSpec
-	labelContext := common.GetKaiwoLabelContext(svc)
 
 	var depSpec appsv1.DeploymentSpec
-	var overrideDefaults bool
 
 	if svcSpec.Deployment == nil {
 		depSpec = GetDefaultDeploymentSpec(
 			config,
 			svcSpec.Dangerous,
-			baseutils.ValueOrDefault(svcSpec.Resources),
 		)
-		if commonMetaSpec.Gpus > 0 {
-			overrideDefaults = true
-		}
-		if commonMetaSpec.Resources != nil {
-			overrideDefaults = false
-		}
 	} else {
 		depSpec = svcSpec.Deployment.Spec
-		overrideDefaults = false
-		common.SyncGpuMetaFromPodSpec(depSpec.Template.Spec, &commonMetaSpec)
 	}
 
 	depSpec.Template.Spec.RestartPolicy = corev1.RestartPolicyAlways
 
-	if depSpec.Template.ObjectMeta.Labels == nil {
-		depSpec.Template.ObjectMeta.Labels = map[string]string{}
-	}
-
 	depSpec.Selector.MatchLabels["app"] = svc.Name
-	depSpec.Template.ObjectMeta.Labels["app"] = svc.Name
 
-	depSpec.Template.ObjectMeta.Labels[common.QueueLabel] = common.GetClusterQueueName(ctx, handler)
-	if commonMetaSpec.PriorityClass != "" {
-		depSpec.Template.Spec.PriorityClassName = commonMetaSpec.PriorityClass
-	}
+	schedulingConfig := common.CalculateSchedulingConfig(ctx, clusterCtx, handler.KaiwoService, true)
 
 	if svcSpec.Replicas != nil {
-		depSpec.Replicas = baseutils.Pointer(int32(*svcSpec.Replicas))
-	}
-
-	gpus := commonMetaSpec.Gpus
-
-	if err := common.UpdatePodSpec(
-		config,
-		commonMetaSpec,
-		labelContext,
-		&depSpec.Template,
-		svc.Name,
-		int(*depSpec.Replicas),
-		gpus,
-		overrideDefaults,
-		false,
-	); err != nil {
-		return nil, fmt.Errorf("failed to update deployment template: %w", err)
+		depSpec.Replicas = baseutils.Pointer(int32(schedulingConfig.Replicas))
 	}
 
 	if err := common.AddEntrypoint(
@@ -153,12 +116,16 @@ func (handler *DeploymentHandler) BuildDesired(ctx context.Context, clusterCtx c
 		return nil, baseutils.LogErrorf(logger, "failed to add entrypoint: %v", err)
 	}
 
+	common.UpdatePodSpec(config, handler.KaiwoService, schedulingConfig, &depSpec.Template)
+
+	depSpec.Template.ObjectMeta.Labels["app"] = svc.Name
+	depSpec.Template.ObjectMeta.Labels[common.QueueLabel] = common.GetClusterQueueName(ctx, handler)
+
 	dep := handler.GetInitializedObject().(*appsv1.Deployment)
 	dep.ObjectMeta.Labels = depSpec.Template.ObjectMeta.Labels
 	dep.Spec = depSpec
 
-	common.CopyLabels(svc.GetLabels(), &dep.ObjectMeta)
-	common.SetKaiwoSystemLabels(labelContext, &dep.ObjectMeta)
+	common.UpdateLabels(handler.KaiwoService, &dep.ObjectMeta)
 
 	return dep, nil
 }

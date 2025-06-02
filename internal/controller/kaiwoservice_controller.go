@@ -77,7 +77,7 @@ func (r *KaiwoServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	if result, err := reconciler.Reconcile(ctx); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to reconcile KaiwoJob: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to reconcile KaiwoService: %w", err)
 	} else {
 		return result, err
 	}
@@ -95,7 +95,6 @@ func (r *KaiwoServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&kaiwo.KaiwoJob{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-				fmt.Println("Ping from service")
 				var services kaiwo.KaiwoServiceList
 				if err := r.Client.List(ctx, &services); err != nil {
 					return nil
@@ -103,7 +102,6 @@ func (r *KaiwoServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				var requests []reconcile.Request
 				for _, svc := range services.Items {
 					if svc.Spec.Duration != nil && svc.Status.Status == kaiwo.WorkloadStatusRunning {
-						fmt.Println("Svc", client.ObjectKeyFromObject(&svc))
 						requests = append(requests, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&svc)})
 					}
 				}

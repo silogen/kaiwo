@@ -25,7 +25,6 @@ import (
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
 	batchv1 "k8s.io/api/batch/v1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -79,31 +78,13 @@ func (handler *BatchJobHandler) BuildDesired(ctx context.Context, clusterCtx com
 	config := common.ConfigFromContext(ctx)
 
 	spec := handler.KaiwoJob.Spec
-	labelContext := common.GetKaiwoLabelContext(handler.KaiwoJob)
 
 	var jobSpec batchv1.JobSpec
-	jobSpec.Template.ObjectMeta.Labels = handler.KaiwoJob.ObjectMeta.Labels
-
-	commonSpec := handler.KaiwoJob.Spec.CommonMetaSpec
-
-	var overrideDefaults bool
 
 	if spec.Job == nil {
-		jobSpec = GetDefaultJobSpec(config, spec.Dangerous, baseutils.ValueOrDefault(spec.Resources))
-		if commonSpec.Gpus > 0 {
-			overrideDefaults = true
-		}
-		if commonSpec.Resources != nil {
-			overrideDefaults = false
-		}
+		jobSpec = GetDefaultJobSpec(config, spec.Dangerous)
 	} else {
 		jobSpec = spec.Job.Spec
-		overrideDefaults = false
-		common.SyncGpuMetaFromPodSpec(jobSpec.Template.Spec, &commonSpec)
-	}
-
-	if err := common.UpdatePodSpec(config, commonSpec, labelContext, &jobSpec.Template, handler.KaiwoJob.Name, 1, commonSpec.Gpus, overrideDefaults, false); err != nil {
-		return nil, fmt.Errorf("failed to update handler spec: %w", err)
 	}
 
 	if baseutils.ValueOrDefault(jobSpec.BackoffLimit) > 0 {
@@ -121,17 +102,16 @@ func (handler *BatchJobHandler) BuildDesired(ctx context.Context, clusterCtx com
 
 	jobSpec.Suspend = baseutils.Pointer(true)
 
-	batchJob := handler.GetInitializedObject().(*batchv1.Job)
+	schedulingConfig := common.CalculateSchedulingConfig(ctx, clusterCtx, handler.KaiwoJob, true)
+	common.UpdatePodSpec(config, handler.KaiwoJob, schedulingConfig, &jobSpec.Template)
 
+	batchJob := handler.GetInitializedObject().(*batchv1.Job)
 	batchJob.Spec = jobSpec
 
-	common.CopyLabels(handler.KaiwoJob.ObjectMeta.Labels, &batchJob.ObjectMeta)
-	common.SetKaiwoSystemLabels(labelContext, &batchJob.ObjectMeta)
+	common.UpdateLabels(handler.KaiwoJob, &batchJob.ObjectMeta)
+	common.UpdateLabels(handler.KaiwoJob, &batchJob.Spec.Template.ObjectMeta)
 
 	batchJob.ObjectMeta.Labels[common.QueueLabel] = common.GetClusterQueueName(ctx, handler)
-	if commonSpec.PriorityClass != "" {
-		batchJob.Spec.Template.Spec.PriorityClassName = commonSpec.PriorityClass
-	}
 
 	return batchJob, nil
 }
@@ -161,101 +141,10 @@ func (handler *BatchJobHandler) GetKueueWorkloads(ctx context.Context, k8sClient
 	return []kueuev1beta1.Workload{*workload}, nil
 }
 
-func GetDefaultJobSpec(config common.KaiwoConfigContext, dangerous bool, resourceRequirements corev1.ResourceRequirements) batchv1.JobSpec {
+func GetDefaultJobSpec(config common.KaiwoConfigContext, dangerous bool) batchv1.JobSpec {
 	return batchv1.JobSpec{
 		TTLSecondsAfterFinished: baseutils.Pointer(defaultTTLSecondsAfterFinished),
 		BackoffLimit:            baseutils.Pointer(int32(0)),
-		Template:                common.GetPodTemplate(config, *resource.NewQuantity(1*1024*1024*1024, resource.BinarySI), dangerous, resourceRequirements, "workload"),
+		Template:                common.GetPodTemplate(config, *resource.NewQuantity(1*1024*1024*1024, resource.BinarySI), dangerous, "workload"),
 	}
 }
-
-//type BatchJobReconciler struct {
-//	common.ResourceReconcilerBase[*batchv1.Job]
-//	KaiwoJob *kaiwo.KaiwoJob
-//}
-//
-//func NewBatchJobReconciler(kaiwoJob *kaiwo.KaiwoJob) *BatchJobReconciler {
-//	reconciler := &BatchJobReconciler{
-//		ResourceReconcilerBase: common.ResourceReconcilerBase[*batchv1.Job]{
-//			ObjectKey: client.ObjectKeyFromObject(kaiwoJob),
-//		},
-//		KaiwoJob: kaiwoJob,
-//	}
-//	reconciler.Self = reconciler
-//	return reconciler
-//}
-//
-//func (r *BatchJobReconciler) Build(ctx context.Context, _ client.Client) (*batchv1.Job, error) {
-//	logger := log.FromContext(ctx)
-//	config := controllerutils.ConfigFromContext(ctx)
-//
-//	spec := r.KaiwoJob.Spec
-//	labelContext := common.GetKaiwoLabelContext(r.KaiwoJob)
-//
-//	var jobSpec batchv1.JobSpec
-//	jobSpec.Template.ObjectMeta.Labels = r.KaiwoJob.ObjectMeta.Labels
-//
-//	var overrideDefaults bool
-//
-//	if spec.Job == nil {
-//		jobSpec = GetDefaultJobSpec(config, spec.Dangerous, baseutils.ValueOrDefault(spec.Resources))
-//		if r.KaiwoJob.Spec.CommonMetaSpec.Gpus > 0 {
-//			overrideDefaults = true
-//		}
-//		if r.KaiwoJob.Spec.CommonMetaSpec.Resources != nil {
-//			overrideDefaults = false
-//		}
-//	} else {
-//		jobSpec = spec.Job.Spec
-//		overrideDefaults = false
-//		common.SyncGpuMetaFromPodSpec(jobSpec.Template.Spec, &r.KaiwoJob.Spec.CommonMetaSpec)
-//	}
-//
-//	if err := common.UpdatePodSpec(config, r.KaiwoJob.Spec.CommonMetaSpec, labelContext, &jobSpec.Template, r.KaiwoJob.Name, 1, r.KaiwoJob.Spec.CommonMetaSpec.Gpus, overrideDefaults, false); err != nil {
-//		return nil, fmt.Errorf("failed to update job spec: %w", err)
-//	}
-//
-//	if baseutils.ValueOrDefault(jobSpec.BackoffLimit) > 0 {
-//		logger.Info("Warning! BackOffLimit can currently only be 0, overriding the given value")
-//		jobSpec.BackoffLimit = baseutils.Pointer(int32(0))
-//	}
-//
-//	if jobSpec.TTLSecondsAfterFinished == nil {
-//		jobSpec.TTLSecondsAfterFinished = baseutils.Pointer(defaultTTLSecondsAfterFinished)
-//	}
-//
-//	if err := common.AddEntrypoint(spec.EntryPoint, &jobSpec.Template); err != nil {
-//		return nil, baseutils.LogErrorf(logger, "failed to add entrypoint: %v", err)
-//	}
-//
-//	jobSpec.Suspend = baseutils.Pointer(true)
-//
-//	job := &batchv1.Job{
-//		ObjectMeta: metav1.ObjectMeta{
-//			Name:      r.ObjectKey.Name,
-//			Namespace: r.ObjectKey.Namespace,
-//			Labels:    jobSpec.Template.ObjectMeta.Labels,
-//		},
-//		Spec: jobSpec,
-//	}
-//
-//	common.CopyLabels(r.KaiwoJob.ObjectMeta.Labels, &job.ObjectMeta)
-//	common.SetKaiwoSystemLabels(labelContext, &job.ObjectMeta)
-//
-//	job.ObjectMeta.Labels[common.QueueLabel] = r.KaiwoJob.Labels[common.QueueLabel]
-//	if r.KaiwoJob.Spec.PriorityClass != "" {
-//		job.Spec.Template.Spec.PriorityClassName = r.KaiwoJob.Spec.PriorityClass
-//	}
-//
-//	return job, nil
-//}
-//
-//func (r *BatchJobReconciler) GetEmptyObject() *batchv1.Job {
-//	return &batchv1.Job{}
-//}
-//
-//func (r *BatchJobReconciler) ValidateBeforeCreateOrUpdate(ctx context.Context, actual *batchv1.Job) (*ctrl.Result, error) {
-//	// Abort reconciliation the managed label is set and actual doesn't exist, as the job is managed by the webhook
-//	// This is to avoid trying to create the job that is going to be created once the webhook completes
-//	return common.ValidateKaiwoResourceBeforeCreateOrUpdate(ctx, actual, r.KaiwoJob.ObjectMeta)
-//}

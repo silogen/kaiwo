@@ -35,6 +35,18 @@ type KaiwoLabelContext struct {
 	Managed string
 }
 
+// UpdateLabels propagates the Kaiwo workload's labels to the objectMeta, and sets the Kaiwo system labels
+func UpdateLabels(workload KaiwoWorkload, objectMeta *v1.ObjectMeta) {
+	if objectMeta.Labels == nil {
+		objectMeta.Labels = map[string]string{}
+	}
+
+	sourceLabels := workload.GetKaiwoWorkloadObject().GetLabels()
+	CopyLabels(sourceLabels, objectMeta)
+
+	SetKaiwoSystemLabels(GetKaiwoLabelContext(workload), objectMeta)
+}
+
 // SetKaiwoSystemLabels sets the Kaiwo system labels on an ObjectMeta instance
 func SetKaiwoSystemLabels(kaiwoLabelContext KaiwoLabelContext, objectMeta *v1.ObjectMeta) {
 	if objectMeta.Labels == nil {

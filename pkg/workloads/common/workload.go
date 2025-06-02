@@ -81,7 +81,6 @@ func (h WorkloadHandler) ObserveStatus(ctx context.Context, k8sClient client.Cli
 				if shouldPreempt, err := ShouldPreempt(ctx, k8sClient, h.Workload); err != nil {
 					return "", nil, fmt.Errorf("failed to check if workload is preemptable: %w", err)
 				} else if shouldPreempt {
-					fmt.Println("Should preempt")
 					conditions = append(conditions, metav1.Condition{
 						Type:    WorkloadEarlyTerminationConditionType,
 						Status:  metav1.ConditionFalse,
@@ -89,8 +88,6 @@ func (h WorkloadHandler) ObserveStatus(ctx context.Context, k8sClient client.Cli
 						Message: "Terminated since duration was exceeded and there is active GPU demand",
 					})
 					return v1alpha1.WorkloadStatusTerminating, conditions, nil
-				} else {
-					fmt.Println("Should not preempt")
 				}
 			}
 
