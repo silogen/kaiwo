@@ -29,10 +29,10 @@ var (
 
 // CreateResourceRequirements converts the scheduling config into ResourceRequirements
 // that can be used to modify the workload containers
-func CreateResourceRequirements(config KaiwoConfigContext, schedulingConfig SchedulingConfig) corev1.ResourceRequirements {
+func CreateResourceRequirements(config KaiwoConfigContext, resourceConfig ResourceConfig) corev1.ResourceRequirements {
 	resources := corev1.ResourceRequirements{}
-	if schedulingConfig.DefaultResources != nil {
-		resources = *schedulingConfig.DefaultResources
+	if resourceConfig.DefaultResources != nil {
+		resources = *resourceConfig.DefaultResources
 	}
 
 	if resources.Requests == nil {
@@ -42,11 +42,11 @@ func CreateResourceRequirements(config KaiwoConfigContext, schedulingConfig Sche
 		resources.Limits = corev1.ResourceList{}
 	}
 
-	gpuCount := schedulingConfig.GpusPerReplica
+	gpuCount := resourceConfig.GpusPerReplica
 	hasGpus := gpuCount > 0
 
 	if hasGpus {
-		gpuResourceKey := getGpuResourceKey(schedulingConfig.GpuVendor, config.Nodes.DefaultGpuResourceKey)
+		gpuResourceKey := getGpuResourceKey(resourceConfig.GpuVendor, config.Nodes.DefaultGpuResourceKey)
 		quantity := resource.MustParse(fmt.Sprintf("%d", gpuCount))
 
 		// GPU value is always overwritten

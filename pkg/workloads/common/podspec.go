@@ -26,7 +26,7 @@ import (
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 )
 
-func UpdatePodSpec(config KaiwoConfigContext, workload KaiwoWorkload, schedulingConfig SchedulingConfig, template *corev1.PodTemplateSpec) {
+func UpdatePodSpec(config KaiwoConfigContext, workload KaiwoWorkload, resourceConfig ResourceConfig, template *corev1.PodTemplateSpec) {
 	commonMetaSpec := workload.GetCommonSpec()
 	workloadName := workload.GetKaiwoWorkloadObject().GetName()
 
@@ -78,13 +78,13 @@ func UpdatePodSpec(config KaiwoConfigContext, workload KaiwoWorkload, scheduling
 		})
 	}
 
-	if len(commonMetaSpec.GpuModels) > 0 && schedulingConfig.GpusPerReplica > 0 {
+	if len(commonMetaSpec.GpuModels) > 0 && resourceConfig.GpusPerReplica > 0 {
 		UpdatePodSpecWithGPUModelAffinity(template, commonMetaSpec.GpuModels, GPUModelLabel)
 	}
 
 	// Update container specs
 	for i := range template.Spec.Containers {
-		updateMainContainer(config, commonMetaSpec, schedulingConfig, &template.Spec.Containers[i])
+		updateMainContainer(config, commonMetaSpec, resourceConfig, &template.Spec.Containers[i])
 	}
 	for i := range template.Spec.InitContainers {
 		updateInitContainer(commonMetaSpec, &template.Spec.InitContainers[i])
@@ -123,18 +123,18 @@ func UpdatePodSpec(config KaiwoConfigContext, workload KaiwoWorkload, scheduling
 }
 
 // updateMainContainer updates the container specifications for main containers
-func updateMainContainer(config KaiwoConfigContext, kaiwoCommonMetaSpec kaiwo.CommonMetaSpec, schedulingConfig SchedulingConfig, container *corev1.Container) {
+func updateMainContainer(config KaiwoConfigContext, kaiwoCommonMetaSpec kaiwo.CommonMetaSpec, resourceConfig ResourceConfig, container *corev1.Container) {
 	// Update base
 	updateContainerBase(kaiwoCommonMetaSpec, container)
 
 	// Update resources
-	containerResourceRequirements := CreateResourceRequirements(config, schedulingConfig)
+	containerResourceRequirements := CreateResourceRequirements(config, resourceConfig)
 	fillContainerResources(container, &containerResourceRequirements, false)
 
 	envVarsToAppend := []corev1.EnvVar{
-		{Name: "NUM_GPUS", Value: fmt.Sprintf("%d", schedulingConfig.TotalGpus)},
-		{Name: "NUM_REPLICAS", Value: fmt.Sprintf("%d", schedulingConfig.Replicas)},
-		{Name: "NUM_GPUS_PER_REPLICA", Value: fmt.Sprintf("%d", schedulingConfig.GpusPerReplica)},
+		{Name: "NUM_GPUS", Value: fmt.Sprintf("%d", resourceConfig.TotalGpus)},
+		{Name: "NUM_REPLICAS", Value: fmt.Sprintf("%d", resourceConfig.Replicas)},
+		{Name: "NUM_GPUS_PER_REPLICA", Value: fmt.Sprintf("%d", resourceConfig.GpusPerReplica)},
 	}
 
 	if container.Image == "" {

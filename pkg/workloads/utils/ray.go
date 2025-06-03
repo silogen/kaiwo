@@ -53,35 +53,35 @@ func UpdateRayClusterSpec(ctx context.Context, clusterCtx workloadutils.ClusterC
 	config := workloadutils.ConfigFromContext(ctx)
 
 	// Calculate scheduling config for workers
-	schedulingConfig := workloadutils.CalculateSchedulingConfig(ctx, clusterCtx, workload, true)
+	resourceConfig := workloadutils.CalculateResourceConfig(ctx, clusterCtx, workload, true)
 
 	// Update worker group specs
 	for i := range rayClusterSpec.WorkerGroupSpecs {
-		workloadutils.UpdatePodSpec(config, workload, schedulingConfig, &rayClusterSpec.WorkerGroupSpecs[i].Template)
-		rayClusterSpec.WorkerGroupSpecs[i].Replicas = baseutils.Pointer(int32(schedulingConfig.Replicas))
-		rayClusterSpec.WorkerGroupSpecs[i].MinReplicas = baseutils.Pointer(int32(schedulingConfig.Replicas))
-		rayClusterSpec.WorkerGroupSpecs[i].MaxReplicas = baseutils.Pointer(int32(schedulingConfig.Replicas))
+		workloadutils.UpdatePodSpec(config, workload, resourceConfig, &rayClusterSpec.WorkerGroupSpecs[i].Template)
+		rayClusterSpec.WorkerGroupSpecs[i].Replicas = baseutils.Pointer(int32(resourceConfig.Replicas))
+		rayClusterSpec.WorkerGroupSpecs[i].MinReplicas = baseutils.Pointer(int32(resourceConfig.Replicas))
+		rayClusterSpec.WorkerGroupSpecs[i].MaxReplicas = baseutils.Pointer(int32(resourceConfig.Replicas))
 	}
 
 	// Update scheduling config for head group spec
 	if headMemoryOverride := resource.MustParse(config.Ray.HeadPodMemory); headMemoryOverride.Value() > 0 {
-		if schedulingConfig.DefaultResources == nil {
-			schedulingConfig.DefaultResources = &v1.ResourceRequirements{
+		if resourceConfig.DefaultResources == nil {
+			resourceConfig.DefaultResources = &v1.ResourceRequirements{
 				Limits:   v1.ResourceList{},
 				Requests: v1.ResourceList{},
 			}
 		}
-		schedulingConfig.DefaultResources.Limits[v1.ResourceMemory] = headMemoryOverride
-		schedulingConfig.DefaultResources.Requests[v1.ResourceMemory] = headMemoryOverride
+		resourceConfig.DefaultResources.Limits[v1.ResourceMemory] = headMemoryOverride
+		resourceConfig.DefaultResources.Requests[v1.ResourceMemory] = headMemoryOverride
 	}
 
 	// Remove GPUs for head group spec
-	schedulingConfig.TotalGpus = 0
-	schedulingConfig.Replicas = 1
-	schedulingConfig.GpusPerReplica = 0
+	resourceConfig.TotalGpus = 0
+	resourceConfig.Replicas = 1
+	resourceConfig.GpusPerReplica = 0
 
 	// Update head group spec
-	workloadutils.UpdatePodSpec(config, workload, schedulingConfig, &rayClusterSpec.HeadGroupSpec.Template)
+	workloadutils.UpdatePodSpec(config, workload, resourceConfig, &rayClusterSpec.HeadGroupSpec.Template)
 
 	// Ensure image is set on all containers
 	ensureImage := func(podSpec *v1.PodSpec) {

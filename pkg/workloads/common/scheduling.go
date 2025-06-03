@@ -24,7 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-type SchedulingConfig struct {
+type ResourceConfig struct {
 	TotalGpus      int
 	Replicas       int
 	GpusPerReplica int
@@ -33,21 +33,21 @@ type SchedulingConfig struct {
 	DefaultResources *v1.ResourceRequirements
 }
 
-// CalculateSchedulingConfig calculates the workload scheduling config based on the requested GPUs and available cluster resources
-func CalculateSchedulingConfig(
+// CalculateResourceConfig calculates the workload scheduling config based on the requested GPUs and available cluster resources
+func CalculateResourceConfig(
 	ctx context.Context,
 	clusterCtx ClusterContext,
 	workload KaiwoWorkload,
 	useAvailability bool,
-) SchedulingConfig {
+) ResourceConfig {
 	spec := workload.GetCommonSpec()
 	gpuStats := clusterCtx.GpuStats
 
-	schedulingConfig := SchedulingConfig{
+	resourceConfig := ResourceConfig{
 		GpuVendor: spec.GpuVendor,
 	}
 	if spec.Resources != nil {
-		schedulingConfig.DefaultResources = spec.Resources.DeepCopy()
+		resourceConfig.DefaultResources = spec.Resources.DeepCopy()
 	}
 
 	userRequestedGpus := 0
@@ -61,18 +61,18 @@ func CalculateSchedulingConfig(
 		if spec.Replicas != nil {
 			replicas = *spec.Replicas
 		}
-		schedulingConfig.Replicas = replicas
+		resourceConfig.Replicas = replicas
 
-		return schedulingConfig
+		return resourceConfig
 	}
 
 	// If user has already provided the GPUs per replica and the replicas, use those
 	if spec.Replicas != nil && *spec.Replicas > 0 && spec.GpusPerReplica > 0 && totalUserRequestedGpus <= gpuStats.TotalClusterGPUs {
-		schedulingConfig.Replicas = *spec.Replicas
-		schedulingConfig.TotalGpus = totalUserRequestedGpus
-		schedulingConfig.GpusPerReplica = spec.GpusPerReplica
+		resourceConfig.Replicas = *spec.Replicas
+		resourceConfig.TotalGpus = totalUserRequestedGpus
+		resourceConfig.GpusPerReplica = spec.GpusPerReplica
 
-		return schedulingConfig
+		return resourceConfig
 	}
 
 	minGpusPerNode := gpuStats.MinGPUsPerNode
@@ -96,11 +96,11 @@ func CalculateSchedulingConfig(
 	replicas := (totalUserRequestedGpus + minGpusPerNode - 1) / minGpusPerNode // Round up
 	gpusPerReplica := totalUserRequestedGpus / replicas
 
-	schedulingConfig.TotalGpus = totalUserRequestedGpus
-	schedulingConfig.GpusPerReplica = gpusPerReplica
-	schedulingConfig.Replicas = replicas
+	resourceConfig.TotalGpus = totalUserRequestedGpus
+	resourceConfig.GpusPerReplica = gpusPerReplica
+	resourceConfig.Replicas = replicas
 
-	return schedulingConfig
+	return resourceConfig
 }
 
 type SchedulingReason string
@@ -172,26 +172,26 @@ func getQueueConfigCondition(ctx context.Context, clusterCtx ClusterContext, wor
 }
 
 func getGpuSchedulableCondition(ctx context.Context, clusterCtx ClusterContext, workload KaiwoWorkload) metav1.Condition {
-	schedulingConfig := CalculateSchedulingConfig(ctx, clusterCtx, workload, true)
+	resourceConfig := CalculateResourceConfig(ctx, clusterCtx, workload, true)
 
 	spec := workload.GetCommonSpec()
 	gpuStats := clusterCtx.GpuStats
 
-	if schedulingConfig.TotalGpus > 0 && gpuStats.TotalClusterGPUs == 0 {
+	if resourceConfig.TotalGpus > 0 && gpuStats.TotalClusterGPUs == 0 {
 		return metav1.Condition{
 			Type:    SchedulableType,
 			Status:  metav1.ConditionFalse,
 			Reason:  string(UnschedulableNoGPUs),
 			Message: fmt.Sprintf("Cluster has 0 GPUs (vendor: %s)", spec.GpuVendor),
 		}
-	} else if schedulingConfig.TotalGpus > gpuStats.TotalClusterGPUs {
+	} else if resourceConfig.TotalGpus > gpuStats.TotalClusterGPUs {
 		return metav1.Condition{
 			Type:    SchedulableType,
 			Status:  metav1.ConditionFalse,
 			Reason:  string(UnschedulableInsufficientGPUs),
-			Message: fmt.Sprintf("Cluster has %d GPUs, but requested for %d GPUs (vendor: %s)", gpuStats.TotalClusterGPUs, schedulingConfig.TotalGpus, spec.GpuVendor),
+			Message: fmt.Sprintf("Cluster has %d GPUs, but requested for %d GPUs (vendor: %s)", gpuStats.TotalClusterGPUs, resourceConfig.TotalGpus, spec.GpuVendor),
 		}
-	} else if schedulingConfig.TotalGpus > 0 {
+	} else if resourceConfig.TotalGpus > 0 {
 		return metav1.Condition{
 			Type:    SchedulableType,
 			Status:  metav1.ConditionTrue,

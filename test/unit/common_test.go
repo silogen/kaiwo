@@ -74,7 +74,7 @@ var _ = Describe("Workload defaults", func() {
 	})
 
 	JustBeforeEach(func() {
-		schedulingConfig := common.SchedulingConfig{
+		schedulingConfig := common.ResourceConfig{
 			Replicas:       replicas,
 			GpusPerReplica: gpusPerReplica,
 		}

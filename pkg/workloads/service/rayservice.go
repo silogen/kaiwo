@@ -73,7 +73,7 @@ func (handler *RayServiceHandler) BuildDesired(ctx context.Context, clusterCtx c
 	rayService := handler.buildRayService(ctx, clusterCtx)
 
 	// Wrap the RayService with an AppWrapper
-	schedulingConfig := common.CalculateSchedulingConfig(ctx, clusterCtx, handler.KaiwoService, true)
+	resourceConfig := common.CalculateResourceConfig(ctx, clusterCtx, handler.KaiwoService, true)
 
 	rayServiceSpecBytes, err := json.Marshal(rayService.Spec)
 	if err != nil {
@@ -94,7 +94,7 @@ func (handler *RayServiceHandler) BuildDesired(ctx context.Context, clusterCtx c
 			{
 				DeclaredPodSets: []appwrapperv1beta2.AppWrapperPodSet{
 					{Replicas: baseutils.Pointer(int32(1)), Path: "template.spec.rayClusterConfig.headGroupSpec.template"},
-					{Replicas: baseutils.Pointer(int32(schedulingConfig.Replicas)), Path: "template.spec.rayClusterConfig.workerGroupSpecs[0].template"},
+					{Replicas: baseutils.Pointer(int32(resourceConfig.Replicas)), Path: "template.spec.rayClusterConfig.workerGroupSpecs[0].template"},
 				},
 				Template: runtime.RawExtension{
 					Raw: []byte(fmt.Sprintf(`{

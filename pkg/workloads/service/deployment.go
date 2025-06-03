@@ -103,10 +103,10 @@ func (handler *DeploymentHandler) BuildDesired(ctx context.Context, clusterCtx c
 
 	depSpec.Selector.MatchLabels["app"] = svc.Name
 
-	schedulingConfig := common.CalculateSchedulingConfig(ctx, clusterCtx, handler.KaiwoService, true)
+	resourceConfig := common.CalculateResourceConfig(ctx, clusterCtx, handler.KaiwoService, true)
 
 	if svcSpec.Replicas != nil {
-		depSpec.Replicas = baseutils.Pointer(int32(schedulingConfig.Replicas))
+		depSpec.Replicas = baseutils.Pointer(int32(resourceConfig.Replicas))
 	}
 
 	if err := common.AddEntrypoint(
@@ -116,7 +116,7 @@ func (handler *DeploymentHandler) BuildDesired(ctx context.Context, clusterCtx c
 		return nil, baseutils.LogErrorf(logger, "failed to add entrypoint: %v", err)
 	}
 
-	common.UpdatePodSpec(config, handler.KaiwoService, schedulingConfig, &depSpec.Template)
+	common.UpdatePodSpec(config, handler.KaiwoService, resourceConfig, &depSpec.Template)
 
 	depSpec.Template.ObjectMeta.Labels["app"] = svc.Name
 	depSpec.Template.ObjectMeta.Labels[common.QueueLabel] = common.GetClusterQueueName(ctx, handler)
