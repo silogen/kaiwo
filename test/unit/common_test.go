@@ -74,7 +74,7 @@ var _ = Describe("Workload defaults", func() {
 	})
 
 	JustBeforeEach(func() {
-		schedulingConfig := common.ResourceConfig{
+		resourceConfig := common.ResourceConfig{
 			Replicas:       replicas,
 			GpusPerReplica: gpusPerReplica,
 		}
@@ -86,7 +86,7 @@ var _ = Describe("Workload defaults", func() {
 				CommonMetaSpec: kaiwoCommonMetaSpec,
 			},
 		}
-		common.UpdatePodSpec(common.KaiwoConfigContext{}, workload, schedulingConfig, &podTemplateSpec)
+		common.UpdatePodSpec(common.KaiwoConfigContext{}, workload, resourceConfig, &podTemplateSpec)
 	})
 
 	When("a workload pod spec is being updated", func() {
