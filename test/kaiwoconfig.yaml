@@ -3,6 +3,7 @@ kind: KaiwoConfig
 metadata:
   name: kaiwo
 spec:
+  dynamicallyUpdateDefaultClusterQueue: true
   ray:
     headPodMemory: 1Gi
   scheduling:
