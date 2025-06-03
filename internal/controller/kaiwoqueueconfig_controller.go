@@ -74,7 +74,7 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	config := common.ConfigFromContext(ctx)
 
 	if config.DynamicallyUpdateDefaultClusterQueue {
-		if err := r.EnsureKaiwoQueueConfig(ctx, common.KaiwoQueueConfigName, config.DefaultClusterQueueName); err != nil {
+		if err := r.EnsureKaiwoQueueConfig(ctx, common.KaiwoQueueConfigName, config.DefaultClusterQueueName, config.DefaultClusterQueueCohortName); err != nil {
 			logger.Error(err, "Failed to create default KaiwoQueueConfig")
 			return ctrl.Result{}, err
 		}
@@ -85,7 +85,7 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	err = r.Get(ctx, req.NamespacedName, &queueConfig)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			if err := r.EnsureKaiwoQueueConfig(ctx, common.KaiwoQueueConfigName, config.DefaultClusterQueueName); err != nil {
+			if err := r.EnsureKaiwoQueueConfig(ctx, common.KaiwoQueueConfigName, config.DefaultClusterQueueName, config.DefaultClusterQueueCohortName); err != nil {
 				logger.Error(err, "Failed to create default KaiwoQueueConfig")
 				return ctrl.Result{}, err
 			}
@@ -512,7 +512,7 @@ func (r *KaiwoQueueConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		}
 		logger.Info("Ensuring default KaiwoQueueConfig exists on startup...")
 		config := common.ConfigFromContext(ctx)
-		if err := r.EnsureKaiwoQueueConfig(ctx, common.KaiwoQueueConfigName, config.DefaultClusterQueueName); err != nil {
+		if err := r.EnsureKaiwoQueueConfig(ctx, common.KaiwoQueueConfigName, config.DefaultClusterQueueName, config.DefaultClusterQueueCohortName); err != nil {
 			logger.Error(err, "Failed to ensure default KaiwoQueueConfig on startup")
 			return err
 		}
@@ -554,7 +554,7 @@ func (r *KaiwoQueueConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *KaiwoQueueConfigReconciler) EnsureKaiwoQueueConfig(ctx context.Context, kaiwoQueueConfigName string, clusterQueueName string) error {
+func (r *KaiwoQueueConfigReconciler) EnsureKaiwoQueueConfig(ctx context.Context, kaiwoQueueConfigName string, clusterQueueName string, cohort string) error {
 	logger := log.FromContext(ctx)
 
 	// Generate new flavors and clusterQueue
@@ -564,7 +564,7 @@ func (r *KaiwoQueueConfigReconciler) EnsureKaiwoQueueConfig(ctx context.Context,
 		return err
 	}
 
-	newClusterQueue := controllerutils.CreateClusterQueue(nodePoolResources, clusterQueueName)
+	newClusterQueue := controllerutils.CreateClusterQueue(nodePoolResources, clusterQueueName, cohort)
 
 	var existingConfig kaiwo.KaiwoQueueConfig
 	err = r.Get(ctx, client.ObjectKey{Name: kaiwoQueueConfigName}, &existingConfig)
