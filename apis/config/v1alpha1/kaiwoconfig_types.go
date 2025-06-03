@@ -51,7 +51,7 @@ type KaiwoConfigSpec struct {
 	// DynamicallyUpdateDefaultClusterQueue defines whether the Kaiwo operator should dynamically update default "kaiwo" clusterqueue.
 	// If set to true, the operator will make sure that the default clusterqueue is always up to date and reflects total resources available.
 	// If nodes are added or removed, the operator will update the default clusterqueue to reflect the current state of the cluster.
-	// +kubebuilder:default=true
+	// +kubebuilder:default=false
 	DynamicallyUpdateDefaultClusterQueue bool `json:"dynamicallyUpdateDefaultClusterQueue,omitempty"`
 }
 
