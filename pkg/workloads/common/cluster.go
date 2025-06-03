@@ -29,8 +29,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var DefaultNodePoolLabel = "kaiwo/nodepool"
-
 // ClusterContext provides context of the cluster and its resources to help build downstream objects
 type ClusterContext struct {
 	Nodes            []v1.Node

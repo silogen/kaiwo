@@ -78,6 +78,10 @@ func UpdatePodSpec(config KaiwoConfigContext, workload KaiwoWorkload, scheduling
 		})
 	}
 
+	if len(commonMetaSpec.GpuModels) > 0 && schedulingConfig.GpusPerReplica > 0 {
+		UpdatePodSpecWithGPUModelAffinity(template, commonMetaSpec.GpuModels, GPUModelLabel)
+	}
+
 	// Update container specs
 	for i := range template.Spec.Containers {
 		updateMainContainer(config, commonMetaSpec, schedulingConfig, &template.Spec.Containers[i])
@@ -183,6 +187,34 @@ func updateContainerBase(kaiwoCommonMetaSpec kaiwo.CommonMetaSpec, container *co
 			SubPath:   volume.SubPath,
 		})
 	}
+}
+
+func UpdatePodSpecWithGPUModelAffinity(template *corev1.PodTemplateSpec, gpuModels []string, gpuModelLabel string) {
+	if len(gpuModels) == 0 {
+		return
+	}
+
+	selectorTerm := corev1.NodeSelectorTerm{
+		MatchExpressions: []corev1.NodeSelectorRequirement{
+			{
+				Key:      gpuModelLabel,
+				Operator: corev1.NodeSelectorOpIn,
+				Values:   gpuModels,
+			},
+		},
+	}
+
+	nodeAffinity := &corev1.NodeAffinity{
+		RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+			NodeSelectorTerms: []corev1.NodeSelectorTerm{selectorTerm},
+		},
+	}
+
+	if template.Spec.Affinity == nil {
+		template.Spec.Affinity = &corev1.Affinity{}
+	}
+
+	template.Spec.Affinity.NodeAffinity = nodeAffinity
 }
 
 func GetPodTemplate(config KaiwoConfigContext, dshmSize resource.Quantity, dangerous bool, workloadContainerName string) corev1.PodTemplateSpec {
