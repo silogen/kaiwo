@@ -15,11 +15,8 @@
 package v1alpha1
 
 import (
-	"context"
-
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -27,18 +24,6 @@ import (
 // KaiwoServiceSpec defines the desired state of KaiwoService.
 type KaiwoServiceSpec struct {
 	CommonMetaSpec `json:",inline"`
-
-	// ClusterQueue specifies the name of the Kueue `ClusterQueue` that the service should be submitted to for scheduling and resource management.
-	//
-	// This value is set as the `kueue.x-k8s.io/queue-name` label on the underlying Kubernetes Deployment or RayService.
-	//
-	// If omitted, it defaults to the value specified by the `DEFAULT_CLUSTER_QUEUE_NAME` environment variable in the Kaiwo controller (typically "kaiwo").
-	//
-	// The `kaiwo submit` CLI command can override this using the `--queue` flag or the `clusterQueue` field in the `kaiwoconfig.yaml` file.
-	ClusterQueue string `json:"clusterQueue,omitempty"`
-
-	// PriorityClass specifies the name of a Kubernetes `PriorityClass` to be assigned to the service's pods. This influences the scheduling priority relative to other pods in the cluster.
-	PriorityClass string `json:"priorityClass,omitempty"`
 
 	// EntryPoint specifies the command or script executed in a Deployment.
 	// Can also be defined inside Deployment struct as regular command in the form of string array.
@@ -101,50 +86,22 @@ type KaiwoServiceList struct {
 	Items           []KaiwoService `json:"items"`
 }
 
-func (svc *KaiwoService) GetUser() string {
-	return svc.Spec.CommonMetaSpec.User
-}
-
-func (svc *KaiwoService) GetObjectMeta() *metav1.ObjectMeta {
-	return &svc.ObjectMeta
-}
-
 func (spec *KaiwoServiceSpec) IsRayService() bool {
 	return spec.RayService != nil || spec.Ray
 }
 
-func (svc *KaiwoService) GetStatusString() string {
-	return string(svc.Status.Status)
-}
-
-func (svc *KaiwoService) GetType() string {
-	return "service"
-}
-
-func (svc *KaiwoService) GetDuration() *metav1.Duration {
-	return svc.Spec.Duration
-}
-
-func (svc *KaiwoService) GetStartTime() *metav1.Time {
-	return svc.Status.StartTime
-}
-
-func (svc *KaiwoService) GetClusterQueue() string {
-	return svc.Spec.ClusterQueue
-}
-
-func (svc *KaiwoService) GetGPUVendor() string {
-	return svc.Spec.GpuVendor
+func (svc *KaiwoService) GetKaiwoWorkloadObject() client.Object {
+	return svc
 }
 
 func (svc *KaiwoService) GetCommonStatusSpec() *CommonStatusSpec {
 	return &svc.Status.CommonStatusSpec
 }
 
-func init() {
-	SchemeBuilder.Register(&KaiwoService{}, &KaiwoServiceList{})
+func (svc *KaiwoService) GetCommonSpec() CommonMetaSpec {
+	return svc.Spec.CommonMetaSpec
 }
 
-func (svc *KaiwoService) GetServices(ctx context.Context, k8sClient client.Client) ([]corev1.Service, error) {
-	return []corev1.Service{}, nil
+func init() {
+	SchemeBuilder.Register(&KaiwoService{}, &KaiwoServiceList{})
 }

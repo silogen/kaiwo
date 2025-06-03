@@ -15,7 +15,6 @@ spec:
           apiVersion: v1
           kind: Pod
           metadata:
-            namespace: kaiwo-test
             labels:
               kaiwo.silogen.ai/name: download-job-ray-starts
               ray.io/is-ray-node: "yes"

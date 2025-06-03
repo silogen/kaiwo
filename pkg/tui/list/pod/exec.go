@@ -65,7 +65,7 @@ func runCommandAction(ctx context.Context, clients k8s.KubernetesClients, state 
 		clients.Kubeconfig,
 		state.PodName,
 		state.ContainerName,
-		state.Workload.GetObjectMeta().Namespace,
+		state.Workload.GetKaiwoWorkloadObject().GetNamespace(),
 		command,
 		execInteractive,
 		execTTY,

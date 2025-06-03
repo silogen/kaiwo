@@ -17,200 +17,348 @@ package common
 import (
 	"context"
 	"fmt"
+	"time"
 
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	"k8s.io/apimachinery/pkg/api/meta"
 
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/tools/record"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	appwrapperv1beta2 "github.com/project-codeflare/appwrapper/api/v1beta2"
-	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
-	appsv1 "k8s.io/api/apps/v1"
-	batchv1 "k8s.io/api/batch/v1"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 
-	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
+
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/tools/record"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type ReconcilerBase[T client.Object] struct {
-	ObjectKey client.ObjectKey
-	Object    T
-	Self      Reconciler[T]
+type Reconciler struct {
+	Client   client.Client
+	Recorder record.EventRecorder
+	Scheme   *runtime.Scheme
+
+	// WorkloadHandler is the handler for the actual workload
+	WorkloadHandler WorkloadHandler
+
+	// StorageHandler is the handler for the optional storage component (PVCs and download job)
+	StorageHandler *StorageHandler
+
+	ClusterContext ClusterContext
 }
 
-// Reconciler manages the reconciliation of a Kaiwo resource (job or service)
-type Reconciler[T client.Object] interface {
-	// Reconcile runs through the reconciliation loop
-	Reconcile(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme) (ctrl.Result, error)
-}
-
-type ResourceReconcilerBase[T client.Object] struct {
-	ObjectKey client.ObjectKey
-	Self      ResourceReconciler[T]
-	Desired   T
-}
-
-func (d *ResourceReconcilerBase[T]) Create(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme, desired T, owner client.Object, recorder record.EventRecorder) error {
-	if owner != nil {
-		if err := ctrl.SetControllerReference(owner, desired, scheme); err != nil {
-			return fmt.Errorf("failed to set controller reference: %w", err)
-		}
-	}
-	gvk, err := apiutil.GVKForObject(desired, scheme)
-	if err != nil {
-		// fallback if scheme lookup fails
-		gvk = desired.GetObjectKind().GroupVersionKind()
-	}
-	key := client.ObjectKeyFromObject(desired).String()
-
-	if err := k8sClient.Create(ctx, desired); err != nil {
-		// The main reconciler function catches this error and emits an event, so no extra event is emitted here
-		return err
-	}
-	recorder.Event(
-		owner,
-		corev1.EventTypeNormal,
-		"CreateSucceeded",
-		fmt.Sprintf("Created %s %s", gvk.Kind, key),
-	)
-	return nil
-}
-
-// Update updates the object. By default, nothing is done, and desired is set to actual
-func (d *ResourceReconcilerBase[T]) Update(_ context.Context, _ client.Client, desired *T, actual T, recorder record.EventRecorder) error {
-	*desired = actual
-	return nil
-}
-
-// Reconcile ensures that the resource exists and is in the desired state.
-// The object is first built based on the reconciler object (kaiwo job or service), and the remote object is fetched.
-// If it exists, it is updated, otherwise it is created.
-func (d *ResourceReconcilerBase[T]) Reconcile(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme, owner client.Object, recorder record.EventRecorder) (actual T, result *ctrl.Result, err error) {
+// Reconcile serves as a central reconciliation function for all Kaiwo workloads. It is broken into the following steps
+// 1. Observe the workload status from the cluster
+// 2. If the status or conditions have changed, update the status and requeue
+// 3. If the status is active, ensure all remote resources match the desired state
+func (wr *Reconciler) Reconcile(ctx context.Context) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	var empty T // nil or default value
-	desired, err := d.Self.Build(ctx, k8sClient)
+	// Fetch the latest config
+	ctx, err := GetContextWithConfig(ctx, wr.Client)
 	if err != nil {
-		return empty, nil, fmt.Errorf("failed to build object: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to fetch kaiwo config: %w", err)
 	}
 
-	d.Desired = desired
+	commonStatusSpec := wr.WorkloadHandler.Workload.GetCommonStatusSpec()
 
-	gvk, err := baseutils.GetGVK(*scheme, desired)
+	if status := commonStatusSpec.Status; isTerminalStatus(status) {
+		baseutils.Debug(logger, fmt.Sprintf("Skipping reconciliation as status is '%s'", commonStatusSpec.Status))
+		return ctrl.Result{}, nil
+	} else if status == v1alpha1.WorkloadStatusTerminating {
+		if err := TerminateWorkload(ctx, wr.Client, wr.Recorder, wr.WorkloadHandler.Workload); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to terminate workload: %w", err)
+		}
+		return ctrl.Result{}, nil
+	}
+
+	clusterContext, err := GetClusterContext(ctx, wr.Client, wr.WorkloadHandler.Workload)
 	if err != nil {
-		return empty, nil, fmt.Errorf("failed to get GVK: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to fetch cluster context: %w", err)
 	}
-	baseutils.Debug(logger, fmt.Sprintf("Reconciling %s (%s/%s)", gvk.String(), desired.GetNamespace(), desired.GetName()))
+	wr.ClusterContext = *clusterContext
 
-	actual, err = d.Self.Get(ctx, k8sClient)
-
-	// Check if the reconciliation should be aborted at this point (based on remote object state)
-	if intermediateResult, err := d.Self.ValidateBeforeCreateOrUpdate(ctx, actual); err != nil {
-		return empty, nil, fmt.Errorf("failed to validate object before create or update: %w", err)
-	} else if intermediateResult != nil {
-		return empty, intermediateResult, nil
+	// Observe the current status based on cluster resources
+	observedStatus, conditions, err := wr.observeOverallStatus(ctx)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to compute observed status: %w", err)
 	}
 
-	if err == nil {
-		switch any(actual).(type) {
-		case *batchv1.Job, *rayv1.RayJob, *rayv1.RayService, *appwrapperv1beta2.AppWrapper, *appsv1.Deployment:
-			if !metav1.IsControlledBy(actual, owner) {
-				logger.Info("Updating object owner for BatchJob or RayJob", "Object", actual.GetObjectKind().GroupVersionKind().Kind)
+	conditionsChanged := !ConditionsEqual(conditions, commonStatusSpec.Conditions)
+	// If the status is new, update and requeue
+	if observedStatus != commonStatusSpec.Status || conditionsChanged {
+		if result, err := wr.handleStatusTransition(ctx, observedStatus, conditions); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to handle status transition: %w", err)
+		} else {
+			return result, nil
+		}
+	}
 
-				if err := ctrl.SetControllerReference(owner, actual, scheme); err != nil {
-					logger.Error(err, "Failed to set controller reference on existing object")
-					return empty, nil, err
-				}
+	// If the workload is active, ensure the remote resources match
+	if isActiveStatus(observedStatus) {
+		baseutils.Debug(logger, "Workload is active, ensuring all resources")
+		if err := wr.ensureAllResources(ctx, observedStatus, conditions); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to ensure all resources: %w", err)
+		}
+	}
 
-				// Apply the update to the object in Kubernetes
+	return ctrl.Result{}, nil
+}
 
-				retryAttempts := 3
-				for i := 0; i < retryAttempts; i++ {
-					if err := k8sClient.Update(ctx, actual); err != nil {
-						if errors.IsConflict(err) {
-							continue
-						}
-						logger.Error(err, "Failed to update existing Job with correct owner reference")
-						return empty, nil, err
-					}
-				}
-			}
+// observeOverallStatus determines the overall workload's current status based on the current cluster context
+func (wr *Reconciler) observeOverallStatus(ctx context.Context) (v1alpha1.WorkloadStatus, []metav1.Condition, error) {
+	schedulableCondition := GetSchedulableCondition(ctx, wr.ClusterContext, wr.WorkloadHandler.Workload)
+	if schedulableCondition.Status == metav1.ConditionFalse {
+		return v1alpha1.WorkloadStatusError, []metav1.Condition{schedulableCondition}, nil
+	}
+
+	status := wr.WorkloadHandler.Workload.GetCommonStatusSpec()
+	conditions := []metav1.Condition{schedulableCondition}
+
+	if wr.StorageHandler != nil {
+		storageStatus, storageConditions, err := wr.StorageHandler.ObserveStatus(ctx, wr.Client, status.Status)
+		if err != nil {
+			return "", nil, fmt.Errorf("failed to observe storage status: %w", err)
+		}
+
+		conditions = append(conditions, storageConditions...)
+
+		switch storageStatus {
+		// If the download job is pending or running, return the Downloading status
+		case v1alpha1.WorkloadStatusNew, v1alpha1.WorkloadStatusPending, v1alpha1.WorkloadStatusRunning, v1alpha1.WorkloadStatusStarting:
+			return v1alpha1.WorkloadStatusDownloading, conditions, nil
+		// Propagate a failed status
+		case v1alpha1.WorkloadStatusFailed:
+			return storageStatus, conditions, nil
+		case v1alpha1.WorkloadStatusComplete:
+			// fall-through to workload handler
 		default:
-			baseutils.Debug(logger, "Skipping owner reference update since object is neither a BatchJob nor a RayJob", "ObjectType", fmt.Sprintf("%T", actual))
+			return "", nil, fmt.Errorf(`unexpected storage status "%s"`, storageStatus)
 		}
 
-		err = d.Update(ctx, k8sClient, &desired, actual, recorder)
-		if err != nil {
-			return empty, nil, fmt.Errorf("failed to update object: %w", err)
+		// Download job is complete and / or storage is healthy
+	}
+
+	workloadStatus, workloadConditions, err := wr.WorkloadHandler.ObserveStatus(ctx, wr.Client, status.Status)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to observe workload status: %w", err)
+	}
+	return workloadStatus, append(conditions, workloadConditions...), nil
+}
+
+// handleStatusTransition handles a new status by emitting events and updating the status object
+func (wr *Reconciler) handleStatusTransition(ctx context.Context, newStatus v1alpha1.WorkloadStatus, conditions []metav1.Condition) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
+	obj := wr.WorkloadHandler.Workload.GetKaiwoWorkloadObject()
+	commonStatusSpec := wr.WorkloadHandler.Workload.GetCommonStatusSpec()
+	previousStatus := commonStatusSpec.Status
+
+	commonStatusSpec.Status = newStatus
+	for _, condition := range conditions {
+		meta.SetStatusCondition(&commonStatusSpec.Conditions, condition)
+	}
+
+	result := ctrl.Result{Requeue: true}
+
+	if previousStatus != newStatus {
+		logger.Info(fmt.Sprintf("Workload has new status: %s", newStatus))
+		switch newStatus {
+		case v1alpha1.WorkloadStatusPending:
+			wr.Recorder.Event(obj, corev1.EventTypeNormal, "WorkloadPending", "Workload is pending admission")
+		case v1alpha1.WorkloadStatusStarting:
+			wr.Recorder.Event(obj, corev1.EventTypeNormal, "WorkloadStarting", "Workload was admitted, starting")
+		case v1alpha1.WorkloadStatusRunning:
+			wr.Recorder.Event(obj, corev1.EventTypeNormal, "WorkloadRunning", "Workload has started")
+			commonStatusSpec.StartTime = &metav1.Time{Time: time.Now()}
+
+			if requeueAfter := GetRemainingTimeBeforeBecomingPreemptable(wr.WorkloadHandler.Workload); requeueAfter != nil {
+				logger.Info(fmt.Sprintf("Workload will become preemptable after %s", requeueAfter.String()))
+				// As everything should be up and running now, we don't have to ensure the resources, we can skip the immediate requeue,
+				// and instead request a requeue to update the preemption condition later
+				result = ctrl.Result{RequeueAfter: *requeueAfter}
+			}
+		case v1alpha1.WorkloadStatusComplete:
+			wr.Recorder.Event(obj, corev1.EventTypeNormal, "WorkloadComplete", "Workload has completed")
+		case v1alpha1.WorkloadStatusFailed:
+			wr.Recorder.Event(obj, corev1.EventTypeWarning, "WorkloadFailed", "Workload has failed")
+		case v1alpha1.WorkloadStatusTerminating:
+			wr.Recorder.Event(obj, corev1.EventTypeNormal, "WorkloadTermination", "Workload has been flagged for termination")
+		case v1alpha1.WorkloadStatusTerminated:
+			wr.Recorder.Event(obj, corev1.EventTypeNormal, "WorkloadTerminated", "Workload has been terminated")
 		}
-		actual = desired
-	} else if errors.IsNotFound(err) {
-		logger.Info(fmt.Sprintf("creating %s (%s/%s)", gvk.String(), desired.GetNamespace(), desired.GetName()))
-		// Object doesn't exist
-		err = d.Create(ctx, k8sClient, scheme, desired, owner, recorder)
-		actual = desired
-		if err != nil {
-			return empty, nil, fmt.Errorf("failed to create object: %w", err)
+	}
+	// Update duration
+	switch commonStatusSpec.Status {
+	case v1alpha1.WorkloadStatusComplete, v1alpha1.WorkloadStatusFailed, v1alpha1.WorkloadStatusTerminating, v1alpha1.WorkloadStatusRunning:
+		if commonStatusSpec.StartTime != nil {
+			commonStatusSpec.Duration = int64(time.Since(commonStatusSpec.StartTime.Time).Seconds())
 		}
-	} else {
-		return empty, nil, fmt.Errorf("failed to get object: %w", err)
-	}
-	shouldContinueResult := d.Self.ShouldContinue(ctx, actual)
-	if shouldContinueResult != nil {
-		baseutils.Debug(logger, "Reconciliation was interrupted with an intermediate response")
-	}
-	return actual, shouldContinueResult, nil
-}
-
-func (d *ResourceReconcilerBase[T]) Get(ctx context.Context, k8sClient client.Client) (actual T, err error) {
-	var zero T // Zero value of T
-
-	obj := d.Self.GetEmptyObject()
-
-	// Pass obj to k8sClient.Get method
-	if err := k8sClient.Get(ctx, d.ObjectKey, obj); err != nil {
-		return zero, err
 	}
 
-	return obj, nil
+	if err := wr.Client.Status().Update(ctx, obj); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
+	}
+
+	return result, nil
 }
 
-func (d *ResourceReconcilerBase[T]) ValidateBeforeCreateOrUpdate(ctx context.Context, actual T) (*ctrl.Result, error) {
-	return nil, nil
+// isActiveStatus checks if the given status is an active status, i.e. one which requires reconciling any resources
+func isActiveStatus(status v1alpha1.WorkloadStatus) bool {
+	switch status {
+	case
+		v1alpha1.WorkloadStatusNew,
+		v1alpha1.WorkloadStatusDownloading,
+		v1alpha1.WorkloadStatusPending,
+		v1alpha1.WorkloadStatusStarting,
+		v1alpha1.WorkloadStatusRunning:
+		return true
+	default:
+		return false
+	}
 }
 
-func (d *ResourceReconcilerBase[T]) ShouldContinue(ctx context.Context, actual T) *ctrl.Result {
+// isTerminalStatus checks if the given status is a terminal status, i.e. one which cannot be recovered from and does not cause any further changes
+func isTerminalStatus(status v1alpha1.WorkloadStatus) bool {
+	switch status {
+	case
+		v1alpha1.WorkloadStatusComplete,
+		v1alpha1.WorkloadStatusTerminated,
+		v1alpha1.WorkloadStatusFailed:
+		return true
+	default:
+		return false
+	}
+}
+
+func (wr *Reconciler) ensureAllResources(ctx context.Context, observedStatus v1alpha1.WorkloadStatus, conditions []metav1.Condition) error {
+	logger := log.FromContext(ctx)
+	ensureStorageOnly := false
+
+	// Determine whether to ensure storage or workload
+	switch observedStatus {
+	case v1alpha1.WorkloadStatusNew:
+		// If we first need to perform a download, skip workload for now
+		hasDownloads := wr.WorkloadHandler.Workload.GetCommonSpec().Storage.HasDownloads()
+		downloadsComplete := meta.IsStatusConditionTrue(conditions, DownloadJobSucceededConditionType)
+		ensureStorageOnly = hasDownloads && !downloadsComplete
+	case v1alpha1.WorkloadStatusDownloading:
+		// If we are currently downloading, skip workload for now
+		ensureStorageOnly = true
+	default:
+		ensureStorageOnly = false
+	}
+
+	if err := wr.ensureStorageResources(ctx, wr.ClusterContext); err != nil {
+		return fmt.Errorf("failed to ensure storage resources: %w", err)
+	}
+
+	if ensureStorageOnly {
+		baseutils.Debug(logger, "Skipping workload resource reconciliation")
+		return nil
+	}
+
+	if err := wr.ensureWorkloadResources(ctx, wr.ClusterContext); err != nil {
+		return fmt.Errorf("failed to ensure workload resources: %w", err)
+	}
+
 	return nil
 }
 
-// ResourceReconciler ensures that a single dependent resource is reconciled to a desired state
-type ResourceReconciler[T client.Object] interface {
-	// Build will build the client object without creating it
-	Build(ctx context.Context, k8sClient client.Client) (desired T, err error)
+// ensureStorageResources ensures that the download resources exist if the workload is in the download phase
+func (wr *Reconciler) ensureStorageResources(ctx context.Context, clusterContext ClusterContext) error {
+	if wr.StorageHandler == nil {
+		return nil
+	}
+	logger := log.FromContext(ctx)
+	baseutils.Debug(logger, "Ensuring storage resources")
+	return wr.reconcileHandler(ctx, clusterContext, wr.StorageHandler)
+}
 
-	// Get will fetch the client object
-	Get(ctx context.Context, k8sClient client.Client) (actual T, err error)
+// ensureWorkloadResources ensures that the workload resources exist if the workload is in the main run phase
+func (wr *Reconciler) ensureWorkloadResources(ctx context.Context, clusterContext ClusterContext) error {
+	if err := wr.ensureLocalQueue(ctx); err != nil {
+		return fmt.Errorf("failed to ensure local queue: %w", err)
+	}
+	logger := log.FromContext(ctx)
+	baseutils.Debug(logger, "Ensuring workload resources")
+	return wr.reconcileHandler(ctx, clusterContext, wr.WorkloadHandler)
+}
 
-	// Create will create the client object
-	Create(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme, desired T, owner client.Object, recorder record.EventRecorder) error
+// ensureLocalQueue makes sure a LocalQueue exists for the current namespace / ClusterQueue combination
+// If no LocalQueue exists and the KaiwoQueueConfig ClusterConfig has no namespaces defined, a new LocalQueue is created.
+// If there are namespaces defined but the workload's namespace is not one of them, an error is raised
+func (wr *Reconciler) ensureLocalQueue(ctx context.Context) error {
+	namespace := wr.WorkloadHandler.Workload.GetKaiwoWorkloadObject().GetNamespace()
+	clusterQueueName := GetClusterQueueName(ctx, wr.WorkloadHandler.Workload)
 
-	// Update will update the client object
-	Update(ctx context.Context, k8sClient client.Client, desired *T, actual T, recorder record.EventRecorder) error
+	if err := EnsureLocalQueue(ctx, wr.Client, wr.Scheme, clusterQueueName, clusterQueueName, namespace); err != nil {
+		return fmt.Errorf("failed to ensure local queue: %w", err)
+	}
+	return nil
+}
 
-	// Reconcile will build and then create
-	Reconcile(ctx context.Context, k8sClient client.Client, scheme *runtime.Scheme, owner client.Object, recorder record.EventRecorder) (actual T, result *ctrl.Result, err error)
+func (wr *Reconciler) reconcileHandler(ctx context.Context, clusterCtx ClusterContext, handler GroupReconciler) error {
+	for _, reconciler := range handler.GetResourceReconcilers() {
+		if err := wr.apply(ctx, clusterCtx, reconciler); err != nil {
+			return fmt.Errorf("failed to reconcile resource: %w", err)
+		}
+	}
+	return nil
+}
 
-	// ShouldContinue returns a reconciliation result if there is an intermediate result to return
-	ShouldContinue(ctx context.Context, actual T) *ctrl.Result
+// apply performs an apply (create or update), and ensures that the
+// object to create has the controller owner reference set
+func (wr *Reconciler) apply(ctx context.Context, clusterCtx ClusterContext, reconciler ResourceReconciler) error {
+	logger := log.FromContext(ctx)
+	owner := wr.WorkloadHandler.Workload.GetKaiwoWorkloadObject()
+	desired, err := reconciler.BuildDesired(ctx, clusterCtx)
+	if err != nil {
+		return fmt.Errorf("failed to build desired object: %w", err)
+	}
 
-	GetEmptyObject() T
+	if err := controllerutil.SetControllerReference(owner, desired, wr.Scheme); err != nil {
+		return fmt.Errorf("failed to set owner reference for object: %w", err)
+	}
 
-	// ValidateBeforeCreateOrUpdate provides a way to abort the reconciliation based on the currently existing object's state
-	ValidateBeforeCreateOrUpdate(ctx context.Context, actual T) (*ctrl.Result, error)
+	result, err := controllerutil.CreateOrPatch(ctx, wr.Client, desired, func() error {
+		// inside this function, desired = actual
+		return reconciler.MutateActual(ctx, clusterCtx, desired)
+	})
+	if err != nil {
+		return fmt.Errorf("failed to apply object: %w", err)
+	}
+
+	if err := wr.stampGVK(desired); err != nil {
+		return fmt.Errorf("failed to stamp object: %w", err)
+	}
+	objectKey := fmt.Sprintf("%s %s/%s", desired.GetObjectKind().GroupVersionKind().String(), desired.GetNamespace(), desired.GetName())
+	switch result {
+	case controllerutil.OperationResultCreated:
+		wr.Recorder.Eventf(owner, corev1.EventTypeNormal, "ResourceCreated", "Created %s: %s", desired.GetObjectKind().GroupVersionKind().String(), desired.GetName())
+		logger.Info(fmt.Sprintf("Created object '%s'", objectKey), "name", desired.GetName(), "namespace", desired.GetNamespace(), "gvk", desired.GetObjectKind().GroupVersionKind().String())
+	case controllerutil.OperationResultUpdated:
+		wr.Recorder.Eventf(owner, corev1.EventTypeNormal, "ResourceUpdated", "Updated %s: %s", desired.GetObjectKind().GroupVersionKind().String(), desired.GetName())
+		logger.Info(fmt.Sprintf("Updated object '%s'", objectKey), desired.GetName(), "namespace", desired.GetNamespace(), "gvk", desired.GetObjectKind().GroupVersionKind().String())
+	}
+
+	return nil
+}
+
+func (wr *Reconciler) stampGVK(obj client.Object) error {
+	gvks, _, err := wr.Scheme.ObjectKinds(obj)
+	if err != nil {
+		return fmt.Errorf("cannot find GVK for %T: %w", obj, err)
+	}
+	if len(gvks) == 0 {
+		return fmt.Errorf("no GVK registered for %T", obj)
+	}
+	obj.GetObjectKind().SetGroupVersionKind(gvks[0])
+	return nil
 }

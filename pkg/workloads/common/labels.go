@@ -17,6 +17,8 @@ package common
 import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
+
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
@@ -31,6 +33,18 @@ type KaiwoLabelContext struct {
 	Type    string
 	RunId   string
 	Managed string
+}
+
+// UpdateLabels propagates the Kaiwo workload's labels to the objectMeta, and sets the Kaiwo system labels
+func UpdateLabels(workload KaiwoWorkload, objectMeta *v1.ObjectMeta) {
+	if objectMeta.Labels == nil {
+		objectMeta.Labels = map[string]string{}
+	}
+
+	sourceLabels := workload.GetKaiwoWorkloadObject().GetLabels()
+	CopyLabels(sourceLabels, objectMeta)
+
+	SetKaiwoSystemLabels(GetKaiwoLabelContext(workload), objectMeta)
 }
 
 // SetKaiwoSystemLabels sets the Kaiwo system labels on an ObjectMeta instance
@@ -60,12 +74,19 @@ func CopyLabels(kaiwoLabels map[string]string, objectMeta *v1.ObjectMeta) {
 }
 
 func GetKaiwoLabelContext(k KaiwoWorkload) KaiwoLabelContext {
-	objectMeta := k.GetObjectMeta()
+	obj := k.GetKaiwoWorkloadObject()
+	spec := k.GetCommonSpec()
+
+	workloadType := "job"
+	if _, isService := obj.(*v1alpha1.KaiwoService); isService {
+		workloadType = "service"
+	}
+
 	return KaiwoLabelContext{
-		User:    k.GetUser(),
-		Name:    objectMeta.Name,
-		Type:    k.GetType(),
-		RunId:   string(objectMeta.UID),
-		Managed: objectMeta.Labels[KaiwoManagedLabel],
+		User:    spec.User,
+		Name:    obj.GetName(),
+		Type:    workloadType,
+		RunId:   string(obj.GetUID()),
+		Managed: obj.GetLabels()[KaiwoManagedLabel],
 	}
 }

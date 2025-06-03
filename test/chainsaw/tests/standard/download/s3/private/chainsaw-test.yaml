@@ -1,0 +1,51 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: download-from-bucket
+spec:
+  concurrent: false
+  timeouts:
+    assert: 240s
+  steps:
+  - try:
+    - apply:
+        file: s3-deployment.yaml
+    - wait:
+        apiVersion: apps/v1
+        kind: Deployment
+        name: minio-deployment
+        timeout: 1m
+        for:
+          condition:
+            name: Available
+            value: 'true'
+    - apply:
+        file: data-uploader.yaml
+    - wait:
+        apiVersion: batch/v1
+        kind: Job
+        name: s3-uploader
+        timeout: 1m
+        for:
+          condition:
+            name: Complete
+            value: 'true'
+    - apply:
+        file: download-from-private-bucket.yaml
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: download-from-private-bucket
+          status:
+            status: COMPLETE
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        - name: NAMESPACE
+          value: ($namespace)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]

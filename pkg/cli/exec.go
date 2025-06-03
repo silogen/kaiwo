@@ -18,7 +18,7 @@ import (
 	"context"
 	"fmt"
 
-	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads/common"
 
 	utils2 "github.com/silogen/kaiwo/pkg/cli/utils"
 

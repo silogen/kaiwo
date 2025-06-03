@@ -73,4 +73,8 @@ spec:
     port: 9000
     targetPort: 9000
     name: minio-endpoint
+  - protocol: TCP
+    port: 9001
+    targetPort: 9001
+    name: minio-console
   type: ClusterIP

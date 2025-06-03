@@ -16,7 +16,6 @@ spec:
           kind: KaiwoJob
           metadata:
             name: download-job-status-change-positive
-            namespace: kaiwo-test
           status:
             status: COMPLETE
     catch:
@@ -35,10 +34,8 @@ spec:
           kind: KaiwoJob
           metadata:
             name: download-job-status-change-negative
-            namespace: kaiwo-test
           status:
             status: FAILED
-
     catch:
     - command:
         entrypoint: kaiwo-dev

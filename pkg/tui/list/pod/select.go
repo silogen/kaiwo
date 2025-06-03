@@ -19,8 +19,6 @@ import (
 	"fmt"
 	"time"
 
-	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
-
 	kaiwo "github.com/silogen/kaiwo/pkg/workloads/common"
 
 	corev1 "k8s.io/api/core/v1"
@@ -55,7 +53,7 @@ func ChoosePodAndContainer(ctx context.Context, clients k8s.KubernetesClients, r
 }
 
 func RunSelectPodAndContainer(ctx context.Context, clients k8s.KubernetesClients, state *tuicomponents.RunState) (tuicomponents.StepResult, tuicomponents.RunStep[tuicomponents.RunState], error) {
-	allPods, err := workloadutils.GetWorkloadPods(ctx, clients.Client, state.Workload)
+	allPods, err := kaiwo.GetWorkloadPods(ctx, clients.Client, state.Workload)
 	if err != nil {
 		return tuicomponents.StepResultErr, nil, fmt.Errorf("failed to list pods: %w", err)
 	}
@@ -150,7 +148,9 @@ func runSelectAndDoAction(_ context.Context, _ k8s.KubernetesClients, state *tui
 		{string(commandAction)},
 	}
 
-	title := fmt.Sprintf("Select action to perform on %s/%s, pod: %s, container %s", state.WorkloadType, state.Workload.GetObjectMeta().Name, state.PodName, state.ContainerName)
+	obj := state.Workload.GetKaiwoWorkloadObject()
+
+	title := fmt.Sprintf("Select action to perform on %s/%s, pod: %s, container %s", state.WorkloadType, obj.GetName(), state.PodName, state.ContainerName)
 	selectedRow, result, err := tuicomponents.RunSelectTable(data, columns, title, true)
 	if err != nil {
 		return result, nil, fmt.Errorf("failed to select the pod: %w", err)

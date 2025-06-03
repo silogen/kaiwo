@@ -10,35 +10,12 @@ spec:
   - try:
     - apply:
         file: download-from-public-bucket.yaml
-    - apply:
-        file: s3-deployment.yaml
-    - wait:
-        apiVersion: apps/v1
-        kind: Deployment
-        name: minio-deployment
-        timeout: 1m
-        for:
-          condition:
-            name: Available
-            value: 'true'
-    - apply:
-        file: data-uploader.yaml
-    - apply:
-        file: download-from-private-bucket.yaml
     - assert:
         resource:
           apiVersion: kaiwo.silogen.ai/v1alpha1
           kind: KaiwoJob
           metadata:
             name: download-from-public-bucket
-          status:
-            status: COMPLETE
-    - assert:
-        resource:
-          apiVersion: kaiwo.silogen.ai/v1alpha1
-          kind: KaiwoJob
-          metadata:
-            name: download-from-private-bucket
           status:
             status: COMPLETE
     catch:

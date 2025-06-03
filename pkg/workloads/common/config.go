@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package controllerutils
+package common
 
 import (
 	"context"
@@ -26,12 +26,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 const (
-	configName = common.KaiwoQueueConfigName
+	configName = "kaiwo"
 )
 
 type cfgKey struct{}

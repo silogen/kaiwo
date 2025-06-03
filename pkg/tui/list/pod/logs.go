@@ -54,7 +54,9 @@ func runViewLogsAction(ctx context.Context, clients k8s.KubernetesClients, state
 		break
 	}
 
-	if err := cliutils.OutputLogs(ctx, clients.Clientset, state.PodName, state.ContainerName, int64(numLines), state.Workload.GetObjectMeta().Namespace, follow); err != nil {
+	obj := state.Workload.GetKaiwoWorkloadObject()
+
+	if err := cliutils.OutputLogs(ctx, clients.Clientset, state.PodName, state.ContainerName, int64(numLines), obj.GetNamespace(), follow); err != nil {
 		return tuicomponents.StepResultErr, nil, fmt.Errorf("failed to output the logs: %w", err)
 	}
 

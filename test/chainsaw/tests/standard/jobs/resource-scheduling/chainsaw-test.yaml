@@ -3,6 +3,8 @@ kind: Test
 metadata:
   name: test-job-gpu-scheduling-with-gpus
 spec:
+  timeouts:
+    assert: 5s
   steps:
   - try:
     - apply:
@@ -50,7 +52,6 @@ spec:
                   kaiwo.silogen.ai/name: kaiwojob-job-resource-scheduling
                   kaiwo.silogen.ai/type: job
                   kaiwo.silogen.ai/user: test-amd.com
-                  kueue.x-k8s.io/queue-name: kaiwo
               spec:
                 containers:
                 - command:
@@ -173,7 +174,6 @@ spec:
                   kaiwo.silogen.ai/name: kaiwojob-job-resource-scheduling-no-gpu
                   kaiwo.silogen.ai/type: job
                   kaiwo.silogen.ai/user: test-amd.com
-                  kueue.x-k8s.io/queue-name: kaiwo
               spec:
                 containers:
                 - command:

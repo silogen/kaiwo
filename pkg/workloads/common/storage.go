@@ -17,69 +17,82 @@ package common
 import (
 	"context"
 
-	configapi "github.com/silogen/kaiwo/apis/config/v1alpha1"
-
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
+
+// StorageHandler handles the storage-related reconcilers (PVCs and download config map / job)
+type StorageHandler struct {
+	ObjectKey      client.ObjectKey
+	CommonMetaSpec v1alpha1.CommonMetaSpec
+}
+
+func NewStorageHandler(workloadHandler WorkloadHandler) *StorageHandler {
+	commonSpec := workloadHandler.Workload.GetCommonSpec()
+	if commonSpec.Storage == nil || !commonSpec.Storage.StorageEnabled {
+		return nil
+	}
+	return &StorageHandler{
+		ObjectKey:      client.ObjectKeyFromObject(workloadHandler.Workload.GetKaiwoWorkloadObject()),
+		CommonMetaSpec: workloadHandler.Workload.GetCommonSpec(),
+	}
+}
 
 const (
 	DataStoragePostfix = "data"
 	HfStoragePostfix   = "hf"
 )
 
-type StorageReconciler struct {
-	ResourceReconcilerBase[*corev1.PersistentVolumeClaim]
-	Amount           string
-	StorageClassName string
-	AccessMode       corev1.PersistentVolumeAccessMode
-}
+func (h StorageHandler) GetResourceReconcilers() []ResourceReconciler {
+	var reconcilers []ResourceReconciler
+	storageSpec := h.CommonMetaSpec.Storage
 
-func NewStorageReconciler(
-	storageConfig configapi.KaiwoStorageConfig,
-	objectKey client.ObjectKey,
-	accessMode corev1.PersistentVolumeAccessMode,
-	storageClassName string,
-	amount string,
-) *StorageReconciler {
-	if storageClassName == "" {
-		storageClassName = storageConfig.DefaultStorageClass
-	}
-	reconciler := &StorageReconciler{
-		ResourceReconcilerBase: ResourceReconcilerBase[*corev1.PersistentVolumeClaim]{
-			ObjectKey: objectKey,
-		},
-		Amount:           amount,
-		StorageClassName: storageClassName,
-		AccessMode:       accessMode,
-	}
-	reconciler.Self = reconciler
-	return reconciler
-}
-
-func (r *StorageReconciler) Build(ctx context.Context, _ client.Client) (*corev1.PersistentVolumeClaim, error) {
-	pvc := &corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      r.ObjectKey.Name,
-			Namespace: r.ObjectKey.Namespace,
-		},
-		Spec: corev1.PersistentVolumeClaimSpec{
-			AccessModes: []corev1.PersistentVolumeAccessMode{
-				r.AccessMode,
+	if storageSpec.HasData() {
+		reconcilers = append(reconcilers, NewPvcReconciler(
+			client.ObjectKey{
+				Name:      baseutils.FormatNameWithPostfix(h.ObjectKey.Name, DataStoragePostfix),
+				Namespace: h.ObjectKey.Namespace,
 			},
-			StorageClassName: &r.StorageClassName,
-			Resources: corev1.VolumeResourceRequirements{
-				Requests: corev1.ResourceList{
-					corev1.ResourceStorage: resource.MustParse(r.Amount),
-				},
-			},
-		},
+			storageSpec.Data.StorageSize,
+			storageSpec.StorageClassName,
+			storageSpec.AccessMode,
+		))
 	}
-	return pvc, nil
+	if storageSpec.HasHfDownloads() {
+		reconcilers = append(reconcilers, NewPvcReconciler(
+			client.ObjectKey{
+				Name:      baseutils.FormatNameWithPostfix(h.ObjectKey.Name, HfStoragePostfix),
+				Namespace: h.ObjectKey.Namespace,
+			},
+			storageSpec.HuggingFace.StorageSize,
+			storageSpec.StorageClassName,
+			storageSpec.AccessMode,
+		))
+	}
+	if storageSpec.HasDownloads() {
+		reconcilers = append(
+			reconcilers,
+			NewDownloadConfigMapReconciler(
+				h.ObjectKey,
+				*storageSpec,
+			),
+			NewDownloadJobReconciler(
+				h.ObjectKey,
+				*storageSpec,
+				h.CommonMetaSpec.Env,
+			))
+	}
+
+	return reconcilers
 }
 
-func (r *StorageReconciler) GetEmptyObject() *corev1.PersistentVolumeClaim {
-	return &corev1.PersistentVolumeClaim{}
+func (h StorageHandler) ObserveStatus(ctx context.Context, k8sClient client.Client, previousWorkloadStatus v1alpha1.WorkloadStatus) (v1alpha1.WorkloadStatus, []metav1.Condition, error) {
+	status, conditions, err := ObserveOverallStatus(ctx, k8sClient, h.GetResourceReconcilers(), previousWorkloadStatus)
+	if status == nil {
+		return "", conditions, err
+	}
+	return *status, conditions, err
 }

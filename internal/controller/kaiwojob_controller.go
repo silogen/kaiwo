@@ -20,12 +20,17 @@ import (
 	"context"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/api/equality"
+
 	"sigs.k8s.io/controller-runtime/pkg/builder"
+
+	"sigs.k8s.io/controller-runtime/pkg/event"
+
+	"github.com/silogen/kaiwo/pkg/workloads/common"
+
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
-
-	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 
@@ -38,7 +43,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
 
 	workloadjob "github.com/silogen/kaiwo/pkg/workloads/job"
@@ -70,45 +74,59 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, nil
 	}
 
-	if kaiwoJob.Status.Status == kaiwo.StatusFailed {
-		baseutils.Debug(logger, "Skipping reconciliation, as status is failed")
-		return ctrl.Result{}, nil
-	} else if kaiwoJob.Status.Status == kaiwo.StatusComplete {
-		baseutils.Debug(logger, "Skipping reconciliation, as status is complete")
-		return ctrl.Result{}, nil
-	} else if kaiwoJob.Status.Status == kaiwo.StatusTerminated {
-		baseutils.Debug(logger, "Skipping reconciliation, as status is terminated")
-		return ctrl.Result{}, nil
+	workloadHandler := workloadjob.NewKaiwoJobHandler(r.Scheme, &kaiwoJob)
+	reconciler := common.Reconciler{
+		WorkloadHandler: workloadHandler,
+		StorageHandler:  common.NewStorageHandler(workloadHandler),
+		Client:          r.Client,
+		Scheme:          r.Scheme,
+		Recorder:        r.Recorder,
 	}
 
-	ctx, err := controllerutils.GetContextWithConfig(ctx, r.Client)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to fetch config: %w", err)
+	if result, err := reconciler.Reconcile(ctx); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to reconcile KaiwoJob: %w", err)
+	} else {
+		return result, err
 	}
+}
 
-	reconciler := workloadjob.NewKaiwoJobReconciler(ctx, &kaiwoJob)
-	reconciler.Recorder = r.Recorder
+// JobStatusChangedPredicate returns true only if Failed, Succeeded
+// or the lengths of UncountedTerminatedPods.Failed / .Succeeded have changed.
+func JobStatusChangedPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldJ := e.ObjectOld.(*batchv1.Job)
+			newJ := e.ObjectNew.(*batchv1.Job)
 
-	result, err := reconciler.Reconcile(ctx, r.Client, r.Scheme)
-	if err != nil {
-		r.Recorder.Eventf(
-			&kaiwoJob,
-			corev1.EventTypeWarning,
-			"KaiwoJobReconcileError",
-			"Failed to reconcile KaiwoJob: %v", err,
-		)
-		return ctrl.Result{}, fmt.Errorf("failed to run reconciliation: %v", err)
+			if oldJ.Status.Active != newJ.Status.Active {
+				return true
+			}
+
+			if oldJ.Status.Ready != newJ.Status.Ready {
+				return true
+			}
+
+			if !equality.Semantic.DeepEqual(oldJ.Status.Conditions, newJ.Status.Conditions) {
+				return true
+			}
+
+			return false
+		},
+		// you can ignore Create/Delete/Generic if you only care about status‐updates
+		CreateFunc:  func(e event.CreateEvent) bool { return false },
+		DeleteFunc:  func(e event.DeleteEvent) bool { return false },
+		GenericFunc: func(e event.GenericEvent) bool { return false },
 	}
-	return result, nil
 }
 
 func (r *KaiwoJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Recorder = mgr.GetEventRecorderFor("kaiwojob-controller")
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&kaiwo.KaiwoJob{},
-			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+		WithEventFilter(predicate.ResourceVersionChangedPredicate{}). // Catch status changes as well
+		For(&kaiwo.KaiwoJob{}).
+		Owns(&batchv1.Job{},
+			builder.WithPredicates(JobStatusChangedPredicate()),
 		).
-		Owns(&batchv1.Job{}).
 		Owns(&rayv1.RayJob{}).
 		Watches(
 			&kaiwo.KaiwoService{},
@@ -119,7 +137,7 @@ func (r *KaiwoJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				}
 				var requests []reconcile.Request
 				for _, job := range jobs.Items {
-					if job.Spec.Duration != nil && job.Status.Status == kaiwo.StatusRunning {
+					if job.Spec.Duration != nil && job.Status.Status == kaiwo.WorkloadStatusRunning {
 						requests = append(requests, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&job)})
 					}
 				}

@@ -68,23 +68,23 @@ spec:
           containers:
           - env:
             - name: NUM_GPUS
-              value: "16"
+              value: "14"
             - name: NUM_REPLICAS
               value: "2"
             - name: NUM_GPUS_PER_REPLICA
-              value: "8"
+              value: "7"
             image: rayproject/ray:2.41.0
             imagePullPolicy: Always
             name: ray-worker
             resources:
               limits:
-                cpu: "32"
-                memory: 256Gi
-                nvidia.com/gpu: "8"
+                cpu: "28"
+                memory: 224Gi
+                nvidia.com/gpu: "7"
               requests:
-                cpu: "32"
-                memory: 256Gi
-                nvidia.com/gpu: "8"
+                cpu: "28"
+                memory: 224Gi
+                nvidia.com/gpu: "7"
             volumeMounts:
             - mountPath: /dev/shm
               name: dshm

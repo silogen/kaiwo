@@ -18,13 +18,11 @@ import (
 	"context"
 	"fmt"
 
+	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
+
+	"k8s.io/apimachinery/pkg/runtime"
+
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
-
-	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
-
-	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
-
-	ctrl "sigs.k8s.io/controller-runtime"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -34,132 +32,167 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	common "github.com/silogen/kaiwo/pkg/workloads/common"
+	"github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
-func GetDefaultDeploymentSpec(config controllerutils.KaiwoConfigContext, dangerous bool, resourceRequirements corev1.ResourceRequirements) appsv1.DeploymentSpec {
+func GetDefaultDeploymentSpec(config common.KaiwoConfigContext, dangerous bool) appsv1.DeploymentSpec {
 	return appsv1.DeploymentSpec{
 		Replicas: baseutils.Pointer(int32(1)),
 		Selector: &metav1.LabelSelector{
 			MatchLabels: map[string]string{},
 		},
-		Template: workloadutils.GetPodTemplate(
+		Template: common.GetPodTemplate(
 			config,
 			*resource.NewQuantity(1*1024*1024*1024, resource.BinarySI),
 			dangerous,
-			resourceRequirements,
 			"workload",
 		),
 	}
 }
 
-type DeploymentReconciler struct {
-	common.ResourceReconcilerBase[*appsv1.Deployment]
+type DeploymentHandler struct {
 	KaiwoService *kaiwo.KaiwoService
+	Scheme       *runtime.Scheme
 }
 
-func NewDeploymentReconciler(svc *kaiwo.KaiwoService) *DeploymentReconciler {
-	reconciler := &DeploymentReconciler{
-		ResourceReconcilerBase: common.ResourceReconcilerBase[*appsv1.Deployment]{
-			ObjectKey: client.ObjectKeyFromObject(svc),
+func (handler *DeploymentHandler) GetKaiwoWorkloadObject() client.Object {
+	return handler.KaiwoService
+}
+
+func (handler *DeploymentHandler) GetCommonSpec() kaiwo.CommonMetaSpec {
+	return handler.KaiwoService.Spec.CommonMetaSpec
+}
+
+func (handler *DeploymentHandler) GetCommonStatusSpec() *kaiwo.CommonStatusSpec {
+	return &handler.KaiwoService.Status.CommonStatusSpec
+}
+
+func (handler *DeploymentHandler) GetInitializedObject() client.Object {
+	return &appsv1.Deployment{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: appsv1.SchemeGroupVersion.String(),
+			Kind:       "Deployment",
 		},
-		KaiwoService: svc,
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      handler.KaiwoService.Name,
+			Namespace: handler.KaiwoService.Namespace,
+			Labels:    map[string]string{},
+		},
 	}
-	reconciler.Self = reconciler
-	return reconciler
 }
 
-func (r *DeploymentReconciler) Build(ctx context.Context, _ client.Client) (*appsv1.Deployment, error) {
+func (handler *DeploymentHandler) BuildDesired(ctx context.Context, clusterCtx common.ClusterContext) (client.Object, error) {
 	logger := log.FromContext(ctx)
-	config := controllerutils.ConfigFromContext(ctx)
+	config := common.ConfigFromContext(ctx)
 
-	svcSpec := r.KaiwoService.Spec
-	labelContext := common.GetKaiwoLabelContext(r.KaiwoService)
+	svc := handler.KaiwoService
+	svcSpec := svc.Spec
 
 	var depSpec appsv1.DeploymentSpec
-	var overrideDefaults bool
 
 	if svcSpec.Deployment == nil {
 		depSpec = GetDefaultDeploymentSpec(
 			config,
 			svcSpec.Dangerous,
-			baseutils.ValueOrDefault(svcSpec.Resources),
 		)
-		if r.KaiwoService.Spec.CommonMetaSpec.Gpus > 0 {
-			overrideDefaults = true
-		}
-		if r.KaiwoService.Spec.CommonMetaSpec.Resources != nil {
-			overrideDefaults = false
-		}
 	} else {
 		depSpec = svcSpec.Deployment.Spec
-		overrideDefaults = false
-		workloadutils.SyncGpuMetaFromPodSpec(depSpec.Template.Spec, &r.KaiwoService.Spec.CommonMetaSpec)
 	}
 
 	depSpec.Template.Spec.RestartPolicy = corev1.RestartPolicyAlways
 
-	if depSpec.Template.ObjectMeta.Labels == nil {
-		depSpec.Template.ObjectMeta.Labels = map[string]string{}
-	}
+	depSpec.Selector.MatchLabels["app"] = svc.Name
 
-	depSpec.Selector.MatchLabels["app"] = r.ObjectKey.Name
-	depSpec.Template.ObjectMeta.Labels["app"] = r.ObjectKey.Name
-
-	depSpec.Template.ObjectMeta.Labels[common.QueueLabel] = r.KaiwoService.Labels[common.QueueLabel]
-	if r.KaiwoService.Spec.PriorityClass != "" {
-		depSpec.Template.Spec.PriorityClassName = r.KaiwoService.Spec.PriorityClass
-	}
+	resourceConfig := common.CalculateResourceConfig(ctx, clusterCtx, handler.KaiwoService, true)
 
 	if svcSpec.Replicas != nil {
-		depSpec.Replicas = baseutils.Pointer(int32(*svcSpec.Replicas))
+		depSpec.Replicas = baseutils.Pointer(int32(resourceConfig.Replicas))
 	}
 
-	gpus := r.KaiwoService.Spec.CommonMetaSpec.Gpus
-
-	if err := workloadutils.UpdatePodSpec(
-		config,
-		r.KaiwoService.Spec.CommonMetaSpec,
-		labelContext,
-		&depSpec.Template,
-		r.KaiwoService.Name,
-		int(*depSpec.Replicas),
-		gpus,
-		overrideDefaults,
-		false,
-	); err != nil {
-		return nil, fmt.Errorf("failed to update deployment template: %w", err)
-	}
-
-	if err := workloadutils.AddEntrypoint(
+	if err := common.AddEntrypoint(
 		svcSpec.EntryPoint,
 		&depSpec.Template,
 	); err != nil {
 		return nil, baseutils.LogErrorf(logger, "failed to add entrypoint: %v", err)
 	}
 
-	dep := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      r.ObjectKey.Name,
-			Namespace: r.ObjectKey.Namespace,
-			Labels:    depSpec.Template.ObjectMeta.Labels,
-		},
-		Spec: depSpec,
-	}
+	common.UpdatePodSpec(config, handler.KaiwoService, resourceConfig, &depSpec.Template)
 
-	common.CopyLabels(r.KaiwoService.GetLabels(), &dep.ObjectMeta)
-	common.SetKaiwoSystemLabels(labelContext, &dep.ObjectMeta)
+	depSpec.Template.ObjectMeta.Labels["app"] = svc.Name
+	depSpec.Template.ObjectMeta.Labels[common.QueueLabel] = common.GetClusterQueueName(ctx, handler)
 
-	logger.Info("Building Deployment for KaiwoService", "name", r.ObjectKey.Name)
+	dep := handler.GetInitializedObject().(*appsv1.Deployment)
+	dep.ObjectMeta.Labels = depSpec.Template.ObjectMeta.Labels
+	dep.Spec = depSpec
+
+	common.UpdateLabels(handler.KaiwoService, &dep.ObjectMeta)
+
 	return dep, nil
 }
 
-func (r *DeploymentReconciler) GetEmptyObject() *appsv1.Deployment {
-	return &appsv1.Deployment{}
+func (handler *DeploymentHandler) MutateActual(ctx context.Context, clusterCtx common.ClusterContext, actual client.Object) error {
+	// TODO
+	return nil
 }
 
-func (r *DeploymentReconciler) ValidateBeforeCreateOrUpdate(ctx context.Context, actual *appsv1.Deployment) (*ctrl.Result, error) {
-	// Abort reconciliation the managed label is set and actual doesn't exist, as the deployment is managed by the webhook
-	// This is to avoid trying to create the deployment that is going to be created once the webhook completes
-	return workloadutils.ValidateKaiwoResourceBeforeCreateOrUpdate(ctx, actual, r.KaiwoService.ObjectMeta)
+func (handler *DeploymentHandler) GetActual(ctx context.Context, k8sClient client.Client) (client.Object, error) {
+	objectKey := client.ObjectKeyFromObject(handler.KaiwoService)
+	batchJob := &appsv1.Deployment{}
+	if err := k8sClient.Get(ctx, objectKey, batchJob); err != nil {
+		return nil, err
+	}
+	return batchJob, nil
+}
+
+func (handler *DeploymentHandler) ObserveStatus(ctx context.Context, k8sClient client.Client, obj client.Object, previousStatus kaiwo.WorkloadStatus) (*kaiwo.WorkloadStatus, []metav1.Condition, error) {
+	deployment := obj.(*appsv1.Deployment)
+	// Check for a “Progressing=False / ProgressDeadlineExceeded”
+	for _, c := range deployment.Status.Conditions {
+		if c.Type == appsv1.DeploymentProgressing &&
+			c.Status == corev1.ConditionFalse &&
+			c.Reason == "ProgressDeadlineExceeded" {
+			return baseutils.Pointer(kaiwo.WorkloadStatusFailed), nil, nil
+		}
+	}
+
+	// None of the desired replicas have been observed yet (the controller hasn’t rolled out the latest spec)
+	if deployment.Status.ObservedGeneration < deployment.Generation {
+		return baseutils.Pointer(kaiwo.WorkloadStatusStarting), nil, nil
+	}
+
+	// If we see fewer AvailableReplicas than we asked for
+	desired := int32(1)
+	if deployment.Spec.Replicas != nil {
+		desired = *deployment.Spec.Replicas
+	}
+	if deployment.Status.AvailableReplicas < desired {
+		return baseutils.Pointer(kaiwo.WorkloadStatusStarting), nil, nil
+	}
+
+	// Deployment exists and is running
+	return baseutils.Pointer(kaiwo.WorkloadStatusRunning), nil, nil
+}
+
+func (handler *DeploymentHandler) GetKueueWorkloads(ctx context.Context, k8sClient client.Client) ([]kueuev1beta1.Workload, error) {
+	podList := &corev1.PodList{}
+
+	if err := k8sClient.List(ctx, podList, client.MatchingLabels{
+		common.KaiwoRunIdLabel: string(handler.KaiwoService.UID),
+	}); err != nil {
+		return nil, fmt.Errorf("failed to list pods: %w", err)
+	}
+
+	var workloads []kueuev1beta1.Workload
+
+	for _, pod := range podList.Items {
+		workload, err := common.GetKueueWorkload(ctx, k8sClient, pod.Namespace, string(pod.UID))
+		if err != nil {
+			return nil, fmt.Errorf("failed to get workload: %w", err)
+		}
+		if workload == nil {
+			continue
+		}
+		workloads = append(workloads, *workload)
+	}
+	return workloads, nil
 }

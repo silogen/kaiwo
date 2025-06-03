@@ -22,18 +22,15 @@ import (
 	"strconv"
 	"strings"
 
-	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
-	"github.com/silogen/kaiwo/pkg/workloads/common"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
+	"github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 func EnsureNamespaceKueueManaged(ctx context.Context, k8sClient client.Client, namespaceName string) error {
@@ -67,7 +64,7 @@ func EnsureNamespaceKueueManaged(ctx context.Context, k8sClient client.Client, n
 
 func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo.ResourceFlavorSpec, map[string]kueuev1beta1.FlavorQuotas, error) {
 	logger := log.FromContext(ctx)
-	config := ConfigFromContext(ctx)
+	config := common.ConfigFromContext(ctx)
 
 	var resourceFlavors []kaiwo.ResourceFlavorSpec
 	nodePoolResources := make(map[string]kueuev1beta1.FlavorQuotas)
@@ -341,7 +338,7 @@ func CreateClusterQueue(nodePoolResources map[string]kueuev1beta1.FlavorQuotas, 
 	// Create ClusterQueue
 	return kaiwo.ClusterQueue{
 		Name:       name,
-		Namespaces: []string{"kaiwo"},
+		Namespaces: []string{},
 		Spec: kueuev1beta1.ClusterQueueSpec{
 			NamespaceSelector: &metav1.LabelSelector{},
 			ResourceGroups:    resourceGroups,

@@ -75,7 +75,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `name` _string_ | Name specifies the name of the Kueue ClusterQueue resource. |  |  |
 | `spec` _[ClusterQueueSpec](#clusterqueuespec)_ | Spec contains the desired Kueue `ClusterQueueSpec`. Kaiwo ensures the corresponding ClusterQueue resource matches this spec. See Kueue documentation for `ClusterQueueSpec` fields like `resourceGroups`, `cohort`, `preemption`, etc. |  |  |
-| `namespaces` _string array_ | Namespaces optionally lists Kubernetes namespaces where Kaiwo should automatically create a Kueue `LocalQueue` resource pointing to this ClusterQueue. |  |  |
+| `namespaces` _string array_ | Namespaces optionally lists Kubernetes namespaces where Kaiwo should automatically create a Kueue `LocalQueue` resource pointing to this ClusterQueue.<br />If one or more namespaces are provided, the KaiwoQueueConfig controller takes over managing the LocalQueues for this ClusterQueue.<br />Leave this empty if you want to be able to create your own LocalQueues for this ClusterQueue. |  |  |
 
 
 #### CommonMetaSpec
@@ -109,6 +109,8 @@ _Appears in:_
 | `ray` _boolean_ | Ray determines whether the operator should use RayCluster for workload execution.<br />If `true`, Kaiwo will create Ray-specific resources.<br />If `false` (default), Kaiwo will create standard Kubernetes resources (BatchJob for `KaiwoJob`, Deployment for `KaiwoService`).<br />This setting dictates which underlying spec (`job`/`rayJob` or `deployment`/`rayService`) is primarily used. | false |  |
 | `storage` _[StorageSpec](#storagespec)_ | Storage configures persistent storage using Kubernetes PersistentVolumeClaims (PVCs).<br /><br />Enabling `storage.data.download` or `storage.huggingFace.preCacheRepos` will cause Kaiwo to create a temporary Kubernetes Job (the "download job") before starting the main workload. This job runs a container that performs the downloads into the respective PVCs. The main workload only starts after the download job completes successfully. |  |  |
 | `dangerous` _boolean_ | Dangerous, if when set to `true`, Kaiwo will *not* add the default `PodSecurityContext` (which normally sets `runAsUser: 1000`, `runAsGroup: 1000`, `fsGroup: 1000`) to the generated pods. Use this only if you need to run containers as root or a different specific user and understand the security implications. | false |  |
+| `clusterQueue` _string_ | ClusterQueue specifies the name of the Kueue `ClusterQueue` that the workload should be submitted to for scheduling and resource management.<br /><br />This value is set as the `kueue.x-k8s.io/queue-name` label on the underlying resources.<br /><br />If omitted, it defaults to the value specified by the `DEFAULT_CLUSTER_QUEUE_NAME` environment variable in the Kaiwo controller (typically "kaiwo"), which is set during installation.<br /><br />Note! If the applied KaiwoQueueConfig includes no quota for the default queue, no workload will run that tries to fall back on it.<br /><br />The `kaiwo submit` CLI command can override this using the `--queue` flag or the `clusterQueue` field in the `kaiwoconfig.yaml` file. |  |  |
+| `priorityClass` _string_ | PriorityClass specifies the name of a Kubernetes `PriorityClass` to be assigned to the job's pods. This influences the scheduling priority relative to other pods in the cluster. |  |  |
 
 
 #### CommonStatusSpec
@@ -127,7 +129,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `startTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | StartTime records the timestamp when the first pod associated with the workload started running. |  |  |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions lists the observed conditions of the workload resource, following standard Kubernetes conventions. May include conditions reflecting the underlying Deployment or RayService state. |  |  |
-| `status` _[Status](#status)_ | Status reflects the current high-level phase of the workload lifecycle (e.g., PENDING, STARTING, READY, FAILED). |  |  |
+| `status` _[WorkloadStatus](#workloadstatus)_ | Status reflects the current high-level phase of the workload lifecycle (e.g., PENDING, STARTING, READY, FAILED). |  |  |
 | `duration` _integer_ | Duration indicates how long the service has been running since StartTime, in seconds. Calculated periodically while running. |  |  |
 | `observedGeneration` _integer_ | ObservedGeneration records the `.metadata.generation` of the workload resource that was last processed by the controller. |  |  |
 
@@ -297,7 +299,7 @@ _Appears in:_
 | `ray` _boolean_ | Ray determines whether the operator should use RayCluster for workload execution.<br />If `true`, Kaiwo will create Ray-specific resources.<br />If `false` (default), Kaiwo will create standard Kubernetes resources (BatchJob for `KaiwoJob`, Deployment for `KaiwoService`).<br />This setting dictates which underlying spec (`job`/`rayJob` or `deployment`/`rayService`) is primarily used. | false |  |
 | `storage` _[StorageSpec](#storagespec)_ | Storage configures persistent storage using Kubernetes PersistentVolumeClaims (PVCs).<br /><br />Enabling `storage.data.download` or `storage.huggingFace.preCacheRepos` will cause Kaiwo to create a temporary Kubernetes Job (the "download job") before starting the main workload. This job runs a container that performs the downloads into the respective PVCs. The main workload only starts after the download job completes successfully. |  |  |
 | `dangerous` _boolean_ | Dangerous, if when set to `true`, Kaiwo will *not* add the default `PodSecurityContext` (which normally sets `runAsUser: 1000`, `runAsGroup: 1000`, `fsGroup: 1000`) to the generated pods. Use this only if you need to run containers as root or a different specific user and understand the security implications. | false |  |
-| `clusterQueue` _string_ | ClusterQueue specifies the name of the Kueue `ClusterQueue` that the job should be submitted to for scheduling and resource management.<br /><br />This value is set as the `kueue.x-k8s.io/queue-name` label on the underlying Kubernetes Job or RayJob.<br /><br />If omitted, it defaults to the value specified by the `DEFAULT_CLUSTER_QUEUE_NAME` environment variable in the Kaiwo controller (typically "kaiwo"), which is set during installation.<br /><br />Note! If the applied KaiwoQueueConfig includes no quota for the default queue, no workload will run that tries to fall back on it.<br /><br />The `kaiwo submit` CLI command can override this using the `--queue` flag or the `clusterQueue` field in the `kaiwoconfig.yaml` file. |  |  |
+| `clusterQueue` _string_ | ClusterQueue specifies the name of the Kueue `ClusterQueue` that the workload should be submitted to for scheduling and resource management.<br /><br />This value is set as the `kueue.x-k8s.io/queue-name` label on the underlying resources.<br /><br />If omitted, it defaults to the value specified by the `DEFAULT_CLUSTER_QUEUE_NAME` environment variable in the Kaiwo controller (typically "kaiwo"), which is set during installation.<br /><br />Note! If the applied KaiwoQueueConfig includes no quota for the default queue, no workload will run that tries to fall back on it.<br /><br />The `kaiwo submit` CLI command can override this using the `--queue` flag or the `clusterQueue` field in the `kaiwoconfig.yaml` file. |  |  |
 | `priorityClass` _string_ | PriorityClass specifies the name of a Kubernetes `PriorityClass` to be assigned to the job's pods. This influences the scheduling priority relative to other pods in the cluster. |  |  |
 | `entrypoint` _string_ | EntryPoint defines the command or script that the primary container in the job's pod(s) should execute.<br /><br />It can be a multi-line string. Shell script shebangs (`#!/bin/bash`) are detected.<br /><br />For standard Kubernetes Jobs (`ray: false`), this populates the `command` and `args` fields of the container spec (typically `["/bin/sh", "-c", "<entrypoint_script>"]`).<br /><br />For RayJobs (`ray: true`), this populates the `rayJob.spec.entrypoint` field. For RayJobs, this must reference a Python script.<br /><br />This overrides any default command specified in the container image or the underlying `job` or `rayJob` spec sections if they are also defined. |  |  |
 | `rayJob` _[RayJob](#rayjob)_ | RayJob defines the RayJob configuration.<br /><br />If this field is present (or if `spec.ray` is `true`), Kaiwo will create a `RayJob` resource instead of a standard `batchv1.Job`.<br /><br />Common fields like `image`, `resources`, `gpus`, `replicas`, etc., will be merged into this spec, potentially overriding values defined here unless explicitly configured otherwise.<br /><br />This provides fine-grained control over the Ray cluster configuration (head/worker groups) and Ray job submission parameters. |  |  |
@@ -319,7 +321,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `startTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | StartTime records the timestamp when the first pod associated with the workload started running. |  |  |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions lists the observed conditions of the workload resource, following standard Kubernetes conventions. May include conditions reflecting the underlying Deployment or RayService state. |  |  |
-| `status` _[Status](#status)_ | Status reflects the current high-level phase of the workload lifecycle (e.g., PENDING, STARTING, READY, FAILED). |  |  |
+| `status` _[WorkloadStatus](#workloadstatus)_ | Status reflects the current high-level phase of the workload lifecycle (e.g., PENDING, STARTING, READY, FAILED). |  |  |
 | `duration` _integer_ | Duration indicates how long the service has been running since StartTime, in seconds. Calculated periodically while running. |  |  |
 | `observedGeneration` _integer_ | ObservedGeneration records the `.metadata.generation` of the workload resource that was last processed by the controller. |  |  |
 | `completionTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | CompletionTime records the timestamp when the KaiwoJob finished execution (either successfully or with failure). |  |  |
@@ -397,9 +399,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions lists the observed conditions of the KaiwoQueueConfig resource, such as whether the managed Kueue resources are synchronized and ready. |  |  |
-| `status` _[Status](#status)_ | Status reflects the overall status of the Kueue resource synchronization managed by this config (e.g., PENDING, READY, FAILED). |  |  |
-
-
+| `status` _[QueueConfigStatusDescription](#queueconfigstatusdescription)_ | Status reflects the overall status of the Kueue resource synchronization managed by this config (e.g., READY, FAILED). |  |  |
 
 
 #### KaiwoService
@@ -470,8 +470,8 @@ _Appears in:_
 | `ray` _boolean_ | Ray determines whether the operator should use RayCluster for workload execution.<br />If `true`, Kaiwo will create Ray-specific resources.<br />If `false` (default), Kaiwo will create standard Kubernetes resources (BatchJob for `KaiwoJob`, Deployment for `KaiwoService`).<br />This setting dictates which underlying spec (`job`/`rayJob` or `deployment`/`rayService`) is primarily used. | false |  |
 | `storage` _[StorageSpec](#storagespec)_ | Storage configures persistent storage using Kubernetes PersistentVolumeClaims (PVCs).<br /><br />Enabling `storage.data.download` or `storage.huggingFace.preCacheRepos` will cause Kaiwo to create a temporary Kubernetes Job (the "download job") before starting the main workload. This job runs a container that performs the downloads into the respective PVCs. The main workload only starts after the download job completes successfully. |  |  |
 | `dangerous` _boolean_ | Dangerous, if when set to `true`, Kaiwo will *not* add the default `PodSecurityContext` (which normally sets `runAsUser: 1000`, `runAsGroup: 1000`, `fsGroup: 1000`) to the generated pods. Use this only if you need to run containers as root or a different specific user and understand the security implications. | false |  |
-| `clusterQueue` _string_ | ClusterQueue specifies the name of the Kueue `ClusterQueue` that the service should be submitted to for scheduling and resource management.<br /><br />This value is set as the `kueue.x-k8s.io/queue-name` label on the underlying Kubernetes Deployment or RayService.<br /><br />If omitted, it defaults to the value specified by the `DEFAULT_CLUSTER_QUEUE_NAME` environment variable in the Kaiwo controller (typically "kaiwo").<br /><br />The `kaiwo submit` CLI command can override this using the `--queue` flag or the `clusterQueue` field in the `kaiwoconfig.yaml` file. |  |  |
-| `priorityClass` _string_ | PriorityClass specifies the name of a Kubernetes `PriorityClass` to be assigned to the service's pods. This influences the scheduling priority relative to other pods in the cluster. |  |  |
+| `clusterQueue` _string_ | ClusterQueue specifies the name of the Kueue `ClusterQueue` that the workload should be submitted to for scheduling and resource management.<br /><br />This value is set as the `kueue.x-k8s.io/queue-name` label on the underlying resources.<br /><br />If omitted, it defaults to the value specified by the `DEFAULT_CLUSTER_QUEUE_NAME` environment variable in the Kaiwo controller (typically "kaiwo"), which is set during installation.<br /><br />Note! If the applied KaiwoQueueConfig includes no quota for the default queue, no workload will run that tries to fall back on it.<br /><br />The `kaiwo submit` CLI command can override this using the `--queue` flag or the `clusterQueue` field in the `kaiwoconfig.yaml` file. |  |  |
+| `priorityClass` _string_ | PriorityClass specifies the name of a Kubernetes `PriorityClass` to be assigned to the job's pods. This influences the scheduling priority relative to other pods in the cluster. |  |  |
 | `entrypoint` _string_ | EntryPoint specifies the command or script executed in a Deployment.<br />Can also be defined inside Deployment struct as regular command in the form of string array.<br /><br />It is *not* used when `ray: true` (use `serveConfigV2` or the `rayService` spec instead for Ray entrypoints). |  |  |
 | `serveConfigV2` _string_ | Defines the applications and deployments to deploy, should be a YAML multi-line scalar string.<br />Can also be defined inside RayService struct |  |  |
 | `rayService` _[RayService](#rayservice)_ | RayService allows providing a full `rayv1.RayService` spec.<br /><br />If present (or `spec.ray` is `true`), Kaiwo creates a `RayService` (wrapped in an AppWrapper for Kueue integration) instead of a `Deployment`.<br /><br />Common fields are merged into the `RayClusterSpec` within this spec.<br /><br />Allows fine-grained control over the Ray cluster and Ray Serve configurations. |  |  |
@@ -493,7 +493,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `startTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | StartTime records the timestamp when the first pod associated with the workload started running. |  |  |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions lists the observed conditions of the workload resource, following standard Kubernetes conventions. May include conditions reflecting the underlying Deployment or RayService state. |  |  |
-| `status` _[Status](#status)_ | Status reflects the current high-level phase of the workload lifecycle (e.g., PENDING, STARTING, READY, FAILED). |  |  |
+| `status` _[WorkloadStatus](#workloadstatus)_ | Status reflects the current high-level phase of the workload lifecycle (e.g., PENDING, STARTING, READY, FAILED). |  |  |
 | `duration` _integer_ | Duration indicates how long the service has been running since StartTime, in seconds. Calculated periodically while running. |  |  |
 | `observedGeneration` _integer_ | ObservedGeneration records the `.metadata.generation` of the workload resource that was last processed by the controller. |  |  |
 
@@ -515,6 +515,23 @@ _Appears in:_
 | `gcs` _[GCSDownloadItem](#gcsdownloaditem) array_ | GCS lists and Google Cloud Storage downloads |  |  |
 | `azureBlob` _[AzureBlobStorageDownloadItem](#azureblobstoragedownloaditem) array_ | AzureBlob lists any Azure Blob Storage downloads |  |  |
 | `git` _[GitDownloadItem](#gitdownloaditem) array_ | Git lists any Git downloads |  |  |
+
+
+#### QueueConfigStatusDescription
+
+_Underlying type:_ _string_
+
+
+
+
+
+_Appears in:_
+- [KaiwoQueueConfigStatus](#kaiwoqueueconfigstatus)
+
+| Field | Description |
+| --- | --- |
+| `READY` |  |
+| `FAILED` |  |
 
 
 #### ResourceFlavorSpec
@@ -578,33 +595,6 @@ _Appears in:_
 | `mountPath` _string_ | MountPath defines the directory path inside the container where the secret volume (or the `SubPath` file) should be mounted. |  |  |
 
 
-#### Status
-
-_Underlying type:_ _string_
-
-
-
-
-
-_Appears in:_
-- [CommonStatusSpec](#commonstatusspec)
-- [KaiwoJobStatus](#kaiwojobstatus)
-- [KaiwoQueueConfigStatus](#kaiwoqueueconfigstatus)
-- [KaiwoServiceStatus](#kaiwoservicestatus)
-
-| Field | Description |
-| --- | --- |
-| `` | StatusNew indicates the resource has been created but not yet processed by the controller.<br /> |
-| `PENDING` | StatusPending indicates the resource is waiting for prerequisites (like download jobs or Kueue admission) to complete.<br /> |
-| `STARTING` | StatusStarting indicates the underlying workload (Job, Deployment, RayService) is being created or started.<br /> |
-| `READY` | StatusReady indicates a KaiwoService is fully deployed and ready to serve requests (Deployment ready or RayService healthy). Not applicable to KaiwoJob.<br /> |
-| `RUNNING` | StatusRunning indicates the workload pods are running. For KaiwoJob, this means the job has started execution. For KaiwoService, pods are up but may not yet be fully ready/healthy.<br /> |
-| `COMPLETE` | StatusComplete indicates a KaiwoJob has finished successfully.<br /> |
-| `FAILED` | StatusFailed indicates the workload (KaiwoJob or KaiwoService) or its prerequisites (like download jobs) encountered an error and cannot proceed or recover.<br /> |
-| `TERMINATED` | StatusTerminated indicates the workload has been terminated by the user or system. This could be due to duration deadline being met and pressure for GPU demand.<br /> |
-| `TERMINATING` | StatusTerminating indicates that the workload should begin to terminate the underlying resources<br /> |
-
-
 #### StorageSpec
 
 
@@ -646,5 +636,32 @@ _Appears in:_
 | `file` _string_ | File specifies the expected path within the download job's container where the secret value will be mounted as a file. This path is usually automatically generated by the controller based on SecretName and SecretKey. |  |  |
 | `secretName` _string_ | SecretName is the name of the Kubernetes Secret resource containing the value. |  |  |
 | `secretKey` _string_ | SecretKey is the key within the specified Secret whose value should be used. |  |  |
+
+
+#### WorkloadStatus
+
+_Underlying type:_ _string_
+
+
+
+
+
+_Appears in:_
+- [CommonStatusSpec](#commonstatusspec)
+- [KaiwoJobStatus](#kaiwojobstatus)
+- [KaiwoServiceStatus](#kaiwoservicestatus)
+
+| Field | Description |
+| --- | --- |
+| `` | WorkloadStatusNew indicates the resource has been created but not yet processed by the controller.<br /> |
+| `DOWNLOADING` | WorkloadStatusDownloading indicates that the resource is currently running the download job<br /> |
+| `PENDING` | WorkloadStatusPending indicates the resource is waiting for prerequisites (like Kueue admission) to complete.<br /> |
+| `STARTING` | WorkloadStatusStarting indicates the Kaiwo workload has been admitted, and the underlying workload (Job, Deployment, RayService) is being created or started.<br /> |
+| `RUNNING` | WorkloadStatusRunning indicates the workload pods are running. For KaiwoJob, this means the job has started execution. For KaiwoService, pods are up but may not yet be fully ready/healthy.<br /> |
+| `COMPLETE` | WorkloadStatusComplete indicates a KaiwoJob has finished successfully.<br /> |
+| `ERROR` | WorkloadStatusError indicates the workload encountered an error which can be recovered from.<br /> |
+| `FAILED` | WorkloadStatusFailed indicates the workload (KaiwoJob or KaiwoService) encountered an error and cannot proceed or recover.<br /> |
+| `TERMINATING` | WorkloadStatusTerminating indicates that the workload should begin to terminate the underlying resources.<br /> |
+| `TERMINATED` | WorkloadStatusTerminated indicates the workload has been terminated by the user or system. This could be due to duration deadline being met and pressure for GPU demand.<br /> |
 
 

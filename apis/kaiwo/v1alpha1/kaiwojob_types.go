@@ -15,33 +15,16 @@
 package v1alpha1
 
 import (
-	"context"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	batchv1 "k8s.io/api/batch/v1"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // KaiwoJobSpec defines the desired state of KaiwoJob.
 type KaiwoJobSpec struct {
 	CommonMetaSpec `json:",inline"`
-
-	// ClusterQueue specifies the name of the Kueue `ClusterQueue` that the job should be submitted to for scheduling and resource management.
-	//
-	// This value is set as the `kueue.x-k8s.io/queue-name` label on the underlying Kubernetes Job or RayJob.
-	//
-	// If omitted, it defaults to the value specified by the `DEFAULT_CLUSTER_QUEUE_NAME` environment variable in the Kaiwo controller (typically "kaiwo"), which is set during installation.
-	//
-	// Note! If the applied KaiwoQueueConfig includes no quota for the default queue, no workload will run that tries to fall back on it.
-	//
-	// The `kaiwo submit` CLI command can override this using the `--queue` flag or the `clusterQueue` field in the `kaiwoconfig.yaml` file.
-	ClusterQueue string `json:"clusterQueue,omitempty"`
-
-	// PriorityClass specifies the name of a Kubernetes `PriorityClass` to be assigned to the job's pods. This influences the scheduling priority relative to other pods in the cluster.
-	PriorityClass string `json:"priorityClass,omitempty"`
 
 	// EntryPoint defines the command or script that the primary container in the job's pod(s) should execute.
 	//
@@ -109,44 +92,16 @@ type KaiwoJob struct {
 	Status KaiwoJobStatus `json:"status,omitempty"`
 }
 
-func (job *KaiwoJob) GetUser() string {
-	return job.Spec.CommonMetaSpec.User
+func (job *KaiwoJob) GetKaiwoWorkloadObject() client.Object {
+	return job
 }
 
-func (job *KaiwoJob) GetObjectMeta() *metav1.ObjectMeta {
-	return &job.ObjectMeta
+func (job *KaiwoJob) GetCommonStatusSpec() *CommonStatusSpec {
+	return &job.Status.CommonStatusSpec
 }
 
-func (job *KaiwoJob) GetStatusString() string {
-	return string(job.Status.Status)
-}
-
-func (job *KaiwoJob) GetType() string {
-	return "job"
-}
-
-func (j *KaiwoJob) GetDuration() *metav1.Duration {
-	return j.Spec.Duration
-}
-
-func (j *KaiwoJob) GetStartTime() *metav1.Time {
-	return j.Status.StartTime
-}
-
-func (j *KaiwoJob) GetClusterQueue() string {
-	return j.Spec.ClusterQueue
-}
-
-func (s *KaiwoJob) GetGPUVendor() string {
-	return s.Spec.GpuVendor
-}
-
-func (s *KaiwoJob) GetCommonStatusSpec() *CommonStatusSpec {
-	return &s.Status.CommonStatusSpec
-}
-
-func (job *KaiwoJob) GetServices(ctx context.Context, k8sClient client.Client) ([]corev1.Service, error) {
-	return []corev1.Service{}, nil
+func (job *KaiwoJob) GetCommonSpec() CommonMetaSpec {
+	return job.Spec.CommonMetaSpec
 }
 
 // KaiwoJobList

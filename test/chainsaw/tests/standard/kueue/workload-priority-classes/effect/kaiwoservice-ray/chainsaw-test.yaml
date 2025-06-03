@@ -29,7 +29,7 @@ spec:
     - description: Increase the quota for the cluster queue to admit a workload
       apply:
         file: ../cluster-queue-fit-ray.yaml
-    - description: Ensure the high-priority workload is running, despite being added last
+    - description: Ensure the high-priority workload is admitted, despite being added last
       assert:
         resource:
           apiVersion: kaiwo.silogen.ai/v1alpha1
@@ -37,7 +37,7 @@ spec:
           metadata:
             name: kaiwoservice-ray-high
           status:
-            status: RUNNING
+            status: STARTING
     - description: Ensure the low-priority workload is still pending, despite being added first
       assert:
         resource:
