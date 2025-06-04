@@ -256,7 +256,7 @@ func RemoveDuplicateResourceFlavors(flavors []kaiwo.ResourceFlavorSpec) []kaiwo.
 	return uniqueFlavors
 }
 
-func CreateClusterQueue(nodePoolResources map[string]kueuev1beta1.FlavorQuotas, name string) kaiwo.ClusterQueue {
+func CreateClusterQueue(nodePoolResources map[string]kueuev1beta1.FlavorQuotas, name string, cohort string) kaiwo.ClusterQueue {
 	var resourceGroups []kueuev1beta1.ResourceGroup
 	coveredResources := make(map[corev1.ResourceName]struct{})
 
@@ -341,6 +341,7 @@ func CreateClusterQueue(nodePoolResources map[string]kueuev1beta1.FlavorQuotas, 
 		Namespaces: []string{},
 		Spec: kueuev1beta1.ClusterQueueSpec{
 			NamespaceSelector: &metav1.LabelSelector{},
+			Cohort:            kueuev1beta1.CohortReference(cohort),
 			ResourceGroups:    resourceGroups,
 		},
 	}

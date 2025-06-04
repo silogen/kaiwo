@@ -61,6 +61,12 @@ spec:
                       used for workloads that don't explicitly specify a storage class.
                     type: string
                 type: object
+              defaultClusterQueueCohortName:
+                default: kaiwo
+                description: |-
+                  DefaultClusterQueueCohortName is the name of the default cohort that is used for the default cluster queue.
+                  ClusterQueues in the same cohort can share resources.
+                type: string
               defaultClusterQueueName:
                 default: kaiwo
                 description: DefaultClusterQueueName is the name of the default cluster
