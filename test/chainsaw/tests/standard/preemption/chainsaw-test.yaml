@@ -91,3 +91,4 @@ spec:
         - name: PRINT_LEVEL
           value: ($values.print_level)
         args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+

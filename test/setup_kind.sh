@@ -87,5 +87,9 @@ echo "NFS provisioner deployed successfully!"
 
 kubectl create ns "$TEST_NAME"
 
+find config/static -name '*.yaml' -print0 | xargs -0 -n1 kubectl apply -f
+make install
+kubectl apply -f test/kaiwoconfig.yaml
+
 echo "Cluster is ready!"
 

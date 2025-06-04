@@ -6,7 +6,7 @@ spec:
   user: test@amd.com
   image: busybox:latest
   gpuVendor: "nvidia"
-  duration: 1s
+  duration: 5s
   gpus: 1
   entrypoint: sleep 60000
   resources:
