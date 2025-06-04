@@ -102,7 +102,6 @@ func (wr *Reconciler) Reconcile(ctx context.Context) (ctrl.Result, error) {
 
 	// If the workload is active, ensure the remote resources match
 	if isActiveStatus(observedStatus) {
-		baseutils.Debug(logger, "Workload is active, ensuring all resources")
 		if err := wr.ensureAllResources(ctx, observedStatus, conditions); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to ensure all resources: %w", err)
 		}
