@@ -203,15 +203,12 @@ type GpuResourceRequirements struct {
 	// calculated dynamically based on the available nodes and their GPUs.
 	TotalVram *resource.Quantity `json:"totalVram,omitempty"`
 
-	// TotalComputeUnits is the total logical number of Compute Units (CUs) that is requested. If you provide both Count and TotalComputeUnits,
-	// the operator will try to find a suitable node that has the given number of GPUs which would provide
-	// at least TotalComputeUnits amount of CUs. If you don't provide Count, the number of GPUs is
-	// calculated dynamically based on the available nodes and their GPUs.
-	TotalComputeUnits *resource.Quantity `json:"totalComputeUnits,omitempty"`
-
-	// Flavor specifies the flavor of GPU node that should be used for scheduling.
-	// +kubebuilder:default=physical
-	Flavor GpuFlavor `json:"flavor,omitempty"`
+	// Partitioned specifies whether to use nodes with partitioned GPUs or not.
+	// If Partitioned is omitted or `nil`, the behavior depends on whether Count is set or not. If
+	// Count is set and Partitioned is `nil`, Partitioned will be implicitly set to `false` in order to avoid
+	// inadvertently using partitioned GPUs when it was not intended. If Count is not set (and TotalVram _is_ set) and Partitioned is `nil`,
+	// both partitioned and unpartitioned nodes are considered.
+	Partitioned *bool `json:"partitioned,omitempty"`
 
 	// Vendor specifies the GPU vendor to be used for the workload
 	// +kubebuilder:default=amd
@@ -221,19 +218,6 @@ type GpuResourceRequirements struct {
 	// This field is used to filter the available nodes for scheduling. You can specify multiple models, and Kaiwo will select the best available node that matches one of the specified models.
 	Models []string `json:"models,omitempty"`
 }
-
-type GpuFlavor string
-
-const (
-	// GpuFlavorAny allows the workload to be scheduled on any GPU node
-	GpuFlavorAny GpuFlavor = "any"
-
-	// GpuFlavorPhysical allows the workload to be scheduled only on nodes with physical GPUs
-	GpuFlavorPhysical GpuFlavor = "physical"
-
-	// GpuFlavorPartitioned allows the workload to be scheduled only on nodes with partitioned GPUs
-	GpuFlavorPartitioned GpuFlavor = "partitioned"
-)
 
 type GpuVendor string
 

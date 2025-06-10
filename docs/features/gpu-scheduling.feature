@@ -11,11 +11,8 @@ Feature: Kaiwo supports scheduling GPU workloads
       # A total of 72Gi of logical vRAM
       totalVram: 72Gi
 
-      # A total of 114 logical compute units (CUs)
-      totalComputeUnits: 114
-
       # Choosing GPU partitioning
-      flavor: partitioned|physical|any
+      partitioned: null|true|false
 
       # Choosing AMD GPUs (the default)
       vendor: amd|nvidia
@@ -28,17 +25,15 @@ Feature: Kaiwo supports scheduling GPU workloads
   These resources are defined as the _per replica_ resource requirements.
 
   Glossary:
-    - *Logical* GPUs / vRAM / Compute Units: The number of resources that are seen by Kubernetes and by containers that are scheduled onto a node. If the GPU is not partitioned, these values are the same as what the physical GPU provides
-    - *Compute Units* (CUs): A fundamental processing unit in AMD GPUs designed to handle parallel workloads. Each CU contains multiple stream processors and supports SIMD (Single Instruction, Multiple Data) execution
+    - *Logical* GPUs / vRAM: The number of resources that are seen by Kubernetes and by containers that are scheduled onto a node. If the GPU is not partitioned, these values are the same as what the physical GPU provides
 
   Background:
     Given a cluster with GPU nodes, each labeled (by the Kaiwo operator) with:
       | label                                      | meaning                         |
       |--------------------------------------------|---------------------------------|
-      | kaiwo.silogen.ai/flavor                    | physical, partitioned, cpu-only |
+      | kaiwo.silogen.ai/partitioned               | true, false                     |
       | kaiwo.silogen.ai/gpu.logical-count         | 64, 8                           |
       | kaiwo.silogen.ai/gpu.logical-vram          | 24Gi, 192Gi                     |
-      | kaiwo.silogen.ai/gpu.logical-compute-units | 38, 304                         |
       | kaiwo.silogen.ai/gpu.vendor                | amd, nvidia                     |
       | kaiwo.silogen.ai/gpu.model                 | mi300x, mi250                   |
     And the Kaiwo operator is running
@@ -57,42 +52,28 @@ Feature: Kaiwo supports scheduling GPU workloads
       Then Kaiwo computes the minimal number of GPUs (rounded up) per node
       And schedules on the node whose GPUs minimize (nodeVram*gpuCount − 72Gi)
 
-    Scenario: Requesting GPUs by totalComputeUnits only
-      When the user specifies:
-        | totalComputeUnits | 114 |
-      And the cluster has nodes where some GPU combinations meet or exceed 114 CUs
-      Then Kaiwo computes the minimal number of GPUs (rounded up) per node
-      And schedules on the node whose GPUs minimize (nodeCUs*gpuCount − 114)
-
   Rule: Combined resource requests
-    Scenario: Count plus vRAM and/or CUs
+    Scenario: Count plus vRAM
       When the user specifies:
         | count               | 4 |
         | totalVram           | 80Gi |
-        | totalComputeUnits   | 120 |
-      And there exist nodes where 4 GPUs provide both ≥ 80Gi vRAM and ≥ 120 CUs
+      And there exist nodes where 4 GPUs provide ≥ 80Gi vRAM
       Then Kaiwo schedules on such node
 
-    Scenario: vRAM and CUs only
+    Scenario: vRAM only
       When the user specifies:
         | totalVram         | 100Gi |
-        | totalComputeUnits | 200 |
-      And the cluster has nodes that can satisfy both requests on a single node
-      Then Kaiwo chooses the node minimizing combined resource waste
+      And the cluster has nodes that can satisfy the GPU vRAM on a single node
+      Then Kaiwo chooses the node minimizing resource waste
 
   Rule: Filters and defaults
-    Scenario: GPU flavor filter
-      When the user specifies `flavor: partitioned`
-      Then only partitioned-GPU nodes are considered
+    Scenario: GPU partitioning filter
+      When the user specifies `partitioned: true|false`
+      Then only partitioned|unpartitioned nodes are considered
 
-    Scenario: Flavor = any, no totals
-      When the user specifies `flavor: any`
-      And omits `totalVram` and `totalComputeUnits`
-      Then no flavor filter is applied, and the workload may get scheduled onto any node (partitioned or unpartitioned)
-
-    Scenario: Flavor default
-      When the user omits `flavor`
-      Then `physical` is used by default
+    Scenario: No GPU partition specified
+      When the user omits `partitioned` or sets it to `null` (the default)
+      Then all node types are considered (partitioned or unpartitioned)
 
     Scenario: GPU vendor filter
       When the user specifies `vendor: nvidia`
@@ -185,8 +166,8 @@ Feature: Kaiwo supports scheduling GPU workloads
       Then scheduling fails
 
   Rule: Validation and errors
-    Scenario: At least count, vRAM or CUs are required
-      When the user specified `gpuResources` but omits `count`, `totalVram` and `totalComputeUnits`
+    Scenario: At least count or vRAM are required
+      When the user specified `gpuResources` but omits `count` and `totalVram`
       Then the scheduling fails
 
     Scenario: Vendor and models mismatch
@@ -206,5 +187,5 @@ Feature: Kaiwo supports scheduling GPU workloads
       Then Kaiwo ignores the `resources.limits` setting and allocates 3 GPUs as per `spec.gpuResources.count`
 
     Scenario: The user requests a GPU configuration that cannot be satisfied by the resources available within the cluster
-      When the user requests GPU resources, for example the number or type of GPUs, GPU flavor, GPU models, or more GPUs than are available within the cluster
+      When the user requests GPU resources, for example the number or type of GPUs, GPU partitioning, GPU models, or more GPUs than are available within the cluster
       Then scheduling fails
