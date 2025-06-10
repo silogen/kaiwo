@@ -16,6 +16,7 @@ package v1alpha1
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -53,6 +54,14 @@ const (
 	WorkloadStatusTerminated WorkloadStatus = "TERMINATED"
 )
 
+type GpuNodeType string
+
+const (
+	GpuNodeTypeAny         GpuNodeType = "any"
+	GpuNodeTypePartitioned GpuNodeType = "partitioned"
+	GpuNodeTypePhysical    GpuNodeType = "physical"
+)
+
 var workloadStatusRank = map[WorkloadStatus]int{
 	WorkloadStatusRunning:     0,
 	WorkloadStatusComplete:    1,
@@ -87,29 +96,12 @@ type CommonMetaSpec struct {
 	// PodTemplateSpecLabels allows you to specify custom labels that will be added to the `template.metadata.labels` section of the generated Pods (within Jobs, Deployments, or RayCluster specs). Standard Kaiwo system labels (like `kaiwo.silogen.ai/user`, `kaiwo.silogen.ai/name`, etc.) are added automatically and take precedence if there are conflicts.
 	PodTemplateSpecLabels map[string]string `json:"podTemplateSpecLabels,omitempty"`
 
-	// Gpus specifies the total number of GPUs allocated to the workload. See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor) for more details on how this field impacts scheduling.
-	// +kubebuilder:default=0
-	Gpus int `json:"gpus,omitempty"`
-
-	// GpuVendor specifies the GPU vendor (e.g., amd, nvidia, etc.). See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor) for more details on how this field impacts scheduling.
-	// +kubebuilder:default=amd
-	GpuVendor string `json:"gpuVendor,omitempty"`
-
-	// GpuModels allows you to optionally specify the GPU models that your workload will run on. You can see available models either by using the CLI and running `kaiwo status amd/nvidia` or by using kubectl command `kubectl get nodes -o custom-columns=NAME:.metadata.name,MODEL:.metadata.labels.kaiwo\/gpu-model`
-	// This field is used to filter the available nodes for scheduling. You can specify multiple models, and Kaiwo will select the best available node that matches one of the specified models.
-	GpuModels []string `json:"gpuModels,omitempty"`
-
 	// Version allows you to specify an optional version string for the workload. This can be useful for tracking different iterations or configurations of the same logical workload. It does not directly affect resource creation but serves as metadata.
 	Version string `json:"version,omitempty"`
 
 	// Replicas specifies the number of replicas for the workload. See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor) for more details on how this field impacts scheduling.
 	// +kubebuilder:default=1
 	Replicas *int `json:"replicas,omitempty"`
-
-	// GpusPerReplica specifies the number of GPUs allocated per replica. See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor) for more details on how this field impacts scheduling.
-	//
-	// If you specify `gpusPerReplica`, you must also specify `replicas`.
-	GpusPerReplica int `json:"gpusPerReplica,omitempty"`
 
 	// Duration specifies the maximum duration over which the workload can run. This is useful for avoiding workloads running indefinitely.
 	Duration *metav1.Duration `json:"duration,omitempty"`
@@ -150,6 +142,9 @@ type CommonMetaSpec struct {
 	// the underlying spec, these GPU-derived CPU/Memory defaults are not applied,
 	// respecting the user's definition or the values from the `resources` field.
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// GpuResources defines the _per-replica_ GPU resources that a workload requests
+	GpuResources *GpuResourceRequirements `json:"gpuResources,omitempty"`
 
 	// Image specifies the default container image to be used for the primary workload container(s).
 	//
@@ -196,6 +191,56 @@ type CommonMetaSpec struct {
 	// WorkloadPriorityClass specifies the name of Kueue `WorkloadPriorityClass` to be assigned to the job's pods. This influences the scheduling priority relative to other pods in the cluster.
 	WorkloadPriorityClass string `json:"priorityClass,omitempty"`
 }
+
+// GpuResourceRequirements defines the per-replica GPU resources that a workload requests.
+type GpuResourceRequirements struct {
+	// Count is the number of logical GPUs requested
+	Count *int `json:"count,omitempty"`
+
+	// TotalVram is the total logical vRAM that is requested. If you provide both Count and TotalVram,
+	// the operator will try to find a suitable node that has the given number of GPUs which would provide
+	// at least TotalVram amount of vRAM. If you don't provide Count, the number of GPUs is
+	// calculated dynamically based on the available nodes and their GPUs.
+	TotalVram *resource.Quantity `json:"totalVram,omitempty"`
+
+	// TotalComputeUnits is the total logical number of Compute Units (CUs) that is requested. If you provide both Count and TotalComputeUnits,
+	// the operator will try to find a suitable node that has the given number of GPUs which would provide
+	// at least TotalComputeUnits amount of CUs. If you don't provide Count, the number of GPUs is
+	// calculated dynamically based on the available nodes and their GPUs.
+	TotalComputeUnits *resource.Quantity `json:"totalComputeUnits,omitempty"`
+
+	// Flavor specifies the flavor of GPU node that should be used for scheduling.
+	// +kubebuilder:default=physical
+	Flavor GpuFlavor `json:"flavor,omitempty"`
+
+	// Vendor specifies the GPU vendor to be used for the workload
+	// +kubebuilder:default=amd
+	Vendor GpuVendor `json:"vendor,omitempty"`
+
+	// Models allows you to optionally specify the GPU models that your workload will run on. You can see available models either by using the CLI and running `kaiwo status amd/nvidia` or by using kubectl command `kubectl get nodes -o custom-columns=NAME:.metadata.name,MODEL:.metadata.labels.kaiwo\/gpu-model`
+	// This field is used to filter the available nodes for scheduling. You can specify multiple models, and Kaiwo will select the best available node that matches one of the specified models.
+	Models []string `json:"models,omitempty"`
+}
+
+type GpuFlavor string
+
+const (
+	// GpuFlavorAny allows the workload to be scheduled on any GPU node
+	GpuFlavorAny GpuFlavor = "any"
+
+	// GpuFlavorPhysical allows the workload to be scheduled only on nodes with physical GPUs
+	GpuFlavorPhysical GpuFlavor = "physical"
+
+	// GpuFlavorPartitioned allows the workload to be scheduled only on nodes with partitioned GPUs
+	GpuFlavorPartitioned GpuFlavor = "partitioned"
+)
+
+type GpuVendor string
+
+const (
+	GpuVendorAmd    GpuVendor = "amd"
+	GpuVendorNvidia GpuVendor = "nvidia"
+)
 
 type CommonStatusSpec struct {
 	// StartTime records the timestamp when the first pod associated with the workload started running.
