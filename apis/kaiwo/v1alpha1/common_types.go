@@ -204,11 +204,8 @@ type GpuResourceRequirements struct {
 	TotalVram *resource.Quantity `json:"totalVram,omitempty"`
 
 	// Partitioned specifies whether to use nodes with partitioned GPUs or not.
-	// If Partitioned is omitted or `nil`, the behavior depends on whether Count is set or not. If
-	// Count is set and Partitioned is `nil`, Partitioned will be implicitly set to `false` in order to avoid
-	// inadvertently using partitioned GPUs when it was not intended. If Count is not set (and TotalVram _is_ set) and Partitioned is `nil`,
-	// both partitioned and unpartitioned nodes are considered.
-	Partitioned *bool `json:"partitioned,omitempty"`
+	// +kubebuilder:default=false
+	Partitioned bool `json:"partitioned,omitempty"`
 
 	// Vendor specifies the GPU vendor to be used for the workload
 	// +kubebuilder:default=amd
