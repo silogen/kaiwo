@@ -12,7 +12,7 @@ Feature: Kaiwo supports scheduling GPU workloads
       totalVram: 72Gi
 
       # Choosing GPU partitioning
-      partitioned: null|true|false
+      partitioned: true|false
 
       # Choosing AMD GPUs (the default)
       vendor: amd|nvidia
@@ -72,8 +72,8 @@ Feature: Kaiwo supports scheduling GPU workloads
       Then only partitioned|unpartitioned nodes are considered
 
     Scenario: No GPU partition specified
-      When the user omits `partitioned` or sets it to `null` (the default)
-      Then all node types are considered (partitioned or unpartitioned)
+      When the user omits `partitioned`
+      Then partitioned is implicitly `false`, and only unpartitioned nodes are considered
 
     Scenario: GPU vendor filter
       When the user specifies `vendor: nvidia`
@@ -87,63 +87,21 @@ Feature: Kaiwo supports scheduling GPU workloads
       When the user specifies `models: [mi300x, mi250]`
       Then only nodes whose GPU model is in that list are considered
 
-  Rule: Minimize GPUs scheduling strategy
-
-    The minimize-gpus strategy optimizes for the least number of GPUs, even if some of the GPUs are not completely filled.
+  Rule: GPU waste is minimized
 
     Background:
-      Given a cluster with GPU nodes offering either 24Gi or 192Gi vRAM per GPU
-      And a KaiwoConfig with:
-        | spec.scheduling.gpuFillThreshold | 0.5           |
-        | spec.scheduling.gpuFillStrategy  | minimize-gpus |
+      Given a cluster with GPU nodes offering either 24Gi or 48Gi vRAM per GPU, both having the same `partitioned` value
+      And the user does not specify GPU model(s) or GPU counts
 
-    Scenario: Low-vRAM request uses multiple small GPUs with minimize-gpus
+    Scenario: GPU waste is minimized
       When the user requests:
         | spec.gpuResources.totalVram | 50Gi |
-      Then Kaiwo computes fill ratios for each tier:
-        | tier  | size | n | totalCap | fillRatio |
-        | small | 24Gi | 3 | 72Gi     | 0.69      |
-        | large | 192Gi| 1 | 192Gi    | 0.26      |
-      And filters out tiers with fillRatio < 0.5
-      And selects three 24Gi GPUs (3×24Gi) rather than 1×192Gi
-
-    Scenario: High-vRAM request uses one large GPU with minimize-gpus
-      When the user requests:
-        | spec.gpuResources.totalVram | 140Gi |
-      Then Kaiwo computes fill ratios for each tier:
-        | tier  | size | n | totalCap | fillRatio |
-        | small | 24Gi | 6 | 144Gi    | 0.97      |
-        | large | 192Gi| 1 | 192Gi    | 0.73      |
-      And filters tiers with fillRatio ≥ 0.5
-      And selects one 192Gi GPU (1×192Gi) rather than six 24Gi GPUs
-
-  Rule: Minimize GPU waste scheduling strategy
-
-    The `minimize-waste` strategy minimizes the amount of wasted resources, even if it increases the number of GPUs requested.
-
-    Background:
-      Given a cluster with GPU nodes offering either 24Gi or 192Gi vRAM per GPU
-      And a KaiwoConfig with:
-        | spec.scheduling.gpuFillThreshold | 0.5            |
-        | spec.scheduling.gpuFillStrategy  | minimize-waste |
-
-    Scenario: Low-vRAM request uses multiple small GPUs with minimize-waste
-      When the user requests:
-        | spec.gpuResources.totalVram | 50Gi |
-      Then Kaiwo computes waste for each tier:
+      Then Kaiwo computes waste for each GPU tier:
         | tier  | size | n | totalCap | waste |
-        | small | 24Gi | 3 | 72Gi     | 22Gi |
-        | large | 192Gi| 1 | 192Gi    | 142Gi|
-      And selects the tier with minimal waste → three 24Gi GPUs (3×24Gi)
-
-    Scenario: High-vRAM request uses multiple small GPUs with minimize-waste
-      When the user requests:
-        | spec.gpuResources.totalVram | 140Gi |
-      Then Kaiwo computes waste for each tier:
-        | tier  | size | n | totalCap | waste |
-        | small | 24Gi | 6 | 144Gi    | 4Gi  |
-        | large | 192Gi| 1 | 192Gi    | 52Gi |
-      And selects the tier with minimal waste → six 24Gi GPUs (6×24Gi)
+        | small | 24Gi | 3 | 72Gi     | 22Gi  |
+        | large | 48Gi | 2 | 96Gi     | 46Gi  |
+      And selects the tier with minimal waste → three 24Gi GPUs
+      And annotates the pod spec template with node affinity label `kaiwo.silogen.ai/gpu.vram: 24Gi` to ensure the workload is scheduled on the small tier nodes
 
   Rule: Multi-replica scheduling
     Scenario: All replicas must fit into the cluster
