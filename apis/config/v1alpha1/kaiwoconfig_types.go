@@ -143,60 +143,7 @@ type KaiwoSchedulingConfig struct {
 	// If the workload is requesting GPUs and pending for longer than this threshold, kaiwo will start preempting workloads that have exceeded their duration deadline and are using GPUs of the same vendor as the pending workload.
 	// +kubebuilder:default="5m"
 	PendingThresholdForPreemption string `json:"pendingThresholdForPreemption,omitempty"`
-
-	// GpuFillThreshold controls which GPU sizes to consider when `count` isn’t set.
-	// For each candidate GPU size S:
-	//
-	// `n = ceil(requested / S)`
-	// `totalCap = n * S`
-	// `fillRatio = requested / totalCap`
-	//
-	// Only sizes with `fillRatio ≥ GpuFillThreshold` are considered.
-	// If none qualify, we fall back to the smallest-waste option.
-	//
-	// Examples (sizes = `{24Gi, 192Gi}`, threshold=0.5):
-	//
-	// * request=50Gi:
-	//     * small: n=3 → cap=72Gi → fillRatio≈0.69 ≥ 0.5
-	//     * large: n=1 → cap=192Gi → fillRatio≈0.26 < 0.5
-	//     ⇒ only 24Gi tier qualifies
-	//
-	// * request=140Gi:
-	//     * small: n=6 → cap=144Gi → fillRatio≈0.97 ≥ 0.5
-	//     * large: n=1 → cap=192Gi → fillRatio≈0.73 ≥ 0.5
-	//     ⇒ both tiers qualify
-	// +kubebuilder:default=0.5
-	// +kubebuilder:validation:Minimum=0
-	// +kubebuilder:validation:Maximum=1
-	GpuFillThreshold float64 `json:"gpuFillThreshold,omitempty"`
-
-	// GpuFillStrategy controls how GPUs are picked after threshold filtering.
-	// If no size meets the threshold, always fall back to waste minimization.
-	// +kubebuilder:validation:Enum=minimize-waste;minimize-gpus
-	// +kubebuilder:default="minimize-gpus"
-	GpuFillStrategy GpuFillStrategy `json:"gpuFillStrategy,omitempty"`
 }
-
-type GpuFillStrategy string
-
-const (
-	// GpuFillStrategyMinimizeWaste picks the tier (size `S` and count `n`) that produces the least leftover
-	// capacity (`totalCap - requested`), even if `n` becomes large.
-	//
-	// Examples (sizes = {24Gi, 192Gi}):
-	//   • request=50Gi: only small qualifies → 3×24Gi (waste=22Gi)
-	//   • request=140Gi: both qualify → small wastes 4Gi vs large wastes 52Gi → choose 6×24Gi
-	GpuFillStrategyMinimizeWaste GpuFillStrategy = "minimize-waste"
-
-	// GpuFillStrategyMinimizeGpus picks the smallest `n` such that `fillRatio ≥ GpuFillThreshold`.
-	// If multiple tiers qualify, choose the one with smaller `n`.
-	// If none qualify, fall back to minimize-waste.
-	//
-	// Examples (sizes = {24Gi, 192Gi}, threshold=0.5):
-	//   • request=50Gi: only small qualifies → 3×24Gi
-	//   • request=140Gi: both qualify → small n=6 vs large n=1 → choose 1×192Gi
-	GpuFillStrategyMinimizeGpus GpuFillStrategy = "minimize-gpus"
-)
 
 // KaiwoConfig manages the Kaiwo operator's configuration which can be modified during runtime.
 // +kubebuilder:object:root=true
