@@ -23,8 +23,11 @@ import (
 )
 
 var (
-	DefaultNodePoolLabel = "kaiwo/nodepool"
-	GPUModelLabel        = "kaiwo/gpu-model"
+	DefaultNodePoolLabel      = "kaiwo/nodepool"
+	GPUModelLabel             = "kaiwo/gpu-model"
+	DefaultTopologyBlockLabel = "kaiwo/topology-block"
+	DefaultTopologyRackLabel  = "kaiwo/topology-rack"
+	DefaultTopologyHostLabel  = "kubernetes.io/hostname"
 )
 
 type KaiwoLabelContext struct {
