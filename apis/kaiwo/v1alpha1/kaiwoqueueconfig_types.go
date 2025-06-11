@@ -17,6 +17,7 @@ package v1alpha1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	kueuev1alpha1 "sigs.k8s.io/kueue/apis/kueue/v1alpha1"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 )
 
@@ -32,15 +33,20 @@ const (
 // There should typically be only one KaiwoQueueConfig resource in the cluster, named 'kaiwo'.
 type KaiwoQueueConfigSpec struct {
 	// ClusterQueues defines a list of Kueue ClusterQueues that Kaiwo should manage. Kaiwo ensures these ClusterQueues exist and match the provided specs.
-	// +kubebuilder:validation:MaxItems=10
+	// +kubebuilder:validation:MaxItems=20
 	ClusterQueues []ClusterQueue `json:"clusterQueues,omitempty"`
 
 	// ResourceFlavors defines a list of Kueue ResourceFlavors that Kaiwo should manage. Kaiwo ensures these ResourceFlavors exist and match the provided specs. If omitted or empty, Kaiwo attempts to automatically discover node pools and create default flavors based on node labels.
+	// +kubebuilder:validation:MaxItems=20
 	ResourceFlavors []ResourceFlavorSpec `json:"resourceFlavors,omitempty"`
 
 	// WorkloadPriorityClasses defines a list of Kueue WorkloadPriorityClasses that Kaiwo should manage. Kaiwo ensures these priority classes exist with the specified values. See Kueue documentation for `WorkloadPriorityClass`.
-	// +kubebuilder:validation:MaxItems=5
+	// +kubebuilder:validation:MaxItems=10
 	WorkloadPriorityClasses []kueuev1beta1.WorkloadPriorityClass `json:"workloadPriorityClasses,omitempty"`
+
+	// Topologies defines a list of Kueue Topologies that Kaiwo should manage. Kaiwo ensures these Topologies exist with the specified values. See Kueue documentation for `Topology`.
+	// +kubebuilder:validation:MaxItems=10
+	Topologies []Topology `json:"topologies,omitempty"`
 }
 
 // ClusterQueue defines the configuration for a Kueue ClusterQueue managed by Kaiwo.
@@ -73,6 +79,30 @@ type ResourceFlavorSpec struct {
 	// Tolerations specifies a list of tolerations associated with this flavor. This is less common than using Taints; Kueue primarily uses Taints to derive Tolerations.
 	// +kubebuilder:validation:MaxItems=5
 	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+
+	// TopologyName specifies the name of the Kueue Topology that this flavor belongs to. If specified, it must match one of the Topologies defined in the KaiwoQueueConfig.
+	// This is used to group flavors by topology for scheduling purposes.
+	TopologyName string `json:"topologyName,omitempty"`
+}
+
+// Topology is the Schema for the topology API
+type Topology struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	// +kubebuilder:validation:Required
+	Spec TopologySpec `json:"spec,omitempty"`
+}
+
+type TopologySpec struct {
+	// levels define the levels of topology.
+	// +required
+	// +listType=atomic
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=8
+	// +kubebuilder:validation:XValidation:rule="size(self.filter(i, size(self.filter(j, j == i)) > 1)) == 0",message="must be unique"
+	// +kubebuilder:validation:XValidation:rule="size(self.filter(i, i.nodeLabel == 'kubernetes.io/hostname')) == 0 || self[size(self) - 1].nodeLabel == 'kubernetes.io/hostname'",message="the kubernetes.io/hostname label can only be used at the lowest level of topology"
+	Levels []kueuev1alpha1.TopologyLevel `json:"levels,omitempty"`
 }
 
 // KaiwoQueueConfigStatus represents the observed state of KaiwoQueueConfig.

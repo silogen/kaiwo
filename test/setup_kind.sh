@@ -40,11 +40,17 @@ fi
 # Add fake-gpu-operator
 kubectl create ns gpu-operator
 kubectl label ns gpu-operator pod-security.kubernetes.io/enforce=privileged 
-kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 run.ai/simulated-gpu-node-pool=default
-kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 nvidia.com/gpu.product=Tesla-K80
-kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 nvidia.com/gpu.count=8
+kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 "$TEST_NAME"-worker3 "$TEST_NAME"-worker4 run.ai/simulated-gpu-node-pool=default
+kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 "$TEST_NAME"-worker3 "$TEST_NAME"-worker4 nvidia.com/gpu.product=Tesla-K80
+kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 "$TEST_NAME"-worker3 "$TEST_NAME"-worker4 nvidia.com/gpu.count=8
 kubectl apply -f test/fake-gpu-operator/fake-gpu-operator.yaml
 
+# Add dummy topology 
+# TODO: Remove when proper implementation of topology discovery is implemented
+kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 kaiwo/topology-rack=rack-a
+kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 kaiwo/topology-block=block-a
+kubectl label node "$TEST_NAME"-worker3 "$TEST_NAME"-worker4 kaiwo/topology-rack=rack-b
+kubectl label node "$TEST_NAME"-worker3 "$TEST_NAME"-worker4 kaiwo/topology-block=block-b
 
 # Deploy NFS-backed storageclass 
 if ! systemctl is-active --quiet nfs-server || [[ ! -d "$NFS_DIR" ]]; then

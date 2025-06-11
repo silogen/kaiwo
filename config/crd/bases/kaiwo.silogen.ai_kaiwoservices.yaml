@@ -8445,6 +8445,12 @@ spec:
                   Standard Kaiwo system labels (like `kaiwo.silogen.ai/user`, `kaiwo.silogen.ai/name`,
                   etc.) are added automatically and take precedence if there are conflicts.
                 type: object
+              preferredTopologyLabel:
+                description: |-
+                  PreferredTopologyLabel specifies the preferred topology label for scheduling the workload. This is used to influence how the workload is distributed across nodes in the cluster.
+                  If not specified, Kaiwo will use the default topology labels defined in the default topology of KaiwoQueueConfig starting at the host level.
+                  The levels are evaluated one-by-one going up from the level indicated by the label. If the PodSet cannot fit within a given topology label then the next topology level up is considered.
+                type: string
               priorityClass:
                 description: PriorityClass specifies the name of a Kubernetes `PriorityClass`
                   to be assigned to the job's pods. This influences the scheduling
@@ -27134,6 +27140,12 @@ spec:
                   See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor)
                   for more details on how this field impacts scheduling.
                 type: integer
+              requiredTopologyLabel:
+                description: RequiredTopologyLabel specifies the required topology
+                  label for scheduling the workload. This is used to ensure that the
+                  workload is scheduled on nodes that match the specified topology
+                  label.
+                type: string
               resources:
                 description: |-
                   Resources specify the default resource requirements applied for all pods inside the workflow.
