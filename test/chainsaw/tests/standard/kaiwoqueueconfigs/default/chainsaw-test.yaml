@@ -66,7 +66,7 @@ spec:
         check:
           (contains($stdout, 'cpu')): true
           (contains($stdout, 'memory')): true
-          (contains($stdout, '{"name":"nvidia.com/gpu","nominalQuota":"32"}')): true
+          (contains($stdout, '{"name":"nvidia.com/gpu","nominalQuota":"8"}')): true
 
     - script:
         env:
@@ -75,32 +75,29 @@ spec:
         content: |
           echo $flavors
         check:
-          (contains($stdout, '"name":"cpu-only-0gpu')): true
-          (contains($stdout, 'nodeLabels":{"kaiwo/nodepool":"cpu-only-0gpu')): true
-          (contains($stdout, '"name":"nvidia-teslak80-8gpu')): true
-          (contains($stdout, '"nodeLabels":{"kaiwo/nodepool":"nvidia-teslak80-8gpu')): true
+          (contains($stdout, '"name":"cpu-only-')): true
+          (contains($stdout, '"name":"8gpu.nvidia.teslak80')): true
+          (contains($stdout, '"name":"64gpu.nvidia.teslak80.partitioned')): true
     - apply:
         file: kaiwoqueueconfig1.yaml
-    - script:
-        timeout: 20s
-        content: sleep 10
+    - wait:
+        duration: 10s
     - script:
         content: kubectl get resourceflavor --no-headers | wc -l
         check:
-          (contains($stdout, '7')): true
+          (contains($stdout, '8')): true
     - script:
         content: kubectl get clusterqueue --no-headers | wc -l
         check:
           (contains($stdout, '3')): true
     - apply:
         file: kaiwoqueueconfig2.yaml
-    - script:
-        timeout: 20s
-        content: sleep 10
+    - wait:
+        duration: 10s
     - script:
         content: kubectl get resourceflavor --no-headers | wc -l
         check:
-          (contains($stdout, '3')): true
+          (contains($stdout, '4')): true
     - script:
         content: kubectl get clusterqueue --no-headers | wc -l
         check:

@@ -4,9 +4,10 @@ metadata:
   name: gpu-model-request-pass
 spec:
   user: test@amd.com
-  gpuModels: ["teslak80", "teslav100"]
-  gpus: 1
-  gpuVendor: "nvidia"
+  gpuResources:
+    count: 1
+    models: ["tesla-v100", "tesla-k80"]
+    vendor: "nvidia"
   resources:
     limits:
       cpu: 1

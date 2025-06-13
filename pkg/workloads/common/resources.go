@@ -15,11 +15,18 @@
 package common
 
 import (
+	"errors"
 	"fmt"
-	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+
+	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
+)
+
+const (
+	AmdGpuResourceName    = corev1.ResourceName("amd.com/gpu")
+	NvidiaGpuResourceName = corev1.ResourceName("nvidia.com/gpu")
 )
 
 var (
@@ -27,91 +34,97 @@ var (
 	DefaultCPU    = resource.MustParse("2")
 )
 
-// CreateResourceRequirements converts the scheduling config into ResourceRequirements
-// that can be used to modify the workload containers
-func CreateResourceRequirements(config KaiwoConfigContext, resourceConfig ResourceConfig, rayhead bool) corev1.ResourceRequirements {
-	resources := corev1.ResourceRequirements{}
-	if resourceConfig.DefaultResources != nil {
-		resources = *resourceConfig.DefaultResources
-	}
-
-	if resources.Requests == nil {
-		resources.Requests = corev1.ResourceList{}
-	}
-	if resources.Limits == nil {
-		resources.Limits = corev1.ResourceList{}
-	}
-
-	if rayhead {
-		resourceConfig.GpusPerReplica = 0
-		resourceConfig.TotalGpus = 0
-		resourceConfig.Replicas = 1
-	}
-
-	gpuCount := resourceConfig.GpusPerReplica
-	hasGpus := gpuCount > 0
-
-	if hasGpus {
-		gpuResourceKey := getGpuResourceKey(resourceConfig.GpuVendor, config.Nodes.DefaultGpuResourceKey)
-		quantity := resource.MustParse(fmt.Sprintf("%d", gpuCount))
-
-		// GPU value is always overwritten
-		resources.Requests[corev1.ResourceName(gpuResourceKey)] = quantity
-		resources.Limits[corev1.ResourceName(gpuResourceKey)] = quantity
-	}
-
-	updateResourceList := func(resourceList corev1.ResourceList) {
-		if _, exists := resourceList[corev1.ResourceCPU]; !exists {
-			if hasGpus {
-				resourceList[corev1.ResourceCPU] = resource.MustParse(fmt.Sprintf("%d", gpuCount*4))
-			} else {
-				resourceList[corev1.ResourceCPU] = DefaultCPU
-			}
-		}
-		if _, exists := resourceList[corev1.ResourceMemory]; !exists {
-			if hasGpus {
-				resourceList[corev1.ResourceMemory] = resource.MustParse(fmt.Sprintf("%dGi", gpuCount*32))
-			} else {
-				resourceList[corev1.ResourceMemory] = DefaultMemory
-			}
-		}
-	}
-
-	updateResourceList(resources.Limits)
-	updateResourceList(resources.Requests)
-
-	return resources
-}
-
-// fillContainerResources fills container resources with a given template if they are not already set
-func fillContainerResources(container *corev1.Container, resources *corev1.ResourceRequirements, override bool) {
-	if resources == nil {
-		return
-	}
-
-	fillResourceList(&container.Resources.Requests, resources.Requests, override)
-	fillResourceList(&container.Resources.Limits, resources.Limits, override)
-}
-
-func fillResourceList(dest *corev1.ResourceList, src corev1.ResourceList, override bool) {
-	if *dest == nil {
-		*dest = corev1.ResourceList{}
-	}
-	for k, v := range src {
-		if _, exists := (*dest)[k]; override || !exists {
-			(*dest)[k] = v
-		}
-	}
-}
-
-func getGpuResourceKey(vendor string, defaultVendor string) string {
-	vendor = strings.ToUpper(vendor)
+func VendorToResourceName(vendor v1alpha1.GpuVendor) corev1.ResourceName {
 	switch vendor {
-	case "NVIDIA":
-		return "nvidia.com/gpu"
-	case "AMD":
-		return "amd.com/gpu"
-	default:
-		return defaultVendor
+	case v1alpha1.GpuVendorAmd:
+		return AmdGpuResourceName
+	case v1alpha1.GpuVendorNvidia:
+		return NvidiaGpuResourceName
 	}
+	panic(fmt.Sprintf("unknown vendor: %v", vendor))
 }
+
+var (
+	ErrMissingGpuFields         = errors.New("missing gpu fields `count`, `totalVram` or `totalComputeUnits`")
+	ErrReplicasCannotFit        = errors.New("required replicas cannot fit into cluster")
+	ErrInvalidGpuResourceValues = errors.New("invalid gpu resource values")
+)
+
+//// CalculateResourceConfig calculates the workload scheduling config based on the requested GPUs and available cluster resources
+//func CalculateResourceConfig(
+//	ctx context.Context,
+//	clusterCtx ClusterContext,
+//	resourceRequirements v1alpha1.GpuResourceRequirements,
+//	replicas *int,
+//) (*CalculatedResourceConfig, error) {
+//	if resourceRequirements.Count == nil && resourceRequirements.TotalComputeUnits == nil && resourceRequirements.TotalVram == nil {
+//		return nil, ErrMissingGpuFields
+//	}
+//	matchingNodes, err := clusterCtx.FindMatchingNodes(resourceRequirements)
+//	if err != nil {
+//		return nil, fmt.Errorf("failed to find best matching node: %w", err)
+//	}
+//
+//	if resourceRequirements.TotalVram != nil && resourceRequirements.TotalVram.Value() == 0 {
+//		return nil, fmt.Errorf("%w: totalVram cannot be zero", ErrInvalidGpuResourceValues)
+//	}
+//	if resourceRequirements.TotalComputeUnits != nil && resourceRequirements.TotalComputeUnits.Value() == 0 {
+//		return nil, fmt.Errorf("%w: totalComputeUnits cannot be zero", ErrInvalidGpuResourceValues)
+//	}
+//
+//	bestMatchingNode := matchingNodes[0]
+//
+//	calculatedResourceRequirements := v1alpha1.GpuResourceRequirements{
+//		Flavor:            resourceRequirements.Flavor,
+//		Models:            resourceRequirements.Models,
+//		Vendor:            resourceRequirements.Vendor,
+//		Count:             resourceRequirements.Count,
+//		TotalVram:         resourceRequirements.TotalVram,
+//		TotalComputeUnits: resourceRequirements.TotalComputeUnits,
+//	}
+//
+//	// If GPU count is not explicitly given, calculate it based on other parameters
+//	if baseutils.ValueOrDefault(resourceRequirements.Count) == 0 {
+//		gpuCount := 0
+//
+//		if resourceRequirements.TotalVram != nil {
+//			gpuCount = int(math.Ceil(float64(resourceRequirements.TotalVram.Value()) / float64(bestMatchingNode.GpuInfo.LogicalComputeUnits.Value())))
+//		}
+//		if resourceRequirements.TotalComputeUnits != nil {
+//			gpuCount = max(gpuCount, int(math.Ceil(float64(resourceRequirements.TotalComputeUnits.Value())/float64(bestMatchingNode.GpuInfo.LogicalComputeUnits.Value()))))
+//		}
+//
+//		calculatedResourceRequirements.Count = &gpuCount
+//	}
+//
+//	// If replicas is set, ensure cluster can fit the requested number of replicas
+//	if replicas != nil {
+//		possibleReplicas := 0
+//		for _, node := range matchingNodes {
+//			replicasOnNode := math.Floor(float64(node.GpuInfo.LogicalCount.Value()) / float64(*calculatedResourceRequirements.Count))
+//			possibleReplicas += int(replicasOnNode)
+//		}
+//		if possibleReplicas < *replicas {
+//			return nil, ErrReplicasCannotFit
+//		}
+//	}
+//
+//	return &CalculatedResourceConfig{
+//		CalculatedResourceRequirements: calculatedResourceRequirements,
+//		BestMatchedNode:                bestMatchingNode.NodeResourceInfo,
+//	}, nil
+//}
+//
+//func GetGpuResourceRequest(workload KaiwoWorkload) (corev1.ResourceName, *resource.Quantity) {
+//	spec := workload.GetCommonSpec()
+//	if spec.Resources.Requests == nil {
+//		return "", nil
+//	}
+//	if val, exists := spec.Resources.Requests[AmdGpuResourceName]; exists {
+//		return AmdGpuResourceName, &val
+//	}
+//	if val, exists := spec.Resources.Requests[NvidiaGpuResourceName]; exists {
+//		return NvidiaGpuResourceName, &val
+//	}
+//	return "", nil
+//}

@@ -6,8 +6,9 @@ spec:
   user: test@amd.com
   ray: true
   image: rayproject/ray:2.41.0
-  gpuVendor: "nvidia"
-  gpus: 30
+  gpuResources:
+    count: 8
+    vendor: nvidia
   entrypoint: sleep 1
   resources:
     limits:
