@@ -17,10 +17,13 @@ package controllerutils
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"sort"
 	"strconv"
 	"strings"
+
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
+
+	"k8s.io/apimachinery/pkg/api/equality"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -63,94 +66,56 @@ func EnsureNamespaceKueueManaged(ctx context.Context, k8sClient client.Client, n
 	return nil
 }
 
-func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo.ResourceFlavorSpec, map[string]kueuev1beta1.FlavorQuotas, error) {
+func ConstructDefaultResourceFlavors(ctx context.Context, clusterContext common.ClusterContext) ([]kaiwo.ResourceFlavorSpec, map[string]kueuev1beta1.FlavorQuotas, error) {
 	logger := log.FromContext(ctx)
 	config := common.ConfigFromContext(ctx)
 
 	var resourceFlavors []kaiwo.ResourceFlavorSpec
 	nodePoolResources := make(map[string]kueuev1beta1.FlavorQuotas)
-	nodePools := make(map[string][]string)
+	nodePools := make(map[string][]common.NodeInfo)
 
 	resourceAggregates := make(map[string]map[corev1.ResourceName]*resource.Quantity)
 
-	// Get node list dynamically
-	nodeList := GetNodeResources(ctx, c)
-
 	if config.Nodes.ExcludeMasterNodesFromNodePools {
-		logger.Info("Excluding master/control-plane nodes from nodepools. Set EXCLUDE_MASTER_NODES_FROM_NODE_POOLS=false to include them")
+		logger.Info("Excluding master/control-plane nodes from nodepools. Set config.nodes.excludeMasterNodesFromNodePools=false to include them")
 	} else {
-		logger.Info("Including master/control-plane nodes in nodepools. Set EXCLUDE_MASTER_NODES_FROM_NODE_POOLS=true to exclude them")
+		logger.Info("Including master/control-plane nodes in nodepools. Set config.nodes.excludeMasterNodesFromNodePools=true to exclude them")
 	}
 
-	for _, node := range nodeList {
-		if node.Unschedulable {
-			logger.Info("Skipping cordoned node", "node", node.Name)
+	for _, node := range clusterContext.Nodes {
+		if node.IsUnschedulable() {
+			logger.Info("Skipping cordoned node", "node", node.Node.Name)
 			continue
 		}
-		// **Skip Control Plane Nodes**
-		if config.Nodes.ExcludeMasterNodesFromNodePools {
-			if _, exists := node.Labels["node-role.kubernetes.io/control-plane"]; exists {
-				continue
-			}
-			if _, exists := node.Labels["node-role.kubernetes.io/master"]; exists {
-				continue
-			}
-		}
-		gpuCount := 0
-		gpuVendor := "cpu"
-		gpuType := "only"
-
-		// Identify AMD GPU Nodes
-		if gpuID, exists := node.Labels["amd.com/gpu.product-name"]; exists {
-			gpuType = CleanAMDGPUName(gpuID)
-			if count, ok := node.Labels["beta.amd.com/gpu.family.AI"]; ok {
-				gpuCount, _ = strconv.Atoi(count)
-				gpuVendor = "amd"
-			}
+		if config.Nodes.ExcludeMasterNodesFromNodePools && node.IsControlPlane() {
+			logger.Info("Skipping control plane node", "node", node.Node.Name)
+			continue
 		}
 
-		// Identify NVIDIA GPU Nodes
-		if gpuProduct, exists := node.Labels["nvidia.com/gpu.product"]; exists {
-			gpuType = strings.ReplaceAll(strings.ToLower(gpuProduct), "-", "")
-			if count, ok := node.Labels["nvidia.com/gpu.count"]; ok {
-				gpuCount, _ = strconv.Atoi(count)
-				gpuVendor = "nvidia" //nolint:goconst
-			}
-		}
-
-		// Compute nominal CPU and memory (90% of total)
-		nominalCPU := resource.NewQuantity(int64(float64(node.CPU)*cpuMemoryDiscountFactor), resource.DecimalSI)
-		nominalMemory := resource.NewQuantity(int64(float64(node.Memory)*cpuMemoryDiscountFactor*1024*1024*1024), resource.BinarySI)
-
-		flavorName := fmt.Sprintf("%s-%s-%dgpu-%dcore-%dgi", gpuVendor, gpuType, gpuCount, nominalCPU.Value(), nominalMemory.Value()/(1024*1024*1024))
+		flavorName := node.GetFlavorName()
 
 		// Track node membership in the nodepool
-		nodePools[flavorName] = append(nodePools[flavorName], node.Name)
-		logger.Info("Node added to node pool", "node", node.Name, "nodePool", flavorName)
+		nodePools[flavorName] = append(nodePools[flavorName], node)
+		logger.Info("Node added to node pool", "node", node.Node.Name, "nodePool", flavorName)
+
+		// TODO check if this should be logical or physical
+		nodeHasGpus := node.GpuInfo != nil && node.GpuInfo.LogicalCount > 0
 
 		if _, exists := resourceAggregates[flavorName]; !exists {
 			resourceAggregates[flavorName] = map[corev1.ResourceName]*resource.Quantity{
 				corev1.ResourceCPU:    resource.NewQuantity(0, resource.DecimalSI),
 				corev1.ResourceMemory: resource.NewQuantity(0, resource.BinarySI),
 			}
-			if gpuCount > 0 {
-				gpuResource := corev1.ResourceName("amd.com/gpu")
-				if gpuVendor == "nvidia" {
-					gpuResource = corev1.ResourceName("nvidia.com/gpu")
-				}
-				resourceAggregates[flavorName][gpuResource] = resource.NewQuantity(0, resource.DecimalSI)
+			if nodeHasGpus {
+				resourceAggregates[flavorName][node.GpuInfo.ResourceName] = resource.NewQuantity(0, resource.DecimalSI)
 			}
 		}
 
-		resourceAggregates[flavorName][corev1.ResourceCPU].Add(*nominalCPU)
-		resourceAggregates[flavorName][corev1.ResourceMemory].Add(*nominalMemory)
+		resourceAggregates[flavorName][corev1.ResourceCPU].Add(*node.GetNominalCPU())
+		resourceAggregates[flavorName][corev1.ResourceMemory].Add(*node.GetNominalMemory())
 
-		if gpuCount > 0 {
-			gpuResource := corev1.ResourceName("amd.com/gpu")
-			if gpuVendor == "nvidia" {
-				gpuResource = corev1.ResourceName("nvidia.com/gpu")
-			}
-			resourceAggregates[flavorName][gpuResource].Add(*resource.NewQuantity(int64(gpuCount), resource.DecimalSI))
+		if nodeHasGpus {
+			resourceAggregates[flavorName][node.GpuInfo.ResourceName].Add(*resource.NewQuantity(int64(node.GpuInfo.LogicalCount), resource.DecimalSI))
 		}
 	}
 
@@ -181,13 +146,18 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 			Name:      kueuev1beta1.ResourceFlavorReference(flavorName),
 			Resources: resourceQuotas,
 		}
-
+		node := nodePools[flavorName][0]
 		flavor := kaiwo.ResourceFlavorSpec{
 			Name: flavorName,
 			NodeLabels: map[string]string{
-				common.DefaultNodePoolLabel: flavorName,
+				common.DefaultNodePoolLabelKey: flavorName,
 			},
 			TopologyName: common.DefaultTopologyName,
+		}
+		if !node.IsCpuOnlyNode() {
+			flavor.NodeLabels[common.NodeGpuLogicalVramLabelKey] = baseutils.QuantityToGi(node.GpuInfo.LogicalVramPerGpu)
+			flavor.NodeLabels[common.NodeGpuModelLabelKey] = node.GpuInfo.ModelCleaned()
+			flavor.NodeLabels[common.NodeGpusPartitionedLabelKey] = strconv.FormatBool(node.GpuInfo.IsPartitioned())
 		}
 
 		// TODO: Look into why automatic scheduling is not working
@@ -198,52 +168,10 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 		// }
 
 		resourceFlavors = append(resourceFlavors, flavor)
-
 	}
 
 	resourceFlavors = RemoveDuplicateResourceFlavors(resourceFlavors)
 
-	gpuTaint := corev1.Taint{
-		Key:    config.Nodes.DefaultGpuTaintKey,
-		Value:  "true",
-		Effect: corev1.TaintEffectNoSchedule,
-	}
-
-	for flavorName, nodeNames := range nodePools {
-		for _, nodeName := range nodeNames {
-			err := LabelNode(ctx, c, nodeName, common.DefaultKaiwoWorkerLabel, "true")
-			if err == nil {
-				logger.Info("Labeled node", "node", nodeName, "label", common.DefaultKaiwoWorkerLabel, "value", "true")
-			} else {
-				return nil, nil, fmt.Errorf("failed to label node %s: %w", nodeName, err)
-			}
-
-			err = LabelNode(ctx, c, nodeName, common.DefaultNodePoolLabel, flavorName)
-			if err == nil {
-				logger.Info("Labeled node", "node", nodeName, "label", common.DefaultNodePoolLabel, "value", flavorName)
-			} else {
-				return nil, nil, fmt.Errorf("failed to label node %s: %w", nodeName, err)
-			}
-
-			if !strings.Contains(flavorName, common.CPUOnly) {
-				err = LabelNode(ctx, c, nodeName, common.GPUModelLabel, strings.Split(flavorName, "-")[1])
-				if err == nil {
-					logger.Info("Labeled node", "node", nodeName, "label", common.GPUModelLabel, "value", strings.Split(flavorName, "-")[1])
-				} else {
-					return nil, nil, fmt.Errorf("failed to label node %s: %w", nodeName, err)
-				}
-			}
-
-			if config.Nodes.AddTaintsToGpuNodes {
-				if !strings.HasPrefix(flavorName, common.CPUOnly) {
-					err = TaintNode(ctx, c, nodeName, gpuTaint)
-					if err != nil {
-						logger.Error(err, "Failed to taint GPU node", "node", nodeName)
-					}
-				}
-			}
-		}
-	}
 	logger.Info("Final generated node pools", "nodePools", nodePools)
 	logger.Info("Final generated node pool resources", "nodePoolResources", nodePoolResources)
 	logger.Info("Final generated resource flavors", "resourceFlavors", resourceFlavors)
@@ -264,7 +192,7 @@ func RemoveDuplicateResourceFlavors(flavors []kaiwo.ResourceFlavorSpec) []kaiwo.
 	return uniqueFlavors
 }
 
-func CreateClusterQueue(nodePoolResources map[string]kueuev1beta1.FlavorQuotas, name string, cohort string) kaiwo.ClusterQueue {
+func ConstructClusterQueue(nodePoolResources map[string]kueuev1beta1.FlavorQuotas, name string, cohort string) kaiwo.ClusterQueue {
 	var resourceGroups []kueuev1beta1.ResourceGroup
 	coveredResources := make(map[corev1.ResourceName]struct{})
 
@@ -307,13 +235,13 @@ func CreateClusterQueue(nodePoolResources map[string]kueuev1beta1.FlavorQuotas, 
 
 	// Convert collected resources to a slice for `CoveredResources`
 	var coveredResourcesSlice []corev1.ResourceName
-	for resource := range coveredResources {
-		coveredResourcesSlice = append(coveredResourcesSlice, resource)
+	for coveredResource := range coveredResources {
+		coveredResourcesSlice = append(coveredResourcesSlice, coveredResource)
 	}
 
 	// Ensure every flavor has the same set of resources as coveredResources
 	for i, flavor := range flavorQuotas {
-		missingResources := []corev1.ResourceName{}
+		var missingResources []corev1.ResourceName
 
 		for _, covered := range coveredResourcesSlice {
 			found := false
@@ -496,19 +424,19 @@ func FindTopology(topologies []kueuev1alpha1.Topology, name string) (kueuev1alph
 }
 
 func CompareResourceFlavors(a, b kueuev1beta1.ResourceFlavor) bool {
-	return reflect.DeepEqual(a.Spec, b.Spec)
+	return equality.Semantic.DeepEqual(a.Spec, b.Spec)
 }
 
 func CompareClusterQueues(a, b kueuev1beta1.ClusterQueue) bool {
-	return reflect.DeepEqual(a.Spec, b.Spec)
+	return equality.Semantic.DeepEqual(a.Spec, b.Spec)
 }
 
 func CompareTopologies(a, b kueuev1alpha1.Topology) bool {
-	return reflect.DeepEqual(a.Spec, b.Spec)
+	return equality.Semantic.DeepEqual(a.Spec, b.Spec)
 }
 
 func ComparePriorityClasses(a, b kueuev1beta1.WorkloadPriorityClass) bool {
-	return reflect.DeepEqual(a.Value, b.Value)
+	return equality.Semantic.DeepEqual(a.Value, b.Value)
 }
 
 func CreateDefaultTopology(ctx context.Context, c client.Client) ([]kaiwo.Topology, error) {

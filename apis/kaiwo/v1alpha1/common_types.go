@@ -54,14 +54,6 @@ const (
 	WorkloadStatusTerminated WorkloadStatus = "TERMINATED"
 )
 
-type GpuNodeType string
-
-const (
-	GpuNodeTypeAny         GpuNodeType = "any"
-	GpuNodeTypePartitioned GpuNodeType = "partitioned"
-	GpuNodeTypePhysical    GpuNodeType = "physical"
-)
-
 var workloadStatusRank = map[WorkloadStatus]int{
 	WorkloadStatusRunning:     0,
 	WorkloadStatusComplete:    1,
@@ -214,6 +206,10 @@ type GpuResourceRequirements struct {
 	// Models allows you to optionally specify the GPU models that your workload will run on. You can see available models either by using the CLI and running `kaiwo status amd/nvidia` or by using kubectl command `kubectl get nodes -o custom-columns=NAME:.metadata.name,MODEL:.metadata.labels.kaiwo\/gpu-model`
 	// This field is used to filter the available nodes for scheduling. You can specify multiple models, and Kaiwo will select the best available node that matches one of the specified models.
 	Models []string `json:"models,omitempty"`
+}
+
+func (r *GpuResourceRequirements) IsGpuRequested() bool {
+	return r != nil && (r.Count != nil || (r.TotalVram != nil && r.TotalVram.Value() > 0))
 }
 
 type GpuVendor string

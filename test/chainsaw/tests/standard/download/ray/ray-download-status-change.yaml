@@ -4,7 +4,6 @@ metadata:
   name: download-job-ray-starts
 spec:
   user: test@amd.com
-  gpus: 0
   resources:
     limits:
       cpu: "100m"

@@ -17,6 +17,8 @@ package unit
 import (
 	"testing"
 
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
+
 	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
 	"github.com/silogen/kaiwo/pkg/workloads/common"
@@ -74,9 +76,10 @@ var _ = Describe("Workload defaults", func() {
 	})
 
 	JustBeforeEach(func() {
-		resourceConfig := common.ResourceConfig{
-			Replicas:       replicas,
-			GpusPerReplica: gpusPerReplica,
+		resourceConfig := &common.GpuSchedulingResult{
+			Replicas:           baseutils.Pointer(replicas),
+			GpuCountPerReplica: gpusPerReplica,
+			GpuResourceName:    common.AmdGpuResourceName,
 		}
 		workload := &v1alpha1.KaiwoJob{
 			ObjectMeta: metav1.ObjectMeta{

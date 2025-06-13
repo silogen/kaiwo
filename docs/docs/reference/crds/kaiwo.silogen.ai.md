@@ -219,26 +219,6 @@ _Appears in:_
 | `targetPath` _string_ | TargetPath specifies the destination path relative to the data volume's mount point (`DataStorageSpec.MountPath`) where the repository or `path` content should be copied. |  |  |
 
 
-#### GpuFlavor
-
-_Underlying type:_ _string_
-
-
-
-
-
-_Appears in:_
-- [GpuResourceRequirements](#gpuresourcerequirements)
-
-| Field | Description |
-| --- | --- |
-| `any` | GpuFlavorAny allows the workload to be scheduled on any GPU node<br /> |
-| `physical` | GpuFlavorPhysical allows the workload to be scheduled only on nodes with physical GPUs<br /> |
-| `partitioned` | GpuFlavorPartitioned allows the workload to be scheduled only on nodes with partitioned GPUs<br /> |
-
-
-
-
 #### GpuResourceRequirements
 
 
@@ -256,8 +236,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `count` _integer_ | Count is the number of logical GPUs requested |  |  |
 | `totalVram` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#quantity-resource-api)_ | TotalVram is the total logical vRAM that is requested. If you provide both Count and TotalVram,<br />the operator will try to find a suitable node that has the given number of GPUs which would provide<br />at least TotalVram amount of vRAM. If you don't provide Count, the number of GPUs is<br />calculated dynamically based on the available nodes and their GPUs. |  |  |
-| `totalComputeUnits` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#quantity-resource-api)_ | TotalComputeUnits is the total logical number of Compute Units (CUs) that is requested. If you provide both Count and TotalComputeUnits,<br />the operator will try to find a suitable node that has the given number of GPUs which would provide<br />at least TotalComputeUnits amount of CUs. If you don't provide Count, the number of GPUs is<br />calculated dynamically based on the available nodes and their GPUs. |  |  |
-| `flavor` _[GpuFlavor](#gpuflavor)_ | Flavor specifies the flavor of GPU node that should be used for scheduling. | physical |  |
+| `partitioned` _boolean_ | Partitioned specifies whether to use nodes with partitioned GPUs or not. | false |  |
 | `vendor` _[GpuVendor](#gpuvendor)_ | Vendor specifies the GPU vendor to be used for the workload | amd |  |
 | `models` _string array_ | Models allows you to optionally specify the GPU models that your workload will run on. You can see available models either by using the CLI and running `kaiwo status amd/nvidia` or by using kubectl command `kubectl get nodes -o custom-columns=NAME:.metadata.name,MODEL:.metadata.labels.kaiwo\/gpu-model`<br />This field is used to filter the available nodes for scheduling. You can specify multiple models, and Kaiwo will select the best available node that matches one of the specified models. |  |  |
 

@@ -16,9 +16,12 @@ package baseutils
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"regexp"
 	"strings"
+
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -141,4 +144,27 @@ func ConvertMultilineEntrypoint(entrypoint string, isRayJob bool) interface{} {
 	}
 
 	return []string{shell, "-c", entrypoint}
+}
+
+// QuantityToGi converts a resource.Quantity to a string in "Gi" (binary gibibytes).
+func QuantityToGi(q resource.Quantity) string {
+	// Get value in bytes
+	bytes := q.Value()
+
+	// divide by 2^30 and round to nearest whole Gi
+	gib := int64(math.Round(float64(bytes) / (1 << 30)))
+
+	return fmt.Sprintf("%dGi", gib)
+}
+
+func ExtractAndConvertLabel[T any](labels map[string]string, key string, fn func(string) (T, error)) (T, error) {
+	value, exists := labels[key]
+	if !exists {
+		return *new(T), fmt.Errorf("key %s does not exist in labels", key)
+	}
+	converted, err := fn(value)
+	if err != nil {
+		return *new(T), fmt.Errorf("key %s could not be converted: %w", key, err)
+	}
+	return converted, nil
 }

@@ -4,7 +4,6 @@ metadata:
   name: foo-gpu-job
 spec:
   user: test@amd.com
-  gpuVendor: "nvidia"
   image: busybox:latest
   entrypoint: "sleep 30"
   resources:
@@ -25,7 +24,6 @@ metadata:
   name: bar-gpu-job
 spec:
   user: test@amd.com
-  gpuVendor: "nvidia"
   image: busybox:latest
   entrypoint: "sleep 30"
   resources:
@@ -46,7 +44,6 @@ metadata:
   name: baz-gpu-job
 spec:
   user: test@amd.com
-  gpuVendor: "nvidia"
   image: busybox:latest
   entrypoint: "sleep 30"
   resources:

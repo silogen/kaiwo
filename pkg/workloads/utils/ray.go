@@ -16,6 +16,7 @@ package utils
 
 import (
 	"context"
+	"fmt"
 
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	v1 "k8s.io/api/core/v1"
@@ -49,34 +50,33 @@ func GetRayClusterTemplate(config workloadutils.KaiwoConfigContext, dangerous bo
 }
 
 // UpdateRayClusterSpec updates a given Ray workload spec to match the Kaiwo workload inputs
-func UpdateRayClusterSpec(ctx context.Context, clusterCtx workloadutils.ClusterContext, workload workloadutils.KaiwoWorkload, rayClusterSpec *rayv1.RayClusterSpec) {
+func UpdateRayClusterSpec(ctx context.Context, clusterCtx workloadutils.ClusterContext, workload workloadutils.KaiwoWorkload, rayClusterSpec *rayv1.RayClusterSpec) error {
 	config := workloadutils.ConfigFromContext(ctx)
 
 	// Calculate scheduling config for workers
-	resourceConfig := workloadutils.CalculateResourceConfig(ctx, clusterCtx, workload, true)
-
+	spec := workload.GetCommonSpec()
+	gpuSchedulingResult, err := workloadutils.CalculateGpuRequirements(ctx, clusterCtx, spec.GpuResources, spec.Replicas)
+	if err != nil {
+		return fmt.Errorf("failed calculating gpu requirements: %w", err)
+	}
 	// Update worker group specs
 	for i := range rayClusterSpec.WorkerGroupSpecs {
-		workloadutils.UpdatePodSpec(config, workload, resourceConfig, &rayClusterSpec.WorkerGroupSpecs[i].Template, false)
-		rayClusterSpec.WorkerGroupSpecs[i].Replicas = baseutils.Pointer(int32(resourceConfig.Replicas))
-		rayClusterSpec.WorkerGroupSpecs[i].MinReplicas = baseutils.Pointer(int32(resourceConfig.Replicas))
-		rayClusterSpec.WorkerGroupSpecs[i].MaxReplicas = baseutils.Pointer(int32(resourceConfig.Replicas))
-	}
-
-	// Update scheduling config for head group spec
-	if headMemoryOverride := resource.MustParse(config.Ray.HeadPodMemory); headMemoryOverride.Value() > 0 {
-		if resourceConfig.DefaultResources == nil {
-			resourceConfig.DefaultResources = &v1.ResourceRequirements{
-				Limits:   v1.ResourceList{},
-				Requests: v1.ResourceList{},
-			}
-		}
-		resourceConfig.DefaultResources.Limits[v1.ResourceMemory] = headMemoryOverride
-		resourceConfig.DefaultResources.Requests[v1.ResourceMemory] = headMemoryOverride
+		workloadutils.UpdatePodSpec(config, workload, gpuSchedulingResult, &rayClusterSpec.WorkerGroupSpecs[i].Template)
+		rayClusterSpec.WorkerGroupSpecs[i].Replicas = baseutils.Pointer(int32(*gpuSchedulingResult.Replicas))
+		rayClusterSpec.WorkerGroupSpecs[i].MinReplicas = baseutils.Pointer(int32(*gpuSchedulingResult.Replicas))
+		rayClusterSpec.WorkerGroupSpecs[i].MaxReplicas = baseutils.Pointer(int32(*gpuSchedulingResult.Replicas))
 	}
 
 	// Update head group spec
-	workloadutils.UpdatePodSpec(config, workload, resourceConfig, &rayClusterSpec.HeadGroupSpec.Template, true)
+	workloadutils.UpdatePodSpec(config, workload, nil, &rayClusterSpec.HeadGroupSpec.Template)
+	if headMemoryOverride := resource.MustParse(config.Ray.HeadPodMemory); headMemoryOverride.Value() > 0 {
+		for i := range rayClusterSpec.HeadGroupSpec.Template.Spec.Containers {
+			resources := rayClusterSpec.HeadGroupSpec.Template.Spec.Containers[i].Resources
+			resources.Limits[v1.ResourceMemory] = headMemoryOverride
+			resources.Requests[v1.ResourceMemory] = headMemoryOverride
+			rayClusterSpec.HeadGroupSpec.Template.Spec.Containers[i].Resources = resources
+		}
+	}
 
 	// Ensure image is set on all containers
 	ensureImage := func(podSpec *v1.PodSpec) {
@@ -91,4 +91,5 @@ func UpdateRayClusterSpec(ctx context.Context, clusterCtx workloadutils.ClusterC
 	for i := range rayClusterSpec.WorkerGroupSpecs {
 		ensureImage(&rayClusterSpec.WorkerGroupSpecs[i].Template.Spec)
 	}
+	return nil
 }

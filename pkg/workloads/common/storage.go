@@ -89,7 +89,7 @@ func (h StorageHandler) GetResourceReconcilers() []ResourceReconciler {
 	return reconcilers
 }
 
-func (h StorageHandler) ObserveStatus(ctx context.Context, k8sClient client.Client, previousWorkloadStatus v1alpha1.WorkloadStatus) (v1alpha1.WorkloadStatus, []metav1.Condition, error) {
+func (h StorageHandler) ObserveStatus(ctx context.Context, k8sClient client.Client, clusterCtx ClusterContext, previousWorkloadStatus v1alpha1.WorkloadStatus) (v1alpha1.WorkloadStatus, []metav1.Condition, error) {
 	status, conditions, err := ObserveOverallStatus(ctx, k8sClient, h.GetResourceReconcilers(), previousWorkloadStatus)
 	if status == nil {
 		return "", conditions, err
