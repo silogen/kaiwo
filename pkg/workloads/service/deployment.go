@@ -103,10 +103,12 @@ func (handler *DeploymentHandler) BuildDesired(ctx context.Context, clusterCtx c
 
 	depSpec.Selector.MatchLabels["app"] = svc.Name
 
-	resourceConfig := common.CalculateResourceConfig(ctx, clusterCtx, handler.KaiwoService, true)
-
+	gpuSchedulingResult, err := common.CalculateGpuRequirements(ctx, clusterCtx, handler.KaiwoService.Spec.GpuResources, svcSpec.Replicas)
+	if err != nil {
+		return nil, fmt.Errorf("failed to calculate gpu requirements: %w", err)
+	}
 	if svcSpec.Replicas != nil {
-		depSpec.Replicas = baseutils.Pointer(int32(resourceConfig.Replicas))
+		depSpec.Replicas = baseutils.Pointer(int32(*gpuSchedulingResult.Replicas))
 	}
 
 	if err := common.AddEntrypoint(
@@ -116,7 +118,7 @@ func (handler *DeploymentHandler) BuildDesired(ctx context.Context, clusterCtx c
 		return nil, baseutils.LogErrorf(logger, "failed to add entrypoint: %v", err)
 	}
 
-	common.UpdatePodSpec(config, handler.KaiwoService, resourceConfig, &depSpec.Template)
+	common.UpdatePodSpec(config, handler.KaiwoService, gpuSchedulingResult, &depSpec.Template)
 
 	depSpec.Template.ObjectMeta.Labels["app"] = svc.Name
 	depSpec.Template.ObjectMeta.Labels[common.QueueLabel] = common.GetClusterQueueName(ctx, handler)

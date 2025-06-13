@@ -78,7 +78,7 @@ func (wr *Reconciler) Reconcile(ctx context.Context) (ctrl.Result, error) {
 		return ctrl.Result{}, nil
 	}
 
-	clusterContext, err := GetClusterContext(ctx, wr.Client, wr.WorkloadHandler.Workload)
+	clusterContext, err := GetClusterContext(ctx, wr.Client)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to fetch cluster context: %w", err)
 	}
@@ -102,9 +102,21 @@ func (wr *Reconciler) Reconcile(ctx context.Context) (ctrl.Result, error) {
 
 	// If the workload is active, ensure the remote resources match
 	if isActiveStatus(observedStatus) {
-		baseutils.Debug(logger, "Workload is active, ensuring all resources")
 		if err := wr.ensureAllResources(ctx, observedStatus, conditions); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to ensure all resources: %w", err)
+		}
+	}
+
+	switch observedStatus {
+	case v1alpha1.WorkloadStatusPending:
+		// Attempt to clean up expired workloads so that this one can be admitted
+		if _, err := CleanupExpiredWorkloads(ctx, wr.Client); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to cleanup expired workloads: %w", err)
+		}
+	case v1alpha1.WorkloadStatusRunning:
+		// Requeue after the workload's duration is expired, so that the workload can become preemptable
+		if shouldRequeue, requeueAfter := ShouldRequeueAfter(wr.WorkloadHandler.Workload); shouldRequeue {
+			return ctrl.Result{RequeueAfter: *requeueAfter}, nil
 		}
 	}
 
@@ -122,7 +134,7 @@ func (wr *Reconciler) observeOverallStatus(ctx context.Context) (v1alpha1.Worklo
 	conditions := []metav1.Condition{schedulableCondition}
 
 	if wr.StorageHandler != nil {
-		storageStatus, storageConditions, err := wr.StorageHandler.ObserveStatus(ctx, wr.Client, status.Status)
+		storageStatus, storageConditions, err := wr.StorageHandler.ObserveStatus(ctx, wr.Client, wr.ClusterContext, status.Status)
 		if err != nil {
 			return "", nil, fmt.Errorf("failed to observe storage status: %w", err)
 		}
@@ -145,7 +157,7 @@ func (wr *Reconciler) observeOverallStatus(ctx context.Context) (v1alpha1.Worklo
 		// Download job is complete and / or storage is healthy
 	}
 
-	workloadStatus, workloadConditions, err := wr.WorkloadHandler.ObserveStatus(ctx, wr.Client, status.Status)
+	workloadStatus, workloadConditions, err := wr.WorkloadHandler.ObserveStatus(ctx, wr.Client, wr.ClusterContext, status.Status)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to observe workload status: %w", err)
 	}
@@ -177,13 +189,6 @@ func (wr *Reconciler) handleStatusTransition(ctx context.Context, newStatus v1al
 		case v1alpha1.WorkloadStatusRunning:
 			wr.Recorder.Event(obj, corev1.EventTypeNormal, "WorkloadRunning", "Workload has started")
 			commonStatusSpec.StartTime = &metav1.Time{Time: time.Now()}
-
-			if requeueAfter := GetRemainingTimeBeforeBecomingPreemptable(wr.WorkloadHandler.Workload); requeueAfter != nil {
-				logger.Info(fmt.Sprintf("Workload will become preemptable after %s", requeueAfter.String()))
-				// As everything should be up and running now, we don't have to ensure the resources, we can skip the immediate requeue,
-				// and instead request a requeue to update the preemption condition later
-				result = ctrl.Result{RequeueAfter: *requeueAfter}
-			}
 		case v1alpha1.WorkloadStatusComplete:
 			wr.Recorder.Event(obj, corev1.EventTypeNormal, "WorkloadComplete", "Workload has completed")
 		case v1alpha1.WorkloadStatusFailed:
@@ -202,10 +207,15 @@ func (wr *Reconciler) handleStatusTransition(ctx context.Context, newStatus v1al
 		}
 	}
 
+	condition := meta.FindStatusCondition(commonStatusSpec.Conditions, PreemptableConditionType)
+	if condition != nil && condition.Status == metav1.ConditionTrue && condition.ObservedGeneration == 0 {
+		wr.Recorder.Event(obj, corev1.EventTypeNormal, "Preemptable", "Workload has exceeded its duration")
+	}
+
 	if err := wr.Client.Status().Update(ctx, obj); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
 	}
-
+	logger.Info(fmt.Sprintf("Result: %v", result))
 	return result, nil
 }
 
@@ -238,7 +248,6 @@ func isTerminalStatus(status v1alpha1.WorkloadStatus) bool {
 }
 
 func (wr *Reconciler) ensureAllResources(ctx context.Context, observedStatus v1alpha1.WorkloadStatus, conditions []metav1.Condition) error {
-	logger := log.FromContext(ctx)
 	ensureStorageOnly := false
 
 	// Determine whether to ensure storage or workload
@@ -260,7 +269,6 @@ func (wr *Reconciler) ensureAllResources(ctx context.Context, observedStatus v1a
 	}
 
 	if ensureStorageOnly {
-		baseutils.Debug(logger, "Skipping workload resource reconciliation")
 		return nil
 	}
 
@@ -276,8 +284,6 @@ func (wr *Reconciler) ensureStorageResources(ctx context.Context, clusterContext
 	if wr.StorageHandler == nil {
 		return nil
 	}
-	logger := log.FromContext(ctx)
-	baseutils.Debug(logger, "Ensuring storage resources")
 	return wr.reconcileHandler(ctx, clusterContext, wr.StorageHandler)
 }
 
@@ -286,8 +292,6 @@ func (wr *Reconciler) ensureWorkloadResources(ctx context.Context, clusterContex
 	if err := wr.ensureLocalQueue(ctx); err != nil {
 		return fmt.Errorf("failed to ensure local queue: %w", err)
 	}
-	logger := log.FromContext(ctx)
-	baseutils.Debug(logger, "Ensuring workload resources")
 	return wr.reconcileHandler(ctx, clusterContext, wr.WorkloadHandler)
 }
 

@@ -3,6 +3,8 @@ kind: Test
 metadata:
   name: default-kaiwoqueueconfig-creation-test
 spec:
+  timeouts:
+    assert: 10s
   steps:
   - name: Check kaiwoqueueconfig creation
     try:
@@ -22,14 +24,14 @@ spec:
           kind: Node
           metadata:
             labels:
-              kaiwo/nodepool: ($resourceflavor1)
+              kaiwo.silogen.ai/node.pool: ($resourceflavor1)
     - assert:
         resource:
           apiVersion: v1
           kind: Node
           metadata:
             labels:
-              kaiwo/nodepool: ($resourceflavor2)
+              kaiwo.silogen.ai/node.pool: ($resourceflavor2)
     catch:
     - command:
         entrypoint: kaiwo-dev
@@ -39,27 +41,3 @@ spec:
         - name: PRINT_LEVEL
           value: ($values.print_level)
         args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
-
----
-
-apiVersion: chainsaw.kyverno.io/v1alpha1
-kind: Test
-metadata:
-  name: assert-gpu-taint
-spec:
-  steps:
-  - name: assert-gpu-taint
-    try:
-    - script:
-        content: kubectl get no kaiwo-test-worker -o json
-        check:
-          (contains($stdout, 'kaiwo.silogen.ai/gpu')): false
-    - script:
-        content: kubectl get no kaiwo-test-worker2 -o json
-        check:
-          (contains($stdout, 'kaiwo.silogen.ai/gpu')): false
-    - script:
-        content: kubectl get no kaiwo-test-worker3 -o json
-        check:
-          (contains($stdout, 'kaiwo.silogen.ai/gpu')): false
-

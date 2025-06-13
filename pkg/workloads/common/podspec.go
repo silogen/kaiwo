@@ -26,7 +26,7 @@ import (
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 )
 
-func UpdatePodSpec(config KaiwoConfigContext, workload KaiwoWorkload, resourceConfig ResourceConfig, template *corev1.PodTemplateSpec) {
+func UpdatePodSpec(config KaiwoConfigContext, workload KaiwoWorkload, gpuScheduling *GpuSchedulingResult, template *corev1.PodTemplateSpec) {
 	commonMetaSpec := workload.GetCommonSpec()
 	workloadName := workload.GetKaiwoWorkloadObject().GetName()
 
@@ -78,13 +78,23 @@ func UpdatePodSpec(config KaiwoConfigContext, workload KaiwoWorkload, resourceCo
 		})
 	}
 
-	if len(commonMetaSpec.GpuModels) > 0 && resourceConfig.GpusPerReplica > 0 {
-		UpdatePodSpecWithGPUModelAffinity(template, commonMetaSpec.GpuModels, GPUModelLabel)
+	// Update node affinity if GPUs requested with node selector terms
+	if gpuScheduling.GpusRequested() && gpuScheduling.GpuCountPerReplica > 0 && (len(gpuScheduling.NodeSelectorTerms.MatchExpressions) > 0 || len(gpuScheduling.NodeSelectorTerms.MatchFields) > 0) {
+		if template.Spec.Affinity == nil {
+			template.Spec.Affinity = &corev1.Affinity{}
+		}
+		if template.Spec.Affinity.NodeAffinity == nil {
+			template.Spec.Affinity.NodeAffinity = &corev1.NodeAffinity{}
+		}
+		if template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil {
+			template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution = &corev1.NodeSelector{}
+		}
+		template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms = append(template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms, gpuScheduling.NodeSelectorTerms)
 	}
 
 	// Update container specs
 	for i := range template.Spec.Containers {
-		updateMainContainer(config, commonMetaSpec, resourceConfig, &template.Spec.Containers[i])
+		updateMainContainer(config, commonMetaSpec, gpuScheduling, &template.Spec.Containers[i])
 	}
 	for i := range template.Spec.InitContainers {
 		updateInitContainer(commonMetaSpec, &template.Spec.InitContainers[i])
@@ -123,26 +133,34 @@ func UpdatePodSpec(config KaiwoConfigContext, workload KaiwoWorkload, resourceCo
 }
 
 // updateMainContainer updates the container specifications for main containers
-func updateMainContainer(config KaiwoConfigContext, kaiwoCommonMetaSpec kaiwo.CommonMetaSpec, resourceConfig ResourceConfig, container *corev1.Container) {
+func updateMainContainer(_ KaiwoConfigContext, kaiwoCommonMetaSpec kaiwo.CommonMetaSpec, gpuScheduling *GpuSchedulingResult, container *corev1.Container) {
 	// Update base
 	updateContainerBase(kaiwoCommonMetaSpec, container)
 
-	// Update resources
-	containerResourceRequirements := CreateResourceRequirements(config, resourceConfig)
-	fillContainerResources(container, &containerResourceRequirements, false)
+	resourceRequirements := gpuScheduling.CreateResourceRequirements(kaiwoCommonMetaSpec.Resources)
+
+	fillContainerResources(container, &resourceRequirements, false)
+
+	replicas := kaiwoCommonMetaSpec.Replicas
+	if baseutils.ValueOrDefault(replicas) == 0 {
+		replicas = baseutils.Pointer(1)
+	}
+
+	numGpusPerReplica := 0
+	if gpuScheduling.GpusRequested() {
+		numGpusPerReplica = gpuScheduling.GpuCountPerReplica
+	}
 
 	envVarsToAppend := []corev1.EnvVar{
-		{Name: "NUM_GPUS", Value: fmt.Sprintf("%d", resourceConfig.TotalGpus)},
-		{Name: "NUM_REPLICAS", Value: fmt.Sprintf("%d", resourceConfig.Replicas)},
-		{Name: "NUM_GPUS_PER_REPLICA", Value: fmt.Sprintf("%d", resourceConfig.GpusPerReplica)},
+		{Name: "NUM_GPUS", Value: fmt.Sprintf("%d", numGpusPerReplica**replicas)},
+		{Name: "NUM_REPLICAS", Value: fmt.Sprintf("%d", *replicas)},
+		{Name: "NUM_GPUS_PER_REPLICA", Value: fmt.Sprintf("%d", numGpusPerReplica)},
 	}
+	container.Env = append(container.Env, envVarsToAppend...)
 
 	if container.Image == "" {
 		container.Image = kaiwoCommonMetaSpec.Image
 	}
-
-	// Append to existing environment variables
-	container.Env = append(container.Env, envVarsToAppend...)
 }
 
 // updateMainContainer updates the container specifications for init containers
@@ -189,32 +207,25 @@ func updateContainerBase(kaiwoCommonMetaSpec kaiwo.CommonMetaSpec, container *co
 	}
 }
 
-func UpdatePodSpecWithGPUModelAffinity(template *corev1.PodTemplateSpec, gpuModels []string, gpuModelLabel string) {
-	if len(gpuModels) == 0 {
+// fillContainerResources fills container resources with a given template if they are not already set
+func fillContainerResources(container *corev1.Container, resources *corev1.ResourceRequirements, override bool) {
+	if resources == nil {
 		return
 	}
 
-	selectorTerm := corev1.NodeSelectorTerm{
-		MatchExpressions: []corev1.NodeSelectorRequirement{
-			{
-				Key:      gpuModelLabel,
-				Operator: corev1.NodeSelectorOpIn,
-				Values:   gpuModels,
-			},
-		},
-	}
+	fillResourceList(&container.Resources.Requests, resources.Requests, override)
+	fillResourceList(&container.Resources.Limits, resources.Limits, override)
+}
 
-	nodeAffinity := &corev1.NodeAffinity{
-		RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
-			NodeSelectorTerms: []corev1.NodeSelectorTerm{selectorTerm},
-		},
+func fillResourceList(dest *corev1.ResourceList, src corev1.ResourceList, override bool) {
+	if *dest == nil {
+		*dest = corev1.ResourceList{}
 	}
-
-	if template.Spec.Affinity == nil {
-		template.Spec.Affinity = &corev1.Affinity{}
+	for k, v := range src {
+		if _, exists := (*dest)[k]; override || !exists {
+			(*dest)[k] = v
+		}
 	}
-
-	template.Spec.Affinity.NodeAffinity = nodeAffinity
 }
 
 func GetPodTemplate(config KaiwoConfigContext, dshmSize resource.Quantity, dangerous bool, workloadContainerName string) corev1.PodTemplateSpec {

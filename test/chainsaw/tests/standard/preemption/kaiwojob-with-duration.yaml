@@ -5,9 +5,10 @@ metadata:
 spec:
   user: test@amd.com
   image: busybox:latest
-  gpuVendor: "nvidia"
-  duration: 1s
-  gpus: 1
+  duration: 5s
+  gpuResources:
+    count: 1
+    vendor: nvidia
   entrypoint: sleep 60000
   resources:
     limits:
