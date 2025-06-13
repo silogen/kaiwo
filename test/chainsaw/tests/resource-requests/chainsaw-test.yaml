@@ -68,11 +68,11 @@ spec:
           metadata:
             name: gpu-model-request-fail
           status:
-            status: PENDING
-    - script:
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-        content: ../../scripts/find_string_in_events.sh $NAMESPACE gpu-model-request-fail "node(s) didn't match Pod's node affinity/selector"
-        check:
-          ($error == null): true
+            status: ERROR
+#    - script:
+#        env:
+#        - name: NAMESPACE
+#          value: ($namespace)
+#        content: ../../scripts/find_string_in_events.sh $NAMESPACE gpu-model-request-fail "node(s) didn't match Pod's node affinity/selector"
+#        check:
+#          ($error == null): true

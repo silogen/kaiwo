@@ -30,7 +30,7 @@ type GroupReconciler interface {
 	GetResourceReconcilers() []ResourceReconciler
 
 	// ObserveStatus gives the current status and conditions of this reconciler group
-	ObserveStatus(ctx context.Context, k8sClient client.Client, previousWorkloadStatus kaiwo.WorkloadStatus) (kaiwo.WorkloadStatus, []metav1.Condition, error)
+	ObserveStatus(ctx context.Context, k8sClient client.Client, clusterCtx ClusterContext, previousWorkloadStatus kaiwo.WorkloadStatus) (kaiwo.WorkloadStatus, []metav1.Condition, error)
 }
 
 // ResourceReconciler is an interface for building and updating Kubernetes resources

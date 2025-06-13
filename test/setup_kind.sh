@@ -43,6 +43,14 @@ kubectl label ns gpu-operator pod-security.kubernetes.io/enforce=privileged
 kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 run.ai/simulated-gpu-node-pool=default
 kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 nvidia.com/gpu.product=Tesla-K80
 kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 nvidia.com/gpu.count=8
+
+# Mock the additional labels
+kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 nvidia.com/gpu.memory.total=24576
+# Make worker2 MIG-enabled (mock)
+kubectl label node "$TEST_NAME"-worker2 nvidia.com/mig.enabled=true
+kubectl label node "$TEST_NAME"-worker2 nvidia.com/gpu.mig.count=8
+kubectl label node "$TEST_NAME"-worker2 nvidia.com/gpu.mig.profile=1g.3gb
+
 kubectl apply -f test/fake-gpu-operator/fake-gpu-operator.yaml
 
 

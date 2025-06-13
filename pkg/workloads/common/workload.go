@@ -44,7 +44,7 @@ func (h WorkloadHandler) GetResourceReconcilers() []ResourceReconciler {
 	return []ResourceReconciler{h.Workload}
 }
 
-func (h WorkloadHandler) ObserveStatus(ctx context.Context, k8sClient client.Client, previousWorkloadStatus v1alpha1.WorkloadStatus) (v1alpha1.WorkloadStatus, []metav1.Condition, error) {
+func (h WorkloadHandler) ObserveStatus(ctx context.Context, k8sClient client.Client, clusterCtx ClusterContext, previousWorkloadStatus v1alpha1.WorkloadStatus) (v1alpha1.WorkloadStatus, []metav1.Condition, error) {
 	isAdmitted, err := IsAdmitted(ctx, k8sClient, h.Workload)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to check if workload is admitted: %w", err)
@@ -78,7 +78,7 @@ func (h WorkloadHandler) ObserveStatus(ctx context.Context, k8sClient client.Cli
 			if preemptCondition != nil {
 				conditions = append(conditions, *preemptCondition)
 
-				if shouldPreempt, err := ShouldPreempt(ctx, k8sClient, h.Workload); err != nil {
+				if shouldPreempt, err := ShouldPreempt(ctx, k8sClient, clusterCtx, h.Workload); err != nil {
 					return "", nil, fmt.Errorf("failed to check if workload is preemptable: %w", err)
 				} else if shouldPreempt {
 					conditions = append(conditions, metav1.Condition{

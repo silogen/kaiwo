@@ -78,7 +78,7 @@ func (wr *Reconciler) Reconcile(ctx context.Context) (ctrl.Result, error) {
 		return ctrl.Result{}, nil
 	}
 
-	clusterContext, err := GetClusterContext(ctx, wr.Client, wr.WorkloadHandler.Workload)
+	clusterContext, err := GetClusterContext(ctx, wr.Client)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to fetch cluster context: %w", err)
 	}
@@ -134,7 +134,7 @@ func (wr *Reconciler) observeOverallStatus(ctx context.Context) (v1alpha1.Worklo
 	conditions := []metav1.Condition{schedulableCondition}
 
 	if wr.StorageHandler != nil {
-		storageStatus, storageConditions, err := wr.StorageHandler.ObserveStatus(ctx, wr.Client, status.Status)
+		storageStatus, storageConditions, err := wr.StorageHandler.ObserveStatus(ctx, wr.Client, wr.ClusterContext, status.Status)
 		if err != nil {
 			return "", nil, fmt.Errorf("failed to observe storage status: %w", err)
 		}
@@ -157,7 +157,7 @@ func (wr *Reconciler) observeOverallStatus(ctx context.Context) (v1alpha1.Worklo
 		// Download job is complete and / or storage is healthy
 	}
 
-	workloadStatus, workloadConditions, err := wr.WorkloadHandler.ObserveStatus(ctx, wr.Client, status.Status)
+	workloadStatus, workloadConditions, err := wr.WorkloadHandler.ObserveStatus(ctx, wr.Client, wr.ClusterContext, status.Status)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to observe workload status: %w", err)
 	}
