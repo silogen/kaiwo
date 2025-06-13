@@ -60,11 +60,11 @@ spec:
             name: dshm
     workerGroupSpecs:
     - groupName: default-worker-group
-      maxReplicas: 2
-      minReplicas: 2
+      maxReplicas: 1
+      minReplicas: 1
       numOfHosts: 1
       rayStartParams: {}
-      replicas: 2
+      replicas: 1
       scaleStrategy: {}
       template:
         metadata:
@@ -76,23 +76,19 @@ spec:
           containers:
           - env:
             - name: NUM_GPUS
-              value: "14"
+              value: "8"
             - name: NUM_REPLICAS
-              value: "2"
+              value: "1"
             - name: NUM_GPUS_PER_REPLICA
-              value: "7"
+              value: "8"
             image: rayproject/ray:2.41.0
             imagePullPolicy: Always
             name: ray-worker
             resources:
               limits:
-                cpu: "28"
-                memory: 224Gi
-                nvidia.com/gpu: "7"
+                nvidia.com/gpu: "8"
               requests:
-                cpu: "28"
-                memory: 224Gi
-                nvidia.com/gpu: "7"
+                nvidia.com/gpu: "8"
             volumeMounts:
             - mountPath: /dev/shm
               name: dshm

@@ -70,6 +70,10 @@ func GetContextWithConfig(ctx context.Context, k8sClient client.Client) (context
 	}), nil
 }
 
+func SetContextConfig(ctx context.Context, config *configapi.KaiwoConfig) context.Context {
+	return context.WithValue(ctx, cfgKey{}, KaiwoConfigContext{KaiwoConfigSpec: config.Spec})
+}
+
 func createDefaultConfig(ctx context.Context, k8sClient client.Client) (*configapi.KaiwoConfig, error) {
 	config := &configapi.KaiwoConfig{
 		ObjectMeta: metav1.ObjectMeta{

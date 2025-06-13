@@ -14,23 +14,6 @@ Package v1alpha1 contains API Schema definitions for the kaiwo configuration v1a
 
 
 
-#### GpuFillStrategy
-
-_Underlying type:_ _string_
-
-
-
-
-
-_Appears in:_
-- [KaiwoSchedulingConfig](#kaiwoschedulingconfig)
-
-| Field | Description |
-| --- | --- |
-| `minimize-waste` | GpuFillStrategyMinimizeWaste picks the tier (size `S` and count `n`) that produces the least leftover<br />capacity (`totalCap - requested`), even if `n` becomes large.<br />Examples (sizes = \{24Gi, 192Gi\}):<br />  • request=50Gi: only small qualifies → 3×24Gi (waste=22Gi)<br />  • request=140Gi: both qualify → small wastes 4Gi vs large wastes 52Gi → choose 6×24Gi<br /> |
-| `minimize-gpus` | GpuFillStrategyMinimizeGpus picks the smallest `n` such that `fillRatio ≥ GpuFillThreshold`.<br />If multiple tiers qualify, choose the one with smaller `n`.<br />If none qualify, fall back to minimize-waste.<br />Examples (sizes = \{24Gi, 192Gi\}, threshold=0.5):<br />  • request=50Gi: only small qualifies → 3×24Gi<br />  • request=140Gi: both qualify → small n=6 vs large n=1 → choose 1×192Gi<br /> |
-
-
 #### KaiwoConfig
 
 
@@ -168,8 +151,6 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `kubeSchedulerName` _string_ | KubeSchedulerName defines the default scheduler name that is used to schedule the workload | kaiwo-scheduler |  |
 | `pendingThresholdForPreemption` _string_ | PendingThresholdForPreemption is the threshold that is used to determine if a workload is awaiting for compute resources to be available.<br />If the workload is requesting GPUs and pending for longer than this threshold, kaiwo will start preempting workloads that have exceeded their duration deadline and are using GPUs of the same vendor as the pending workload. | 5m |  |
-| `gpuFillThreshold` _float_ | GpuFillThreshold controls which GPU sizes to consider when `count` isn’t set.<br />For each candidate GPU size S:<br /><br />`n = ceil(requested / S)`<br />`totalCap = n * S`<br />`fillRatio = requested / totalCap`<br /><br />Only sizes with `fillRatio ≥ GpuFillThreshold` are considered.<br />If none qualify, we fall back to the smallest-waste option.<br /><br />Examples (sizes = `\{24Gi, 192Gi\}`, threshold=0.5):<br /><br />* request=50Gi:<br />    * small: n=3 → cap=72Gi → fillRatio≈0.69 ≥ 0.5<br />    * large: n=1 → cap=192Gi → fillRatio≈0.26 < 0.5<br />    ⇒ only 24Gi tier qualifies<br /><br />* request=140Gi:<br />    * small: n=6 → cap=144Gi → fillRatio≈0.97 ≥ 0.5<br />    * large: n=1 → cap=192Gi → fillRatio≈0.73 ≥ 0.5<br />    ⇒ both tiers qualify | 0.5 | Maximum: 1 <br />Minimum: 0 <br /> |
-| `gpuFillStrategy` _[GpuFillStrategy](#gpufillstrategy)_ | GpuFillStrategy controls how GPUs are picked after threshold filtering.<br />If no size meets the threshold, always fall back to waste minimization. | minimize-gpus | Enum: [minimize-waste minimize-gpus] <br /> |
 
 
 #### KaiwoStorageConfig

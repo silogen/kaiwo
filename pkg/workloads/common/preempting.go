@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/meta"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -48,7 +48,7 @@ func GetRemainingTimeBeforeBecomingPreemptable(handler KaiwoWorkload) *time.Dura
 }
 
 // GetPreemptableCondition gets the correct preemptable condition
-func GetPreemptableCondition(ctx context.Context, handler KaiwoWorkload) *v1.Condition {
+func GetPreemptableCondition(ctx context.Context, handler KaiwoWorkload) *metav1.Condition {
 	logger := log.FromContext(ctx)
 	remaining := GetRemainingTimeBeforeBecomingPreemptable(handler)
 	obj := handler.GetKaiwoWorkloadObject()
@@ -57,17 +57,17 @@ func GetPreemptableCondition(ctx context.Context, handler KaiwoWorkload) *v1.Con
 	}
 	logger.Info(fmt.Sprintf("Preemptable condition found, remaining: %v", *remaining))
 	if remaining.Seconds() > 0 {
-		return &v1.Condition{
+		return &metav1.Condition{
 			Type:               PreemptableConditionType,
-			Status:             v1.ConditionFalse,
+			Status:             metav1.ConditionFalse,
 			Reason:             string(PreemptReasonDurationNotExceeded),
 			Message:            "Workload is running and the duration has not been exceeded",
 			ObservedGeneration: obj.GetGeneration(),
 		}
 	} else {
-		return &v1.Condition{
+		return &metav1.Condition{
 			Type:               PreemptableConditionType,
-			Status:             v1.ConditionTrue,
+			Status:             metav1.ConditionTrue,
 			Reason:             string(PreemptReasonDurationExceeded),
 			Message:            "Workload duration has exceeded",
 			ObservedGeneration: obj.GetGeneration(),
@@ -101,9 +101,9 @@ func CleanupExpiredWorkloads(ctx context.Context, k8sClient client.Client) (bool
 		status := workload.GetCommonStatusSpec()
 		if status.Status == v1alpha1.WorkloadStatusRunning && meta.IsStatusConditionTrue(status.Conditions, PreemptableConditionType) {
 			status.Status = v1alpha1.WorkloadStatusTerminating
-			meta.SetStatusCondition(&status.Conditions, v1.Condition{
+			meta.SetStatusCondition(&status.Conditions, metav1.Condition{
 				Type:    WorkloadEarlyTerminationConditionType,
-				Status:  v1.ConditionFalse,
+				Status:  metav1.ConditionFalse,
 				Reason:  string(PreemptReasonDurationExceeded),
 				Message: "Workload is terminating due to exceeding its duration and active GPU demand",
 			})
@@ -119,7 +119,7 @@ func CleanupExpiredWorkloads(ctx context.Context, k8sClient client.Client) (bool
 }
 
 // ShouldPreempt checks if a workload should be preempted or not based on expired duration and current queue GPU demand
-func ShouldPreempt(ctx context.Context, k8sClient client.Client, handler WorkloadReconciler) (bool, error) {
+func ShouldPreempt(ctx context.Context, k8sClient client.Client, clusterCtx ClusterContext, handler WorkloadReconciler) (bool, error) {
 	status := handler.GetCommonStatusSpec()
 	spec := handler.GetCommonSpec()
 	duration := spec.Duration
@@ -132,7 +132,7 @@ func ShouldPreempt(ctx context.Context, k8sClient client.Client, handler Workloa
 	if now.After(deadline) {
 		config := ConfigFromContext(ctx)
 		queue := GetClusterQueueName(ctx, handler)
-		hasDemand, err := ClusterHasGpuDemand(ctx, k8sClient, queue, spec.GpuVendor, config)
+		hasDemand, err := ClusterHasGpuDemand(ctx, k8sClient, clusterCtx, queue, config, handler)
 		if err != nil {
 			return false, fmt.Errorf("failed to check if cluster has GPU demand: %w", err)
 		}
@@ -141,19 +141,36 @@ func ShouldPreempt(ctx context.Context, k8sClient client.Client, handler Workloa
 	return false, nil
 }
 
-func ClusterHasGpuDemand(ctx context.Context, k8sClient client.Client, clusterQueue string, gpuVendor string, config KaiwoConfigContext) (bool, error) {
+// ClusterHasGpuDemand checks if the cluster has GPU demand that matches the workload's GPU resources
+func ClusterHasGpuDemand(ctx context.Context, k8sClient client.Client, clusterCtx ClusterContext, clusterQueue string, config KaiwoConfigContext, workload KaiwoWorkload) (bool, error) {
+	workloadSpec := workload.GetCommonSpec()
+
+	gpuRequirements, err := CalculateGpuRequirements(ctx, clusterCtx, workloadSpec.GpuResources, workloadSpec.Replicas)
+	if err != nil {
+		return false, fmt.Errorf("failed to calculate workload resource config: %w", err)
+	}
+
+	if !gpuRequirements.GpusRequested() {
+		return false, nil
+	}
+
 	var jobs v1alpha1.KaiwoJobList
 	if err := k8sClient.List(ctx, &jobs); err != nil {
 		return false, fmt.Errorf("failed to list KaiwoJobs: %w", err)
 	}
 	for _, job := range jobs.Items {
+
+		jobGpuRequirements, err := CalculateGpuRequirements(ctx, clusterCtx, job.Spec.GpuResources, job.Spec.Replicas)
+		if err != nil {
+			return false, fmt.Errorf("failed to calculate job resource config: %w", err)
+		}
+
 		if job.Spec.ClusterQueue == "" {
 			job.Spec.ClusterQueue = config.DefaultClusterQueueName
 		}
 		if job.Status.Status == v1alpha1.WorkloadStatusPending &&
-			job.Spec.Gpus > 0 &&
 			job.Spec.ClusterQueue == clusterQueue &&
-			job.Spec.GpuVendor == gpuVendor &&
+			gpuRequirements.CompetesWith(jobGpuRequirements) &&
 			isPendingForLong(ctx, job.ObjectMeta) {
 			return true, nil
 		}
@@ -164,13 +181,16 @@ func ClusterHasGpuDemand(ctx context.Context, k8sClient client.Client, clusterQu
 		return false, fmt.Errorf("failed to list KaiwoServices: %w", err)
 	}
 	for _, svc := range services.Items {
+		svcGpuRequirements, err := CalculateGpuRequirements(ctx, clusterCtx, svc.Spec.GpuResources, svc.Spec.Replicas)
+		if err != nil {
+			return false, fmt.Errorf("failed to calculate service resource config: %w", err)
+		}
 		if svc.Spec.ClusterQueue == "" {
 			svc.Spec.ClusterQueue = config.DefaultClusterQueueName
 		}
 		if svc.Status.Status == v1alpha1.WorkloadStatusPending &&
-			svc.Spec.Gpus > 0 &&
 			svc.Spec.ClusterQueue == clusterQueue &&
-			svc.Spec.GpuVendor == gpuVendor &&
+			gpuRequirements.CompetesWith(svcGpuRequirements) &&
 			isPendingForLong(ctx, svc.ObjectMeta) {
 			return true, nil
 		}
@@ -179,7 +199,7 @@ func ClusterHasGpuDemand(ctx context.Context, k8sClient client.Client, clusterQu
 	return false, nil
 }
 
-func isPendingForLong(ctx context.Context, meta v1.ObjectMeta) bool {
+func isPendingForLong(ctx context.Context, meta metav1.ObjectMeta) bool {
 	logger := log.FromContext(ctx)
 	config := ConfigFromContext(ctx)
 	age := time.Since(meta.CreationTimestamp.Time)
@@ -194,7 +214,7 @@ func isPendingForLong(ctx context.Context, meta v1.ObjectMeta) bool {
 func ShouldRequeueAfter(workload KaiwoWorkload) (bool, *time.Duration) {
 	condition := meta.FindStatusCondition(workload.GetCommonStatusSpec().Conditions, PreemptableConditionType)
 	if condition != nil &&
-		condition.Status == v1.ConditionFalse &&
+		condition.Status == metav1.ConditionFalse &&
 		condition.ObservedGeneration == workload.GetKaiwoWorkloadObject().GetGeneration() {
 		requeueAfter := GetRemainingTimeBeforeBecomingPreemptable(workload)
 		if requeueAfter != nil {

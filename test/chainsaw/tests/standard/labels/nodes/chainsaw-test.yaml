@@ -1,0 +1,54 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: node-kaiwo-labels
+spec:
+  timeouts:
+    assert: 1s
+  steps:
+  - name: cpu-node
+    try:
+    - assert:
+        resource:
+          apiVersion: "v1"
+          kind: Node
+          metadata:
+            name: kaiwo-test-control-plane
+            labels:
+              kaiwo.silogen.ai/node.type: cpu-only
+  - name: gpu-node
+    try:
+    - assert:
+        resource:
+          apiVersion: "v1"
+          kind: Node
+          metadata:
+            name: kaiwo-test-worker
+            labels:
+              kaiwo.silogen.ai/node.gpu: "8"
+              kaiwo.silogen.ai/node.gpu.logical: "8"
+              kaiwo.silogen.ai/node.gpu.logical.vram: 24Gi
+              kaiwo.silogen.ai/node.gpu.model: tesla-k80
+              kaiwo.silogen.ai/node.gpu.partitioned: "false"
+              kaiwo.silogen.ai/node.gpu.vendor: nvidia
+              kaiwo.silogen.ai/node.gpu.vram: 24Gi
+#                  kaiwo.silogen.ai/node.pool: 8gpu.nvidia.tesla-k80.24gi-15core-17gi
+              kaiwo.silogen.ai/node.type: gpu
+  - name: partitioned-gpu-node
+    try:
+    - assert:
+        resource:
+          apiVersion: "v1"
+          kind: Node
+          metadata:
+            name: kaiwo-test-worker2
+            labels:
+              kaiwo.silogen.ai/node.gpu: "8"
+              kaiwo.silogen.ai/node.gpu.logical: "64"
+              kaiwo.silogen.ai/node.gpu.logical.vram: 3Gi
+              kaiwo.silogen.ai/node.gpu.model: tesla-k80
+              kaiwo.silogen.ai/node.gpu.partitioned: "true"
+              kaiwo.silogen.ai/node.gpu.vendor: nvidia
+              kaiwo.silogen.ai/node.gpu.vram: 24Gi
+#                  kaiwo.silogen.ai/node.pool: 64gpu.nvidia.tesla-k80.partitioned.3gi-15core-17gi
+              kaiwo.silogen.ai/node.type: gpu

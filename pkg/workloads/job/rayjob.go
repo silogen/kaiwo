@@ -101,7 +101,9 @@ func (handler *RayJobHandler) BuildDesired(ctx context.Context, clusterCtx commo
 	}
 
 	// Update ray cluster specs
-	utils.UpdateRayClusterSpec(ctx, clusterCtx, handler.KaiwoJob, rayJobSpec.RayClusterSpec)
+	if err := utils.UpdateRayClusterSpec(ctx, clusterCtx, handler.KaiwoJob, rayJobSpec.RayClusterSpec); err != nil {
+		return nil, fmt.Errorf("failed to update ray cluster spec: %w", err)
+	}
 
 	rayJob := handler.GetInitializedObject().(*rayv1.RayJob)
 	rayJob.Labels = rayJobSpec.RayClusterSpec.HeadGroupSpec.Template.Labels
