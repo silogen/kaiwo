@@ -5,7 +5,8 @@ metadata:
 spec:
   user: test@amd.com
   image: ghcr.io/silogen/rocm-ray:6.3
-  gpus: 4
+  gpuResources:
+    count: 4
   ray: true
   serveConfigV2: |
     applications:
