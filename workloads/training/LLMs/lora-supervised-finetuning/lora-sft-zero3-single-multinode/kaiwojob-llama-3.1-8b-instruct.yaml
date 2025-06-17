@@ -4,7 +4,9 @@ metadata:
   name: multinode-stage-zero3-finetuning-example
 spec:
   user: test@amd.com
-  gpus: 16
+  gpuResources:
+    count: 8
+  replicas: 2
   ray: true
   entrypoint: |
     python code/main.py \
