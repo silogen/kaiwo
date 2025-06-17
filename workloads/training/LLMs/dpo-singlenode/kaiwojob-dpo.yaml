@@ -4,7 +4,8 @@ metadata:
   name: dpo-singlenode
 spec:
   user: test@amd.com
-  gpus: 4
+  gpuResources:
+    count: 4
   entrypoint: |
     accelerate launch code/dpo.py \
     --dataset_name trl-lib/ultrafeedback_binarized \

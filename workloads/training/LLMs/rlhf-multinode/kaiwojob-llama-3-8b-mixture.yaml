@@ -4,7 +4,9 @@ metadata:
   name: multinode-rlhf-example
 spec:
   user: test@amd.com
-  gpus: 12
+  gpuResources:
+    count: 6
+  replicas: 2
   ray: true
   image: ghcr.io/silogen/rocm-ray:v0.8
   entrypoint: |

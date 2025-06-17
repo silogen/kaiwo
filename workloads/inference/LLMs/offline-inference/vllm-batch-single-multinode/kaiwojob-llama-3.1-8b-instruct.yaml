@@ -4,7 +4,8 @@ metadata:
   name: batch-inference-vllm-example
 spec:
   user: test@amd.com
-  gpusPerReplica: 4
+  gpuResources:
+    count: 4
   replicas: 1
   ray: true
   entrypoint: python code/main.py
