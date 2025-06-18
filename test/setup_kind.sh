@@ -45,13 +45,6 @@ kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 "$TEST_NAME"-worker3
 kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 "$TEST_NAME"-worker3 "$TEST_NAME"-worker4 nvidia.com/gpu.count=8
 kubectl apply -f test/fake-gpu-operator/fake-gpu-operator.yaml
 
-# Add dummy topology 
-# TODO: Remove when proper implementation of topology discovery is implemented
-kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 kaiwo/topology-rack=rack-a
-kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 kaiwo/topology-block=block-a
-kubectl label node "$TEST_NAME"-worker3 "$TEST_NAME"-worker4 kaiwo/topology-rack=rack-b
-kubectl label node "$TEST_NAME"-worker3 "$TEST_NAME"-worker4 kaiwo/topology-block=block-b
-
 # Deploy NFS-backed storageclass 
 if ! systemctl is-active --quiet nfs-server || [[ ! -d "$NFS_DIR" ]]; then
     echo "NFS server is not running OR $NFS_DIR is missing!"

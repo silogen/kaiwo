@@ -28,6 +28,7 @@ var (
 	DefaultTopologyBlockLabel = "kaiwo/topology-block"
 	DefaultTopologyRackLabel  = "kaiwo/topology-rack"
 	DefaultTopologyHostLabel  = "kubernetes.io/hostname"
+	DefaultTopologyName       = "default-topology"
 )
 
 type KaiwoLabelContext struct {

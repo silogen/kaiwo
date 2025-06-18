@@ -642,7 +642,9 @@ func (r *KaiwoQueueConfigReconciler) CreateTopology(ctx context.Context) error {
 		}
 
 		if updated {
-			_ = r.Client.Update(ctx, node) // ignore errors for now
+			if err := r.Client.Update(ctx, node); err != nil {
+				return fmt.Errorf("failed to label node %s: %w", node.Name, err)
+			}
 		}
 	}
 
