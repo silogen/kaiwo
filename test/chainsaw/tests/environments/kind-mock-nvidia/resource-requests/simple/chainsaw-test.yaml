@@ -1,0 +1,30 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: resource-requests-1
+spec:
+  steps:
+  - try:
+    - apply:
+        file: kaiwojob-1.yaml
+    - assert:
+        resource:
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: resource-requests-1
+          spec:
+            template:
+              spec:
+                containers:
+                - name: hello-world
+                  image: busybox:latest
+                  resources:
+                    limits:
+                      cpu: "1"
+                      memory: 2Gi
+                    requests:
+                      cpu: "1"
+                      memory: 2Gi
+                restartPolicy: Never
+

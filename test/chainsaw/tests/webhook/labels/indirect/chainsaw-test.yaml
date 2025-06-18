@@ -1,0 +1,42 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: label-propagation-indirect
+spec:
+  steps:
+  - try:
+    - apply:
+        file: job.yaml
+    - assert:
+        resource:
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: label-propagation-indirect-job
+            labels:
+                  # Check that the kaiwo labels were added
+              kaiwo.silogen.ai/type: job
+              kaiwo.silogen.ai/name: label-propagation-indirect-job
+                  # TODO add user check
+              foo: bar
+    - assert:
+        resource:
+              # Check that the KaiwoJob was created
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: label-propagation-indirect-job
+                # Check that the original labels were copied here as well
+            labels:
+              kaiwo.silogen.ai/type: job
+              kaiwo.silogen.ai/name: label-propagation-indirect-job
+              foo: bar
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
