@@ -1,0 +1,11 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoJob
+metadata:
+  name: kaiwojob-job-resource-scheduling
+spec:
+  user: test@amd.com
+  image: busybox:latest
+  gpuResources:
+    count: 8
+    vendor: nvidia
+  entrypoint: sleep 1
