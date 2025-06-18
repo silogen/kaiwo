@@ -1,0 +1,48 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: scheduling-positive-gpu-count
+spec:
+  steps:
+  - try:
+    - apply:
+        file: job.yaml
+    - wait:
+        apiVersion: kaiwo.silogen.ai/v1alpha1
+        kind: KaiwoJob
+        name: kaiwo-job
+        timeout: 10s
+        for:
+          condition:
+            name: Schedulable
+            value: 'true'
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            labels:
+              kaiwo.silogen.ai/name: "kaiwo-job"
+          spec:
+                # Ensure pod is on the non-partitioned node
+            nodeName: kaiwo-test-worker
+            containers:
+                  # Ensure the correct number of GPUs are assigned
+            - resources:
+                requests:
+                  nvidia.com/gpu: "1"
+                limits:
+                  nvidia.com/gpu: "1"
+                # Ensure affinity labels are set
+            affinity:
+              nodeAffinity:
+                requiredDuringSchedulingIgnoredDuringExecution:
+                  nodeSelectorTerms:
+                  - matchExpressions:
+                    - key: kaiwo.silogen.ai/node.gpu.partitioned
+                      operator: In
+                      values: ["false"]
+              # Ensure pod was scheduled
+          status:
+            (conditions[?type == 'PodScheduled']):
+            - status: 'True'

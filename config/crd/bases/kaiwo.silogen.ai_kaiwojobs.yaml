@@ -210,31 +210,42 @@ spec:
                   - name
                   type: object
                 type: array
-              gpuModels:
-                description: |-
-                  GpuModels allows you to optionally specify the GPU models that your workload will run on. You can see available models either by using the CLI and running `kaiwo status amd/nvidia` or by using kubectl command `kubectl get nodes -o custom-columns=NAME:.metadata.name,MODEL:.metadata.labels.kaiwo\/gpu-model`
-                  This field is used to filter the available nodes for scheduling. You can specify multiple models, and Kaiwo will select the best available node that matches one of the specified models.
-                items:
-                  type: string
-                type: array
-              gpuVendor:
-                default: amd
-                description: GpuVendor specifies the GPU vendor (e.g., amd, nvidia,
-                  etc.). See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor)
-                  for more details on how this field impacts scheduling.
-                type: string
-              gpus:
-                default: 0
-                description: Gpus specifies the total number of GPUs allocated to
-                  the workload. See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor)
-                  for more details on how this field impacts scheduling.
-                type: integer
-              gpusPerReplica:
-                description: |-
-                  GpusPerReplica specifies the number of GPUs allocated per replica. See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor) for more details on how this field impacts scheduling.
-
-                  If you specify `gpusPerReplica`, you must also specify `replicas`.
-                type: integer
+              gpuResources:
+                description: GpuResources defines the _per-replica_ GPU resources
+                  that a workload requests
+                properties:
+                  count:
+                    description: Count is the number of logical GPUs requested
+                    type: integer
+                  models:
+                    description: |-
+                      Models allows you to optionally specify the GPU models that your workload will run on. You can see available models either by using the CLI and running `kaiwo status amd/nvidia` or by using kubectl command `kubectl get nodes -o custom-columns=NAME:.metadata.name,MODEL:.metadata.labels.kaiwo\/gpu-model`
+                      This field is used to filter the available nodes for scheduling. You can specify multiple models, and Kaiwo will select the best available node that matches one of the specified models.
+                    items:
+                      type: string
+                    type: array
+                  partitioned:
+                    default: false
+                    description: Partitioned specifies whether to use nodes with partitioned
+                      GPUs or not.
+                    type: boolean
+                  totalVram:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: |-
+                      TotalVram is the total logical vRAM that is requested. If you provide both Count and TotalVram,
+                      the operator will try to find a suitable node that has the given number of GPUs which would provide
+                      at least TotalVram amount of vRAM. If you don't provide Count, the number of GPUs is
+                      calculated dynamically based on the available nodes and their GPUs.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  vendor:
+                    default: amd
+                    description: Vendor specifies the GPU vendor to be used for the
+                      workload
+                    type: string
+                type: object
               image:
                 description: |-
                   Image specifies the default container image to be used for the primary workload container(s).

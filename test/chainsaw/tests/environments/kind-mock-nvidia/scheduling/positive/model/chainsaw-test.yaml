@@ -1,0 +1,48 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: scheduling-positive-model
+spec:
+  steps:
+  - try:
+    - apply:
+        file: job.yaml
+    - wait:
+        apiVersion: kaiwo.silogen.ai/v1alpha1
+        kind: KaiwoJob
+        name: kaiwo-job
+        timeout: 10s
+        for:
+          condition:
+            name: Schedulable
+            value: 'true'
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            labels:
+              kaiwo.silogen.ai/name: "kaiwo-job"
+          spec:
+            containers:
+            - resources:
+                requests:
+                  nvidia.com/gpu: "1"
+                limits:
+                  nvidia.com/gpu: "1"
+                # Ensure affinity labels are set
+            affinity:
+              nodeAffinity:
+                requiredDuringSchedulingIgnoredDuringExecution:
+                  nodeSelectorTerms:
+                  - matchExpressions:
+                    - key: kaiwo.silogen.ai/node.gpu.model
+                      operator: In
+                      values: ["tesla-k80"]
+                    - key: kaiwo.silogen.ai/node.gpu.partitioned
+                      operator: In
+                      values: ["false"]
+              # Ensure pod was scheduled
+          status:
+            (conditions[?type == 'PodScheduled']):
+            - status: 'True'

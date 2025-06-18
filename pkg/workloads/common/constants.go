@@ -15,12 +15,14 @@
 package common
 
 const (
-	KaiwoLabelBase    = "kaiwo.silogen.ai"
-	KaiwoUserLabel    = KaiwoLabelBase + "/user"
-	KaiwoNameLabel    = KaiwoLabelBase + "/name"
-	KaiwoTypeLabel    = KaiwoLabelBase + "/type"
-	KaiwoRunIdLabel   = KaiwoLabelBase + "/run-id"
-	KaiwoManagedLabel = KaiwoLabelBase + "/managed"
+	KaiwoLabelBase    = "kaiwo.silogen.ai/"
+	KaiwoUserLabel    = KaiwoLabelBase + "user"
+	KaiwoNameLabel    = KaiwoLabelBase + "name"
+	KaiwoTypeLabel    = KaiwoLabelBase + "type"
+	KaiwoRunIdLabel   = KaiwoLabelBase + "run-id"
+	KaiwoManagedLabel = KaiwoLabelBase + "managed"
 	QueueLabel        = "kueue.x-k8s.io/queue-name"
 	CPUOnly           = "cpu-only"
+	True              = "true"
+	False             = "false"
 )

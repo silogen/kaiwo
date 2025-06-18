@@ -22,11 +22,6 @@ import (
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
-var (
-	DefaultNodePoolLabel = "kaiwo/nodepool"
-	GPUModelLabel        = "kaiwo/gpu-model"
-)
-
 type KaiwoLabelContext struct {
 	User    string
 	Name    string
