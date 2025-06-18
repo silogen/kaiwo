@@ -17,7 +17,6 @@ limitations under the License.
 package e2e
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -25,8 +24,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	baseutils "github.com/silogen/kaiwo/pkg/utils"
 
 	"gopkg.in/yaml.v3"
 
@@ -38,87 +35,62 @@ import (
 
 // namespaces where the project is deployed in
 const (
-	namespace      = "kaiwo-system"
-	test_namespace = "kaiwo-test"
+	kaiwoSystemNamespace = "kaiwo-system"
+	// test_namespace       = "kaiwo-test"
 )
 
-var runningInCI = func() bool {
-	return os.Getenv("CI") != ""
-}()
+type DeployTarget string
 
-func getChainsawArgs() ([]string, error) {
-	args := []string{
-		"test",
-		"--test-dir",
+const (
+	DeployTargetKind DeployTarget = "kind"
+)
+
+// TestConfig is the configuration that is used to configure the end-to-end tests
+type TestConfig struct {
+	BuildCli    bool `yaml:"buildCli"`
+	BuildDevCli bool `yaml:"buildDevCli"`
+
+	// DeployTo, if set, deploys the operator to a remote environment. If not set, assumes the operator is running locally
+	DeployTo *DeployTarget `yaml:"deployTo"`
+
+	// KaiwoConfigPath, if set, is the KaiwoConfig file which will be applied before tests are run
+	KaiwoConfigPath string `yaml:"kaiwoConfigPath"`
+
+	// TestValidateController, if true, will validate that the controller is correctly running
+	TestValidateController bool `yaml:"testValidateController"`
+
+	Chainsaw *utils.ChainsawConfig `yaml:"chainsaw"`
+}
+
+func (c *TestConfig) ShouldDeploy() bool {
+	return c.DeployTo != nil
+}
+
+func GetTestConfig() (*TestConfig, error) {
+	configPath, exists := os.LookupEnv("TEST_CONFIG_PATH")
+	if !exists {
+		return nil, fmt.Errorf("cannot run tests without the environmental variable TEST_CONFIG_PATH set")
 	}
-	chainsawDir := filepath.Join("../", "chainsaw")
-	absoluteChainsawDir, err := filepath.Abs(chainsawDir)
+	configPath = filepath.Join(utils.GetModuleRoot(), configPath)
+	configFile, err := os.Open(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get absolute chainsaw dir: %w", err)
+		return nil, fmt.Errorf("failed to open test config file: %w", err)
 	}
-	chainsawDir = absoluteChainsawDir
-
-	logLevel := baseutils.GetEnv("CHAINSAW_DEBUG_LOG_LEVEL", "info")
-
-	values := map[string]string{
-		"print_level": logLevel,
-	}
-
-	configPath := ""
-	testPath := ""
-	if runningInCI {
-		configPath = filepath.Join(chainsawDir, "configs/ci.yaml")
-		testPath = filepath.Join(chainsawDir, "tests/standard")
-	} else {
-		testPath = filepath.Join(chainsawDir, "tests")
-		configPath = filepath.Join(chainsawDir, "configs/local.yaml")
-
-		hfToken := os.Getenv("HF_TOKEN")
-		if hfToken == "" {
-			return nil, fmt.Errorf("cannot run tests without the environmental variable HF_TOKEN set")
-		}
-		githubToken := os.Getenv("GH_TOKEN")
-		if githubToken == "" {
-			return nil, fmt.Errorf("cannot run tests without the environmental variable GH_TOKEN set")
-		}
-		values["hf_token_base64"] = base64.StdEncoding.EncodeToString([]byte(hfToken))
-		values["gh_token_base64"] = base64.StdEncoding.EncodeToString([]byte(githubToken))
-	}
-
-	yamlFile, err := yaml.Marshal(&values)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate yaml file: %w", err)
-	}
-	valuesFile := filepath.Join(chainsawDir, "values/sensitive/values.yaml")
-
-	f, err := os.Create(valuesFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create values file: %w", err)
-	}
-	defer func(f *os.File) {
-		err := f.Close()
+	defer func(configFile *os.File) {
+		err := configFile.Close()
 		if err != nil {
 			panic(err)
 		}
-	}(f)
-
-	_, err = f.Write(yamlFile)
+	}(configFile)
+	var config TestConfig
+	err = yaml.NewDecoder(configFile).Decode(&config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to write values file: %w", err)
+		return nil, fmt.Errorf("failed to parse test config file: %w", err)
 	}
-	args = append(
-		args,
-		testPath,
-		"--config",
-		configPath,
-		"--values",
-		valuesFile,
-	)
-
-	return args, nil
+	return &config, nil
 }
 
-func validateChainsawErr(err error) error {
+func validateErr(err error) error {
 	if err != nil {
 		panic(err)
 	}
@@ -126,8 +98,8 @@ func validateChainsawErr(err error) error {
 }
 
 var (
-	chainsawArgs, chainsawErr = getChainsawArgs()
-	_                         = validateChainsawErr(chainsawErr)
+	testConfig, testConfigErr = GetTestConfig()
+	_                         = validateErr(testConfigErr)
 	kaiwoBuildPath            = "builds"
 	kaiwoCliPath              = kaiwoBuildPath + "/kaiwo"
 	kaiwoDevCliPath           = kaiwoBuildPath + "/kaiwo-dev"
@@ -149,55 +121,67 @@ var _ = Describe("Manager", Ordered, func() {
 	// enforce the restricted security policy to the namespace, installing CRDs,
 	// and deploying the controller.
 	BeforeAll(func() {
-		RecreateNamespace(namespace)
-		RecreateNamespace(test_namespace)
+		// RecreateNamespace(test_namespace)
 
-		By("building the Kaiwo CLI")
-		buildCmd := exec.Command("go", "build", "-o", kaiwoCliPath, "cmd/cli/main.go")
-		buildErr := buildCmd.Run()
-		Expect(buildErr).NotTo(HaveOccurred(), "Kaiwo build failed")
+		if testConfig.BuildCli {
+			By("building the Kaiwo CLI")
+			buildCmd := exec.Command("go", "build", "-o", kaiwoCliPath, "cmd/cli/main.go")
+			buildErr := buildCmd.Run()
+			Expect(buildErr).NotTo(HaveOccurred(), "Kaiwo build failed")
+		}
 
-		buildDevCmd := exec.Command("go", "build", "-o", kaiwoDevCliPath, "pkg/cli/dev/main.go")
-		buildDevErr := buildDevCmd.Run()
-		Expect(buildDevErr).NotTo(HaveOccurred(), "Kaiwo dev build failed")
+		if testConfig.BuildDevCli {
+			buildDevCmd := exec.Command("go", "build", "-o", kaiwoDevCliPath, "pkg/cli/dev/main.go")
+			buildDevErr := buildDevCmd.Run()
+			Expect(buildDevErr).NotTo(HaveOccurred(), "Kaiwo dev build failed")
+		}
+
+		if testConfig.ShouldDeploy() {
+			RecreateNamespace(kaiwoSystemNamespace)
+		}
 
 		By("labeling the namespace to enforce the restricted security policy")
-		cmd := exec.Command("kubectl", "label", "--overwrite", "ns", namespace,
+		cmd := exec.Command("kubectl", "label", "--overwrite", "ns", kaiwoSystemNamespace,
 			"pod-security.kubernetes.io/enforce=restricted")
 		_, err := utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to label namespace with restricted policy")
 
-		By("Generating boilerplate code for CRDs")
-		cmd = exec.Command("make", "generate")
-		cmd.Stdout = nil
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to generate boilerplate code for CRDs")
+		if testConfig.ShouldDeploy() {
+			By("Generating boilerplate code for CRDs")
+			cmd = exec.Command("make", "generate")
+			cmd.Stdout = nil
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to generate boilerplate code for CRDs")
 
-		By("Generating manifests for CRDs")
-		cmd = exec.Command("make", "manifests")
-		cmd.Stdout = nil
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to make manifests for CRDs")
+			By("Generating manifests for CRDs")
+			cmd = exec.Command("make", "manifests")
+			cmd.Stdout = nil
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to make manifests for CRDs")
 
-		By("Building install.yaml for kaiwo-operator")
-		cmd = exec.Command("make", "build-installer", fmt.Sprintf("TAG=%s", strings.Split(projectImage, ":")[1]))
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to build install.yaml for kaiwo-operator")
+			By("Building install.yaml for kaiwo-operator")
+			cmd = exec.Command("make", "build-installer", fmt.Sprintf("TAG=%s", strings.Split(projectImage, ":")[1]))
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to build install.yaml for kaiwo-operator")
 
-		By("Making a copy of install.yaml so that kustomize can do test patching")
-		cmd = exec.Command("cp", "dist/install.yaml", "test/merged.yaml")
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to make a copy of install.yaml")
+			By("Making a copy of install.yaml so that kustomize can do test patching")
+			cmd = exec.Command("cp", "dist/install.yaml", "test/merged.yaml")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to make a copy of install.yaml")
 
-		By("deploying kaiwo-operator")
-		cmd = exec.Command("kubectl", "apply", "--server-side", "-k", "test/")
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to deploy kaiwo-operator")
+			By("deploying kaiwo-operator")
+			cmd = exec.Command("kubectl", "apply", "--server-side", "-k", "test/")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to deploy kaiwo-operator")
+		}
 
-		By("deploying the kaiwo test config")
-		cmd = exec.Command("kubectl", "apply", "-f", "test/kaiwoconfig.yaml")
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to deploy kaiwo test config")
+		if testConfig.KaiwoConfigPath != "" {
+			path := filepath.Join(utils.GetModuleRoot(), testConfig.KaiwoConfigPath)
+			By("deploying the kaiwo test config")
+			cmd = exec.Command("kubectl", "apply", "-f", path)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to deploy kaiwo test config")
+		}
 	})
 
 	// After all tests have been executed, clean up by undeploying the controller, uninstalling CRDs,
@@ -209,24 +193,26 @@ var _ = Describe("Manager", Ordered, func() {
 			_, _ = utils.Run(cmd)
 		}
 
-		By("Removing finalizers from KaiwoJobs before deletion")
-		cmd := exec.Command("kubectl", "get", "kaiwojob", "-A", "-o", "json")
-		output, err := utils.Run(cmd)
-		if err == nil {
-			cmd = exec.Command("kubectl", "apply", "-f", "-")
-			cmd.Stdin = strings.NewReader(strings.ReplaceAll(output, `"finalizers":["kaiwo.silogen.ai/finalizer"]`, `"finalizers":[]`))
-			_, _ = utils.Run(cmd)
+		if testConfig.ShouldDeploy() {
+			By("Removing finalizers from KaiwoJobs before deletion")
+			cmd := exec.Command("kubectl", "get", "kaiwojob", "-A", "-o", "json")
+			output, err := utils.Run(cmd)
+			if err == nil {
+				cmd = exec.Command("kubectl", "apply", "-f", "-")
+				cmd.Stdin = strings.NewReader(strings.ReplaceAll(output, `"finalizers":["kaiwo.silogen.ai/finalizer"]`, `"finalizers":[]`))
+				_, _ = utils.Run(cmd)
+			}
+
+			go runCmd("Deleting curl pod for metrics", "delete", "pod", "curl-metrics", "-n", kaiwoSystemNamespace, "--force", "--grace-period=0", "--ignore-not-found")
+			go runCmd("Deleting ClusterRoleBinding for metrics", "delete", "clusterrolebinding", metricsRoleBindingName, "--ignore-not-found")
+			go runCmd("Deleting all KaiwoJobs", "delete", "kaiwojob", "-A", "--all", "--timeout=30s", "--force", "--grace-period=0")
+			go runCmd("Undeploying kaiwo-controller-manager", "delete", "-k", "test", "--force", "--grace-period=0")
+			// go runCmd("Removing namespace for test workloads", "delete", "ns", test_namespace, "--force", "--grace-period=0", "--timeout=30s")
+
+			time.Sleep(5 * time.Second) // Small delay to start background deletions
+			By("Cleanup process started. Waiting for final cleanup.")
+			time.Sleep(30 * time.Second) // Ensure background jobs finish
 		}
-
-		go runCmd("Deleting curl pod for metrics", "delete", "pod", "curl-metrics", "-n", namespace, "--force", "--grace-period=0", "--ignore-not-found")
-		go runCmd("Deleting ClusterRoleBinding for metrics", "delete", "clusterrolebinding", metricsRoleBindingName, "--ignore-not-found")
-		go runCmd("Deleting all KaiwoJobs", "delete", "kaiwojob", "-A", "--all", "--timeout=30s", "--force", "--grace-period=0")
-		go runCmd("Undeploying kaiwo-controller-manager", "delete", "-k", "test", "--force", "--grace-period=0")
-		go runCmd("Removing namespace for test workloads", "delete", "ns", test_namespace, "--force", "--grace-period=0", "--timeout=30s")
-
-		time.Sleep(5 * time.Second) // Small delay to start background deletions
-		By("Cleanup process started. Waiting for final cleanup.")
-		time.Sleep(30 * time.Second) // Ensure background jobs finish
 	})
 
 	// After each test, check for failures and collect logs, events,
@@ -276,91 +262,92 @@ var _ = Describe("Manager", Ordered, func() {
 	SetDefaultEventuallyPollingInterval(time.Second)
 
 	Context("Manager", func() {
-		It("should run successfully", func() {
-			By("validating that the kaiwo-controller-manager pod is running as expected")
-			verifyControllerUp := func(g Gomega) {
-				// Get the name of the kaiwo-controller-manager pod
-				cmd := exec.Command("kubectl", "get",
-					"pods", "-l", "control-plane=kaiwo-controller-manager",
-					"-o", "go-template={{ range .items }}"+
-						"{{ if not .metadata.deletionTimestamp }}"+
-						"{{ .metadata.name }}"+
-						"{{ \"\\n\" }}{{ end }}{{ end }}",
-					"-n", namespace,
+		if testConfig.TestValidateController {
+			It("should run successfully", func() {
+				By("validating that the kaiwo-controller-manager pod is running as expected")
+				verifyControllerUp := func(g Gomega) {
+					// Get the name of the kaiwo-controller-manager pod
+					cmd := exec.Command("kubectl", "get",
+						"pods", "-l", "control-plane=kaiwo-controller-manager",
+						"-o", "go-template={{ range .items }}"+
+							"{{ if not .metadata.deletionTimestamp }}"+
+							"{{ .metadata.name }}"+
+							"{{ \"\\n\" }}{{ end }}{{ end }}",
+						"-n", kaiwoSystemNamespace,
+					)
+
+					podOutput, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve kaiwo-controller-manager pod information")
+					podNames := utils.GetNonEmptyLines(podOutput)
+					g.Expect(podNames).To(HaveLen(1), "expected 1 controller pod running")
+					controllerPodName = podNames[0]
+					g.Expect(controllerPodName).To(ContainSubstring("kaiwo-controller-manager"))
+
+					// Validate the pod's status
+					cmd = exec.Command("kubectl", "get",
+						"pods", controllerPodName, "-o", "jsonpath={.status.phase}",
+						"-n", kaiwoSystemNamespace,
+					)
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(Equal("Running"), "Incorrect kaiwo-controller-manager pod status")
+				}
+				Eventually(verifyControllerUp).Should(Succeed())
+			})
+
+			It("should ensure the metrics endpoint is serving metrics", func() {
+				By("creating a ClusterRoleBinding for the service account to allow access to metrics")
+				cmd := exec.Command("kubectl", "create", "clusterrolebinding", metricsRoleBindingName,
+					"--clusterrole=kaiwo-metrics-reader",
+					fmt.Sprintf("--serviceaccount=%s:%s", kaiwoSystemNamespace, serviceAccountName),
 				)
+				_, err := utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred(), "Failed to create ClusterRoleBinding")
 
-				podOutput, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve kaiwo-controller-manager pod information")
-				podNames := utils.GetNonEmptyLines(podOutput)
-				g.Expect(podNames).To(HaveLen(1), "expected 1 controller pod running")
-				controllerPodName = podNames[0]
-				g.Expect(controllerPodName).To(ContainSubstring("kaiwo-controller-manager"))
+				By("validating that the metrics service is available")
+				cmd = exec.Command("kubectl", "get", "service", metricsServiceName, "-n", kaiwoSystemNamespace)
+				_, err = utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred(), "Metrics service should exist")
 
-				// Validate the pod's status
-				cmd = exec.Command("kubectl", "get",
-					"pods", controllerPodName, "-o", "jsonpath={.status.phase}",
-					"-n", namespace,
-				)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("Running"), "Incorrect kaiwo-controller-manager pod status")
-			}
-			Eventually(verifyControllerUp).Should(Succeed())
-		})
+				By("getting the service account token")
+				token, err := serviceAccountToken()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(token).NotTo(BeEmpty())
 
-		It("should ensure the metrics endpoint is serving metrics", func() {
-			By("creating a ClusterRoleBinding for the service account to allow access to metrics")
-			cmd := exec.Command("kubectl", "create", "clusterrolebinding", metricsRoleBindingName,
-				"--clusterrole=kaiwo-metrics-reader",
-				fmt.Sprintf("--serviceaccount=%s:%s", namespace, serviceAccountName),
-			)
-			_, err := utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create ClusterRoleBinding")
+				By("waiting for the metrics endpoint to be ready")
+				verifyMetricsEndpointReady := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "endpoints", metricsServiceName, "-n", kaiwoSystemNamespace)
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(ContainSubstring("8443"), "Metrics endpoint is not ready")
+				}
+				Eventually(verifyMetricsEndpointReady).Should(Succeed())
 
-			By("validating that the metrics service is available")
-			cmd = exec.Command("kubectl", "get", "service", metricsServiceName, "-n", namespace)
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Metrics service should exist")
+				By("verifying that the controller manager is serving the metrics server")
+				verifyMetricsServerStarted := func(g Gomega) {
+					cmd := exec.Command("kubectl", "logs", controllerPodName, "-n", kaiwoSystemNamespace)
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(ContainSubstring("Serving metrics server"),
+						"Metrics server not yet started")
+				}
+				Eventually(verifyMetricsServerStarted).Should(Succeed())
 
-			By("getting the service account token")
-			token, err := serviceAccountToken()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(token).NotTo(BeEmpty())
+				By("waiting for the metrics certificate to be mounted into the controller pod")
+				waitForMetricsCertMount := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "pod", controllerPodName, "-n", kaiwoSystemNamespace, "-o", "jsonpath={.status.conditions[?(@.type=='Ready')].status}")
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(Equal("True"))
+				}
+				Eventually(waitForMetricsCertMount, 1*time.Minute, 2*time.Second).Should(Succeed())
 
-			By("waiting for the metrics endpoint to be ready")
-			verifyMetricsEndpointReady := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "endpoints", metricsServiceName, "-n", namespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(ContainSubstring("8443"), "Metrics endpoint is not ready")
-			}
-			Eventually(verifyMetricsEndpointReady).Should(Succeed())
-
-			By("verifying that the controller manager is serving the metrics server")
-			verifyMetricsServerStarted := func(g Gomega) {
-				cmd := exec.Command("kubectl", "logs", controllerPodName, "-n", namespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(ContainSubstring("Serving metrics server"),
-					"Metrics server not yet started")
-			}
-			Eventually(verifyMetricsServerStarted).Should(Succeed())
-
-			By("waiting for the metrics certificate to be mounted into the controller pod")
-			waitForMetricsCertMount := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "pod", controllerPodName, "-n", namespace, "-o", "jsonpath={.status.conditions[?(@.type=='Ready')].status}")
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("True"))
-			}
-			Eventually(waitForMetricsCertMount, 1*time.Minute, 2*time.Second).Should(Succeed())
-
-			By("creating the curl-metrics pod to access the metrics endpoint")
-			cmd = exec.Command("kubectl", "run", "curl-metrics", "--restart=Never",
-				"--namespace", namespace,
-				"--image=alpine/curl:8.12.1",
-				"--overrides",
-				fmt.Sprintf(`{
+				By("creating the curl-metrics pod to access the metrics endpoint")
+				cmd = exec.Command("kubectl", "run", "curl-metrics", "--restart=Never",
+					"--namespace", kaiwoSystemNamespace,
+					"--image=alpine/curl:8.12.1",
+					"--overrides",
+					fmt.Sprintf(`{
 					"spec": {
 						"containers": [{
 							"name": "curl",
@@ -381,73 +368,70 @@ var _ = Describe("Manager", Ordered, func() {
 						}],
 						"serviceAccount": "%s"
 					}
-				}`, token, metricsServiceName, namespace, serviceAccountName))
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create curl-metrics pod")
+				}`, token, metricsServiceName, kaiwoSystemNamespace, serviceAccountName))
+				_, err = utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred(), "Failed to create curl-metrics pod")
 
-			By("waiting for the curl-metrics pod to complete.")
-			verifyCurlUp := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "pods", "curl-metrics",
-					"-o", "jsonpath={.status.phase}",
-					"-n", namespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("Succeeded"), "curl pod in wrong status")
-			}
-			Eventually(verifyCurlUp, 5*time.Minute).Should(Succeed())
+				By("waiting for the curl-metrics pod to complete.")
+				verifyCurlUp := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "pods", "curl-metrics",
+						"-o", "jsonpath={.status.phase}",
+						"-n", kaiwoSystemNamespace)
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(Equal("Succeeded"), "curl pod in wrong status")
+				}
+				Eventually(verifyCurlUp, 5*time.Minute).Should(Succeed())
 
-			By("getting the metrics by checking curl-metrics logs")
-			verifyMetricsOutput := func(g Gomega) {
-				metricsOutput := getMetricsOutput()
-				g.Expect(metricsOutput).To(ContainSubstring(
-					"controller_runtime_reconcile_total",
-				))
-			}
-			Eventually(verifyMetricsOutput).WithTimeout(5 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
-		})
+				By("getting the metrics by checking curl-metrics logs")
+				verifyMetricsOutput := func(g Gomega) {
+					metricsOutput := getMetricsOutput()
+					g.Expect(metricsOutput).To(ContainSubstring(
+						"controller_runtime_reconcile_total",
+					))
+				}
+				Eventually(verifyMetricsOutput).WithTimeout(5 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
+			})
 
-		It("should provisioned cert-manager", func() {
-			By("validating that cert-manager has the certificate Secret")
-			verifyCertManager := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "secrets", "webhook-server-cert", "-n", namespace)
-				_, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-			}
-			Eventually(verifyCertManager).Should(Succeed())
-		})
+			It("should provisioned cert-manager", func() {
+				By("validating that cert-manager has the certificate Secret")
+				verifyCertManager := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "secrets", "webhook-server-cert", "-n", kaiwoSystemNamespace)
+					_, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+				}
+				Eventually(verifyCertManager).Should(Succeed())
+			})
 
-		It("should have CA injection for mutating webhooks", func() {
-			By("checking CA injection for mutating webhooks")
-			verifyCAInjection := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get",
-					"mutatingwebhookconfigurations.admissionregistration.k8s.io",
-					"kaiwo-job-mutating",
-					"-o", "go-template={{ range .webhooks }}{{ .clientConfig.caBundle }}{{ end }}")
-				mwhOutput, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(len(mwhOutput)).To(BeNumerically(">", 10))
-			}
-			Eventually(verifyCAInjection).Should(Succeed())
-		})
+			It("should have CA injection for mutating webhooks", func() {
+				By("checking CA injection for mutating webhooks")
+				verifyCAInjection := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get",
+						"mutatingwebhookconfigurations.admissionregistration.k8s.io",
+						"kaiwo-job-mutating",
+						"-o", "go-template={{ range .webhooks }}{{ .clientConfig.caBundle }}{{ end }}")
+					mwhOutput, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(len(mwhOutput)).To(BeNumerically(">", 10))
+				}
+				Eventually(verifyCAInjection).Should(Succeed())
+			})
+		}
 
-		It("should run all the chainsaw tests", func() {
-			By("executing chainsaw tests")
+		if testConfig.Chainsaw != nil {
+			It("should run all the chainsaw tests", func() {
+				By("executing chainsaw tests")
 
-			env := os.Environ()
+				// Retrieve the current PATH.
+				currentPath := os.Getenv("PATH")
+				// Append your additional directory.
+				absoluteKaiwoPath, _ := filepath.Abs(kaiwoBuildPath)
+				newPath := currentPath + ":" + absoluteKaiwoPath
 
-			// Retrieve the current PATH.
-			currentPath := os.Getenv("PATH")
-			// Append your additional directory.
-			absoluteKaiwoPath, _ := filepath.Abs(kaiwoBuildPath)
-			newPath := currentPath + ":" + absoluteKaiwoPath
-
-			cmd := exec.Command("chainsaw", chainsawArgs...)
-			cmd.Env = append(env, "PATH="+newPath)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			err := cmd.Run()
-			Expect(err).NotTo(HaveOccurred(), "Chainsaw test(s) failed")
-		})
+				err := testConfig.Chainsaw.Run("PATH=" + newPath)
+				Expect(err).NotTo(HaveOccurred(), "Chainsaw test(s) failed")
+			})
+		}
 
 		// +kubebuilder:scaffold:e2e-webhooks-checks
 	})
@@ -475,7 +459,7 @@ func serviceAccountToken() (string, error) {
 		// Execute kubectl command to create the token
 		cmd := exec.Command("kubectl", "create", "--raw", fmt.Sprintf(
 			"/api/v1/namespaces/%s/serviceaccounts/%s/token",
-			namespace,
+			kaiwoSystemNamespace,
 			serviceAccountName,
 		), "-f", tokenRequestFile)
 
@@ -497,7 +481,7 @@ func serviceAccountToken() (string, error) {
 // getMetricsOutput retrieves and returns the logs from the curl pod used to access the metrics endpoint.
 func getMetricsOutput() string {
 	By("getting the curl-metrics logs")
-	cmd := exec.Command("kubectl", "logs", "curl-metrics", "-n", namespace)
+	cmd := exec.Command("kubectl", "logs", "curl-metrics", "-n", kaiwoSystemNamespace)
 	metricsOutput, err := utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred(), "Failed to retrieve logs from curl pod")
 	Expect(metricsOutput).To(ContainSubstring("< HTTP/1.1 200 OK"))

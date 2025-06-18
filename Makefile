@@ -53,14 +53,14 @@ TEST_NAME ?= "kaiwo-test"
 
 .PHONY: test-e2e
 test-e2e: manifests generate fmt vet ## Run the e2e tests. Requires an isolated environment using Kind.
-	@command -v kind >/dev/null 2>&1 || { \
-		echo "Kind is not installed. Please install Kind manually."; \
-		exit 1; \
-	}
-	@kind get clusters | grep -q "$(TEST_NAME)" || { \
-		echo "No Kind cluster named '$(TEST_NAME)' is running. Please start a Kind cluster before running the e2e tests."; \
-		exit 1; \
-	}
+#	@command -v kind >/dev/null 2>&1 || { \
+#		echo "Kind is not installed. Please install Kind manually."; \
+#		exit 1; \
+#	}
+#	@kind get clusters | grep -q "$(TEST_NAME)" || { \
+#		echo "No Kind cluster named '$(TEST_NAME)' is running. Please start a Kind cluster before running the e2e tests."; \
+#		exit 1; \
+#	}
 	go test ./test/e2e/ -v -ginkgo.v -timeout 30m
 
 .PHONY: lint
