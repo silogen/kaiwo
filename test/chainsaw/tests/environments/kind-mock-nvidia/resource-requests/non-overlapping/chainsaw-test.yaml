@@ -1,0 +1,29 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: resource-requests-non-overlapping
+spec:
+  steps:
+  - try:
+    - apply:
+        file: job-non-overlapping.yaml
+    - assert:
+        resource:
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: job-non-overlapping
+          spec:
+            template:
+              spec:
+                containers:
+                - name: test-container
+                  image: busybox
+                  resources:
+                    limits:
+                      cpu: 150m
+                      memory: 125Mi
+                    requests:
+                      cpu: 125m
+                      memory: 100Mi
+                restartPolicy: Never
