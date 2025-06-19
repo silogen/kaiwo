@@ -13,11 +13,11 @@ repos:
     language: system
     pass_filenames: false
 
-  # - id: make-generate-crd-docs
-  #   name: Run make generate-crd-docs
-  #   entry: make generate-crd-docs
-  #   language: system
-  #   pass_filenames: false
+  - id: make-generate-crd-docs
+    name: Run make generate-crd-docs
+    entry: make generate-crd-docs
+    language: system
+    pass_filenames: false
 
   - id: golangci-lint
     name: golangci-lint
