@@ -1,0 +1,18 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoJob
+metadata:
+  name: tas-rayjob
+spec:
+  user: test@amd.com
+  ray: true
+  image: rayproject/ray:2.41.0
+  gpuVendor: "nvidia"
+  gpus: 16
+  resources:
+    limits:
+      cpu: 1
+      memory: 2Gi
+    requests:
+      cpu: 1
+      memory: 2Gi
+  entrypoint: sleep 1

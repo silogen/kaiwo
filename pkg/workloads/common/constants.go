@@ -15,12 +15,14 @@
 package common
 
 const (
-	KaiwoLabelBase    = "kaiwo.silogen.ai"
-	KaiwoUserLabel    = KaiwoLabelBase + "/user"
-	KaiwoNameLabel    = KaiwoLabelBase + "/name"
-	KaiwoTypeLabel    = KaiwoLabelBase + "/type"
-	KaiwoRunIdLabel   = KaiwoLabelBase + "/run-id"
-	KaiwoManagedLabel = KaiwoLabelBase + "/managed"
-	QueueLabel        = "kueue.x-k8s.io/queue-name"
-	CPUOnly           = "cpu-only"
+	KaiwoLabelBase            = "kaiwo.silogen.ai"
+	KaiwoUserLabel            = KaiwoLabelBase + "/user"
+	KaiwoNameLabel            = KaiwoLabelBase + "/name"
+	KaiwoTypeLabel            = KaiwoLabelBase + "/type"
+	KaiwoRunIdLabel           = KaiwoLabelBase + "/run-id"
+	KaiwoManagedLabel         = KaiwoLabelBase + "/managed"
+	QueueLabel                = "kueue.x-k8s.io/queue-name"
+	CPUOnly                   = "cpu-only"
+	KueueRequiredTopologyKey  = "kueue.x-k8s.io/podset-required-topology"
+	KueuePreferredTopologyKey = "kueue.x-k8s.io/podset-preferred-topology"
 )

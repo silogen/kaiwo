@@ -1,0 +1,70 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: test-tas-rayjob
+spec:
+  concurrent: false
+  steps:
+  - try:
+    - script:
+        content: |
+          #!/bin/bash
+          TEST_NAME=kaiwo-test
+          kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 kaiwo/topology-rack=rack-a --overwrite
+          kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 kaiwo/topology-block=block-a --overwrite
+          kubectl label node "$TEST_NAME"-worker3 "$TEST_NAME"-worker4 kaiwo/topology-rack=rack-b --overwrite
+          kubectl label node "$TEST_NAME"-worker3 "$TEST_NAME"-worker4 kaiwo/topology-block=block-b --overwrite
+    - apply:
+        file: tas-rayjob.yaml
+    - script:
+        timeout: 120s
+        content: |
+          #!/bin/sh
+          set -e
+
+          echo "Waiting for pods with label kaiwo.silogen.ai/name=tas-rayjob..."
+
+          for i in $(seq 1 30); do
+            pod_names=$(kubectl get pods -n "$NAMESPACE" -l "kaiwo.silogen.ai/name=tas-rayjob" -o jsonpath="{.items[*].metadata.name}")
+            if [ -n "$pod_names" ]; then
+              echo "Found pods: $pod_names"
+              break
+            fi
+            echo "Waiting... ($i)"
+            sleep 2
+          done
+
+          if [ -z "$pod_names" ]; then
+            echo "No pods found after timeout"
+            exit 1
+          fi
+
+          rack_label=""
+          for pod in $pod_names; do
+            node=$(kubectl get pod "$pod" -n "$NAMESPACE" -o jsonpath="{.spec.nodeName}")
+            rack=$(kubectl get node "$node" -o jsonpath="{.metadata.labels.kaiwo\.topology-rack}")
+            echo "$pod is on $node (rack: $rack)"
+
+            if [ -z "$rack_label" ]; then
+              rack_label="$rack"
+            elif [ "$rack" != "$rack_label" ]; then
+              echo "Topology mismatch: not all pods are on the same rack"
+              exit 1
+            fi
+          done
+
+          echo "All pods are scheduled on the same rack: $rack_label"
+          exit 0
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        check:
+          ($error == null): true
+    - script:
+        content: |
+          #!/bin/bash
+          TEST_NAME=kaiwo-test
+          kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 kaiwo/topology-rack=rack-a --overwrite
+          kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 kaiwo/topology-block=block-a --overwrite
+          kubectl label node "$TEST_NAME"-worker3 "$TEST_NAME"-worker4 kaiwo/topology-rack=rack-a --overwrite
+          kubectl label node "$TEST_NAME"-worker3 "$TEST_NAME"-worker4 kaiwo/topology-block=block-a --overwrite
