@@ -195,6 +195,9 @@ var _ = Describe("Manager", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred(), "Failed to deploy kaiwo-operator")
 
 		By("deploying the kaiwo test config")
+		cmd = exec.Command("kubectl", "delete", "kaiwoconfig", "kaiwo")
+		_, err = utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Failed to delete kaiwoconfig")
 		cmd = exec.Command("kubectl", "apply", "-f", "test/kaiwoconfig.yaml")
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to deploy kaiwo test config")
