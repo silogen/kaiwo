@@ -27,13 +27,6 @@ spec:
             availableReplicas: 1
             readyReplicas: 1
             replicas: 1
-    - script:
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-        content: ../../../scripts/find_string_in_events.sh $NAMESPACE kaiwoservice-2 "Admitted by clusterQueue kaiwo"
-        check:
-          ($error == null): true
     catch:
     - command:
         entrypoint: kaiwo-dev

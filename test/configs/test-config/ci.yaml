@@ -1,7 +1,7 @@
 buildCli: true
 buildDevCli: true
 deployTo: kind
-kaiwoConfigPath: test/kaiwoconfig.yaml
+kaiwoConfigPath: test/configs/ci.yaml
 
 testValidateController: true
 

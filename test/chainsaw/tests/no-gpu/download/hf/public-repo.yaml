@@ -19,7 +19,6 @@ spec:
     echo "Hello World" > /hf_cache/hub/workload/hello.txt
   storage:
     storageEnabled: true
-    storageClassName: "nfs-client"
     huggingFace:
       storageSize: "50Mi"
       mountPath: "/hf_cache"

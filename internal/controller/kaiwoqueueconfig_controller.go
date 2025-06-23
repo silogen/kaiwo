@@ -483,6 +483,10 @@ func (r *KaiwoQueueConfigReconciler) syncLocalQueues(
 			continue
 		}
 		for namespace, localQueue := range namespaceMap {
+			//if !slices.Contains(clusterQueue.Namespaces, namespace) {
+			//	Skip if the local queue namespace is not referenced by the
+			//continue
+			//}
 			logger.Info("Deleting stale LocalQueue", "name", queueName, "namespace", namespace)
 			err := r.Delete(ctx, &localQueue)
 			if err != nil {

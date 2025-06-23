@@ -46,9 +46,15 @@ const (
 	HfStoragePostfix   = "hf"
 )
 
-func (h StorageHandler) GetResourceReconcilers() []ResourceReconciler {
+func (h StorageHandler) GetResourceReconcilers(ctx context.Context) []ResourceReconciler {
 	var reconcilers []ResourceReconciler
 	storageSpec := h.CommonMetaSpec.Storage
+
+	config := ConfigFromContext(ctx)
+	storageClassName := storageSpec.StorageClassName
+	if storageClassName == "" {
+		storageClassName = config.Storage.DefaultStorageClass
+	}
 
 	if storageSpec.HasData() {
 		reconcilers = append(reconcilers, NewPvcReconciler(
@@ -57,7 +63,7 @@ func (h StorageHandler) GetResourceReconcilers() []ResourceReconciler {
 				Namespace: h.ObjectKey.Namespace,
 			},
 			storageSpec.Data.StorageSize,
-			storageSpec.StorageClassName,
+			storageClassName,
 			storageSpec.AccessMode,
 		))
 	}
@@ -68,7 +74,7 @@ func (h StorageHandler) GetResourceReconcilers() []ResourceReconciler {
 				Namespace: h.ObjectKey.Namespace,
 			},
 			storageSpec.HuggingFace.StorageSize,
-			storageSpec.StorageClassName,
+			storageClassName,
 			storageSpec.AccessMode,
 		))
 	}
@@ -90,7 +96,7 @@ func (h StorageHandler) GetResourceReconcilers() []ResourceReconciler {
 }
 
 func (h StorageHandler) ObserveStatus(ctx context.Context, k8sClient client.Client, clusterCtx ClusterContext, previousWorkloadStatus v1alpha1.WorkloadStatus) (v1alpha1.WorkloadStatus, []metav1.Condition, error) {
-	status, conditions, err := ObserveOverallStatus(ctx, k8sClient, h.GetResourceReconcilers(), previousWorkloadStatus)
+	status, conditions, err := ObserveOverallStatus(ctx, k8sClient, h.GetResourceReconcilers(ctx), previousWorkloadStatus)
 	if status == nil {
 		return "", conditions, err
 	}
