@@ -78,6 +78,31 @@ _Appears in:_
 | `namespaces` _string array_ | Namespaces optionally lists Kubernetes namespaces where Kaiwo should automatically create a Kueue `LocalQueue` resource pointing to this ClusterQueue.<br />If one or more namespaces are provided, the KaiwoQueueConfig controller takes over managing the LocalQueues for this ClusterQueue.<br />Leave this empty if you want to be able to create your own LocalQueues for this ClusterQueue. |  |  |
 
 
+#### ClusterQueueSpec
+
+
+
+
+
+
+
+_Appears in:_
+- [ClusterQueue](#clusterqueue)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `resourceGroups` _ResourceGroup array_ | resourceGroups describes groups of resources.<br />Each resource group defines the list of resources and a list of flavors<br />that provide quotas for these resources.<br />Each resource and each flavor can only form part of one resource group.<br />resourceGroups can be up to 16. |  | MaxItems: 16 <br /> |
+| `cohort` _[CohortReference](#cohortreference)_ | cohort that this ClusterQueue belongs to. CQs that belong to the<br />same cohort can borrow unused resources from each other.<br /><br />A CQ can be a member of a single borrowing cohort. A workload submitted<br />to a queue referencing this CQ can borrow quota from any CQ in the cohort.<br />Only quota for the [resource, flavor] pairs listed in the CQ can be<br />borrowed.<br />If empty, this ClusterQueue cannot borrow from any other ClusterQueue and<br />vice versa.<br /><br />A cohort is a name that links CQs together, but it doesn't reference any<br />object. |  |  |
+| `queueingStrategy` _[QueueingStrategy](#queueingstrategy)_ | QueueingStrategy indicates the queueing strategy of the workloads<br />across the queues in this ClusterQueue.<br />Current Supported Strategies:<br /><br />- StrictFIFO: workloads are ordered strictly by creation time.<br />Older workloads that can't be admitted will block admitting newer<br />workloads even if they fit available quota.<br />- BestEffortFIFO: workloads are ordered by creation time,<br />however older workloads that can't be admitted will not block<br />admitting newer workloads that fit existing quota. | BestEffortFIFO | Enum: [StrictFIFO BestEffortFIFO] <br /> |
+| `namespaceSelector` _[LabelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#labelselector-v1-meta)_ | namespaceSelector defines which namespaces are allowed to submit workloads to<br />this clusterQueue. Beyond this basic support for policy, a policy agent like<br />Gatekeeper should be used to enforce more advanced policies.<br />Defaults to null which is a nothing selector (no namespaces eligible).<br />If set to an empty selector `\{\}`, then all namespaces are eligible. |  |  |
+| `flavorFungibility` _[FlavorFungibility](#flavorfungibility)_ | flavorFungibility defines whether a workload should try the next flavor<br />before borrowing or preempting in the flavor being evaluated. | \{  \} |  |
+| `preemption` _[ClusterQueuePreemption](#clusterqueuepreemption)_ |  | \{  \} |  |
+| `admissionChecks` _string array_ | admissionChecks lists the AdmissionChecks required by this ClusterQueue.<br />Cannot be used along with AdmissionCheckStrategy. |  |  |
+| `admissionChecksStrategy` _[AdmissionChecksStrategy](#admissionchecksstrategy)_ | admissionCheckStrategy defines a list of strategies to determine which ResourceFlavors require AdmissionChecks.<br />This property cannot be used in conjunction with the 'admissionChecks' property. |  |  |
+| `stopPolicy` _[StopPolicy](#stoppolicy)_ | stopPolicy - if set to a value different from None, the ClusterQueue is considered Inactive, no new reservation being<br />made.<br /><br />Depending on its value, its associated workloads will:<br /><br />- None - Workloads are admitted<br />- HoldAndDrain - Admitted workloads are evicted and Reserving workloads will cancel the reservation.<br />- Hold - Admitted workloads will run to completion and Reserving workloads will cancel the reservation. | None | Enum: [None Hold HoldAndDrain] <br /> |
+| `fairSharing` _[FairSharing](#fairsharing)_ | fairSharing defines the properties of the ClusterQueue when<br />participating in FairSharing.  The values are only relevant<br />if FairSharing is enabled in the Kueue configuration. |  |  |
+
+
 #### CommonMetaSpec
 
 
@@ -384,9 +409,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `clusterQueues` _[ClusterQueue](#clusterqueue) array_ | ClusterQueues defines a list of Kueue ClusterQueues that Kaiwo should manage. Kaiwo ensures these ClusterQueues exist and match the provided specs. |  | MaxItems: 20 <br /> |
+| `clusterQueues` _[ClusterQueue](#clusterqueue) array_ | ClusterQueues defines a list of Kueue ClusterQueues that Kaiwo should manage. Kaiwo ensures these ClusterQueues exist and match the provided specs. |  | MaxItems: 1000 <br /> |
 | `resourceFlavors` _[ResourceFlavorSpec](#resourceflavorspec) array_ | ResourceFlavors defines a list of Kueue ResourceFlavors that Kaiwo should manage. Kaiwo ensures these ResourceFlavors exist and match the provided specs. If omitted or empty, Kaiwo attempts to automatically discover node pools and create default flavors based on node labels. |  | MaxItems: 20 <br /> |
-| `workloadPriorityClasses` _WorkloadPriorityClass array_ | WorkloadPriorityClasses defines a list of Kueue WorkloadPriorityClasses that Kaiwo should manage. Kaiwo ensures these priority classes exist with the specified values. See Kueue documentation for `WorkloadPriorityClass`. |  | MaxItems: 10 <br /> |
+| `workloadPriorityClasses` _WorkloadPriorityClass array_ | WorkloadPriorityClasses defines a list of Kueue WorkloadPriorityClasses that Kaiwo should manage. Kaiwo ensures these priority classes exist with the specified values. See Kueue documentation for `WorkloadPriorityClass`. |  | MaxItems: 20 <br /> |
 | `topologies` _[Topology](#topology) array_ | Topologies defines a list of Kueue Topologies that Kaiwo should manage. Kaiwo ensures these Topologies exist with the specified values. See Kueue documentation for `Topology`. |  | MaxItems: 10 <br /> |
 
 

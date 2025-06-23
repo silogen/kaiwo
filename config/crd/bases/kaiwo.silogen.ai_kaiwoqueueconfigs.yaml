@@ -473,15 +473,10 @@ spec:
                           - HoldAndDrain
                           type: string
                       type: object
-                      x-kubernetes-validations:
-                      - message: borrowingLimit must be nil when cohort is empty
-                        rule: '!has(self.cohort) && has(self.resourceGroups) ? self.resourceGroups.all(rg,
-                          rg.flavors.all(f, f.resources.all(r, !has(r.borrowingLimit))))
-                          : true'
                   required:
                   - name
                   type: object
-                maxItems: 20
+                maxItems: 1000
                 type: array
               resourceFlavors:
                 description: ResourceFlavors defines a list of Kueue ResourceFlavors
@@ -733,7 +728,7 @@ spec:
                   required:
                   - value
                   type: object
-                maxItems: 10
+                maxItems: 20
                 type: array
             type: object
           status:

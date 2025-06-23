@@ -341,7 +341,7 @@ func CreateClusterQueue(nodePoolResources map[string]kueuev1beta1.FlavorQuotas, 
 	return kaiwo.ClusterQueue{
 		Name:       name,
 		Namespaces: []string{},
-		Spec: kueuev1beta1.ClusterQueueSpec{
+		Spec: kaiwo.ClusterQueueSpec{
 			NamespaceSelector: &metav1.LabelSelector{},
 			Cohort:            kueuev1beta1.CohortReference(cohort),
 			ResourceGroups:    resourceGroups,
@@ -395,7 +395,23 @@ func ConvertKaiwoToKueueClusterQueue(kaiwoQueue kaiwo.ClusterQueue) kueuev1beta1
 		ObjectMeta: metav1.ObjectMeta{
 			Name: kaiwoQueue.Name,
 		},
-		Spec: kaiwoQueue.Spec,
+		Spec: ConvertKaiwoToKueueSpec(kaiwoQueue.Spec),
+	}
+}
+
+// ConvertKaiwoToKueueSpec converts from Kaiwo's simplified ClusterQueueSpec to the actual Kueue version
+func ConvertKaiwoToKueueSpec(in kaiwo.ClusterQueueSpec) kueuev1beta1.ClusterQueueSpec {
+	return kueuev1beta1.ClusterQueueSpec{
+		ResourceGroups:          in.ResourceGroups,
+		Cohort:                  in.Cohort,
+		QueueingStrategy:        in.QueueingStrategy,
+		NamespaceSelector:       in.NamespaceSelector,
+		FlavorFungibility:       in.FlavorFungibility,
+		Preemption:              in.Preemption,
+		AdmissionChecks:         in.AdmissionChecks,
+		AdmissionChecksStrategy: in.AdmissionChecksStrategy,
+		StopPolicy:              in.StopPolicy,
+		FairSharing:             in.FairSharing,
 	}
 }
 
