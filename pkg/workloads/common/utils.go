@@ -166,6 +166,6 @@ func ConditionsEqual(a, b []metav1.Condition) bool {
 
 	// Use cmpopts to ignore LastTransitionTime
 	return cmp.Equal(a, b,
-		cmpopts.IgnoreFields(metav1.Condition{}, "LastTransitionTime"),
+		cmpopts.IgnoreFields(metav1.Condition{}, "LastTransitionTime", "ObservedGeneration"),
 	)
 }

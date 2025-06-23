@@ -17,8 +17,8 @@ package controller
 import (
 	"context"
 	"fmt"
-	"reflect"
 
+	"k8s.io/apimachinery/pkg/api/equality"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
@@ -72,6 +72,10 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	config := common.ConfigFromContext(ctx)
+
+	if err := common.EnsureClusterNodesLabelsAndTaints(ctx, r.Client); err != nil {
+		return ctrl.Result{}, fmt.Errorf("could not ensure cluster nodes' taints and labels: %w", err)
+	}
 
 	if config.DynamicallyUpdateDefaultClusterQueue {
 		if err := r.EnsureKaiwoQueueConfig(ctx, common.KaiwoQueueConfigName, config.DefaultClusterQueueName, config.DefaultClusterQueueCohortName); err != nil {
@@ -334,8 +338,11 @@ func (r *KaiwoQueueConfigReconciler) syncLocalQueues(
 		staleQueues[localQueue.Name][localQueue.Namespace] = localQueue
 	}
 
+	clusterQueueLookup := map[string]kaiwo.ClusterQueue{}
+
 	// Reconcile expected LocalQueues
 	for _, clusterQueue := range kaiwoQueueConfig.Spec.ClusterQueues {
+		clusterQueueLookup[clusterQueue.Name] = clusterQueue
 		// Fetch the actual cluster queue to use for the owner reference
 		actualClusterQueue := &kueuev1beta1.ClusterQueue{}
 		if err := r.Get(ctx, client.ObjectKey{Name: clusterQueue.Name}, actualClusterQueue); err != nil {
@@ -408,7 +415,16 @@ func (r *KaiwoQueueConfigReconciler) syncLocalQueues(
 
 	// Clean up stale LocalQueues
 	for queueName, namespaceMap := range staleQueues {
+		clusterQueue := clusterQueueLookup[queueName]
+		if len(clusterQueue.Namespaces) == 0 {
+			// Skip cleaning this ClusterQueue reference if it does not limit the namespaces
+			continue
+		}
 		for namespace, localQueue := range namespaceMap {
+			//if !slices.Contains(clusterQueue.Namespaces, namespace) {
+			//	Skip if the local queue namespace is not referenced by the
+			//continue
+			//}
 			logger.Info("Deleting stale LocalQueue", "name", queueName, "namespace", namespace)
 			err := r.Delete(ctx, &localQueue)
 			if err != nil {
@@ -494,7 +510,7 @@ func nodeResourceChanged(oldNode, newNode *corev1.Node) bool {
 		return true
 	}
 
-	if !reflect.DeepEqual(oldNode.Labels, newNode.Labels) {
+	if !equality.Semantic.DeepEqual(oldNode.Labels, newNode.Labels) {
 		return true
 	}
 
@@ -512,6 +528,11 @@ func (r *KaiwoQueueConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		}
 		logger.Info("Ensuring default KaiwoQueueConfig exists on startup...")
 		config := common.ConfigFromContext(ctx)
+
+		if err := common.EnsureClusterNodesLabelsAndTaints(ctx, r.Client); err != nil {
+			return fmt.Errorf("could not ensure cluster nodes' taints and labels: %w", err)
+		}
+
 		if err := r.EnsureKaiwoQueueConfig(ctx, common.KaiwoQueueConfigName, config.DefaultClusterQueueName, config.DefaultClusterQueueCohortName); err != nil {
 			logger.Error(err, "Failed to ensure default KaiwoQueueConfig on startup")
 			return err
@@ -557,14 +578,19 @@ func (r *KaiwoQueueConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *KaiwoQueueConfigReconciler) EnsureKaiwoQueueConfig(ctx context.Context, kaiwoQueueConfigName string, clusterQueueName string, cohort string) error {
 	logger := log.FromContext(ctx)
 
+	clusterCtx, err := common.GetClusterContext(ctx, r.Client)
+	if err != nil {
+		return fmt.Errorf("could not get cluster context: %w", err)
+	}
+
 	// Generate new flavors and clusterQueue
-	newResourceFlavors, nodePoolResources, err := controllerutils.CreateDefaultResourceFlavors(ctx, r.Client)
+	newResourceFlavors, nodePoolResources, err := controllerutils.ConstructDefaultResourceFlavors(ctx, *clusterCtx)
 	if err != nil {
 		logger.Error(err, "Failed to create default resource flavors")
 		return err
 	}
 
-	newClusterQueue := controllerutils.CreateClusterQueue(nodePoolResources, clusterQueueName, cohort)
+	newClusterQueue := controllerutils.ConstructClusterQueue(nodePoolResources, clusterQueueName, cohort)
 
 	var existingConfig kaiwo.KaiwoQueueConfig
 	err = r.Get(ctx, client.ObjectKey{Name: kaiwoQueueConfigName}, &existingConfig)

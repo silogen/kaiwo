@@ -1,0 +1,25 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoJob
+metadata:
+  name: download-job-status-change-positive
+spec:
+  user: test@amd.com
+  resources:
+    limits:
+      cpu: "100m"
+      memory: "100Mi"
+    requests:
+      cpu: "100m"
+      memory: "100Mi"
+  image: busybox:latest
+  entrypoint: |
+    sleep 1
+  storage:
+    storageEnabled: true
+    huggingFace:
+      storageSize: "1Mi"
+      mountPath: "/hf_cache"
+      preCacheRepos:
+      - repoId: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+        files:
+        - "README.md"

@@ -20,30 +20,21 @@ import (
 	"context"
 	"fmt"
 
+	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
-
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
-
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
-
-	"github.com/silogen/kaiwo/pkg/workloads/common"
-
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
-
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-
-	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
-	batchv1 "k8s.io/api/batch/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	"k8s.io/client-go/tools/record"
+	"github.com/silogen/kaiwo/pkg/workloads/common"
 
 	workloadjob "github.com/silogen/kaiwo/pkg/workloads/job"
 )
@@ -128,22 +119,6 @@ func (r *KaiwoJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			builder.WithPredicates(JobStatusChangedPredicate()),
 		).
 		Owns(&rayv1.RayJob{}).
-		Watches(
-			&kaiwo.KaiwoService{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-				var jobs kaiwo.KaiwoJobList
-				if err := r.Client.List(ctx, &jobs); err != nil {
-					return nil
-				}
-				var requests []reconcile.Request
-				for _, job := range jobs.Items {
-					if job.Spec.Duration != nil && job.Status.Status == kaiwo.WorkloadStatusRunning {
-						requests = append(requests, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&job)})
-					}
-				}
-				return requests
-			}),
-		).
 		Named("kaiwojob").
 		Complete(r)
 }
