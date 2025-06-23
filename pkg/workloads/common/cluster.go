@@ -433,11 +433,11 @@ func extractAmdNodeGpuInfo(node v1.Node) (*NodeGpuInfo, error) {
 		return nil, fmt.Errorf("failed to parse physical GPU count: %w", err)
 	}
 
-	logicalVramCount, exists := nodeLabels[AmdGpuVramLabelKey]
+	physicalVramCount, exists := nodeLabels[AmdGpuVramLabelKey]
 	if !exists {
 		return nil, fmt.Errorf("failed to extract logical GPU vRAM from labels, label %s does not exist", AmdGpuVramLabelKey)
 	}
-	logicalVRAM, err := resource.ParseQuantity(logicalVramCount)
+	physicalVram, err := resource.ParseQuantity(physicalVramCount + "i")
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract logical VRAM from labels: %w", err)
 	}
@@ -447,13 +447,18 @@ func extractAmdNodeGpuInfo(node v1.Node) (*NodeGpuInfo, error) {
 		return nil, fmt.Errorf("failed to extract logical GPU count from capacity, node does not have the resource '%s' listed in its capacity", AmdGpuResourceName)
 	}
 
+	logicalVram := physicalVram.DeepCopy()
+	partitionFactor := int(logicalCount.Value()) / physicalGpus
+	logicalVram.Mul(int64(partitionFactor))
+
 	return &NodeGpuInfo{
-		Vendor:            v1alpha1.GpuVendorAmd,
-		ResourceName:      AmdGpuResourceName,
-		Model:             cleanAMDGPUName(productName),
-		PhysicalCount:     physicalGpus,
-		LogicalCount:      int(logicalCount.Value()),
-		LogicalVramPerGpu: logicalVRAM,
+		Vendor:             v1alpha1.GpuVendorAmd,
+		ResourceName:       AmdGpuResourceName,
+		Model:              cleanAMDGPUName(productName),
+		PhysicalVramPerGpu: physicalVram,
+		PhysicalCount:      physicalGpus,
+		LogicalCount:       int(logicalCount.Value()),
+		LogicalVramPerGpu:  logicalVram,
 	}, nil
 }
 

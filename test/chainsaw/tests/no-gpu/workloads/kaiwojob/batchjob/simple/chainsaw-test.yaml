@@ -1,29 +1,20 @@
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
-  name: test-gpu-scheduling-when-gpu-is-not-available
+  name: kaiwojob-reconciliation
 spec:
   steps:
   - try:
     - apply:
-        file: basic-rayjob-no-gpus-available.yaml
-    - wait:
-        apiVersion: kaiwo.silogen.ai/v1alpha1
-        kind: KaiwoJob
-        name: kaiwojob-rayjob-no-gpus-available
-        timeout: 30s
-        for:
-          condition:
-            name: Schedulable
-            value: 'false'
+        file: basic-kaiwojob.yaml
     - assert:
         resource:
           apiVersion: kaiwo.silogen.ai/v1alpha1
           kind: KaiwoJob
           metadata:
-            name: kaiwojob-rayjob-no-gpus-available
+            name: kaiwojob-1
           status:
-            status: ERROR
+            status: COMPLETE
     catch:
     - command:
         entrypoint: kaiwo-dev

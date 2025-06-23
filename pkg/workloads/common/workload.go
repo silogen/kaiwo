@@ -40,7 +40,7 @@ const (
 	WorkloadPending  WorkloadAdmittedReason = "Pending"
 )
 
-func (h WorkloadHandler) GetResourceReconcilers() []ResourceReconciler {
+func (h WorkloadHandler) GetResourceReconcilers(ctx context.Context) []ResourceReconciler {
 	return []ResourceReconciler{h.Workload}
 }
 
@@ -52,7 +52,7 @@ func (h WorkloadHandler) ObserveStatus(ctx context.Context, k8sClient client.Cli
 
 	var conditions []metav1.Condition
 
-	workloadStatus, workloadConditions, err := ObserveOverallStatus(ctx, k8sClient, h.GetResourceReconcilers(), previousWorkloadStatus)
+	workloadStatus, workloadConditions, err := ObserveOverallStatus(ctx, k8sClient, h.GetResourceReconcilers(ctx), previousWorkloadStatus)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to observe workload status: %w", err)
 	}

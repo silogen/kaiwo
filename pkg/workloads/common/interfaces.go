@@ -27,7 +27,7 @@ import (
 
 // GroupReconciler provides a way to link related reconcilers and observe their status
 type GroupReconciler interface {
-	GetResourceReconcilers() []ResourceReconciler
+	GetResourceReconcilers(ctx context.Context) []ResourceReconciler
 
 	// ObserveStatus gives the current status and conditions of this reconciler group
 	ObserveStatus(ctx context.Context, k8sClient client.Client, clusterCtx ClusterContext, previousWorkloadStatus kaiwo.WorkloadStatus) (kaiwo.WorkloadStatus, []metav1.Condition, error)
