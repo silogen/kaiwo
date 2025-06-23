@@ -16,7 +16,6 @@ spec:
     sleep 10
   storage:
     storageEnabled: true
-    storageClassName: "nfs-client"
     data:
       storageSize: 1Gi
       mountPath: /workload

@@ -172,7 +172,7 @@ func ConstructDefaultResourceFlavors(ctx context.Context, clusterContext common.
 
 	resourceFlavors = RemoveDuplicateResourceFlavors(resourceFlavors)
 
-	logger.Info("Final generated node pools", "nodePools", nodePools)
+	// logger.Info("Final generated node pools", "nodePools", nodePools)
 	logger.Info("Final generated node pool resources", "nodePoolResources", nodePoolResources)
 	logger.Info("Final generated resource flavors", "resourceFlavors", resourceFlavors)
 

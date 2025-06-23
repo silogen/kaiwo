@@ -66,7 +66,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `ray` _[KaiwoRayConfig](#kaiworayconfig)_ | Ray defines the Ray-specific settings | \{  \} |  |
-| `data` _[KaiwoStorageConfig](#kaiwostorageconfig)_ | Storage defines the storage-specific settings | \{  \} |  |
+| `storage` _[KaiwoStorageConfig](#kaiwostorageconfig)_ | Storage defines the storage-specific settings | \{  \} |  |
 | `nodes` _[KaiwoNodeConfig](#kaiwonodeconfig)_ | Nodes defines the node configuration settings | \{  \} |  |
 | `scheduling` _[KaiwoSchedulingConfig](#kaiwoschedulingconfig)_ | Scheduling contains the configuration Kaiwo uses for workload scheduling | \{  \} |  |
 | `resourceMonitoring` _[KaiwoResourceMonitoringConfig](#kaiworesourcemonitoringconfig)_ | ResourceMonitoring defines the resource-monitoring specific settings | \{  \} |  |

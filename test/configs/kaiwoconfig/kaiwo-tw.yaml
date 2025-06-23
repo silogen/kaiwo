@@ -1,0 +1,12 @@
+apiVersion: config.kaiwo.silogen.ai/v1alpha1
+kind: KaiwoConfig
+metadata:
+  name: kaiwo
+spec:
+  dynamicallyUpdateDefaultClusterQueue: false
+  ray:
+    headPodMemory: 1Gi
+  scheduling:
+    pendingThresholdForPreemption: 1s
+  storage:
+    defaultStorageClass: nfs-csi

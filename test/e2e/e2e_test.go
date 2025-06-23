@@ -60,6 +60,9 @@ type TestConfig struct {
 	TestValidateController bool `yaml:"testValidateController"`
 
 	Chainsaw *utils.ChainsawConfig `yaml:"chainsaw"`
+
+	// Context is the Kubernetes context to use
+	Context string `yaml:"context"`
 }
 
 func (c *TestConfig) ShouldDeploy() bool {
