@@ -17,7 +17,6 @@ spec:
     sleep 1
   storage:
     storageEnabled: true
-    storageClassName: "nfs-client"
     huggingFace:
       storageSize: "1Gi"
       mountPath: "/hf_cache"

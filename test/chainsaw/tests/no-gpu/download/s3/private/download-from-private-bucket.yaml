@@ -15,7 +15,6 @@ spec:
   entrypoint: cat /workload/s3/test-upload.txt
   storage:
     storageEnabled: true
-    storageClassName: "nfs-client"
     data:
       storageSize: "1Mi"
       mountPath: "/workload"

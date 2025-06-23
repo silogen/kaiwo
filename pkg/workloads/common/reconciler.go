@@ -309,7 +309,7 @@ func (wr *Reconciler) ensureLocalQueue(ctx context.Context) error {
 }
 
 func (wr *Reconciler) reconcileHandler(ctx context.Context, clusterCtx ClusterContext, handler GroupReconciler) error {
-	for _, reconciler := range handler.GetResourceReconcilers() {
+	for _, reconciler := range handler.GetResourceReconcilers(ctx) {
 		if err := wr.apply(ctx, clusterCtx, reconciler); err != nil {
 			return fmt.Errorf("failed to reconcile resource: %w", err)
 		}

@@ -338,8 +338,11 @@ func (r *KaiwoQueueConfigReconciler) syncLocalQueues(
 		staleQueues[localQueue.Name][localQueue.Namespace] = localQueue
 	}
 
+	clusterQueueLookup := map[string]kaiwo.ClusterQueue{}
+
 	// Reconcile expected LocalQueues
 	for _, clusterQueue := range kaiwoQueueConfig.Spec.ClusterQueues {
+		clusterQueueLookup[clusterQueue.Name] = clusterQueue
 		// Fetch the actual cluster queue to use for the owner reference
 		actualClusterQueue := &kueuev1beta1.ClusterQueue{}
 		if err := r.Get(ctx, client.ObjectKey{Name: clusterQueue.Name}, actualClusterQueue); err != nil {
@@ -412,7 +415,16 @@ func (r *KaiwoQueueConfigReconciler) syncLocalQueues(
 
 	// Clean up stale LocalQueues
 	for queueName, namespaceMap := range staleQueues {
+		clusterQueue := clusterQueueLookup[queueName]
+		if len(clusterQueue.Namespaces) == 0 {
+			// Skip cleaning this ClusterQueue reference if it does not limit the namespaces
+			continue
+		}
 		for namespace, localQueue := range namespaceMap {
+			//if !slices.Contains(clusterQueue.Namespaces, namespace) {
+			//	Skip if the local queue namespace is not referenced by the
+			//continue
+			//}
 			logger.Info("Deleting stale LocalQueue", "name", queueName, "namespace", namespace)
 			err := r.Delete(ctx, &localQueue)
 			if err != nil {
