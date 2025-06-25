@@ -20,8 +20,9 @@ jobs:
       with:
         go-version: stable
     - name: golangci-lint
-      uses: golangci/golangci-lint-action@v6
+      uses: golangci/golangci-lint-action@v8
       with:
+        version: v2.1
         args: --timeout=10m
   test:
     name: Run tests
