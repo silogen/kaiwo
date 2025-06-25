@@ -66,7 +66,7 @@ spec:
         check:
           (contains($stdout, 'cpu')): true
           (contains($stdout, 'memory')): true
-          (contains($stdout, '{"name":"nvidia.com/gpu","nominalQuota":"16"}')): true
+          (contains($stdout, '{"name":"nvidia.com/gpu","nominalQuota":"32"}')): true
 
     - script:
         env:

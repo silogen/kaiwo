@@ -518,9 +518,8 @@ func CreateDefaultTopology(ctx context.Context, c client.Client) ([]kaiwo.Topolo
 		},
 		Spec: kaiwo.TopologySpec{
 			Levels: []kueuev1alpha1.TopologyLevel{
-				// TODO: uncomment when we know topology
-				// {NodeLabel: common.DefaultTopologyBlockLabel},
-				// {NodeLabel: common.DefaultTopologyRackLabel},
+				{NodeLabel: common.DefaultTopologyBlockLabel},
+				{NodeLabel: common.DefaultTopologyRackLabel},
 				{NodeLabel: common.DefaultTopologyHostLabel},
 			},
 		},

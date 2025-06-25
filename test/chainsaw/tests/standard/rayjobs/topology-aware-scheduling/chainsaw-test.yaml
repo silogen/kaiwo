@@ -4,6 +4,8 @@ metadata:
   name: test-tas-rayjob
 spec:
   concurrent: false
+  timeouts:
+    cleanup: 240s
   steps:
   - try:
     - script:
