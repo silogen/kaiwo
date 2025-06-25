@@ -111,7 +111,7 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 
 		// Identify NVIDIA GPU Nodes
 		if gpuProduct, exists := node.Labels["nvidia.com/gpu.product"]; exists {
-			gpuType = strings.Replace(strings.ToLower(gpuProduct), "-", "", -1)
+			gpuType = strings.ReplaceAll(strings.ToLower(gpuProduct), "-", "")
 			if count, ok := node.Labels["nvidia.com/gpu.count"]; ok {
 				gpuCount, _ = strconv.Atoi(count)
 				gpuVendor = "nvidia" //nolint:goconst
@@ -382,10 +382,23 @@ func ConvertKaiwoToKueueTopologies(kaiwoTopologies []kaiwo.Topology) []kueuev1al
 }
 
 func ConvertKaiwoToKueueTopology(kaiwoTopology kaiwo.Topology) kueuev1alpha1.Topology {
+	levels := make([]kueuev1alpha1.TopologyLevel, len(kaiwoTopology.Spec.Levels))
+	for i, l := range kaiwoTopology.Spec.Levels {
+		levels[i] = kueuev1alpha1.TopologyLevel{
+			NodeLabel: l.NodeLabel,
+		}
+	}
+
 	return kueuev1alpha1.Topology{
-		ObjectMeta: metav1.ObjectMeta{Name: kaiwoTopology.Name},
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Topology",
+			APIVersion: "kueue.x-k8s.io/v1alpha1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: kaiwoTopology.Name,
+		},
 		Spec: kueuev1alpha1.TopologySpec{
-			Levels: kaiwoTopology.Spec.Levels,
+			Levels: levels,
 		},
 	}
 }

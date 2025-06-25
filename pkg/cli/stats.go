@@ -316,17 +316,17 @@ func runQueueStatsCmd(gpuResourceName v1.ResourceName) func(cmd *cobra.Command, 
 			// Find the ClusterQueue for this LocalQueue
 			clusterQueueName := "<unknown>"
 			if m, ok := localQueueToCluster[namespace]; ok {
-				if cqName, ok2 := m[localQueueName]; ok2 {
+				if cqName, ok2 := m[string(localQueueName)]; ok2 {
 					clusterQueueName = cqName
 				}
 			}
 
 			if workload.Status.Admission != nil {
 				clusterAdmittedGPU[clusterQueueName]++
-				localAdmittedGPU[clusterQueueName][localQueueName]++
+				localAdmittedGPU[clusterQueueName][string(localQueueName)]++
 			} else {
 				clusterPendingGPU[clusterQueueName]++
-				localPendingGPU[clusterQueueName][localQueueName]++
+				localPendingGPU[clusterQueueName][string(localQueueName)]++
 			}
 		}
 

@@ -80,7 +80,7 @@ func ShouldPreempt(ctx context.Context, k8sClient client.Client, handler Workloa
 		return false, nil
 	}
 	now := time.Now()
-	deadline := startTime.Time.Add(duration.Duration)
+	deadline := startTime.Add(duration.Duration)
 	if now.After(deadline) {
 		config := ConfigFromContext(ctx)
 		queue := GetClusterQueueName(ctx, handler)
@@ -103,9 +103,9 @@ func ClusterHasGpuDemand(ctx context.Context, k8sClient client.Client, clusterQu
 			job.Spec.ClusterQueue = config.DefaultClusterQueueName
 		}
 		if job.Status.Status == v1alpha1.WorkloadStatusPending &&
-			job.Spec.CommonMetaSpec.Gpus > 0 &&
+			job.Spec.Gpus > 0 &&
 			job.Spec.ClusterQueue == clusterQueue &&
-			job.Spec.CommonMetaSpec.GpuVendor == gpuVendor &&
+			job.Spec.GpuVendor == gpuVendor &&
 			isPendingForLong(ctx, job.ObjectMeta) {
 			return true, nil
 		}

@@ -175,7 +175,7 @@ func main() {
 	// Create watchers for metrics and webhooks certificates
 	var metricsCertWatcher, webhookCertWatcher *certwatcher.CertWatcher
 
-	webhooksEnabled := !(os.Getenv("DISABLE_WEBHOOKS") == "true")
+	webhooksEnabled := os.Getenv("DISABLE_WEBHOOKS") != "true"
 	if !webhooksEnabled {
 		setupLog.Info("webhooks disabled")
 	}

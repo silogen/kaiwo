@@ -22,8 +22,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	v1 "k8s.io/api/core/v1"
-
 	"k8s.io/client-go/tools/record"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
@@ -132,10 +130,10 @@ func (r *KaiwoQueueConfigReconciler) emitEvent(queueConfig *kaiwo.KaiwoQueueConf
 		key = ""
 	}
 
-	eventType := v1.EventTypeNormal
+	eventType := corev1.EventTypeNormal
 	var message string
 	if err != nil {
-		eventType = v1.EventTypeWarning
+		eventType = corev1.EventTypeWarning
 		reason += "Failed"
 		message = fmt.Sprintf("Failed to %s %s %s: %v", action, target, key, err)
 	} else {
@@ -267,6 +265,7 @@ func (r *KaiwoQueueConfigReconciler) syncTopologies(
 				r.emitEvent(queueConfig, "topology", "owner reference", &kueueTopology, err)
 				continue
 			}
+
 			err := r.Create(ctx, &kueueTopology)
 			if err != nil {
 				logger.Error(err, "Failed to create Topology", "name", kueueTopology.Name)
@@ -276,6 +275,7 @@ func (r *KaiwoQueueConfigReconciler) syncTopologies(
 		} else if !controllerutils.CompareTopologies(existingTopology, kueueTopology) {
 			logger.Info("Updating Topology", "name", kueueTopology.Name)
 			existingTopology.Spec = kueueTopology.Spec
+
 			err := r.Update(ctx, &existingTopology)
 			if err != nil {
 				logger.Error(err, "Failed to update Topology", "name", kueueTopology.Name)
@@ -621,7 +621,7 @@ func (r *KaiwoQueueConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *KaiwoQueueConfigReconciler) CreateTopology(ctx context.Context) error {
 	var nodes corev1.NodeList
-	if err := r.Client.List(ctx, &nodes); err != nil {
+	if err := r.List(ctx, &nodes); err != nil {
 		return fmt.Errorf("listing nodes: %w", err)
 	}
 
@@ -642,7 +642,7 @@ func (r *KaiwoQueueConfigReconciler) CreateTopology(ctx context.Context) error {
 		}
 
 		if updated {
-			if err := r.Client.Update(ctx, node); err != nil {
+			if err := r.Update(ctx, node); err != nil {
 				return fmt.Errorf("failed to label node %s: %w", node.Name, err)
 			}
 		}

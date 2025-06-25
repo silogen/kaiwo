@@ -123,7 +123,7 @@ type ClusterQueueSpec struct {
 	// admissionChecks lists the AdmissionChecks required by this ClusterQueue.
 	// Cannot be used along with AdmissionCheckStrategy.
 	// +optional
-	AdmissionChecks []string `json:"admissionChecks,omitempty"`
+	AdmissionChecks []kueuev1beta1.AdmissionCheckReference `json:"admissionChecks,omitempty"`
 
 	// admissionCheckStrategy defines a list of strategies to determine which ResourceFlavors require AdmissionChecks.
 	// This property cannot be used in conjunction with the 'admissionChecks' property.
@@ -179,7 +179,7 @@ type Topology struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	// +kubebuilder:validation:Required
-	Spec TopologySpec `json:"spec,omitempty"`
+	Spec TopologySpec `json:"spec"`
 }
 
 type TopologySpec struct {
@@ -190,7 +190,7 @@ type TopologySpec struct {
 	// +kubebuilder:validation:MaxItems=8
 	// +kubebuilder:validation:XValidation:rule="size(self.filter(i, size(self.filter(j, j == i)) > 1)) == 0",message="must be unique"
 	// +kubebuilder:validation:XValidation:rule="size(self.filter(i, i.nodeLabel == 'kubernetes.io/hostname')) == 0 || self[size(self) - 1].nodeLabel == 'kubernetes.io/hostname'",message="the kubernetes.io/hostname label can only be used at the lowest level of topology"
-	Levels []kueuev1alpha1.TopologyLevel `json:"levels,omitempty"`
+	Levels []kueuev1alpha1.TopologyLevel `json:"levels"`
 }
 
 // KaiwoQueueConfigStatus represents the observed state of KaiwoQueueConfig.

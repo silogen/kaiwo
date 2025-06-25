@@ -86,7 +86,7 @@ func (handler *RayServiceHandler) BuildDesired(ctx context.Context, clusterCtx c
 	}
 
 	appWrapper := handler.GetInitializedObject().(*appwrapperv1beta2.AppWrapper)
-	appWrapper.ObjectMeta.Labels = map[string]string{
+	appWrapper.Labels = map[string]string{
 		common.QueueLabel: common.GetClusterQueueName(ctx, handler),
 	}
 	appWrapper.Spec = appwrapperv1beta2.AppWrapperSpec{
@@ -148,7 +148,7 @@ func (handler *RayServiceHandler) buildRayService(ctx context.Context, clusterCt
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      handler.KaiwoService.Name,
 			Namespace: handler.KaiwoService.Namespace,
-			Labels:    rayServiceSpec.RayClusterSpec.HeadGroupSpec.Template.ObjectMeta.Labels,
+			Labels:    rayServiceSpec.RayClusterSpec.HeadGroupSpec.Template.Labels,
 		},
 		Spec: rayServiceSpec,
 	}

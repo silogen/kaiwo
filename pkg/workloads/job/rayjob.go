@@ -104,12 +104,12 @@ func (handler *RayJobHandler) BuildDesired(ctx context.Context, clusterCtx commo
 	utils.UpdateRayClusterSpec(ctx, clusterCtx, handler.KaiwoJob, rayJobSpec.RayClusterSpec)
 
 	rayJob := handler.GetInitializedObject().(*rayv1.RayJob)
-	rayJob.ObjectMeta.Labels = rayJobSpec.RayClusterSpec.HeadGroupSpec.Template.ObjectMeta.Labels
+	rayJob.Labels = rayJobSpec.RayClusterSpec.HeadGroupSpec.Template.Labels
 	rayJob.Spec = rayJobSpec
 
 	common.UpdateLabels(handler.KaiwoJob, &rayJob.ObjectMeta)
 
-	rayJob.ObjectMeta.Labels[common.QueueLabel] = common.GetClusterQueueName(ctx, handler)
+	rayJob.Labels[common.QueueLabel] = common.GetClusterQueueName(ctx, handler)
 
 	return rayJob, nil
 }
