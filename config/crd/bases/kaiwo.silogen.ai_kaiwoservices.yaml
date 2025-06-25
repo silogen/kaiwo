@@ -8452,7 +8452,7 @@ spec:
                   The levels are evaluated one-by-one going up from the level indicated by the label. If the PodSet cannot fit within a given topology label then the next topology level up is considered.
                 type: string
               priorityClass:
-                description: PriorityClass specifies the name of a Kubernetes `PriorityClass`
+                description: WorkloadPriorityClass specifies the name of Kueue `WorkloadPriorityClass`
                   to be assigned to the job's pods. This influences the scheduling
                   priority relative to other pods in the cluster.
                 type: string

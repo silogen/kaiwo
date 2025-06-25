@@ -89,6 +89,9 @@ func (handler *RayServiceHandler) BuildDesired(ctx context.Context, clusterCtx c
 	appWrapper.Labels = map[string]string{
 		common.QueueLabel: common.GetClusterQueueName(ctx, handler),
 	}
+	if priorityclass := handler.GetCommonSpec().WorkloadPriorityClass; priorityclass != "" {
+		appWrapper.Labels[common.WorkloaddPriorityClassLabel] = priorityclass
+	}
 	appWrapper.Spec = appwrapperv1beta2.AppWrapperSpec{
 		Components: []appwrapperv1beta2.AppWrapperComponent{
 			{

@@ -110,6 +110,9 @@ func (handler *RayJobHandler) BuildDesired(ctx context.Context, clusterCtx commo
 	common.UpdateLabels(handler.KaiwoJob, &rayJob.ObjectMeta)
 
 	rayJob.Labels[common.QueueLabel] = common.GetClusterQueueName(ctx, handler)
+	if priorityclass := handler.GetCommonSpec().WorkloadPriorityClass; priorityclass != "" {
+		rayJob.Labels[common.WorkloaddPriorityClassLabel] = priorityclass
+	}
 
 	return rayJob, nil
 }

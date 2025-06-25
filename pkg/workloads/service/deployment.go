@@ -120,6 +120,9 @@ func (handler *DeploymentHandler) BuildDesired(ctx context.Context, clusterCtx c
 
 	depSpec.Template.Labels["app"] = svc.Name
 	depSpec.Template.Labels[common.QueueLabel] = common.GetClusterQueueName(ctx, handler)
+	if priorityclass := handler.GetCommonSpec().WorkloadPriorityClass; priorityclass != "" {
+		depSpec.Template.Labels[common.WorkloaddPriorityClassLabel] = priorityclass
+	}
 
 	dep := handler.GetInitializedObject().(*appsv1.Deployment)
 	dep.Labels = depSpec.Template.Labels

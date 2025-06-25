@@ -24,6 +24,7 @@ import (
 
 var (
 	DefaultNodePoolLabel      = "kaiwo/nodepool"
+	DefaultKaiwoWorkerLabel   = "kaiwo/worker"
 	GPUModelLabel             = "kaiwo/gpu-model"
 	DefaultTopologyBlockLabel = "kaiwo/topology-block"
 	DefaultTopologyRackLabel  = "kaiwo/topology-rack"

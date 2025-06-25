@@ -211,8 +211,14 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 
 	for flavorName, nodeNames := range nodePools {
 		for _, nodeName := range nodeNames {
+			err := LabelNode(ctx, c, nodeName, common.DefaultKaiwoWorkerLabel, "true")
+			if err == nil {
+				logger.Info("Labeled node", "node", nodeName, "label", common.DefaultKaiwoWorkerLabel, "value", "true")
+			} else {
+				return nil, nil, fmt.Errorf("failed to label node %s: %w", nodeName, err)
+			}
 
-			err := LabelNode(ctx, c, nodeName, common.DefaultNodePoolLabel, flavorName)
+			err = LabelNode(ctx, c, nodeName, common.DefaultNodePoolLabel, flavorName)
 			if err == nil {
 				logger.Info("Labeled node", "node", nodeName, "label", common.DefaultNodePoolLabel, "value", flavorName)
 			} else {
@@ -358,17 +364,27 @@ func ConvertKaiwoToKueueResourceFlavors(kaiwoFlavors []kaiwo.ResourceFlavorSpec)
 }
 
 func ConvertKaiwoToKueueResourceFlavor(kaiwoFlavor kaiwo.ResourceFlavorSpec) kueuev1beta1.ResourceFlavor {
+	// Copy the node labels
+	nodeLabels := make(map[string]string, len(kaiwoFlavor.NodeLabels))
+	for k, v := range kaiwoFlavor.NodeLabels {
+		nodeLabels[k] = v
+	}
+
 	var topologyRef *kueuev1beta1.TopologyReference
 	if kaiwoFlavor.TopologyName != "" {
 		ref := kueuev1beta1.TopologyReference(kaiwoFlavor.TopologyName)
 		topologyRef = &ref
+	} else {
+		ref := kueuev1beta1.TopologyReference(common.DefaultTopologyName)
+		topologyRef = &ref
+		nodeLabels[common.DefaultKaiwoWorkerLabel] = "true"
 	}
+
 	return kueuev1beta1.ResourceFlavor{
 		ObjectMeta: metav1.ObjectMeta{Name: kaiwoFlavor.Name},
 		Spec: kueuev1beta1.ResourceFlavorSpec{
-			NodeLabels:   kaiwoFlavor.NodeLabels,
+			NodeLabels:   nodeLabels,
 			TopologyName: topologyRef,
-			// Copy other fields if needed
 		},
 	}
 }
@@ -502,8 +518,9 @@ func CreateDefaultTopology(ctx context.Context, c client.Client) ([]kaiwo.Topolo
 		},
 		Spec: kaiwo.TopologySpec{
 			Levels: []kueuev1alpha1.TopologyLevel{
-				{NodeLabel: common.DefaultTopologyBlockLabel},
-				{NodeLabel: common.DefaultTopologyRackLabel},
+				// TODO: uncomment when we know topology
+				// {NodeLabel: common.DefaultTopologyBlockLabel},
+				// {NodeLabel: common.DefaultTopologyRackLabel},
 				{NodeLabel: common.DefaultTopologyHostLabel},
 			},
 		},

@@ -193,8 +193,8 @@ type CommonMetaSpec struct {
 	// The `kaiwo submit` CLI command can override this using the `--queue` flag or the `clusterQueue` field in the `kaiwoconfig.yaml` file.
 	ClusterQueue string `json:"clusterQueue,omitempty"`
 
-	// PriorityClass specifies the name of a Kubernetes `PriorityClass` to be assigned to the job's pods. This influences the scheduling priority relative to other pods in the cluster.
-	PriorityClass string `json:"priorityClass,omitempty"`
+	// WorkloadPriorityClass specifies the name of Kueue `WorkloadPriorityClass` to be assigned to the job's pods. This influences the scheduling priority relative to other pods in the cluster.
+	WorkloadPriorityClass string `json:"priorityClass,omitempty"`
 }
 
 type CommonStatusSpec struct {
