@@ -3,20 +3,35 @@ kind: Test
 metadata:
   name: test-preemption
 spec:
+  concurrent: false
   steps:
-  - try:
+  - name: expire-before-pressure
+    description: Ensure that the expired workloads are terminated when they expire before there is GPU demand added
+    try:
     - apply:
         file: kaiwojob-with-duration.yaml
     - apply:
         file: kaiwoservice-with-duration.yaml
-    - script:
-        timeout: 15s
-        content: sleep 10
+    - wait:
+        apiVersion: kaiwo.silogen.ai/v1alpha1
+        kind: KaiwoJob
+        name: kaiwojob-with-duration
+        timeout: 1m
+        for:
+          condition:
+            name: Preemptable
+            value: 'true'
+    - wait:
+        apiVersion: kaiwo.silogen.ai/v1alpha1
+        kind: KaiwoService
+        name: kaiwoservice-with-duration
+        timeout: 1m
+        for:
+          condition:
+            name: Preemptable
+            value: 'true'
     - apply:
         file: gpu-demand-pressure.yaml
-    - script:
-        timeout: 65s
-        content: sleep 60
     - assert:
         resource:
           apiVersion: kaiwo.silogen.ai/v1alpha1
@@ -33,23 +48,40 @@ spec:
             name: kaiwoservice-with-duration
           status:
             status: TERMINATED
-    - script:
-        timeout: 15s
-        content: sleep 10
-    - script:
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
         env:
         - name: NAMESPACE
           value: ($namespace)
-        content: kubectl get job kaiwojob-with-duration -n $NAMESPACE
-        check:
-          ($error != null): true
-    - script:
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-        content: kubectl get deployment kaiwoservice-with-duration -n $NAMESPACE
-        check:
-          ($error != null): true
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+  - name: expire-after-pressure
+    description: Ensure that the expired workloads are terminated when they expire after there is GPU demand added
+    try:
+    - apply:
+        file: kaiwojob-with-duration.yaml
+    - apply:
+        file: kaiwoservice-with-duration.yaml
+    - apply:
+        file: gpu-demand-pressure.yaml
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: kaiwojob-with-duration
+          status:
+            status: TERMINATED
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoService
+          metadata:
+            name: kaiwoservice-with-duration
+          status:
+            status: TERMINATED
     catch:
     - command:
         entrypoint: kaiwo-dev

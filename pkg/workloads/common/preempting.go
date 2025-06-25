@@ -19,10 +19,10 @@ import (
 	"fmt"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/meta"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 )
@@ -36,7 +36,7 @@ const (
 	PreemptReasonDurationExceededWithActiveGpuDemand PreemptReason = "DurationExceededWithActiveGpuDemand"
 )
 
-func GetRemainingTimeBeforeBecomingPreemptable(handler WorkloadReconciler) *time.Duration {
+func GetRemainingTimeBeforeBecomingPreemptable(handler KaiwoWorkload) *time.Duration {
 	status := handler.GetCommonStatusSpec()
 	spec := handler.GetCommonSpec()
 	if status.Status != v1alpha1.WorkloadStatusRunning || spec.Duration == nil || status.StartTime == nil {
@@ -48,26 +48,74 @@ func GetRemainingTimeBeforeBecomingPreemptable(handler WorkloadReconciler) *time
 }
 
 // GetPreemptableCondition gets the correct preemptable condition
-func GetPreemptableCondition(handler WorkloadReconciler) *v1.Condition {
+func GetPreemptableCondition(ctx context.Context, handler KaiwoWorkload) *v1.Condition {
+	logger := log.FromContext(ctx)
 	remaining := GetRemainingTimeBeforeBecomingPreemptable(handler)
+	obj := handler.GetKaiwoWorkloadObject()
 	if remaining == nil {
 		return nil
 	}
+	logger.Info(fmt.Sprintf("Preemptable condition found, remaining: %v", *remaining))
 	if remaining.Seconds() > 0 {
 		return &v1.Condition{
-			Type:    PreemptableConditionType,
-			Status:  v1.ConditionFalse,
-			Reason:  string(PreemptReasonDurationNotExceeded),
-			Message: "Workload is running and the duration has not been exceeded",
+			Type:               PreemptableConditionType,
+			Status:             v1.ConditionFalse,
+			Reason:             string(PreemptReasonDurationNotExceeded),
+			Message:            "Workload is running and the duration has not been exceeded",
+			ObservedGeneration: obj.GetGeneration(),
 		}
 	} else {
 		return &v1.Condition{
-			Type:    PreemptableConditionType,
-			Status:  v1.ConditionTrue,
-			Reason:  string(PreemptReasonDurationExceeded),
-			Message: "Workload duration has exceeded",
+			Type:               PreemptableConditionType,
+			Status:             v1.ConditionTrue,
+			Reason:             string(PreemptReasonDurationExceeded),
+			Message:            "Workload duration has exceeded",
+			ObservedGeneration: obj.GetGeneration(),
 		}
 	}
+}
+
+func CleanupExpiredWorkloads(ctx context.Context, k8sClient client.Client) (bool, error) {
+	logger := log.FromContext(ctx).WithName("CleanupExpiredWorkloads")
+
+	var workloads []KaiwoWorkload
+
+	jobList := &v1alpha1.KaiwoJobList{}
+	if err := k8sClient.List(ctx, jobList); err != nil {
+		return false, fmt.Errorf("failed to list Kaiwo jobs: %w", err)
+	}
+	for _, job := range jobList.Items {
+		workloads = append(workloads, &job)
+	}
+
+	serviceList := &v1alpha1.KaiwoServiceList{}
+	if err := k8sClient.List(ctx, serviceList); err != nil {
+		return false, fmt.Errorf("failed to list Kaiwo services: %w", err)
+	}
+	for _, service := range serviceList.Items {
+		workloads = append(workloads, &service)
+	}
+
+	workloadsCleaned := false
+	for _, workload := range workloads {
+		status := workload.GetCommonStatusSpec()
+		if status.Status == v1alpha1.WorkloadStatusRunning && meta.IsStatusConditionTrue(status.Conditions, PreemptableConditionType) {
+			status.Status = v1alpha1.WorkloadStatusTerminating
+			meta.SetStatusCondition(&status.Conditions, v1.Condition{
+				Type:    WorkloadEarlyTerminationConditionType,
+				Status:  v1.ConditionFalse,
+				Reason:  string(PreemptReasonDurationExceeded),
+				Message: "Workload is terminating due to exceeding its duration and active GPU demand",
+			})
+			if err := k8sClient.Status().Update(ctx, workload.GetKaiwoWorkloadObject()); err != nil {
+				logger.Error(err, "failed to update Kaiwo workload status")
+			} else {
+				workloadsCleaned = true
+			}
+		}
+	}
+
+	return workloadsCleaned, nil
 }
 
 // ShouldPreempt checks if a workload should be preempted or not based on expired duration and current queue GPU demand
@@ -141,4 +189,17 @@ func isPendingForLong(ctx context.Context, meta v1.ObjectMeta) bool {
 		return false
 	}
 	return age > duration
+}
+
+func ShouldRequeueAfter(workload KaiwoWorkload) (bool, *time.Duration) {
+	condition := meta.FindStatusCondition(workload.GetCommonStatusSpec().Conditions, PreemptableConditionType)
+	if condition != nil &&
+		condition.Status == v1.ConditionFalse &&
+		condition.ObservedGeneration == workload.GetKaiwoWorkloadObject().GetGeneration() {
+		requeueAfter := GetRemainingTimeBeforeBecomingPreemptable(workload)
+		if requeueAfter != nil {
+			return true, requeueAfter
+		}
+	}
+	return false, nil
 }

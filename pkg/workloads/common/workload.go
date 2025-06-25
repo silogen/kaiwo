@@ -74,7 +74,7 @@ func (h WorkloadHandler) ObserveStatus(ctx context.Context, k8sClient client.Cli
 
 		// Check for preemption TODO move?
 		if h.Workload.GetCommonSpec().Duration != nil {
-			preemptCondition := GetPreemptableCondition(h.Workload)
+			preemptCondition := GetPreemptableCondition(ctx, h.Workload)
 			if preemptCondition != nil {
 				conditions = append(conditions, *preemptCondition)
 
