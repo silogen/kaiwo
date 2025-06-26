@@ -26,7 +26,7 @@ import (
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 )
 
-func UpdatePodSpec(config KaiwoConfigContext, workload KaiwoWorkload, resourceConfig ResourceConfig, template *corev1.PodTemplateSpec) {
+func UpdatePodSpec(config KaiwoConfigContext, workload KaiwoWorkload, resourceConfig ResourceConfig, template *corev1.PodTemplateSpec, rayHead bool) {
 	commonMetaSpec := workload.GetCommonSpec()
 	workloadName := workload.GetKaiwoWorkloadObject().GetName()
 
@@ -96,7 +96,7 @@ func UpdatePodSpec(config KaiwoConfigContext, workload KaiwoWorkload, resourceCo
 
 	// Update container specs
 	for i := range template.Spec.Containers {
-		updateMainContainer(config, commonMetaSpec, resourceConfig, &template.Spec.Containers[i])
+		updateMainContainer(config, commonMetaSpec, resourceConfig, &template.Spec.Containers[i], rayHead)
 	}
 	for i := range template.Spec.InitContainers {
 		updateInitContainer(commonMetaSpec, &template.Spec.InitContainers[i])
@@ -130,12 +130,12 @@ func UpdatePodSpec(config KaiwoConfigContext, workload KaiwoWorkload, resourceCo
 }
 
 // updateMainContainer updates the container specifications for main containers
-func updateMainContainer(config KaiwoConfigContext, kaiwoCommonMetaSpec kaiwo.CommonMetaSpec, resourceConfig ResourceConfig, container *corev1.Container) {
+func updateMainContainer(config KaiwoConfigContext, kaiwoCommonMetaSpec kaiwo.CommonMetaSpec, resourceConfig ResourceConfig, container *corev1.Container, rayHead bool) {
 	// Update base
 	updateContainerBase(kaiwoCommonMetaSpec, container)
 
 	// Update resources
-	containerResourceRequirements := CreateResourceRequirements(config, resourceConfig)
+	containerResourceRequirements := CreateResourceRequirements(config, resourceConfig, rayHead)
 	fillContainerResources(container, &containerResourceRequirements, false)
 
 	envVarsToAppend := []corev1.EnvVar{

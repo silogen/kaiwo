@@ -103,7 +103,7 @@ func (handler *BatchJobHandler) BuildDesired(ctx context.Context, clusterCtx com
 	jobSpec.Suspend = baseutils.Pointer(true)
 
 	resourceConfig := common.CalculateResourceConfig(ctx, clusterCtx, handler.KaiwoJob, true)
-	common.UpdatePodSpec(config, handler.KaiwoJob, resourceConfig, &jobSpec.Template)
+	common.UpdatePodSpec(config, handler.KaiwoJob, resourceConfig, &jobSpec.Template, false)
 
 	batchJob := handler.GetInitializedObject().(*batchv1.Job)
 	batchJob.Spec = jobSpec

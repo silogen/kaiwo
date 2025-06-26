@@ -86,7 +86,7 @@ var _ = Describe("Workload defaults", func() {
 				CommonMetaSpec: kaiwoCommonMetaSpec,
 			},
 		}
-		common.UpdatePodSpec(common.KaiwoConfigContext{}, workload, resourceConfig, &podTemplateSpec)
+		common.UpdatePodSpec(common.KaiwoConfigContext{}, workload, resourceConfig, &podTemplateSpec, false)
 	})
 
 	When("a workload pod spec is being updated", func() {

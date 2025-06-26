@@ -27,6 +27,14 @@ spec:
             kaiwo.silogen.ai/user: test-amd.com
         spec:
           containers:
+          # Head container MUST have the same environment variables for GPUs as the worker containers!
+          - env:
+            - name: NUM_GPUS
+              value: "14"
+            - name: NUM_REPLICAS
+              value: "2"
+            - name: NUM_GPUS_PER_REPLICA
+              value: "7"
           - image: rayproject/ray:2.41.0
             imagePullPolicy: Always
             name: ray-head

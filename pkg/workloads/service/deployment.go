@@ -116,7 +116,7 @@ func (handler *DeploymentHandler) BuildDesired(ctx context.Context, clusterCtx c
 		return nil, baseutils.LogErrorf(logger, "failed to add entrypoint: %v", err)
 	}
 
-	common.UpdatePodSpec(config, handler.KaiwoService, resourceConfig, &depSpec.Template)
+	common.UpdatePodSpec(config, handler.KaiwoService, resourceConfig, &depSpec.Template, false)
 
 	depSpec.Template.Labels["app"] = svc.Name
 	depSpec.Template.Labels[common.QueueLabel] = common.GetClusterQueueName(ctx, handler)
