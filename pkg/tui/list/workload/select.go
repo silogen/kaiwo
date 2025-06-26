@@ -64,7 +64,8 @@ func runSelectWorkload(ctx context.Context, clients k8s.KubernetesClients, state
 
 	var loadErr error
 	loadReferences := func() {
-		if state.WorkloadType == "job" {
+		switch state.WorkloadType {
+		case "job":
 			jobList := &kaiwo.KaiwoJobList{}
 			if err := clients.Client.List(ctx, jobList, labelSelector); err != nil {
 				loadErr = fmt.Errorf("failed to list Kaiwo jobs: %s", err)
@@ -73,7 +74,7 @@ func runSelectWorkload(ctx context.Context, clients k8s.KubernetesClients, state
 			for _, job := range jobList.Items {
 				workloadReferences = append(workloadReferences, &job)
 			}
-		} else if state.WorkloadType == "service" {
+		case "service":
 			serviceList := &kaiwo.KaiwoServiceList{}
 			if err := clients.Client.List(ctx, serviceList, labelSelector); err != nil {
 				loadErr = fmt.Errorf("failed to list Kaiwo services: %s", err)

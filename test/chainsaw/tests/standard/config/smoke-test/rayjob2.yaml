@@ -7,3 +7,10 @@ spec:
   ray: true
   image: busybox:latest
   entrypoint: sleep 1
+  resources:
+    limits:
+      cpu: "100m"
+      memory: "100Mi"
+    requests:
+      cpu: "100m"
+      memory: "100Mi"

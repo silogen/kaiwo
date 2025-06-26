@@ -22,7 +22,7 @@ spec:
         content: |
           echo $resources
         check:
-          (contains($stdout, '{"name":"nvidia.com/gpu","nominalQuota":"8"}')): true
+          (contains($stdout, '{"name":"nvidia.com/gpu","nominalQuota":"24"}')): true
     - script:
         content: kubectl uncordon kaiwo-test-worker
     - sleep:
@@ -39,4 +39,4 @@ spec:
         content: |
           echo $resources
         check:
-          (contains($stdout, '{"name":"nvidia.com/gpu","nominalQuota":"16"}')): true
+          (contains($stdout, '{"name":"nvidia.com/gpu","nominalQuota":"32"}')): true

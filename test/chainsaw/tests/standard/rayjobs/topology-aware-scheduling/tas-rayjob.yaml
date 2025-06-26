@@ -1,17 +1,18 @@
 apiVersion: kaiwo.silogen.ai/v1alpha1
 kind: KaiwoJob
 metadata:
-  name: gpu-demand-pressure
+  name: tas-rayjob
 spec:
   user: test@amd.com
   ray: true
   image: rayproject/ray:2.41.0
   gpuVendor: "nvidia"
-  gpus: 30
-  entrypoint: sleep 1
+  gpus: 16
   resources:
     limits:
-      memory: 200M
+      cpu: 1
+      memory: 2Gi
     requests:
-      memory: 100M
-      cpu: 100m
+      cpu: 1
+      memory: 2Gi
+  entrypoint: sleep 1

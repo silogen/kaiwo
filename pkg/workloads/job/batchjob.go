@@ -111,7 +111,10 @@ func (handler *BatchJobHandler) BuildDesired(ctx context.Context, clusterCtx com
 	common.UpdateLabels(handler.KaiwoJob, &batchJob.ObjectMeta)
 	common.UpdateLabels(handler.KaiwoJob, &batchJob.Spec.Template.ObjectMeta)
 
-	batchJob.ObjectMeta.Labels[common.QueueLabel] = common.GetClusterQueueName(ctx, handler)
+	batchJob.Labels[common.QueueLabel] = common.GetClusterQueueName(ctx, handler)
+	if priorityclass := handler.GetCommonSpec().WorkloadPriorityClass; priorityclass != "" {
+		batchJob.Labels[common.WorkloaddPriorityClassLabel] = priorityclass
+	}
 
 	return batchJob, nil
 }

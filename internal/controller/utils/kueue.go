@@ -27,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	kueuev1alpha1 "sigs.k8s.io/kueue/apis/kueue/v1alpha1"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
@@ -110,7 +111,7 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 
 		// Identify NVIDIA GPU Nodes
 		if gpuProduct, exists := node.Labels["nvidia.com/gpu.product"]; exists {
-			gpuType = strings.Replace(strings.ToLower(gpuProduct), "-", "", -1)
+			gpuType = strings.ReplaceAll(strings.ToLower(gpuProduct), "-", "")
 			if count, ok := node.Labels["nvidia.com/gpu.count"]; ok {
 				gpuCount, _ = strconv.Atoi(count)
 				gpuVendor = "nvidia" //nolint:goconst
@@ -186,6 +187,7 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 			NodeLabels: map[string]string{
 				common.DefaultNodePoolLabel: flavorName,
 			},
+			TopologyName: common.DefaultTopologyName,
 		}
 
 		// TODO: Look into why automatic scheduling is not working
@@ -209,8 +211,14 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 
 	for flavorName, nodeNames := range nodePools {
 		for _, nodeName := range nodeNames {
+			err := LabelNode(ctx, c, nodeName, common.DefaultKaiwoWorkerLabel, "true")
+			if err == nil {
+				logger.Info("Labeled node", "node", nodeName, "label", common.DefaultKaiwoWorkerLabel, "value", "true")
+			} else {
+				return nil, nil, fmt.Errorf("failed to label node %s: %w", nodeName, err)
+			}
 
-			err := LabelNode(ctx, c, nodeName, common.DefaultNodePoolLabel, flavorName)
+			err = LabelNode(ctx, c, nodeName, common.DefaultNodePoolLabel, flavorName)
 			if err == nil {
 				logger.Info("Labeled node", "node", nodeName, "label", common.DefaultNodePoolLabel, "value", flavorName)
 			} else {
@@ -339,7 +347,7 @@ func CreateClusterQueue(nodePoolResources map[string]kueuev1beta1.FlavorQuotas, 
 	return kaiwo.ClusterQueue{
 		Name:       name,
 		Namespaces: []string{},
-		Spec: kueuev1beta1.ClusterQueueSpec{
+		Spec: kaiwo.ClusterQueueSpec{
 			NamespaceSelector: &metav1.LabelSelector{},
 			Cohort:            kueuev1beta1.CohortReference(cohort),
 			ResourceGroups:    resourceGroups,
@@ -356,11 +364,57 @@ func ConvertKaiwoToKueueResourceFlavors(kaiwoFlavors []kaiwo.ResourceFlavorSpec)
 }
 
 func ConvertKaiwoToKueueResourceFlavor(kaiwoFlavor kaiwo.ResourceFlavorSpec) kueuev1beta1.ResourceFlavor {
+	// Copy the node labels
+	nodeLabels := make(map[string]string, len(kaiwoFlavor.NodeLabels))
+	for k, v := range kaiwoFlavor.NodeLabels {
+		nodeLabels[k] = v
+	}
+
+	var topologyRef *kueuev1beta1.TopologyReference
+	if kaiwoFlavor.TopologyName != "" {
+		ref := kueuev1beta1.TopologyReference(kaiwoFlavor.TopologyName)
+		topologyRef = &ref
+	} else {
+		ref := kueuev1beta1.TopologyReference(common.DefaultTopologyName)
+		topologyRef = &ref
+		nodeLabels[common.DefaultKaiwoWorkerLabel] = "true"
+	}
+
 	return kueuev1beta1.ResourceFlavor{
 		ObjectMeta: metav1.ObjectMeta{Name: kaiwoFlavor.Name},
 		Spec: kueuev1beta1.ResourceFlavorSpec{
-			NodeLabels: kaiwoFlavor.NodeLabels,
-			// Copy other fields if needed
+			NodeLabels:   nodeLabels,
+			TopologyName: topologyRef,
+		},
+	}
+}
+
+func ConvertKaiwoToKueueTopologies(kaiwoTopologies []kaiwo.Topology) []kueuev1alpha1.Topology {
+	var kueueTopologies []kueuev1alpha1.Topology
+	for _, topo := range kaiwoTopologies {
+		kueueTopologies = append(kueueTopologies, ConvertKaiwoToKueueTopology(topo))
+	}
+	return kueueTopologies
+}
+
+func ConvertKaiwoToKueueTopology(kaiwoTopology kaiwo.Topology) kueuev1alpha1.Topology {
+	levels := make([]kueuev1alpha1.TopologyLevel, len(kaiwoTopology.Spec.Levels))
+	for i, l := range kaiwoTopology.Spec.Levels {
+		levels[i] = kueuev1alpha1.TopologyLevel{
+			NodeLabel: l.NodeLabel,
+		}
+	}
+
+	return kueuev1alpha1.Topology{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Topology",
+			APIVersion: "kueue.x-k8s.io/v1alpha1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: kaiwoTopology.Name,
+		},
+		Spec: kueuev1alpha1.TopologySpec{
+			Levels: levels,
 		},
 	}
 }
@@ -370,7 +424,23 @@ func ConvertKaiwoToKueueClusterQueue(kaiwoQueue kaiwo.ClusterQueue) kueuev1beta1
 		ObjectMeta: metav1.ObjectMeta{
 			Name: kaiwoQueue.Name,
 		},
-		Spec: kaiwoQueue.Spec,
+		Spec: ConvertKaiwoToKueueSpec(kaiwoQueue.Spec),
+	}
+}
+
+// ConvertKaiwoToKueueSpec converts from Kaiwo's simplified ClusterQueueSpec to the actual Kueue version
+func ConvertKaiwoToKueueSpec(in kaiwo.ClusterQueueSpec) kueuev1beta1.ClusterQueueSpec {
+	return kueuev1beta1.ClusterQueueSpec{
+		ResourceGroups:          in.ResourceGroups,
+		Cohort:                  in.Cohort,
+		QueueingStrategy:        in.QueueingStrategy,
+		NamespaceSelector:       in.NamespaceSelector,
+		FlavorFungibility:       in.FlavorFungibility,
+		Preemption:              in.Preemption,
+		AdmissionChecks:         in.AdmissionChecks,
+		AdmissionChecksStrategy: in.AdmissionChecksStrategy,
+		StopPolicy:              in.StopPolicy,
+		FairSharing:             in.FairSharing,
 	}
 }
 
@@ -416,6 +486,15 @@ func FindFlavor(flavors []kueuev1beta1.ResourceFlavor, name string) (kueuev1beta
 	return kueuev1beta1.ResourceFlavor{}, false
 }
 
+func FindTopology(topologies []kueuev1alpha1.Topology, name string) (kueuev1alpha1.Topology, bool) {
+	for _, topo := range topologies {
+		if topo.Name == name {
+			return topo, true
+		}
+	}
+	return kueuev1alpha1.Topology{}, false
+}
+
 func CompareResourceFlavors(a, b kueuev1beta1.ResourceFlavor) bool {
 	return reflect.DeepEqual(a.Spec, b.Spec)
 }
@@ -424,6 +503,26 @@ func CompareClusterQueues(a, b kueuev1beta1.ClusterQueue) bool {
 	return reflect.DeepEqual(a.Spec, b.Spec)
 }
 
+func CompareTopologies(a, b kueuev1alpha1.Topology) bool {
+	return reflect.DeepEqual(a.Spec, b.Spec)
+}
+
 func ComparePriorityClasses(a, b kueuev1beta1.WorkloadPriorityClass) bool {
 	return reflect.DeepEqual(a.Value, b.Value)
+}
+
+func CreateDefaultTopology(ctx context.Context, c client.Client) ([]kaiwo.Topology, error) {
+	defaultTopology := kaiwo.Topology{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: common.DefaultTopologyName,
+		},
+		Spec: kaiwo.TopologySpec{
+			Levels: []kueuev1alpha1.TopologyLevel{
+				{NodeLabel: common.DefaultTopologyBlockLabel},
+				{NodeLabel: common.DefaultTopologyRackLabel},
+				{NodeLabel: common.DefaultTopologyHostLabel},
+			},
+		},
+	}
+	return []kaiwo.Topology{defaultTopology}, nil
 }

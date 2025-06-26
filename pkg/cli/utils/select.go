@@ -48,11 +48,12 @@ func GetWorkload(ctx context.Context, k8sClient client.Client, workloadSelector 
 	type_ := parts[0]
 	name := parts[1]
 	var obj client.Object
-	if type_ == "job" {
+	switch type_ {
+	case "job":
 		obj = &kaiwo.KaiwoJob{}
-	} else if type_ == "service" {
+	case "service":
 		obj = &kaiwo.KaiwoService{}
-	} else {
+	default:
 		return nil, fmt.Errorf("invalid workload type: %s, must be either 'job' or 'service'", type_)
 	}
 	if err := k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, obj); err != nil {

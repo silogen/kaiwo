@@ -118,11 +118,14 @@ func (handler *DeploymentHandler) BuildDesired(ctx context.Context, clusterCtx c
 
 	common.UpdatePodSpec(config, handler.KaiwoService, resourceConfig, &depSpec.Template)
 
-	depSpec.Template.ObjectMeta.Labels["app"] = svc.Name
-	depSpec.Template.ObjectMeta.Labels[common.QueueLabel] = common.GetClusterQueueName(ctx, handler)
+	depSpec.Template.Labels["app"] = svc.Name
+	depSpec.Template.Labels[common.QueueLabel] = common.GetClusterQueueName(ctx, handler)
+	if priorityclass := handler.GetCommonSpec().WorkloadPriorityClass; priorityclass != "" {
+		depSpec.Template.Labels[common.WorkloaddPriorityClassLabel] = priorityclass
+	}
 
 	dep := handler.GetInitializedObject().(*appsv1.Deployment)
-	dep.ObjectMeta.Labels = depSpec.Template.ObjectMeta.Labels
+	dep.Labels = depSpec.Template.Labels
 	dep.Spec = depSpec
 
 	common.UpdateLabels(handler.KaiwoService, &dep.ObjectMeta)

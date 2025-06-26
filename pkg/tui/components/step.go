@@ -51,18 +51,19 @@ func RunSteps[T any](ctx context.Context, clients k8s.KubernetesClients, state *
 			return fmt.Errorf("step execution failed: %w", err)
 		}
 
-		if result == StepResultOk {
+		switch result {
+		case StepResultOk:
 			if nextStep != nil {
 				stack = append(stack, nextStep)
 			} else {
 				// Nothing left to do
 				return nil
 			}
-		} else if result == StepResultPrevious {
+		case StepResultPrevious:
 			stack = stack[:len(stack)-1]
-		} else if result == StepResultQuit {
+		case StepResultQuit:
 			return nil
-		} else {
+		default:
 			return fmt.Errorf("unexpected result from step (no error reported): %s", result)
 		}
 
