@@ -3,6 +3,7 @@ kind: Test
 metadata:
   name: test-config-smoke-ray-head-pod-memory
 spec:
+  concurrent: false
   steps:
   - try:
     - assert:
