@@ -42,10 +42,16 @@ func CreateResourceRequirements(config KaiwoConfigContext, resourceConfig Resour
 		resources.Limits = corev1.ResourceList{}
 	}
 
+	if rayhead {
+		resourceConfig.GpusPerReplica = 0
+		resourceConfig.TotalGpus = 0
+		resourceConfig.Replicas = 1
+	}
+
 	gpuCount := resourceConfig.GpusPerReplica
 	hasGpus := gpuCount > 0
 
-	if hasGpus && !rayhead {
+	if hasGpus {
 		gpuResourceKey := getGpuResourceKey(resourceConfig.GpuVendor, config.Nodes.DefaultGpuResourceKey)
 		quantity := resource.MustParse(fmt.Sprintf("%d", gpuCount))
 

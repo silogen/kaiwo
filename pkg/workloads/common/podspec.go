@@ -134,10 +134,6 @@ func updateMainContainer(config KaiwoConfigContext, kaiwoCommonMetaSpec kaiwo.Co
 	// Update base
 	updateContainerBase(kaiwoCommonMetaSpec, container)
 
-	// Update resources
-	containerResourceRequirements := CreateResourceRequirements(config, resourceConfig, rayHead)
-	fillContainerResources(container, &containerResourceRequirements, false)
-
 	envVarsToAppend := []corev1.EnvVar{
 		{Name: "NUM_GPUS", Value: fmt.Sprintf("%d", resourceConfig.TotalGpus)},
 		{Name: "NUM_REPLICAS", Value: fmt.Sprintf("%d", resourceConfig.Replicas)},
@@ -150,6 +146,10 @@ func updateMainContainer(config KaiwoConfigContext, kaiwoCommonMetaSpec kaiwo.Co
 
 	// Append to existing environment variables
 	container.Env = append(container.Env, envVarsToAppend...)
+
+	// Update resources
+	containerResourceRequirements := CreateResourceRequirements(config, resourceConfig, rayHead)
+	fillContainerResources(container, &containerResourceRequirements, false)
 }
 
 // updateMainContainer updates the container specifications for init containers
