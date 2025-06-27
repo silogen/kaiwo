@@ -29,7 +29,7 @@ var (
 
 // CreateResourceRequirements converts the scheduling config into ResourceRequirements
 // that can be used to modify the workload containers
-func CreateResourceRequirements(config KaiwoConfigContext, resourceConfig ResourceConfig) corev1.ResourceRequirements {
+func CreateResourceRequirements(config KaiwoConfigContext, resourceConfig ResourceConfig, rayhead bool) corev1.ResourceRequirements {
 	resources := corev1.ResourceRequirements{}
 	if resourceConfig.DefaultResources != nil {
 		resources = *resourceConfig.DefaultResources
@@ -40,6 +40,12 @@ func CreateResourceRequirements(config KaiwoConfigContext, resourceConfig Resour
 	}
 	if resources.Limits == nil {
 		resources.Limits = corev1.ResourceList{}
+	}
+
+	if rayhead {
+		resourceConfig.GpusPerReplica = 0
+		resourceConfig.TotalGpus = 0
+		resourceConfig.Replicas = 1
 	}
 
 	gpuCount := resourceConfig.GpusPerReplica

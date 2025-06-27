@@ -57,7 +57,7 @@ func UpdateRayClusterSpec(ctx context.Context, clusterCtx workloadutils.ClusterC
 
 	// Update worker group specs
 	for i := range rayClusterSpec.WorkerGroupSpecs {
-		workloadutils.UpdatePodSpec(config, workload, resourceConfig, &rayClusterSpec.WorkerGroupSpecs[i].Template)
+		workloadutils.UpdatePodSpec(config, workload, resourceConfig, &rayClusterSpec.WorkerGroupSpecs[i].Template, false)
 		rayClusterSpec.WorkerGroupSpecs[i].Replicas = baseutils.Pointer(int32(resourceConfig.Replicas))
 		rayClusterSpec.WorkerGroupSpecs[i].MinReplicas = baseutils.Pointer(int32(resourceConfig.Replicas))
 		rayClusterSpec.WorkerGroupSpecs[i].MaxReplicas = baseutils.Pointer(int32(resourceConfig.Replicas))
@@ -75,13 +75,8 @@ func UpdateRayClusterSpec(ctx context.Context, clusterCtx workloadutils.ClusterC
 		resourceConfig.DefaultResources.Requests[v1.ResourceMemory] = headMemoryOverride
 	}
 
-	// Remove GPUs for head group spec
-	resourceConfig.TotalGpus = 0
-	resourceConfig.Replicas = 1
-	resourceConfig.GpusPerReplica = 0
-
 	// Update head group spec
-	workloadutils.UpdatePodSpec(config, workload, resourceConfig, &rayClusterSpec.HeadGroupSpec.Template)
+	workloadutils.UpdatePodSpec(config, workload, resourceConfig, &rayClusterSpec.HeadGroupSpec.Template, true)
 
 	// Ensure image is set on all containers
 	ensureImage := func(podSpec *v1.PodSpec) {
