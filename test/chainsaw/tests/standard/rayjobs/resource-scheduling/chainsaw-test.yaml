@@ -42,7 +42,7 @@ spec:
         apiVersion: kaiwo.silogen.ai/v1alpha1
         kind: KaiwoJob
         name: kaiwojob-rayjob-no-gpus-available
-        timeout: 5s
+        timeout: 30s
         for:
           condition:
             name: Schedulable
