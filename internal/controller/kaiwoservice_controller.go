@@ -26,17 +26,14 @@ import (
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
-	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
 	appwrapperv1beta2 "github.com/project-codeflare/appwrapper/api/v1beta2"
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
+	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 	workloadservice "github.com/silogen/kaiwo/pkg/workloads/service"
@@ -92,22 +89,6 @@ func (r *KaiwoServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&appsv1.Deployment{}).
 		Owns(&rayv1.RayService{}).
 		Owns(&appwrapperv1beta2.AppWrapper{}).
-		Watches(
-			&kaiwo.KaiwoJob{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-				var services kaiwo.KaiwoServiceList
-				if err := r.Client.List(ctx, &services); err != nil {
-					return nil
-				}
-				var requests []reconcile.Request
-				for _, svc := range services.Items {
-					if svc.Spec.Duration != nil && svc.Status.Status == kaiwo.WorkloadStatusRunning {
-						requests = append(requests, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&svc)})
-					}
-				}
-				return requests
-			}),
-		).
 		Named("kaiwoservice").
 		Complete(r)
 }

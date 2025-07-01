@@ -102,8 +102,11 @@ func (handler *BatchJobHandler) BuildDesired(ctx context.Context, clusterCtx com
 
 	jobSpec.Suspend = baseutils.Pointer(true)
 
-	resourceConfig := common.CalculateResourceConfig(ctx, clusterCtx, handler.KaiwoJob, true)
-	common.UpdatePodSpec(config, handler.KaiwoJob, resourceConfig, &jobSpec.Template, false)
+	gpuSchedulingResult, err := common.CalculateGpuRequirements(ctx, clusterCtx, handler.KaiwoJob.Spec.GpuResources, baseutils.Pointer(1))
+	if err != nil {
+		return nil, baseutils.LogErrorf(logger, "failed to calculate gpu requirements: %v", err)
+	}
+	common.UpdatePodSpec(config, handler.KaiwoJob, gpuSchedulingResult, &jobSpec.Template)
 
 	batchJob := handler.GetInitializedObject().(*batchv1.Job)
 	batchJob.Spec = jobSpec
@@ -111,10 +114,7 @@ func (handler *BatchJobHandler) BuildDesired(ctx context.Context, clusterCtx com
 	common.UpdateLabels(handler.KaiwoJob, &batchJob.ObjectMeta)
 	common.UpdateLabels(handler.KaiwoJob, &batchJob.Spec.Template.ObjectMeta)
 
-	batchJob.Labels[common.QueueLabel] = common.GetClusterQueueName(ctx, handler)
-	if priorityclass := handler.GetCommonSpec().WorkloadPriorityClass; priorityclass != "" {
-		batchJob.Labels[common.WorkloaddPriorityClassLabel] = priorityclass
-	}
+	batchJob.ObjectMeta.Labels[common.QueueLabel] = common.GetClusterQueueName(ctx, handler)
 
 	return batchJob, nil
 }

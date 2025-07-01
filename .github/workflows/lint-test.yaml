@@ -95,4 +95,4 @@ jobs:
     - name: Running Test e2e
       run: |-
         go mod tidy
-        make test-e2e
+        TEST_CONFIG_PATH=test/configs/ci.yaml make test-e2e

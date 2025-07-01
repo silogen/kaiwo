@@ -78,7 +78,7 @@ func (wr *Reconciler) Reconcile(ctx context.Context) (ctrl.Result, error) {
 		return ctrl.Result{}, nil
 	}
 
-	clusterContext, err := GetClusterContext(ctx, wr.Client, wr.WorkloadHandler.Workload)
+	clusterContext, err := GetClusterContext(ctx, wr.Client)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to fetch cluster context: %w", err)
 	}
@@ -102,7 +102,6 @@ func (wr *Reconciler) Reconcile(ctx context.Context) (ctrl.Result, error) {
 
 	// If the workload is active, ensure the remote resources match
 	if isActiveStatus(observedStatus) {
-		baseutils.Debug(logger, "Workload is active, ensuring all resources")
 		if err := wr.ensureAllResources(ctx, observedStatus, conditions); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to ensure all resources: %w", err)
 		}
@@ -135,7 +134,7 @@ func (wr *Reconciler) observeOverallStatus(ctx context.Context) (v1alpha1.Worklo
 	conditions := []metav1.Condition{schedulableCondition}
 
 	if wr.StorageHandler != nil {
-		storageStatus, storageConditions, err := wr.StorageHandler.ObserveStatus(ctx, wr.Client, status.Status)
+		storageStatus, storageConditions, err := wr.StorageHandler.ObserveStatus(ctx, wr.Client, wr.ClusterContext, status.Status)
 		if err != nil {
 			return "", nil, fmt.Errorf("failed to observe storage status: %w", err)
 		}
@@ -158,7 +157,7 @@ func (wr *Reconciler) observeOverallStatus(ctx context.Context) (v1alpha1.Worklo
 		// Download job is complete and / or storage is healthy
 	}
 
-	workloadStatus, workloadConditions, err := wr.WorkloadHandler.ObserveStatus(ctx, wr.Client, status.Status)
+	workloadStatus, workloadConditions, err := wr.WorkloadHandler.ObserveStatus(ctx, wr.Client, wr.ClusterContext, status.Status)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to observe workload status: %w", err)
 	}
@@ -310,7 +309,7 @@ func (wr *Reconciler) ensureLocalQueue(ctx context.Context) error {
 }
 
 func (wr *Reconciler) reconcileHandler(ctx context.Context, clusterCtx ClusterContext, handler GroupReconciler) error {
-	for _, reconciler := range handler.GetResourceReconcilers() {
+	for _, reconciler := range handler.GetResourceReconcilers(ctx) {
 		if err := wr.apply(ctx, clusterCtx, reconciler); err != nil {
 			return fmt.Errorf("failed to reconcile resource: %w", err)
 		}

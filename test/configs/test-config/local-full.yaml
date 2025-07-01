@@ -1,0 +1,26 @@
+# This configuration does not build or deploy anything, and is meant to be used when running or debugging the operator locally
+
+buildCli: true
+buildDevCli: true
+deployTo: kind
+kaiwoConfigPath: test/kaiwoconfig.yaml
+
+testValidateController: true
+
+chainsaw:
+  configPath: test/chainsaw/configs/ci.yaml
+  tests:
+  - test/chainsaw/tests/no-gpu
+  - test/chainsaw/tests/environments/kind-mock-nvidia
+  - test/chainsaw/tests/sensitive
+  - test/chainsaw/tests/webhook
+  - test/chainsaw/tests/cli
+  values:
+  - name: print_level
+    value: info
+  - name: gh_token_base64
+    valueFromEnv: GH_TOKEN
+    encodeBase64: true
+  - name: hf_token_base64
+    valueFromEnv: HF_TOKEN
+    encodeBase64: true

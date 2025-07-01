@@ -95,7 +95,7 @@ func init() {
 func setupFormattedLogOutput() logr.Logger {
 	cfg := uberzap.NewProductionConfig()
 	cfg.Encoding = "console"
-	// cfg.Level = uberzap.NewAtomicLevelAt(uberzap.DebugLevel)
+	cfg.Level = uberzap.NewAtomicLevelAt(uberzap.DebugLevel)
 	cfg.EncoderConfig = zapcore.EncoderConfig{
 		TimeKey:  "ts",
 		LevelKey: "level",
