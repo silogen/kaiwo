@@ -152,7 +152,7 @@ func (r *KaiwoQueueConfigReconciler) emitEvent(queueConfig *kaiwo.KaiwoQueueConf
 	)
 }
 
-func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, queueConfig *kaiwo.KaiwoQueueConfig) error {
+func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, kaiwoQueueConfig *kaiwo.KaiwoQueueConfig) error {
 	logger := log.FromContext(ctx)
 
 	existingFlavors := &kueuev1beta1.ResourceFlavorList{}
@@ -182,11 +182,11 @@ func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, que
 		return err
 	}
 
-	success := r.syncResourceFlavors(ctx, queueConfig, existingFlavors)
-	success = r.syncClusterQueues(ctx, queueConfig, existingQueues) && success
-	success = r.syncLocalQueues(ctx, queueConfig, existingLocalQueues) && success
-	success = r.syncWorkloadPriorityClasses(ctx, queueConfig, existingPriorityClasses) && success
-	success = r.syncTopologies(ctx, queueConfig, existingTopologies) && success
+	success := r.syncResourceFlavors(ctx, kaiwoQueueConfig, existingFlavors)
+	success = r.syncClusterQueues(ctx, kaiwoQueueConfig, existingQueues) && success
+	success = r.syncLocalQueues(ctx, kaiwoQueueConfig, existingLocalQueues) && success
+	success = r.syncWorkloadPriorityClasses(ctx, kaiwoQueueConfig, existingPriorityClasses) && success
+	success = r.syncTopologies(ctx, kaiwoQueueConfig, existingTopologies) && success
 
 	if success {
 		logger.Info("Successfully synced all Kueue resources")
@@ -195,21 +195,21 @@ func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, que
 	return fmt.Errorf("failed to sync some Kueue resources")
 }
 
-func (r *KaiwoQueueConfigReconciler) syncResourceFlavors(ctx context.Context, queueConfig *kaiwo.KaiwoQueueConfig, existingFlavors *kueuev1beta1.ResourceFlavorList) bool {
+func (r *KaiwoQueueConfigReconciler) syncResourceFlavors(ctx context.Context, kaiwoQueueConfig *kaiwo.KaiwoQueueConfig, existingFlavors *kueuev1beta1.ResourceFlavorList) bool {
 	logger := log.FromContext(ctx)
 
 	success := true
-	expectedFlavors := controllerutils.ConvertKaiwoToKueueResourceFlavors(queueConfig.Spec.ResourceFlavors)
+	expectedFlavors := controllerutils.ConvertKaiwoToKueueResourceFlavors(kaiwoQueueConfig.Spec.ResourceFlavors)
 	existingFlavorMap := make(map[string]kueuev1beta1.ResourceFlavor)
 
 	for _, kueueFlavor := range expectedFlavors {
 		existingFlavor, found := controllerutils.FindFlavor(existingFlavors.Items, kueueFlavor.Name)
 		if !found {
 			logger.Info("Creating ResourceFlavor", "name", kueueFlavor.Name)
-			if err := ctrl.SetControllerReference(queueConfig, &kueueFlavor, r.Scheme); err != nil {
+			if err := ctrl.SetControllerReference(kaiwoQueueConfig, &kueueFlavor, r.Scheme); err != nil {
 				logger.Error(err, "Failed to set owner reference", "name", kueueFlavor.Name)
 				success = false
-				r.emitEvent(queueConfig, "resource flavor", "owner reference", &kueueFlavor, err)
+				r.emitEvent(kaiwoQueueConfig, "resource flavor", "owner reference", &kueueFlavor, err)
 				continue
 			}
 			err := r.Create(ctx, &kueueFlavor)
@@ -217,7 +217,7 @@ func (r *KaiwoQueueConfigReconciler) syncResourceFlavors(ctx context.Context, qu
 				logger.Error(err, "Failed to create ResourceFlavor", "name", kueueFlavor.Name)
 				success = false
 			}
-			r.emitEvent(queueConfig, "resource flavor", "create", &kueueFlavor, err)
+			r.emitEvent(kaiwoQueueConfig, "resource flavor", "create", &kueueFlavor, err)
 
 		} else if !controllerutils.CompareResourceFlavors(existingFlavor, kueueFlavor) {
 			logger.Info("Updating ResourceFlavor", "name", kueueFlavor.Name)
@@ -227,7 +227,7 @@ func (r *KaiwoQueueConfigReconciler) syncResourceFlavors(ctx context.Context, qu
 				logger.Error(err, "Failed to update ResourceFlavor", "name", kueueFlavor.Name)
 				success = false
 			}
-			r.emitEvent(queueConfig, "resource flavor", "update", &existingFlavor, err)
+			r.emitEvent(kaiwoQueueConfig, "resource flavor", "update", &existingFlavor, err)
 
 		}
 		existingFlavorMap[kueueFlavor.Name] = kueueFlavor
@@ -241,7 +241,7 @@ func (r *KaiwoQueueConfigReconciler) syncResourceFlavors(ctx context.Context, qu
 				logger.Error(err, "Failed to delete ResourceFlavor", "name", existingFlavor.Name)
 				success = false
 			}
-			r.emitEvent(queueConfig, "resource flavor", "delete", &existingFlavor, err)
+			r.emitEvent(kaiwoQueueConfig, "resource flavor", "delete", &existingFlavor, err)
 		}
 	}
 

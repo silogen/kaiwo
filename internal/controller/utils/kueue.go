@@ -155,9 +155,13 @@ func ConstructDefaultResourceFlavors(ctx context.Context, clusterContext common.
 			TopologyName: common.DefaultTopologyName,
 		}
 		if !node.IsCpuOnlyNode() {
-			flavor.NodeLabels[common.NodeGpuLogicalVramLabelKey] = baseutils.QuantityToGi(node.GpuInfo.LogicalVramPerGpu)
+			if logicalVramPerGpu := node.GpuInfo.LogicalVramPerGpu; logicalVramPerGpu != nil {
+				flavor.NodeLabels[common.NodeGpuLogicalVramLabelKey] = baseutils.QuantityToGi(*logicalVramPerGpu)
+			}
 			flavor.NodeLabels[common.NodeGpuModelLabelKey] = node.GpuInfo.ModelCleaned()
-			flavor.NodeLabels[common.NodeGpusPartitionedLabelKey] = strconv.FormatBool(node.GpuInfo.IsPartitioned())
+			if partitioned := node.GpuInfo.IsPartitioned(); partitioned != nil {
+				flavor.NodeLabels[common.NodeGpusPartitionedLabelKey] = strconv.FormatBool(*partitioned)
+			}
 		}
 
 		// TODO: Look into why automatic scheduling is not working
