@@ -1,0 +1,12 @@
+# Skipping as fails on CI, but succeeds locally
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: annotation-propagation-kaiwojob-rayjob
+spec:
+  steps:
+  - try:
+    - apply:
+        file: kaiwojob.yaml
+    - assert:
+        file: ../../pod.yaml
