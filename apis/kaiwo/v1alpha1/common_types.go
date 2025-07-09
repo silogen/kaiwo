@@ -87,6 +87,9 @@ type CommonMetaSpec struct {
 	// PodTemplateSpecLabels allows you to specify custom labels that will be added to the `template.metadata.labels` section of the generated Pods (within Jobs, Deployments, or RayCluster specs). Standard Kaiwo system labels (like `kaiwo.silogen.ai/user`, `kaiwo.silogen.ai/name`, etc.) are added automatically and take precedence if there are conflicts.
 	PodTemplateSpecLabels map[string]string `json:"podTemplateSpecLabels,omitempty"`
 
+	// PodTemplateSpecAnnotations allows you to specify custom annotations that will be added to the `template.metadata.annotations` section of the generated Pods (within Jobs, Deployments, or RayCluster specs).
+	PodTemplateSpecAnnotations map[string]string `json:"podTemplateSpecAnnotations,omitempty"`
+
 	// Gpus specifies the total number of GPUs allocated to the workload. See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor) for more details on how this field impacts scheduling.
 	// +kubebuilder:default=0
 	Gpus int `json:"gpus,omitempty"`

@@ -39,8 +39,12 @@ func UpdatePodSpec(config KaiwoConfigContext, workload KaiwoWorkload, resourceCo
 	}
 	UpdateLabels(workload, &template.ObjectMeta)
 
+	// Propagate annotations
 	if template.Annotations == nil {
 		template.Annotations = make(map[string]string)
+	}
+	for key, value := range commonMetaSpec.PodTemplateSpecAnnotations {
+		template.Annotations[key] = value
 	}
 
 	if commonMetaSpec.RequiredTopologyLabel != "" {

@@ -195,6 +195,13 @@ func (in *CommonMetaSpec) DeepCopyInto(out *CommonMetaSpec) {
 			(*out)[key] = val
 		}
 	}
+	if in.PodTemplateSpecAnnotations != nil {
+		in, out := &in.PodTemplateSpecAnnotations, &out.PodTemplateSpecAnnotations
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
 	if in.GpuModels != nil {
 		in, out := &in.GpuModels, &out.GpuModels
 		*out = make([]string, len(*in))

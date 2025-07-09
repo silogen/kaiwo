@@ -1,0 +1,20 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: annotation-propagation
+spec:
+  steps:
+  - try:
+    - apply:
+        file: kaiwoservice.yaml
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            labels:
+              kaiwo.silogen.ai/type: service
+              kaiwo.silogen.ai/name: kaiwoservice
+                # Ensure the annotations have been propagated
+            annotations:
+              foo: bar
