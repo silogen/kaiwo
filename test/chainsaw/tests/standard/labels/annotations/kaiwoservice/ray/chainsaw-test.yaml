@@ -1,0 +1,11 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: annotation-propagation-kaiwoservice-rayservice
+spec:
+  steps:
+  - try:
+    - apply:
+        file: kaiwoservice.yaml
+    - assert:
+        file: ../../pod.yaml

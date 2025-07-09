@@ -1,10 +1,10 @@
 apiVersion: kaiwo.silogen.ai/v1alpha1
 kind: KaiwoService
 metadata:
-  name: kaiwoservice
-spec:
-  podTemplateSpecAnnotations:
+  name: annotation-test
+  annotations:
     foo: bar
+spec:
   resources:
     requests:
       cpu: "100m"

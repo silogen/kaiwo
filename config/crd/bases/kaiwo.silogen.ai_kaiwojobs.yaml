@@ -8728,14 +8728,6 @@ spec:
                     type: object
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
-              podTemplateSpecAnnotations:
-                additionalProperties:
-                  type: string
-                description: PodTemplateSpecAnnotations allows you to specify custom
-                  annotations that will be added to the `template.metadata.annotations`
-                  section of the generated Pods (within Jobs, Deployments, or RayCluster
-                  specs).
-                type: object
               podTemplateSpecLabels:
                 additionalProperties:
                   type: string

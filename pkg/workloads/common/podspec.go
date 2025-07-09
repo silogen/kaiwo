@@ -43,7 +43,7 @@ func UpdatePodSpec(config KaiwoConfigContext, workload KaiwoWorkload, resourceCo
 	if template.Annotations == nil {
 		template.Annotations = make(map[string]string)
 	}
-	for key, value := range commonMetaSpec.PodTemplateSpecAnnotations {
+	for key, value := range workload.GetKaiwoWorkloadObject().GetAnnotations() {
 		template.Annotations[key] = value
 	}
 
