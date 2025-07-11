@@ -29,7 +29,7 @@ spec:
   - name: NCCL_P2P_DISABLE
     value: "1"
   - name: MODEL_ID
-    value: "meta-llama/Llama-3.1-8B-Instruct"
+    value: "Qwen/Qwen2.5-1.5B-Instruct"
   - name: GPU_MEMORY_UTILIZATION
     value: "0.9"
   - name: PLACEMENT_STRATEGY
@@ -40,17 +40,17 @@ spec:
     value: "4"
   - name: MAX_NUM_BATCHED_TOKENS
     value: "32768"
-  - name: HF_TOKEN
-    valueFrom:
-      secretKeyRef:
-        name: hf-token
-        key: hf-token
+#  - name: HF_TOKEN
+#    valueFrom:
+#      secretKeyRef:
+#        name: hf-token
+#        key: hf-token
   storage:
     storageEnabled: true
-    storageClassName: multinode
+#    storageClassName: multinode
     huggingFace:
       storageSize: "100Gi"
       mountPath: "/hf_cache" # Also sets the env var HF_HOME to this value in each container
       preCacheRepos:
-      - repoId: meta-llama/Llama-3.1-8B-Instruct
+      - repoId: Qwen/Qwen2.5-1.5B-Instruct
         files: []

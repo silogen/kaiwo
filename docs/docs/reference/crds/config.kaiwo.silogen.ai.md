@@ -130,6 +130,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
+| `enabled` _boolean_ | Enabled turns on resource monitoring | false |  |
+| `metricsServiceConfig` _[MetricsServiceConfig](#metricsserviceconfig)_ | MetricsServiceConfig contains the configuration required to connect to the GPU metrics service |  |  |
+| `pollInterval` _string_ | PollInterval is the interval which is used to poll the metrics exporters | 30s | Pattern: `^([0-9]+(s\|m\|h))+$` <br /> |
 | `lowUtilizationThreshold` _float_ | LowUtilizationThreshold is the threshold which, if the metric goes under, the workload is considered underutilized. The threshold is interpreted as the percentage utilization versus the requested capacity. | 1 | Minimum: 0 <br /> |
 | `targetNamespaces` _string array_ | TargetNamespaces is a list of namespaces to apply the monitoring to. If not supplied or empty, all namespaces apart from kube-system will be inspected. However, only pods associated with KaiwoJobs or KaiwoServices are impacted. |  |  |
 | `profile` _string_ | Profile chooses the target resource to monitor. | gpu | Enum: [gpu] <br /> |
@@ -152,6 +155,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `kubeSchedulerName` _string_ | KubeSchedulerName defines the default scheduler name that is used to schedule the workload | kaiwo-scheduler |  |
 | `pendingThresholdForPreemption` _string_ | PendingThresholdForPreemption is the threshold that is used to determine if a workload is awaiting for compute resources to be available.<br />If the workload is requesting GPUs and pending for longer than this threshold, kaiwo will start preempting workloads that have exceeded their duration deadline and are using GPUs of the same vendor as the pending workload. | 5m |  |
+| `strictNodeMatching` _boolean_ | StrictNodeMatching, if true, will only consider nodes that have all the expected labels present (logical vs. physical count / vRAM, partitioning, etc.)<br />If the value is false and the workload request does not request partitioned GPUs, scheduling onto nodes that do not specify the partitioning type are also allowed. | true |  |
 
 
 #### KaiwoStorageConfig
@@ -170,5 +174,23 @@ _Appears in:_
 | `defaultStorageClass` _string_ | DefaultStorageClass is the storage class that is used for workloads that don't explicitly specify a storage class. |  |  |
 | `defaultDataMountPath` _string_ | DefaultDataMountPath is the default path for the data storage and downloads that gets mounted in the workload pods.<br />This value can be overwritten in the workload CRD. | /workload |  |
 | `defaultHfMountPath` _string_ | DefaultHfMountPath is the default path for the HuggingFace that gets mounted in the workload pods. The `HF_HOME` environmental variable<br />is also set to this value. This value can be overwritten in the workload CRD. | /hf_cache |  |
+
+
+#### MetricsServiceConfig
+
+
+
+
+
+
+
+_Appears in:_
+- [KaiwoResourceMonitoringConfig](#kaiworesourcemonitoringconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `namespace` _string_ |  |  |  |
+| `name` _string_ |  |  |  |
+| `port` _integer_ |  |  |  |
 
 

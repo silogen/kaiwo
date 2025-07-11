@@ -1,7 +1,7 @@
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
-  name: check-mi300x-dev-nodes
+  name: mi300x-dev-node-labels
 spec:
   timeouts:
     assert: 5s
@@ -12,6 +12,24 @@ spec:
           apiVersion: v1
           kind: Node
           metadata:
+            # Worker node
+            name: tw009
+            labels:
+              kaiwo.silogen.ai/node.gpu: "8"
+              kaiwo.silogen.ai/node.gpu.logical: "63"
+              kaiwo.silogen.ai/node.gpu.logical.vram: 24Gi
+              kaiwo.silogen.ai/node.gpu.model: mi300x
+              kaiwo.silogen.ai/node.gpu.partitioned: "true"
+              kaiwo.silogen.ai/node.gpu.vendor: amd
+              kaiwo.silogen.ai/node.gpu.vram: 192Gi
+              kaiwo.silogen.ai/node.pool: 63gpu.amd.mi300x.partitioned.24gi-116core-2041gi
+              kaiwo.silogen.ai/node.type: gpu
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Node
+          metadata:
+            # Master node
             name: tw038
             labels:
               kaiwo.silogen.ai/node.gpu: "8"
@@ -23,35 +41,3 @@ spec:
               kaiwo.silogen.ai/node.gpu.vram: 192Gi
               kaiwo.silogen.ai/node.pool: 8gpu.amd.mi300x.192gi-116core-2041gi
               kaiwo.silogen.ai/node.type: gpu
-    - assert:
-        resource:
-          apiVersion: v1
-          kind: Node
-          metadata:
-            name: tw009
-            labels:
-              kaiwo.silogen.ai/node.gpu: "8"
-              kaiwo.silogen.ai/node.gpu.logical: "8"
-              kaiwo.silogen.ai/node.gpu.logical.vram: 192Gi
-              kaiwo.silogen.ai/node.gpu.model: mi300x
-              kaiwo.silogen.ai/node.gpu.partitioned: "false"
-              kaiwo.silogen.ai/node.gpu.vendor: amd
-              kaiwo.silogen.ai/node.gpu.vram: 192Gi
-              kaiwo.silogen.ai/node.pool: 8gpu.amd.mi300x.192gi-116core-2041gi
-              kaiwo.silogen.ai/node.type: gpu
-#        - assert:
-#            resource:
-#              apiVersion: v1
-#              kind: Node
-#              metadata:
-#                name: tw009
-#                labels:
-#                  kaiwo.silogen.ai/node.gpu: "8"
-#                  kaiwo.silogen.ai/node.gpu.logical: "64"
-#                  kaiwo.silogen.ai/node.gpu.logical.vram: 24Gi
-#                  kaiwo.silogen.ai/node.gpu.model: mi300x
-#                  kaiwo.silogen.ai/node.gpu.partitioned: "true"
-#                  kaiwo.silogen.ai/node.gpu.vendor: amd
-#                  kaiwo.silogen.ai/node.gpu.vram: 192Gi
-#                  kaiwo.silogen.ai/node.pool: 8gpu.amd.mi300x.192gi-116core-2041gi
-#                  kaiwo.silogen.ai/node.type: gpu

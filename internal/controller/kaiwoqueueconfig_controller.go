@@ -18,6 +18,10 @@ import (
 	"context"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/api/meta"
+
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+
 	"k8s.io/apimachinery/pkg/api/equality"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -37,9 +41,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	kueuev1alpha1 "sigs.k8s.io/kueue/apis/kueue/v1alpha1"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
@@ -92,6 +94,8 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				logger.Error(err, "Failed to create default KaiwoQueueConfig")
 				return ctrl.Result{}, err
 			}
+			// stop here and requeue so queueConfig is fetched on the next loop
+			return ctrl.Result{Requeue: true}, nil
 		} else {
 			logger.Error(err, "Failed to get KaiwoQueueConfig")
 			return ctrl.Result{}, err
@@ -103,12 +107,15 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// **Sync Kueue Resources**
 	logger.Info("Syncing Kueue resources for KaiwoQueueConfig", "name", queueConfig.Name)
+
 	err = r.SyncKueueResources(ctx, &queueConfig)
 
 	if err != nil {
-		logger.Error(err, "Failed to sync Kueue resources for KaiwoQueueConfig")
+		logger.Error(err, "Failed to sync KaiwoQueueConfig with one or more errors") // TODO how to report the errors?
+		meta.SetStatusCondition(&queueConfig.Status.Conditions, metav1.Condition{Type: "Ready", Status: metav1.ConditionFalse, Reason: "SyncFailed", Message: err.Error()})
 		queueConfig.Status.Status = kaiwo.QueueConfigStatusFailed
 	} else {
+		meta.SetStatusCondition(&queueConfig.Status.Conditions, metav1.Condition{Type: "Ready", Status: metav1.ConditionTrue, Reason: "SyncSucceeded", Message: "Kueue sync succeeded"})
 		queueConfig.Status.Status = kaiwo.QueueConfigStatusReady
 	}
 
@@ -118,442 +125,122 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			logger.Error(err, "Failed to update KaiwoQueueConfig status")
 			return ctrl.Result{}, err
 		}
-		logger.Info("Updated KaiwoQueueConfig status", "name", queueConfig.Name, "WorkloadStatus", queueConfig.Status.Status)
 	}
 
-	return ctrl.Result{}, nil
-}
-
-func (r *KaiwoQueueConfigReconciler) emitEvent(queueConfig *kaiwo.KaiwoQueueConfig, target string, action string, obj client.Object, err error) {
-	reason := fmt.Sprintf("KaiwoQueueConfig%s%s", common.ToPascalCase(target), common.ToPascalCase(action))
-
-	var key string
-	if obj != nil {
-		key = fmt.Sprintf("%s/%s", obj.GetNamespace(), obj.GetName())
-	} else {
-		key = ""
-	}
-
-	eventType := corev1.EventTypeNormal
-	var message string
-	if err != nil {
-		eventType = corev1.EventTypeWarning
-		reason += "Failed"
-		message = fmt.Sprintf("Failed to %s %s %s: %v", action, target, key, err)
-	} else {
-		reason += "d"
-		message = fmt.Sprintf("%sd %s %s", action, target, key)
-	}
-	r.Recorder.Eventf(
-		queueConfig,
-		eventType,
-		reason,
-		message,
-	)
+	return ctrl.Result{}, err
 }
 
 func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, kaiwoQueueConfig *kaiwo.KaiwoQueueConfig) error {
-	logger := log.FromContext(ctx)
+	syncErrors := make([]error, 0)
 
-	existingFlavors := &kueuev1beta1.ResourceFlavorList{}
-	existingQueues := &kueuev1beta1.ClusterQueueList{}
-	existingLocalQueues := &kueuev1beta1.LocalQueueList{}
-	existingPriorityClasses := &kueuev1beta1.WorkloadPriorityClassList{}
-	existingTopologies := &kueuev1alpha1.TopologyList{}
-
-	if err := r.List(ctx, existingFlavors); err != nil {
-		logger.Error(err, "Failed to list ResourceFlavors")
-		return err
-	}
-	if err := r.List(ctx, existingQueues); err != nil {
-		logger.Error(err, "Failed to list ClusterQueues")
-		return err
-	}
-	if err := r.List(ctx, existingPriorityClasses); err != nil {
-		logger.Error(err, "Failed to list WorkloadPriorityClasses")
-		return err
-	}
-	if err := r.List(ctx, existingLocalQueues); err != nil {
-		logger.Error(err, "Failed to list LocalQueues")
-		return err
-	}
-	if err := r.List(ctx, existingTopologies); err != nil {
-		logger.Error(err, "Failed to list Topologies")
-		return err
+	// ResourceFlavors
+	if err := controllerutils.SyncQueueResource(
+		ctx,
+		r.Client,
+		r.Recorder,
+		kaiwoQueueConfig,
+		kaiwoQueueConfig.Spec.ResourceFlavors,
+		controllerutils.ResourceFlavorConverter{},
+		controllerutils.WithOwnerReference(kaiwoQueueConfig, r.Scheme),
+	); err != nil {
+		syncErrors = append(syncErrors, err)
 	}
 
-	success := r.syncResourceFlavors(ctx, kaiwoQueueConfig, existingFlavors)
-	success = r.syncClusterQueues(ctx, kaiwoQueueConfig, existingQueues) && success
-	success = r.syncLocalQueues(ctx, kaiwoQueueConfig, existingLocalQueues) && success
-	success = r.syncWorkloadPriorityClasses(ctx, kaiwoQueueConfig, existingPriorityClasses) && success
-	success = r.syncTopologies(ctx, kaiwoQueueConfig, existingTopologies) && success
-
-	if success {
-		logger.Info("Successfully synced all Kueue resources")
-		return nil
+	// ClusterQueues
+	if err := controllerutils.SyncQueueResource(
+		ctx,
+		r.Client,
+		r.Recorder,
+		kaiwoQueueConfig,
+		kaiwoQueueConfig.Spec.ClusterQueues,
+		controllerutils.ClusterQueueConverter{},
+		controllerutils.WithOwnerReference(kaiwoQueueConfig, r.Scheme),
+	); err != nil {
+		syncErrors = append(syncErrors, err)
 	}
-	return fmt.Errorf("failed to sync some Kueue resources")
-}
 
-func (r *KaiwoQueueConfigReconciler) syncResourceFlavors(ctx context.Context, kaiwoQueueConfig *kaiwo.KaiwoQueueConfig, existingFlavors *kueuev1beta1.ResourceFlavorList) bool {
-	logger := log.FromContext(ctx)
+	// LocalQueues
+	existingClusterQueues := &kueuev1beta1.ClusterQueueList{}
+	if err := r.Client.List(ctx, existingClusterQueues); err != nil {
+		syncErrors = append(syncErrors, err)
+	} else {
+		actualClusterQueues := map[string]*kueuev1beta1.ClusterQueue{}
+		for _, queue := range existingClusterQueues.Items {
+			actualClusterQueues[queue.Name] = &queue
+		}
 
-	success := true
-	expectedFlavors := controllerutils.ConvertKaiwoToKueueResourceFlavors(kaiwoQueueConfig.Spec.ResourceFlavors)
-	existingFlavorMap := make(map[string]kueuev1beta1.ResourceFlavor)
+		kaiwoClusterQueueReferences := map[string]kaiwo.ClusterQueue{}
+		for _, queue := range kaiwoQueueConfig.Spec.ClusterQueues {
+			kaiwoClusterQueueReferences[queue.Name] = queue
+		}
 
-	for _, kueueFlavor := range expectedFlavors {
-		existingFlavor, found := controllerutils.FindFlavor(existingFlavors.Items, kueueFlavor.Name)
-		if !found {
-			logger.Info("Creating ResourceFlavor", "name", kueueFlavor.Name)
-			if err := ctrl.SetControllerReference(kaiwoQueueConfig, &kueueFlavor, r.Scheme); err != nil {
-				logger.Error(err, "Failed to set owner reference", "name", kueueFlavor.Name)
-				success = false
-				r.emitEvent(kaiwoQueueConfig, "resource flavor", "owner reference", &kueueFlavor, err)
+		var localQueuesToCreate []client.ObjectKey
+		for _, expectedClusterQueue := range kaiwoQueueConfig.Spec.ClusterQueues {
+			if len(expectedClusterQueue.Namespaces) == 0 {
+				// Skip if the cluster queue does not define any namespaces (nothing to automatically create)
 				continue
 			}
-			err := r.Create(ctx, &kueueFlavor)
-			if err != nil {
-				logger.Error(err, "Failed to create ResourceFlavor", "name", kueueFlavor.Name)
-				success = false
-			}
-			r.emitEvent(kaiwoQueueConfig, "resource flavor", "create", &kueueFlavor, err)
-
-		} else if !controllerutils.CompareResourceFlavors(existingFlavor, kueueFlavor) {
-			logger.Info("Updating ResourceFlavor", "name", kueueFlavor.Name)
-			existingFlavor.Spec = kueueFlavor.Spec
-			err := r.Update(ctx, &existingFlavor)
-			if err != nil {
-				logger.Error(err, "Failed to update ResourceFlavor", "name", kueueFlavor.Name)
-				success = false
-			}
-			r.emitEvent(kaiwoQueueConfig, "resource flavor", "update", &existingFlavor, err)
-
-		}
-		existingFlavorMap[kueueFlavor.Name] = kueueFlavor
-	}
-
-	for _, existingFlavor := range existingFlavors.Items {
-		if _, exists := existingFlavorMap[existingFlavor.Name]; !exists {
-			logger.Info("Deleting ResourceFlavor", "name", existingFlavor.Name)
-			err := r.Delete(ctx, &existingFlavor)
-			if err != nil {
-				logger.Error(err, "Failed to delete ResourceFlavor", "name", existingFlavor.Name)
-				success = false
-			}
-			r.emitEvent(kaiwoQueueConfig, "resource flavor", "delete", &existingFlavor, err)
-		}
-	}
-
-	return success
-}
-
-func (r *KaiwoQueueConfigReconciler) syncTopologies(
-	ctx context.Context,
-	queueConfig *kaiwo.KaiwoQueueConfig,
-	existingTopologies *kueuev1alpha1.TopologyList,
-) bool {
-	logger := log.FromContext(ctx)
-
-	success := true
-	expectedTopologies := controllerutils.ConvertKaiwoToKueueTopologies(queueConfig.Spec.Topologies)
-	existingTopologyMap := make(map[string]kueuev1alpha1.Topology)
-
-	for _, kueueTopology := range expectedTopologies {
-		existingTopology, found := controllerutils.FindTopology(existingTopologies.Items, kueueTopology.Name)
-		if !found {
-			logger.Info("Creating Topology", "name", kueueTopology.Name)
-			if err := ctrl.SetControllerReference(queueConfig, &kueueTopology, r.Scheme); err != nil {
-				logger.Error(err, "Failed to set owner reference", "name", kueueTopology.Name)
-				success = false
-				r.emitEvent(queueConfig, "topology", "owner reference", &kueueTopology, err)
-				continue
-			}
-
-			err := r.Create(ctx, &kueueTopology)
-			if err != nil {
-				logger.Error(err, "Failed to create Topology", "name", kueueTopology.Name)
-				success = false
-			}
-			r.emitEvent(queueConfig, "topology", "create", &kueueTopology, err)
-		} else if !controllerutils.CompareTopologies(existingTopology, kueueTopology) {
-			logger.Info("Updating Topology", "name", kueueTopology.Name)
-			existingTopology.Spec = kueueTopology.Spec
-
-			err := r.Update(ctx, &existingTopology)
-			if err != nil {
-				logger.Error(err, "Failed to update Topology", "name", kueueTopology.Name)
-				success = false
-			}
-			r.emitEvent(queueConfig, "topology", "update", &existingTopology, err)
-		}
-		existingTopologyMap[kueueTopology.Name] = kueueTopology
-	}
-
-	for _, existingTopology := range existingTopologies.Items {
-		if _, exists := existingTopologyMap[existingTopology.Name]; !exists {
-			logger.Info("Deleting Topology", "name", existingTopology.Name)
-			err := r.Delete(ctx, &existingTopology)
-			if err != nil {
-				logger.Error(err, "Failed to delete Topology", "name", existingTopology.Name)
-				success = false
-			}
-			r.emitEvent(queueConfig, "topology", "delete", &existingTopology, err)
-		}
-	}
-
-	return success
-}
-
-func (r *KaiwoQueueConfigReconciler) syncClusterQueues(ctx context.Context, queueConfig *kaiwo.KaiwoQueueConfig, existingQueues *kueuev1beta1.ClusterQueueList) bool {
-	logger := log.FromContext(ctx)
-
-	success := true
-	expectedQueues := make(map[string]kueuev1beta1.ClusterQueue)
-
-	for _, kaiwoQueue := range queueConfig.Spec.ClusterQueues {
-		kueueQueue := controllerutils.ConvertKaiwoToKueueClusterQueue(kaiwoQueue)
-		for i, resourceGroup := range kueueQueue.Spec.ResourceGroups {
-			for j, flavor := range resourceGroup.Flavors {
-				resourceMap := make(map[string]kueuev1beta1.ResourceQuota)
-				for _, flavorResource := range flavor.Resources {
-					resourceMap[flavorResource.Name.String()] = flavorResource
-				}
-				var resources []kueuev1beta1.ResourceQuota
-				for _, resourceName := range resourceGroup.CoveredResources {
-					if resource, exists := resourceMap[resourceName.String()]; exists {
-						resources = append(resources, resource)
-					}
-				}
-				kueueQueue.Spec.ResourceGroups[i].Flavors[j].Resources = resources
-			}
-		}
-		existingQueue := &kueuev1beta1.ClusterQueue{}
-		err := r.Get(ctx, client.ObjectKey{Name: kueueQueue.Name}, existingQueue)
-
-		if errors.IsNotFound(err) {
-			logger.Info("Creating ClusterQueue", "name", kueueQueue.Name)
-			if err := ctrl.SetControllerReference(queueConfig, &kueueQueue, r.Scheme); err != nil {
-				logger.Error(err, "Failed to set owner reference", "name", kueueQueue.Name)
-				success = false
-				r.emitEvent(queueConfig, "cluster queue", "owner reference", &kueueQueue, err)
-				continue
-			}
-			err := r.Create(ctx, &kueueQueue)
-			if err != nil {
-				logger.Error(err, "Failed to create ClusterQueue", "name", kueueQueue.Name)
-				success = false
-			}
-			r.emitEvent(queueConfig, "cluster queue", "create", &kueueQueue, err)
-
-		} else if err != nil {
-			logger.Error(err, "Failed to get ClusterQueue", "name", kueueQueue.Name)
-			r.emitEvent(queueConfig, "cluster queue", "get", &kueueQueue, err)
-			success = false
-		} else if !controllerutils.CompareClusterQueues(*existingQueue, kueueQueue) {
-			logger.Info("Updating ClusterQueue", "name", kueueQueue.Name)
-			existingQueue.Spec = kueueQueue.Spec
-			err := r.Update(ctx, existingQueue)
-			if err != nil {
-				logger.Error(err, "Failed to update ClusterQueue", "name", kueueQueue.Name)
-				success = false
-			}
-			r.emitEvent(queueConfig, "cluster queue", "update", existingQueue, err)
-		}
-		expectedQueues[kueueQueue.Name] = kueueQueue
-	}
-
-	for _, existingQueue := range existingQueues.Items {
-		if _, exists := expectedQueues[existingQueue.Name]; !exists {
-			logger.Info("Deleting ClusterQueue", "name", existingQueue.Name)
-			err := r.Delete(ctx, &existingQueue)
-			if err != nil {
-				logger.Error(err, "Failed to delete ClusterQueue", "name", existingQueue.Name)
-				success = false
-			}
-			r.emitEvent(queueConfig, "cluster queue", "delete", &existingQueue, err)
-		}
-	}
-
-	return success
-}
-
-// syncLocalQueues manages a set of LocalQueues based on the defined Cluster Queues and the namespaces that they apply to.
-// This function ensures that each namespace has its corresponding LocalQueue, and if the namespace (or ClusterQueue) is removed,
-// the corresponding LocalQueue is also deleted.
-func (r *KaiwoQueueConfigReconciler) syncLocalQueues(
-	ctx context.Context,
-	kaiwoQueueConfig *kaiwo.KaiwoQueueConfig,
-	existingLocalQueues *kueuev1beta1.LocalQueueList,
-) bool {
-	logger := log.FromContext(ctx)
-	success := true
-
-	// Map: clusterQueueName -> namespace -> LocalQueue
-	staleQueues := map[string]map[string]kueuev1beta1.LocalQueue{}
-
-	// Build map of all existing LocalQueues
-	for _, localQueue := range existingLocalQueues.Items {
-		if _, ok := staleQueues[localQueue.Name]; !ok {
-			staleQueues[localQueue.Name] = map[string]kueuev1beta1.LocalQueue{}
-		}
-		staleQueues[localQueue.Name][localQueue.Namespace] = localQueue
-	}
-
-	clusterQueueLookup := map[string]kaiwo.ClusterQueue{}
-
-	// Reconcile expected LocalQueues
-	for _, clusterQueue := range kaiwoQueueConfig.Spec.ClusterQueues {
-		clusterQueueLookup[clusterQueue.Name] = clusterQueue
-		// Fetch the actual cluster queue to use for the owner reference
-		actualClusterQueue := &kueuev1beta1.ClusterQueue{}
-		if err := r.Get(ctx, client.ObjectKey{Name: clusterQueue.Name}, actualClusterQueue); err != nil {
-			logger.Error(err, "Failed to get ClusterQueue", "name", clusterQueue.Name)
-			success = false
-			r.emitEvent(kaiwoQueueConfig, "cluster queue", "get", actualClusterQueue, err)
-			continue
-		}
-
-		// If the ClusterQueue doesn't have any namespaces listed, ensure any existing LocalQueue for this ClusterQueue is not removed
-		if len(clusterQueue.Namespaces) == 0 {
-			if namespaceMap, ok := staleQueues[clusterQueue.Name]; ok {
-				if len(namespaceMap) == 0 {
-					delete(staleQueues, clusterQueue.Name)
-				}
-			}
-			continue
-		}
-
-		for _, namespace := range clusterQueue.Namespaces {
-			localQueue := &kueuev1beta1.LocalQueue{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      clusterQueue.Name,
+			for _, namespace := range expectedClusterQueue.Namespaces {
+				localQueuesToCreate = append(localQueuesToCreate, client.ObjectKey{
+					Name:      expectedClusterQueue.Name,
 					Namespace: namespace,
-				},
-				Spec: kueuev1beta1.LocalQueueSpec{
-					ClusterQueue: kueuev1beta1.ClusterQueueReference(clusterQueue.Name),
-				},
+				})
 			}
+		}
 
-			key := client.ObjectKeyFromObject(localQueue)
-			existing := &kueuev1beta1.LocalQueue{}
-			err := r.Get(ctx, key, existing)
-
-			switch {
-			case err == nil:
-				// Already exists — remove it from the stale map
-				if namespaceMap, ok := staleQueues[clusterQueue.Name]; ok {
-					delete(namespaceMap, namespace)
-					if len(namespaceMap) == 0 {
-						delete(staleQueues, clusterQueue.Name)
-					}
-				}
-
-			case errors.IsNotFound(err):
-				// Needs to be created
-				if err := ctrl.SetControllerReference(actualClusterQueue, localQueue, r.Scheme); err != nil {
-					logger.Error(err, "Failed to set owner reference", "name", clusterQueue.Name, "namespace", namespace)
-					success = false
-					r.emitEvent(kaiwoQueueConfig, "local queue", "owner reference", localQueue, err)
-					continue
-				}
-				err := r.Create(ctx, localQueue)
-				if err != nil {
-					logger.Error(err, "Failed to create LocalQueue", "name", clusterQueue.Name, "namespace", namespace)
-					success = false
-				} else {
-					logger.Info("Created LocalQueue", "name", clusterQueue.Name, "namespace", namespace)
-				}
-				r.emitEvent(kaiwoQueueConfig, "local queue", "create", localQueue, err)
-
-			default:
-				// Unexpected error
-				logger.Error(err, "Failed to get LocalQueue", "name", clusterQueue.Name, "namespace", namespace)
-				r.emitEvent(kaiwoQueueConfig, "local queue", "get", nil, err)
-				success = false
-			}
+		if err := controllerutils.SyncQueueResource(
+			ctx,
+			r.Client,
+			r.Recorder,
+			kaiwoQueueConfig,
+			localQueuesToCreate,
+			controllerutils.LocalQueueConverter{},
+			controllerutils.WithDynamicOwnerReference(r.Scheme, func(obj client.Object) client.Object {
+				localQueue := obj.(*kueuev1beta1.LocalQueue)
+				return actualClusterQueues[localQueue.Name]
+			}),
+			controllerutils.WithStaleDeleteCheck(func(obj *kueuev1beta1.LocalQueue) bool {
+				// Check if the cluster queue which this local queue belongs to lists any namespaces
+				// If it doesn't, that means that the cluster queue does not limit namespaces, and users can
+				// create local queues outside the KaiwoQueueConfig, so we shouldn't delete them
+				kaiwoClusterQueueReference := kaiwoClusterQueueReferences[obj.Name]
+				return len(kaiwoClusterQueueReference.Namespaces) > 0
+			}),
+		); err != nil {
+			syncErrors = append(syncErrors, err)
 		}
 	}
 
-	// Clean up stale LocalQueues
-	for queueName, namespaceMap := range staleQueues {
-		clusterQueue := clusterQueueLookup[queueName]
-		if len(clusterQueue.Namespaces) == 0 {
-			// Skip cleaning this ClusterQueue reference if it does not limit the namespaces
-			continue
-		}
-		for namespace, localQueue := range namespaceMap {
-			//if !slices.Contains(clusterQueue.Namespaces, namespace) {
-			//	Skip if the local queue namespace is not referenced by the
-			//continue
-			//}
-			logger.Info("Deleting stale LocalQueue", "name", queueName, "namespace", namespace)
-			err := r.Delete(ctx, &localQueue)
-			if err != nil {
-				logger.Error(err, "Failed to delete stale LocalQueue", "name", queueName, "namespace", namespace)
-				success = false
-			}
-			r.emitEvent(kaiwoQueueConfig, "local queue", "delete", &localQueue, err)
-		}
+	// WorkloadPriorityClasses
+	if err := controllerutils.SyncQueueResource(
+		ctx,
+		r.Client,
+		r.Recorder,
+		kaiwoQueueConfig,
+		kaiwoQueueConfig.Spec.WorkloadPriorityClasses,
+		controllerutils.WorkloadPriorityClassConverter{},
+		controllerutils.WithOwnerReference(kaiwoQueueConfig, r.Scheme),
+	); err != nil {
+		syncErrors = append(syncErrors, err)
 	}
 
-	return success
-}
-
-func (r *KaiwoQueueConfigReconciler) syncWorkloadPriorityClasses(ctx context.Context, queueConfig *kaiwo.KaiwoQueueConfig, existingPriorityClasses *kueuev1beta1.WorkloadPriorityClassList) bool {
-	logger := log.FromContext(ctx)
-
-	success := true
-	expectedPriorityClasses := make(map[string]kueuev1beta1.WorkloadPriorityClass)
-
-	for _, priorityClassSpec := range queueConfig.Spec.WorkloadPriorityClasses {
-		existingPriorityClass := &kueuev1beta1.WorkloadPriorityClass{}
-		err := r.Get(ctx, client.ObjectKey{Name: priorityClassSpec.Name}, existingPriorityClass)
-
-		if errors.IsNotFound(err) {
-			logger.Info("Creating WorkloadPriorityClass", "name", priorityClassSpec.Name)
-			if err := ctrl.SetControllerReference(queueConfig, &priorityClassSpec, r.Scheme); err != nil {
-				logger.Error(err, "Failed to set owner reference", "name", priorityClassSpec.Name)
-				success = false
-				r.emitEvent(queueConfig, "workload priority class", "owner reference", &priorityClassSpec, err)
-				continue
-			}
-			err := r.Create(ctx, &priorityClassSpec)
-			if err != nil {
-				logger.Error(err, "Failed to create WorkloadPriorityClass", "name", priorityClassSpec.Name)
-				success = false
-			}
-			r.emitEvent(queueConfig, "workload priority class", "create", &priorityClassSpec, err)
-		} else if err != nil {
-			logger.Error(err, "Failed to get WorkloadPriorityClass", "name", priorityClassSpec.Name)
-			success = false
-			r.emitEvent(queueConfig, "workload priority class", "get", &priorityClassSpec, err)
-		} else if !controllerutils.ComparePriorityClasses(*existingPriorityClass, priorityClassSpec) {
-			logger.Info("Updating WorkloadPriorityClass", "name", priorityClassSpec.Name)
-			existingPriorityClass.Value = priorityClassSpec.Value
-			err := r.Update(ctx, existingPriorityClass)
-			if err != nil {
-				logger.Error(err, "Failed to update WorkloadPriorityClass", "name", priorityClassSpec.Name)
-				success = false
-			}
-			r.emitEvent(queueConfig, "workload priority class", "update", existingPriorityClass, err)
-		}
-		expectedPriorityClasses[priorityClassSpec.Name] = priorityClassSpec
+	// Topologies
+	if err := controllerutils.SyncQueueResource(
+		ctx,
+		r.Client,
+		r.Recorder,
+		kaiwoQueueConfig,
+		kaiwoQueueConfig.Spec.Topologies,
+		controllerutils.TopologyConverter{},
+		controllerutils.WithOwnerReference(kaiwoQueueConfig, r.Scheme),
+	); err != nil {
+		syncErrors = append(syncErrors, err)
 	}
 
-	for _, existingPriorityClass := range existingPriorityClasses.Items {
-		if _, exists := expectedPriorityClasses[existingPriorityClass.Name]; !exists {
-			logger.Info("Deleting WorkloadPriorityClass", "name", existingPriorityClass.Name)
-			err := r.Delete(ctx, &existingPriorityClass)
-			if err != nil {
-				logger.Error(err, "Failed to delete WorkloadPriorityClass", "name", existingPriorityClass.Name)
-				success = false
-			}
-			r.emitEvent(queueConfig, "workload priority class", "delete", &existingPriorityClass, err)
-		}
+	if len(syncErrors) > 0 {
+		return utilerrors.NewAggregate(syncErrors)
 	}
-
-	return success
+	return nil
 }
 
 // nodeResourceChanged returns true if any of the fields that we watch changed
@@ -580,33 +267,34 @@ func nodeResourceChanged(oldNode, newNode *corev1.Node) bool {
 }
 
 func (r *KaiwoQueueConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	logger := log.Log.WithName("SetupWithManager")
+	// logger := log.Log.WithName("SetupWithManager")
 	r.Recorder = mgr.GetEventRecorderFor("kaiwoqueueconfig-controller")
 
-	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
-		ctx, err := common.GetContextWithConfig(ctx, mgr.GetClient())
-		if err != nil {
-			return fmt.Errorf("could not get config: %w", err)
-		}
-		logger.Info("Ensuring default KaiwoQueueConfig exists on startup...")
-		config := common.ConfigFromContext(ctx)
-
-		if err := common.EnsureClusterNodesLabelsAndTaints(ctx, r.Client); err != nil {
-			return fmt.Errorf("could not ensure cluster nodes' taints and labels: %w", err)
-		}
-
-		if err := r.CreateTopology(ctx); err != nil {
-			logger.Error(err, "Failed to create default topology on startup")
-		}
-
-		if err := r.EnsureKaiwoQueueConfig(ctx, common.KaiwoQueueConfigName, config.DefaultClusterQueueName, config.DefaultClusterQueueCohortName); err != nil {
-			logger.Error(err, "Failed to ensure default KaiwoQueueConfig on startup")
-			return err
-		}
-		return nil
-	})); err != nil {
-		return err
-	}
+	// FIX Driven by the node watcher
+	//if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+	//	ctx, err := common.GetContextWithConfig(ctx, mgr.GetClient())
+	//	if err != nil {
+	//		return fmt.Errorf("could not get config: %w", err)
+	//	}
+	//	logger.Info("Ensuring default KaiwoQueueConfig exists on startup...")
+	//	config := common.ConfigFromContext(ctx)
+	//
+	//	if err := common.EnsureClusterNodesLabelsAndTaints(ctx, r.Client); err != nil {
+	//		return fmt.Errorf("could not ensure cluster nodes' taints and labels: %w", err)
+	//	}
+	//
+	//	if err := r.CreateTopology(ctx); err != nil {
+	//		logger.Error(err, "Failed to create default topology on startup")
+	//	}
+	//
+	//	if err := r.EnsureKaiwoQueueConfig(ctx, common.KaiwoQueueConfigName, config.DefaultClusterQueueName, config.DefaultClusterQueueCohortName); err != nil {
+	//		logger.Error(err, "Failed to ensure default KaiwoQueueConfig on startup")
+	//		return err
+	//	}
+	//	return nil
+	//})); err != nil {
+	//	return err
+	//}
 
 	// Create a predicate to filter when to run the reconciliation on node changes
 	nodePred := predicate.Funcs{
@@ -639,38 +327,6 @@ func (r *KaiwoQueueConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		).
 		Named("kaiwoqueueconfig").
 		Complete(r)
-}
-
-func (r *KaiwoQueueConfigReconciler) CreateTopology(ctx context.Context) error {
-	var nodes corev1.NodeList
-	if err := r.List(ctx, &nodes); err != nil {
-		return fmt.Errorf("listing nodes: %w", err)
-	}
-
-	for i := range nodes.Items {
-		node := &nodes.Items[i]
-		if node.Labels == nil {
-			node.Labels = map[string]string{}
-		}
-
-		updated := false
-		if _, exists := node.Labels[common.DefaultTopologyBlockLabel]; !exists {
-			node.Labels[common.DefaultTopologyBlockLabel] = "block-a"
-			updated = true
-		}
-		if _, exists := node.Labels[common.DefaultTopologyRackLabel]; !exists {
-			node.Labels[common.DefaultTopologyRackLabel] = "rack-a"
-			updated = true
-		}
-
-		if updated {
-			if err := r.Update(ctx, node); err != nil {
-				return fmt.Errorf("failed to label node %s: %w", node.Name, err)
-			}
-		}
-	}
-
-	return nil
 }
 
 func (r *KaiwoQueueConfigReconciler) EnsureKaiwoQueueConfig(ctx context.Context, kaiwoQueueConfigName string, clusterQueueName string, cohort string) error {

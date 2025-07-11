@@ -9,4 +9,4 @@ spec:
   scheduling:
     pendingThresholdForPreemption: 1s
   storage:
-    defaultStorageClass: nfs-client
+    defaultStorageClass: rwx-nfs

@@ -9,4 +9,13 @@ spec:
   scheduling:
     pendingThresholdForPreemption: 1s
   storage:
-    defaultStorageClass: nfs-csi
+    defaultStorageClass: rwx-nfs
+  resourceMonitoring:
+    targetNamespaces:
+    - default
+    enabled: true
+    pollInterval: 5s
+    metricsServiceConfig:
+      name: gpu-metrics-collector-collector
+      namespace: kube-amd-gpu
+      port: 5000

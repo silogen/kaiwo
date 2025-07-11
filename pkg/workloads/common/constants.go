@@ -26,6 +26,6 @@ const (
 	CPUOnly                     = "cpu-only"
 	KueueRequiredTopologyKey    = "kueue.x-k8s.io/podset-required-topology"
 	KueuePreferredTopologyKey   = "kueue.x-k8s.io/podset-preferred-topology"
-	True              = "true"
-	False             = "false"
+	True                        = "true"
+	False                       = "false"
 )

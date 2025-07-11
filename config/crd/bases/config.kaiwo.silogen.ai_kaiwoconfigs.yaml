@@ -104,6 +104,10 @@ spec:
                 description: ResourceMonitoring defines the resource-monitoring specific
                   settings
                 properties:
+                  enabled:
+                    default: false
+                    description: Enabled turns on resource monitoring
+                    type: boolean
                   lowUtilizationThreshold:
                     default: 1
                     description: LowUtilizationThreshold is the threshold which, if
@@ -112,6 +116,24 @@ spec:
                       the requested capacity.
                     minimum: 0
                     type: number
+                  metricsServiceConfig:
+                    description: MetricsServiceConfig contains the configuration required
+                      to connect to the GPU metrics service
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                      port:
+                        format: int32
+                        type: integer
+                    type: object
+                  pollInterval:
+                    default: 30s
+                    description: PollInterval is the interval which is used to poll
+                      the metrics exporters
+                    pattern: ^([0-9]+(s|m|h))+$
+                    type: string
                   profile:
                     default: gpu
                     description: Profile chooses the target resource to monitor.
@@ -155,6 +177,12 @@ spec:
                       PendingThresholdForPreemption is the threshold that is used to determine if a workload is awaiting for compute resources to be available.
                       If the workload is requesting GPUs and pending for longer than this threshold, kaiwo will start preempting workloads that have exceeded their duration deadline and are using GPUs of the same vendor as the pending workload.
                     type: string
+                  strictNodeMatching:
+                    default: true
+                    description: |-
+                      StrictNodeMatching, if true, will only consider nodes that have all the expected labels present (logical vs. physical count / vRAM, partitioning, etc.)
+                      If the value is false and the workload request does not request partitioned GPUs, scheduling onto nodes that do not specify the partitioning type are also allowed.
+                    type: boolean
                 type: object
               storage:
                 default: {}

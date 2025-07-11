@@ -80,7 +80,7 @@ spec:
           (contains($stdout, '"name":"64gpu.nvidia.teslak80.partitioned')): true
     - apply:
         file: kaiwoqueueconfig1.yaml
-    - wait:
+    - sleep:
         duration: 10s
     - script:
         content: kubectl get resourceflavor --no-headers | wc -l
@@ -92,7 +92,7 @@ spec:
           (contains($stdout, '3')): true
     - apply:
         file: kaiwoqueueconfig2.yaml
-    - wait:
+    - sleep:
         duration: 10s
     - script:
         content: kubectl get resourceflavor --no-headers | wc -l

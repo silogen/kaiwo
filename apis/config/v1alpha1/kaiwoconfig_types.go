@@ -15,6 +15,8 @@
 package v1alpha1
 
 import (
+	"time"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -111,6 +113,18 @@ type KaiwoNodeConfig struct {
 // * Setting the metrics endpoint (`RESOURCE_MONITORING_METRICS_ENDPOINT=...`)
 // * Setting the polling interval (`RESOURCE_MONITORING_POLLING_INTERVAL=30s`)
 type KaiwoResourceMonitoringConfig struct {
+	// Enabled turns on resource monitoring
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled,omitempty"`
+
+	// MetricsServiceConfig contains the configuration required to connect to the GPU metrics service
+	MetricsServiceConfig MetricsServiceConfig `json:"metricsServiceConfig,omitempty"`
+
+	// PollInterval is the interval which is used to poll the metrics exporters
+	// +kubebuilder:validation:Pattern=`^([0-9]+(s|m|h))+$`
+	// +kubebuilder:default="30s"
+	PollInterval string `json:"pollInterval,omitempty"`
+
 	// LowUtilizationThreshold is the threshold which, if the metric goes under, the workload is considered underutilized. The threshold is interpreted as the percentage utilization versus the requested capacity.
 	// +kubebuilder:default=1
 	// +kubebuilder:validation:Minimum=0
@@ -134,15 +148,35 @@ type KaiwoResourceMonitoringConfig struct {
 	TerminateUnderutilizedAfter string `json:"terminateUnderutilizedAfter,omitempty"`
 }
 
+type MetricsServiceConfig struct {
+	Namespace string `json:"namespace,omitempty"`
+	Name      string `json:"name,omitempty"`
+	Port      int32  `json:"port,omitempty"`
+}
+
+func (k *KaiwoResourceMonitoringConfig) GetPollInterval() time.Duration {
+	interval, err := time.ParseDuration(k.PollInterval)
+	if err != nil {
+		panic(err)
+	}
+	return interval
+}
+
 // KaiwoSchedulingConfig contains the configuration Kaiwo uses for workload scheduling
 type KaiwoSchedulingConfig struct {
 	// KubeSchedulerName defines the default scheduler name that is used to schedule the workload
 	// +kubebuilder:default="kaiwo-scheduler"
 	KubeSchedulerName string `json:"kubeSchedulerName,omitempty"`
+
 	// PendingThresholdForPreemption is the threshold that is used to determine if a workload is awaiting for compute resources to be available.
 	// If the workload is requesting GPUs and pending for longer than this threshold, kaiwo will start preempting workloads that have exceeded their duration deadline and are using GPUs of the same vendor as the pending workload.
 	// +kubebuilder:default="5m"
 	PendingThresholdForPreemption string `json:"pendingThresholdForPreemption,omitempty"`
+
+	// StrictNodeMatching, if true, will only consider nodes that have all the expected labels present (logical vs. physical count / vRAM, partitioning, etc.)
+	// If the value is false and the workload request does not request partitioned GPUs, scheduling onto nodes that do not specify the partitioning type are also allowed.
+	// +kubebuilder:default=true
+	StrictNodeMatching bool `json:"strictNodeMatching,omitempty"`
 }
 
 // KaiwoConfig manages the Kaiwo operator's configuration which can be modified during runtime.

@@ -1,7 +1,7 @@
 buildCli: true
 buildDevCli: true
 deployTo: kind
-kaiwoConfigPath: test/configs/ci.yaml
+kaiwoConfigPath: test/configs/kaiwoconfig/local-kind.yaml
 
 testValidateController: true
 
@@ -10,6 +10,7 @@ chainsaw:
   tests:
   - test/chainsaw/tests/no-gpu
   - test/chainsaw/tests/environments/kind-mock-nvidia
+  - test/chainsaw/tests/cli
   values:
   - name: print_level
     value: info
