@@ -70,10 +70,17 @@ func (handler *RayServiceHandler) GetInitializedObject() client.Object {
 }
 
 func (handler *RayServiceHandler) BuildDesired(ctx context.Context, clusterCtx common.ClusterContext) (client.Object, error) {
-	rayService := handler.buildRayService(ctx, clusterCtx)
-
+	rayService, err := handler.buildRayService(ctx, clusterCtx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build ray service: %w", err)
+	}
+	svcSpec := handler.KaiwoService.Spec
 	// Wrap the RayService with an AppWrapper
-	resourceConfig := common.CalculateResourceConfig(ctx, clusterCtx, handler.KaiwoService, true)
+
+	replicas := 1
+	if svcSpec.Replicas != nil {
+		replicas = *svcSpec.Replicas
+	}
 
 	rayServiceSpecBytes, err := json.Marshal(rayService.Spec)
 	if err != nil {
@@ -89,15 +96,14 @@ func (handler *RayServiceHandler) BuildDesired(ctx context.Context, clusterCtx c
 	appWrapper.Labels = map[string]string{
 		common.QueueLabel: common.GetClusterQueueName(ctx, handler),
 	}
-	if priorityclass := handler.GetCommonSpec().WorkloadPriorityClass; priorityclass != "" {
-		appWrapper.Labels[common.WorkloaddPriorityClassLabel] = priorityclass
-	}
+
 	appWrapper.Spec = appwrapperv1beta2.AppWrapperSpec{
+		Suspend: true,
 		Components: []appwrapperv1beta2.AppWrapperComponent{
 			{
 				DeclaredPodSets: []appwrapperv1beta2.AppWrapperPodSet{
 					{Replicas: baseutils.Pointer(int32(1)), Path: "template.spec.rayClusterConfig.headGroupSpec.template"},
-					{Replicas: baseutils.Pointer(int32(resourceConfig.Replicas)), Path: "template.spec.rayClusterConfig.workerGroupSpecs[0].template"},
+					{Replicas: baseutils.Pointer(int32(replicas)), Path: "template.spec.rayClusterConfig.workerGroupSpecs[0].template"},
 				},
 				Template: runtime.RawExtension{
 					Raw: []byte(fmt.Sprintf(`{
@@ -120,7 +126,7 @@ func (handler *RayServiceHandler) BuildDesired(ctx context.Context, clusterCtx c
 	return appWrapper, nil
 }
 
-func (handler *RayServiceHandler) buildRayService(ctx context.Context, clusterCtx common.ClusterContext) rayv1.RayService {
+func (handler *RayServiceHandler) buildRayService(ctx context.Context, clusterCtx common.ClusterContext) (*rayv1.RayService, error) {
 	config := common.ConfigFromContext(ctx)
 
 	spec := handler.KaiwoService.Spec
@@ -141,9 +147,11 @@ func (handler *RayServiceHandler) buildRayService(ctx context.Context, clusterCt
 	}
 
 	// Update ray cluster specs
-	utils.UpdateRayClusterSpec(ctx, clusterCtx, handler.KaiwoService, &rayServiceSpec.RayClusterSpec)
+	if err := utils.UpdateRayClusterSpec(ctx, clusterCtx, handler.KaiwoService, &rayServiceSpec.RayClusterSpec); err != nil {
+		return nil, fmt.Errorf("failed to update ray cluster spec: %w", err)
+	}
 
-	rayService := rayv1.RayService{
+	rayService := &rayv1.RayService{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: rayv1.SchemeGroupVersion.String(),
 			Kind:       "RayService",
@@ -157,7 +165,7 @@ func (handler *RayServiceHandler) buildRayService(ctx context.Context, clusterCt
 	}
 
 	common.UpdateLabels(handler.KaiwoService, &rayService.ObjectMeta)
-	return rayService
+	return rayService, nil
 }
 
 func (handler *RayServiceHandler) MutateActual(ctx context.Context, clusterCtx common.ClusterContext, actual client.Object) error {

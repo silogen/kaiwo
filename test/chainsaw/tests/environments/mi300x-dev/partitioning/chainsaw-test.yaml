@@ -1,0 +1,38 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: monitoring-conditions-gpu
+spec:
+  steps:
+  - try:
+    - apply:
+        file: kaiwojob-partitioned.yaml
+    - apply:
+        file: kaiwojob-non-partitioned.yaml
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            labels:
+              kaiwo.silogen.ai/name: partitioned
+          spec:
+            nodeName: tw009
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            labels:
+              kaiwo.silogen.ai/name: non-partitioned
+          spec:
+            nodeName: tw038
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]

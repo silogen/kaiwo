@@ -1,0 +1,21 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: assert-gpu-taint
+spec:
+  steps:
+  - name: assert-gpu-taint
+    try:
+    - script:
+        content: kubectl get no kaiwo-test-worker -o json
+        check:
+          (contains($stdout, 'kaiwo.silogen.ai/gpu')): false
+    - script:
+        content: kubectl get no kaiwo-test-worker2 -o json
+        check:
+          (contains($stdout, 'kaiwo.silogen.ai/gpu')): false
+    - script:
+        content: kubectl get no kaiwo-test-worker3 -o json
+        check:
+          (contains($stdout, 'kaiwo.silogen.ai/gpu')): false
+

@@ -1,0 +1,112 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: test-job-gpu-scheduling-without-gpus
+spec:
+  steps:
+  - try:
+    - apply:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: kaiwojob-job-resource-scheduling-no-gpu
+          spec:
+            user: test@amd.com
+            image: busybox:latest
+            entrypoint: sleep 1
+    - assert:
+        resource:
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            labels:
+              kaiwo.silogen.ai/name: kaiwojob-job-resource-scheduling-no-gpu
+              kaiwo.silogen.ai/type: job
+              kaiwo.silogen.ai/user: test-amd.com
+              kueue.x-k8s.io/queue-name: kaiwo
+            name: kaiwojob-job-resource-scheduling-no-gpu
+            ownerReferences:
+            - apiVersion: kaiwo.silogen.ai/v1alpha1
+              blockOwnerDeletion: true
+              controller: true
+              kind: KaiwoJob
+              name: kaiwojob-job-resource-scheduling-no-gpu
+          spec:
+            backoffLimit: 0
+            completionMode: NonIndexed
+            completions: 1
+            manualSelector: false
+            parallelism: 1
+            podReplacementPolicy: TerminatingOrFailed
+            template:
+              metadata:
+                labels:
+                  batch.kubernetes.io/job-name: kaiwojob-job-resource-scheduling-no-gpu
+                  job-name: kaiwojob-job-resource-scheduling-no-gpu
+                  kaiwo.silogen.ai/name: kaiwojob-job-resource-scheduling-no-gpu
+                  kaiwo.silogen.ai/type: job
+                  kaiwo.silogen.ai/user: test-amd.com
+              spec:
+                containers:
+                - command:
+                  - /bin/sh
+                  - -c
+                  - sleep 1
+                  env:
+                  - name: NUM_GPUS
+                    value: "0"
+                  - name: NUM_REPLICAS
+                    value: "1"
+                  - name: NUM_GPUS_PER_REPLICA
+                    value: "0"
+                  image: busybox:latest
+                  imagePullPolicy: Always
+                  name: workload
+                  resources:
+                    limits:
+                      cpu: "2"
+                      memory: 16Gi
+                    requests:
+                      cpu: "2"
+                      memory: 16Gi
+                  terminationMessagePath: /dev/termination-log
+                  terminationMessagePolicy: File
+                  volumeMounts:
+                  - mountPath: /dev/shm
+                    name: dshm
+                dnsPolicy: ClusterFirst
+                restartPolicy: Never
+                schedulerName: kaiwo-scheduler
+                securityContext:
+                  fsGroup: 1000
+                  runAsGroup: 1000
+                  runAsUser: 1000
+                terminationGracePeriodSeconds: 30
+                volumes:
+                - emptyDir:
+                    medium: Memory
+                    sizeLimit: 1Gi
+                  name: dshm
+            ttlSecondsAfterFinished: 3600
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: kaiwojob-job-resource-scheduling-no-gpu
+          spec:
+            dangerous: false
+            entrypoint: sleep 1
+            ray: false
+            replicas: 1
+            user: test@amd.com
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
