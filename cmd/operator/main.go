@@ -351,24 +351,20 @@ func main() {
 		}
 	}
 
-	if monitoring.IsMetricsMonitoringEnabled() {
-		setupLog.Info("Adding metrics watcher")
-		metricsWatcher, err := monitoring.NewMetricsWatcherFromEnv(
-			mgr.GetClient(),
-			mgr.GetScheme(),
-			mgr.GetEventRecorderFor(monitoring.MetricsComponentName),
-		)
-		if err != nil {
-			setupLog.Error(err, "unable to create metrics watcher")
-			os.Exit(1)
-		}
+	setupLog.Info("Adding metrics watcher")
+	metricsWatcher, err := monitoring.NewMetricsWatcher(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+		mgr.GetEventRecorderFor(monitoring.MetricsComponentName),
+	)
+	if err != nil {
+		setupLog.Error(err, "unable to create metrics watcher")
+		os.Exit(1)
+	}
 
-		if err := mgr.Add(metricsWatcher); err != nil {
-			setupLog.Error(err, "unable to add metrics watcher to manager")
-			os.Exit(1)
-		}
-	} else {
-		setupLog.Info("Metrics watcher is not enabled")
+	if err := mgr.Add(metricsWatcher); err != nil {
+		setupLog.Error(err, "unable to add metrics watcher to manager")
+		os.Exit(1)
 	}
 
 	// Ensure that the config exists

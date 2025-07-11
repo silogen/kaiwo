@@ -15,14 +15,17 @@
 package monitoring
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"fmt"
-	"io"
-	"net/http"
-	"os"
 	"slices"
+	"strconv"
 	"time"
+
+	ctrl "sigs.k8s.io/controller-runtime"
+
+	"k8s.io/client-go/kubernetes"
 
 	"github.com/silogen/kaiwo/pkg/workloads/common"
 
@@ -64,72 +67,33 @@ const (
 	MetricsComponentName = "KaiwoResourceMonitor"
 )
 
-func IsMetricsMonitoringEnabled() bool {
-	return os.Getenv(EnvMonitoringEnabled) == "true"
-}
-
 // MetricsWatcher polls Prometheus and updates Kaiwo statuses.
 type MetricsWatcher struct {
-	logger logr.Logger
-
-	metricsEndpoint string
-	pollInterval    time.Duration
-
+	logger    logr.Logger
+	clientset *kubernetes.Clientset
 	k8sClient client.Client
 	scheme    *runtime.Scheme
 	recorder  record.EventRecorder
 }
 
-// NewMetricsWatcherFromEnv constructs a MetricsWatcher from environment variables.
-func NewMetricsWatcherFromEnv(
-	k8sClient client.Client,
-	scheme *runtime.Scheme,
-	recorder record.EventRecorder,
-) (*MetricsWatcher, error) {
-	endpoint := os.Getenv(EnvMetricsEndpoint)
-	if endpoint == "" {
-		return nil, fmt.Errorf("environment variable %s not set", EnvMetricsEndpoint)
-	}
-
-	pollInterval, err := ParseIntervalFromEnv(EnvPollingInterval)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse poll interval: %v", err)
-	}
-
-	return NewMetricsWatcher(
-		endpoint,
-		pollInterval,
-		k8sClient,
-		scheme,
-		recorder,
-	)
-}
-
-// ParseIntervalFromEnv retrieves a duration from an environment variable.
-func ParseIntervalFromEnv(envVar string) (time.Duration, error) {
-	interval := os.Getenv(envVar)
-	if interval == "" {
-		return 0, fmt.Errorf("environment variable %s not set", envVar)
-	}
-	return time.ParseDuration(interval)
-}
-
 // NewMetricsWatcher creates a watcher; check template.Err on parse.
 func NewMetricsWatcher(
-	endpoint string,
-	pollInterval time.Duration,
 	k8sClient client.Client,
 	scheme *runtime.Scheme,
 	recorder record.EventRecorder,
 ) (*MetricsWatcher, error) {
 	logger := log.Log.WithName("MetricsWatcher")
+	cfg := ctrl.GetConfigOrDie()
+	kc, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
+	}
 	return &MetricsWatcher{
-		logger:          logger,
-		metricsEndpoint: endpoint,
-		pollInterval:    pollInterval,
-		k8sClient:       k8sClient,
-		scheme:          scheme,
-		recorder:        recorder,
+		logger:    logger,
+		k8sClient: k8sClient,
+		scheme:    scheme,
+		recorder:  recorder,
+		clientset: kc,
 	}, nil
 }
 
@@ -137,23 +101,34 @@ func NewMetricsWatcher(
 func (m *MetricsWatcher) Start(ctx context.Context) error {
 	logger := log.FromContext(ctx).WithName("MetricsWatcher")
 	logger.Info("Starting metrics watcher")
-	ticker := time.NewTicker(m.pollInterval)
-	defer ticker.Stop()
+
+	ctx2, err := common.GetContextWithConfig(ctx, m.k8sClient)
+	if err != nil {
+		return fmt.Errorf("getting config: %w", err)
+	}
+	config := common.ConfigFromContext(ctx2)
+	pollInterval := config.ResourceMonitoring.GetPollInterval()
 
 	for {
 		select {
 		case <-ctx.Done():
-			m.logger.Info("shutting down")
+			logger.Info("Stopping metrics watcher")
 			return nil
-		case <-ticker.C:
-			ctx2, err := common.GetContextWithConfig(ctx, m.k8sClient)
+
+		case <-time.After(pollInterval):
+			if config.ResourceMonitoring.Enabled {
+				if err := m.pollMetrics(ctx2); err != nil {
+					logger.Error(err, "failed to poll metrics")
+				}
+			}
+
+			// Update polling interval
+			ctx2, err = common.GetContextWithConfig(ctx, m.k8sClient)
 			if err != nil {
-				m.logger.Error(err, "failed to get Kaiwo config")
-				continue
+				return fmt.Errorf("getting config: %w", err)
 			}
-			if err := m.pollMetrics(ctx2); err != nil {
-				m.logger.Error(err, "pollMetrics")
-			}
+			config = common.ConfigFromContext(ctx2)
+			pollInterval = config.ResourceMonitoring.GetPollInterval()
 		}
 	}
 }
@@ -179,9 +154,13 @@ func (entry *GpuMetricsEntry) IsValid() bool {
 // pollMetrics fetches Prometheus data and processes each result.
 func (m *MetricsWatcher) pollMetrics(ctx context.Context) error {
 	config := common.ConfigFromContext(ctx)
+	if !m.isCollectorAvailable(ctx) {
+		return fmt.Errorf("no service '%s' in namespace '%s'", config.ResourceMonitoring.MetricsServiceConfig.Name, config.ResourceMonitoring.MetricsServiceConfig.Namespace)
+	}
+
 	logger := log.FromContext(ctx).WithName("MetricsWatcher")
 	baseutils.Debug(logger, "Polling for metrics")
-	metrics, err := scrapeMetrics(m.metricsEndpoint)
+	metrics, err := m.scrapeMetrics(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to scrape metrics: %v", err)
 	}
@@ -194,6 +173,7 @@ func (m *MetricsWatcher) pollMetrics(ctx context.Context) error {
 	if err := m.handleKaiwoWorkloads(ctx, config, kaiwoWorkloads); err != nil {
 		return fmt.Errorf("failed to handle Kaiwo workloads: %v", err)
 	}
+
 	return nil
 }
 
@@ -206,6 +186,11 @@ func filterForKaiwoPods(config common.KaiwoConfigContext, metrics *dto.MetricFam
 
 		utilizationPercentage := *m.Gauge.Value
 
+		// gpu_gfx_activity{card_model="102-G30211-0C",card_series="AMD Instinct MI300X OAM",card_vendor="AMD",cluster_name="",container="",driver_version="6.12.12",gpu_compute_partition_type="spx",gpu_id="2",gpu_memory_partition_type="nps1",gpu_partition_id="0",gpu_uuid="ccff74a1-0000-1000-80e0-c6d49f5b0d86",hostname="tw038",namespace="",pod="",serial_number="692409005408",vbios_version="022.040.003.043.000001"} 0
+
+		// gpu_gfx_activity{card_model="102-G30211-0C",card_series="AMD Instinct MI300X OAM",card_vendor="AMD",driver_version="6.12.12",gpu_compute_partition_type="cpx",gpu_id="47",gpu_memory_partition_type="nps4",gpu_partition_id="0",gpu_uuid="c3ff74a1-0000-0000-80ff-88426fc31c9e",hostname="tw009",instance="10.42.1.221:5000",job="gpu-exporter",node="tw009",pod="default-metrics-exporter-vvvkm",serial_number="692409005296",vbios_version="022.040.003.043.000001"} 0
+
+		// gpu_gfx_activity{card_model="102-G30211-0C",card_series="AMD Instinct MI300X OAM",card_vendor="AMD",container="workload",driver_version="6.12.12",gpu_compute_partition_type="spx",gpu_id="0",gpu_memory_partition_type="nps1",gpu_partition_id="0",gpu_uuid="3dff74a1-0000-1000-80d3-0c4c1df1df58",hostname="tw038",instance="10.42.0.176:5000",job="gpu-exporter",namespace="default",node="tw038",pod="high-utilization-57ls6",serial_number="692409005328",vbios_version="022.040.003.043.000001"} 100
 		entry := GpuMetricsEntry{
 			Namespace:             labels["namespace"],
 			PodName:               labels["pod"],
@@ -332,23 +317,51 @@ func (m *MetricsWatcher) handleKaiwoWorkloads(ctx context.Context, config common
 
 // scrapeMetrics scrapes the given URL, parses all families,
 // and returns a map from metric name → MetricFamily.
-func scrapeMetrics(url string) (map[string]*dto.MetricFamily, error) {
-	httpClient := http.Client{Timeout: 5 * time.Second}
-	resp, err := httpClient.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			panic(err)
-		}
-	}(resp.Body)
+func (m *MetricsWatcher) scrapeMetrics(ctx context.Context) (map[string]*dto.MetricFamily, error) {
+	logger := log.FromContext(ctx)
+	config := common.ConfigFromContext(ctx)
+	var (
+		namespace   = config.ResourceMonitoring.MetricsServiceConfig.Namespace
+		serviceName = config.ResourceMonitoring.MetricsServiceConfig.Name
+		metricsPort = config.ResourceMonitoring.MetricsServiceConfig.Port
+	)
 
-	// Prometheus text or OpenMetrics parsing
+	portStr := strconv.Itoa(int(metricsPort))
+
+	// Build the service-proxy request:
+	// GET /api/v1/namespaces/{ns}/services/{service}:{port}/proxy/metrics
+	req := m.clientset.CoreV1().RESTClient().
+		Get().
+		Namespace(namespace).
+		Resource("services").
+		Name(fmt.Sprintf("%s:%s", serviceName, portStr)).
+		SubResource("proxy").
+		Suffix("metrics")
+
+	// Execute the request
+	data, err := req.Do(ctx).Raw()
+	if err != nil {
+		return nil, fmt.Errorf("failed to proxy metrics from service %s: %w", serviceName, err)
+	}
+
+	// Parse the Prometheus metrics
 	parser := expfmt.TextParser{}
-	mf, err := parser.TextToMetricFamilies(resp.Body)
-	return mf, err
+	metricFamilies, err := parser.TextToMetricFamilies(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse metrics: %w", err)
+	}
+
+	baseutils.Debug(logger, "Successfully scraped metrics",
+		"metric_families", len(metricFamilies))
+
+	return metricFamilies, nil
+}
+
+func (m *MetricsWatcher) isCollectorAvailable(ctx context.Context) bool {
+	config := common.ConfigFromContext(ctx)
+
+	_, err := m.clientset.CoreV1().Services(config.ResourceMonitoring.MetricsServiceConfig.Namespace).Get(ctx, config.ResourceMonitoring.MetricsServiceConfig.Name, metav1.GetOptions{})
+	return err == nil
 }
 
 func parseLabels(metric *dto.Metric) map[string]string {

@@ -1,0 +1,97 @@
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: gpu-metrics-collector
+  namespace: kube-amd-gpu
+spec:
+  mode: deployment
+  image: otel/opentelemetry-collector:0.82.0
+  serviceAccount: default
+
+  # expose TWO ports:
+  ports:
+    # 1) the Collector's own telemetry (default)
+  - name: telemetry
+    port: 8888
+    targetPort: 8888
+    protocol: TCP
+    # 2) your Prometheus pipeline exporter
+  - name: prometheus
+    port: 5000
+    targetPort: 5000
+    protocol: TCP
+
+  config:
+    receivers:
+      prometheus:
+        config:
+          scrape_configs:
+          - job_name: gpu-exporter
+            scrape_interval: 10s
+            honor_labels: true
+            kubernetes_sd_configs:
+            - role: endpoints
+              namespaces:
+                names: [kube-amd-gpu]
+
+            relabel_configs:
+                # Keep only endpoints for our specific service
+            - source_labels: [__meta_kubernetes_service_name]
+              regex: default-metrics-exporter
+              action: keep
+                # Keep only the metrics port
+            - source_labels: [__meta_kubernetes_endpoint_port_name]
+              regex: exporter-port
+              action: keep
+                # Optional: Add labels from service/pod metadata
+#                - source_labels: [__meta_kubernetes_pod_name]
+#                  target_label: pod
+            - source_labels: [__meta_kubernetes_pod_node_name]
+              target_label: node
+
+#                # add the pod's namespace
+#                - source_labels: [__meta_kubernetes_namespace]
+#                  action: replace
+#                  target_label: namespace
+#
+#                # add the name of the container in that pod
+#                - source_labels: [__meta_kubernetes_pod_container_name]
+#                  action: replace
+#                  target_label: container
+
+#                # only endpoint slices for our new Service
+#                # 2) Only keep slices for our Service
+#                - source_labels: [__meta_kubernetes_endpoint_slice_label_kubernetes_io_service_name]
+#                  regex: gpu-exporter-metrics
+#                  action: keep
+#
+#                # 3) Only keep addresses whose target is a Pod
+#                - source_labels: [__meta_kubernetes_endpoint_slice_address_target_ref_kind]
+#                  regex: Pod
+#                  action: keep
+#
+#                # 4) Only keep the port entry whose name is "metrics"
+#                - source_labels: [__meta_kubernetes_endpoint_port_name]
+#                  regex: metrics
+#                  action: keep
+
+            metrics_path: /metrics
+            scheme: http
+
+    processors:
+      batch: {}
+
+    exporters:
+      prometheus:
+        endpoint: "0.0.0.0:5000"
+
+    service:
+#      telemetry:
+#        logs:
+#          level: debug
+#          development: true
+      pipelines:
+        metrics:
+          receivers: [prometheus]
+          processors: [batch]
+          exporters: [prometheus]

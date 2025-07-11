@@ -22,6 +22,11 @@ import (
 	"sort"
 	"strconv"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
+
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 
 	corev1 "k8s.io/api/core/v1"
@@ -174,7 +179,7 @@ func CalculateGpuRequirements(ctx context.Context, clusterCtx ClusterContext, gp
 	var candidateNodes []NodeInfo
 
 	for _, node := range clusterCtx.Nodes {
-		if nodeMatchesRequirements(node, *gpuResourceRequirements) {
+		if nodeMatchesRequirements(ctx, node, *gpuResourceRequirements) {
 			candidateNodes = append(candidateNodes, node)
 		}
 	}
@@ -219,7 +224,9 @@ func CalculateGpuRequirements(ctx context.Context, clusterCtx ClusterContext, gp
 }
 
 // nodeMatchesRequirements checks if the given node matches the workload's requirements
-func nodeMatchesRequirements(nodeInfo NodeInfo, gpuResourceRequirements v1alpha1.GpuResourceRequirements) bool {
+func nodeMatchesRequirements(ctx context.Context, nodeInfo NodeInfo, gpuResourceRequirements v1alpha1.GpuResourceRequirements) bool {
+	config := ConfigFromContext(ctx)
+
 	if nodeInfo.IsUnschedulable() {
 		return false
 	}
@@ -248,13 +255,17 @@ func nodeMatchesRequirements(nodeInfo NodeInfo, gpuResourceRequirements v1alpha1
 		}
 	}
 
-	// If the node partitioning is different, skip
-	if gpuInfo.IsPartitioned() != gpuResourceRequirements.Partitioned {
+	// If the node GPU vendor is different, skip
+	if gpuInfo.Vendor != gpuResourceRequirements.Vendor {
 		return false
 	}
 
-	// If the node GPU vendor is different, skip
-	if gpuInfo.Vendor != gpuResourceRequirements.Vendor {
+	// If the node partitioning is different, skip
+	if partitioned := gpuInfo.IsPartitioned(); partitioned != nil && *partitioned != gpuResourceRequirements.Partitioned {
+		// The node partitioning does not match
+		return false
+	} else if partitioned == nil && config.Scheduling.StrictNodeMatching {
+		// The node does not have partitioning labels and strict node matching is enforced
 		return false
 	}
 
@@ -307,10 +318,13 @@ func bestMatchingVramTier(nodes []NodeInfo, gpuResourceRequirements v1alpha1.Gpu
 
 	for _, node := range nodes {
 		gpuInfo := node.GpuInfo
+		if gpuInfo.LogicalVramPerGpu == nil {
+			continue
+		}
 		key := gpuInfo.LogicalVramPerGpu.String()
 		entry, exists := tiersNodeGpuCapacities[key]
 		if !exists {
-			entry.vram = gpuInfo.LogicalVramPerGpu
+			entry.vram = *gpuInfo.LogicalVramPerGpu
 			entry.gpus = make([]int, 0)
 		}
 		entry.gpus = append(entry.gpus, gpuInfo.LogicalCount)
@@ -399,23 +413,40 @@ const (
 	UnschedulableClusterQueueNotFound SchedulingReason = "ClusterQueueNotFound"
 )
 
-func GetSchedulableCondition(ctx context.Context, clusterCtx ClusterContext, workload KaiwoWorkload) metav1.Condition {
-	queueConfigCondition := getQueueConfigCondition(ctx, clusterCtx, workload)
+func GetSchedulableCondition(ctx context.Context, k8sClient client.Client, clusterCtx ClusterContext, workload KaiwoWorkload) (metav1.Condition, error) {
+	queueConfigCondition, err := getQueueConfigCondition(ctx, k8sClient, clusterCtx, workload)
+	if err != nil {
+		return metav1.Condition{}, fmt.Errorf("error getting queue config condition: %w", err)
+	}
 
 	if queueConfigCondition.Status == metav1.ConditionFalse {
-		return queueConfigCondition
+		return queueConfigCondition, nil
 	}
 	gpuSchedulableCondition := getGpuSchedulableCondition(ctx, clusterCtx, workload)
 
 	// TODO add another reason that indicates the workload can be scheduled, but not immediately?
 	// TODO add checks for other cluster resources?
 
-	return gpuSchedulableCondition
+	return gpuSchedulableCondition, nil
 }
 
-func getQueueConfigCondition(ctx context.Context, clusterCtx ClusterContext, workload KaiwoWorkload) metav1.Condition {
+func getQueueConfigCondition(ctx context.Context, k8sClient client.Client, clusterCtx ClusterContext, workload KaiwoWorkload) (metav1.Condition, error) {
 	kaiwoQueueConfig := clusterCtx.KaiwoQueueConfig
 	clusterQueueName := GetClusterQueueName(ctx, workload)
+
+	clusterQueue := &kueuev1beta1.ClusterQueue{}
+	if err := k8sClient.Get(ctx, client.ObjectKey{Name: clusterQueueName}, clusterQueue); err != nil && !apierrors.IsNotFound(err) {
+		return metav1.Condition{}, fmt.Errorf("failed to get ClusterQueue %s: %w", clusterQueueName, err)
+	} else if err != nil {
+		// If ClusterQueue does not exist at all, it may be the case that it will be created later
+		return metav1.Condition{
+			Type:    SchedulableType,
+			Status:  metav1.ConditionFalse,
+			Reason:  string(UnschedulableClusterQueueNotFound),
+			Message: fmt.Sprintf("Cluster queue '%s' does not exist", clusterQueueName),
+		}, nil
+	}
+
 	workloadNamespace := workload.GetKaiwoWorkloadObject().GetNamespace()
 	for _, clusterQueue := range kaiwoQueueConfig.Spec.ClusterQueues {
 		if clusterQueue.Name == clusterQueueName {
@@ -425,7 +456,7 @@ func getQueueConfigCondition(ctx context.Context, clusterCtx ClusterContext, wor
 					Status:  metav1.ConditionTrue,
 					Reason:  string(Schedulable),
 					Message: "Cluster queue has no namespace restrictions",
-				}
+				}, nil
 			}
 			for _, namespace := range clusterQueue.Namespaces {
 				if namespace == workloadNamespace {
@@ -434,7 +465,7 @@ func getQueueConfigCondition(ctx context.Context, clusterCtx ClusterContext, wor
 						Status:  metav1.ConditionTrue,
 						Reason:  string(Schedulable),
 						Message: "Cluster queue namespace matches",
-					}
+					}, nil
 				}
 			}
 			return metav1.Condition{
@@ -442,7 +473,7 @@ func getQueueConfigCondition(ctx context.Context, clusterCtx ClusterContext, wor
 				Status:  metav1.ConditionFalse,
 				Reason:  string(UnschedulableWrongQueueNamespace),
 				Message: fmt.Sprintf("Cluster queue '%s' defines one or more namespaces, but workload namespace '%s' is not one of them", clusterQueueName, workloadNamespace),
-			}
+			}, nil
 		}
 	}
 	return metav1.Condition{
@@ -450,7 +481,7 @@ func getQueueConfigCondition(ctx context.Context, clusterCtx ClusterContext, wor
 		Status:  metav1.ConditionFalse,
 		Reason:  string(UnschedulableClusterQueueNotFound),
 		Message: fmt.Sprintf("Cluster queue '%s' is not defined in KaiwoQueueConfig '%s'", clusterQueueName, kaiwoQueueConfig.Name),
-	}
+	}, nil
 }
 
 func getGpuSchedulableCondition(ctx context.Context, clusterCtx ClusterContext, workload KaiwoWorkload) metav1.Condition {

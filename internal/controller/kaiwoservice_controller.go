@@ -20,6 +20,12 @@ import (
 	"context"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/api/equality"
+
+	"sigs.k8s.io/controller-runtime/pkg/builder"
+
+	"sigs.k8s.io/controller-runtime/pkg/event"
+
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/silogen/kaiwo/pkg/workloads/common"
@@ -80,15 +86,55 @@ func (r *KaiwoServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 }
 
+func AppWrapperChangedPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldObj := e.ObjectOld.(*appwrapperv1beta2.AppWrapper)
+			newObj := e.ObjectNew.(*appwrapperv1beta2.AppWrapper)
+
+			if !equality.Semantic.DeepEqual(oldObj.Status.Conditions, newObj.Status.Conditions) {
+				return true
+			}
+
+			return oldObj.Status.Phase != newObj.Status.Phase
+		},
+		CreateFunc:  func(e event.CreateEvent) bool { return false },
+		DeleteFunc:  func(e event.DeleteEvent) bool { return false },
+		GenericFunc: func(e event.GenericEvent) bool { return false },
+	}
+}
+
+func DeploymentChangedPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldObj := e.ObjectOld.(*appsv1.Deployment)
+			newObj := e.ObjectNew.(*appsv1.Deployment)
+
+			if oldObj.Status.AvailableReplicas != newObj.Status.AvailableReplicas {
+				return true
+			}
+
+			if !equality.Semantic.DeepEqual(oldObj.Status.Conditions, newObj.Status.Conditions) {
+				return true
+			}
+
+			return false
+		},
+		CreateFunc:  func(e event.CreateEvent) bool { return false },
+		DeleteFunc:  func(e event.DeleteEvent) bool { return false },
+		GenericFunc: func(e event.GenericEvent) bool { return false },
+	}
+}
+
 func (r *KaiwoServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Recorder = mgr.GetEventRecorderFor("kaiwoservice-controller")
 
 	return ctrl.NewControllerManagedBy(mgr).
 		WithEventFilter(predicate.ResourceVersionChangedPredicate{}). // Catch status changes as well
 		For(&kaiwo.KaiwoService{}).
-		Owns(&appsv1.Deployment{}).
+		Owns(&appsv1.Deployment{}, builder.WithPredicates(DeploymentChangedPredicate())).
 		Owns(&rayv1.RayService{}).
-		Owns(&appwrapperv1beta2.AppWrapper{}).
+		Owns(&appwrapperv1beta2.AppWrapper{}, builder.WithPredicates(AppWrapperChangedPredicate())).
 		Named("kaiwoservice").
 		Complete(r)
 }

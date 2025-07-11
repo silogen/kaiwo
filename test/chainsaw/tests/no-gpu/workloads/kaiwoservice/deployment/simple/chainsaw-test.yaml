@@ -4,7 +4,7 @@ metadata:
   name: kaiwoservice-reconciliation
 spec:
   timeouts:
-    assert: 90s
+    cleanup: 60s
   steps:
   - try:
     - apply:
