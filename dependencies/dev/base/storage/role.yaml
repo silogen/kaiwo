@@ -1,0 +1,60 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: nfs-provisioner-runner
+rules:
+  # allow dynamic provisioning to manage PVs and PVCs
+- apiGroups: [""]
+  resources:
+  - persistentvolumes
+  - persistentvolumeclaims
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - delete
+
+  # allow provisioning to create & delete StorageClasses
+- apiGroups: ["storage.k8s.io"]
+  resources:
+  - storageclasses
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - delete
+
+  # allow the provisioner to record events (so PVC bind failures etc. are surfaced)
+- apiGroups: [""]
+  resources:
+  - events
+  verbs:
+  - create
+  - update
+  - patch
+
+  # allow it to lookup the NFS Server Service (to discover its ClusterIP)
+- apiGroups: [""]
+  resources:
+  - services
+  - endpoints
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: run-nfs-provisioner
+subjects:
+- kind: ServiceAccount
+  name: nfs-provisioner-nfs-server-provisioner      # your release’s SA name
+  namespace: default                                 # the namespace you installed into
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: nfs-provisioner-runner

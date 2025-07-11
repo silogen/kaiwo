@@ -18,7 +18,6 @@ spec:
           spec:
             resourceMonitoring:
               lowUtilizationThreshold: 10
-                  # Set termination to false for now
               terminateUnderutilized: false
               terminateUnderutilizedAfter: 30s
               targetNamespaces:
@@ -50,7 +49,7 @@ spec:
   - name: "Create workload"
     try:
     - apply:
-        file: ../../../../../workloads/inference/LLMs/online-inference/vllm-online-single-multinode/kaiwoservice-llama-3.1-8b-instruct.yaml
+        file: ../../../../../../workloads/inference/LLMs/online-inference/vllm-online-single-multinode/kaiwoservice-llama-3.1-8b-instruct.yaml
   - name: "Wait for workload to be ready"
     try:
     - assert:

@@ -1,0 +1,43 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- gpu-config-cm.yaml
+- device-config.yaml
+
+# There are still some issues with the helm install here, so it is installed separately
+#
+#helmCharts:
+#  - name: gpu-operator-charts
+#    repo: https://rocm.github.io/gpu-operator
+#    version: v1.3.0
+#    releaseName: amd-gpu-operator
+#    namespace: kube-amd-gpu
+#    includeCRDs: true
+#    valuesInline:
+#      # Enable ROCm SMI for better MI300X telemetry
+#      prometheus:
+#        enabled: true
+#      # Ensure proper telemetry collection for MI300X
+#      operator:
+#        defaultRuntime: containerd
+#      upgradeCRD: false
+#      crds:
+#        defaultCR:
+#          install: true
+#
+## There is a post-delete hook which deletes the CRDs
+## During development, if the operator hasn't been cleanly uninstalled, the hook will run even during install
+## leading to a faulty installation. There is no way to disable this hook via helm values, so the whole job is deleted here
+#patches:
+#  - target:
+#      kind: Job
+#      name: delete-custom-resource-definitions
+#      namespace: kube-amd-gpu
+#    patch: |
+#      $patch: delete
+#      apiVersion: batch/v1
+#      kind: Job
+#      metadata:
+#        name: delete-custom-resource-definitions
+#        namespace: kube-amd-gpu

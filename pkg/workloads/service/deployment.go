@@ -16,7 +16,12 @@ package workloadservice
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+
+	"k8s.io/apimachinery/pkg/api/errors"
+
+	appwrapperv1beta2 "github.com/project-codeflare/appwrapper/api/v1beta2"
 
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
@@ -24,15 +29,13 @@ import (
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
+	"github.com/silogen/kaiwo/pkg/workloads/common"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	"github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 func GetDefaultDeploymentSpec(config common.KaiwoConfigContext, dangerous bool) appsv1.DeploymentSpec {
@@ -68,10 +71,10 @@ func (handler *DeploymentHandler) GetCommonStatusSpec() *kaiwo.CommonStatusSpec 
 }
 
 func (handler *DeploymentHandler) GetInitializedObject() client.Object {
-	return &appsv1.Deployment{
+	return &appwrapperv1beta2.AppWrapper{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: appsv1.SchemeGroupVersion.String(),
-			Kind:       "Deployment",
+			APIVersion: appwrapperv1beta2.GroupVersion.String(),
+			Kind:       "AppWrapper",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      handler.KaiwoService.Name,
@@ -82,55 +85,131 @@ func (handler *DeploymentHandler) GetInitializedObject() client.Object {
 }
 
 func (handler *DeploymentHandler) BuildDesired(ctx context.Context, clusterCtx common.ClusterContext) (client.Object, error) {
-	logger := log.FromContext(ctx)
-	config := common.ConfigFromContext(ctx)
+	desiredDeployment, err := handler.buildDeploymentTemplate(ctx, clusterCtx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build desired deployment: %w", err)
+	}
 
-	svc := handler.KaiwoService
-	svcSpec := svc.Spec
+	specBytes, err := json.Marshal(desiredDeployment.Spec)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal Deployment spec: %w", err)
+	}
+	labelsBytes, err := json.Marshal(desiredDeployment.ObjectMeta.Labels)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal Deployment labels: %w", err)
+	}
 
-	var depSpec appsv1.DeploymentSpec
+	// 3) initialize the AppWrapper
+	applicationWrapper := handler.GetInitializedObject().(*appwrapperv1beta2.AppWrapper)
+	applicationWrapper.Labels = map[string]string{
+		common.QueueLabel: common.GetClusterQueueName(ctx, handler),
+	}
+	if priorityClass := handler.GetCommonSpec().WorkloadPriorityClass; priorityClass != "" {
+		applicationWrapper.Labels[common.WorkloaddPriorityClassLabel] = priorityClass
+	}
 
-	if svcSpec.Deployment == nil {
-		depSpec = GetDefaultDeploymentSpec(
-			config,
-			svcSpec.Dangerous,
+	// 4) configure the wrapper to suspend until Kueue admits all replicas
+	applicationWrapper.Spec = appwrapperv1beta2.AppWrapperSpec{
+		Suspend: true,
+		Components: []appwrapperv1beta2.AppWrapperComponent{{
+			DeclaredPodSets: []appwrapperv1beta2.AppWrapperPodSet{{
+				Replicas: desiredDeployment.Spec.Replicas,
+				Path:     "template.spec.template",
+			}},
+			Template: runtime.RawExtension{
+				Raw: []byte(fmt.Sprintf(`{
+  "apiVersion": "apps/v1",
+  "kind":       "Deployment",
+  "metadata": {
+    "name":      %q,
+    "namespace": %q,
+    "labels":    %s
+  },
+  "spec": %s
+}`, desiredDeployment.Name,
+					desiredDeployment.Namespace,
+					labelsBytes,
+					specBytes)),
+			},
+		}},
+	}
+
+	// 5) propagate KaiwoService labels onto the AppWrapper itself
+	common.UpdateLabels(handler.KaiwoService, &applicationWrapper.ObjectMeta)
+
+	return applicationWrapper, nil
+}
+
+func (handler *DeploymentHandler) buildDeploymentTemplate(
+	ctx context.Context,
+	clusterContext common.ClusterContext,
+) (*appsv1.Deployment, error) {
+	kaiwoService := handler.KaiwoService
+	configuration := common.ConfigFromContext(ctx)
+
+	var deploymentSpec appsv1.DeploymentSpec
+	if kaiwoService.Spec.Deployment == nil {
+		deploymentSpec = GetDefaultDeploymentSpec(
+			configuration,
+			kaiwoService.Spec.Dangerous,
 		)
 	} else {
-		depSpec = svcSpec.Deployment.Spec
+		deploymentSpec = kaiwoService.Spec.Deployment.Spec
 	}
 
-	depSpec.Template.Spec.RestartPolicy = corev1.RestartPolicyAlways
+	deploymentSpec.Template.Spec.RestartPolicy = corev1.RestartPolicyAlways
 
-	depSpec.Selector.MatchLabels["app"] = svc.Name
+	if deploymentSpec.Selector == nil {
+		deploymentSpec.Selector = &metav1.LabelSelector{
+			MatchLabels: map[string]string{},
+		}
+	}
+	deploymentSpec.Selector.MatchLabels["app"] = kaiwoService.Name
 
-	gpuSchedulingResult, err := common.CalculateGpuRequirements(ctx, clusterCtx, handler.KaiwoService.Spec.GpuResources, svcSpec.Replicas)
+	gpuSchedulingResult, err := common.CalculateGpuRequirements(
+		ctx, clusterContext,
+		kaiwoService.Spec.GpuResources,
+		kaiwoService.Spec.Replicas,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to calculate gpu requirements: %w", err)
+		return nil, fmt.Errorf("failed to calculate GPU requirements: %w", err)
 	}
-	if svcSpec.Replicas != nil {
-		depSpec.Replicas = baseutils.Pointer(int32(*gpuSchedulingResult.Replicas))
+	if kaiwoService.Spec.Replicas != nil {
+		deploymentSpec.Replicas = baseutils.Pointer(int32(*gpuSchedulingResult.Replicas))
 	}
 
 	if err := common.AddEntrypoint(
-		svcSpec.EntryPoint,
-		&depSpec.Template,
+		kaiwoService.Spec.EntryPoint,
+		&deploymentSpec.Template,
 	); err != nil {
-		return nil, baseutils.LogErrorf(logger, "failed to add entrypoint: %v", err)
+		return nil, fmt.Errorf("failed to add entrypoint: %w", err)
 	}
 
-	common.UpdatePodSpec(config, handler.KaiwoService, gpuSchedulingResult, &depSpec.Template)
+	common.UpdatePodSpec(
+		configuration,
+		kaiwoService,
+		gpuSchedulingResult,
+		&deploymentSpec.Template,
+	)
 
-	depSpec.Template.ObjectMeta.Labels["app"] = svc.Name
-	depSpec.Template.ObjectMeta.Labels[common.QueueLabel] = common.GetClusterQueueName(ctx, handler)
+	deploymentSpec.Template.ObjectMeta.Labels["app"] = kaiwoService.Name
+	deploymentSpec.Template.ObjectMeta.Labels[common.KaiwoRunIdLabel] = string(kaiwoService.UID)
+	deploymentSpec.Template.ObjectMeta.Labels[common.QueueLabel] = common.GetClusterQueueName(ctx, handler)
 
-	dep := handler.GetInitializedObject().(*appsv1.Deployment)
-	dep.ObjectMeta.Labels = depSpec.Template.ObjectMeta.Labels
-	dep.Labels = depSpec.Template.Labels
-	dep.Spec = depSpec
+	desiredDeployment := &appsv1.Deployment{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: appsv1.SchemeGroupVersion.String(),
+			Kind:       "Deployment",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      kaiwoService.Name,
+			Namespace: kaiwoService.Namespace,
+			Labels:    deploymentSpec.Template.ObjectMeta.Labels,
+		},
+		Spec: deploymentSpec,
+	}
 
-	common.UpdateLabels(handler.KaiwoService, &dep.ObjectMeta)
-
-	return dep, nil
+	return desiredDeployment, nil
 }
 
 func (handler *DeploymentHandler) MutateActual(ctx context.Context, clusterCtx common.ClusterContext, actual client.Object) error {
@@ -148,7 +227,13 @@ func (handler *DeploymentHandler) GetActual(ctx context.Context, k8sClient clien
 }
 
 func (handler *DeploymentHandler) ObserveStatus(ctx context.Context, k8sClient client.Client, obj client.Object, previousStatus kaiwo.WorkloadStatus) (*kaiwo.WorkloadStatus, []metav1.Condition, error) {
-	deployment := obj.(*appsv1.Deployment)
+	deployment := &appsv1.Deployment{}
+	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(obj), deployment); err != nil {
+		if !errors.IsNotFound(err) {
+			return nil, nil, fmt.Errorf("failed to get deployment: %w", err)
+		}
+		return baseutils.Pointer(kaiwo.WorkloadStatusStarting), nil, nil
+	}
 	// Check for a “Progressing=False / ProgressDeadlineExceeded”
 	for _, c := range deployment.Status.Conditions {
 		if c.Type == appsv1.DeploymentProgressing &&
@@ -177,25 +262,18 @@ func (handler *DeploymentHandler) ObserveStatus(ctx context.Context, k8sClient c
 }
 
 func (handler *DeploymentHandler) GetKueueWorkloads(ctx context.Context, k8sClient client.Client) ([]kueuev1beta1.Workload, error) {
-	podList := &corev1.PodList{}
+	appWrapper := &appwrapperv1beta2.AppWrapper{}
 
-	if err := k8sClient.List(ctx, podList, client.MatchingLabels{
-		common.KaiwoRunIdLabel: string(handler.KaiwoService.UID),
-	}); err != nil {
-		return nil, fmt.Errorf("failed to list pods: %w", err)
+	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(handler.KaiwoService), appWrapper); err != nil {
+		return nil, fmt.Errorf("failed to get app wrapper: %w", err)
 	}
 
-	var workloads []kueuev1beta1.Workload
-
-	for _, pod := range podList.Items {
-		workload, err := common.GetKueueWorkload(ctx, k8sClient, pod.Namespace, string(pod.UID))
-		if err != nil {
-			return nil, fmt.Errorf("failed to get workload: %w", err)
-		}
-		if workload == nil {
-			continue
-		}
-		workloads = append(workloads, *workload)
+	workload, err := common.GetKueueWorkload(ctx, k8sClient, appWrapper.GetNamespace(), string(appWrapper.GetUID()))
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract workload from handler: %w", err)
 	}
-	return workloads, nil
+	if workload == nil {
+		return []kueuev1beta1.Workload{}, nil
+	}
+	return []kueuev1beta1.Workload{*workload}, nil
 }

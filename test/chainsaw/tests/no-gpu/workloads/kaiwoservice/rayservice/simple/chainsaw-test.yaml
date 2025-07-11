@@ -3,6 +3,9 @@ kind: Test
 metadata:
   name: kaiwoservice-reconciliation-ray
 spec:
+  timeouts:
+    assert: 90s
+    cleanup: 60s
   steps:
   - try:
     - apply:

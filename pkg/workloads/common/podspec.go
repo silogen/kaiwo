@@ -141,11 +141,6 @@ func UpdatePodSpec(config KaiwoConfigContext, workload KaiwoWorkload, gpuSchedul
 			}
 		}
 	}
-
-	// Set priority class
-	if commonMetaSpec.PriorityClass != "" {
-		template.Spec.PriorityClassName = commonMetaSpec.PriorityClass
-	}
 }
 
 // updateMainContainer updates the container specifications for main containers

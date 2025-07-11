@@ -34,8 +34,6 @@ import (
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 	common "github.com/silogen/kaiwo/pkg/workloads/common"
-
-	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 )
 
 var (
@@ -166,9 +164,10 @@ func (j *JobWebhook) ensureKaiwoJob(ctx context.Context, job *batchv1.Job, authe
 	// Set Kaiwo system labels on the original job
 	common.SetKaiwoSystemLabels(labelContext, &job.ObjectMeta)
 
-	if err := controllerutils.CreateLocalQueue(ctx, j.Client, kaiwoJobLabels[common.QueueLabel], kaiwoJob.Namespace); err != nil {
-		return fmt.Errorf("failed to create local queue: %w", err)
-	}
+	// TODO check
+	//if err := controllerutils.CreateLocalQueue(ctx, j.Client, kaiwoJobLabels[common.QueueLabel], kaiwoJob.Namespace); err != nil {
+	//	return fmt.Errorf("failed to create local queue: %w", err)
+	//}
 
 	if err := j.Client.Create(ctx, kaiwoJob); err != nil {
 		logger.Error(err, "Failed to create KaiwoJob")

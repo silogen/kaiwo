@@ -1,0 +1,37 @@
+resources:
+- namespace.yaml
+helmCharts:
+- name: loki-stack
+  repo: https://grafana.github.io/helm-charts
+  releaseName: loki-stack
+  namespace: logging
+  valuesInline:
+    grafana:
+      enabled: false
+    promtail:
+      enabled: true
+- name: kubernetes-event-exporter
+  repo: https://charts.bitnami.com/bitnami
+  namespace: logging
+  valuesInline:
+    config:
+        # Only events (no metrics)
+      metrics:
+        enabled: false
+
+        # Watch all Event resources
+      sources:
+      - resources:
+        - events
+        labels:
+        - namespace
+        - involvedObject.kind
+        - involvedObject.name
+        - reason
+        - type
+
+      outputs:
+        loki:
+          enabled: true
+            # Point at the Loki service we just installed
+          url: http://loki.logging.svc.cluster.local:3100/loki/api/v1/push

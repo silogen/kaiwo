@@ -21,6 +21,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -41,16 +42,15 @@ var ErrNoSuitableNode = errors.New("no suitable node found")
 type NodeType string
 
 const (
-	NodeTypeLabelKey             = KaiwoLabelBase + "node.type"
-	NodeGpusPartitionedLabelKey  = KaiwoLabelBase + "node.gpu.partitioned"
-	NodeGpuVendorLabelKey        = KaiwoLabelBase + "node.gpu.vendor"
-	NodeGpuModelLabelKey         = KaiwoLabelBase + "node.gpu.model"
-	NodeGpuPhysicalCountLabelKey = KaiwoLabelBase + "node.gpu"
-	NodeGpuPhysicalVramLabelKey  = KaiwoLabelBase + "node.gpu.vram"
-	NodeGpuLogicalCountLabelKey  = KaiwoLabelBase + "node.gpu.logical"
-	NodeGpuLogicalVramLabelKey   = KaiwoLabelBase + "node.gpu.logical.vram"
-	NodeGpuResourceNameLabelKey  = KaiwoLabelBase + "node.gpu.resource-name"
-	DefaultNodePoolLabelKey      = KaiwoLabelBase + "node.pool"
+	NodeTypeLabelKey             = KaiwoLabelBase + "/node.type"
+	NodeGpusPartitionedLabelKey  = KaiwoLabelBase + "/node.gpu.partitioned"
+	NodeGpuVendorLabelKey        = KaiwoLabelBase + "/node.gpu.vendor"
+	NodeGpuModelLabelKey         = KaiwoLabelBase + "/node.gpu.model"
+	NodeGpuPhysicalCountLabelKey = KaiwoLabelBase + "/node.gpu"
+	NodeGpuPhysicalVramLabelKey  = KaiwoLabelBase + "/node.gpu.vram"
+	NodeGpuLogicalCountLabelKey  = KaiwoLabelBase + "/node.gpu.logical"
+	NodeGpuLogicalVramLabelKey   = KaiwoLabelBase + "/node.gpu.logical.vram"
+	DefaultNodePoolLabelKey      = KaiwoLabelBase + "/node.pool"
 
 	NodeTypeCpuOnly NodeType = "cpu-only"
 	NodeTypeGpu     NodeType = "gpu"
@@ -134,7 +134,7 @@ func ExtractLabeledNodeInfo(node v1.Node) (*NodeInfo, error) {
 
 	var err error
 
-	gpuInfo.PhysicalCount, err = baseutils.ExtractAndConvertLabel(node.Labels, NodeGpuPhysicalCountLabelKey, strconv.Atoi)
+	gpuInfo.PhysicalCount, err = baseutils.ExtractAndConvertLabelIfExists(node.Labels, NodeGpuPhysicalCountLabelKey, strconv.Atoi)
 	if err != nil {
 		return nil, err
 	}
@@ -143,11 +143,11 @@ func ExtractLabeledNodeInfo(node v1.Node) (*NodeInfo, error) {
 		return nil, err
 	}
 
-	gpuInfo.PhysicalVramPerGpu, err = baseutils.ExtractAndConvertLabel(node.Labels, NodeGpuPhysicalVramLabelKey, resource.ParseQuantity)
+	gpuInfo.PhysicalVramPerGpu, err = baseutils.ExtractAndConvertLabelIfExists(node.Labels, NodeGpuPhysicalVramLabelKey, resource.ParseQuantity)
 	if err != nil {
 		return nil, err
 	}
-	gpuInfo.LogicalVramPerGpu, err = baseutils.ExtractAndConvertLabel(node.Labels, NodeGpuLogicalVramLabelKey, resource.ParseQuantity)
+	gpuInfo.LogicalVramPerGpu, err = baseutils.ExtractAndConvertLabelIfExists(node.Labels, NodeGpuLogicalVramLabelKey, resource.ParseQuantity)
 	if err != nil {
 		return nil, err
 	}
@@ -195,8 +195,11 @@ func (info NodeInfo) GetNominalMemory() *resource.Quantity {
 	return resource.NewQuantity(scaledBytes, resource.BinarySI)
 }
 
-func (info NodeInfo) IsGpuPartitioned() bool {
-	return info.GpuInfo != nil && info.GpuInfo.IsPartitioned()
+func (info NodeInfo) IsGpuPartitioned() *bool {
+	if info.GpuInfo == nil {
+		return nil
+	}
+	return info.GpuInfo.IsPartitioned()
 }
 
 // GetFlavorName returns the Kueue flavor name that this node should belong to
@@ -208,10 +211,12 @@ func (info NodeInfo) GetFlavorName() string {
 	} else {
 		model := strings.ReplaceAll(gpuInfo.ModelCleaned(), "-", "")
 		gpuComponent := fmt.Sprintf("%dgpu.%s.%s", gpuInfo.LogicalCount, string(gpuInfo.Vendor), model)
-		if gpuInfo.IsPartitioned() {
+		if partitioned := gpuInfo.IsPartitioned(); partitioned != nil && *partitioned {
 			gpuComponent += ".partitioned"
 		}
-		gpuComponent += "." + strings.ToLower(baseutils.QuantityToGi(gpuInfo.LogicalVramPerGpu))
+		if gpuInfo.LogicalVramPerGpu != nil {
+			gpuComponent += "." + strings.ToLower(baseutils.QuantityToGi(*gpuInfo.LogicalVramPerGpu))
+		}
 		components = append(components, gpuComponent)
 	}
 	components = append(components, strconv.Itoa(int(info.GetNominalCPU().Value()))+"core")
@@ -250,6 +255,8 @@ func extractRawNodeResources(node v1.Node) (*NodeInfo, error) {
 }
 
 type NodeGpuInfo struct {
+	// Mandatory fields, parsing a node will fail if the following fields cannot be extracted
+
 	// Vendor is the vendor of the GPU (primarily `amd` or `nvidia`)
 	Vendor v1alpha1.GpuVendor
 
@@ -259,22 +266,29 @@ type NodeGpuInfo struct {
 	// ResourceName is the GPU resource name for this GPU
 	ResourceName v1.ResourceName
 
+	// LogicalCount is the number of logical GPUs in the node and is taken from the Kubernetes node status capacity. If the GPUs are not partitioned, this is the same as PhysicalCount
+	LogicalCount int
+
+	// Optional fields, some features may not be available if the following fields are not set
+
 	// PhysicalCount is the number of physical GPUs in the node
-	PhysicalCount int
+	PhysicalCount *int
 
 	// PhysicalVramPerGpu is the vRAM that each physical GPU has.
-	PhysicalVramPerGpu resource.Quantity
-
-	// LogicalCount is the number of logical GPUs in the node. If the GPUs are not partitioned, this is the same as PhysicalCount
-	LogicalCount int
+	PhysicalVramPerGpu *resource.Quantity
 
 	// LogicalVramPerGpu is the vRAM that each logical GPU sees. If the node's GPUs are not partitioned, this is the
 	// total vRAM that each GPU has. If the node's GPUs are partitioned, this is the vRAM that each partition has.
-	LogicalVramPerGpu resource.Quantity
+	LogicalVramPerGpu *resource.Quantity
 }
 
-func (gpuInfo NodeGpuInfo) IsPartitioned() bool {
-	return gpuInfo.PhysicalCount != gpuInfo.LogicalCount
+// IsPartitioned tells if a node's GPUs are partitioned or not. If it is unclear (missing labels),
+// nil is returned.
+func (gpuInfo NodeGpuInfo) IsPartitioned() *bool {
+	if gpuInfo.PhysicalCount == nil {
+		return nil
+	}
+	return baseutils.Pointer(*gpuInfo.PhysicalCount != gpuInfo.LogicalCount)
 }
 
 // ModelCleaned returns the cleaned model name (compliant with RFC1123)
@@ -318,7 +332,7 @@ func EnsureNodeLabelsAndTaints(ctx context.Context, c client.Client, node v1.Nod
 		return fmt.Errorf("failed to extract node resource info for node '%s': %w", node.Name, err)
 	}
 
-	ensureNodeLabels(*nodeInfo, &node)
+	ensureNodeLabels(config, *nodeInfo, &node)
 	ensureNodeTaints(config, *nodeInfo, &node)
 
 	if err := c.Update(ctx, &node); err != nil {
@@ -328,11 +342,15 @@ func EnsureNodeLabelsAndTaints(ctx context.Context, c client.Client, node v1.Nod
 	return nil
 }
 
-func ensureNodeLabels(nodeResourceInfo NodeInfo, node *v1.Node) {
+func ensureNodeLabels(config KaiwoConfigContext, nodeResourceInfo NodeInfo, node *v1.Node) {
 	labels := node.Labels
 
 	labels[NodeTypeLabelKey] = string(nodeResourceInfo.Type)
 	labels[DefaultNodePoolLabelKey] = nodeResourceInfo.GetFlavorName()
+
+	if !nodeResourceInfo.IsControlPlane() || !config.Nodes.ExcludeMasterNodesFromNodePools {
+		labels[DefaultKaiwoWorkerLabel] = True
+	}
 
 	if nodeResourceInfo.Type == CPUOnly {
 		return
@@ -340,20 +358,33 @@ func ensureNodeLabels(nodeResourceInfo NodeInfo, node *v1.Node) {
 
 	gpuInfo := nodeResourceInfo.GpuInfo
 
-	if nodeResourceInfo.IsGpuPartitioned() {
+	if partitioned := nodeResourceInfo.IsGpuPartitioned(); partitioned != nil && *partitioned {
 		labels[NodeGpusPartitionedLabelKey] = True
-	} else {
+	} else if partitioned != nil && !*partitioned {
 		labels[NodeGpusPartitionedLabelKey] = False
 	}
 
 	labels[NodeGpuVendorLabelKey] = string(gpuInfo.Vendor)
 	labels[NodeGpuModelLabelKey] = gpuInfo.ModelCleaned()
-
-	labels[NodeGpuPhysicalCountLabelKey] = strconv.Itoa(gpuInfo.PhysicalCount)
 	labels[NodeGpuLogicalCountLabelKey] = strconv.Itoa(gpuInfo.LogicalCount)
 
-	labels[NodeGpuPhysicalVramLabelKey] = baseutils.QuantityToGi(gpuInfo.PhysicalVramPerGpu)
-	labels[NodeGpuLogicalVramLabelKey] = baseutils.QuantityToGi(gpuInfo.LogicalVramPerGpu)
+	if gpuInfo.PhysicalCount != nil {
+		labels[NodeGpuPhysicalCountLabelKey] = strconv.Itoa(*gpuInfo.PhysicalCount)
+	}
+	if gpuInfo.PhysicalVramPerGpu != nil {
+		labels[NodeGpuPhysicalVramLabelKey] = baseutils.QuantityToGi(*gpuInfo.PhysicalVramPerGpu)
+	}
+	if gpuInfo.LogicalVramPerGpu != nil {
+		labels[NodeGpuLogicalVramLabelKey] = baseutils.QuantityToGi(*gpuInfo.LogicalVramPerGpu)
+	}
+
+	// Topology level defaults
+	if _, exists := node.Labels[DefaultTopologyBlockLabel]; !exists {
+		node.Labels[DefaultTopologyBlockLabel] = "block-a"
+	}
+	if _, exists := node.Labels[DefaultTopologyRackLabel]; !exists {
+		node.Labels[DefaultTopologyRackLabel] = "rack-a"
+	}
 
 	node.SetLabels(labels)
 }
@@ -369,7 +400,7 @@ func ensureNodeTaints(config KaiwoConfigContext, nodeResourceInfo NodeInfo, node
 		}
 		taints = append(taints, gpuTaint)
 
-		if nodeResourceInfo.IsGpuPartitioned() {
+		if partitioned := nodeResourceInfo.IsGpuPartitioned(); partitioned != nil && *partitioned {
 			taints = append(taints, v1.Taint{
 				Key:    NodePartitionedGpusTaint,
 				Value:  True,
@@ -399,12 +430,12 @@ const (
 	AmdGpuFamilyAiCountLabelKey = "beta.amd.com/gpu.family.AI"
 	AmdGpuVramLabelKey          = "amd.com/gpu.vram"
 
-	NvidiaProductNameLabelKey    = "nvidia.com/gpu.product"
-	NvidiaGpuCountLabelKey       = "nvidia.com/gpu.count"
-	NvidiaGpuTotalMemoryLabelKey = "nvidia.com/gpu.memory.total"
-	NvidiaMigEnabledLabelKey     = "nvidia.com/mig.enabled"
-	NvidiaMigCountLabelKey       = "nvidia.com/gpu.mig.count"
-	NvidiaMigProfileLabelKey     = "nvidia.com/gpu.mig.profile"
+	NvidiaProductNameLabelKey = "nvidia.com/gpu.product"
+	// NvidiaGpuCountLabelKey       = "nvidia.com/gpu.count"
+	// NvidiaGpuTotalMemoryLabelKey = "nvidia.com/gpu.memory.total"
+	// NvidiaMigEnabledLabelKey     = "nvidia.com/mig.enabled"
+	// NvidiaMigCountLabelKey       = "nvidia.com/gpu.mig.count"
+	// NvidiaMigProfileLabelKey     = "nvidia.com/gpu.mig.profile"
 )
 
 func extractNodeGpuInfo(node v1.Node) (*NodeGpuInfo, error) {
@@ -417,48 +448,56 @@ func extractNodeGpuInfo(node v1.Node) (*NodeGpuInfo, error) {
 }
 
 func extractAmdNodeGpuInfo(node v1.Node) (*NodeGpuInfo, error) {
-	nodeLabels := node.Labels
+	labels := node.Labels
 
-	productName, exists := nodeLabels[AmdProductNameLabelKey]
-	if !exists {
-		return nil, fmt.Errorf("failed to extract product name from labels, label %s does not exist", AmdProductNameLabelKey)
+	productName, ok := labels[AmdProductNameLabelKey]
+	if !ok {
+		return nil, fmt.Errorf("missing label %q", AmdProductNameLabelKey)
 	}
 
-	physicalGpusCount, exists := nodeLabels[AmdGpuFamilyAiCountLabelKey]
-	if !exists {
-		return nil, fmt.Errorf("failed to extract physical GPU count from labels, label %s does not exist", AmdGpuFamilyAiCountLabelKey)
+	// logical count (total logical GPUs seen by K8s)
+	capQty, ok := node.Status.Capacity[AmdGpuResourceName]
+	if !ok {
+		return nil, fmt.Errorf("node has no capacity entry %q", AmdGpuResourceName)
 	}
-	physicalGpus, err := strconv.Atoi(physicalGpusCount)
+	logicalCount := int(capQty.Value())
+
+	// 3) physical GPU count (e.g. 8 on an MI300X)
+	physGPUPtr, err := baseutils.ExtractAndConvertLabelIfExists(
+		labels, AmdGpuFamilyAiCountLabelKey, strconv.Atoi,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse physical GPU count: %w", err)
+		return nil, fmt.Errorf("parsing %s: %w", AmdGpuFamilyAiCountLabelKey, err)
 	}
 
-	physicalVramCount, exists := nodeLabels[AmdGpuVramLabelKey]
-	if !exists {
-		return nil, fmt.Errorf("failed to extract logical GPU vRAM from labels, label %s does not exist", AmdGpuVramLabelKey)
-	}
-	physicalVram, err := resource.ParseQuantity(physicalVramCount + "i")
+	// 4) logical VRAM per *logical* GPU (e.g. 24Gi)
+	logicalVramPtr, err := baseutils.ExtractAndConvertLabelIfExists(
+		labels, AmdGpuVramLabelKey,
+		func(s string) (resource.Quantity, error) { return resource.ParseQuantity(s + "i") },
+	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract logical VRAM from labels: %w", err)
+		return nil, fmt.Errorf("parsing %s: %w", AmdGpuVramLabelKey, err)
 	}
 
-	logicalCount, exists := node.Status.Capacity[AmdGpuResourceName]
-	if !exists {
-		return nil, fmt.Errorf("failed to extract logical GPU count from capacity, node does not have the resource '%s' listed in its capacity", AmdGpuResourceName)
+	// 5) compute physical VRAM per *physical* GPU by:
+	//      partitionFactor = ceil(logicalCount / physicalGpus)
+	//      physicalVram = logicalVram * partitionFactor
+	var physicalVramPtr *resource.Quantity
+	if physGPUPtr != nil && logicalVramPtr != nil {
+		pf := int(math.Ceil(float64(logicalCount) / float64(*physGPUPtr)))
+		q := logicalVramPtr.DeepCopy()
+		q.Mul(int64(pf))
+		physicalVramPtr = baseutils.Pointer(q)
 	}
-
-	logicalVram := physicalVram.DeepCopy()
-	partitionFactor := int(logicalCount.Value()) / physicalGpus
-	logicalVram.Mul(int64(partitionFactor))
 
 	return &NodeGpuInfo{
 		Vendor:             v1alpha1.GpuVendorAmd,
 		ResourceName:       AmdGpuResourceName,
 		Model:              cleanAMDGPUName(productName),
-		PhysicalVramPerGpu: physicalVram,
-		PhysicalCount:      physicalGpus,
-		LogicalCount:       int(logicalCount.Value()),
-		LogicalVramPerGpu:  logicalVram,
+		PhysicalCount:      physGPUPtr,
+		LogicalCount:       logicalCount,
+		PhysicalVramPerGpu: physicalVramPtr,
+		LogicalVramPerGpu:  logicalVramPtr,
 	}, nil
 }
 
@@ -482,72 +521,80 @@ func cleanAMDGPUName(gpuID string) string {
 	return strings.TrimSpace(gpuType)
 }
 
+// extractNvidiaNodeGpuInfo extracts Nvidia node information
+// currently only supports parsing the logical GPU count
 func extractNvidiaNodeGpuInfo(node v1.Node) (*NodeGpuInfo, error) {
 	nodeLabels := node.Labels
+
+	// Mandatory info
 
 	productName, exists := nodeLabels[NvidiaProductNameLabelKey]
 	if !exists {
 		return nil, fmt.Errorf("failed to extract product name from labels, label %s does not exist", NvidiaProductNameLabelKey)
 	}
 
-	physicalGpusCount, exists := nodeLabels[NvidiaGpuCountLabelKey]
+	logicalGpusCount, exists := node.Status.Capacity[NvidiaGpuResourceName]
 	if !exists {
-		return nil, fmt.Errorf("failed to extract physical GPU count from labels, label %s does not exist", NvidiaGpuCountLabelKey)
-	}
-	physicalGpus, err := strconv.Atoi(physicalGpusCount)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse physical GPU count: %w", err)
+		return nil, fmt.Errorf("failed to extract NVIDIA GPU node info, no NVIDIA resource present")
 	}
 
-	gpuTotalVramValue, exists := nodeLabels[NvidiaGpuTotalMemoryLabelKey]
-	if !exists {
-		return nil, fmt.Errorf("failed to extract vRAM from labels, label %s does not exist", NvidiaGpuTotalMemoryLabelKey)
-	}
-	vramPerGpu, err := resource.ParseQuantity(gpuTotalVramValue + "Mi")
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse vRAM from labels: %w", err)
-	}
-	physicalVramPerGpu := vramPerGpu
+	// Optional info
 
-	resourceName := NvidiaGpuResourceName
-
-	logicalGpus := physicalGpus
-
-	migEnabled, exists := nodeLabels[NvidiaMigEnabledLabelKey]
-	if exists && migEnabled == True {
-		migProfile, exists := nodeLabels[NvidiaMigProfileLabelKey]
-		if !exists {
-			return nil, fmt.Errorf("failed to extract MIG profile, label %s does not exist", NvidiaMigProfileLabelKey)
-		}
-		resourceName = v1.ResourceName("nvidia.com/mig-" + migProfile)
-		migSplit := strings.SplitN(migProfile, ".", 2)
-		if len(migSplit) != 2 {
-			return nil, fmt.Errorf("failed to parse MIG profile '%s'", migProfile)
-		}
-		migLogicalVram, err := resource.ParseQuantity(strings.ReplaceAll(migSplit[1], "gb", "Gi"))
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse MIG logical VRAM '%s': %w", migProfile, err)
-		}
-		vramPerGpu = migLogicalVram
-
-		migCountValue, exists := nodeLabels[NvidiaMigCountLabelKey]
-		if !exists {
-			return nil, fmt.Errorf("failed to extract MIG count, label %s does not exist", NvidiaMigCountLabelKey)
-		}
-		migCount, err := strconv.Atoi(migCountValue)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse MIG count %s: %w", migCountValue, err)
-		}
-		logicalGpus *= migCount
-	}
+	//var physicalGpus *int = nil
+	//if physicalGpusCount, exists := nodeLabels[NvidiaGpuCountLabelKey]; exists {
+	//	gpus, err := strconv.Atoi(physicalGpusCount)
+	//	if err != nil {
+	//		return nil, fmt.Errorf("failed to parse physical GPU count: %w", err)
+	//	}
+	//	physicalGpus = baseutils.Pointer(gpus)
+	//}
+	//
+	//gpuTotalVramValue, exists := nodeLabels[NvidiaGpuTotalMemoryLabelKey]
+	//if !exists {
+	//	return nil, fmt.Errorf("failed to extract vRAM from labels, label %s does not exist", NvidiaGpuTotalMemoryLabelKey)
+	//}
+	//vramPerGpu, err := resource.ParseQuantity(gpuTotalVramValue + "Mi")
+	//if err != nil {
+	//	return nil, fmt.Errorf("failed to parse vRAM from labels: %w", err)
+	//}
+	//physicalVramPerGpu := vramPerGpu
+	//
+	//resourceName := NvidiaGpuResourceName
+	//
+	//logicalGpus := physicalGpus
+	//
+	//migEnabled, exists := nodeLabels[NvidiaMigEnabledLabelKey]
+	//if exists && migEnabled == True {
+	//	migProfile, exists := nodeLabels[NvidiaMigProfileLabelKey]
+	//	if !exists {
+	//		return nil, fmt.Errorf("failed to extract MIG profile, label %s does not exist", NvidiaMigProfileLabelKey)
+	//	}
+	//	resourceName = v1.ResourceName("nvidia.com/mig-" + migProfile)
+	//	migSplit := strings.SplitN(migProfile, ".", 2)
+	//	if len(migSplit) != 2 {
+	//		return nil, fmt.Errorf("failed to parse MIG profile '%s'", migProfile)
+	//	}
+	//	migLogicalVram, err := resource.ParseQuantity(strings.ReplaceAll(migSplit[1], "gb", "Gi"))
+	//	if err != nil {
+	//		return nil, fmt.Errorf("failed to parse MIG logical VRAM '%s': %w", migProfile, err)
+	//	}
+	//	vramPerGpu = migLogicalVram
+	//
+	//	migCountValue, exists := nodeLabels[NvidiaMigCountLabelKey]
+	//	if !exists {
+	//		return nil, fmt.Errorf("failed to extract MIG count, label %s does not exist", NvidiaMigCountLabelKey)
+	//	}
+	//	migCount, err := strconv.Atoi(migCountValue)
+	//	if err != nil {
+	//		return nil, fmt.Errorf("failed to parse MIG count %s: %w", migCountValue, err)
+	//	}
+	//	logicalGpus *= migCount
+	//}
 
 	return &NodeGpuInfo{
-		Vendor:             v1alpha1.GpuVendorNvidia,
-		ResourceName:       resourceName,
-		Model:              productName,
-		PhysicalCount:      physicalGpus,
-		PhysicalVramPerGpu: physicalVramPerGpu,
-		LogicalCount:       logicalGpus,
-		LogicalVramPerGpu:  vramPerGpu,
+		Vendor:       v1alpha1.GpuVendorNvidia,
+		Model:        productName,
+		LogicalCount: int(logicalGpusCount.Value()),
+		ResourceName: NvidiaGpuResourceName,
 	}, nil
 }

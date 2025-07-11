@@ -168,3 +168,15 @@ func ExtractAndConvertLabel[T any](labels map[string]string, key string, fn func
 	}
 	return converted, nil
 }
+
+func ExtractAndConvertLabelIfExists[T any](labels map[string]string, key string, fn func(string) (T, error)) (*T, error) {
+	value, exists := labels[key]
+	if !exists {
+		return nil, nil
+	}
+	converted, err := fn(value)
+	if err != nil {
+		return nil, fmt.Errorf("key %s could not be converted: %w", key, err)
+	}
+	return &converted, nil
+}
