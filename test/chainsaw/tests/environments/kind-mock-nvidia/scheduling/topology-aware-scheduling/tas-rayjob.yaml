@@ -6,8 +6,9 @@ spec:
   user: test@amd.com
   ray: true
   image: rayproject/ray:2.41.0
-  gpuVendor: "nvidia"
-  gpus: 16
+  gpuResources:
+    vendor: nvidia
+    count: 16
   resources:
     limits:
       cpu: 1

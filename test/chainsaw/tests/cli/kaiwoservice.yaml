@@ -1,0 +1,19 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoService
+metadata:
+  name: kaiwoservice
+spec:
+  user: test-user
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "100Mi"
+    limits:
+      cpu: "100m"
+      memory: "100Mi"
+  image: busybox:latest
+  entrypoint: |
+    while true; do
+      echo "Hello, world!"
+      sleep 1
+    done

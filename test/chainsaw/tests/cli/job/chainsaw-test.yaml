@@ -9,7 +9,7 @@ spec:
         entrypoint: kaiwo
         args:
         - submit
-        - --file=../../basic/basic-kaiwojob.yaml
+        - --file=../kaiwojob.yaml
         - --user=test-user
         - --namespace=$NAMESPACE
         env:
@@ -20,7 +20,7 @@ spec:
           apiVersion: kaiwo.silogen.ai/v1alpha1
           kind: KaiwoJob
           metadata:
-            name: kaiwojob-1
+            name: kaiwojob
           status:
             status: COMPLETE
     - delete:
@@ -28,7 +28,7 @@ spec:
           apiVersion: kaiwo.silogen.ai/v1alpha1
           kind: KaiwoJob
           namespace: ($namespace)
-          name: kaiwojob-1
+          name: kaiwojob
     catch:
     - command:
         entrypoint: kaiwo-dev
