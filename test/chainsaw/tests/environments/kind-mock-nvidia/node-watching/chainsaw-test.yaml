@@ -41,4 +41,4 @@ spec:
         content: |
           echo $resources
         check:
-          (contains($stdout, '{"name":"nvidia.com/gpu","nominalQuota":"8"}')): true
+          (contains($stdout, '{"name":"nvidia.com/gpu","nominalQuota":"32"}')): true

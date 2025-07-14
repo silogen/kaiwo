@@ -8,5 +8,6 @@ spec:
     headPodMemory: 1Gi
   scheduling:
     pendingThresholdForPreemption: 1s
+    strictNodeMatching: false
   storage:
     defaultStorageClass: rwx-nfs

@@ -66,7 +66,7 @@ spec:
         check:
           (contains($stdout, 'cpu')): true
           (contains($stdout, 'memory')): true
-          (contains($stdout, '{"name":"nvidia.com/gpu","nominalQuota":"8"}')): true
+          (contains($stdout, '{"name":"nvidia.com/gpu","nominalQuota":"32"}')): true
 
     - script:
         env:
@@ -77,7 +77,6 @@ spec:
         check:
           (contains($stdout, '"name":"cpu-only-')): true
           (contains($stdout, '"name":"8gpu.nvidia.teslak80')): true
-          (contains($stdout, '"name":"64gpu.nvidia.teslak80.partitioned')): true
     - apply:
         file: kaiwoqueueconfig1.yaml
     - sleep:
@@ -85,11 +84,11 @@ spec:
     - script:
         content: kubectl get resourceflavor --no-headers | wc -l
         check:
-          (contains($stdout, '8')): true
+          (contains($stdout, '5')): true
     - script:
         content: kubectl get clusterqueue --no-headers | wc -l
         check:
-          (contains($stdout, '3')): true
+          (contains($stdout, '2')): true
     - apply:
         file: kaiwoqueueconfig2.yaml
     - sleep:
@@ -97,11 +96,11 @@ spec:
     - script:
         content: kubectl get resourceflavor --no-headers | wc -l
         check:
-          (contains($stdout, '4')): true
+          (contains($stdout, '1')): true
     - script:
         content: kubectl get clusterqueue --no-headers | wc -l
         check:
-          (contains($stdout, '2')): true
+          (contains($stdout, '1')): true
     - script:
         content: kubectl get clusterqueue fizz -o json
         check:
