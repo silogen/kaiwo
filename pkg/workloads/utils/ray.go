@@ -62,7 +62,7 @@ func UpdateRayClusterSpec(ctx context.Context, clusterCtx workloadutils.ClusterC
 	commonSpec := workload.GetCommonSpec()
 	workerOptions := workloadutils.WithBaseOptions(workload)
 	workerOptions = append(workerOptions, workloadutils.WithGpuSchedulingOptions(config, commonSpec.Resources, gpuSchedulingResult)...)
-	workerOptions = append(workerOptions, workloadutils.WithDefaultImage(config.Ray.DefaultRayImage))
+	workerOptions = append(workerOptions, workloadutils.WithImage(config.Ray.DefaultRayImage))
 
 	// Update worker group specs
 	for i := range rayClusterSpec.WorkerGroupSpecs {
@@ -77,7 +77,7 @@ func UpdateRayClusterSpec(ctx context.Context, clusterCtx workloadutils.ClusterC
 	headOptions = append(headOptions, workloadutils.WithResourceRequirements(commonSpec.Resources))
 	headOptions = append(headOptions,
 		workloadutils.WithRayHeadPodResourceRequirements(resource.MustParse(config.Ray.HeadPodMemory)),
-		workloadutils.WithDefaultImage(config.Ray.DefaultRayImage),
+		workloadutils.WithImage(config.Ray.DefaultRayImage),
 	)
 
 	// Update head group spec

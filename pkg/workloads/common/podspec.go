@@ -390,13 +390,3 @@ func WithRayHeadPodResourceRequirements(headPodMemory resource.Quantity) PodTemp
 		}
 	}
 }
-
-func WithDefaultImage(image string) PodTemplateSpecOption {
-	return func(tpl *corev1.PodTemplateSpec) {
-		for i := range tpl.Spec.Containers {
-			if tpl.Spec.Containers[i].Image == "" {
-				tpl.Spec.Containers[i].Image = image
-			}
-		}
-	}
-}
