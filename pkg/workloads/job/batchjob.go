@@ -106,7 +106,8 @@ func (handler *BatchJobHandler) BuildDesired(ctx context.Context, clusterCtx com
 	if err != nil {
 		return nil, baseutils.LogErrorf(logger, "failed to calculate gpu requirements: %v", err)
 	}
-	common.UpdatePodSpec(config, handler.KaiwoJob, gpuSchedulingResult, &jobSpec.Template)
+
+	common.UpdatePodTemplateSpecNonRay(config, handler, gpuSchedulingResult, &jobSpec.Template)
 
 	batchJob := handler.GetInitializedObject().(*batchv1.Job)
 	batchJob.Spec = jobSpec

@@ -19,7 +19,6 @@ import (
 	"fmt"
 
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	workloadutils "github.com/silogen/kaiwo/pkg/workloads/common"
@@ -59,37 +58,30 @@ func UpdateRayClusterSpec(ctx context.Context, clusterCtx workloadutils.ClusterC
 	if err != nil {
 		return fmt.Errorf("failed calculating gpu requirements: %w", err)
 	}
+
+	commonSpec := workload.GetCommonSpec()
+	workerOptions := workloadutils.WithBaseOptions(workload)
+	workerOptions = append(workerOptions, workloadutils.WithGpuSchedulingOptions(config, commonSpec.Resources, gpuSchedulingResult)...)
+	workerOptions = append(workerOptions, workloadutils.WithDefaultImage(config.Ray.DefaultRayImage))
+
 	// Update worker group specs
 	for i := range rayClusterSpec.WorkerGroupSpecs {
-		workloadutils.UpdatePodSpec(config, workload, gpuSchedulingResult, &rayClusterSpec.WorkerGroupSpecs[i].Template)
+		workloadutils.UpdatePodTemplateSpec(&rayClusterSpec.WorkerGroupSpecs[i].Template, workerOptions...)
 		rayClusterSpec.WorkerGroupSpecs[i].Replicas = baseutils.Pointer(int32(*gpuSchedulingResult.Replicas))
 		rayClusterSpec.WorkerGroupSpecs[i].MinReplicas = baseutils.Pointer(int32(*gpuSchedulingResult.Replicas))
 		rayClusterSpec.WorkerGroupSpecs[i].MaxReplicas = baseutils.Pointer(int32(*gpuSchedulingResult.Replicas))
 	}
 
+	headOptions := workloadutils.WithBaseOptions(workload)
+	headOptions = append(headOptions, workloadutils.WithGpuEnvVars(gpuSchedulingResult))
+	headOptions = append(headOptions, workloadutils.WithResourceRequirements(commonSpec.Resources))
+	headOptions = append(headOptions,
+		workloadutils.WithRayHeadPodResourceRequirements(resource.MustParse(config.Ray.HeadPodMemory)),
+		workloadutils.WithDefaultImage(config.Ray.DefaultRayImage),
+	)
+
 	// Update head group spec
-	workloadutils.UpdatePodSpec(config, workload, nil, &rayClusterSpec.HeadGroupSpec.Template)
-	if headMemoryOverride := resource.MustParse(config.Ray.HeadPodMemory); headMemoryOverride.Value() > 0 {
-		for i := range rayClusterSpec.HeadGroupSpec.Template.Spec.Containers {
-			resources := rayClusterSpec.HeadGroupSpec.Template.Spec.Containers[i].Resources
-			resources.Limits[v1.ResourceMemory] = headMemoryOverride
-			resources.Requests[v1.ResourceMemory] = headMemoryOverride
-			rayClusterSpec.HeadGroupSpec.Template.Spec.Containers[i].Resources = resources
-		}
-	}
+	workloadutils.UpdatePodTemplateSpec(&rayClusterSpec.HeadGroupSpec.Template, headOptions...)
 
-	// Ensure image is set on all containers
-	ensureImage := func(podSpec *v1.PodSpec) {
-		for i := range podSpec.Containers {
-			if podSpec.Containers[i].Image == "" {
-				podSpec.Containers[i].Image = config.Ray.DefaultRayImage
-			}
-		}
-	}
-
-	ensureImage(&rayClusterSpec.HeadGroupSpec.Template.Spec)
-	for i := range rayClusterSpec.WorkerGroupSpecs {
-		ensureImage(&rayClusterSpec.WorkerGroupSpecs[i].Template.Spec)
-	}
 	return nil
 }

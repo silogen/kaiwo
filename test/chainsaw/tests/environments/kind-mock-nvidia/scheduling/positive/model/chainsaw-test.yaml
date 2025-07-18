@@ -38,7 +38,7 @@ spec:
                   - matchExpressions:
                     - key: kaiwo.silogen.ai/node.gpu.model
                       operator: In
-                      values: ["tesla-k80"]
+                      values: ["tesla-k80", "tesla-v100"]
                     - key: kaiwo.silogen.ai/node.gpu.partitioned
                       operator: In
                       values: ["false"]

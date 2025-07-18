@@ -33,11 +33,11 @@ spec:
             # Head container MUST have the same environment variables for GPUs as the worker containers!
             env:
             - name: NUM_GPUS
-              value: "14"
+              value: "8"
             - name: NUM_REPLICAS
-              value: "2"
+              value: "1"
             - name: NUM_GPUS_PER_REPLICA
-              value: "7"
+              value: "8"
             resources:
               limits:
                 cpu: "2"
