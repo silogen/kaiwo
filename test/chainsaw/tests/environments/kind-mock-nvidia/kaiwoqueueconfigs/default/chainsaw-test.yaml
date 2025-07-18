@@ -84,11 +84,11 @@ spec:
     - script:
         content: kubectl get resourceflavor --no-headers | wc -l
         check:
-          (contains($stdout, '5')): true
+          (contains($stdout, '7')): true
     - script:
         content: kubectl get clusterqueue --no-headers | wc -l
         check:
-          (contains($stdout, '2')): true
+          (contains($stdout, '3')): true
     - apply:
         file: kaiwoqueueconfig2.yaml
     - sleep:
@@ -96,11 +96,11 @@ spec:
     - script:
         content: kubectl get resourceflavor --no-headers | wc -l
         check:
-          (contains($stdout, '1')): true
+          (contains($stdout, '3')): true
     - script:
         content: kubectl get clusterqueue --no-headers | wc -l
         check:
-          (contains($stdout, '1')): true
+          (contains($stdout, '2')): true
     - script:
         content: kubectl get clusterqueue fizz -o json
         check:

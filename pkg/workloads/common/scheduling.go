@@ -63,6 +63,8 @@ func (r *GpuSchedulingResult) GpusRequested() bool {
 	return r != nil && r.GpuCountPerReplica > 0
 }
 
+//
+
 // CreateResourceRequirements creates the Kubernetes resource requirements from the GPU scheduling result
 func (r *GpuSchedulingResult) CreateResourceRequirements(defaults *corev1.ResourceRequirements) corev1.ResourceRequirements {
 	resourceRequirements := corev1.ResourceRequirements{}

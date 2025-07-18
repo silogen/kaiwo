@@ -185,12 +185,7 @@ func (handler *DeploymentHandler) buildDeploymentTemplate(
 		return nil, fmt.Errorf("failed to add entrypoint: %w", err)
 	}
 
-	common.UpdatePodSpec(
-		configuration,
-		kaiwoService,
-		gpuSchedulingResult,
-		&deploymentSpec.Template,
-	)
+	common.UpdatePodTemplateSpecNonRay(configuration, handler, gpuSchedulingResult, &deploymentSpec.Template)
 
 	deploymentSpec.Template.ObjectMeta.Labels["app"] = kaiwoService.Name
 	deploymentSpec.Template.ObjectMeta.Labels[common.KaiwoRunIdLabel] = string(kaiwoService.UID)
