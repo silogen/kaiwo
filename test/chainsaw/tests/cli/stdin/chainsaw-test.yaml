@@ -7,7 +7,7 @@ spec:
   - try:
     - script:
         content: |
-          cat ../../basic/basic-kaiwojob.yaml | kaiwo submit --user=test-user --namespace=$NAMESPACE -f --
+          cat ../kaiwojob.yaml | kaiwo submit --user=test-user --namespace=$NAMESPACE -f --
         env:
         - name: NAMESPACE
           value: ($namespace)
@@ -16,7 +16,7 @@ spec:
           apiVersion: kaiwo.silogen.ai/v1alpha1
           kind: KaiwoJob
           metadata:
-            name: kaiwojob-1
+            name: kaiwojob
           status:
             status: COMPLETE
     - delete:
@@ -24,7 +24,7 @@ spec:
           apiVersion: kaiwo.silogen.ai/v1alpha1
           kind: KaiwoJob
           namespace: ($namespace)
-          name: kaiwojob-1
+          name: kaiwojob
     catch:
     - command:
         entrypoint: kaiwo-dev
