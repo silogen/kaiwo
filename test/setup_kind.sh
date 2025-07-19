@@ -47,7 +47,7 @@ kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 "$TEST_NAME"-worker3
 kubectl apply -f test/fake-gpu-operator/fake-gpu-operator.yaml
 
 ## Deploy other dev dependencies
-kustomize build --enable-helm ../dependencies/dev/overlays/kind-test | kubectl apply -f -
+kustomize build --enable-helm "$SCRIPT_DIR/../dependencies/dev/overlays/kind-test" | kubectl apply -f -
 
 ## Deploy NFS-backed storageclass
 #if ! systemctl is-active --quiet nfs-server || [[ ! -d "$NFS_DIR" ]]; then
