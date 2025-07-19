@@ -1,0 +1,35 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: scheduling-negative-wrong-vendor
+spec:
+  steps:
+  - try:
+    - apply:
+        file: job.yaml
+    - wait:
+        apiVersion: kaiwo.silogen.ai/v1alpha1
+        kind: KaiwoJob
+        name: kaiwo-job
+        timeout: 10s
+        for:
+          condition:
+            name: Schedulable
+            value: 'false'
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: scheduling-negative-wrong-vendor
+          status:
+            status: ERROR
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
