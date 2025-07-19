@@ -113,6 +113,7 @@ func WithBaseOptions(
 		WithImage(commonMetaSpec.Image),
 		WithCommonEnvVars(commonMetaSpec),
 		WithCommonLabels(workload),
+		WithAnnotations(workload),
 		WithKueueTopology(commonMetaSpec.RequiredTopologyLabel, commonMetaSpec.PreferredTopologyLabel),
 		WithImagePullSecrets(commonMetaSpec.ImagePullSecrets),
 		WithStorageVolumes(commonMetaSpec.Storage, workload.GetKaiwoWorkloadObject().GetName()),
@@ -144,6 +145,15 @@ func WithCommonEnvVars(commonMetaSpec kaiwo.CommonMetaSpec) PodTemplateSpecOptio
 		forContainers(podTemplateSpec, true, func(container *corev1.Container) {
 			container.Env = append(container.Env, envVars...)
 		})
+	}
+}
+
+// WithAnnotations copies the Kaiwo workload's annotations to the pod template spec
+func WithAnnotations(workload KaiwoWorkload) PodTemplateSpecOption {
+	return func(podTemplateSpec *corev1.PodTemplateSpec) {
+		for key, value := range workload.GetKaiwoWorkloadObject().GetAnnotations() {
+			podTemplateSpec.Annotations[key] = value
+		}
 	}
 }
 
