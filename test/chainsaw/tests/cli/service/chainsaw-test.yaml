@@ -9,7 +9,7 @@ spec:
         entrypoint: kaiwo
         args:
         - submit
-        - --file=../../basic/basic-kaiwoservice.yaml
+        - --file=../kaiwoservice.yaml
         - --user=test-user
         - --namespace=$NAMESPACE
         env:
@@ -20,7 +20,7 @@ spec:
           apiVersion: kaiwo.silogen.ai/v1alpha1
           kind: KaiwoService
           metadata:
-            name: kaiwoservice-1
+            name: kaiwoservice
           status:
             status: RUNNING
     - assert:
@@ -28,7 +28,7 @@ spec:
           apiVersion: apps/v1
           kind: Deployment
           metadata:
-            name: kaiwoservice-1
+            name: kaiwoservice
           status:
             availableReplicas: 1
             readyReplicas: 1
@@ -38,7 +38,7 @@ spec:
           apiVersion: kaiwo.silogen.ai/v1alpha1
           kind: KaiwoService
           namespace: ($namespace)
-          name: kaiwoservice-1
+          name: kaiwoservice
     catch:
     - command:
         entrypoint: kaiwo-dev
