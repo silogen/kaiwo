@@ -7,7 +7,7 @@ spec:
   interval: 10m
   sourceRef:
     kind: GitRepository
-    name: flux-system
+    name: kaiwo-source
   path: "./flux/helm/nfs-storage"
   prune: true
   wait: true

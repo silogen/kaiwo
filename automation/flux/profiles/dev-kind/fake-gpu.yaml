@@ -8,7 +8,7 @@ spec:
   dependsOn: []
   sourceRef:
     kind: GitRepository
-    name: flux-system
+    name: kaiwo-source
     namespace: flux-system
   path: "./kustomization/nvidia-fake-gpu"
   prune: true

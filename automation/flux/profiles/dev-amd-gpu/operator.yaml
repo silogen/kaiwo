@@ -7,7 +7,7 @@ spec:
   interval: 30m
   sourceRef:
     kind: GitRepository
-    name: flux-system
+    name: kaiwo-source
   path: "./flux/helm/amd-gpu-operator"
   prune: true
   wait: true
