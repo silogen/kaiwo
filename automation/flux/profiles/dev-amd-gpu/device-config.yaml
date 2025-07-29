@@ -8,7 +8,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: kaiwo-source
-  path: "./kustomization/amd-gpu-device-config"
+  path: "./automation/kustomization/amd-gpu-device-config"
   prune: true
   wait: true
   timeout: 5m

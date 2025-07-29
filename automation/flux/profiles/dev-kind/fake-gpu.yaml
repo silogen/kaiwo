@@ -10,7 +10,7 @@ spec:
     kind: GitRepository
     name: kaiwo-source
     namespace: flux-system
-  path: "./kustomization/nvidia-fake-gpu"
+  path: "./automation/kustomization/nvidia-fake-gpu"
   prune: true
   postBuild:
     substitute:

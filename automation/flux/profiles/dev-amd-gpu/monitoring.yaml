@@ -8,7 +8,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: kaiwo-source
-  path: "./kustomization/otel-operator"
+  path: "./automation/kustomization/otel-operator"
   prune: true
   wait: true
   timeout: 5m
@@ -27,7 +27,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: kaiwo-source
-  path: "./kustomization/otel-collector"
+  path: "./automation/kustomization/otel-collector"
   prune: true
   wait: true
   timeout: 5m

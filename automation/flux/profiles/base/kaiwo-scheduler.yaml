@@ -8,7 +8,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: kaiwo-source
-  path: "./kustomization/kaiwo-scheduler"
+  path: "./automation/kustomization/kaiwo-scheduler"
   prune: true
   wait: true
   timeout: 5m

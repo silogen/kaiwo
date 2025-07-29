@@ -8,7 +8,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: kaiwo-source
-  path: "./kustomization/kuberay"
+  path: "./automation/kustomization/kuberay"
   prune: true
   wait: true
   timeout: 5m

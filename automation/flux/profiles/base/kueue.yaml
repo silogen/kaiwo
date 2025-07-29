@@ -8,7 +8,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: kaiwo-source
-  path: "./kustomization/kueue"
+  path: "./automation/kustomization/kueue"
   prune: true
   wait: true
   timeout: 5m
