@@ -8,7 +8,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: flux-system
-  path: "./flux/profiles/dev-amd-gpu"
+  path: "./automation/flux/profiles/dev-amd-gpu"
   prune: true
   wait: true
   timeout: 15m

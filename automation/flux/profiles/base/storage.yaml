@@ -8,7 +8,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: kaiwo-source
-  path: "./flux/helm/nfs-storage"
+  path: "./automation/flux/helm/nfs-storage"
   prune: true
   wait: true
   timeout: 5m

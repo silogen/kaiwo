@@ -7,8 +7,8 @@ spec:
   interval: 10m
   sourceRef:
     kind: GitRepository
-    name: flux-system
-  path: "./flux/profiles/dev-kind"
+    name: kaiwo-source
+  path: "./automation/flux/profiles/dev-kind"
   prune: true
   wait: true
   timeout: 5m
