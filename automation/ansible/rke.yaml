@@ -1,0 +1,135 @@
+- name: Setup RKE2 cluster with shared secret
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    rke2_server_url: "https://get.rke2.io"
+    rke2_config_path: "/etc/rancher/rke2/config.yaml"
+    kubeconfig_path: "/etc/rancher/rke2/rke2.yaml"
+    local_kubeconfig_path: "./kubeconfig_rke2.yaml"
+    server_address: "{{ hostvars[groups['master'][0]].private_ip }}:9345"
+
+  tasks:
+
+  - name: Uninstall any existing RKE2 if present
+    shell: "/usr/local/bin/rke2-uninstall.sh"
+    ignore_errors: yes
+
+  - name: Create RKE2 config directory
+    file:
+      path: "/etc/rancher/rke2"
+      state: directory
+      mode: '0755'
+
+  - name: Generate the tls_sans list based on the master private IP
+    set_fact:
+      tls_sans: >
+        {{
+          groups['master'] | map('extract', hostvars, 'private_ip') | list
+        }}
+    run_once: true
+
+  - name: Configure master node
+    copy:
+      dest: "{{ rke2_config_path }}"
+      content: |
+        # advertise the control‐plane on the private interface
+        advertise-address: "{{ private_ip }}"
+        node-ip: "{{ private_ip }}"
+        tls-san:
+        {% for san in tls_sans %}
+          - "{{ san }}"
+        {% endfor %}
+    when: inventory_hostname == groups['master'][0]
+
+
+  - name: Install RKE2 server on first master node
+    shell: "curl -sfL {{ rke2_server_url }} | sh -"
+    when: inventory_hostname == groups['master'][0]
+
+  - name: Enable and start rke2-server service on first master node
+    systemd:
+      name: rke2-server.service
+      enabled: yes
+      state: started
+    when: inventory_hostname == groups['master'][0]
+
+  - name: Retrieve generated token from first master node after installation
+    fetch:
+      src: /var/lib/rancher/rke2/server/node-token
+      dest: /tmp/rke2-token
+      flat: yes
+    delegate_to: "{{ groups['master'][0] }}"
+    run_once: true
+
+
+  - name: Install RKE2 on secondary master nodes
+    shell: "curl -sfL {{ rke2_server_url }} | sh -"
+    when: "'master' in group_names and inventory_hostname != groups['master'][0]"
+
+  - name: Configure remaining master nodes
+    copy:
+      dest: "{{ rke2_config_path }}"
+      content: |
+        token: "{{ lookup('file', '/tmp/rke2-token') }}"
+        server: https://{{ server_address }}
+        advertise-address: "{{ private_ip }}"
+        node-ip: "{{ private_ip }}"
+        tls-san:
+        {% for san in tls_sans %}
+          - "{{ san }}"
+        {% endfor %}
+    when: "'master' in group_names and inventory_hostname != groups['master'][0]"
+
+  - name: Enable and start rke2-server service on remaining master nodes
+    systemd:
+      name: rke2-server.service
+      enabled: yes
+      state: started
+    when: "'master' in group_names and inventory_hostname != groups['master'][0]"
+
+  - name: Configure worker nodes
+    copy:
+      dest: "{{ rke2_config_path }}"
+      content: |
+        server: https://{{ server_address }}
+        token: "{{ lookup('file', '/tmp/rke2-token') }}"
+        # tell kubelet to advertise its private IP
+        node-ip: "{{ private_ip }}"
+        # if you ever want to reach the node via its public IP, advertise it here
+        node-external-ip: "{{ ansible_host }}"
+    when: "'worker' in group_names"
+
+  - name: Install RKE2 agent on worker nodes
+    shell: "curl -sfL {{ rke2_server_url }} | INSTALL_RKE2_TYPE='agent' sh -"
+    when: "'worker' in group_names"
+
+  - name: Enable and start rke2-agent service on worker nodes
+    systemd:
+      name: rke2-agent.service
+      enabled: yes
+      state: started
+    when: "'worker' in group_names"
+
+  - name: Fetch kubeconfig from primary master node
+    fetch:
+      src: "{{ kubeconfig_path }}"
+      dest: "{{ local_kubeconfig_path }}"
+      flat: yes
+    delegate_to: "{{ groups['master'][0] }}"
+    run_once: true
+
+  - name: Patch the server address in kubeconfig to use the master node IP
+    replace:
+      path: "{{ local_kubeconfig_path }}"
+      regexp: '127\.0\.0\.1'
+      replace: "{{ hostvars[groups['master'][0]].ansible_host }}"
+    delegate_to: localhost
+    run_once: true
+    become: false
+
+  - name: Display instructions to set KUBECONFIG environment variable
+    debug:
+      msg: "Run the following command before attempting kubectl commands: export KUBECONFIG={{ local_kubeconfig_path }}"
+    run_once: true
+    delegate_to: localhost

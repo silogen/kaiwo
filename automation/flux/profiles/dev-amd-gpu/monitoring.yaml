@@ -1,0 +1,35 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: otel-operator
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: "./kustomization/otel-operator"
+  prune: true
+  wait: true
+  timeout: 5m
+  dependsOn:
+  - name: cert-manager
+  - name: kueue
+  - name: amd-gpu-operator
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: otel-collector
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: "./kustomization/otel-collector"
+  prune: true
+  wait: true
+  timeout: 5m
+  dependsOn:
+  - name: otel-operator
