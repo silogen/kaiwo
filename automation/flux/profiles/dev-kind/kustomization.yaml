@@ -6,4 +6,5 @@ resources:
 - ../base
 
 # KIND specific (fake GPU for testing)
+- topology.yaml
 - fake-gpu.yaml

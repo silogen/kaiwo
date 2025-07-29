@@ -1,0 +1,14 @@
+apiVersion: v1
+data:
+  topology.yml: |-
+    migStrategy: mixed
+    nodePoolLabelKey: run.ai/simulated-gpu-node-pool
+    nodePools:
+      default:
+        gpuCount: 8
+        gpuMemory: 11441
+        gpuProduct: Tesla-K80
+kind: ConfigMap
+metadata:
+  name: topology
+  namespace: default
