@@ -23,20 +23,46 @@ spec:
       retries: 3
   values:
     deploymentMode: SingleBinary
-    
+
+    # Zero out replica counts of other deployment modes (required for SingleBinary)
+    backend:
+      replicas: 0
+    read:
+      replicas: 0
+    write:
+      replicas: 0
+    ingester:
+      replicas: 0
+    querier:
+      replicas: 0
+    queryFrontend:
+      replicas: 0
+    queryScheduler:
+      replicas: 0
+    distributor:
+      replicas: 0
+    compactor:
+      replicas: 0
+    indexGateway:
+      replicas: 0
+    bloomCompactor:
+      replicas: 0
+    bloomGateway:
+      replicas: 0
+
     loki:
       # Basic configuration for development/testing
       auth_enabled: false
-      
+
       commonConfig:
         replication_factor: 1
-      
+
       storage:
         type: filesystem
         filesystem:
           chunks_directory: /var/loki/chunks
           rules_directory: /var/loki/rules
-      
+
       # Schema configuration  
       schemaConfig:
         configs:
@@ -47,7 +73,7 @@ spec:
           index:
             prefix: loki_index_
             period: 24h
-      
+
       # Retention policy
       limits_config:
         retention_period: 12h
@@ -55,11 +81,11 @@ spec:
         ingestion_burst_size_mb: 100
         per_stream_rate_limit: 10MB
         per_stream_rate_limit_burst: 20MB
-    
+
     # Single binary mode
     singleBinary:
       replicas: 1
-      
+
       # Resource limits
       resources:
         limits:
@@ -68,26 +94,24 @@ spec:
         requests:
           cpu: 500m
           memory: 1Gi
-      
+
       # Persistence for logs
       persistence:
         enabled: true
         size: 20Gi
         storageClass: "rwx-nfs"
-    
+
     # Gateway configuration (disabled in SingleBinary mode)
     gateway:
       enabled: false
-    
+
     # Monitoring configuration
     monitoring:
       serviceMonitor:
         enabled: false  # Disable for now - enable if Prometheus is available
-      
       # Rules for alerting
       rules:
         enabled: false  # Disable for now
-    
     # Test configuration
     test:
       enabled: false
