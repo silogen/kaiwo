@@ -164,22 +164,7 @@ spec:
       runAsGroup: 0
       runAsUser: 0
     
-    # Volumes for log access
-    extraVolumes:
-    - name: pods
-      hostPath:
-        path: /var/log/pods
-    - name: containers
-      hostPath:
-        path: /var/lib/docker/containers
-    
-    extraVolumeMounts:
-    - name: pods
-      mountPath: /var/log/pods
-      readOnly: true
-    - name: containers
-      mountPath: /var/lib/docker/containers
-      readOnly: true
+    # Log access volumes are automatically configured by the chart
     
     # ServiceMonitor for monitoring Promtail itself
     serviceMonitor:
