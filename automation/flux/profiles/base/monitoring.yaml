@@ -7,6 +7,7 @@ spec:
   interval: 30m
   dependsOn:
   - name: cert-manager
+  - name: kueue
   sourceRef:
     kind: GitRepository
     name: kaiwo-source
