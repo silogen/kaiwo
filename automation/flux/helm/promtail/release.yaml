@@ -27,12 +27,12 @@ spec:
     config:
       # Send logs to Loki (SingleBinary mode)
       clients:
-      - url: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
+      - url: http://monitoring-loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
         tenant_id: ""
       
-      # Positions file for tracking log progress
+      # Positions file for tracking log progress (must be writable path)
       positions:
-        filename: /tmp/positions.yaml
+        filename: /run/promtail/positions.yaml
       
       # Server configuration
       server:
@@ -165,6 +165,14 @@ spec:
       runAsUser: 0
     
     # Log access volumes are automatically configured by the chart
+    # Add volume for positions file
+    extraVolumes:
+    - name: positions
+      emptyDir: {}
+    
+    extraVolumeMounts:
+    - name: positions
+      mountPath: /run/promtail
     
     # ServiceMonitor for monitoring Promtail itself
     serviceMonitor:
