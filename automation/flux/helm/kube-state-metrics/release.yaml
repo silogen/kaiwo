@@ -5,6 +5,8 @@ metadata:
   namespace: flux-system
 spec:
   interval: 30m
+  dependsOn:
+  - name: loki
   chart:
     spec:
       chart: kube-state-metrics
