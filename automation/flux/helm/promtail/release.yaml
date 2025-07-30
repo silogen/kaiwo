@@ -32,7 +32,7 @@ spec:
       
       # Positions file for tracking log progress (must be writable path)
       positions:
-        filename: /run/promtail/positions.yaml
+        filename: /var/lib/promtail/positions.yaml
       
       # Server configuration
       server:
@@ -172,7 +172,7 @@ spec:
     
     extraVolumeMounts:
     - name: positions
-      mountPath: /run/promtail
+      mountPath: /var/lib/promtail
     
     # ServiceMonitor for monitoring Promtail itself
     serviceMonitor:
