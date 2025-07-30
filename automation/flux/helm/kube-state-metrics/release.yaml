@@ -1,0 +1,87 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kube-state-metrics
+  namespace: flux-system
+spec:
+  interval: 30m
+  chart:
+    spec:
+      chart: kube-state-metrics
+      version: "5.25.1"  # Latest stable version
+      sourceRef:
+        kind: HelmRepository
+        name: prometheus-community
+        namespace: flux-system
+  targetNamespace: monitoring
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    # Resources for kube-state-metrics
+    resources:
+      limits:
+        cpu: 200m
+        memory: 256Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+    
+    # Enable additional metrics for comprehensive monitoring
+    collectors:
+    - certificatesigningrequests
+    - configmaps
+    - cronjobs
+    - daemonsets
+    - deployments
+    - endpoints
+    - horizontalpodautoscalers
+    - ingresses
+    - jobs
+    - leases
+    - limitranges
+    - mutatingwebhookconfigurations
+    - namespaces
+    - networkpolicies
+    - nodes
+    - persistentvolumeclaims
+    - persistentvolumes
+    - poddisruptionbudgets
+    - pods
+    - replicasets
+    - replicationcontrollers
+    - resourcequotas
+    - secrets
+    - services
+    - statefulsets
+    - storageclasses
+    - validatingwebhookconfigurations
+    - volumeattachments
+    - verticalpodautoscalers
+    
+    # ServiceMonitor for Prometheus integration (if available)
+    prometheus:
+      monitor:
+        enabled: false  # Disable for now
+    
+    # Security context
+    securityContext:
+      enabled: true
+      runAsGroup: 65534
+      runAsUser: 65534
+      fsGroup: 65534
+    
+    # Service configuration
+    service:
+      type: ClusterIP
+      port: 8080
+    
+    # RBAC configuration
+    rbac:
+      create: true
+    
+    serviceAccount:
+      create: true

@@ -1,0 +1,87 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: event-exporter-config
+  namespace: monitoring
+data:
+  config.yaml: |
+    logLevel: info
+    logFormat: json
+    route:
+      routes:
+      - match:
+        - receiver: "loki"
+    receivers:
+    - name: "loki"
+      loki:
+        url: "http://loki-gateway.monitoring.svc.cluster.local/loki/api/v1/push"
+        streamLabels:
+          source: "kubernetes-events"
+          cluster: "kaiwo-cluster"
+        staticLabels:
+          job: "kubernetes-events"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: event-exporter
+  namespace: monitoring
+  labels:
+    app: event-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: event-exporter
+  template:
+    metadata:
+      labels:
+        app: event-exporter
+    spec:
+      serviceAccountName: event-exporter
+      containers:
+      - name: event-exporter
+        image: ghcr.io/resmoio/kubernetes-event-exporter:v1.7
+        args:
+        - -conf=/data/config.yaml
+        volumeMounts:
+        - name: config
+          mountPath: /data
+        resources:
+          limits:
+            cpu: 200m
+            memory: 128Mi
+          requests:
+            cpu: 100m
+            memory: 64Mi
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 2112
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 2112
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: config
+        configMap:
+          name: event-exporter-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: event-exporter
+  namespace: monitoring
+  labels:
+    app: event-exporter
+spec:
+  ports:
+  - name: http-metrics
+    port: 2112
+    targetPort: 2112
+  selector:
+    app: event-exporter

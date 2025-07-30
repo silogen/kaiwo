@@ -1,0 +1,97 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: loki
+  namespace: flux-system
+spec:
+  interval: 30m
+  chart:
+    spec:
+      chart: loki
+      version: "6.6.4"  # Latest stable version
+      sourceRef:
+        kind: HelmRepository
+        name: grafana
+        namespace: flux-system
+  targetNamespace: monitoring
+  install:
+    createNamespace: true
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    deploymentMode: SingleBinary
+    
+    loki:
+      # Basic configuration for development/testing
+      auth_enabled: false
+      
+      commonConfig:
+        replication_factor: 1
+      
+      storage:
+        type: filesystem
+        filesystem:
+          chunks_directory: /var/loki/chunks
+          rules_directory: /var/loki/rules
+      
+      # Schema configuration  
+      schemaConfig:
+        configs:
+        - from: 2024-04-01
+          store: tsdb
+          object_store: filesystem
+          schema: v13
+          index:
+            prefix: loki_index_
+            period: 24h
+      
+      # Retention policy
+      limits_config:
+        retention_period: 12h
+        ingestion_rate_mb: 50
+        ingestion_burst_size_mb: 100
+        per_stream_rate_limit: 10MB
+        per_stream_rate_limit_burst: 20MB
+    
+    # Single binary mode
+    singleBinary:
+      replicas: 1
+      
+      # Resource limits
+      resources:
+        limits:
+          cpu: 1000m
+          memory: 2Gi
+        requests:
+          cpu: 500m
+          memory: 1Gi
+      
+      # Persistence for logs
+      persistence:
+        enabled: true
+        size: 20Gi
+        storageClass: "rwx-nfs"
+    
+    # Gateway configuration
+    gateway:
+      enabled: true
+      replicas: 1
+      service:
+        type: ClusterIP
+        port: 80
+    
+    # Monitoring configuration
+    monitoring:
+      serviceMonitor:
+        enabled: false  # Disable for now - enable if Prometheus is available
+      
+      # Rules for alerting
+      rules:
+        enabled: false  # Disable for now
+    
+    # Test configuration
+    test:
+      enabled: false

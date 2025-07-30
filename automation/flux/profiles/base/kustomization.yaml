@@ -9,3 +9,4 @@ resources:
 - appwrapper.yaml
 - storage.yaml
 - kaiwo-scheduler.yaml
+- monitoring.yaml
