@@ -66,7 +66,7 @@ spec:
       # Schema configuration  
       schemaConfig:
         configs:
-        - from: 2024-04-01
+        - from: "2024-04-01"
           store: tsdb
           object_store: filesystem
           schema: v13
