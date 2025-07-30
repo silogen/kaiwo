@@ -75,13 +75,9 @@ spec:
         size: 20Gi
         storageClass: "rwx-nfs"
     
-    # Gateway configuration
+    # Gateway configuration (disabled in SingleBinary mode)
     gateway:
-      enabled: true
-      replicas: 1
-      service:
-        type: ClusterIP
-        port: 80
+      enabled: false
     
     # Monitoring configuration
     monitoring:

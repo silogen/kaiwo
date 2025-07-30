@@ -25,9 +25,9 @@ spec:
   values:
     # Promtail configuration
     config:
-      # Send logs to Loki
+      # Send logs to Loki (SingleBinary mode)
       clients:
-      - url: http://loki-gateway.monitoring.svc.cluster.local/loki/api/v1/push
+      - url: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
         tenant_id: ""
       
       # Positions file for tracking log progress
