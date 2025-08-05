@@ -74,9 +74,9 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	config := common.ConfigFromContext(ctx)
 
-	if err := common.EnsureClusterNodesLabelsAndTaints(ctx, r.Client); err != nil {
-		return ctrl.Result{}, fmt.Errorf("could not ensure cluster nodes' taints and labels: %w", err)
-	}
+	//if err := common.EnsureClusterNodesLabelsAndTaints(ctx, r.Client); err != nil {
+	//	return ctrl.Result{}, fmt.Errorf("could not ensure cluster nodes' taints and labels: %w", err)
+	//}
 
 	if config.DynamicallyUpdateDefaultClusterQueue {
 		if err := r.EnsureKaiwoQueueConfig(ctx, common.KaiwoQueueConfigName, config.DefaultClusterQueueName, config.DefaultClusterQueueCohortName); err != nil {

@@ -89,9 +89,8 @@ func (r *KaiwoNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// Keep a copy of the original objects for later patching
 	originalObjects := &nodeutils.KaiwoNodeWrapper{}
-	if node != nil {
-		originalObjects.Node = node.DeepCopy()
-	}
+	originalObjects.Node = node.DeepCopy()
+
 	if kaiwoNode != nil {
 		originalObjects.KaiwoNode = kaiwoNode.DeepCopy()
 	}

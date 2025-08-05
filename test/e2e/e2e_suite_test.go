@@ -17,7 +17,6 @@ limitations under the License.
 package e2e
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -33,13 +32,6 @@ import (
 
 var (
 	projectImage = "ghcr.io/silogen/kaiwo-operator:v-e2e"
-
-	// Test execution flags
-	deployOperatorToKind = flag.Bool("deploy-to-kind", false, "Builds and deploys the operator to the Kind cluster")
-	buildCli             = flag.Bool("build-cli", false, "Build CLI tools")
-
-	// Test selection flags
-	validateController = flag.Bool("validate-controller", false, "Run controller validation tests")
 
 	// Global chainsaw configuration - set up in BeforeSuite
 	chainsawConfigPath string

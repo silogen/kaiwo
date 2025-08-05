@@ -18,11 +18,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+)
+
+const (
+	LogLevelInfo  = "INFO"
+	LogLevelError = "ERROR"
 )
 
 // LogEntry represents a timestamped log entry with source information
@@ -87,7 +91,7 @@ func (r *ChainsawTestRunner) displayAggregatedLogs(entries []LogEntry, namespace
 	})
 
 	fmt.Printf("\n🔍 AGGREGATED LOGS AND EVENTS (namespace: %s)\n", namespace)
-	fmt.Printf("=" + strings.Repeat("=", 60) + "\n")
+	fmt.Printf("%s", "="+strings.Repeat("=", 60)+"\n")
 	fmt.Printf("📊 Total entries: %d\n", len(entries))
 
 	// Group by source for summary
@@ -113,15 +117,9 @@ func (r *ChainsawTestRunner) displayAggregatedLogs(entries []LogEntry, namespace
 	fmt.Printf("%s\n", strings.Repeat("=", 80))
 }
 
-// parseReportToLogEntries converts a Chainsaw JSON report into LogEntry format
-// for integration with other logs in chronological order, filtered by namespace
-func (r *ChainsawTestRunner) parseReportToLogEntries(reportPath, filterNamespace string) []LogEntry {
-	return r.parseReportToLogEntriesWithContext(reportPath, filterNamespace, -1, -1, "")
-}
-
 // parseReportToLogEntriesWithContext converts a Chainsaw JSON report into LogEntry format
 // with context information for a specific failing step/operation
-func (r *ChainsawTestRunner) parseReportToLogEntriesWithContext(reportPath, filterNamespace string, failedStepIndex, failedOpIndex int, failedOpType string) []LogEntry {
+func (r *ChainsawTestRunner) parseReportToLogEntriesWithContext(reportPath, filterNamespace string) []LogEntry {
 	var entries []LogEntry
 
 	report, err := r.parseReport(reportPath)
@@ -139,7 +137,7 @@ func (r *ChainsawTestRunner) parseReportToLogEntriesWithContext(reportPath, filt
 		entries = append(entries, LogEntry{
 			Timestamp: test.StartTime,
 			Source:    "chainsaw",
-			Level:     "INFO",
+			Level:     LogLevelInfo,
 			Container: "",
 			Pod:       "",
 			Message:   fmt.Sprintf("🧪 Test started: %s (namespace: %s)", test.Name, test.Namespace),
@@ -151,7 +149,7 @@ func (r *ChainsawTestRunner) parseReportToLogEntriesWithContext(reportPath, filt
 			entries = append(entries, LogEntry{
 				Timestamp: step.StartTime,
 				Source:    "chainsaw",
-				Level:     "INFO",
+				Level:     LogLevelInfo,
 				Container: "",
 				Pod:       "",
 				Message:   fmt.Sprintf("📋 Step %d started: %s", stepIdx+1, step.Name),
@@ -159,11 +157,11 @@ func (r *ChainsawTestRunner) parseReportToLogEntriesWithContext(reportPath, filt
 			})
 
 			for opIdx, operation := range step.Operations {
-				level := "INFO"
+				level := LogLevelInfo
 				message := fmt.Sprintf("⚙️  Operation %d.%d: %s (%s)", stepIdx+1, opIdx+1, operation.Type, operation.Name)
 
 				if operation.Failure != nil {
-					level = "ERROR"
+					level = LogLevelError
 					message = fmt.Sprintf("❌ Operation %d.%d FAILED: %s (%s)", stepIdx+1, opIdx+1, operation.Type, operation.Name)
 				}
 
@@ -189,7 +187,7 @@ func (r *ChainsawTestRunner) parseReportToLogEntriesWithContext(reportPath, filt
 			entries = append(entries, LogEntry{
 				Timestamp: step.EndTime,
 				Source:    "chainsaw",
-				Level:     "INFO",
+				Level:     LogLevelInfo,
 				Container: "",
 				Pod:       "",
 				Message:   fmt.Sprintf("✅ Step %d completed: %s (took %s)", stepIdx+1, step.Name, stepDuration.String()),
@@ -199,14 +197,14 @@ func (r *ChainsawTestRunner) parseReportToLogEntriesWithContext(reportPath, filt
 
 		// Add test completion entry
 		testDuration := test.EndTime.Sub(test.StartTime)
-		testLevel := "INFO"
+		testLevel := LogLevelInfo
 		testStatus := "✅ PASSED"
 
 		// Check if any operations failed
 		for _, step := range test.Steps {
 			for _, operation := range step.Operations {
 				if operation.Failure != nil {
-					testLevel = "ERROR"
+					testLevel = LogLevelError
 					testStatus = "❌ FAILED"
 					goto testCompleted
 				}
@@ -262,11 +260,11 @@ func (r *ChainsawTestRunner) displayColoredLogEntry(entry LogEntry) {
 	// Choose color based on log level
 	var levelColor, sourceColor string
 	switch entry.Level {
-	case "ERROR":
+	case LogLevelError:
 		levelColor = red
 	case "WARN":
 		levelColor = yellow
-	case "INFO":
+	case LogLevelInfo:
 		levelColor = green
 	case "DEBUG":
 		levelColor = gray
@@ -373,50 +371,6 @@ func (r *ChainsawTestRunner) getLocalKaiwoLogs(logPath, namespace string, startT
 
 	// fmt.Printf("   📊 Found %d relevant local Kaiwo controller log entries\n", len(entries))
 	return entries
-}
-
-// getLocalProcessLogs attempts to get logs from a local running process
-func (r *ChainsawTestRunner) getLocalProcessLogs(namespace string, startTime, endTime time.Time) []LogEntry {
-	var entries []LogEntry
-
-	// Try to find recent log files that might be from the local operator
-	logPatterns := []string{
-		"/tmp/kaiwo-operator*.log",
-		"./kaiwo-operator*.log",
-		"./operator*.log",
-		"/tmp/operator*.log",
-	}
-
-	var logFile string
-	for _, pattern := range logPatterns {
-		matches, err := filepath.Glob(pattern)
-		if err == nil && len(matches) > 0 {
-			// Use the most recent file
-			var newest string
-			var newestTime time.Time
-			for _, match := range matches {
-				if info, err := os.Stat(match); err == nil {
-					if info.ModTime().After(newestTime) {
-						newest = match
-						newestTime = info.ModTime()
-					}
-				}
-			}
-			if newest != "" {
-				logFile = newest
-				break
-			}
-		}
-	}
-
-	if logFile == "" {
-		fmt.Printf("   ⚠️  No local operator log files found in common locations\n")
-		fmt.Printf("   💡 Tip: Set KAIWO_LOCAL_LOGS_PATH to specify the log file location\n")
-		return entries
-	}
-
-	fmt.Printf("   📁 Using local log file: %s\n", logFile)
-	return r.getLocalKaiwoLogs(logFile, namespace, startTime, endTime)
 }
 
 // getLokiLogsWithQuery retrieves logs from Loki using Kubernetes service proxy

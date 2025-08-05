@@ -42,16 +42,16 @@ spec:
       namespaceSelector: {}   # All namespaces
       queueingStrategy: BestEffortFIFO
       resourceGroups:
-        - coveredResources: ["cpu", "memory", "amd.com/gpu"]
-          flavors:
-            - name: "default"
-              resources:
-                - name: cpu
-                  nominalQuota: "10"
-                - name: memory
-                  nominalQuota: "100Gi"
-                - name: amd.com/gpu
-                  nominalQuota: "1"
+      - coveredResources: ["cpu", "memory", "amd.com/gpu"]
+        flavors:
+        - name: "default"
+          resources:
+          - name: cpu
+            nominalQuota: "10"
+          - name: memory
+            nominalQuota: "100Gi"
+          - name: amd.com/gpu
+            nominalQuota: "1"
 
   resourceFlavors:
   - name: default

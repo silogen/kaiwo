@@ -36,7 +36,6 @@ spec:
           value: ($namespace)
         check:
           ($error == null): true
-
 ---
 
 apiVersion: chainsaw.kyverno.io/v1alpha1
@@ -75,7 +74,6 @@ spec:
           value: ($namespace)
         check:
           ($error == null): true
-
 ---
 
 apiVersion: chainsaw.kyverno.io/v1alpha1

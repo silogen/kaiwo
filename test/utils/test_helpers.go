@@ -5,7 +5,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-     http://www.apache.org/licenses/LICENSE-2.0
+      http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -172,7 +172,7 @@ func (h *TestRunnerHelper) scanAndRegisterDirectory(dirPath, relativePath, conte
 	chainsawTestPath := filepath.Join(dirPath, "chainsaw-test.yaml")
 	if _, err := os.Stat(chainsawTestPath); err == nil {
 		// This is a test directory - register the test directly without creating a Context for the directory name
-		h.registerChainsawTest(chainsawTestPath, relativePath, contextPath)
+		h.registerChainsawTest(chainsawTestPath, relativePath)
 		return
 	}
 
@@ -200,7 +200,6 @@ func (h *TestRunnerHelper) scanAndRegisterDirectory(dirPath, relativePath, conte
 					h.scanAndRegisterDirectory(newDirPath, newRelativePath, newContextPath)
 				})
 			}
-		} else {
 		}
 	}
 }
@@ -349,7 +348,7 @@ func (h *TestRunnerHelper) printTreeNode(node *TestTreeNode, prefix string, isLa
 }
 
 // registerChainsawTest creates the detailed test structure for a single chainsaw test
-func (h *TestRunnerHelper) registerChainsawTest(chainsawTestPath, relativePath, contextPath string) {
+func (h *TestRunnerHelper) registerChainsawTest(chainsawTestPath, relativePath string) {
 	// Parse the chainsaw test file
 	testSpec, err := h.parseChainsawTest(chainsawTestPath)
 	if err != nil {
@@ -502,7 +501,7 @@ func (h *TestRunnerHelper) checkOperationResultWithError(relativePath, testName 
 			chainsawTestPath, failureLine, stepIndex+1, opIndex+1, operation.Type, operation.Failure.Error)
 
 		// Collect and display logs for this specific failure
-		h.collectAndDisplayFailureLogs(testResult, stepIndex, opIndex, operation)
+		h.collectAndDisplayFailureLogs(testResult, stepIndex, operation)
 
 		// This marks the test as failed but allows other tests to continue
 		err := fmt.Errorf("operation %d in step %d failed: %s", opIndex+1, stepIndex+1, operation.Failure.Error)
@@ -511,68 +510,6 @@ func (h *TestRunnerHelper) checkOperationResultWithError(relativePath, testName 
 	}
 
 	return nil
-}
-
-// checkOperationResult checks the Chainsaw report for a specific operation result (legacy method)
-func (h *TestRunnerHelper) checkOperationResult(relativePath, testName string, stepIndex, opIndex int) {
-	// Find the report file for this test path
-
-	reportPath := h.findReportForPath(relativePath, testName)
-	if reportPath == "" {
-		// Test ANSI colors with enhanced detection
-		colorTest := h.colorize("red", "No report found")
-		fmt.Printf("%s for test %s at path %s\n", colorTest, testName, relativePath)
-		return
-	}
-
-	// Parse the report
-	report, err := h.parseReport(reportPath)
-	if err != nil {
-		Fail(fmt.Sprintf("Could not parse report %s: %v", reportPath, err))
-		return
-	}
-
-	// Find the specific test in the report
-	var testResult *ChainsawTest
-	for _, test := range report.Tests {
-		if strings.HasSuffix(test.BasePath, relativePath) && test.Name == testName {
-			testResult = &test
-			break
-		}
-	}
-
-	if testResult == nil {
-		Fail(fmt.Sprintf("Test %s not found in report %s", testName, reportPath))
-		return
-	}
-
-	// Check if we have the requested step and operation
-	if stepIndex >= len(testResult.Steps) {
-		Fail(fmt.Sprintf("Step %d not found in test %s (only %d steps)", stepIndex, testName, len(testResult.Steps)))
-		return
-	}
-
-	step := testResult.Steps[stepIndex]
-	if opIndex >= len(step.Operations) {
-		Fail(fmt.Sprintf("Operation %d not found in step %d of test %s (only %d operations)",
-			opIndex, stepIndex, testName, len(step.Operations)))
-		return
-	}
-
-	operation := step.Operations[opIndex]
-
-	// Check if the operation failed
-	if operation.Failure != nil {
-		// Collect and display logs for this specific failure
-		h.collectAndDisplayFailureLogs(testResult, stepIndex, opIndex, operation)
-
-		// This marks the test as failed but allows other tests to continue
-		err := fmt.Errorf("operation %d in step %d failed: %s", opIndex+1, stepIndex+1, operation.Failure.Error)
-		Expect(err).NotTo(HaveOccurred())
-	}
-
-	// Operation succeeded - success messages removed to reduce verbosity
-	// Only failures will be shown, successful operations are silent
 }
 
 // findReportForPath finds the report file that corresponds to a given test path
@@ -633,7 +570,7 @@ func (h *TestRunnerHelper) parseReport(reportPath string) (*ChainsawReport, erro
 }
 
 // collectAndDisplayFailureLogs collects and displays logs for a specific failed operation
-func (h *TestRunnerHelper) collectAndDisplayFailureLogs(testResult *ChainsawTest, stepIndex, opIndex int, operation ChainsawOperation) {
+func (h *TestRunnerHelper) collectAndDisplayFailureLogs(testResult *ChainsawTest, stepIndex int, operation ChainsawOperation) {
 	// fmt.Printf("\n🔴 LOGS FOR FAILED OPERATION\n")
 	// fmt.Printf("=" + strings.Repeat("=", 40) + "\n")
 
@@ -655,7 +592,7 @@ func (h *TestRunnerHelper) collectAndDisplayFailureLogs(testResult *ChainsawTest
 	// Add Chainsaw report entries to the debug information (filtered by namespace)
 	reportPath := h.findReportForPath(strings.TrimPrefix(testResult.BasePath, GetModuleRoot()+"/"), testResult.Name)
 	if reportPath != "" {
-		chainsawEntries := h.runner.parseReportToLogEntriesWithContext(reportPath, testResult.Namespace, stepIndex, opIndex, operation.Type)
+		chainsawEntries := h.runner.parseReportToLogEntriesWithContext(reportPath, testResult.Namespace)
 		debugInfo = append(debugInfo, chainsawEntries...)
 		// fmt.Printf("   📊 Added %d Chainsaw report entries for namespace %s\n", len(chainsawEntries), testResult.Namespace)
 	}
@@ -668,7 +605,7 @@ func (h *TestRunnerHelper) collectAndDisplayFailureLogs(testResult *ChainsawTest
 		fmt.Printf("⚠️ No debug information could be collected\n")
 	}
 
-	fmt.Printf("\n" + strings.Repeat("=", 60) + "\n")
+	fmt.Printf("%s", "\n"+strings.Repeat("=", 60)+"\n")
 }
 
 // ExecuteChainsawTests runs all registered Chainsaw test paths in parallel
@@ -840,7 +777,7 @@ func (h *TestRunnerHelper) checkTestResult(testResult ChainsawTest) bool {
 					stepIndex+1, opIndex+1, operation.Failure.Error)
 
 				// Collect and display logs for this failure
-				h.collectAndDisplayFailureLogs(&testResult, stepIndex, opIndex, operation)
+				h.collectAndDisplayFailureLogs(&testResult, stepIndex, operation)
 			} else {
 				fmt.Printf("✅ Step %d, Operation %d succeeded (%s)\n",
 					stepIndex+1, opIndex+1, operation.Type)
@@ -871,65 +808,4 @@ func (h *TestRunnerHelper) DisplaySummary() {
 	} else {
 		fmt.Printf("✅ No failures detected\n")
 	}
-}
-
-// colorize adds ANSI colors with intelligent detection and fallback
-func (h *TestRunnerHelper) colorize(color, text string) string {
-	// Force colors if environment variable is set (useful for IDE terminals)
-	forceColors := os.Getenv("FORCE_COLOR") == "1" || os.Getenv("FORCE_COLOR") == "true"
-
-	// Check if we should use colors
-	if !forceColors && !isColorTerminal() {
-		return text // Return plain text if colors not supported
-	}
-
-	// ANSI color codes
-	colors := map[string]string{
-		"reset":       "\033[0m",
-		"red":         "\033[31m",
-		"green":       "\033[32m",
-		"yellow":      "\033[33m",
-		"blue":        "\033[34m",
-		"purple":      "\033[35m",
-		"cyan":        "\033[36m",
-		"gray":        "\033[37m",
-		"brightRed":   "\033[91m",
-		"brightGreen": "\033[92m",
-		"brightBlue":  "\033[94m",
-	}
-
-	colorCode, exists := colors[color]
-	if !exists {
-		return text // Return plain text if color not found
-	}
-
-	return colorCode + text + colors["reset"]
-}
-
-// isColorTerminal detects if the current terminal supports ANSI colors
-func isColorTerminal() bool {
-	// Check common environment variables that indicate color support
-	term := os.Getenv("TERM")
-	colorTerm := os.Getenv("COLORTERM")
-
-	// Debug: uncomment to see environment detection
-	// fmt.Printf("DEBUG: TERM='%s', COLORTERM='%s', CI='%s'\n", term, colorTerm, os.Getenv("CI"))
-
-	// Force color support for common IDE terminals
-	if strings.Contains(term, "xterm") ||
-		strings.Contains(term, "screen") ||
-		strings.Contains(term, "tmux") ||
-		colorTerm != "" ||
-		os.Getenv("CI") == "true" { // CI environments usually support colors
-		return true
-	}
-
-	// GoLand and other IDEs often don't set TERM properly, but support colors
-	// Check if we're likely in an IDE
-	if os.Getenv("TERM") == "" || term == "dumb" {
-		// Might be an IDE - try colors anyway if output is a terminal
-		return true
-	}
-
-	return false
 }

@@ -39,7 +39,7 @@ spec:
     limits:
       cpu: "2"
       memory: "8Gi"
-  entrypoint: |
+  entrypoint: |-
     python3 - << 'EOF'
     import torch
     dev = torch.device('cuda')
