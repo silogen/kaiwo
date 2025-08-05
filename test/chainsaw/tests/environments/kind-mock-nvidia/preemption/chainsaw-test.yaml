@@ -48,15 +48,6 @@ spec:
             name: kaiwoservice-with-duration
           status:
             status: TERMINATED
-    catch:
-    - command:
-        entrypoint: kaiwo-dev
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-        - name: PRINT_LEVEL
-          value: ($values.print_level)
-        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
   - name: expire-after-pressure
     description: Ensure that the expired workloads are terminated when they expire after there is GPU demand added
     try:
@@ -82,13 +73,4 @@ spec:
             name: kaiwoservice-with-duration
           status:
             status: TERMINATED
-    catch:
-    - command:
-        entrypoint: kaiwo-dev
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-        - name: PRINT_LEVEL
-          value: ($values.print_level)
-        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
 

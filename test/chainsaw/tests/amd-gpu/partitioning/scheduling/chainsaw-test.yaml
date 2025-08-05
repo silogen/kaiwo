@@ -1,0 +1,31 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: partitioned-gpu-tests
+spec:
+  concurrent: false
+  steps:
+  - name: Run partitioned jobs
+    try:
+    - apply:
+        file: kaiwojob-partitioned.yaml
+    - apply:
+        file: kaiwojob-non-partitioned.yaml
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            labels:
+              kaiwo.silogen.ai/name: partitioned
+          spec:
+            nodeName: tw009
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            labels:
+              kaiwo.silogen.ai/name: non-partitioned
+          spec:
+            nodeName: tw038

@@ -18,12 +18,3 @@ spec:
             name: download-from-public-bucket
           status:
             status: COMPLETE
-    catch:
-    - command:
-        entrypoint: kaiwo-dev
-        env:
-        - name: PRINT_LEVEL
-          value: ($values.print_level)
-        - name: NAMESPACE
-          value: ($namespace)
-        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]

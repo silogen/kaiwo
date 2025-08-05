@@ -78,12 +78,3 @@ spec:
     # Delete patched kaiwoqueueconfig. Default kaiwoqueueconfig will be re-created by the operator
     - script:
         content: kubectl delete kaiwoqueueconfig kaiwo
-    catch:
-    - command:
-        entrypoint: kaiwo-dev
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-        - name: PRINT_LEVEL
-          value: ($values.print_level)
-        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]

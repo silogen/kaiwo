@@ -50,8 +50,13 @@ func GetModuleRoot() string {
 	return strings.TrimSpace(string(out))
 }
 
-// Run executes the provided command within this context
-func Run(cmd *exec.Cmd) (string, error) {
+func Run(cmd *exec.Cmd) error {
+	_, err := RunWithOutput(cmd)
+	return err
+}
+
+// RunWithOutput executes the provided command within this context
+func RunWithOutput(cmd *exec.Cmd) (string, error) {
 	dir, _ := GetProjectDir()
 	cmd.Dir = dir
 
@@ -74,7 +79,7 @@ func Run(cmd *exec.Cmd) (string, error) {
 func InstallPrometheusOperator() error {
 	url := fmt.Sprintf(prometheusOperatorURL, prometheusOperatorVersion)
 	cmd := exec.Command("kubectl", "create", "-f", url)
-	_, err := Run(cmd)
+	_, err := RunWithOutput(cmd)
 	return err
 }
 
@@ -82,7 +87,7 @@ func InstallPrometheusOperator() error {
 func UninstallPrometheusOperator() {
 	url := fmt.Sprintf(prometheusOperatorURL, prometheusOperatorVersion)
 	cmd := exec.Command("kubectl", "delete", "-f", url)
-	if _, err := Run(cmd); err != nil {
+	if _, err := RunWithOutput(cmd); err != nil {
 		warnError(err)
 	}
 }
@@ -98,7 +103,7 @@ func IsPrometheusCRDsInstalled() bool {
 	}
 
 	cmd := exec.Command("kubectl", "get", "crds", "-o", "custom-columns=NAME:.metadata.name")
-	output, err := Run(cmd)
+	output, err := RunWithOutput(cmd)
 	if err != nil {
 		return false
 	}
@@ -118,7 +123,7 @@ func IsPrometheusCRDsInstalled() bool {
 func UninstallCertManager() {
 	url := fmt.Sprintf(certmanagerURLTmpl, certmanagerVersion)
 	cmd := exec.Command("kubectl", "delete", "-f", url)
-	if _, err := Run(cmd); err != nil {
+	if _, err := RunWithOutput(cmd); err != nil {
 		warnError(err)
 	}
 }
@@ -127,7 +132,7 @@ func UninstallCertManager() {
 func InstallCertManager() error {
 	url := fmt.Sprintf(certmanagerURLTmpl, certmanagerVersion)
 	cmd := exec.Command("kubectl", "apply", "-f", url)
-	if _, err := Run(cmd); err != nil {
+	if _, err := RunWithOutput(cmd); err != nil {
 		return err
 	}
 	// Wait for cert-manager-webhook to be ready, which can take time if cert-manager
@@ -138,7 +143,7 @@ func InstallCertManager() error {
 		"--timeout", "5m",
 	)
 
-	_, err := Run(cmd)
+	_, err := RunWithOutput(cmd)
 	return err
 }
 
@@ -157,7 +162,7 @@ func IsCertManagerCRDsInstalled() bool {
 
 	// Execute the kubectl command to get all CRDs
 	cmd := exec.Command("kubectl", "get", "crds")
-	output, err := Run(cmd)
+	output, err := RunWithOutput(cmd)
 	if err != nil {
 		return false
 	}
@@ -183,7 +188,7 @@ func LoadImageToKindClusterWithName(name string) error {
 	}
 	kindOptions := []string{"load", "docker-image", name, "--name", cluster}
 	cmd := exec.Command("kind", kindOptions...)
-	_, err := Run(cmd)
+	_, err := RunWithOutput(cmd)
 	return err
 }
 
