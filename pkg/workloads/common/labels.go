@@ -28,6 +28,9 @@ var (
 	DefaultTopologyRackLabel  = KaiwoLabelBase + "/topology.rack"
 	DefaultTopologyHostLabel  = "kubernetes.io/hostname"
 	DefaultTopologyName       = "default-topology"
+
+	GpuPartitioningEnabledLabel = KaiwoLabelBase + "/node.amd.partitioning.enabled"
+	GpuPartitioningProfileLabel = KaiwoLabelBase + "/node.amd.partitioning.profile"
 )
 
 type KaiwoLabelContext struct {

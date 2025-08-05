@@ -178,7 +178,7 @@ func CalculateGpuRequirements(ctx context.Context, clusterCtx ClusterContext, gp
 		result.Replicas = baseutils.Pointer(1)
 	}
 
-	var candidateNodes []NodeInfo
+	var candidateNodes []v1alpha1.KaiwoNode
 
 	for _, node := range clusterCtx.Nodes {
 		if nodeMatchesRequirements(ctx, node, *gpuResourceRequirements) {
@@ -226,10 +226,10 @@ func CalculateGpuRequirements(ctx context.Context, clusterCtx ClusterContext, gp
 }
 
 // nodeMatchesRequirements checks if the given node matches the workload's requirements
-func nodeMatchesRequirements(ctx context.Context, nodeInfo NodeInfo, gpuResourceRequirements v1alpha1.GpuResourceRequirements) bool {
+func nodeMatchesRequirements(ctx context.Context, node v1alpha1.KaiwoNode, gpuResourceRequirements v1alpha1.GpuResourceRequirements) bool {
 	config := ConfigFromContext(ctx)
 
-	if nodeInfo.IsUnschedulable() {
+	if node.Status.Status != v1alpha1.KaiwoNodeStatusReady {
 		return false
 	}
 
@@ -237,11 +237,11 @@ func nodeMatchesRequirements(ctx context.Context, nodeInfo NodeInfo, gpuResource
 		return true
 	}
 
-	if nodeInfo.IsCpuOnlyNode() {
+	if node.Status.NodeType == v1alpha1.NodeTypeCpu {
 		return false
 	}
 
-	gpuInfo := nodeInfo.GpuInfo
+	gpuInfo := node.Status.Resources.Gpus
 
 	// If GPU models are defined and the node does not have a matching model, skip
 	if len(gpuResourceRequirements.Models) > 0 {
@@ -263,7 +263,7 @@ func nodeMatchesRequirements(ctx context.Context, nodeInfo NodeInfo, gpuResource
 	}
 
 	// If the node partitioning is different, skip
-	if partitioned := gpuInfo.IsPartitioned(); partitioned != nil && *partitioned != gpuResourceRequirements.Partitioned {
+	if partitioned := gpuInfo.IsPartitioned; partitioned != nil && *partitioned != gpuResourceRequirements.Partitioned {
 		// The node partitioning does not match
 		return false
 	} else if partitioned == nil && config.Scheduling.StrictNodeMatching {
@@ -299,7 +299,7 @@ type candidateTierInfo struct {
 }
 
 // bestMatchingNode selects the vRAM tier which minimizes wasted vRAM but guarantees that there are adequate resources available
-func bestMatchingVramTier(nodes []NodeInfo, gpuResourceRequirements v1alpha1.GpuResourceRequirements, replicas int) *resource.Quantity {
+func bestMatchingVramTier(nodes []v1alpha1.KaiwoNode, gpuResourceRequirements v1alpha1.GpuResourceRequirements, replicas int) *resource.Quantity {
 	if gpuResourceRequirements.TotalVram == nil || gpuResourceRequirements.TotalVram.IsZero() {
 		// Cannot determine best tier without a target TotalVram
 		return nil
@@ -319,7 +319,7 @@ func bestMatchingVramTier(nodes []NodeInfo, gpuResourceRequirements v1alpha1.Gpu
 	})
 
 	for _, node := range nodes {
-		gpuInfo := node.GpuInfo
+		gpuInfo := node.Status.Resources.Gpus
 		if gpuInfo.LogicalVramPerGpu == nil {
 			continue
 		}

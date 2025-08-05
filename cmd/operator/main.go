@@ -21,6 +21,7 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -45,6 +46,7 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -92,6 +94,28 @@ func init() {
 	utilruntime.Must(appwrapperv1beta2.AddToScheme(scheme))
 }
 
+type FlushingWriter struct {
+	io.Writer          // underlying writer
+	file      *os.File // to call Sync()
+}
+
+// Write writes through, then immediately fsyncs.
+func (fw *FlushingWriter) Write(p []byte) (n int, err error) {
+	n, err = fw.Writer.Write(p)
+	if err != nil {
+		return n, err
+	}
+	if err := fw.file.Sync(); err != nil {
+		return n, err
+	}
+	return n, nil
+}
+
+// Sync just fsyncs the file.
+func (fw *FlushingWriter) Sync() error {
+	return fw.file.Sync()
+}
+
 func setupFormattedLogOutput() logr.Logger {
 	cfg := uberzap.NewProductionConfig()
 	cfg.Encoding = "console"
@@ -109,11 +133,46 @@ func setupFormattedLogOutput() logr.Logger {
 		EncodeDuration: zapcore.StringDurationEncoder,
 		EncodeCaller:   zapcore.ShortCallerEncoder,
 	}
-	rawLogger, err := cfg.Build(uberzap.AddCaller())
-	if err != nil {
-		panic(err)
+
+	// Check if we should also log to a file for local development
+	var cores []zapcore.Core
+
+	// Always add console output
+	consoleEncoder := zapcore.NewConsoleEncoder(cfg.EncoderConfig)
+	consoleCore := zapcore.NewCore(consoleEncoder, zapcore.AddSync(os.Stdout), cfg.Level)
+	cores = append(cores, consoleCore)
+	if logFile := os.Getenv("KAIWO_LOG_FILE"); logFile != "" {
+		// Delete existing log file
+		if _, err := os.Stat(logFile); err == nil {
+			if err := os.Remove(logFile); err != nil {
+				fmt.Printf("Warning: Could not delete existing log file %s: %v\n", logFile, err)
+			}
+		}
+
+		// Create a custom WriteSyncer that flushes immediately
+		file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND|os.O_SYNC, 0o666)
+		if err != nil {
+			fmt.Printf("Warning: Could not open log file %s: %v\n", logFile, err)
+		} else {
+			// Create a flushing writer
+			flushingWriter := &FlushingWriter{
+				Writer: file,
+				file:   file,
+			}
+
+			jsonEncCfg := cfg.EncoderConfig
+			jsonEncCfg.EncodeLevel = zapcore.CapitalLevelEncoder
+			fileEncoder := zapcore.NewJSONEncoder(jsonEncCfg)
+
+			fileSyncer := zapcore.Lock(zapcore.AddSync(flushingWriter))
+			fileCore := zapcore.NewCore(fileEncoder, fileSyncer, cfg.Level)
+			cores = append(cores, fileCore)
+		}
 	}
-	defer func() { _ = rawLogger.Sync() }()
+
+	// Combine all cores
+	combinedCore := zapcore.NewTee(cores...)
+	rawLogger := uberzap.New(combinedCore, uberzap.AddCaller())
 
 	return zapr.NewLogger(rawLogger)
 }
@@ -284,6 +343,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Index pods by node name for efficient field selector queries
+	if err := mgr.GetFieldIndexer().IndexField(context.TODO(), &corev1.Pod{}, "spec.nodeName", func(rawObj client.Object) []string {
+		pod := rawObj.(*corev1.Pod)
+		return []string{pod.Spec.NodeName}
+	}); err != nil {
+		setupLog.Error(err, "unable to setup field indexer for pod.spec.nodeName")
+		os.Exit(1)
+	}
+
 	if err = (&controller.KaiwoJobReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
@@ -304,6 +372,9 @@ func main() {
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "KaiwoQueueConfig")
 		os.Exit(1)
+	}
+	if err := controller.NewKaiwoNodeReconciler(mgr).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "KaiwoNodeWatch")
 	}
 
 	if webhooksEnabled {
