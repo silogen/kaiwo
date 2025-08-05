@@ -28,6 +28,7 @@ rules:
   - "kaiwojobs"
   - "kaiwoqueueconfigs"
   - "kaiwoservices"
+  - "kaiwonodes"
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
 - apiGroups: ["config.kaiwo.silogen.ai"]
@@ -40,6 +41,7 @@ rules:
   - "kaiwojobs/status"
   - "kaiwoservices/status"
   - "kaiwoqueueconfigs/status"
+  - "kaiwonodes/status"
   verbs: ["get", "update", "patch"]
 
 - apiGroups: ["batch"]
