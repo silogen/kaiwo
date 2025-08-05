@@ -44,6 +44,9 @@ else
     create_cluster
 fi
 
+echo "Waiting for nodes to be ready"
+kubectl wait --for=condition=Ready nodes --all --timeout=300s
+
 echo "Labeling nodes..."
 
 kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 "$TEST_NAME"-worker3 "$TEST_NAME"-worker4 run.ai/simulated-gpu-node-pool=default
