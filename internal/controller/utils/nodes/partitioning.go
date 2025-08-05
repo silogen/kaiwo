@@ -38,6 +38,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+const (
+	KindDaemonSet = "DaemonSet"
+)
+
 // GpuPartitionTask is responsible for ensuring that the nodes are partitioned correctly
 type GpuPartitionTask struct {
 	Client   client.Client
@@ -113,7 +117,8 @@ func (t *GpuPartitionTask) Run(ctx context.Context, obj *KaiwoNodeWrapper) (*ctr
 
 	// If the node is not a GPU node, return with error
 	if obj.KaiwoNode.Status.NodeType != v1alpha1.NodeTypeGpu {
-		return t.setErrorCondition(obj, "Cannot partition a node without GPUs"), nil
+		t.setErrorCondition(obj, "Cannot partition a node without GPUs")
+		return nil, nil
 	}
 
 	currentProfile, err := extractCurrentProfile(obj.KaiwoNode)
@@ -189,7 +194,8 @@ func (t *GpuPartitionTask) handlePartitioningPhase(ctx context.Context, obj *Kai
 
 	default:
 		logger.Error(nil, "Unknown partitioning phase", "phase", obj.KaiwoNode.Status.Partitioning.Phase)
-		return t.setErrorCondition(obj, fmt.Sprintf("Unknown partitioning phase: %s", obj.KaiwoNode.Status.Partitioning.Phase)), nil
+		t.setErrorCondition(obj, fmt.Sprintf("Unknown partitioning phase: %s", obj.KaiwoNode.Status.Partitioning.Phase))
+		return nil, nil
 	}
 }
 
@@ -241,7 +247,8 @@ func (t *GpuPartitionTask) handleApplyingPartitions(ctx context.Context, obj *Ka
 	profileState, profileStateExists := obj.Node.Labels[AmdDcmPartitioningStateLabel]
 
 	if profileStateExists && profileState == "failure" {
-		return t.setErrorCondition(obj, "Partitioning failed (check device config manager logs)"), nil
+		t.setErrorCondition(obj, "Partitioning failed (check device config manager logs)")
+		return nil, nil
 	}
 
 	if profileStateExists && profileState == "success" {
@@ -327,7 +334,7 @@ func (t *GpuPartitionTask) handleRestartingPods(ctx context.Context, obj *KaiwoN
 }
 
 // handleWaitingForLabels waits for the node labels to be updated and completes partitioning
-func (t *GpuPartitionTask) handleWaitingForLabels(ctx context.Context, obj *KaiwoNodeWrapper) (*ctrl.Result, error) {
+func (t *GpuPartitionTask) handleWaitingForLabels(_ context.Context, _ *KaiwoNodeWrapper) (*ctrl.Result, error) {
 	// This phase will naturally transition to completed state on the next reconcile
 	// when isPartitioningComplete() returns true
 	return &ctrl.Result{RequeueAfter: shortRequeueDelay}, nil
@@ -343,7 +350,7 @@ func (t *GpuPartitionTask) getDaemonSetPod(ctx context.Context, namespace, dsSuf
 
 	for _, pod := range podList.Items {
 		for _, owner := range pod.OwnerReferences {
-			if owner.Kind == "DaemonSet" && strings.HasSuffix(owner.Name, dsSuffix) {
+			if owner.Kind == KindDaemonSet && strings.HasSuffix(owner.Name, dsSuffix) {
 				return &pod, nil
 			}
 		}
@@ -353,7 +360,7 @@ func (t *GpuPartitionTask) getDaemonSetPod(ctx context.Context, namespace, dsSuf
 
 // Helper methods for state management
 
-func (t *GpuPartitionTask) setErrorCondition(obj *KaiwoNodeWrapper, message string) *ctrl.Result {
+func (t *GpuPartitionTask) setErrorCondition(obj *KaiwoNodeWrapper, message string) {
 	obj.KaiwoNode.Status.Status = v1alpha1.KaiwoNodeStatusError
 	obj.KaiwoNode.Status.Partitioning.Phase = v1alpha1.PartitioningPhaseError
 	meta.SetStatusCondition(&obj.KaiwoNode.Status.Conditions, metav1.Condition{
@@ -362,7 +369,6 @@ func (t *GpuPartitionTask) setErrorCondition(obj *KaiwoNodeWrapper, message stri
 		Status:  metav1.ConditionFalse,
 		Message: message,
 	})
-	return nil
 }
 
 func (t *GpuPartitionTask) setInProgressCondition(obj *KaiwoNodeWrapper, phase v1alpha1.PartitioningPhase, message string) {
@@ -388,26 +394,6 @@ func (t *GpuPartitionTask) setupSystemTolerations(ctx context.Context) error {
 	}
 	return nil
 }
-
-// daemonSetPodExists checks if a pod exists for the given daemonset on the node
-func (t *GpuPartitionTask) daemonSetPodExists(ctx context.Context, namespace, dsSuffix, nodeName string) (bool, error) {
-	podList := &corev1.PodList{}
-	fieldSelector := client.MatchingFields{"spec.nodeName": nodeName}
-	if err := t.Client.List(ctx, podList, client.InNamespace(namespace), fieldSelector); err != nil {
-		return false, err
-	}
-
-	for _, pod := range podList.Items {
-		for _, owner := range pod.OwnerReferences {
-			if owner.Kind == "DaemonSet" && strings.HasSuffix(owner.Name, dsSuffix) {
-				return true, nil
-			}
-		}
-	}
-	return false, nil
-}
-
-// Existing utility methods remain the same...
 
 // ensureSystemTolerations adds tolerations to kube-system Deployments and DaemonSets
 func (t *GpuPartitionTask) ensureSystemTolerations(ctx context.Context, taint corev1.Taint, namespace string) error {
@@ -481,14 +467,14 @@ func (t *GpuPartitionTask) nodeHasTaint(node *corev1.Node, taint corev1.Taint) b
 }
 
 // addTaint adds the AMD DCM taint to the node
-func (t *GpuPartitionTask) addTaint(ctx context.Context, node *corev1.Node, taint corev1.Taint) {
+func (t *GpuPartitionTask) addTaint(_ context.Context, node *corev1.Node, taint corev1.Taint) {
 	node.Spec.Taints = append(node.Spec.Taints, taint)
 	t.Recorder.Eventf(node, corev1.EventTypeNormal, "TaintNode",
 		"Added %s=%s taint", taint.Key, taint.Value)
 }
 
 // removeTaint removes the AMD DCM taint from the node
-func (t *GpuPartitionTask) removeTaint(ctx context.Context, node *corev1.Node, taint corev1.Taint) {
+func (t *GpuPartitionTask) removeTaint(_ context.Context, node *corev1.Node, taint corev1.Taint) {
 	var newTaints []corev1.Taint
 	for _, nodeTaint := range node.Spec.Taints {
 		if !nodeTaint.MatchTaint(&taint) {
@@ -537,34 +523,4 @@ func toleratesDCM(tolerations []corev1.Toleration) bool {
 		}
 	}
 	return false
-}
-
-// isDaemonSetPodReady returns true if there exists a Pod in `namespace`
-// owned by DaemonSet `dsName`, scheduled on `nodeName`, whose Phase is Running
-// and which has the Ready condition == True.
-func (t *GpuPartitionTask) isDaemonSetPodReady(ctx context.Context, namespace, dsSuffix, nodeName string) (bool, error) {
-	podList := &corev1.PodList{}
-	fieldSelector := client.MatchingFields{"spec.nodeName": nodeName}
-	if err := t.Client.List(ctx, podList, client.InNamespace(namespace), fieldSelector); err != nil {
-		return false, err
-	}
-
-	for _, pod := range podList.Items {
-		for _, owner := range pod.OwnerReferences {
-			if owner.Kind == "DaemonSet" && strings.HasSuffix(owner.Name, dsSuffix) {
-				if pod.Status.Phase != corev1.PodRunning {
-					return false, nil
-				}
-				for _, cond := range pod.Status.Conditions {
-					if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionTrue {
-						return true, nil
-					}
-				}
-				return false, nil
-			}
-		}
-	}
-
-	// No matching Pod found
-	return false, nil
 }

@@ -31,7 +31,6 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
@@ -290,129 +289,6 @@ func (gpuInfo NodeGpuInfo) ModelCleaned() string {
 const (
 	NodePartitionedGpusTaint = KaiwoLabelBase + "partitioned-gpu"
 )
-
-// EnsureClusterNodesLabelsAndTaints ensures that each node in the cluster is labeled correctly for Kaiwo usage
-func EnsureClusterNodesLabelsAndTaints(ctx context.Context, c client.Client) error {
-	nodeList := &v1.NodeList{}
-	if err := c.List(ctx, nodeList); err != nil {
-		return fmt.Errorf("failed to list nodes: %w", err)
-	}
-	for _, node := range nodeList.Items {
-		if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			err := c.Get(ctx, client.ObjectKeyFromObject(&node), &node)
-			if err != nil {
-				return fmt.Errorf("failed to get node '%s': %w", node.Name, err)
-			}
-			if err := EnsureNodeLabelsAndTaints(ctx, c, node); err != nil {
-				return fmt.Errorf("failed to ensure cluster nodes: %w", err)
-			}
-			return nil
-		}); err != nil {
-			return fmt.Errorf("failed to ensure labels and taints on node '%s': %w", node.Name, err)
-		}
-	}
-	return nil
-}
-
-// EnsureNodeLabelsAndTaints ensures that a node is labeled correctly for Kaiwo usage
-func EnsureNodeLabelsAndTaints(ctx context.Context, c client.Client, node v1.Node) error {
-	config := ConfigFromContext(ctx)
-
-	nodeInfo, err := ExtractRawNodeResources(node)
-	if err != nil {
-		return fmt.Errorf("failed to extract node resource info for node '%s': %w", node.Name, err)
-	}
-
-	// ensureNodeLabels(config, *nodeInfo, &node)
-	ensureNodeTaints(config, *nodeInfo, &node)
-
-	if err := c.Update(ctx, &node); err != nil {
-		return fmt.Errorf("failed to update node labels: %w", err)
-	}
-
-	return nil
-}
-
-func ensureNodeLabels(config KaiwoConfigContext, nodeResourceInfo NodeInfo, node *v1.Node) {
-	labels := node.Labels
-
-	labels[NodeTypeLabelKey] = string(nodeResourceInfo.Type)
-	labels[DefaultNodePoolLabelKey] = nodeResourceInfo.GetFlavorName()
-
-	if !nodeResourceInfo.IsControlPlane() || !config.Nodes.ExcludeMasterNodesFromNodePools {
-		labels[DefaultKaiwoWorkerLabel] = True
-	}
-
-	if nodeResourceInfo.Type == CPUOnly {
-		return
-	}
-
-	gpuInfo := nodeResourceInfo.GpuInfo
-
-	if partitioned := nodeResourceInfo.GpuInfo.IsPartitioned; partitioned != nil && *partitioned {
-		labels[NodeGpusPartitionedLabelKey] = True
-	} else if partitioned != nil && !*partitioned {
-		labels[NodeGpusPartitionedLabelKey] = False
-	}
-
-	labels[NodeGpuVendorLabelKey] = string(gpuInfo.Vendor)
-	labels[NodeGpuModelLabelKey] = gpuInfo.Model
-	labels[NodeGpuLogicalCountLabelKey] = strconv.Itoa(gpuInfo.LogicalCount)
-
-	if gpuInfo.PhysicalCount != nil {
-		labels[NodeGpuPhysicalCountLabelKey] = strconv.Itoa(*gpuInfo.PhysicalCount)
-	}
-	if gpuInfo.PhysicalVramPerGpu != nil {
-		labels[NodeGpuPhysicalVramLabelKey] = baseutils.QuantityToGi(*gpuInfo.PhysicalVramPerGpu)
-	}
-	if gpuInfo.LogicalVramPerGpu != nil {
-		labels[NodeGpuLogicalVramLabelKey] = baseutils.QuantityToGi(*gpuInfo.LogicalVramPerGpu)
-	}
-
-	// Topology level defaults
-	if _, exists := node.Labels[DefaultTopologyBlockLabel]; !exists {
-		node.Labels[DefaultTopologyBlockLabel] = "block-a"
-	}
-	if _, exists := node.Labels[DefaultTopologyRackLabel]; !exists {
-		node.Labels[DefaultTopologyRackLabel] = "rack-a"
-	}
-
-	node.SetLabels(labels)
-}
-
-func ensureNodeTaints(config KaiwoConfigContext, nodeResourceInfo NodeInfo, node *v1.Node) {
-	var taints []v1.Taint
-
-	if config.Nodes.AddTaintsToGpuNodes && !nodeResourceInfo.IsCpuOnlyNode() {
-		gpuTaint := v1.Taint{
-			Key:    config.Nodes.DefaultGpuTaintKey,
-			Value:  True,
-			Effect: v1.TaintEffectNoSchedule,
-		}
-		taints = append(taints, gpuTaint)
-
-		if partitioned := nodeResourceInfo.GpuInfo.IsPartitioned; partitioned != nil && *partitioned {
-			taints = append(taints, v1.Taint{
-				Key:    NodePartitionedGpusTaint,
-				Value:  True,
-				Effect: v1.TaintEffectNoSchedule,
-			})
-		}
-	}
-
-	for _, taint := range taints {
-		addTaint := true
-		for _, t := range node.Spec.Taints {
-			if t.MatchTaint(&taint) {
-				addTaint = false
-				break
-			}
-		}
-		if addTaint {
-			node.Spec.Taints = append(node.Spec.Taints, taint)
-		}
-	}
-}
 
 // The code below is for extracting information from the AMD / NVIDIA system labels
 

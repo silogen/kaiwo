@@ -7,41 +7,41 @@ spec:
   steps:
   - name: Ensure partitioning is enabled
     try:
-      - script:
-          content: kubectl label nodes tw009 --overwrite kaiwo.silogen.ai/node.amd.partitioning.enabled=true kaiwo.silogen.ai/node.amd.partitioning.profile=cpx
-      - wait:
+    - script:
+        content: kubectl label nodes tw009 --overwrite kaiwo.silogen.ai/node.amd.partitioning.enabled=true kaiwo.silogen.ai/node.amd.partitioning.profile=cpx
+    - wait:
+        apiVersion: kaiwo.silogen.ai/v1alpha1
+        kind: KaiwoNode
+        name: tw009
+        timeout: 5m
+        for:
+          condition:
+            name: PartitioningCompleted
+            value: 'true'
+    - assert:
+        resource:
           apiVersion: kaiwo.silogen.ai/v1alpha1
           kind: KaiwoNode
-          name: tw009
-          timeout: 5m
-          for:
-            condition:
-              name: PartitioningCompleted
-              value: 'true'
-      - assert:
-          resource:
-            apiVersion: kaiwo.silogen.ai/v1alpha1
-            kind: KaiwoNode
-            metadata:
-              name: tw009
-            spec:
-              partitioning:
-                profile: cpx
-            status:
-              status: Ready
-              partitioning:
-                phase: Completed
-                appliedProfile: cpx
-              resources:
-                gpus:
-                  isPartitioned: true
-                  logicalCount: 63
-                  logicalVramPerGpu: 24Gi
-      - script:
+          metadata:
+            name: tw009
+          spec:
+            partitioning:
+              profile: cpx
+          status:
+            status: Ready
+            partitioning:
+              phase: Completed
+              appliedProfile: cpx
+            resources:
+              gpus:
+                isPartitioned: true
+                logicalCount: 63
+                logicalVramPerGpu: 24Gi
+    - script:
           # Reset the KaiwoQueueConfig
-          content: kubectl delete kaiwoqueueconfig kaiwo
-      - sleep:
-          duration: 5s
+        content: kubectl delete kaiwoqueueconfig kaiwo
+    - sleep:
+        duration: 5s
   - name: Run partitioned jobs
     try:
     - apply:
@@ -68,41 +68,41 @@ spec:
             nodeName: tw038
   - name: Ensure partitioning is disabled
     try:
-      - script:
-          content: kubectl label nodes tw009 --overwrite kaiwo.silogen.ai/node.amd.partitioning.enabled=true kaiwo.silogen.ai/node.amd.partitioning.profile=spx
-      - sleep:
-          duration: 10s
-      - wait:
+    - script:
+        content: kubectl label nodes tw009 --overwrite kaiwo.silogen.ai/node.amd.partitioning.enabled=true kaiwo.silogen.ai/node.amd.partitioning.profile=spx
+    - sleep:
+        duration: 10s
+    - wait:
+        apiVersion: kaiwo.silogen.ai/v1alpha1
+        kind: KaiwoNode
+        name: tw009
+        timeout: 5m
+        for:
+          condition:
+            name: PartitioningCompleted
+            value: 'true'
+    - assert:
+        resource:
           apiVersion: kaiwo.silogen.ai/v1alpha1
           kind: KaiwoNode
-          name: tw009
-          timeout: 5m
-          for:
-            condition:
-              name: PartitioningCompleted
-              value: 'true'
-      - assert:
-          resource:
-            apiVersion: kaiwo.silogen.ai/v1alpha1
-            kind: KaiwoNode
-            metadata:
-              name: tw009
-            spec:
-              partitioning:
-                profile: spx
-            status:
-              status: Ready
-              partitioning:
-                phase: Completed
-                appliedProfile: spx
-              resources:
-                gpus:
-                  isPartitioned: false
-                  logicalCount: 8
-                  logicalVramPerGpu: 192Gi
+          metadata:
+            name: tw009
+          spec:
+            partitioning:
+              profile: spx
+          status:
+            status: Ready
+            partitioning:
+              phase: Completed
+              appliedProfile: spx
+            resources:
+              gpus:
+                isPartitioned: false
+                logicalCount: 8
+                logicalVramPerGpu: 192Gi
     finally:
-      - script:
+    - script:
           # Reset the KaiwoQueueConfig
-          content: kubectl delete kaiwoqueueconfig kaiwo
-      - sleep:
-          duration: 5s
+        content: kubectl delete kaiwoqueueconfig kaiwo
+    - sleep:
+        duration: 5s

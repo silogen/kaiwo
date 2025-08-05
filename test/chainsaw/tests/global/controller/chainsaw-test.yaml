@@ -4,26 +4,26 @@ metadata:
   name: ensure-kaiwo-controller-and-scheduler
 spec:
   steps:
-    - try:
-        - assert:
-            resource:
-              apiVersion: apps/v1
-              kind: Deployment
-              metadata:
-                name: kaiwo-controller-manager
-                namespace: kaiwo-system
-              status:
-                availableReplicas: 1
-                readyReplicas: 1
-                replicas: 1
-        - assert:
-            resource:
-              apiVersion: apps/v1
-              kind: Deployment
-              metadata:
-                name: kaiwo-scheduler
-                namespace: kube-system
-              status:
-                availableReplicas: 1
-                readyReplicas: 1
-                replicas: 1
+  - try:
+    - assert:
+        resource:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: kaiwo-controller-manager
+            namespace: kaiwo-system
+          status:
+            availableReplicas: 1
+            readyReplicas: 1
+            replicas: 1
+    - assert:
+        resource:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: kaiwo-scheduler
+            namespace: kube-system
+          status:
+            availableReplicas: 1
+            readyReplicas: 1
+            replicas: 1

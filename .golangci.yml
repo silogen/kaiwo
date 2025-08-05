@@ -14,11 +14,12 @@ linters:
   - nakedret
   - unconvert
   - unparam
-  settings:
-    goheader:
-      template-path: .copyright-template
-    lll:
-      line-length: 500
+
+linters-settings:
+  goheader:
+    template-path: .copyright-template
+  lll:
+    line-length: 500
   exclusions:
     generated: lax
     rules:
@@ -29,6 +30,9 @@ linters:
       - dupl
       - lll
       path: internal/*
+    - linters:
+      - lll
+      path: pkg/*
     paths:
     - python
     - third_party$
