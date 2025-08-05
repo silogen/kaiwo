@@ -92,10 +92,54 @@ kubectl apply -f "https://raw.githubusercontent.com/silogen/kaiwo/$GIT_REF/autom
 
 echo "Waiting for kaiwo-infrastructure to be ready..."
 echo "This may take several minutes as all components are installed and configured..."
-kubectl wait --for=condition=ready kustomization/kaiwo-infrastructure -n flux-system --timeout=600s
+
+echo "Checking status of kustomization/kaiwo-infrastructure..."
+kubectl get kustomization/kaiwo-infrastructure -n flux-system -o wide
+
+echo "Waiting for Kustomizations to be ready..."
+if ! kubectl wait --for=condition=ready kustomization/kaiwo-infrastructure -n flux-system --timeout=600s; then
+    echo "❌ kaiwo-infrastructure failed to become ready. Debugging..."
+    echo "📋 Kustomization status:"
+    kubectl describe kustomization/kaiwo-infrastructure -n flux-system
+    echo "🔍 Recent events:"
+    kubectl get events -n flux-system --sort-by='.lastTimestamp' --field-selector reason!=Scheduled
+    echo "💾 Kustomize controller logs:"
+    kubectl logs -n flux-system -l app=kustomize-controller --tail=100 --prefix=true || true
+    exit 1
+fi
 
 echo "Waiting for all Helm releases to be ready..."
-kubectl wait --for=condition=ready helmrelease --all -n flux-system --timeout=600s
+echo "Checking current status of Helm releases..."
+kubectl get helmrelease -A -o wide
+
+echo "Checking Flux logs for any errors..."
+kubectl logs -n flux-system -l app=source-controller --tail=50 --prefix=true || true
+kubectl logs -n flux-system -l app=helm-controller --tail=50 --prefix=true || true
+
+echo "Attempting to wait for Helm releases..."
+if ! kubectl wait --for=condition=ready helmrelease --all -n flux-system --timeout=600s; then
+    echo "❌ Helm releases failed to become ready. Debugging..."
+    
+    echo "📊 Final status of all Helm releases:"
+    kubectl get helmrelease -A -o wide
+    
+    echo "📋 Detailed status of failed Helm releases:"
+    kubectl get helmrelease -A -o json | jq -r '.items[] | select(.status.conditions // [] | map(.status) | contains(["False"])) | "\(.metadata.namespace)/\(.metadata.name): \(.status.conditions // [] | map(select(.status == "False")) | .[0].message // "Unknown error")"'
+    
+    echo "🔍 Events in flux-system namespace:"
+    kubectl get events -n flux-system --sort-by='.lastTimestamp' --field-selector type!=Normal
+    
+    echo "📦 Pod status in flux-system:"
+    kubectl get pods -n flux-system -o wide
+    
+    echo "💾 Recent logs from Helm controller:"
+    kubectl logs -n flux-system -l app=helm-controller --tail=100 --prefix=true || true
+    
+    echo "💾 Recent logs from Source controller:"
+    kubectl logs -n flux-system -l app=source-controller --tail=100 --prefix=true || true
+    
+    exit 1
+fi
 
 echo "Creating test namespace..."
 kubectl create ns "$TEST_NAME" --dry-run=client -o yaml | kubectl apply -f -
