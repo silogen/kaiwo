@@ -16,7 +16,7 @@ spec:
   versions:
   - additionalPrinterColumns:
     - jsonPath: .status.status
-      name: Status
+      name: Phase
       type: string
     - jsonPath: .status.startTime
       name: StartTime
