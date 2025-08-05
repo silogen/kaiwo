@@ -11,6 +11,8 @@ Package v1alpha1 contains API Schema definitions for the kaiwo v1alpha1 API grou
 ### Resource Types
 - [KaiwoJob](#kaiwojob)
 - [KaiwoJobList](#kaiwojoblist)
+- [KaiwoNode](#kaiwonode)
+- [KaiwoNodeList](#kaiwonodelist)
 - [KaiwoQueueConfig](#kaiwoqueueconfig)
 - [KaiwoQueueConfigList](#kaiwoqueueconfiglist)
 - [KaiwoService](#kaiwoservice)
@@ -92,14 +94,14 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `resourceGroups` _ResourceGroup array_ | resourceGroups describes groups of resources.<br />Each resource group defines the list of resources and a list of flavors<br />that provide quotas for these resources.<br />Each resource and each flavor can only form part of one resource group.<br />resourceGroups can be up to 16. |  | MaxItems: 16 <br /> |
-| `cohort` _[CohortReference](#cohortreference)_ | cohort that this ClusterQueue belongs to. CQs that belong to the<br />same cohort can borrow unused resources from each other.<br /><br />A CQ can be a member of a single borrowing cohort. A workload submitted<br />to a queue referencing this CQ can borrow quota from any CQ in the cohort.<br />Only quota for the [resource, flavor] pairs listed in the CQ can be<br />borrowed.<br />If empty, this ClusterQueue cannot borrow from any other ClusterQueue and<br />vice versa.<br /><br />A cohort is a name that links CQs together, but it doesn't reference any<br />object. |  |  |
-| `queueingStrategy` _[QueueingStrategy](#queueingstrategy)_ | QueueingStrategy indicates the queueing strategy of the workloads<br />across the queues in this ClusterQueue.<br />Current Supported Strategies:<br /><br />- StrictFIFO: workloads are ordered strictly by creation time.<br />Older workloads that can't be admitted will block admitting newer<br />workloads even if they fit available quota.<br />- BestEffortFIFO: workloads are ordered by creation time,<br />however older workloads that can't be admitted will not block<br />admitting newer workloads that fit existing quota. | BestEffortFIFO | Enum: [StrictFIFO BestEffortFIFO] <br /> |
+| `cohort` _[CohortReference](#cohortreference)_ | cohort that this ClusterQueue belongs to. CQs that belong to the<br />same cohort can borrow unused resources from each other.<br />A CQ can be a member of a single borrowing cohort. A workload submitted<br />to a queue referencing this CQ can borrow quota from any CQ in the cohort.<br />Only quota for the [resource, flavor] pairs listed in the CQ can be<br />borrowed.<br />If empty, this ClusterQueue cannot borrow from any other ClusterQueue and<br />vice versa.<br />A cohort is a name that links CQs together, but it doesn't reference any<br />object. |  |  |
+| `queueingStrategy` _[QueueingStrategy](#queueingstrategy)_ | QueueingStrategy indicates the queueing strategy of the workloads<br />across the queues in this ClusterQueue.<br />Current Supported Strategies:<br />- StrictFIFO: workloads are ordered strictly by creation time.<br />Older workloads that can't be admitted will block admitting newer<br />workloads even if they fit available quota.<br />- BestEffortFIFO: workloads are ordered by creation time,<br />however older workloads that can't be admitted will not block<br />admitting newer workloads that fit existing quota. | BestEffortFIFO | Enum: [StrictFIFO BestEffortFIFO] <br /> |
 | `namespaceSelector` _[LabelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#labelselector-v1-meta)_ | namespaceSelector defines which namespaces are allowed to submit workloads to<br />this clusterQueue. Beyond this basic support for policy, a policy agent like<br />Gatekeeper should be used to enforce more advanced policies.<br />Defaults to null which is a nothing selector (no namespaces eligible).<br />If set to an empty selector `\{\}`, then all namespaces are eligible. |  |  |
 | `flavorFungibility` _[FlavorFungibility](#flavorfungibility)_ | flavorFungibility defines whether a workload should try the next flavor<br />before borrowing or preempting in the flavor being evaluated. | \{  \} |  |
 | `preemption` _[ClusterQueuePreemption](#clusterqueuepreemption)_ |  | \{  \} |  |
 | `admissionChecks` _[AdmissionCheckReference](#admissioncheckreference) array_ | admissionChecks lists the AdmissionChecks required by this ClusterQueue.<br />Cannot be used along with AdmissionCheckStrategy. |  |  |
 | `admissionChecksStrategy` _[AdmissionChecksStrategy](#admissionchecksstrategy)_ | admissionCheckStrategy defines a list of strategies to determine which ResourceFlavors require AdmissionChecks.<br />This property cannot be used in conjunction with the 'admissionChecks' property. |  |  |
-| `stopPolicy` _[StopPolicy](#stoppolicy)_ | stopPolicy - if set to a value different from None, the ClusterQueue is considered Inactive, no new reservation being<br />made.<br /><br />Depending on its value, its associated workloads will:<br /><br />- None - Workloads are admitted<br />- HoldAndDrain - Admitted workloads are evicted and Reserving workloads will cancel the reservation.<br />- Hold - Admitted workloads will run to completion and Reserving workloads will cancel the reservation. | None | Enum: [None Hold HoldAndDrain] <br /> |
+| `stopPolicy` _[StopPolicy](#stoppolicy)_ | stopPolicy - if set to a value different from None, the ClusterQueue is considered Inactive, no new reservation being<br />made.<br />Depending on its value, its associated workloads will:<br />- None - Workloads are admitted<br />- HoldAndDrain - Admitted workloads are evicted and Reserving workloads will cancel the reservation.<br />- Hold - Admitted workloads will run to completion and Reserving workloads will cancel the reservation. | None | Enum: [None Hold HoldAndDrain] <br /> |
 | `fairSharing` _[FairSharing](#fairsharing)_ | fairSharing defines the properties of the ClusterQueue when<br />participating in FairSharing.  The values are only relevant<br />if FairSharing is enabled in the Kueue configuration. |  |  |
 
 
@@ -117,23 +119,23 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `user` _string_ | User specifies the owner or creator of the workload. It should typically be the user's email address. This value is primarily used for labeling (`kaiwo.silogen.ai/user`) the generated resources (like Pods, Jobs, Deployments) for identification and filtering (e.g., with `kaiwo list --user <email>`).<br /><br />In the future, if authentication is enabled, this must be the email address which is checked against authenticated user for match. |  |  |
+| `user` _string_ | User specifies the owner or creator of the workload. It should typically be the user's email address. This value is primarily used for labeling (`kaiwo.silogen.ai/user`) the generated resources (like Pods, Jobs, Deployments) for identification and filtering (e.g., with `kaiwo list --user <email>`).<br />In the future, if authentication is enabled, this must be the email address which is checked against authenticated user for match. |  |  |
 | `podTemplateSpecLabels` _object (keys:string, values:string)_ | PodTemplateSpecLabels allows you to specify custom labels that will be added to the `template.metadata.labels` section of the generated Pods (within Jobs, Deployments, or RayCluster specs). Standard Kaiwo system labels (like `kaiwo.silogen.ai/user`, `kaiwo.silogen.ai/name`, etc.) are added automatically and take precedence if there are conflicts. |  |  |
 | `version` _string_ | Version allows you to specify an optional version string for the workload. This can be useful for tracking different iterations or configurations of the same logical workload. It does not directly affect resource creation but serves as metadata. |  |  |
 | `replicas` _integer_ | Replicas specifies the number of replicas for the workload. See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor) for more details on how this field impacts scheduling. | 1 |  |
 | `duration` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#duration-v1-meta)_ | Duration specifies the maximum duration over which the workload can run. This is useful for avoiding workloads running indefinitely. |  |  |
 | `preferredTopologyLabel` _string_ | PreferredTopologyLabel specifies the preferred topology label for scheduling the workload. This is used to influence how the workload is distributed across nodes in the cluster.<br />If not specified, Kaiwo will use the default topology labels defined in the default topology of KaiwoQueueConfig starting at the host level.<br />The levels are evaluated one-by-one going up from the level indicated by the label. If the PodSet cannot fit within a given topology label then the next topology level up is considered.<br />If the PodSet cannot fit at the highest topology level, then it is distributed among multiple topology domains |  |  |
 | `requiredTopologyLabel` _string_ | RequiredTopologyLabel specifies the required topology label for scheduling the workload. This is used to ensure that the workload is scheduled on nodes that match the specified topology label. |  |  |
-| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core)_ | Resources specify the default resource requirements applied for all pods inside the workflow.<br /><br />This field defines default Kubernetes `ResourceRequirements` (requests and limits for CPU,<br />memory, ephemeral-storage) applied to *all* containers (including init containers) within<br />the workload's pods.<br /><br />**Behavior:**<br /><br />These values act as **defaults**. If a container within the underlying Job, Deployment,<br />or Ray spec (if provided by the user) already defines a specific request or limit<br />(e.g., `memory` limit), the value from `resources` for that specific metric **will not** override it.<br /><br />**Interaction with GPU fields:** The GPU requests/limits (`amd.com/gpu` or `nvidia.com/gpu`)<br />are controlled exclusively by the `gpus`, `gpusPerReplica`, and `gpuVendor` fields<br />(and the associated calculation logic described above). Any GPU specifications within<br />the `resources` field are **ignored**.<br /><br />**Default CPU/Memory with GPUs:** When Kaiwo *generates* the underlying<br />Job/Deployment/RayCluster spec (i.e., the user did *not* provide `spec.job`,<br />`spec.deployment`, or `spec.rayService`/`spec.rayJob`), and GPUs are requested<br />(`gpusPerReplica` > 0), Kaiwo applies default CPU and Memory requests/limits<br />based on the GPU count (e.g., 4 CPU cores and 32Gi Memory per GPU).<br />These GPU-derived defaults *will* override any CPU/Memory settings defined in<br />the `resources` field in this specific scenario. If the user *does* provide<br />the underlying spec, these GPU-derived CPU/Memory defaults are not applied,<br />respecting the user's definition or the values from the `resources` field. |  |  |
+| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core)_ | Resources specify the default resource requirements applied for all pods inside the workflow.<br />This field defines default Kubernetes `ResourceRequirements` (requests and limits for CPU,<br />memory, ephemeral-storage) applied to *all* containers (including init containers) within<br />the workload's pods.<br />**Behavior:**<br />These values act as **defaults**. If a container within the underlying Job, Deployment,<br />or Ray spec (if provided by the user) already defines a specific request or limit<br />(e.g., `memory` limit), the value from `resources` for that specific metric **will not** override it.<br />**Interaction with GPU fields:** The GPU requests/limits (`amd.com/gpu` or `nvidia.com/gpu`)<br />are controlled exclusively by the `gpus`, `gpusPerReplica`, and `gpuVendor` fields<br />(and the associated calculation logic described above). Any GPU specifications within<br />the `resources` field are **ignored**.<br />**Default CPU/Memory with GPUs:** When Kaiwo *generates* the underlying<br />Job/Deployment/RayCluster spec (i.e., the user did *not* provide `spec.job`,<br />`spec.deployment`, or `spec.rayService`/`spec.rayJob`), and GPUs are requested<br />(`gpusPerReplica` > 0), Kaiwo applies default CPU and Memory requests/limits<br />based on the GPU count (e.g., 4 CPU cores and 32Gi Memory per GPU).<br />These GPU-derived defaults *will* override any CPU/Memory settings defined in<br />the `resources` field in this specific scenario. If the user *does* provide<br />the underlying spec, these GPU-derived CPU/Memory defaults are not applied,<br />respecting the user's definition or the values from the `resources` field. |  |  |
 | `gpuResources` _[GpuResourceRequirements](#gpuresourcerequirements)_ | GpuResources defines the _per-replica_ GPU resources that a workload requests |  |  |
-| `image` _string_ | Image specifies the default container image to be used for the primary workload container(s).<br /><br />- If containers defined within the underlying Job, Deployment, or Ray spec do *not* specify an image, this image will be used.<br />- If this field is also empty, the latest tag of ghcr.io/silogen/rocm-ray is used |  |  |
+| `image` _string_ | Image specifies the default container image to be used for the primary workload container(s).<br />- If containers defined within the underlying Job, Deployment, or Ray spec do *not* specify an image, this image will be used.<br />- If this field is also empty, the latest tag of ghcr.io/silogen/rocm-ray is used |  |  |
 | `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets is a list of Kubernetes `LocalObjectReference` (containing just the secret `name`) referencing secrets needed to pull the container image(s). These are added to the `imagePullSecrets` field of the PodSpec for all generated pods. |  |  |
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env is a list of Kubernetes `EnvVar` structs. These environment variables are added to the primary workload container(s) in the generated pods. They are appended to any environment variables already defined in the underlying Job, Deployment, or Ray spec. |  |  |
 | `secretVolumes` _[SecretVolume](#secretvolume) array_ | SecretVolumes allows you to mount specific keys from Kubernetes Secrets as files into the workload containers. |  |  |
 | `ray` _boolean_ | Ray determines whether the operator should use RayCluster for workload execution.<br />If `true`, Kaiwo will create Ray-specific resources.<br />If `false` (default), Kaiwo will create standard Kubernetes resources (BatchJob for `KaiwoJob`, Deployment for `KaiwoService`).<br />This setting dictates which underlying spec (`job`/`rayJob` or `deployment`/`rayService`) is primarily used. | false |  |
-| `storage` _[StorageSpec](#storagespec)_ | Storage configures persistent storage using Kubernetes PersistentVolumeClaims (PVCs).<br /><br />Enabling `storage.data.download` or `storage.huggingFace.preCacheRepos` will cause Kaiwo to create a temporary Kubernetes Job (the "download job") before starting the main workload. This job runs a container that performs the downloads into the respective PVCs. The main workload only starts after the download job completes successfully. |  |  |
+| `storage` _[StorageSpec](#storagespec)_ | Storage configures persistent storage using Kubernetes PersistentVolumeClaims (PVCs).<br />Enabling `storage.data.download` or `storage.huggingFace.preCacheRepos` will cause Kaiwo to create a temporary Kubernetes Job (the "download job") before starting the main workload. This job runs a container that performs the downloads into the respective PVCs. The main workload only starts after the download job completes successfully. |  |  |
 | `dangerous` _boolean_ | Dangerous, if when set to `true`, Kaiwo will *not* add the default `PodSecurityContext` (which normally sets `runAsUser: 1000`, `runAsGroup: 1000`, `fsGroup: 1000`) to the generated pods. Use this only if you need to run containers as root or a different specific user and understand the security implications. | false |  |
-| `clusterQueue` _string_ | ClusterQueue specifies the name of the Kueue `ClusterQueue` that the workload should be submitted to for scheduling and resource management.<br /><br />This value is set as the `kueue.x-k8s.io/queue-name` label on the underlying resources.<br /><br />If omitted, it defaults to the value specified by the `DEFAULT_CLUSTER_QUEUE_NAME` environment variable in the Kaiwo controller (typically "kaiwo"), which is set during installation.<br /><br />Note! If the applied KaiwoQueueConfig includes no quota for the default queue, no workload will run that tries to fall back on it.<br /><br />The `kaiwo submit` CLI command can override this using the `--queue` flag or the `clusterQueue` field in the `kaiwoconfig.yaml` file. |  |  |
+| `clusterQueue` _string_ | ClusterQueue specifies the name of the Kueue `ClusterQueue` that the workload should be submitted to for scheduling and resource management.<br />This value is set as the `kueue.x-k8s.io/queue-name` label on the underlying resources.<br />If omitted, it defaults to the value specified by the `DEFAULT_CLUSTER_QUEUE_NAME` environment variable in the Kaiwo controller (typically "kaiwo"), which is set during installation.<br />Note! If the applied KaiwoQueueConfig includes no quota for the default queue, no workload will run that tries to fall back on it.<br />The `kaiwo submit` CLI command can override this using the `--queue` flag or the `clusterQueue` field in the `kaiwoconfig.yaml` file. |  |  |
 | `priorityClass` _string_ | WorkloadPriorityClass specifies the name of Kueue `WorkloadPriorityClass` to be assigned to the job's pods. This influences the scheduling priority relative to other pods in the cluster. |  |  |
 
 
@@ -219,6 +221,24 @@ _Appears in:_
 | `targetPath` _string_ | TargetPath specifies the destination path relative to the data volume's mount point (`DataStorageSpec.MountPath`) where the repository or `path` content should be copied. |  |  |
 
 
+#### GpuPartitioningProfile
+
+_Underlying type:_ _string_
+
+
+
+
+
+_Appears in:_
+- [PartitioningConfig](#partitioningconfig)
+- [PartitioningStatus](#partitioningstatus)
+
+| Field | Description |
+| --- | --- |
+| `spx` |  |
+| `cpx` |  |
+
+
 #### GpuResourceRequirements
 
 
@@ -251,6 +271,7 @@ _Underlying type:_ _string_
 
 _Appears in:_
 - [GpuResourceRequirements](#gpuresourcerequirements)
+- [NodeGpuInfo](#nodegpuinfo)
 
 | Field | Description |
 | --- | --- |
@@ -345,27 +366,27 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `user` _string_ | User specifies the owner or creator of the workload. It should typically be the user's email address. This value is primarily used for labeling (`kaiwo.silogen.ai/user`) the generated resources (like Pods, Jobs, Deployments) for identification and filtering (e.g., with `kaiwo list --user <email>`).<br /><br />In the future, if authentication is enabled, this must be the email address which is checked against authenticated user for match. |  |  |
+| `user` _string_ | User specifies the owner or creator of the workload. It should typically be the user's email address. This value is primarily used for labeling (`kaiwo.silogen.ai/user`) the generated resources (like Pods, Jobs, Deployments) for identification and filtering (e.g., with `kaiwo list --user <email>`).<br />In the future, if authentication is enabled, this must be the email address which is checked against authenticated user for match. |  |  |
 | `podTemplateSpecLabels` _object (keys:string, values:string)_ | PodTemplateSpecLabels allows you to specify custom labels that will be added to the `template.metadata.labels` section of the generated Pods (within Jobs, Deployments, or RayCluster specs). Standard Kaiwo system labels (like `kaiwo.silogen.ai/user`, `kaiwo.silogen.ai/name`, etc.) are added automatically and take precedence if there are conflicts. |  |  |
 | `version` _string_ | Version allows you to specify an optional version string for the workload. This can be useful for tracking different iterations or configurations of the same logical workload. It does not directly affect resource creation but serves as metadata. |  |  |
 | `replicas` _integer_ | Replicas specifies the number of replicas for the workload. See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor) for more details on how this field impacts scheduling. | 1 |  |
 | `duration` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#duration-v1-meta)_ | Duration specifies the maximum duration over which the workload can run. This is useful for avoiding workloads running indefinitely. |  |  |
 | `preferredTopologyLabel` _string_ | PreferredTopologyLabel specifies the preferred topology label for scheduling the workload. This is used to influence how the workload is distributed across nodes in the cluster.<br />If not specified, Kaiwo will use the default topology labels defined in the default topology of KaiwoQueueConfig starting at the host level.<br />The levels are evaluated one-by-one going up from the level indicated by the label. If the PodSet cannot fit within a given topology label then the next topology level up is considered.<br />If the PodSet cannot fit at the highest topology level, then it is distributed among multiple topology domains |  |  |
 | `requiredTopologyLabel` _string_ | RequiredTopologyLabel specifies the required topology label for scheduling the workload. This is used to ensure that the workload is scheduled on nodes that match the specified topology label. |  |  |
-| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core)_ | Resources specify the default resource requirements applied for all pods inside the workflow.<br /><br />This field defines default Kubernetes `ResourceRequirements` (requests and limits for CPU,<br />memory, ephemeral-storage) applied to *all* containers (including init containers) within<br />the workload's pods.<br /><br />**Behavior:**<br /><br />These values act as **defaults**. If a container within the underlying Job, Deployment,<br />or Ray spec (if provided by the user) already defines a specific request or limit<br />(e.g., `memory` limit), the value from `resources` for that specific metric **will not** override it.<br /><br />**Interaction with GPU fields:** The GPU requests/limits (`amd.com/gpu` or `nvidia.com/gpu`)<br />are controlled exclusively by the `gpus`, `gpusPerReplica`, and `gpuVendor` fields<br />(and the associated calculation logic described above). Any GPU specifications within<br />the `resources` field are **ignored**.<br /><br />**Default CPU/Memory with GPUs:** When Kaiwo *generates* the underlying<br />Job/Deployment/RayCluster spec (i.e., the user did *not* provide `spec.job`,<br />`spec.deployment`, or `spec.rayService`/`spec.rayJob`), and GPUs are requested<br />(`gpusPerReplica` > 0), Kaiwo applies default CPU and Memory requests/limits<br />based on the GPU count (e.g., 4 CPU cores and 32Gi Memory per GPU).<br />These GPU-derived defaults *will* override any CPU/Memory settings defined in<br />the `resources` field in this specific scenario. If the user *does* provide<br />the underlying spec, these GPU-derived CPU/Memory defaults are not applied,<br />respecting the user's definition or the values from the `resources` field. |  |  |
+| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core)_ | Resources specify the default resource requirements applied for all pods inside the workflow.<br />This field defines default Kubernetes `ResourceRequirements` (requests and limits for CPU,<br />memory, ephemeral-storage) applied to *all* containers (including init containers) within<br />the workload's pods.<br />**Behavior:**<br />These values act as **defaults**. If a container within the underlying Job, Deployment,<br />or Ray spec (if provided by the user) already defines a specific request or limit<br />(e.g., `memory` limit), the value from `resources` for that specific metric **will not** override it.<br />**Interaction with GPU fields:** The GPU requests/limits (`amd.com/gpu` or `nvidia.com/gpu`)<br />are controlled exclusively by the `gpus`, `gpusPerReplica`, and `gpuVendor` fields<br />(and the associated calculation logic described above). Any GPU specifications within<br />the `resources` field are **ignored**.<br />**Default CPU/Memory with GPUs:** When Kaiwo *generates* the underlying<br />Job/Deployment/RayCluster spec (i.e., the user did *not* provide `spec.job`,<br />`spec.deployment`, or `spec.rayService`/`spec.rayJob`), and GPUs are requested<br />(`gpusPerReplica` > 0), Kaiwo applies default CPU and Memory requests/limits<br />based on the GPU count (e.g., 4 CPU cores and 32Gi Memory per GPU).<br />These GPU-derived defaults *will* override any CPU/Memory settings defined in<br />the `resources` field in this specific scenario. If the user *does* provide<br />the underlying spec, these GPU-derived CPU/Memory defaults are not applied,<br />respecting the user's definition or the values from the `resources` field. |  |  |
 | `gpuResources` _[GpuResourceRequirements](#gpuresourcerequirements)_ | GpuResources defines the _per-replica_ GPU resources that a workload requests |  |  |
-| `image` _string_ | Image specifies the default container image to be used for the primary workload container(s).<br /><br />- If containers defined within the underlying Job, Deployment, or Ray spec do *not* specify an image, this image will be used.<br />- If this field is also empty, the latest tag of ghcr.io/silogen/rocm-ray is used |  |  |
+| `image` _string_ | Image specifies the default container image to be used for the primary workload container(s).<br />- If containers defined within the underlying Job, Deployment, or Ray spec do *not* specify an image, this image will be used.<br />- If this field is also empty, the latest tag of ghcr.io/silogen/rocm-ray is used |  |  |
 | `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets is a list of Kubernetes `LocalObjectReference` (containing just the secret `name`) referencing secrets needed to pull the container image(s). These are added to the `imagePullSecrets` field of the PodSpec for all generated pods. |  |  |
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env is a list of Kubernetes `EnvVar` structs. These environment variables are added to the primary workload container(s) in the generated pods. They are appended to any environment variables already defined in the underlying Job, Deployment, or Ray spec. |  |  |
 | `secretVolumes` _[SecretVolume](#secretvolume) array_ | SecretVolumes allows you to mount specific keys from Kubernetes Secrets as files into the workload containers. |  |  |
 | `ray` _boolean_ | Ray determines whether the operator should use RayCluster for workload execution.<br />If `true`, Kaiwo will create Ray-specific resources.<br />If `false` (default), Kaiwo will create standard Kubernetes resources (BatchJob for `KaiwoJob`, Deployment for `KaiwoService`).<br />This setting dictates which underlying spec (`job`/`rayJob` or `deployment`/`rayService`) is primarily used. | false |  |
-| `storage` _[StorageSpec](#storagespec)_ | Storage configures persistent storage using Kubernetes PersistentVolumeClaims (PVCs).<br /><br />Enabling `storage.data.download` or `storage.huggingFace.preCacheRepos` will cause Kaiwo to create a temporary Kubernetes Job (the "download job") before starting the main workload. This job runs a container that performs the downloads into the respective PVCs. The main workload only starts after the download job completes successfully. |  |  |
+| `storage` _[StorageSpec](#storagespec)_ | Storage configures persistent storage using Kubernetes PersistentVolumeClaims (PVCs).<br />Enabling `storage.data.download` or `storage.huggingFace.preCacheRepos` will cause Kaiwo to create a temporary Kubernetes Job (the "download job") before starting the main workload. This job runs a container that performs the downloads into the respective PVCs. The main workload only starts after the download job completes successfully. |  |  |
 | `dangerous` _boolean_ | Dangerous, if when set to `true`, Kaiwo will *not* add the default `PodSecurityContext` (which normally sets `runAsUser: 1000`, `runAsGroup: 1000`, `fsGroup: 1000`) to the generated pods. Use this only if you need to run containers as root or a different specific user and understand the security implications. | false |  |
-| `clusterQueue` _string_ | ClusterQueue specifies the name of the Kueue `ClusterQueue` that the workload should be submitted to for scheduling and resource management.<br /><br />This value is set as the `kueue.x-k8s.io/queue-name` label on the underlying resources.<br /><br />If omitted, it defaults to the value specified by the `DEFAULT_CLUSTER_QUEUE_NAME` environment variable in the Kaiwo controller (typically "kaiwo"), which is set during installation.<br /><br />Note! If the applied KaiwoQueueConfig includes no quota for the default queue, no workload will run that tries to fall back on it.<br /><br />The `kaiwo submit` CLI command can override this using the `--queue` flag or the `clusterQueue` field in the `kaiwoconfig.yaml` file. |  |  |
+| `clusterQueue` _string_ | ClusterQueue specifies the name of the Kueue `ClusterQueue` that the workload should be submitted to for scheduling and resource management.<br />This value is set as the `kueue.x-k8s.io/queue-name` label on the underlying resources.<br />If omitted, it defaults to the value specified by the `DEFAULT_CLUSTER_QUEUE_NAME` environment variable in the Kaiwo controller (typically "kaiwo"), which is set during installation.<br />Note! If the applied KaiwoQueueConfig includes no quota for the default queue, no workload will run that tries to fall back on it.<br />The `kaiwo submit` CLI command can override this using the `--queue` flag or the `clusterQueue` field in the `kaiwoconfig.yaml` file. |  |  |
 | `priorityClass` _string_ | WorkloadPriorityClass specifies the name of Kueue `WorkloadPriorityClass` to be assigned to the job's pods. This influences the scheduling priority relative to other pods in the cluster. |  |  |
-| `entrypoint` _string_ | EntryPoint defines the command or script that the primary container in the job's pod(s) should execute.<br /><br />It can be a multi-line string. Shell script shebangs (`#!/bin/bash`) are detected.<br /><br />For standard Kubernetes Jobs (`ray: false`), this populates the `command` and `args` fields of the container spec (typically `["/bin/sh", "-c", "<entrypoint_script>"]`).<br /><br />For RayJobs (`ray: true`), this populates the `rayJob.spec.entrypoint` field. For RayJobs, this must reference a Python script.<br /><br />This overrides any default command specified in the container image or the underlying `job` or `rayJob` spec sections if they are also defined. |  |  |
-| `rayJob` _[RayJob](#rayjob)_ | RayJob defines the RayJob configuration.<br /><br />If this field is present (or if `spec.ray` is `true`), Kaiwo will create a `RayJob` resource instead of a standard `batchv1.Job`.<br /><br />Common fields like `image`, `resources`, `gpus`, `replicas`, etc., will be merged into this spec, potentially overriding values defined here unless explicitly configured otherwise.<br /><br />This provides fine-grained control over the Ray cluster configuration (head/worker groups) and Ray job submission parameters. |  |  |
-| `job` _[Job](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#job-v1-batch)_ | Job defines the Kubernetes Job configuration.<br /><br />If this field is present and `spec.ray` is `false`, Kaiwo will use this as the base for the created `batchv1.Job`.<br /><br />Common fields like `image`, `resources`, `gpus`, `entrypoint`, etc., will be merged into this spec, potentially overriding values defined here.<br /><br />This provides fine-grained control over standard Kubernetes Job parameters like `backoffLimit`, `ttlSecondsAfterFinished`, pod template details, etc. |  |  |
+| `entrypoint` _string_ | EntryPoint defines the command or script that the primary container in the job's pod(s) should execute.<br />It can be a multi-line string. Shell script shebangs (`#!/bin/bash`) are detected.<br />For standard Kubernetes Jobs (`ray: false`), this populates the `command` and `args` fields of the container spec (typically `["/bin/sh", "-c", "<entrypoint_script>"]`).<br />For RayJobs (`ray: true`), this populates the `rayJob.spec.entrypoint` field. For RayJobs, this must reference a Python script.<br />This overrides any default command specified in the container image or the underlying `job` or `rayJob` spec sections if they are also defined. |  |  |
+| `rayJob` _[RayJob](#rayjob)_ | RayJob defines the RayJob configuration.<br />If this field is present (or if `spec.ray` is `true`), Kaiwo will create a `RayJob` resource instead of a standard `batchv1.Job`.<br />Common fields like `image`, `resources`, `gpus`, `replicas`, etc., will be merged into this spec, potentially overriding values defined here unless explicitly configured otherwise.<br />This provides fine-grained control over the Ray cluster configuration (head/worker groups) and Ray job submission parameters. |  |  |
+| `job` _[Job](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#job-v1-batch)_ | Job defines the Kubernetes Job configuration.<br />If this field is present and `spec.ray` is `false`, Kaiwo will use this as the base for the created `batchv1.Job`.<br />Common fields like `image`, `resources`, `gpus`, `entrypoint`, etc., will be merged into this spec, potentially overriding values defined here.<br />This provides fine-grained control over standard Kubernetes Job parameters like `backoffLimit`, `ttlSecondsAfterFinished`, pod template details, etc. |  |  |
 
 
 #### KaiwoJobStatus
@@ -387,6 +408,103 @@ _Appears in:_
 | `duration` _integer_ | Duration indicates how long the service has been running since StartTime, in seconds. Calculated periodically while running. |  |  |
 | `observedGeneration` _integer_ | ObservedGeneration records the `.metadata.generation` of the workload resource that was last processed by the controller. |  |  |
 | `completionTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | CompletionTime records the timestamp when the KaiwoJob finished execution (either successfully or with failure). |  |  |
+
+
+#### KaiwoNode
+
+
+
+KaiwoNode represents a proxy that Kaiwo uses to interact with and report on node statuses.
+
+
+
+_Appears in:_
+- [KaiwoNodeList](#kaiwonodelist)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `kaiwo.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `KaiwoNode` | | |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `spec` _[KaiwoNodeSpec](#kaiwonodespec)_ | Spec defines the desired state of the KaiwoNode. |  |  |
+| `status` _[KaiwoNodeStatus](#kaiwonodestatus)_ | Status reflects the most recently observed state of the KaiwoNode. |  |  |
+
+
+#### KaiwoNodeList
+
+
+
+KaiwoNodeList
+
+
+
+
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `kaiwo.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `KaiwoNodeList` | | |
+| `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `items` _[KaiwoNode](#kaiwonode) array_ |  |  |  |
+
+
+#### KaiwoNodeSpec
+
+
+
+KaiwoNodeSpec defines the desired state of Kaiwo node.
+
+
+
+_Appears in:_
+- [KaiwoNode](#kaiwonode)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `partitioning` _[PartitioningConfig](#partitioningconfig)_ | Partitioning configures the node's partitioning |  |  |
+
+
+#### KaiwoNodeStatus
+
+
+
+KaiwoNodeStatus defines the observed state of KaiwoNode.
+
+
+
+_Appears in:_
+- [KaiwoNode](#kaiwonode)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `status` _[KaiwoNodeStatusType](#kaiwonodestatustype)_ | KaiwoNodeStatus reports the current status for the node | Unknown |  |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ |  |  |  |
+| `nodeType` _[NodeType](#nodetype)_ | NodeType reports the type of the node |  |  |
+| `resources` _[NodeResources](#noderesources)_ | Resources reports the resources that the node currently has |  |  |
+| `kueueFlavorName` _string_ | KueueFlavorName is the name of the flavor that Kueue uses for this node |  |  |
+| `unschedulable` _boolean_ |  |  |  |
+| `isControlPlane` _boolean_ |  |  |  |
+| `partitioning` _[PartitioningStatus](#partitioningstatus)_ |  |  |  |
+
+
+#### KaiwoNodeStatusType
+
+_Underlying type:_ _string_
+
+
+
+
+
+_Appears in:_
+- [KaiwoNodeStatus](#kaiwonodestatus)
+
+| Field | Description |
+| --- | --- |
+| `NotReady` |  |
+| `Ready` |  |
+| `Unknown` |  |
+| `Error` |  |
+| `Partitioning` |  |
 
 
 #### KaiwoQueueConfig
@@ -516,28 +634,28 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `user` _string_ | User specifies the owner or creator of the workload. It should typically be the user's email address. This value is primarily used for labeling (`kaiwo.silogen.ai/user`) the generated resources (like Pods, Jobs, Deployments) for identification and filtering (e.g., with `kaiwo list --user <email>`).<br /><br />In the future, if authentication is enabled, this must be the email address which is checked against authenticated user for match. |  |  |
+| `user` _string_ | User specifies the owner or creator of the workload. It should typically be the user's email address. This value is primarily used for labeling (`kaiwo.silogen.ai/user`) the generated resources (like Pods, Jobs, Deployments) for identification and filtering (e.g., with `kaiwo list --user <email>`).<br />In the future, if authentication is enabled, this must be the email address which is checked against authenticated user for match. |  |  |
 | `podTemplateSpecLabels` _object (keys:string, values:string)_ | PodTemplateSpecLabels allows you to specify custom labels that will be added to the `template.metadata.labels` section of the generated Pods (within Jobs, Deployments, or RayCluster specs). Standard Kaiwo system labels (like `kaiwo.silogen.ai/user`, `kaiwo.silogen.ai/name`, etc.) are added automatically and take precedence if there are conflicts. |  |  |
 | `version` _string_ | Version allows you to specify an optional version string for the workload. This can be useful for tracking different iterations or configurations of the same logical workload. It does not directly affect resource creation but serves as metadata. |  |  |
 | `replicas` _integer_ | Replicas specifies the number of replicas for the workload. See [here](/scientist/scheduling#replicas-gpus-gpusperreplica-and-gpuvendor) for more details on how this field impacts scheduling. | 1 |  |
 | `duration` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#duration-v1-meta)_ | Duration specifies the maximum duration over which the workload can run. This is useful for avoiding workloads running indefinitely. |  |  |
 | `preferredTopologyLabel` _string_ | PreferredTopologyLabel specifies the preferred topology label for scheduling the workload. This is used to influence how the workload is distributed across nodes in the cluster.<br />If not specified, Kaiwo will use the default topology labels defined in the default topology of KaiwoQueueConfig starting at the host level.<br />The levels are evaluated one-by-one going up from the level indicated by the label. If the PodSet cannot fit within a given topology label then the next topology level up is considered.<br />If the PodSet cannot fit at the highest topology level, then it is distributed among multiple topology domains |  |  |
 | `requiredTopologyLabel` _string_ | RequiredTopologyLabel specifies the required topology label for scheduling the workload. This is used to ensure that the workload is scheduled on nodes that match the specified topology label. |  |  |
-| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core)_ | Resources specify the default resource requirements applied for all pods inside the workflow.<br /><br />This field defines default Kubernetes `ResourceRequirements` (requests and limits for CPU,<br />memory, ephemeral-storage) applied to *all* containers (including init containers) within<br />the workload's pods.<br /><br />**Behavior:**<br /><br />These values act as **defaults**. If a container within the underlying Job, Deployment,<br />or Ray spec (if provided by the user) already defines a specific request or limit<br />(e.g., `memory` limit), the value from `resources` for that specific metric **will not** override it.<br /><br />**Interaction with GPU fields:** The GPU requests/limits (`amd.com/gpu` or `nvidia.com/gpu`)<br />are controlled exclusively by the `gpus`, `gpusPerReplica`, and `gpuVendor` fields<br />(and the associated calculation logic described above). Any GPU specifications within<br />the `resources` field are **ignored**.<br /><br />**Default CPU/Memory with GPUs:** When Kaiwo *generates* the underlying<br />Job/Deployment/RayCluster spec (i.e., the user did *not* provide `spec.job`,<br />`spec.deployment`, or `spec.rayService`/`spec.rayJob`), and GPUs are requested<br />(`gpusPerReplica` > 0), Kaiwo applies default CPU and Memory requests/limits<br />based on the GPU count (e.g., 4 CPU cores and 32Gi Memory per GPU).<br />These GPU-derived defaults *will* override any CPU/Memory settings defined in<br />the `resources` field in this specific scenario. If the user *does* provide<br />the underlying spec, these GPU-derived CPU/Memory defaults are not applied,<br />respecting the user's definition or the values from the `resources` field. |  |  |
+| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core)_ | Resources specify the default resource requirements applied for all pods inside the workflow.<br />This field defines default Kubernetes `ResourceRequirements` (requests and limits for CPU,<br />memory, ephemeral-storage) applied to *all* containers (including init containers) within<br />the workload's pods.<br />**Behavior:**<br />These values act as **defaults**. If a container within the underlying Job, Deployment,<br />or Ray spec (if provided by the user) already defines a specific request or limit<br />(e.g., `memory` limit), the value from `resources` for that specific metric **will not** override it.<br />**Interaction with GPU fields:** The GPU requests/limits (`amd.com/gpu` or `nvidia.com/gpu`)<br />are controlled exclusively by the `gpus`, `gpusPerReplica`, and `gpuVendor` fields<br />(and the associated calculation logic described above). Any GPU specifications within<br />the `resources` field are **ignored**.<br />**Default CPU/Memory with GPUs:** When Kaiwo *generates* the underlying<br />Job/Deployment/RayCluster spec (i.e., the user did *not* provide `spec.job`,<br />`spec.deployment`, or `spec.rayService`/`spec.rayJob`), and GPUs are requested<br />(`gpusPerReplica` > 0), Kaiwo applies default CPU and Memory requests/limits<br />based on the GPU count (e.g., 4 CPU cores and 32Gi Memory per GPU).<br />These GPU-derived defaults *will* override any CPU/Memory settings defined in<br />the `resources` field in this specific scenario. If the user *does* provide<br />the underlying spec, these GPU-derived CPU/Memory defaults are not applied,<br />respecting the user's definition or the values from the `resources` field. |  |  |
 | `gpuResources` _[GpuResourceRequirements](#gpuresourcerequirements)_ | GpuResources defines the _per-replica_ GPU resources that a workload requests |  |  |
-| `image` _string_ | Image specifies the default container image to be used for the primary workload container(s).<br /><br />- If containers defined within the underlying Job, Deployment, or Ray spec do *not* specify an image, this image will be used.<br />- If this field is also empty, the latest tag of ghcr.io/silogen/rocm-ray is used |  |  |
+| `image` _string_ | Image specifies the default container image to be used for the primary workload container(s).<br />- If containers defined within the underlying Job, Deployment, or Ray spec do *not* specify an image, this image will be used.<br />- If this field is also empty, the latest tag of ghcr.io/silogen/rocm-ray is used |  |  |
 | `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets is a list of Kubernetes `LocalObjectReference` (containing just the secret `name`) referencing secrets needed to pull the container image(s). These are added to the `imagePullSecrets` field of the PodSpec for all generated pods. |  |  |
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env is a list of Kubernetes `EnvVar` structs. These environment variables are added to the primary workload container(s) in the generated pods. They are appended to any environment variables already defined in the underlying Job, Deployment, or Ray spec. |  |  |
 | `secretVolumes` _[SecretVolume](#secretvolume) array_ | SecretVolumes allows you to mount specific keys from Kubernetes Secrets as files into the workload containers. |  |  |
 | `ray` _boolean_ | Ray determines whether the operator should use RayCluster for workload execution.<br />If `true`, Kaiwo will create Ray-specific resources.<br />If `false` (default), Kaiwo will create standard Kubernetes resources (BatchJob for `KaiwoJob`, Deployment for `KaiwoService`).<br />This setting dictates which underlying spec (`job`/`rayJob` or `deployment`/`rayService`) is primarily used. | false |  |
-| `storage` _[StorageSpec](#storagespec)_ | Storage configures persistent storage using Kubernetes PersistentVolumeClaims (PVCs).<br /><br />Enabling `storage.data.download` or `storage.huggingFace.preCacheRepos` will cause Kaiwo to create a temporary Kubernetes Job (the "download job") before starting the main workload. This job runs a container that performs the downloads into the respective PVCs. The main workload only starts after the download job completes successfully. |  |  |
+| `storage` _[StorageSpec](#storagespec)_ | Storage configures persistent storage using Kubernetes PersistentVolumeClaims (PVCs).<br />Enabling `storage.data.download` or `storage.huggingFace.preCacheRepos` will cause Kaiwo to create a temporary Kubernetes Job (the "download job") before starting the main workload. This job runs a container that performs the downloads into the respective PVCs. The main workload only starts after the download job completes successfully. |  |  |
 | `dangerous` _boolean_ | Dangerous, if when set to `true`, Kaiwo will *not* add the default `PodSecurityContext` (which normally sets `runAsUser: 1000`, `runAsGroup: 1000`, `fsGroup: 1000`) to the generated pods. Use this only if you need to run containers as root or a different specific user and understand the security implications. | false |  |
-| `clusterQueue` _string_ | ClusterQueue specifies the name of the Kueue `ClusterQueue` that the workload should be submitted to for scheduling and resource management.<br /><br />This value is set as the `kueue.x-k8s.io/queue-name` label on the underlying resources.<br /><br />If omitted, it defaults to the value specified by the `DEFAULT_CLUSTER_QUEUE_NAME` environment variable in the Kaiwo controller (typically "kaiwo"), which is set during installation.<br /><br />Note! If the applied KaiwoQueueConfig includes no quota for the default queue, no workload will run that tries to fall back on it.<br /><br />The `kaiwo submit` CLI command can override this using the `--queue` flag or the `clusterQueue` field in the `kaiwoconfig.yaml` file. |  |  |
+| `clusterQueue` _string_ | ClusterQueue specifies the name of the Kueue `ClusterQueue` that the workload should be submitted to for scheduling and resource management.<br />This value is set as the `kueue.x-k8s.io/queue-name` label on the underlying resources.<br />If omitted, it defaults to the value specified by the `DEFAULT_CLUSTER_QUEUE_NAME` environment variable in the Kaiwo controller (typically "kaiwo"), which is set during installation.<br />Note! If the applied KaiwoQueueConfig includes no quota for the default queue, no workload will run that tries to fall back on it.<br />The `kaiwo submit` CLI command can override this using the `--queue` flag or the `clusterQueue` field in the `kaiwoconfig.yaml` file. |  |  |
 | `priorityClass` _string_ | WorkloadPriorityClass specifies the name of Kueue `WorkloadPriorityClass` to be assigned to the job's pods. This influences the scheduling priority relative to other pods in the cluster. |  |  |
-| `entrypoint` _string_ | EntryPoint specifies the command or script executed in a Deployment.<br />Can also be defined inside Deployment struct as regular command in the form of string array.<br /><br />It is *not* used when `ray: true` (use `serveConfigV2` or the `rayService` spec instead for Ray entrypoints). |  |  |
+| `entrypoint` _string_ | EntryPoint specifies the command or script executed in a Deployment.<br />Can also be defined inside Deployment struct as regular command in the form of string array.<br />It is *not* used when `ray: true` (use `serveConfigV2` or the `rayService` spec instead for Ray entrypoints). |  |  |
 | `serveConfigV2` _string_ | Defines the applications and deployments to deploy, should be a YAML multi-line scalar string.<br />Can also be defined inside RayService struct |  |  |
-| `rayService` _[RayService](#rayservice)_ | RayService allows providing a full `rayv1.RayService` spec.<br /><br />If present (or `spec.ray` is `true`), Kaiwo creates a `RayService` (wrapped in an AppWrapper for Kueue integration) instead of a `Deployment`.<br /><br />Common fields are merged into the `RayClusterSpec` within this spec.<br /><br />Allows fine-grained control over the Ray cluster and Ray Serve configurations. |  |  |
-| `deployment` _[Deployment](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#deployment-v1-apps)_ | Deployment allows providing a full `appsv1.Deployment` spec.<br /><br />If present and `spec.ray` is `false`, this is used as the base for the created `Deployment`.<br /><br />Common fields are merged into this spec.<br /><br />Allows fine-grained control over Kubernetes Deployment parameters (strategy, selectors, pod template, etc.). |  |  |
+| `rayService` _[RayService](#rayservice)_ | RayService allows providing a full `rayv1.RayService` spec.<br />If present (or `spec.ray` is `true`), Kaiwo creates a `RayService` (wrapped in an AppWrapper for Kueue integration) instead of a `Deployment`.<br />Common fields are merged into the `RayClusterSpec` within this spec.<br />Allows fine-grained control over the Ray cluster and Ray Serve configurations. |  |  |
+| `deployment` _[Deployment](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#deployment-v1-apps)_ | Deployment allows providing a full `appsv1.Deployment` spec.<br />If present and `spec.ray` is `false`, this is used as the base for the created `Deployment`.<br />Common fields are merged into this spec.<br />Allows fine-grained control over Kubernetes Deployment parameters (strategy, selectors, pod template, etc.). |  |  |
 
 
 #### KaiwoServiceStatus
@@ -560,6 +678,81 @@ _Appears in:_
 | `observedGeneration` _integer_ | ObservedGeneration records the `.metadata.generation` of the workload resource that was last processed by the controller. |  |  |
 
 
+#### NodeGpuInfo
+
+
+
+
+
+
+
+_Appears in:_
+- [NodeResources](#noderesources)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `vendor` _[GpuVendor](#gpuvendor)_ | Vendor is the vendor of the GPU (primarily `amd` or `nvidia`) |  |  |
+| `model` _string_ | Model is the model name of the GPU |  |  |
+| `resourceName` _[ResourceName](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcename-v1-core)_ | ResourceName is the GPU resource name for this GPU |  |  |
+| `logicalCount` _integer_ | LogicalCount is the number of logical GPUs in the node and is taken from the Kubernetes node status capacity. If the GPUs are not partitioned, this is the same as PhysicalCount |  |  |
+| `physicalCount` _integer_ | PhysicalCount is the number of physical GPUs in the node |  |  |
+| `physicalVramPerGpu` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#quantity-resource-api)_ | PhysicalVramPerGpu is the vRAM that each physical GPU has. |  |  |
+| `logicalVramPerGpu` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#quantity-resource-api)_ | LogicalVramPerGpu is the vRAM that each logical GPU sees. If the node's GPUs are not partitioned, this is the<br />total vRAM that each GPU has. If the node's GPUs are partitioned, this is the vRAM that each partition has. |  |  |
+| `isPartitioned` _boolean_ | IsPartitioned reports whether the GPUs are currently partitioned or not. A null value implicates that it is unclear<br />whether the GPUs are partitioned or not |  |  |
+
+
+#### NodeResources
+
+
+
+
+
+
+
+_Appears in:_
+- [KaiwoNodeStatus](#kaiwonodestatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `cpu` _[NominalResourceWrapper](#nominalresourcewrapper)_ |  |  |  |
+| `memory` _[NominalResourceWrapper](#nominalresourcewrapper)_ |  |  |  |
+| `gpus` _[NodeGpuInfo](#nodegpuinfo)_ |  |  |  |
+
+
+#### NodeType
+
+_Underlying type:_ _string_
+
+
+
+
+
+_Appears in:_
+- [KaiwoNodeStatus](#kaiwonodestatus)
+
+| Field | Description |
+| --- | --- |
+| `gpu` |  |
+| `cpu-only` |  |
+
+
+#### NominalResourceWrapper
+
+
+
+
+
+
+
+_Appears in:_
+- [NodeResources](#noderesources)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `actual` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#quantity-resource-api)_ |  |  |  |
+| `nominal` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#quantity-resource-api)_ |  |  |  |
+
+
 #### ObjectStorageDownloadSpec
 
 
@@ -577,6 +770,64 @@ _Appears in:_
 | `gcs` _[GCSDownloadItem](#gcsdownloaditem) array_ | GCS lists and Google Cloud Storage downloads |  |  |
 | `azureBlob` _[AzureBlobStorageDownloadItem](#azureblobstoragedownloaditem) array_ | AzureBlob lists any Azure Blob Storage downloads |  |  |
 | `git` _[GitDownloadItem](#gitdownloaditem) array_ | Git lists any Git downloads |  |  |
+
+
+
+
+#### PartitioningConfig
+
+
+
+
+
+
+
+_Appears in:_
+- [KaiwoNodeSpec](#kaiwonodespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | Enabled enforces partitioning on the node's GPUs. Note that this switches the partitioning changes on or off. If partitioning is first enabled, and then disabled, any changes that were made will persist, but any changes made to the partitioning profile while partitioning is disabled will not take effect. |  |  |
+| `profile` _[GpuPartitioningProfile](#gpupartitioningprofile)_ | Profile is the partitioning profile to apply. |  |  |
+
+
+#### PartitioningPhase
+
+_Underlying type:_ _string_
+
+
+
+
+
+_Appears in:_
+- [PartitioningStatus](#partitioningstatus)
+
+| Field | Description |
+| --- | --- |
+| `DrainingUntoleratedPods` |  |
+| `ApplyingPartitions` |  |
+| `WaitingForResourceUpdate` |  |
+| `RestartingPods` |  |
+| `WaitingForLabels` |  |
+| `Completed` |  |
+| `Error` |  |
+
+
+#### PartitioningStatus
+
+
+
+
+
+
+
+_Appears in:_
+- [KaiwoNodeStatus](#kaiwonodestatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `appliedProfile` _[GpuPartitioningProfile](#gpupartitioningprofile)_ | AppliedProfile reports the currently active profile |  |  |
+| `phase` _[PartitioningPhase](#partitioningphase)_ | Phase reports the current partitioning phase |  |  |
 
 
 #### QueueConfigStatusDescription
@@ -675,7 +926,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `storageEnabled` _boolean_ | StorageEnabled must be `true` to enable the creation of any PersistentVolumeClaims defined within this spec. If `false`, `data` and `huggingFace` sections are ignored. |  |  |
 | `storageClassName` _string_ | StorageClassName specifies the name of the Kubernetes `StorageClass` to use when creating PersistentVolumeClaims for `data` and `huggingFace` volumes. Must refer to an existing StorageClass in the cluster. |  |  |
-| `accessMode` _[PersistentVolumeAccessMode](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#persistentvolumeaccessmode-v1-core)_ | AccessMode determines the access mode (e.g., `ReadWriteOnce`, `ReadWriteMany`, `ReadOnlyMany`) for the created PersistentVolumeClaims.<br /><br />In a multi-node setting, ReadWriteMany is generally required, as pods scheduled on different nodes cannot access ReadWriteOnce PVCs. This is true even when `replicas: 1` if you are using download jobs, as the download pod may get scheduled on a different pod than the main workload pod. | ReadWriteMany |  |
+| `accessMode` _[PersistentVolumeAccessMode](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#persistentvolumeaccessmode-v1-core)_ | AccessMode determines the access mode (e.g., `ReadWriteOnce`, `ReadWriteMany`, `ReadOnlyMany`) for the created PersistentVolumeClaims.<br />In a multi-node setting, ReadWriteMany is generally required, as pods scheduled on different nodes cannot access ReadWriteOnce PVCs. This is true even when `replicas: 1` if you are using download jobs, as the download pod may get scheduled on a different pod than the main workload pod. | ReadWriteMany |  |
 | `data` _[DataStorageSpec](#datastoragespec)_ | Data configures the main data PersistentVolumeClaim and optional pre-download tasks for it. |  |  |
 | `huggingFace` _[HfStorageSpec](#hfstoragespec)_ | HuggingFace configures a PersistentVolumeClaim specifically for caching Hugging Face models and datasets, with options for pre-caching. |  |  |
 
