@@ -89,10 +89,18 @@ jobs:
       with:
         release: v0.2.12
 
+    - name: Setup Flux CLI
+      uses: fluxcd/flux2/action@main
+      with:
+        version: 'latest'
+
     - name: Create kind cluster
-      run: test/setup_kind.sh
+      run: |
+        set -e
+        FLUX_BRANCH=automation-upgrade test/setup/kind.sh
 
     - name: Running Test e2e
       run: |-
         go mod tidy
-        TEST_CONFIG_PATH=test/configs/test-config/ci.yaml make test-e2e
+        cd test
+        make test-kind-deploy
