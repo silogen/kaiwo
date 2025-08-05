@@ -142,7 +142,12 @@ func (r *ChainsawTestRunner) runChainsawWithReport(config *ChainsawExecutionConf
 		if err != nil {
 			return fmt.Errorf("creating values file: %w", err)
 		}
-		defer os.Remove(valuesFile)
+		defer func(name string) {
+			err := os.Remove(name)
+			if err != nil {
+				panic(err)
+			}
+		}(valuesFile)
 		args = append(args, "--values", valuesFile)
 	}
 
@@ -169,7 +174,12 @@ func (r *ChainsawTestRunner) createValuesFile(values []ChainsawValue) (string, e
 	if err != nil {
 		return "", err
 	}
-	defer valuesFile.Close()
+	defer func(valuesFile *os.File) {
+		err := valuesFile.Close()
+		if err != nil {
+			panic(err)
+		}
+	}(valuesFile)
 
 	chainsawValues := map[string]string{}
 	for _, value := range values {

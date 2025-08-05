@@ -19,10 +19,11 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 	"github.com/silogen/kaiwo/pkg/workloads/common"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 )

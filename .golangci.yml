@@ -30,8 +30,10 @@ linters:
       - lll
       path: internal/*
     - linters:
-      - lll
-      path: pkg/*
+      - staticcheck
+      # Ignore dot imports for gomega tests
+      text: "ST1001:"
+      path: test/*
     paths:
     - python
     - third_party$
@@ -53,4 +55,3 @@ formatters:
     - python
     - third_party$
     - builtin$
-    - examples$

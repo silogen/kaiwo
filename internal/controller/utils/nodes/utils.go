@@ -17,8 +17,9 @@ package nodeutils
 import (
 	"context"
 
-	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
+
+	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 )

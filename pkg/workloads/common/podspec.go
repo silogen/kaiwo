@@ -17,10 +17,11 @@ package common
 import (
 	"fmt"
 
-	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
-	baseutils "github.com/silogen/kaiwo/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+
+	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
 // fillContainerResources fills container resources with a given template if they are not already set

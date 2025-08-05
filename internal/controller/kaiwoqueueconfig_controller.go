@@ -161,7 +161,7 @@ func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, kai
 
 	// LocalQueues
 	existingClusterQueues := &kueuev1beta1.ClusterQueueList{}
-	if err := r.Client.List(ctx, existingClusterQueues); err != nil {
+	if err := r.List(ctx, existingClusterQueues); err != nil {
 		syncErrors = append(syncErrors, err)
 	} else {
 		actualClusterQueues := map[string]*kueuev1beta1.ClusterQueue{}
