@@ -1,0 +1,57 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoQueueConfig
+metadata:
+  name: kaiwo
+spec:
+  clusterQueues:
+  - name: queue-1
+    spec:
+      cohort: test
+      flavorFungibility:
+        whenCanBorrow: Borrow
+        whenCanPreempt: Preempt
+      preemption:
+        borrowWithinCohort:
+          policy: Never
+        reclaimWithinCohort: Any
+        withinClusterQueue: Never
+      namespaceSelector: {}   # All namespaces
+      queueingStrategy: BestEffortFIFO
+      resourceGroups:
+      - coveredResources: ["cpu", "memory", "amd.com/gpu"]
+        flavors:
+        - name: "default"
+          resources:
+          - name: cpu
+            nominalQuota: "10"
+          - name: memory
+            nominalQuota: 100Gi
+          - name: amd.com/gpu
+            nominalQuota: "7"
+  - name: queue-2
+    spec:
+      cohort: test
+      flavorFungibility:
+        whenCanBorrow: Borrow
+        whenCanPreempt: Preempt
+      preemption:
+        borrowWithinCohort:
+          policy: Never
+        reclaimWithinCohort: Any
+        withinClusterQueue: Never
+      namespaceSelector: {}   # All namespaces
+      queueingStrategy: BestEffortFIFO
+      resourceGroups:
+        - coveredResources: ["cpu", "memory", "amd.com/gpu"]
+          flavors:
+            - name: "default"
+              resources:
+                - name: cpu
+                  nominalQuota: "10"
+                - name: memory
+                  nominalQuota: "100Gi"
+                - name: amd.com/gpu
+                  nominalQuota: "1"
+
+  resourceFlavors:
+  - name: default

@@ -8,6 +8,7 @@ spec:
     - apply:
         file: job.yaml
     - assert:
+        timeout: 5s
         resource:
           apiVersion: batch/v1
           kind: Job
@@ -15,12 +16,3 @@ spec:
             name: job-backoff-test
           spec:
             backoffLimit: 0 # Ensure the backoffLimit was reset to 0
-    catch:
-    - command:
-        entrypoint: kaiwo-dev
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-        - name: PRINT_LEVEL
-          value: ($values.print_level)
-        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]

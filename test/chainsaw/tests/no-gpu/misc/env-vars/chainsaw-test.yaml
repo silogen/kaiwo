@@ -39,15 +39,6 @@ spec:
               - value: "0"
               (env[?name == 'FOO']):
               - value: "BAR"
-    catch:
-    - command:
-        entrypoint: kaiwo-dev
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-        - name: PRINT_LEVEL
-          value: ($values.print_level)
-        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
 ---
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
@@ -92,12 +83,3 @@ spec:
               - value: "0"
               (env[?name == 'FOO']):
               - value: "BAR"
-    catch:
-    - command:
-        entrypoint: kaiwo-dev
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-        - name: PRINT_LEVEL
-          value: ($values.print_level)
-        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
