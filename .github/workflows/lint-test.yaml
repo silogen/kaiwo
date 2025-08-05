@@ -96,7 +96,6 @@ jobs:
 
     - name: Create kind cluster
       run: |
-        set -e
         FLUX_BRANCH=automation-upgrade test/setup/kind.sh
 
     - name: Running Test e2e

@@ -18,6 +18,7 @@ package e2e
 
 import (
 	. "github.com/onsi/ginkgo/v2"
+
 	"github.com/silogen/kaiwo/test/utils"
 )
 

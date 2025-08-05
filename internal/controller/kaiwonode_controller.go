@@ -39,12 +39,13 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	baseutils "github.com/silogen/kaiwo/pkg/utils"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
 // KaiwoNodeReconciler operates on the Kaiwo nodes
@@ -67,7 +68,7 @@ func (r *KaiwoNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	baseutils.Debug(logger, "Running reconciliation")
 
 	node := &corev1.Node{}
-	if err := r.Client.Get(ctx, req.NamespacedName, node); err != nil && !errors.IsNotFound(err) {
+	if err := r.Get(ctx, req.NamespacedName, node); err != nil && !errors.IsNotFound(err) {
 		return ctrl.Result{}, fmt.Errorf("failed to get node: %w", err)
 	} else if err != nil && errors.IsNotFound(err) {
 		// If node does not exist, it has been deleted
@@ -76,7 +77,7 @@ func (r *KaiwoNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	kaiwoNode := &v1alpha1.KaiwoNode{}
-	if err := r.Client.Get(ctx, req.NamespacedName, kaiwoNode); err != nil && !errors.IsNotFound(err) {
+	if err := r.Get(ctx, req.NamespacedName, kaiwoNode); err != nil && !errors.IsNotFound(err) {
 		return ctrl.Result{}, fmt.Errorf("failed to get Kaiwo node: %w", err)
 	} else if err != nil && errors.IsNotFound(err) {
 		kaiwoNode = nil

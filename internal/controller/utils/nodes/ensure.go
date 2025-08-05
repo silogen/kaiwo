@@ -21,10 +21,11 @@ import (
 
 	"github.com/silogen/kaiwo/pkg/workloads/common"
 
-	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
 

@@ -500,7 +500,7 @@ func (t *GpuPartitionTask) hasOffendingPods(ctx context.Context, node *corev1.No
 		if toleratesDCM(pod.Spec.Tolerations) {
 			continue
 		}
-		if pod.ObjectMeta.Namespace == "kube-system" {
+		if pod.Namespace == "kube-system" {
 			continue
 		}
 		return true, nil
