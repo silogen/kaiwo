@@ -1,0 +1,20 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Test E2E Kind - local" type="GoTestRunConfiguration" factoryName="Go Test">
+    <module name="ai-workload-orchestrator" />
+    <working_directory value="$PROJECT_DIR$/test/e2e" />
+    <go_parameters value="-count=1 -v" />
+    <parameters value="--ginkgo.v --ginkgo.label-filter=&quot;basic || kind || cli&quot;" />
+    <envs>
+      <env name="KAIWO_LOG_FILE" value="$PROJECT_DIR$/kaiwo.logs" />
+      <env name="KAIWO_TEST_CHAINSAW_CONFIG" value="test/chainsaw/configs/local.yaml" />
+      <env name="KAIWO_TEST_KAIWOCONFIG" value="test/configs/kaiwoconfig/local-kind.yaml" />
+    </envs>
+    <root_directory value="$PROJECT_DIR$" />
+    <kind value="PACKAGE" />
+    <package value="github.com/silogen/kaiwo/test/e2e" />
+    <directory value="$PROJECT_DIR$/test/e2e" />
+    <filePath value="$PROJECT_DIR$" />
+    <framework value="gotest" />
+    <method v="2" />
+  </configuration>
+</component>

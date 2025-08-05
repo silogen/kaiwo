@@ -1,0 +1,21 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="E2E tests - local - deploy" type="GinkgoRunConfigurationType">
+    <envs>
+      <env name="KAIWO_LOG_FILE" value="$PROJECT_DIR$/kaiwo.logs" />
+      <env name="KAIWO_TEST_CHAINSAW_CONFIG" value="test/chainsaw/configs/local.yaml" />
+      <env name="KAIWO_TEST_KAIWOCONFIG" value="test/configs/kaiwoconfig/local-kind.yaml" />
+    </envs>
+    <ginkgo-executable value="$USER_HOME$/go/bin/ginkgo" />
+    <working-dir value="$PROJECT_DIR$/test/e2e" />
+    <envs>
+      <env name="KAIWO_LOG_FILE" value="$PROJECT_DIR$/kaiwo.logs" />
+      <env name="KAIWO_TEST_CHAINSAW_CONFIG" value="test/chainsaw/configs/local.yaml" />
+      <env name="KAIWO_TEST_KAIWOCONFIG" value="test/configs/kaiwoconfig/local-kind.yaml" />
+    </envs>
+    <ginkgo-additional-options value="--label-filter=&quot;basic&quot;" />
+    <ginkgo-scope value="ALL" />
+    <focus-expression value="" />
+    <package-name />
+    <method v="2" />
+  </configuration>
+</component>
