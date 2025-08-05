@@ -1,7 +1,6 @@
 version: "2"
 run:
   allow-parallel-runners: true
-
 linters:
   enable:
   - copyloopvar
@@ -15,28 +14,43 @@ linters:
   - nakedret
   - unconvert
   - unparam
-
-linters-settings:
-  goheader:
-    template-path: .copyright-template
-  lll:
-    line-length: 500
-
+  settings:
+    goheader:
+      template-path: .copyright-template
+    lll:
+      line-length: 500
+  exclusions:
+    generated: lax
+    rules:
+    - linters:
+      - lll
+      path: apis/*
+    - linters:
+      - dupl
+      - lll
+      path: internal/*
+    - linters:
+      - lll
+      path: pkg/*
+    paths:
+    - python
+    - third_party$
+    - builtin$
+    - examples$
 issues:
   fix: true
-  exclude-rules:
-  - linters:
-    - lll
-    path: apis/*
-  - linters:
-    - dupl
-    - lll
-    path: internal/*
-  - linters:
-    - lll
-    path: pkg/*
-  exclude-dirs:
-  - python
-  - third_party
-  - builtin
-  - examples
+formatters:
+  enable:
+  - gofumpt
+  - goimports
+  settings:
+    goimports:
+      local-prefixes:
+      - github.com/silogen/kaiwo
+  exclusions:
+    generated: lax
+    paths:
+    - python
+    - third_party$
+    - builtin$
+    - examples$
