@@ -262,8 +262,7 @@ func (m *MetricsWatcher) handleKaiwoWorkloads(ctx context.Context, config common
 			}
 		}
 
-		switch kaiwoWorkload.GetCommonStatusSpec().Status {
-		case kaiwo.WorkloadStatusTerminating, kaiwo.WorkloadStatusTerminated, kaiwo.WorkloadStatusFailed, kaiwo.WorkloadStatusComplete:
+		if kaiwoWorkload.GetCommonStatusSpec().Status != kaiwo.WorkloadStatusRunning {
 			continue
 		}
 
