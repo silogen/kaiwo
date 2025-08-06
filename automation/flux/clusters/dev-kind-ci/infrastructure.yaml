@@ -1,0 +1,14 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: kaiwo-infrastructure
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: GitRepository
+    name: kaiwo-source
+  path: "./automation/flux/profiles/dev-kind-ci"
+  prune: true
+  wait: true
+  timeout: 5m

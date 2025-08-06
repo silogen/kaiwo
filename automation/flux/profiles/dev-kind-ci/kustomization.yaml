@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+# Inherit from dev-kind profile
+- ../dev-kind
+
+patches:
+# Patch the HelmRelease in the loki kustomization to disable persistence
+- patch: |-
+    - op: replace
+      path: /spec/values/singleBinary/persistence/enabled
+      value: false
+    - op: remove
+      path: /spec/values/singleBinary/persistence/size
+    - op: remove
+      path: /spec/values/singleBinary/persistence/storageClass
+  target:
+    kind: HelmRelease
+    name: loki
