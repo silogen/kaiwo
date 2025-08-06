@@ -117,7 +117,11 @@ func (c *ChainsawExecutionConfig) createValuesFile(path string) error {
 
 	// Load base values file if specified
 	if c.BaseValuesFile != "" {
-		baseData, err := os.ReadFile(c.BaseValuesFile)
+		baseValuesPath := c.BaseValuesFile
+		if !filepath.IsAbs(baseValuesPath) {
+			baseValuesPath = filepath.Join(GetModuleRoot(), c.BaseValuesFile)
+		}
+		baseData, err := os.ReadFile(baseValuesPath)
 		if err != nil {
 			return fmt.Errorf("reading base values file %s: %w", c.BaseValuesFile, err)
 		}

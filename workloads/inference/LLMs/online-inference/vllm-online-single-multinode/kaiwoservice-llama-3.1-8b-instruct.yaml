@@ -29,7 +29,7 @@ spec:
   - name: NCCL_P2P_DISABLE
     value: "1"
   - name: MODEL_ID
-    value: "Qwen/Qwen2.5-1.5B-Instruct"
+    value: "unsloth/Llama-3.2-11B-Vision-Instruct"
   - name: GPU_MEMORY_UTILIZATION
     value: "0.9"
   - name: PLACEMENT_STRATEGY
@@ -52,5 +52,5 @@ spec:
       storageSize: "100Gi"
       mountPath: "/hf_cache" # Also sets the env var HF_HOME to this value in each container
       preCacheRepos:
-      - repoId: Qwen/Qwen2.5-1.5B-Instruct
+      - repoId: unsloth/Llama-3.2-11B-Vision-Instruct
         files: []

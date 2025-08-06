@@ -4,6 +4,8 @@ metadata:
   name: kueue-gpu-preemption
 spec:
   concurrent: false
+  timeouts:
+    assert: 15s
   steps:
   - name: Create resources
     try:
@@ -11,10 +13,22 @@ spec:
         file: cluster-queue.yaml
   - name: Deployment
     try:
+    - description: Create two 1 GPU jobs in queue 2
+      apply:
+        file: kaiwojob-queue-2-1.yaml
+    - assert:
+        resource:
+          apiVersion: kueue.x-k8s.io/v1beta1
+          kind: ClusterQueue
+          metadata:
+            name: queue-2
+          status:
+            pendingWorkloads: 0
+            admittedWorkloads: 2
     - description: Create first job in queue 1
       apply:
         file: kaiwojob-queue-1-1.yaml
-    - description: Create second job in queue 1, which borrows from queue 2
+    - description: Create second job in queue 1, which should push one of the original 1 GPU jobs out
       apply:
         file: kaiwojob-queue-1-2.yaml
     - assert:
@@ -26,18 +40,6 @@ spec:
           status:
             pendingWorkloads: 0
             admittedWorkloads: 2
-    - description: Create first job in queue 2, which should reclaim a workload from queue 1, and push the second workload to pending
-      apply:
-        file: kaiwojob-queue-2-1.yaml
-    - assert:
-        resource:
-          apiVersion: kueue.x-k8s.io/v1beta1
-          kind: ClusterQueue
-          metadata:
-            name: queue-1
-          status:
-            pendingWorkloads: 1
-            admittedWorkloads: 1
     - assert:
         resource:
           apiVersion: kueue.x-k8s.io/v1beta1
@@ -45,7 +47,7 @@ spec:
           metadata:
             name: queue-2
           status:
-            pendingWorkloads: 0
+            pendingWorkloads: 1
             admittedWorkloads: 1
     finally:
     - script:

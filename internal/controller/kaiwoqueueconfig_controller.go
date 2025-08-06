@@ -325,6 +325,14 @@ func (r *KaiwoQueueConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			}),
 			builder.WithPredicates(nodePred),
 		).
+		Watches(
+			&kaiwo.KaiwoNode{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				return []reconcile.Request{
+					{NamespacedName: types.NamespacedName{Name: common.KaiwoQueueConfigName}},
+				}
+			}),
+		).
 		Named("kaiwoqueueconfig").
 		Complete(r)
 }

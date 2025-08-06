@@ -4,7 +4,7 @@ metadata:
   name: partitioned-vram-test
 spec:
   gpuResources:
-    totalVram: $(values.amd_gpu_partitioned_two_gpu_vram_request)
+    totalVram: ($values.amd_gpu_partitioned_two_gpu_vram_request)
     partitioned: true
   image: busybox:latest
   resources:

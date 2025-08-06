@@ -4,7 +4,7 @@ metadata:
   name: non-partitioned-vram-test
 spec:
   gpuResources:
-    totalVram: $(values.amd_gpu_unpartitioned_two_gpu_vram_request)
+    totalVram: ($values.amd_gpu_unpartitioned_two_gpu_vram_request)
   image: busybox:latest
   resources:
     requests:

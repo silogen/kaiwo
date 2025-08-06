@@ -8,25 +8,26 @@ spec:
   - name: Label the node and trigger the partitioning
     try:
     - script:
-        environment:
+        env:
         - name: NODE_NAME
-          value: $(values.amd_gpu_partitioning_node_name)
+          value: ($values.amd_gpu_partitioning_node_name)
         content: kubectl label nodes $NODE_NAME --overwrite kaiwo.silogen.ai/node.amd.partitioning.enabled=true kaiwo.silogen.ai/node.amd.partitioning.profile=cpx
     - wait:
         apiVersion: kaiwo.silogen.ai/v1alpha1
         kind: KaiwoNode
-        name: $(values.amd_gpu_partitioning_node_name)
+        name: ($values.amd_gpu_partitioning_node_name)
         timeout: 5m
         for:
           condition:
             name: PartitioningCompleted
             value: 'true'
     - assert:
+        timeout: 300s
         resource:
           apiVersion: kaiwo.silogen.ai/v1alpha1
           kind: KaiwoNode
           metadata:
-            name: $(values.amd_gpu_partitioning_node_name)
+            name: ($values.amd_gpu_partitioning_node_name)
           spec:
             partitioning:
               profile: cpx
@@ -35,3 +36,5 @@ spec:
             partitioning:
               phase: Completed
               appliedProfile: cpx
+    - script:
+        content: kubectl delete kaiwoqueueconfig kaiwo
