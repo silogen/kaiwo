@@ -99,54 +99,161 @@ func (t *GpuPartitionTask) Name() string { return "GpuPartition" }
 
 // extractCurrentProfile extracts the currently applied profile
 func extractCurrentProfile(kaiwoNode *v1alpha1.KaiwoNode) (v1alpha1.GpuPartitioningProfile, error) {
+	logger := log.FromContext(context.Background())
+
+	baseutils.Debug(logger, "extractCurrentProfile: Starting profile extraction", "node", kaiwoNode.Name)
+
 	gpus := kaiwoNode.Status.Resources.Gpus
+
+	logger.Info("extractCurrentProfile: GPU resource information",
+		"node", kaiwoNode.Name,
+		"logicalCount", gpus.LogicalCount,
+		"physicalCount", gpus.PhysicalCount,
+		"logicalVramPerGpu", gpus.LogicalVramPerGpu)
+
 	if gpus.LogicalVramPerGpu == nil {
+		logger.Info("extractCurrentProfile: No vRAM information available",
+			"node", kaiwoNode.Name)
 		return "", fmt.Errorf("no vRAM information, labels are likely not set correctly")
 	}
+
 	if gpus.PhysicalCount != nil && *gpus.PhysicalCount != gpus.LogicalCount {
+		logger.Info("extractCurrentProfile: Detected CPX profile (physical != logical)",
+			"node", kaiwoNode.Name,
+			"physicalCount", *gpus.PhysicalCount,
+			"logicalCount", gpus.LogicalCount)
 		return v1alpha1.GpuPartitioningProfileAmdCpx, nil
 	}
+
+	logger.Info("extractCurrentProfile: Detected SPX profile (physical == logical or no physical count)",
+		"node", kaiwoNode.Name,
+		"physicalCount", gpus.PhysicalCount,
+		"logicalCount", gpus.LogicalCount)
 	return v1alpha1.GpuPartitioningProfileAmdSpx, nil
 }
 
 func (t *GpuPartitionTask) Run(ctx context.Context, obj *KaiwoNodeWrapper) (*ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
+	baseutils.Debug(logger, "GpuPartitionTask: Starting partitioning task", "node", obj.Node.Name)
+
 	// Return if partitioning is disabled
 	if !obj.KaiwoNode.Spec.Partitioning.Enabled {
+		baseutils.Debug(logger, "GpuPartitionTask: Partitioning is disabled, skipping", "node", obj.Node.Name)
 		return nil, nil
 	}
 
+	logger.Info("GpuPartitionTask: Processing node for partitioning",
+		"node", obj.Node.Name,
+		"nodeType", obj.KaiwoNode.Status.NodeType,
+		"desiredProfile", obj.KaiwoNode.Spec.Partitioning.Profile)
+
 	// If the node is not a GPU node, return with error
 	if obj.KaiwoNode.Status.NodeType != v1alpha1.NodeTypeGpu {
+		logger.Info("GpuPartitionTask: Node is not a GPU node, cannot partition",
+			"node", obj.Node.Name,
+			"nodeType", obj.KaiwoNode.Status.NodeType)
 		t.setErrorCondition(obj, "Cannot partition a node without GPUs")
 		return nil, nil
 	}
 
 	currentProfile, err := extractCurrentProfile(obj.KaiwoNode)
 	if err != nil {
+		logger.Info("GpuPartitionTask: Failed to extract current profile",
+			"node", obj.Node.Name,
+			"error", err.Error())
+		baseutils.Debug(logger, "GpuPartitionTask: Setting AppliedProfile to nil due to extraction error", "node", obj.Node.Name)
 		obj.KaiwoNode.Status.Partitioning.AppliedProfile = nil
 	} else {
+		logger.Info("GpuPartitionTask: Successfully extracted current profile",
+			"node", obj.Node.Name,
+			"currentProfile", currentProfile)
 		obj.KaiwoNode.Status.Partitioning.AppliedProfile = &currentProfile
 	}
 
 	// Check if partitioning is complete and matches desired state
+	logger.Info("GpuPartitionTask: Checking if partitioning is complete", "node", obj.Node.Name)
 	if t.isPartitioningComplete(obj) {
+		logger.Info("GpuPartitionTask: Partitioning is complete, handling completion", "node", obj.Node.Name)
 		return t.handleCompletedPartitioning(ctx, obj)
 	}
 
 	// Handle partitioning phases
+	logger.Info("GpuPartitionTask: Partitioning not complete, handling partitioning phases",
+		"node", obj.Node.Name,
+		"currentPhase", obj.KaiwoNode.Status.Partitioning.Phase)
 	return t.handlePartitioningPhase(ctx, obj)
 }
 
 // isPartitioningComplete checks if the current state matches the desired state
 func (t *GpuPartitionTask) isPartitioningComplete(obj *KaiwoNodeWrapper) bool {
 	profileState, profileStateExists := obj.Node.Labels[AmdDcmPartitioningStateLabel]
-	return obj.KaiwoNode.Status.Partitioning.AppliedProfile != nil &&
-		*obj.KaiwoNode.Status.Partitioning.AppliedProfile == obj.KaiwoNode.Spec.Partitioning.Profile &&
-		profileStateExists && profileState == "success"
+
+	appliedProfile := "<nil>"
+	if obj.KaiwoNode.Status.Partitioning.AppliedProfile != nil {
+		appliedProfile = string(*obj.KaiwoNode.Status.Partitioning.AppliedProfile)
+	}
+	desiredProfile := string(obj.KaiwoNode.Spec.Partitioning.Profile)
+	phase := string(obj.KaiwoNode.Status.Partitioning.Phase)
+
+	log.FromContext(context.Background()).Info("Checking if partitioning is complete",
+		"node", obj.Node.Name,
+		"appliedProfile", appliedProfile,
+		"desiredProfile", desiredProfile,
+		"phase", phase,
+		"dcmStateLabel", profileState,
+		"dcmStateLabelExists", profileStateExists)
+
+	// Check if we have the applied profile and it matches the desired profile
+	hasCorrectProfile := obj.KaiwoNode.Status.Partitioning.AppliedProfile != nil &&
+		*obj.KaiwoNode.Status.Partitioning.AppliedProfile == obj.KaiwoNode.Spec.Partitioning.Profile
+
+	log.FromContext(context.Background()).Info("Profile matching check",
+		"node", obj.Node.Name,
+		"hasCorrectProfile", hasCorrectProfile)
+
+	// If we have the DCM state label and it indicates success, we're definitely complete
+	if profileStateExists && profileState == "success" && hasCorrectProfile {
+		log.FromContext(context.Background()).Info("Partitioning complete via DCM state label",
+			"node", obj.Node.Name)
+		return true
+	}
+
+	// If we don't have the state label but can detect the correct profile is applied,
+	// consider it complete (handles pre-partitioned nodes)
+	if hasCorrectProfile && !profileStateExists {
+		// Additional validation: only consider it complete if we're in a clearly completed state
+		// Do NOT consider empty phase as complete, as that's the initial state for new partitioning
+		currentPhase := obj.KaiwoNode.Status.Partitioning.Phase
+		log.FromContext(context.Background()).Info("Checking pre-partitioned node completion",
+			"node", obj.Node.Name,
+			"currentPhase", currentPhase)
+
+		if currentPhase == v1alpha1.PartitioningPhaseCompleted {
+			log.FromContext(context.Background()).Info("Partitioning complete via pre-partitioned node detection",
+				"node", obj.Node.Name)
+			return true
+		} else {
+			log.FromContext(context.Background()).Info("Pre-partitioned node but not in completed phase, allowing partitioning to proceed",
+				"node", obj.Node.Name,
+				"phase", currentPhase)
+		}
+	}
+
+	log.FromContext(context.Background()).Info("Partitioning not complete",
+		"node", obj.Node.Name)
+	return false
 }
 
 // handleCompletedPartitioning handles the case where partitioning is already complete
 func (t *GpuPartitionTask) handleCompletedPartitioning(ctx context.Context, obj *KaiwoNodeWrapper) (*ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
+	logger.Info("GpuPartitionTask: Handling completed partitioning",
+		"node", obj.Node.Name,
+		"previousStatus", obj.KaiwoNode.Status.Status,
+		"previousPhase", obj.KaiwoNode.Status.Partitioning.Phase)
+
 	obj.KaiwoNode.Status.Status = v1alpha1.KaiwoNodeStatusReady
 	obj.KaiwoNode.Status.Partitioning.Phase = v1alpha1.PartitioningPhaseCompleted
 
@@ -159,8 +266,17 @@ func (t *GpuPartitionTask) handleCompletedPartitioning(ctx context.Context, obj 
 
 	// Remove partitioning taint if it exists
 	if t.nodeHasTaint(obj.Node, kaiwoPartitioningTaint) {
+		logger.Info("GpuPartitionTask: Removing partitioning taint from node", "node", obj.Node.Name)
 		t.removeTaint(ctx, obj.Node, kaiwoPartitioningTaint)
+	} else {
+		baseutils.Debug(logger, "GpuPartitionTask: No partitioning taint found on node", "node", obj.Node.Name)
 	}
+
+	logger.Info("GpuPartitionTask: Successfully completed partitioning handling",
+		"node", obj.Node.Name,
+		"newStatus", obj.KaiwoNode.Status.Status,
+		"newPhase", obj.KaiwoNode.Status.Partitioning.Phase)
+
 	return nil, nil
 }
 
@@ -189,7 +305,21 @@ func (t *GpuPartitionTask) handlePartitioningPhase(ctx context.Context, obj *Kai
 		return t.handleWaitingForLabels(ctx, obj)
 
 	case v1alpha1.PartitioningPhaseError:
-		logger.Info("Partitioning is in error state", "node", obj.Node.Name)
+		logger.Info("GpuPartitionTask: Node is in error phase, checking if recovery is possible",
+			"node", obj.Node.Name)
+		baseutils.Debug(logger, "GpuPartitionTask: Attempting error recovery for partitioning", "node", obj.Node.Name)
+
+		// Check if partitioning is actually complete despite being in error state
+		// This can happen when a pre-partitioned node was incorrectly marked as error
+		if t.isPartitioningComplete(obj) {
+			logger.Info("GpuPartitionTask: Node was in error state but partitioning is actually complete, recovering",
+				"node", obj.Node.Name)
+			return t.handleCompletedPartitioning(ctx, obj)
+		}
+
+		logger.Info("GpuPartitionTask: Partitioning is in error state and not recoverable",
+			"node", obj.Node.Name)
+		baseutils.Debug(logger, "GpuPartitionTask: Node remains in error state, no recovery possible", "node", obj.Node.Name)
 		return nil, nil
 
 	default:

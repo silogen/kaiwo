@@ -137,8 +137,8 @@ func (r *ChainsawTestRunner) runChainsawWithReport(config *ChainsawExecutionConf
 	}
 
 	// Add values file if needed
-	if len(config.Values) > 0 {
-		valuesFile, err := r.createValuesFile(config.Values)
+	if len(config.Values) > 0 || config.BaseValuesFile != "" {
+		valuesFile, err := r.createValuesFileWithBase(config.Values, config.BaseValuesFile)
 		if err != nil {
 			return fmt.Errorf("creating values file: %w", err)
 		}
@@ -168,8 +168,7 @@ func (r *ChainsawTestRunner) runChainsawWithReport(config *ChainsawExecutionConf
 	return cmd.Run()
 }
 
-// createValuesFile creates a temporary values file for chainsaw
-func (r *ChainsawTestRunner) createValuesFile(values []ChainsawValue) (string, error) {
+func (r *ChainsawTestRunner) createValuesFileWithBase(values []ChainsawValue, baseValuesFile string) (string, error) {
 	valuesFile, err := os.CreateTemp("", "kaiwo-chainsaw-values-*.yaml")
 	if err != nil {
 		return "", err
@@ -181,7 +180,25 @@ func (r *ChainsawTestRunner) createValuesFile(values []ChainsawValue) (string, e
 		}
 	}(valuesFile)
 
-	chainsawValues := map[string]string{}
+	chainsawValues := map[string]interface{}{}
+
+	// Load base values file if specified
+	if baseValuesFile != "" {
+		baseValuesPath := baseValuesFile
+		if !filepath.IsAbs(baseValuesPath) {
+			baseValuesPath = filepath.Join(GetModuleRoot(), baseValuesFile)
+		}
+		baseData, err := os.ReadFile(baseValuesPath)
+		if err != nil {
+			return "", fmt.Errorf("reading base values file %s: %w", baseValuesFile, err)
+		}
+
+		if err := yaml.Unmarshal(baseData, &chainsawValues); err != nil {
+			return "", fmt.Errorf("parsing base values file %s: %w", baseValuesFile, err)
+		}
+	}
+
+	// Add/override with generated values
 	for _, value := range values {
 		val, err := value.GetValue()
 		if err != nil {
@@ -190,9 +207,12 @@ func (r *ChainsawTestRunner) createValuesFile(values []ChainsawValue) (string, e
 		chainsawValues[value.Name] = val
 	}
 
-	enc := yaml.NewEncoder(valuesFile)
-	if err := enc.Encode(chainsawValues); err != nil {
-		return "", err
+	// Only write file if we have values
+	if len(chainsawValues) > 0 {
+		enc := yaml.NewEncoder(valuesFile)
+		if err := enc.Encode(chainsawValues); err != nil {
+			return "", err
+		}
 	}
 
 	return valuesFile.Name(), nil

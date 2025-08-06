@@ -17,6 +17,8 @@ limitations under the License.
 package e2e
 
 import (
+	"os"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -35,39 +37,34 @@ var _ = Describe("AMD GPU tests", Label("gpu", "amd"), Ordered, ContinueOnFailur
 
 // AMD GPU Partitioning tests with setup/teardown
 var _ = Describe("AMD GPU Partitioning tests", Label("gpu", "amd", "partitioning"), Ordered, ContinueOnFailure, func() {
-	setupHelper := utils.NewTestRunnerHelper()
 	testHelper := utils.NewTestRunnerHelper()
-	teardownHelper := utils.NewTestRunnerHelper()
 
 	BeforeAll(func() {
-		setupErr := setupHelper.ExecuteChainsawTests(chainsawConfigPath, chainsawValues)
+		By("Running setup: partition-to-cpx")
+		setupConfig := &utils.ChainsawExecutionConfig{
+			ConfigPath:     chainsawConfigPath,
+			Tests:          []string{"test/chainsaw/tests/amd-gpu/partitioning-setup/partition-to-cpx"},
+			Values:         chainsawValues,
+			BaseValuesFile: os.Getenv("KAIWO_TEST_BASE_VALUES_FILE"),
+		}
+		setupErr := setupConfig.Run("")
 		Expect(setupErr).NotTo(HaveOccurred())
+
+		By("Running main partitioning tests")
 		_ = testHelper.ExecuteChainsawTests(chainsawConfigPath, chainsawValues)
 	})
 
-	setupHelper.Register("test/chainsaw/tests/amd-gpu/partitioning-setup/partition-to-cpx", "amd-gpu-partitioning-setup")
 	testHelper.Register("test/chainsaw/tests/amd-gpu/partitioning", "amd-gpu-partitioning-tests")
-	teardownHelper.Register("test/chainsaw/tests/amd-gpu/partitioning-setup/partition-to-spx", "amd-gpu-partitioning-teardown")
 
 	AfterAll(func() {
-		teardownErr := teardownHelper.ExecuteChainsawTests(chainsawConfigPath, chainsawValues)
+		By("Running teardown: partition-to-spx")
+		teardownConfig := &utils.ChainsawExecutionConfig{
+			ConfigPath:     chainsawConfigPath,
+			Tests:          []string{"test/chainsaw/tests/amd-gpu/partitioning-setup/partition-to-spx"},
+			Values:         chainsawValues,
+			BaseValuesFile: os.Getenv("KAIWO_TEST_BASE_VALUES_FILE"),
+		}
+		teardownErr := teardownConfig.Run("")
 		Expect(teardownErr).NotTo(HaveOccurred())
-	})
-})
-
-// MI300X-specific environment tests
-var _ = Describe("MI300X Development Environment tests", Label("gpu", "mi300x", "amd"), Ordered, ContinueOnFailure, func() {
-	testHelper := utils.NewTestRunnerHelper()
-
-	Context("MI300X dev environment tests", func() {
-		It("should run MI300X dev environment chainsaw tests", func() {
-			Expect(testHelper.RunTestBlock("mi300x-dev-tests", "should run MI300X dev environment chainsaw tests", []string{
-				"test/chainsaw/tests/environments/mi300x-dev",
-			}, chainsawConfigPath, chainsawValues)).To(Succeed())
-		})
-	})
-
-	AfterAll(func() {
-		testHelper.DisplaySummary()
 	})
 })

@@ -103,9 +103,6 @@ if ! kubectl wait --for=condition=ready helmrelease --all -n flux-system --timeo
     exit 1
 fi
 
-echo "Creating test namespace..."
-kubectl create ns "$TEST_NAME" --dry-run=client -o yaml | kubectl apply -f -
-
 echo "Base cluster setup complete!"
 
 echo "Cluster is ready for testing!"
