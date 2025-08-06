@@ -97,9 +97,9 @@ spec:
 
       # Persistence for logs
       persistence:
-        enabled: true
-        size: 20Gi
-        storageClass: "rwx-nfs"
+        enabled: false
+        # size: 20Gi
+        # storageClass: "rwx-nfs"
 
     # Gateway configuration (disabled in SingleBinary mode)
     gateway:
