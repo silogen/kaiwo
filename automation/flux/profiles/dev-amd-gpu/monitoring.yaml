@@ -33,21 +33,3 @@ spec:
   timeout: 5m
   dependsOn:
   - name: otel-operator
----
-apiVersion: kustomize.toolkit.fluxcd.io/v1
-kind: Kustomization
-metadata:
-  name: amd-gpu-metrics
-  namespace: flux-system
-spec:
-  interval: 10m
-  dependsOn:
-  - name: monitoring-stack
-  - name: amd-gpu-operator
-  sourceRef:
-    kind: GitRepository
-    name: kaiwo-source
-    namespace: flux-system
-  path: "./dependencies/dev/overlays/amd-gpu/metrics-collector"
-  prune: true
-  targetNamespace: monitoring
