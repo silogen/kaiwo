@@ -90,8 +90,14 @@ elif [ "$FLUX_BRANCH" != "main" ]; then
     kubectl patch gitrepository kaiwo-source -n flux-system --type='merge' -p="{\"spec\":{\"ref\":{\"branch\":\"$FLUX_BRANCH\"}}}"
 fi
 
-echo "Applying dev-kind infrastructure configuration..."
-kubectl apply -f "https://raw.githubusercontent.com/silogen/kaiwo/$GIT_REF/automation/flux/clusters/dev-kind/infrastructure.yaml"
+# choose infra folder based on environment
+INFRA_DIR="dev-kind"
+if [ "${GITHUB_ACTIONS:-false}" = "true" ] || [ "${CI:-false}" = "true" ]; then
+  INFRA_DIR="dev-kind-ci"
+fi
+
+echo "Applying $INFRA_DIR infrastructure configuration..."
+kubectl apply -f "https://raw.githubusercontent.com/silogen/kaiwo/$GIT_REF/automation/flux/clusters/$INFRA_DIR/infrastructure.yaml"
 
 echo "Waiting for kaiwo-infrastructure to be ready..."
 echo "This may take several minutes as all components are installed and configured..."
