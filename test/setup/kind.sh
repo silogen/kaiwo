@@ -140,7 +140,15 @@ if ! kubectl wait --for=condition=ready helmrelease --all -n flux-system --timeo
     
     echo "💾 Recent logs from Source controller:"
     kubectl logs -n flux-system -l app=source-controller --tail=100 --prefix=true || true
-    
+
+    echo "Monitoring debug"
+
+    kubectl get helmrelease loki -n flux-system -o yaml
+
+    kubectl get pods -n monitoring -o wide || true
+    kubectl describe pods -n monitoring || true
+    kubectl logs -n monitoring -l app.kubernetes.io/name=loki --tail=50 || true
+
     exit 1
 fi
 
