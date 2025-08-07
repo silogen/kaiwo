@@ -1,0 +1,98 @@
+name: Test GPU Self-Hosted Runner
+
+on:
+  workflow_dispatch: null
+  push:
+    paths:
+    - '.github/workflows/test-gpu-runner.yml'
+
+jobs:
+  test-gpu-runner:
+    runs-on: arc-runner-set
+    steps:
+    - name: Check runner info
+      run: |
+        echo "=== Runner Information ==="
+        echo "Runner: $(hostname)"
+        echo "OS: $(uname -a)"
+        echo "CPU: $(nproc) cores"
+        echo "Memory: $(free -h)"
+        echo ""
+
+    - name: Check GPU availability
+      run: |
+        echo "=== GPU Information ==="
+        if command -v rocm-smi &> /dev/null; then
+          echo "ROCm SMI found:"
+          rocm-smi
+        elif command -v nvidia-smi &> /dev/null; then
+          echo "NVIDIA SMI found:"
+          nvidia-smi
+        else
+          echo "No GPU monitoring tools found"
+          ls -la /dev/kfd /dev/dri/ || echo "No GPU devices found"
+        fi
+        echo ""
+
+    - name: Check Docker availability
+      run: |
+        echo "=== Docker Information ==="
+        docker --version
+        docker info --format "{{.ServerVersion}}"
+        echo ""
+
+    - name: Check Kubernetes access
+      run: |
+        echo "=== Kubernetes Access ==="
+        kubectl version --client
+        kubectl get nodes -o wide
+        kubectl get pods -A | head -10
+        echo ""
+
+    - name: Test GPU workload deployment
+      run: |
+        echo "=== Testing GPU Workload Deployment ==="
+        cat << 'EOF' > test-gpu-pod.yaml
+        apiVersion: v1
+        kind: Pod
+        metadata:
+          name: test-gpu-runner-${{ github.run_id }}
+          namespace: default
+        spec:
+          restartPolicy: Never
+          containers:
+          - name: gpu-test
+            image: rocm/rocm-terminal:latest
+            command: ["/bin/bash"]
+            args: ["-c", "rocm-smi && echo 'GPU test completed'"]
+            resources:
+              limits:
+                amd.com/gpu: 1
+              requests:
+                amd.com/gpu: 1
+        EOF
+
+        echo "Deploying test GPU pod..."
+        kubectl apply -f test-gpu-pod.yaml
+
+        echo "Waiting for pod to complete..."
+        kubectl wait --for=condition=Ready pod/test-gpu-runner-${{ github.run_id }} --timeout=300s || true
+
+        echo "Pod logs:"
+        kubectl logs test-gpu-runner-${{ github.run_id }} || echo "Pod not ready yet"
+
+        echo "Pod status:"
+        kubectl get pod test-gpu-runner-${{ github.run_id }} -o wide
+
+        echo "Cleaning up..."
+        kubectl delete pod test-gpu-runner-${{ github.run_id }} --ignore-not-found=true
+
+    - name: Test summary
+      run: |-
+        echo "=== Test Summary ==="
+        echo "✅ Runner connectivity: OK"
+        echo "✅ Docker access: OK" 
+        echo "✅ Kubernetes access: OK"
+        echo "✅ GPU workload deployment: Attempted"
+        echo ""
+        echo "Self-hosted runner test completed!"
