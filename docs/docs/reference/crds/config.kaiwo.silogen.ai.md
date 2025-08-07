@@ -118,7 +118,6 @@ _Appears in:_
 KaiwoResourceMonitoringConfig configures the resource monitoring feature.
 Note that the following must be set as environmental variables inside the Kaiwo controller manager as these cannot be updated without restarting the operator process.
 
-
 * Enabling the resource monitoring feature (`RESOURCE_MONITORING_ENABLED=true`)
 * Setting the metrics endpoint (`RESOURCE_MONITORING_METRICS_ENDPOINT=...`)
 * Setting the polling interval (`RESOURCE_MONITORING_POLLING_INTERVAL=30s`)

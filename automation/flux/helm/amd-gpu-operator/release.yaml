@@ -1,0 +1,34 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: amd-gpu-operator
+  namespace: flux-system
+spec:
+  interval: 30m
+  chart:
+    spec:
+      chart: gpu-operator-charts
+      version: "v1.3.0"
+      sourceRef:
+        kind: HelmRepository
+        name: rocm
+        namespace: flux-system
+  install:
+    createNamespace: true
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  targetNamespace: kube-amd-gpu
+  values:
+    # Enable ROCm SMI for better MI300X telemetry
+    prometheus:
+      enabled: true
+    # Ensure proper telemetry collection for MI300X
+    operator:
+      defaultRuntime: containerd
+    upgradeCRD: false
+    crds:
+      defaultCR:
+        install: true

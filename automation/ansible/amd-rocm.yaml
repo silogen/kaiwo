@@ -1,0 +1,87 @@
+- name: Install AMD GPU drivers and ROCm for specific Ubuntu versions
+  hosts: amd-gpu-nodes
+  become: true
+  vars:
+    amdgpu_version: "6.4.60401-1"
+    amdgpu_version_short: "6.4.1"
+  tasks:
+
+  - name: Run lshw to check for AMD GPU
+    shell: "sudo lspci"
+    register: lshw_output
+    ignore_errors: yes
+
+  - name: Fail if AMD GPU is not detected
+    fail:
+      msg: "No AMD GPU detected. Ensure that an AMD GPU is present and properly connected."
+    when: "'Advanced Micro Devices' not in lshw_output.stdout"
+
+  - name: Display confirmation if AMD GPU is detected
+    debug:
+      msg: "AMD GPU detected in the system."
+    when: "'Advanced Micro Devices' in lshw_output.stdout"
+
+  - name: Check Ubuntu version for Rocm installation
+    command: lsb_release -rs
+    register: ubuntu_version
+    changed_when: false
+
+  - name: Get the current kernel version
+    command: uname -r
+    register: kernel_version
+    changed_when: false
+
+  - name: Install kernel headers and extra modules for the current kernel version
+    apt:
+      name:
+      - "linux-headers-{{ kernel_version.stdout }}"
+      - "linux-modules-extra-{{ kernel_version.stdout }}"
+      state: present
+      update_cache: yes
+
+  - name: Set version-specific variables for AMD GPU install path
+    set_fact:
+      ubuntu_version: "{{ 'jammy' if ubuntu_version.stdout.startswith('22.04') else 'noble' }}"
+    when: "'22.04' in ubuntu_version.stdout or '24.04' in ubuntu_version.stdout"
+
+
+  - name: Add the current user to the render and video groups
+    user:
+      name: "{{ ansible_user }}"
+      groups: render,video
+      append: yes
+
+  - name: Ensure ADD_EXTRA_GROUPS is set to 1
+    lineinfile:
+      path: /etc/adduser.conf
+      regexp: '^ADD_EXTRA_GROUPS='
+      line: 'ADD_EXTRA_GROUPS=1'
+      state: present
+
+  - name: Add 'video' and 'render' to EXTRA_GROUPS
+    lineinfile:
+      path: /etc/adduser.conf
+      regexp: '^EXTRA_GROUPS='
+      line: 'EXTRA_GROUPS=video render'
+      state: present
+
+  - name: Download AMD GPU installer
+    get_url:
+      url: "https://repo.radeon.com/amdgpu-install/{{ amdgpu_version_short }}/ubuntu/{{ ubuntu_version }}/amdgpu-install_{{ amdgpu_version }}_all.deb"
+      dest: "/tmp/amdgpu-install_{{ amdgpu_version }}_all.deb"
+
+  - name: Install AMD GPU package
+    apt:
+      deb: "/tmp/amdgpu-install_{{ amdgpu_version }}_all.deb"
+
+  - name: Install Rocm and additional single packages
+    shell: amdgpu-install --usecase=rocm
+    become: true
+
+  - name: Comment out 'blacklist amdgpu' if present
+    shell: sed -i '/blacklist amdgpu/s/^/# /' /etc/modprobe.d/*.conf
+
+  - name: Reboot the system
+    ansible.builtin.reboot:
+      reboot_timeout: 600
+    become: true
