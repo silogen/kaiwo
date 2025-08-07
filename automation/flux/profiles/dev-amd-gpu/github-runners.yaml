@@ -13,4 +13,4 @@ spec:
   wait: true
   timeout: 5m
   dependsOn:
-  - name: kaiwo-infrastructure
+  - name: cert-manager
