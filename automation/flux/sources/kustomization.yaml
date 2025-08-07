@@ -4,4 +4,3 @@ kind: Kustomization
 resources:
 - helm-repositories.yaml
 - git-repository.yaml
-- oci-repositories.yaml
