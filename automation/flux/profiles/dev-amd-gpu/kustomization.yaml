@@ -10,4 +10,5 @@ resources:
 - operator.yaml
 - device-config.yaml
 - monitoring.yaml
+- arc.yaml
 - github-runners.yaml

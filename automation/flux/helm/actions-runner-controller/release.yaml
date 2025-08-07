@@ -17,9 +17,11 @@ spec:
   install:
     remediation:
       retries: 3
+    createNamespace: true
   upgrade:
     remediation:
       retries: 3
+  targetNamespace: arc-systems
   values:
     replicaCount: 1
     image:

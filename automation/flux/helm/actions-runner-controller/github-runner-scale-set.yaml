@@ -2,7 +2,7 @@ apiVersion: helm.toolkit.fluxcd.io/v2beta1
 kind: HelmRelease
 metadata:
   name: gpu-runner-scale-set
-  namespace: github-runners
+  namespace: flux-system
 spec:
   interval: 15m
   chart:
@@ -21,14 +21,14 @@ spec:
   upgrade:
     remediation:
       retries: 3
+  targetNamespace: github-runners
   dependsOn:
   - name: actions-runner-controller
     namespace: flux-system
   values:
     runnerScaleSetName: "gpu-runners"
     githubConfigUrl: "https://github.com/silogen/kaiwo"
-    githubConfigSecret:
-      github_token: ""  # Will be provided via secret
+    githubConfigSecret: "github-auth-secret"
     minRunners: 0
     maxRunners: 1
     containerMode:
@@ -39,7 +39,6 @@ spec:
         containers:
         - name: runner
           image: ghcr.io/actions/actions-runner:latest
-          command: ["/home/runner/run.sh"]
           env:
           - name: RUNNER_FEATURE_FLAG_ONCE
             value: "true"
