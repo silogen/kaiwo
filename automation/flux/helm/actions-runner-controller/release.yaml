@@ -1,0 +1,34 @@
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: actions-runner-controller
+  namespace: flux-system
+spec:
+  interval: 15m
+  chart:
+    spec:
+      chart: gha-runner-scale-set-controller
+      version: "0.9.3"
+      sourceRef:
+        kind: HelmRepository
+        name: actions-runner-controller
+        namespace: flux-system
+      interval: 15m
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    replicaCount: 1
+    image:
+      repository: ghcr.io/actions/gha-runner-scale-set-controller
+      pullPolicy: IfNotPresent
+    metrics:
+      controllerManagerAddr: ":8080"
+      listenerAddr: ":8080"
+      listenerEndpoint: "/metrics"
+    env:
+    - name: CONTROLLER_LOG_LEVEL
+      value: "info"

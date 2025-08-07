@@ -1,0 +1,16 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: github-runners
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: GitRepository
+    name: kaiwo-source
+  path: "./automation/kustomization/github-runners"
+  prune: true
+  wait: true
+  timeout: 5m
+  dependsOn:
+  - name: kaiwo-infrastructure

@@ -10,3 +10,4 @@ resources:
 - operator.yaml
 - device-config.yaml
 - monitoring.yaml
+- github-runners.yaml
