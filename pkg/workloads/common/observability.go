@@ -40,14 +40,21 @@ func ObserveBatchJob(job *batchv1.Job, previousStatus kaiwo.WorkloadStatus) (kai
 		return kaiwo.WorkloadStatusFailed, nil
 	}
 
+	// Check if job has completed successfully by examining job status fields
+	// A job is complete when it has succeeded pods and no active pods
+	if job.Status.Succeeded > 0 && job.Status.Active == 0 {
+		return kaiwo.WorkloadStatusComplete, nil
+	}
+
 	// If we are here, the job is not complete, failed or suspended
 
 	if baseutils.ValueOrDefault(job.Status.Ready) > 0 {
 		// Pods are running (not pending)
 		return kaiwo.WorkloadStatusRunning, nil
-	} else if previousStatus == kaiwo.WorkloadStatusRunning {
+	} else if previousStatus == kaiwo.WorkloadStatusRunning && job.Status.Active > 0 {
 		// Before completing, a Job will have active but not ready pods and no other conditions
 		// This check is added to avoid going back to starting phase
+		// But only if there are still active pods - if no active pods, the job might be completing
 		return previousStatus, nil
 	} else if job.Status.Active > 0 {
 		// Pods are running or pending

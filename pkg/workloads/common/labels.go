@@ -23,13 +23,14 @@ import (
 )
 
 var (
-	DefaultNodePoolLabel      = "kaiwo/nodepool"
-	DefaultKaiwoWorkerLabel   = "kaiwo/worker"
-	GPUModelLabel             = "kaiwo/gpu-model"
-	DefaultTopologyBlockLabel = "kaiwo/topology-block"
-	DefaultTopologyRackLabel  = "kaiwo/topology-rack"
+	DefaultKaiwoWorkerLabel   = KaiwoLabelBase + "/worker"
+	DefaultTopologyBlockLabel = KaiwoLabelBase + "/topology.block"
+	DefaultTopologyRackLabel  = KaiwoLabelBase + "/topology.rack"
 	DefaultTopologyHostLabel  = "kubernetes.io/hostname"
 	DefaultTopologyName       = "default-topology"
+
+	GpuPartitioningEnabledLabel = KaiwoLabelBase + "/node.amd.partitioning.enabled"
+	GpuPartitioningProfileLabel = KaiwoLabelBase + "/node.amd.partitioning.profile"
 )
 
 type KaiwoLabelContext struct {
@@ -44,6 +45,10 @@ type KaiwoLabelContext struct {
 func UpdateLabels(workload KaiwoWorkload, objectMeta *v1.ObjectMeta) {
 	if objectMeta.Labels == nil {
 		objectMeta.Labels = map[string]string{}
+	}
+
+	if priorityclass := workload.GetCommonSpec().WorkloadPriorityClass; priorityclass != "" {
+		objectMeta.Labels[WorkloaddPriorityClassLabel] = priorityclass
 	}
 
 	sourceLabels := workload.GetKaiwoWorkloadObject().GetLabels()

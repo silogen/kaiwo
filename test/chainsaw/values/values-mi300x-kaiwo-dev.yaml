@@ -1,0 +1,3 @@
+amd_gpu_partitioning_node_name: tw009
+amd_gpu_unpartitioned_two_gpu_vram_request: 200Gi
+amd_gpu_partitioned_two_gpu_vram_request: 30Gi

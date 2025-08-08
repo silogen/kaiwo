@@ -1,0 +1,24 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: non-partitioned-vram-test
+spec:
+  steps:
+  - try:
+    - apply:
+        file: kaiwojob.yaml
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            labels:
+              kaiwo.silogen.ai/name: non-partitioned-vram-test
+          spec:
+            (nodeName != $values.amd_gpu_partitioning_node_name): true
+            containers:
+            - resources:
+                requests:
+                  amd.com/gpu: "2"
+                limits:
+                  amd.com/gpu: "2"

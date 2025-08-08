@@ -75,7 +75,30 @@ func (r *PvcReconciler) MutateActual(ctx context.Context, clusterCtx ClusterCont
 	return nil
 }
 
+const PvcReadyConditionType = "PvcReady"
+
 func (r *PvcReconciler) ObserveStatus(ctx context.Context, k8sClient client.Client, obj client.Object, previousWorkloadStatus kaiwo.WorkloadStatus) (*kaiwo.WorkloadStatus, []metav1.Condition, error) {
-	// TODO check for conditions
-	return nil, nil, nil
+	pvc := obj.(*corev1.PersistentVolumeClaim)
+	var workloadStatus kaiwo.WorkloadStatus
+	var conditions []metav1.Condition
+	var conditionStatus metav1.ConditionStatus
+
+	switch pvc.Status.Phase {
+	case corev1.ClaimBound:
+		workloadStatus = kaiwo.WorkloadStatusComplete
+		conditionStatus = metav1.ConditionTrue
+	case corev1.ClaimPending:
+		workloadStatus = kaiwo.WorkloadStatusPending
+		conditionStatus = metav1.ConditionFalse
+	case corev1.ClaimLost:
+		workloadStatus = kaiwo.WorkloadStatusFailed
+		conditionStatus = metav1.ConditionFalse
+	}
+	conditions = append(conditions, metav1.Condition{
+		Type:   PvcReadyConditionType,
+		Status: conditionStatus,
+		Reason: string(pvc.Status.Phase),
+	})
+
+	return &workloadStatus, conditions, nil
 }

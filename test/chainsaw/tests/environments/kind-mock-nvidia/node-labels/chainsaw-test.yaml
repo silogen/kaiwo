@@ -1,0 +1,29 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: node-kaiwo-labels
+spec:
+  timeouts:
+    assert: 1s
+  steps:
+  - name: cpu-node
+    try:
+    - assert:
+        resource:
+          apiVersion: "v1"
+          kind: Node
+          metadata:
+            name: kaiwo-test-control-plane
+            labels:
+              kaiwo.silogen.ai/node.type: cpu-only
+  - name: gpu-node
+    try:
+    - assert:
+        resource:
+          apiVersion: "v1"
+          kind: Node
+          metadata:
+            name: kaiwo-test-worker
+            labels:
+              kaiwo.silogen.ai/node.gpu.model: tesla-k80
+              kaiwo.silogen.ai/node.type: gpu

@@ -1,0 +1,55 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: monitoring-conditions-gpu
+spec:
+  concurrent: false
+  timeouts:
+    assert: 60s
+    cleanup: 60s
+  steps:
+  - try:
+    - patch:
+        resource:
+          apiVersion: config.kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoConfig
+          metadata:
+            name: kaiwo
+          spec:
+            resourceMonitoring:
+              lowUtilizationThreshold: 10
+              terminateUnderutilized: true
+              terminateUnderutilizedAfter: 30s
+              targetNamespaces:
+              - ($namespace)
+    - apply:
+        file: low-utilization.yaml
+    - apply:
+        file: high-utilization.yaml
+    - sleep:
+        duration: 45s
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: low-utilization
+          status:
+            status: TERMINATED
+            (conditions[?type == 'ResourceUnderutilization']):
+            - status: "True"
+              reason: "GpuUtilizationLow"
+            (conditions[?type == 'WorkloadTerminatedEarly']):
+            - status: "True"
+              reason: "GpuUtilizationLow"
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: high-utilization
+          status:
+            status: RUNNING
+            (conditions[?type == 'ResourceUnderutilization']):
+            - status: "False"
+              reason: "GpuUtilizationNormal"

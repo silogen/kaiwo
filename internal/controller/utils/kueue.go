@@ -17,10 +17,21 @@ package controllerutils
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"sort"
 	"strconv"
 	"strings"
+
+	"k8s.io/client-go/tools/record"
+
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+	"k8s.io/apimachinery/pkg/runtime"
+
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -34,123 +45,441 @@ import (
 	"github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
-func EnsureNamespaceKueueManaged(ctx context.Context, k8sClient client.Client, namespaceName string) error {
-	logger := log.FromContext(ctx)
-
-	namespace := &corev1.Namespace{}
-	if err := k8sClient.Get(ctx, client.ObjectKey{Name: namespaceName}, namespace); err != nil {
-		logger.Error(err, "Failed to get namespace", "namespace", namespaceName)
-		return fmt.Errorf("failed to get namespace: %w", err)
+// SyncQueueResource syncs a list of resources with the Kubernetes API
+func SyncQueueResource[T any, U client.Object](
+	ctx context.Context,
+	k8sClient client.Client,
+	recorder record.EventRecorder,
+	kaiwoQueueConfig *kaiwo.KaiwoQueueConfig,
+	desired []T,
+	converter KaiwoQueueResourceConverter[T, U],
+	opts ...SyncOption,
+) error {
+	cfg := SyncOptions{
+		ShouldDelete: func(_ client.Object) bool { return true },
+		Owner:        nil,
+		Scheme:       nil,
+	}
+	for _, opt := range opts {
+		opt(&cfg)
 	}
 
-	if value, exists := namespace.Labels["kueue-managed"]; exists && value == "true" { //nolint:goconst
-		return nil
+	kind := converter.CreateList().GetObjectKind().GroupVersionKind().Kind
+	kind = strings.TrimSuffix(kind, "List")
+	baseLog := log.FromContext(ctx).
+		WithName("syncResource").
+		WithValues("controller", "KaiwoQueue", "kind", kind)
+
+	existing := converter.CreateList()
+	if err := k8sClient.List(ctx, existing); err != nil {
+		return fmt.Errorf("failed to list resources: %w", err)
 	}
 
-	if namespace.Labels == nil {
-		namespace.Labels = make(map[string]string)
+	items, err := meta.ExtractList(existing)
+	if err != nil {
+		// Should never happen, but just it's not silently ignored if it does
+		panic("failed to extract list of resources")
 	}
-	namespace.Labels["kueue-managed"] = "true" //nolint:goconst
+	toDelete := make(map[string]U, len(items))
 
-	logger.Info("Adding 'kueue-managed: true' label to namespace", "namespace", namespaceName)
-
-	if err := k8sClient.Update(ctx, namespace); err != nil {
-		logger.Error(err, "Failed to update namespace with 'kueue-managed: true' label", "namespace", namespaceName)
-		return fmt.Errorf("failed to update namespace: %w", err)
+	for _, item := range items {
+		obj := item.(U)
+		key := obj.GetNamespace() + "/" + obj.GetName()
+		toDelete[key] = obj
 	}
 
-	logger.Info("Successfully labeled namespace", "namespace", namespaceName)
+	var syncErrors []error
+
+	for _, item := range desired {
+
+		desiredObj, err := converter.Convert(item)
+		if err != nil {
+			syncErrors = append(syncErrors, fmt.Errorf("error converting %v: %w", item, err))
+			continue
+		}
+
+		key := desiredObj.GetNamespace() + "/" + desiredObj.GetName()
+
+		working := desiredObj.DeepCopyObject().(U)
+
+		// Determine owner
+		owner := cfg.Owner
+		if cfg.Owner == nil && cfg.OwnerFunc == nil {
+			// Should never happen, but just it's not silently ignored if it does
+			panic("an owner or owner func must be passed to this method")
+		} else if cfg.Scheme == nil {
+			// Should never happen, but just it's not silently ignored if it does
+			panic("a scheme must be passed to this method")
+		}
+		if owner == nil && cfg.OwnerFunc != nil {
+			owner = cfg.OwnerFunc(working)
+		}
+
+		if err := controllerutil.SetControllerReference(owner, working, cfg.Scheme); err != nil {
+			syncErrors = append(syncErrors, fmt.Errorf("error setting owner %s/%s: %w",
+				working.GetNamespace(), working.GetName(), err))
+			// Ensure we don't delete if encountered an error
+			delete(toDelete, key)
+			continue
+		}
+
+		op, err := controllerutil.CreateOrPatch(ctx, k8sClient, working, func() error {
+			converter.Mutate(desiredObj, working)
+			return nil
+		})
+		if err != nil {
+			syncErrors = append(syncErrors, fmt.Errorf("error applying %s/%s: %w",
+				working.GetNamespace(), working.GetName(), err))
+			// Ensure we don't delete if encountered an error
+			delete(toDelete, key)
+			continue
+		}
+
+		ns, name := working.GetNamespace(), working.GetName()
+		entryLog := baseLog.WithValues("namespace", ns, "name", name, "operation", op)
+
+		switch op {
+		case controllerutil.OperationResultNone:
+			baseutils.Debug(entryLog, "no-op, up-to-date")
+		case controllerutil.OperationResultCreated:
+			entryLog.Info("created")
+			recorder.Event(
+				kaiwoQueueConfig, corev1.EventTypeNormal, "Created",
+				fmt.Sprintf("Created %s %s/%s", kind, ns, name),
+			)
+		case controllerutil.OperationResultUpdated:
+			entryLog.Info("updated")
+			recorder.Event(
+				kaiwoQueueConfig, corev1.EventTypeNormal, "Updated",
+				fmt.Sprintf("Updated %s %s/%s", kind, ns, name),
+			)
+		}
+
+		delete(toDelete, key)
+	}
+
+	for key, obj := range toDelete {
+		if cfg.ShouldDelete != nil && !cfg.ShouldDelete(obj) {
+			continue
+		}
+		ns, name := obj.GetNamespace(), obj.GetName()
+		if err := k8sClient.Delete(ctx, obj); err != nil && !errors.IsNotFound(err) {
+			syncErrors = append(syncErrors, fmt.Errorf("delete %s: %w", key, err))
+			continue
+		}
+		baseLog.WithValues("namespace", ns, "name", name).
+			Info("deleted stale")
+		recorder.Event(
+			kaiwoQueueConfig, corev1.EventTypeNormal, "Deleted",
+			fmt.Sprintf("Deleted stale %s %s/%s", kind, ns, name),
+		)
+	}
+
+	if len(syncErrors) > 0 {
+		return utilerrors.NewAggregate(syncErrors)
+	}
+
 	return nil
 }
 
-func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo.ResourceFlavorSpec, map[string]kueuev1beta1.FlavorQuotas, error) {
+type SyncOptions struct {
+	// if non-nil, called for each stale object; delete only if it returns true
+	ShouldDelete func(obj client.Object) bool
+
+	// Scheme is used when setting the owner reference
+	Scheme *runtime.Scheme
+
+	// if non-nil, used as the owner reference on every created/updated obj
+	Owner client.Object
+
+	// OwnerFunc, if non-nil, is called for each object to determine its owner
+	// Only used if Owner is non-nil
+	OwnerFunc func(obj client.Object) client.Object
+}
+
+type SyncOption func(*SyncOptions)
+
+// WithStaleDeleteCheck takes a U-typed predicate and wraps it
+func WithStaleDeleteCheck[U client.Object](fn func(obj U) bool) SyncOption {
+	return func(o *SyncOptions) {
+		o.ShouldDelete = func(obj client.Object) bool {
+			u, ok := obj.(U)
+			if !ok {
+				return false
+			}
+			return fn(u)
+		}
+	}
+}
+
+// WithOwnerReference is now non-generic, since owner is just client.Object
+func WithOwnerReference(owner client.Object, scheme *runtime.Scheme) SyncOption {
+	return func(o *SyncOptions) {
+		o.Owner = owner
+		o.Scheme = scheme
+	}
+}
+
+// WithDynamicOwnerReference allows the syncer to set the owner reference dynamically to something else
+func WithDynamicOwnerReference(scheme *runtime.Scheme, fn func(obj client.Object) client.Object) SyncOption {
+	return func(o *SyncOptions) {
+		o.OwnerFunc = fn
+		o.Scheme = scheme
+	}
+}
+
+type KaiwoQueueResourceConverter[T any, U client.Object] interface {
+	// Convert turns the Kaiwo resources T into the Kueue resource U
+	Convert(input T) (U, error)
+
+	// CreateList creates a list to use to fetch the Kueue resources of type U
+	CreateList() client.ObjectList
+
+	Mutate(desired U, existing U)
+}
+
+// ClusterQueue
+
+type ClusterQueueConverter struct{}
+
+func (c ClusterQueueConverter) Convert(input kaiwo.ClusterQueue) (*kueuev1beta1.ClusterQueue, error) {
+	in := input.Spec
+	clusterQueue := &kueuev1beta1.ClusterQueue{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: input.Name,
+		},
+		Spec: kueuev1beta1.ClusterQueueSpec{
+			ResourceGroups:          in.ResourceGroups,
+			Cohort:                  in.Cohort,
+			QueueingStrategy:        in.QueueingStrategy,
+			NamespaceSelector:       in.NamespaceSelector,
+			FlavorFungibility:       in.FlavorFungibility,
+			Preemption:              in.Preemption,
+			AdmissionChecks:         in.AdmissionChecks,
+			AdmissionChecksStrategy: in.AdmissionChecksStrategy,
+			StopPolicy:              in.StopPolicy,
+			FairSharing:             in.FairSharing,
+		},
+	}
+
+	// TODO check if this does something?
+	for i, resourceGroup := range clusterQueue.Spec.ResourceGroups {
+		for j, flavor := range resourceGroup.Flavors {
+			resourceMap := make(map[string]kueuev1beta1.ResourceQuota)
+			for _, flavorResource := range flavor.Resources {
+				resourceMap[flavorResource.Name.String()] = flavorResource
+			}
+			var resources []kueuev1beta1.ResourceQuota
+			for _, resourceName := range resourceGroup.CoveredResources {
+				if res, exists := resourceMap[resourceName.String()]; exists {
+					resources = append(resources, res)
+				}
+			}
+			clusterQueue.Spec.ResourceGroups[i].Flavors[j].Resources = resources
+		}
+	}
+
+	return clusterQueue, nil
+}
+
+func (c ClusterQueueConverter) CreateList() client.ObjectList {
+	return &kueuev1beta1.ClusterQueueList{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: kueuev1beta1.SchemeGroupVersion.String(),
+			Kind:       "ClusterQueueList",
+		},
+	}
+}
+
+func (c ClusterQueueConverter) Mutate(desired, actual *kueuev1beta1.ClusterQueue) {
+	actual.Spec = desired.Spec
+}
+
+// LocalQueue
+
+type LocalQueueConverter struct{}
+
+func (c LocalQueueConverter) Convert(input client.ObjectKey) (*kueuev1beta1.LocalQueue, error) {
+	return &kueuev1beta1.LocalQueue{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      input.Name,
+			Namespace: input.Namespace,
+		},
+		Spec: kueuev1beta1.LocalQueueSpec{
+			ClusterQueue: kueuev1beta1.ClusterQueueReference(input.Name),
+		},
+	}, nil
+}
+
+func (c LocalQueueConverter) CreateList() client.ObjectList {
+	return &kueuev1beta1.LocalQueueList{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: kueuev1beta1.SchemeGroupVersion.String(),
+			Kind:       "LocalQueueList",
+		},
+	}
+}
+
+func (c LocalQueueConverter) Mutate(desired, actual *kueuev1beta1.LocalQueue) {
+	// Nothing updated at the moment
+}
+
+// WorkloadPriorityClass
+
+type WorkloadPriorityClassConverter struct{}
+
+func (c WorkloadPriorityClassConverter) Convert(input kueuev1beta1.WorkloadPriorityClass) (*kueuev1beta1.WorkloadPriorityClass, error) {
+	return input.DeepCopy(), nil
+}
+
+func (c WorkloadPriorityClassConverter) CreateList() client.ObjectList {
+	return &kueuev1beta1.WorkloadPriorityClassList{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: kueuev1beta1.SchemeGroupVersion.String(),
+			Kind:       "WorkloadPriorityClassList",
+		},
+	}
+}
+
+func (c WorkloadPriorityClassConverter) Mutate(desired, actual *kueuev1beta1.WorkloadPriorityClass) {
+	actual.Value = desired.Value
+}
+
+// Topology
+
+type TopologyConverter struct{}
+
+func (c TopologyConverter) Convert(input kaiwo.Topology) (*kueuev1alpha1.Topology, error) {
+	levels := make([]kueuev1alpha1.TopologyLevel, len(input.Spec.Levels))
+	for i, l := range input.Spec.Levels {
+		levels[i] = kueuev1alpha1.TopologyLevel{
+			NodeLabel: l.NodeLabel,
+		}
+	}
+
+	return &kueuev1alpha1.Topology{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Topology",
+			APIVersion: "kueue.x-k8s.io/v1alpha1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: input.Name,
+		},
+		Spec: kueuev1alpha1.TopologySpec{
+			Levels: levels,
+		},
+	}, nil
+}
+
+func (c TopologyConverter) CreateList() client.ObjectList {
+	return &kueuev1alpha1.TopologyList{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: kueuev1alpha1.SchemeGroupVersion.String(),
+			Kind:       "TopologyList",
+		},
+	}
+}
+
+func (c TopologyConverter) Mutate(desired, actual *kueuev1alpha1.Topology) {
+	actual.Spec = desired.Spec
+}
+
+// ResourceFlavor
+
+type ResourceFlavorConverter struct{}
+
+func (c ResourceFlavorConverter) Convert(input kaiwo.ResourceFlavorSpec) (*kueuev1beta1.ResourceFlavor, error) {
+	nodeLabels := make(map[string]string, len(input.NodeLabels))
+	for k, v := range input.NodeLabels {
+		nodeLabels[k] = v
+	}
+
+	var topologyRef *kueuev1beta1.TopologyReference
+	if input.TopologyName != "" {
+		ref := kueuev1beta1.TopologyReference(input.TopologyName)
+		topologyRef = &ref
+	} else {
+		ref := kueuev1beta1.TopologyReference(common.DefaultTopologyName)
+		topologyRef = &ref
+		nodeLabels[common.DefaultKaiwoWorkerLabel] = "true"
+	}
+
+	// Only schedule on nodes with KaiwoNode status = Ready
+	nodeLabels[common.NodeStatusLabelKey] = string(kaiwo.KaiwoNodeStatusReady)
+
+	return &kueuev1beta1.ResourceFlavor{
+		ObjectMeta: metav1.ObjectMeta{Name: input.Name},
+		Spec: kueuev1beta1.ResourceFlavorSpec{
+			NodeLabels:   nodeLabels,
+			TopologyName: topologyRef,
+		},
+	}, nil
+}
+
+func (c ResourceFlavorConverter) CreateList() client.ObjectList {
+	return &kueuev1beta1.ResourceFlavorList{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: kueuev1beta1.SchemeGroupVersion.String(),
+			Kind:       "ResourceFlavorList",
+		},
+	}
+}
+
+func (c ResourceFlavorConverter) Mutate(desired *kueuev1beta1.ResourceFlavor, actual *kueuev1beta1.ResourceFlavor) {
+	actual.Spec = desired.Spec
+}
+
+func ConstructDefaultResourceFlavors(ctx context.Context, clusterContext common.ClusterContext) ([]kaiwo.ResourceFlavorSpec, map[string]kueuev1beta1.FlavorQuotas, error) {
 	logger := log.FromContext(ctx)
 	config := common.ConfigFromContext(ctx)
 
 	var resourceFlavors []kaiwo.ResourceFlavorSpec
 	nodePoolResources := make(map[string]kueuev1beta1.FlavorQuotas)
-	nodePools := make(map[string][]string)
+	nodePools := make(map[string][]kaiwo.KaiwoNode)
 
 	resourceAggregates := make(map[string]map[corev1.ResourceName]*resource.Quantity)
 
-	// Get node list dynamically
-	nodeList := GetNodeResources(ctx, c)
-
 	if config.Nodes.ExcludeMasterNodesFromNodePools {
-		logger.Info("Excluding master/control-plane nodes from nodepools. Set EXCLUDE_MASTER_NODES_FROM_NODE_POOLS=false to include them")
+		logger.Info("Excluding master/control-plane nodes from nodepools. Set config.nodes.excludeMasterNodesFromNodePools=false to include them")
 	} else {
-		logger.Info("Including master/control-plane nodes in nodepools. Set EXCLUDE_MASTER_NODES_FROM_NODE_POOLS=true to exclude them")
+		logger.Info("Including master/control-plane nodes in nodepools. Set config.nodes.excludeMasterNodesFromNodePools=true to exclude them")
 	}
 
-	for _, node := range nodeList {
-		if node.Unschedulable {
+	for _, node := range clusterContext.Nodes {
+		if node.IsUnschedulable() {
 			logger.Info("Skipping cordoned node", "node", node.Name)
 			continue
 		}
-		// **Skip Control Plane Nodes**
-		if config.Nodes.ExcludeMasterNodesFromNodePools {
-			if _, exists := node.Labels["node-role.kubernetes.io/control-plane"]; exists {
-				continue
-			}
-			if _, exists := node.Labels["node-role.kubernetes.io/master"]; exists {
-				continue
-			}
-		}
-		gpuCount := 0
-		gpuVendor := "cpu"
-		gpuType := "only"
-
-		// Identify AMD GPU Nodes
-		if gpuID, exists := node.Labels["amd.com/gpu.product-name"]; exists {
-			gpuType = CleanAMDGPUName(gpuID)
-			if count, ok := node.Labels["beta.amd.com/gpu.family.AI"]; ok {
-				gpuCount, _ = strconv.Atoi(count)
-				gpuVendor = "amd"
-			}
+		if config.Nodes.ExcludeMasterNodesFromNodePools && node.Status.IsControlPlane {
+			logger.Info("Skipping control plane node", "node", node.Name)
+			continue
 		}
 
-		// Identify NVIDIA GPU Nodes
-		if gpuProduct, exists := node.Labels["nvidia.com/gpu.product"]; exists {
-			gpuType = strings.ReplaceAll(strings.ToLower(gpuProduct), "-", "")
-			if count, ok := node.Labels["nvidia.com/gpu.count"]; ok {
-				gpuCount, _ = strconv.Atoi(count)
-				gpuVendor = "nvidia" //nolint:goconst
-			}
-		}
-
-		// Compute nominal CPU and memory (90% of total)
-		nominalCPU := resource.NewQuantity(int64(float64(node.CPU)*cpuMemoryDiscountFactor), resource.DecimalSI)
-		nominalMemory := resource.NewQuantity(int64(float64(node.Memory)*cpuMemoryDiscountFactor*1024*1024*1024), resource.BinarySI)
-
-		flavorName := fmt.Sprintf("%s-%s-%dgpu-%dcore-%dgi", gpuVendor, gpuType, gpuCount, nominalCPU.Value(), nominalMemory.Value()/(1024*1024*1024))
+		flavorName := node.Status.KueueFlavorName
 
 		// Track node membership in the nodepool
-		nodePools[flavorName] = append(nodePools[flavorName], node.Name)
+		nodePools[flavorName] = append(nodePools[flavorName], node)
 		logger.Info("Node added to node pool", "node", node.Name, "nodePool", flavorName)
+
+		gpuInfo := node.Status.Resources.Gpus
+
+		nodeHasGpus := gpuInfo != nil && gpuInfo.LogicalCount > 0
 
 		if _, exists := resourceAggregates[flavorName]; !exists {
 			resourceAggregates[flavorName] = map[corev1.ResourceName]*resource.Quantity{
 				corev1.ResourceCPU:    resource.NewQuantity(0, resource.DecimalSI),
 				corev1.ResourceMemory: resource.NewQuantity(0, resource.BinarySI),
 			}
-			if gpuCount > 0 {
-				gpuResource := corev1.ResourceName("amd.com/gpu")
-				if gpuVendor == "nvidia" {
-					gpuResource = corev1.ResourceName("nvidia.com/gpu")
-				}
-				resourceAggregates[flavorName][gpuResource] = resource.NewQuantity(0, resource.DecimalSI)
+			if nodeHasGpus {
+				resourceAggregates[flavorName][gpuInfo.ResourceName] = resource.NewQuantity(0, resource.DecimalSI)
 			}
 		}
 
-		resourceAggregates[flavorName][corev1.ResourceCPU].Add(*nominalCPU)
-		resourceAggregates[flavorName][corev1.ResourceMemory].Add(*nominalMemory)
+		resourceAggregates[flavorName][corev1.ResourceCPU].Add(*node.Status.Resources.Cpu.Nominal)
+		resourceAggregates[flavorName][corev1.ResourceMemory].Add(*node.Status.Resources.Memory.Nominal)
 
-		if gpuCount > 0 {
-			gpuResource := corev1.ResourceName("amd.com/gpu")
-			if gpuVendor == "nvidia" {
-				gpuResource = corev1.ResourceName("nvidia.com/gpu")
-			}
-			resourceAggregates[flavorName][gpuResource].Add(*resource.NewQuantity(int64(gpuCount), resource.DecimalSI))
+		if nodeHasGpus {
+			resourceAggregates[flavorName][gpuInfo.ResourceName].Add(*resource.NewQuantity(int64(gpuInfo.LogicalCount), resource.DecimalSI))
 		}
 	}
 
@@ -181,13 +510,23 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 			Name:      kueuev1beta1.ResourceFlavorReference(flavorName),
 			Resources: resourceQuotas,
 		}
-
+		node := nodePools[flavorName][0]
+		gpuInfo := node.Status.Resources.Gpus
 		flavor := kaiwo.ResourceFlavorSpec{
 			Name: flavorName,
 			NodeLabels: map[string]string{
-				common.DefaultNodePoolLabel: flavorName,
+				common.DefaultNodePoolLabelKey: flavorName,
 			},
 			TopologyName: common.DefaultTopologyName,
+		}
+		if !node.IsCpuOnlyNode() {
+			if logicalVramPerGpu := gpuInfo.LogicalVramPerGpu; logicalVramPerGpu != nil {
+				flavor.NodeLabels[common.NodeGpuLogicalVramLabelKey] = baseutils.QuantityToGi(*logicalVramPerGpu)
+			}
+			flavor.NodeLabels[common.NodeGpuModelLabelKey] = gpuInfo.Model
+			if partitioned := gpuInfo.IsPartitioned; partitioned != nil {
+				flavor.NodeLabels[common.NodeGpusPartitionedLabelKey] = strconv.FormatBool(*partitioned)
+			}
 		}
 
 		// TODO: Look into why automatic scheduling is not working
@@ -198,53 +537,11 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 		// }
 
 		resourceFlavors = append(resourceFlavors, flavor)
-
 	}
 
 	resourceFlavors = RemoveDuplicateResourceFlavors(resourceFlavors)
 
-	gpuTaint := corev1.Taint{
-		Key:    config.Nodes.DefaultGpuTaintKey,
-		Value:  "true",
-		Effect: corev1.TaintEffectNoSchedule,
-	}
-
-	for flavorName, nodeNames := range nodePools {
-		for _, nodeName := range nodeNames {
-			err := LabelNode(ctx, c, nodeName, common.DefaultKaiwoWorkerLabel, "true")
-			if err == nil {
-				logger.Info("Labeled node", "node", nodeName, "label", common.DefaultKaiwoWorkerLabel, "value", "true")
-			} else {
-				return nil, nil, fmt.Errorf("failed to label node %s: %w", nodeName, err)
-			}
-
-			err = LabelNode(ctx, c, nodeName, common.DefaultNodePoolLabel, flavorName)
-			if err == nil {
-				logger.Info("Labeled node", "node", nodeName, "label", common.DefaultNodePoolLabel, "value", flavorName)
-			} else {
-				return nil, nil, fmt.Errorf("failed to label node %s: %w", nodeName, err)
-			}
-
-			if !strings.Contains(flavorName, common.CPUOnly) {
-				err = LabelNode(ctx, c, nodeName, common.GPUModelLabel, strings.Split(flavorName, "-")[1])
-				if err == nil {
-					logger.Info("Labeled node", "node", nodeName, "label", common.GPUModelLabel, "value", strings.Split(flavorName, "-")[1])
-				} else {
-					return nil, nil, fmt.Errorf("failed to label node %s: %w", nodeName, err)
-				}
-			}
-
-			if config.Nodes.AddTaintsToGpuNodes {
-				if !strings.HasPrefix(flavorName, common.CPUOnly) {
-					err = TaintNode(ctx, c, nodeName, gpuTaint)
-					if err != nil {
-						logger.Error(err, "Failed to taint GPU node", "node", nodeName)
-					}
-				}
-			}
-		}
-	}
-	logger.Info("Final generated node pools", "nodePools", nodePools)
+	// logger.Info("Final generated node pools", "nodePools", nodePools)
 	logger.Info("Final generated node pool resources", "nodePoolResources", nodePoolResources)
 	logger.Info("Final generated resource flavors", "resourceFlavors", resourceFlavors)
 
@@ -264,7 +561,7 @@ func RemoveDuplicateResourceFlavors(flavors []kaiwo.ResourceFlavorSpec) []kaiwo.
 	return uniqueFlavors
 }
 
-func CreateClusterQueue(nodePoolResources map[string]kueuev1beta1.FlavorQuotas, name string, cohort string) kaiwo.ClusterQueue {
+func ConstructClusterQueue(nodePoolResources map[string]kueuev1beta1.FlavorQuotas, name string, cohort string) kaiwo.ClusterQueue {
 	var resourceGroups []kueuev1beta1.ResourceGroup
 	coveredResources := make(map[corev1.ResourceName]struct{})
 
@@ -307,13 +604,13 @@ func CreateClusterQueue(nodePoolResources map[string]kueuev1beta1.FlavorQuotas, 
 
 	// Convert collected resources to a slice for `CoveredResources`
 	var coveredResourcesSlice []corev1.ResourceName
-	for resource := range coveredResources {
-		coveredResourcesSlice = append(coveredResourcesSlice, resource)
+	for coveredResource := range coveredResources {
+		coveredResourcesSlice = append(coveredResourcesSlice, coveredResource)
 	}
 
 	// Ensure every flavor has the same set of resources as coveredResources
 	for i, flavor := range flavorQuotas {
-		missingResources := []corev1.ResourceName{}
+		var missingResources []corev1.ResourceName
 
 		for _, covered := range coveredResourcesSlice {
 			found := false
@@ -353,162 +650,6 @@ func CreateClusterQueue(nodePoolResources map[string]kueuev1beta1.FlavorQuotas, 
 			ResourceGroups:    resourceGroups,
 		},
 	}
-}
-
-func ConvertKaiwoToKueueResourceFlavors(kaiwoFlavors []kaiwo.ResourceFlavorSpec) []kueuev1beta1.ResourceFlavor {
-	var kueueFlavors []kueuev1beta1.ResourceFlavor
-	for _, rf := range kaiwoFlavors {
-		kueueFlavors = append(kueueFlavors, ConvertKaiwoToKueueResourceFlavor(rf))
-	}
-	return kueueFlavors
-}
-
-func ConvertKaiwoToKueueResourceFlavor(kaiwoFlavor kaiwo.ResourceFlavorSpec) kueuev1beta1.ResourceFlavor {
-	// Copy the node labels
-	nodeLabels := make(map[string]string, len(kaiwoFlavor.NodeLabels))
-	for k, v := range kaiwoFlavor.NodeLabels {
-		nodeLabels[k] = v
-	}
-
-	var topologyRef *kueuev1beta1.TopologyReference
-	if kaiwoFlavor.TopologyName != "" {
-		ref := kueuev1beta1.TopologyReference(kaiwoFlavor.TopologyName)
-		topologyRef = &ref
-	} else {
-		ref := kueuev1beta1.TopologyReference(common.DefaultTopologyName)
-		topologyRef = &ref
-		nodeLabels[common.DefaultKaiwoWorkerLabel] = "true"
-	}
-
-	return kueuev1beta1.ResourceFlavor{
-		ObjectMeta: metav1.ObjectMeta{Name: kaiwoFlavor.Name},
-		Spec: kueuev1beta1.ResourceFlavorSpec{
-			NodeLabels:   nodeLabels,
-			TopologyName: topologyRef,
-		},
-	}
-}
-
-func ConvertKaiwoToKueueTopologies(kaiwoTopologies []kaiwo.Topology) []kueuev1alpha1.Topology {
-	var kueueTopologies []kueuev1alpha1.Topology
-	for _, topo := range kaiwoTopologies {
-		kueueTopologies = append(kueueTopologies, ConvertKaiwoToKueueTopology(topo))
-	}
-	return kueueTopologies
-}
-
-func ConvertKaiwoToKueueTopology(kaiwoTopology kaiwo.Topology) kueuev1alpha1.Topology {
-	levels := make([]kueuev1alpha1.TopologyLevel, len(kaiwoTopology.Spec.Levels))
-	for i, l := range kaiwoTopology.Spec.Levels {
-		levels[i] = kueuev1alpha1.TopologyLevel{
-			NodeLabel: l.NodeLabel,
-		}
-	}
-
-	return kueuev1alpha1.Topology{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Topology",
-			APIVersion: "kueue.x-k8s.io/v1alpha1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: kaiwoTopology.Name,
-		},
-		Spec: kueuev1alpha1.TopologySpec{
-			Levels: levels,
-		},
-	}
-}
-
-func ConvertKaiwoToKueueClusterQueue(kaiwoQueue kaiwo.ClusterQueue) kueuev1beta1.ClusterQueue {
-	return kueuev1beta1.ClusterQueue{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: kaiwoQueue.Name,
-		},
-		Spec: ConvertKaiwoToKueueSpec(kaiwoQueue.Spec),
-	}
-}
-
-// ConvertKaiwoToKueueSpec converts from Kaiwo's simplified ClusterQueueSpec to the actual Kueue version
-func ConvertKaiwoToKueueSpec(in kaiwo.ClusterQueueSpec) kueuev1beta1.ClusterQueueSpec {
-	return kueuev1beta1.ClusterQueueSpec{
-		ResourceGroups:          in.ResourceGroups,
-		Cohort:                  in.Cohort,
-		QueueingStrategy:        in.QueueingStrategy,
-		NamespaceSelector:       in.NamespaceSelector,
-		FlavorFungibility:       in.FlavorFungibility,
-		Preemption:              in.Preemption,
-		AdmissionChecks:         in.AdmissionChecks,
-		AdmissionChecksStrategy: in.AdmissionChecksStrategy,
-		StopPolicy:              in.StopPolicy,
-		FairSharing:             in.FairSharing,
-	}
-}
-
-// CreateLocalQueue creates a LocalQueue in the given namespace.
-func CreateLocalQueue(ctx context.Context, c client.Client, name string, namespace string) error {
-	logger := log.FromContext(ctx)
-
-	// Define the LocalQueue object
-	localQueue := &kueuev1beta1.LocalQueue{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
-		Spec: kueuev1beta1.LocalQueueSpec{
-			ClusterQueue: kueuev1beta1.ClusterQueueReference(name),
-		},
-	}
-
-	// Check if the LocalQueue already exists
-	existingQueue := &kueuev1beta1.LocalQueue{}
-	err := c.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, existingQueue)
-	if err == nil {
-		return nil
-	}
-
-	// Create the LocalQueue
-	err = c.Create(ctx, localQueue)
-	if err != nil {
-		logger.Error(err, "Failed to create LocalQueue", "Name", name, "Namespace", namespace)
-		return fmt.Errorf("failed to create LocalQueue %s in namespace %s: %w", name, namespace, err)
-	}
-
-	logger.Info("Successfully created LocalQueue", "Name", name, "Namespace", namespace)
-	return nil
-}
-
-func FindFlavor(flavors []kueuev1beta1.ResourceFlavor, name string) (kueuev1beta1.ResourceFlavor, bool) {
-	for _, flavor := range flavors {
-		if flavor.Name == name {
-			return flavor, true
-		}
-	}
-	return kueuev1beta1.ResourceFlavor{}, false
-}
-
-func FindTopology(topologies []kueuev1alpha1.Topology, name string) (kueuev1alpha1.Topology, bool) {
-	for _, topo := range topologies {
-		if topo.Name == name {
-			return topo, true
-		}
-	}
-	return kueuev1alpha1.Topology{}, false
-}
-
-func CompareResourceFlavors(a, b kueuev1beta1.ResourceFlavor) bool {
-	return reflect.DeepEqual(a.Spec, b.Spec)
-}
-
-func CompareClusterQueues(a, b kueuev1beta1.ClusterQueue) bool {
-	return reflect.DeepEqual(a.Spec, b.Spec)
-}
-
-func CompareTopologies(a, b kueuev1alpha1.Topology) bool {
-	return reflect.DeepEqual(a.Spec, b.Spec)
-}
-
-func ComparePriorityClasses(a, b kueuev1beta1.WorkloadPriorityClass) bool {
-	return reflect.DeepEqual(a.Value, b.Value)
 }
 
 func CreateDefaultTopology(ctx context.Context, c client.Client) ([]kaiwo.Topology, error) {

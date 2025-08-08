@@ -1,0 +1,31 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: kaiwo-cli-job
+spec:
+  steps:
+  - try:
+    - command:
+        entrypoint: kaiwo
+        args:
+        - submit
+        - --file=../kaiwojob.yaml
+        - --user=test-user
+        - --namespace=$NAMESPACE
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: kaiwojob
+          status:
+            status: COMPLETE
+    - delete:
+        ref:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          namespace: ($namespace)
+          name: kaiwojob

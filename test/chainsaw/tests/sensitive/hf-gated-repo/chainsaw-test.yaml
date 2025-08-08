@@ -39,7 +39,6 @@ spec:
               sleep 5
             storage:
               storageEnabled: true
-              storageClassName: "nfs-client"
               huggingFace:
                 storageSize: "1Gi"
                 mountPath: "/hf_cache"
@@ -56,12 +55,3 @@ spec:
             name: hf-gated-repo
           status:
             status: RUNNING
-    catch:
-    - command:
-        entrypoint: kaiwo-dev
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-        - name: PRINT_LEVEL
-          value: ($values.print_level)
-        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]

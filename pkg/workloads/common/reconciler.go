@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/errors"
+
 	"k8s.io/apimachinery/pkg/api/meta"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -78,7 +80,7 @@ func (wr *Reconciler) Reconcile(ctx context.Context) (ctrl.Result, error) {
 		return ctrl.Result{}, nil
 	}
 
-	clusterContext, err := GetClusterContext(ctx, wr.Client, wr.WorkloadHandler.Workload)
+	clusterContext, err := GetClusterContext(ctx, wr.Client)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to fetch cluster context: %w", err)
 	}
@@ -93,16 +95,23 @@ func (wr *Reconciler) Reconcile(ctx context.Context) (ctrl.Result, error) {
 	conditionsChanged := !ConditionsEqual(conditions, commonStatusSpec.Conditions)
 	// If the status is new, update and requeue
 	if observedStatus != commonStatusSpec.Status || conditionsChanged {
-		if result, err := wr.handleStatusTransition(ctx, observedStatus, conditions); err != nil {
+		if result, err := wr.handleStatusTransition(ctx, observedStatus, conditions); err != nil && !errors.IsConflict(err) {
 			return ctrl.Result{}, fmt.Errorf("failed to handle status transition: %w", err)
+		} else if err != nil {
+			baseutils.Debug(logger, "failed to handle status transition due to conflict error, requeueing")
+			return ctrl.Result{Requeue: true}, nil
 		} else {
 			return result, nil
 		}
 	}
 
+	// If recoverable error persists, requeue to check again later
+	if observedStatus == v1alpha1.WorkloadStatusError {
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
 	// If the workload is active, ensure the remote resources match
 	if isActiveStatus(observedStatus) {
-		baseutils.Debug(logger, "Workload is active, ensuring all resources")
 		if err := wr.ensureAllResources(ctx, observedStatus, conditions); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to ensure all resources: %w", err)
 		}
@@ -126,7 +135,10 @@ func (wr *Reconciler) Reconcile(ctx context.Context) (ctrl.Result, error) {
 
 // observeOverallStatus determines the overall workload's current status based on the current cluster context
 func (wr *Reconciler) observeOverallStatus(ctx context.Context) (v1alpha1.WorkloadStatus, []metav1.Condition, error) {
-	schedulableCondition := GetSchedulableCondition(ctx, wr.ClusterContext, wr.WorkloadHandler.Workload)
+	schedulableCondition, err := GetSchedulableCondition(ctx, wr.Client, wr.ClusterContext, wr.WorkloadHandler.Workload)
+	if err != nil {
+		return v1alpha1.WorkloadStatusError, nil, err
+	}
 	if schedulableCondition.Status == metav1.ConditionFalse {
 		return v1alpha1.WorkloadStatusError, []metav1.Condition{schedulableCondition}, nil
 	}
@@ -135,7 +147,7 @@ func (wr *Reconciler) observeOverallStatus(ctx context.Context) (v1alpha1.Worklo
 	conditions := []metav1.Condition{schedulableCondition}
 
 	if wr.StorageHandler != nil {
-		storageStatus, storageConditions, err := wr.StorageHandler.ObserveStatus(ctx, wr.Client, status.Status)
+		storageStatus, storageConditions, err := wr.StorageHandler.ObserveStatus(ctx, wr.Client, wr.ClusterContext, status.Status)
 		if err != nil {
 			return "", nil, fmt.Errorf("failed to observe storage status: %w", err)
 		}
@@ -158,7 +170,7 @@ func (wr *Reconciler) observeOverallStatus(ctx context.Context) (v1alpha1.Worklo
 		// Download job is complete and / or storage is healthy
 	}
 
-	workloadStatus, workloadConditions, err := wr.WorkloadHandler.ObserveStatus(ctx, wr.Client, status.Status)
+	workloadStatus, workloadConditions, err := wr.WorkloadHandler.ObserveStatus(ctx, wr.Client, wr.ClusterContext, status.Status)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to observe workload status: %w", err)
 	}
@@ -212,11 +224,9 @@ func (wr *Reconciler) handleStatusTransition(ctx context.Context, newStatus v1al
 	if condition != nil && condition.Status == metav1.ConditionTrue && condition.ObservedGeneration == 0 {
 		wr.Recorder.Event(obj, corev1.EventTypeNormal, "Preemptable", "Workload has exceeded its duration")
 	}
-
 	if err := wr.Client.Status().Update(ctx, obj); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
 	}
-	logger.Info(fmt.Sprintf("Result: %v", result))
 	return result, nil
 }
 
@@ -310,7 +320,7 @@ func (wr *Reconciler) ensureLocalQueue(ctx context.Context) error {
 }
 
 func (wr *Reconciler) reconcileHandler(ctx context.Context, clusterCtx ClusterContext, handler GroupReconciler) error {
-	for _, reconciler := range handler.GetResourceReconcilers() {
+	for _, reconciler := range handler.GetResourceReconcilers(ctx) {
 		if err := wr.apply(ctx, clusterCtx, reconciler); err != nil {
 			return fmt.Errorf("failed to reconcile resource: %w", err)
 		}
@@ -336,7 +346,9 @@ func (wr *Reconciler) apply(ctx context.Context, clusterCtx ClusterContext, reco
 		// inside this function, desired = actual
 		return reconciler.MutateActual(ctx, clusterCtx, desired)
 	})
-	if err != nil {
+	// Consecutive reconciles with AppWrapper may lead to race condition where the object is created in between
+	// the CreateOrPatch function's get and create
+	if err != nil && !errors.IsAlreadyExists(err) {
 		return fmt.Errorf("failed to apply object: %w", err)
 	}
 

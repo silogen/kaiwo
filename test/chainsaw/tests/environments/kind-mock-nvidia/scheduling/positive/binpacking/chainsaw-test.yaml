@@ -1,0 +1,25 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: test-binpacking
+spec:
+  concurrent: false
+  steps:
+  - try:
+    - apply:
+        file: gpu-jobs.yaml
+    - script:
+        content: |
+          #!/bin/bash
+          nodes=$(kubectl get pods -n $NAMESPACE --field-selector=status.phase=Running -o jsonpath="{.items[*].spec.nodeName}" | tr ' ' '\n' | sort | uniq)
+          node_count=$(echo "$nodes" | wc -l)
+          if [[ "$node_count" -ne 1 ]]; then
+            exit 1
+          else
+            exit 0
+          fi
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        check:
+          ($error == null): true

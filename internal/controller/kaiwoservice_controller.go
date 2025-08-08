@@ -20,23 +20,28 @@ import (
 	"context"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/api/equality"
+
+	"sigs.k8s.io/controller-runtime/pkg/builder"
+
+	"sigs.k8s.io/controller-runtime/pkg/event"
+
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/silogen/kaiwo/pkg/workloads/common"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
-	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
 	appwrapperv1beta2 "github.com/project-codeflare/appwrapper/api/v1beta2"
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
+	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 	workloadservice "github.com/silogen/kaiwo/pkg/workloads/service"
@@ -83,31 +88,58 @@ func (r *KaiwoServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 }
 
+func AppWrapperChangedPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldObj := e.ObjectOld.(*appwrapperv1beta2.AppWrapper)
+			newObj := e.ObjectNew.(*appwrapperv1beta2.AppWrapper)
+
+			if !equality.Semantic.DeepEqual(oldObj.Status.Conditions, newObj.Status.Conditions) {
+				return true
+			}
+
+			return oldObj.Status.Phase != newObj.Status.Phase
+		},
+		CreateFunc:  func(e event.CreateEvent) bool { return false },
+		DeleteFunc:  func(e event.DeleteEvent) bool { return false },
+		GenericFunc: func(e event.GenericEvent) bool { return false },
+	}
+}
+
+func DeploymentChangedPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldObj := e.ObjectOld.(*appsv1.Deployment)
+			newObj := e.ObjectNew.(*appsv1.Deployment)
+
+			if oldObj.Status.AvailableReplicas != newObj.Status.AvailableReplicas {
+				return true
+			}
+
+			if !equality.Semantic.DeepEqual(oldObj.Status.Conditions, newObj.Status.Conditions) {
+				return true
+			}
+
+			return false
+		},
+		CreateFunc:  func(e event.CreateEvent) bool { return false },
+		DeleteFunc:  func(e event.DeleteEvent) bool { return false },
+		GenericFunc: func(e event.GenericEvent) bool { return false },
+	}
+}
+
 func (r *KaiwoServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Recorder = mgr.GetEventRecorderFor("kaiwoservice-controller")
 
 	return ctrl.NewControllerManagedBy(mgr).
 		WithEventFilter(predicate.ResourceVersionChangedPredicate{}). // Catch status changes as well
 		For(&kaiwo.KaiwoService{}).
-		Owns(&appsv1.Deployment{}).
+		Owns(&appsv1.Deployment{}, builder.WithPredicates(DeploymentChangedPredicate())).
 		Owns(&rayv1.RayService{}).
-		Owns(&appwrapperv1beta2.AppWrapper{}).
-		Watches(
-			&kaiwo.KaiwoJob{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-				var services kaiwo.KaiwoServiceList
-				if err := r.Client.List(ctx, &services); err != nil {
-					return nil
-				}
-				var requests []reconcile.Request
-				for _, svc := range services.Items {
-					if svc.Spec.Duration != nil && svc.Status.Status == kaiwo.WorkloadStatusRunning {
-						requests = append(requests, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&svc)})
-					}
-				}
-				return requests
-			}),
-		).
+		Owns(&appwrapperv1beta2.AppWrapper{}, builder.WithPredicates(AppWrapperChangedPredicate())).
+		Owns(&batchv1.Job{}, builder.WithPredicates(JobStatusChangedPredicate())).
+		Owns(&corev1.PersistentVolumeClaim{}).
+		Owns(&corev1.ConfigMap{}).
 		Named("kaiwoservice").
 		Complete(r)
 }

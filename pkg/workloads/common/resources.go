@@ -16,10 +16,16 @@ package common
 
 import (
 	"fmt"
-	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+
+	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
+)
+
+const (
+	AmdGpuResourceName    = corev1.ResourceName("amd.com/gpu")
+	NvidiaGpuResourceName = corev1.ResourceName("nvidia.com/gpu")
 )
 
 var (
@@ -27,91 +33,12 @@ var (
 	DefaultCPU    = resource.MustParse("2")
 )
 
-// CreateResourceRequirements converts the scheduling config into ResourceRequirements
-// that can be used to modify the workload containers
-func CreateResourceRequirements(config KaiwoConfigContext, resourceConfig ResourceConfig, rayhead bool) corev1.ResourceRequirements {
-	resources := corev1.ResourceRequirements{}
-	if resourceConfig.DefaultResources != nil {
-		resources = *resourceConfig.DefaultResources
-	}
-
-	if resources.Requests == nil {
-		resources.Requests = corev1.ResourceList{}
-	}
-	if resources.Limits == nil {
-		resources.Limits = corev1.ResourceList{}
-	}
-
-	if rayhead {
-		resourceConfig.GpusPerReplica = 0
-		resourceConfig.TotalGpus = 0
-		resourceConfig.Replicas = 1
-	}
-
-	gpuCount := resourceConfig.GpusPerReplica
-	hasGpus := gpuCount > 0
-
-	if hasGpus {
-		gpuResourceKey := getGpuResourceKey(resourceConfig.GpuVendor, config.Nodes.DefaultGpuResourceKey)
-		quantity := resource.MustParse(fmt.Sprintf("%d", gpuCount))
-
-		// GPU value is always overwritten
-		resources.Requests[corev1.ResourceName(gpuResourceKey)] = quantity
-		resources.Limits[corev1.ResourceName(gpuResourceKey)] = quantity
-	}
-
-	updateResourceList := func(resourceList corev1.ResourceList) {
-		if _, exists := resourceList[corev1.ResourceCPU]; !exists {
-			if hasGpus {
-				resourceList[corev1.ResourceCPU] = resource.MustParse(fmt.Sprintf("%d", gpuCount*4))
-			} else {
-				resourceList[corev1.ResourceCPU] = DefaultCPU
-			}
-		}
-		if _, exists := resourceList[corev1.ResourceMemory]; !exists {
-			if hasGpus {
-				resourceList[corev1.ResourceMemory] = resource.MustParse(fmt.Sprintf("%dGi", gpuCount*32))
-			} else {
-				resourceList[corev1.ResourceMemory] = DefaultMemory
-			}
-		}
-	}
-
-	updateResourceList(resources.Limits)
-	updateResourceList(resources.Requests)
-
-	return resources
-}
-
-// fillContainerResources fills container resources with a given template if they are not already set
-func fillContainerResources(container *corev1.Container, resources *corev1.ResourceRequirements, override bool) {
-	if resources == nil {
-		return
-	}
-
-	fillResourceList(&container.Resources.Requests, resources.Requests, override)
-	fillResourceList(&container.Resources.Limits, resources.Limits, override)
-}
-
-func fillResourceList(dest *corev1.ResourceList, src corev1.ResourceList, override bool) {
-	if *dest == nil {
-		*dest = corev1.ResourceList{}
-	}
-	for k, v := range src {
-		if _, exists := (*dest)[k]; override || !exists {
-			(*dest)[k] = v
-		}
-	}
-}
-
-func getGpuResourceKey(vendor string, defaultVendor string) string {
-	vendor = strings.ToUpper(vendor)
+func VendorToResourceName(vendor v1alpha1.GpuVendor) corev1.ResourceName {
 	switch vendor {
-	case "NVIDIA":
-		return "nvidia.com/gpu"
-	case "AMD":
-		return "amd.com/gpu"
-	default:
-		return defaultVendor
+	case v1alpha1.GpuVendorAmd:
+		return AmdGpuResourceName
+	case v1alpha1.GpuVendorNvidia:
+		return NvidiaGpuResourceName
 	}
+	panic(fmt.Sprintf("unknown vendor: %v", vendor))
 }
