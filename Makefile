@@ -1,6 +1,10 @@
 # Image URL to use for all building/pushing image targets
 IMG ?= ghcr.io/silogen/kaiwo-operator:${TAG}
 
+# Helm chart configuration
+CHART_DIR ?= chart
+CHART_VERSION ?= 0.1.0
+
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -112,6 +116,28 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/default > dist/install.yaml
 	find config/static -type f -name "*.yaml" -exec sh -c 'echo "---" >> dist/install.yaml && cat {} >> dist/install.yaml' \;
+
+##@ Helm
+
+.PHONY: helm-package
+helm-package: build-installer ## Package the Helm chart
+	@command -v helm >/dev/null 2>&1 || { \
+		echo "Helm is not installed. Please install Helm."; \
+		exit 1; \
+	}
+	helm package $(CHART_DIR) --version=$(CHART_VERSION) --destination=dist/
+
+.PHONY: helm-install
+helm-install: helm-package ## Install the Helm chart locally
+	helm upgrade --install kaiwo dist/kaiwo-operator-$(CHART_VERSION).tgz --create-namespace
+
+.PHONY: helm-uninstall
+helm-uninstall: ## Uninstall the Helm chart
+	helm uninstall kaiwo
+
+.PHONY: helm-template
+helm-template: build-installer ## Generate Helm templates for inspection
+	helm template kaiwo $(CHART_DIR) --output-dir dist/helm-output/
 
 
 ##@ Deployment

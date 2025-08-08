@@ -1,0 +1,129 @@
+{{/*
+This template creates the core operator resources with Helm customizations
+*/}}
+
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.namespace }}
+  labels:
+    {{- include "kaiwo.labels" . | nindent 4 }}
+    {{- with .Values.commonLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+
+---
+# Service Account (customized)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "kaiwo.serviceAccountName" . }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "kaiwo.labels" . | nindent 4 }}
+    control-plane: kaiwo-controller-manager
+    {{- with .Values.commonLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+
+---
+# Controller Manager Deployment (customized from config/manager/manager.yaml)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kaiwo.fullname" . }}-controller-manager
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "kaiwo.labels" . | nindent 4 }}
+    control-plane: kaiwo-controller-manager
+    {{- with .Values.commonLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "kaiwo.selectorLabels" . | nindent 6 }}
+      control-plane: kaiwo-controller-manager
+  replicas: {{ .Values.replicas }}
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+        {{- with .Values.commonAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "kaiwo.selectorLabels" . | nindent 8 }}
+        control-plane: kaiwo-controller-manager
+        {{- with .Values.commonLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - command:
+        - /manager
+        args:
+        - --leader-elect
+        - --health-probe-bind-address=:8081
+        image: {{ include "kaiwo.image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: DEFAULT_KAIWO_QUEUE_CONFIG_NAME
+          value: "kaiwo"
+        - name: DEFAULT_CLUSTER_QUEUE_NAME
+          value: "kaiwo"
+        name: manager
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - "ALL"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+      serviceAccountName: {{ include "kaiwo.serviceAccountName" . }}
+      terminationGracePeriodSeconds: 10
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

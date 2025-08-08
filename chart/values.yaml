@@ -1,0 +1,122 @@
+# Default values for kaiwo-operator
+# This is a YAML-formatted file.
+
+# Image configuration
+image:
+  registry: ghcr.io
+  repository: silogen/kaiwo-operator
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+# Global image pull secrets
+imagePullSecrets: []
+
+# Namespace where operator will be installed
+namespace: kaiwo-system
+
+# Controller manager replicas
+replicas: 1
+
+# Resource limits and requests
+resources:
+  limits:
+    memory: 4Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
+
+# Node selector, affinity and tolerations
+nodeSelector: {}
+affinity: {}
+tolerations: []
+
+# Additional labels and annotations to add to all resources
+commonLabels: {}
+commonAnnotations: {}
+
+# Optional KaiwoConfig - global operator configuration
+# If provided, a KaiwoConfig resource will be created
+# If not provided, the operator will use defaults
+kaiwoConfig:
+  # Set to true to create the KaiwoConfig resource
+  enabled: false
+  # name: kaiwo  # Optional name override, defaults to "kaiwo"
+  spec:
+    # Ray configuration
+    ray:
+      defaultRayImage: "ghcr.io/silogen/rocm-ray:6.4"
+      headPodMemory: "16Gi"
+
+    # Storage configuration
+    data:
+      defaultStorageClass: ""  # Leave empty to use cluster default
+      defaultDataMountPath: "/workload"
+      defaultHfMountPath: "/hf_cache"
+
+    # Node configuration
+    nodes:
+      defaultGpuResourceKey: "amd.com/gpu"
+      defaultGpuTaintKey: "kaiwo.silogen.ai/gpu"
+      excludeMasterNodesFromNodePools: false
+
+    # Scheduling configuration
+    scheduling:
+      enablePreemption: true
+      defaultTimeoutSeconds: 3600
+
+    # Resource monitoring configuration
+    resourceMonitoring:
+      enabled: false
+      pollingInterval: "15s"
+      prometheusEndpoint: "http://prometheus-k8s.monitoring.svc.cluster.local:9090"
+
+    # Default cluster queue settings
+    defaultClusterQueueName: "kaiwo"
+    defaultClusterQueueCohortName: "kaiwo"
+    dynamicallyUpdateDefaultClusterQueue: false
+
+# Optional KaiwoQueueConfig - manages Kueue resources
+# If provided, a KaiwoQueueConfig resource will be created
+# If not provided, the operator will create default queue configuration
+kaiwoQueueConfig:
+  # Set to true to create the KaiwoQueueConfig resource
+  enabled: false
+  # name: kaiwo  # Optional name override, defaults to "kaiwo"
+  spec:
+    # ClusterQueues to create and manage
+    clusterQueues: []
+    # Example:
+    # - name: kaiwo
+    #   spec:
+    #     resourceGroups:
+    #     - flavors:
+    #       - name: default-flavor
+    #       resources:
+    #       - name: cpu
+    #         nominalQuota: 100
+    #       - name: memory
+    #         nominalQuota: 1000Gi
+    #   namespaces:
+    #   - default
+    #   - kaiwo-workloads
+    # ResourceFlavors to create and manage
+    resourceFlavors: []
+    # Example:
+    # - name: default-flavor
+    #   nodeLabels:
+    #     node-type: gpu
+    # WorkloadPriorityClasses to create and manage
+    workloadPriorityClasses: []
+    # Example:
+    # - metadata:
+    #     name: high-priority
+    #   value: 1000
+    #   description: "High priority workloads"
+    # Topologies to create and manage
+    topologies: []
+    # Example:
+    # - metadata:
+    #     name: gpu-topology
+    #   spec:
+    #     levels:
+    #     - nodeLabel: topology.kubernetes.io/zone
