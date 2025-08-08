@@ -787,7 +787,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `enabled` _boolean_ | Enabled enforces partitioning on the node's GPUs. Note that this switches the partitioning changes on or off. If partitioning is first enabled, and then disabled, any changes that were made will persist, but any changes made to the partitioning profile while partitioning is disabled will not take effect. |  |  |
+| `enabled` _boolean_ | Enabled enforces partitioning on the node's GPUs. Note that this switches the partitioning changes on or off. If partitioning is first enabled, and then disabled, any changes that were made will persist, but any changes made to the partitioning profile while partitioning is disabled will not take effect. | false |  |
 | `profile` _[GpuPartitioningProfile](#gpupartitioningprofile)_ | Profile is the partitioning profile to apply. |  |  |
 
 

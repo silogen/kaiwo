@@ -28,6 +28,7 @@ type KaiwoNodeSpec struct {
 
 type PartitioningConfig struct {
 	// Enabled enforces partitioning on the node's GPUs. Note that this switches the partitioning changes on or off. If partitioning is first enabled, and then disabled, any changes that were made will persist, but any changes made to the partitioning profile while partitioning is disabled will not take effect.
+	// +kubebuilder:default=false
 	Enabled bool `json:"enabled,omitempty"`
 
 	// Profile is the partitioning profile to apply.

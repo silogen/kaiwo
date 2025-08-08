@@ -7,4 +7,4 @@ helm upgrade --install amd-gpu-operator rocm/gpu-operator-charts \
 
 echo "== Installing the dependencies == "
 
-kustomize build --enable-helm overlays/amd-gpu | kubectl apply -f -
+kubectl kustomize --enable-helm overlays/amd-gpu | kubectl apply -f -

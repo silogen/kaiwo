@@ -54,6 +54,7 @@ spec:
                 description: Partitioning configures the node's partitioning
                 properties:
                   enabled:
+                    default: false
                     description: Enabled enforces partitioning on the node's GPUs.
                       Note that this switches the partitioning changes on or off.
                       If partitioning is first enabled, and then disabled, any changes
