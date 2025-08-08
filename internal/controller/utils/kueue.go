@@ -404,6 +404,9 @@ func (c ResourceFlavorConverter) Convert(input kaiwo.ResourceFlavorSpec) (*kueue
 		nodeLabels[common.DefaultKaiwoWorkerLabel] = "true"
 	}
 
+	// Only schedule on nodes with KaiwoNode status = Ready
+	nodeLabels[common.NodeStatusLabelKey] = string(kaiwo.KaiwoNodeStatusReady)
+
 	return &kueuev1beta1.ResourceFlavor{
 		ObjectMeta: metav1.ObjectMeta{Name: input.Name},
 		Spec: kueuev1beta1.ResourceFlavorSpec{
@@ -432,7 +435,7 @@ func ConstructDefaultResourceFlavors(ctx context.Context, clusterContext common.
 
 	var resourceFlavors []kaiwo.ResourceFlavorSpec
 	nodePoolResources := make(map[string]kueuev1beta1.FlavorQuotas)
-	nodePools := make(map[string][]common.NodeInfo)
+	nodePools := make(map[string][]kaiwo.KaiwoNode)
 
 	resourceAggregates := make(map[string]map[corev1.ResourceName]*resource.Quantity)
 
@@ -444,21 +447,23 @@ func ConstructDefaultResourceFlavors(ctx context.Context, clusterContext common.
 
 	for _, node := range clusterContext.Nodes {
 		if node.IsUnschedulable() {
-			logger.Info("Skipping cordoned node", "node", node.Node.Name)
+			logger.Info("Skipping cordoned node", "node", node.Name)
 			continue
 		}
-		if config.Nodes.ExcludeMasterNodesFromNodePools && node.IsControlPlane() {
-			logger.Info("Skipping control plane node", "node", node.Node.Name)
+		if config.Nodes.ExcludeMasterNodesFromNodePools && node.Status.IsControlPlane {
+			logger.Info("Skipping control plane node", "node", node.Name)
 			continue
 		}
 
-		flavorName := node.GetFlavorName()
+		flavorName := node.Status.KueueFlavorName
 
 		// Track node membership in the nodepool
 		nodePools[flavorName] = append(nodePools[flavorName], node)
-		logger.Info("Node added to node pool", "node", node.Node.Name, "nodePool", flavorName)
+		logger.Info("Node added to node pool", "node", node.Name, "nodePool", flavorName)
 
-		nodeHasGpus := node.GpuInfo != nil && node.GpuInfo.LogicalCount > 0
+		gpuInfo := node.Status.Resources.Gpus
+
+		nodeHasGpus := gpuInfo != nil && gpuInfo.LogicalCount > 0
 
 		if _, exists := resourceAggregates[flavorName]; !exists {
 			resourceAggregates[flavorName] = map[corev1.ResourceName]*resource.Quantity{
@@ -466,15 +471,15 @@ func ConstructDefaultResourceFlavors(ctx context.Context, clusterContext common.
 				corev1.ResourceMemory: resource.NewQuantity(0, resource.BinarySI),
 			}
 			if nodeHasGpus {
-				resourceAggregates[flavorName][node.GpuInfo.ResourceName] = resource.NewQuantity(0, resource.DecimalSI)
+				resourceAggregates[flavorName][gpuInfo.ResourceName] = resource.NewQuantity(0, resource.DecimalSI)
 			}
 		}
 
-		resourceAggregates[flavorName][corev1.ResourceCPU].Add(*node.GetNominalCPU())
-		resourceAggregates[flavorName][corev1.ResourceMemory].Add(*node.GetNominalMemory())
+		resourceAggregates[flavorName][corev1.ResourceCPU].Add(*node.Status.Resources.Cpu.Nominal)
+		resourceAggregates[flavorName][corev1.ResourceMemory].Add(*node.Status.Resources.Memory.Nominal)
 
 		if nodeHasGpus {
-			resourceAggregates[flavorName][node.GpuInfo.ResourceName].Add(*resource.NewQuantity(int64(node.GpuInfo.LogicalCount), resource.DecimalSI))
+			resourceAggregates[flavorName][gpuInfo.ResourceName].Add(*resource.NewQuantity(int64(gpuInfo.LogicalCount), resource.DecimalSI))
 		}
 	}
 
@@ -506,6 +511,7 @@ func ConstructDefaultResourceFlavors(ctx context.Context, clusterContext common.
 			Resources: resourceQuotas,
 		}
 		node := nodePools[flavorName][0]
+		gpuInfo := node.Status.Resources.Gpus
 		flavor := kaiwo.ResourceFlavorSpec{
 			Name: flavorName,
 			NodeLabels: map[string]string{
@@ -514,11 +520,11 @@ func ConstructDefaultResourceFlavors(ctx context.Context, clusterContext common.
 			TopologyName: common.DefaultTopologyName,
 		}
 		if !node.IsCpuOnlyNode() {
-			if logicalVramPerGpu := node.GpuInfo.LogicalVramPerGpu; logicalVramPerGpu != nil {
+			if logicalVramPerGpu := gpuInfo.LogicalVramPerGpu; logicalVramPerGpu != nil {
 				flavor.NodeLabels[common.NodeGpuLogicalVramLabelKey] = baseutils.QuantityToGi(*logicalVramPerGpu)
 			}
-			flavor.NodeLabels[common.NodeGpuModelLabelKey] = node.GpuInfo.ModelCleaned()
-			if partitioned := node.GpuInfo.IsPartitioned(); partitioned != nil {
+			flavor.NodeLabels[common.NodeGpuModelLabelKey] = gpuInfo.Model
+			if partitioned := gpuInfo.IsPartitioned; partitioned != nil {
 				flavor.NodeLabels[common.NodeGpusPartitionedLabelKey] = strconv.FormatBool(*partitioned)
 			}
 		}

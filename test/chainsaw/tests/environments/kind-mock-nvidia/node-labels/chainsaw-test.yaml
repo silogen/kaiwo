@@ -25,12 +25,5 @@ spec:
           metadata:
             name: kaiwo-test-worker
             labels:
-#              kaiwo.silogen.ai/node.gpu: "8"
-              kaiwo.silogen.ai/node.gpu.logical: "8"
-#              kaiwo.silogen.ai/node.gpu.logical.vram: 24Gi
               kaiwo.silogen.ai/node.gpu.model: tesla-k80
-#              kaiwo.silogen.ai/node.gpu.partitioned: "false"
-#              kaiwo.silogen.ai/node.gpu.vendor: nvidia
-#              kaiwo.silogen.ai/node.gpu.vram: 24Gi
-#                  kaiwo.silogen.ai/node.pool: 8gpu.nvidia.tesla-k80.24gi-15core-17gi
               kaiwo.silogen.ai/node.type: gpu

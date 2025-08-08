@@ -31,12 +31,3 @@ spec:
               kaiwo.silogen.ai/type: job
               kaiwo.silogen.ai/name: label-propagation-indirect-job
               foo: bar
-    catch:
-    - command:
-        entrypoint: kaiwo-dev
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-        - name: PRINT_LEVEL
-          value: ($values.print_level)
-        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]

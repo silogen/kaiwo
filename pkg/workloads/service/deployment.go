@@ -29,13 +29,14 @@ import (
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
-	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	"github.com/silogen/kaiwo/pkg/workloads/common"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
+	"github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 func GetDefaultDeploymentSpec(config common.KaiwoConfigContext, dangerous bool) appsv1.DeploymentSpec {
@@ -94,7 +95,7 @@ func (handler *DeploymentHandler) BuildDesired(ctx context.Context, clusterCtx c
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal Deployment spec: %w", err)
 	}
-	labelsBytes, err := json.Marshal(desiredDeployment.ObjectMeta.Labels)
+	labelsBytes, err := json.Marshal(desiredDeployment.Labels)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal Deployment labels: %w", err)
 	}
@@ -187,9 +188,9 @@ func (handler *DeploymentHandler) buildDeploymentTemplate(
 
 	common.UpdatePodTemplateSpecNonRay(configuration, handler, gpuSchedulingResult, &deploymentSpec.Template)
 
-	deploymentSpec.Template.ObjectMeta.Labels["app"] = kaiwoService.Name
-	deploymentSpec.Template.ObjectMeta.Labels[common.KaiwoRunIdLabel] = string(kaiwoService.UID)
-	deploymentSpec.Template.ObjectMeta.Labels[common.QueueLabel] = common.GetClusterQueueName(ctx, handler)
+	deploymentSpec.Template.Labels["app"] = kaiwoService.Name
+	deploymentSpec.Template.Labels[common.KaiwoRunIdLabel] = string(kaiwoService.UID)
+	deploymentSpec.Template.Labels[common.QueueLabel] = common.GetClusterQueueName(ctx, handler)
 
 	desiredDeployment := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
@@ -199,7 +200,7 @@ func (handler *DeploymentHandler) buildDeploymentTemplate(
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      kaiwoService.Name,
 			Namespace: kaiwoService.Namespace,
-			Labels:    deploymentSpec.Template.ObjectMeta.Labels,
+			Labels:    deploymentSpec.Template.Labels,
 		},
 		Spec: deploymentSpec,
 	}

@@ -24,10 +24,8 @@ spec:
             labels:
               kaiwo.silogen.ai/name: "kaiwo-job"
           spec:
-                # Ensure pod is on the non-partitioned node
-            nodeName: kaiwo-test-worker
+            (contains(['kaiwo-test-worker', 'kaiwo-test-worker2', 'kaiwo-test-worker3', 'kaiwo-test-worker4'], nodeName)): true
             containers:
-                  # Ensure the correct number of GPUs are assigned
             - resources:
                 requests:
                   nvidia.com/gpu: "1"

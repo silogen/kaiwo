@@ -31,7 +31,6 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
@@ -44,6 +43,7 @@ type NodeType string
 const (
 	NodeTypeLabelKey             = KaiwoLabelBase + "/node.type"
 	NodeGpusPartitionedLabelKey  = KaiwoLabelBase + "/node.gpu.partitioned"
+	NodeStatusLabelKey           = KaiwoLabelBase + "/node.status"
 	NodeGpuVendorLabelKey        = KaiwoLabelBase + "/node.gpu.vendor"
 	NodeGpuModelLabelKey         = KaiwoLabelBase + "/node.gpu.model"
 	NodeGpuPhysicalCountLabelKey = KaiwoLabelBase + "/node.gpu"
@@ -58,29 +58,25 @@ const (
 
 // ClusterContext provides context of the cluster and its resources to help build downstream objects
 type ClusterContext struct {
-	Nodes            []NodeInfo
+	Nodes            []v1alpha1.KaiwoNode
 	KaiwoQueueConfig *v1alpha1.KaiwoQueueConfig
 }
 
 // GetClusterContext gathers the cluster context
 func GetClusterContext(ctx context.Context, k8sClient client.Client) (*ClusterContext, error) {
 	config := ConfigFromContext(ctx)
-	nodeList := &v1.NodeList{}
+	nodeList := &v1alpha1.KaiwoNodeList{}
 	if err := k8sClient.List(ctx, nodeList); err != nil {
 		return nil, fmt.Errorf("failed to list nodes: %w", err)
 	}
 	clusterCtx := ClusterContext{
-		Nodes: []NodeInfo{},
+		Nodes: []v1alpha1.KaiwoNode{},
 	}
 	for _, node := range nodeList.Items {
-		if config.Nodes.ExcludeMasterNodesFromNodePools && IsControlPlaneNode(node) {
+		if config.Nodes.ExcludeMasterNodesFromNodePools && node.Status.IsControlPlane {
 			continue
 		}
-		info, err := ExtractLabeledNodeInfo(node)
-		if err != nil {
-			return nil, fmt.Errorf("failed to extract node resources: %w", err)
-		}
-		clusterCtx.Nodes = append(clusterCtx.Nodes, *info)
+		clusterCtx.Nodes = append(clusterCtx.Nodes, node)
 	}
 
 	kaiwoQueueConfig := &v1alpha1.KaiwoQueueConfig{}
@@ -99,63 +95,64 @@ func GetClusterContext(ctx context.Context, k8sClient client.Client) (*ClusterCo
 type NodeInfo struct {
 	Node    v1.Node
 	Type    NodeType
-	GpuInfo *NodeGpuInfo
+	GpuInfo *v1alpha1.NodeGpuInfo
 }
 
-// ExtractLabeledNodeInfo extracts the NodeInfo from a Kaiwo-labeled node
-func ExtractLabeledNodeInfo(node v1.Node) (*NodeInfo, error) {
-	info := &NodeInfo{
-		Node: node,
-		Type: NodeType(node.Labels[NodeTypeLabelKey]),
-	}
-
-	if info.Type == "" {
-		return nil, fmt.Errorf("no node type label found for node %s, ensure nodes are correctly labeled", node.Name)
-	}
-
-	if info.Type == CPUOnly {
-		return info, nil
-	}
-
-	gpuInfo := NodeGpuInfo{}
-
-	vendor, exists := node.Labels[NodeGpuVendorLabelKey]
-	if !exists {
-		return nil, fmt.Errorf("no vendor label '%s' for node %s", NodeGpuLogicalVramLabelKey, node.Name)
-	}
-	gpuInfo.Vendor = v1alpha1.GpuVendor(vendor)
-
-	gpuInfo.Model, exists = node.Labels[NodeGpuModelLabelKey]
-	if !exists {
-		return nil, fmt.Errorf("no model label '%s' found for node %s", NodeGpuModelLabelKey, node.Name)
-	}
-
-	gpuInfo.ResourceName = VendorToResourceName(gpuInfo.Vendor)
-
-	var err error
-
-	gpuInfo.PhysicalCount, err = baseutils.ExtractAndConvertLabelIfExists(node.Labels, NodeGpuPhysicalCountLabelKey, strconv.Atoi)
-	if err != nil {
-		return nil, err
-	}
-	gpuInfo.LogicalCount, err = baseutils.ExtractAndConvertLabel(node.Labels, NodeGpuLogicalCountLabelKey, strconv.Atoi)
-	if err != nil {
-		return nil, err
-	}
-
-	gpuInfo.PhysicalVramPerGpu, err = baseutils.ExtractAndConvertLabelIfExists(node.Labels, NodeGpuPhysicalVramLabelKey, resource.ParseQuantity)
-	if err != nil {
-		return nil, err
-	}
-	gpuInfo.LogicalVramPerGpu, err = baseutils.ExtractAndConvertLabelIfExists(node.Labels, NodeGpuLogicalVramLabelKey, resource.ParseQuantity)
-	if err != nil {
-		return nil, err
-	}
-
-	info.GpuInfo = &gpuInfo
-
-	return info, nil
-}
+//
+//// ExtractLabeledNodeInfo extracts the NodeInfo from a Kaiwo-labeled node
+//func ExtractLabeledNodeInfo(node v1.Node) (*NodeInfo, error) {
+//	info := &NodeInfo{
+//		Node: node,
+//		Type: NodeType(node.Labels[NodeTypeLabelKey]),
+//	}
+//
+//	if info.Type == "" {
+//		return nil, fmt.Errorf("no node type label found for node %s, ensure nodes are correctly labeled", node.Name)
+//	}
+//
+//	if info.Type == CPUOnly {
+//		return info, nil
+//	}
+//
+//	gpuInfo := NodeGpuInfo{}
+//
+//	vendor, exists := node.Labels[NodeGpuVendorLabelKey]
+//	if !exists {
+//		return nil, fmt.Errorf("no vendor label '%s' for node %s", NodeGpuLogicalVramLabelKey, node.Name)
+//	}
+//	gpuInfo.Vendor = v1alpha1.GpuVendor(vendor)
+//
+//	gpuInfo.Model, exists = node.Labels[NodeGpuModelLabelKey]
+//	if !exists {
+//		return nil, fmt.Errorf("no model label '%s' found for node %s", NodeGpuModelLabelKey, node.Name)
+//	}
+//
+//	gpuInfo.ResourceName = VendorToResourceName(gpuInfo.Vendor)
+//
+//	var err error
+//
+//	gpuInfo.PhysicalCount, err = baseutils.ExtractAndConvertLabelIfExists(node.Labels, NodeGpuPhysicalCountLabelKey, strconv.Atoi)
+//	if err != nil {
+//		return nil, err
+//	}
+//	gpuInfo.LogicalCount, err = baseutils.ExtractAndConvertLabel(node.Labels, NodeGpuLogicalCountLabelKey, strconv.Atoi)
+//	if err != nil {
+//		return nil, err
+//	}
+//
+//	gpuInfo.PhysicalVramPerGpu, err = baseutils.ExtractAndConvertLabelIfExists(node.Labels, NodeGpuPhysicalVramLabelKey, resource.ParseQuantity)
+//	if err != nil {
+//		return nil, err
+//	}
+//	gpuInfo.LogicalVramPerGpu, err = baseutils.ExtractAndConvertLabelIfExists(node.Labels, NodeGpuLogicalVramLabelKey, resource.ParseQuantity)
+//	if err != nil {
+//		return nil, err
+//	}
+//
+//	info.GpuInfo = &gpuInfo
+//
+//	return info, nil
+//}
 
 func (info NodeInfo) IsControlPlane() bool {
 	return IsControlPlaneNode(info.Node)
@@ -195,13 +192,6 @@ func (info NodeInfo) GetNominalMemory() *resource.Quantity {
 	return resource.NewQuantity(scaledBytes, resource.BinarySI)
 }
 
-func (info NodeInfo) IsGpuPartitioned() *bool {
-	if info.GpuInfo == nil {
-		return nil
-	}
-	return info.GpuInfo.IsPartitioned()
-}
-
 // GetFlavorName returns the Kueue flavor name that this node should belong to
 func (info NodeInfo) GetFlavorName() string {
 	var components []string
@@ -209,9 +199,9 @@ func (info NodeInfo) GetFlavorName() string {
 	if info.IsCpuOnlyNode() {
 		components = append(components, "cpu-only")
 	} else {
-		model := strings.ReplaceAll(gpuInfo.ModelCleaned(), "-", "")
+		model := strings.ReplaceAll(gpuInfo.Model, "-", "")
 		gpuComponent := fmt.Sprintf("%dgpu.%s.%s", gpuInfo.LogicalCount, string(gpuInfo.Vendor), model)
-		if partitioned := gpuInfo.IsPartitioned(); partitioned != nil && *partitioned {
+		if partitioned := gpuInfo.IsPartitioned; partitioned != nil && *partitioned {
 			gpuComponent += ".partitioned"
 		}
 		if gpuInfo.LogicalVramPerGpu != nil {
@@ -236,9 +226,9 @@ func (info NodeInfo) IsCpuOnlyNode() bool {
 	return info.GpuInfo == nil
 }
 
-// extractRawNodeResources extracts the node resources from system labels
-func extractRawNodeResources(node v1.Node) (*NodeInfo, error) {
-	gpuInfo, err := extractNodeGpuInfo(node)
+// ExtractRawNodeResources extracts the node resources from system labels
+func ExtractRawNodeResources(node v1.Node) (*NodeInfo, error) {
+	gpuInfo, err := ExtractNodeGpuInfo(node)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract node gpu info: %w", err)
 	}
@@ -300,129 +290,6 @@ const (
 	NodePartitionedGpusTaint = KaiwoLabelBase + "partitioned-gpu"
 )
 
-// EnsureClusterNodesLabelsAndTaints ensures that each node in the cluster is labeled correctly for Kaiwo usage
-func EnsureClusterNodesLabelsAndTaints(ctx context.Context, c client.Client) error {
-	nodeList := &v1.NodeList{}
-	if err := c.List(ctx, nodeList); err != nil {
-		return fmt.Errorf("failed to list nodes: %w", err)
-	}
-	for _, node := range nodeList.Items {
-		if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			err := c.Get(ctx, client.ObjectKeyFromObject(&node), &node)
-			if err != nil {
-				return fmt.Errorf("failed to get node '%s': %w", node.Name, err)
-			}
-			if err := EnsureNodeLabelsAndTaints(ctx, c, node); err != nil {
-				return fmt.Errorf("failed to ensure cluster nodes: %w", err)
-			}
-			return nil
-		}); err != nil {
-			return fmt.Errorf("failed to ensure labels and taints on node '%s': %w", node.Name, err)
-		}
-	}
-	return nil
-}
-
-// EnsureNodeLabelsAndTaints ensures that a node is labeled correctly for Kaiwo usage
-func EnsureNodeLabelsAndTaints(ctx context.Context, c client.Client, node v1.Node) error {
-	config := ConfigFromContext(ctx)
-
-	nodeInfo, err := extractRawNodeResources(node)
-	if err != nil {
-		return fmt.Errorf("failed to extract node resource info for node '%s': %w", node.Name, err)
-	}
-
-	ensureNodeLabels(config, *nodeInfo, &node)
-	ensureNodeTaints(config, *nodeInfo, &node)
-
-	if err := c.Update(ctx, &node); err != nil {
-		return fmt.Errorf("failed to update node labels: %w", err)
-	}
-
-	return nil
-}
-
-func ensureNodeLabels(config KaiwoConfigContext, nodeResourceInfo NodeInfo, node *v1.Node) {
-	labels := node.Labels
-
-	labels[NodeTypeLabelKey] = string(nodeResourceInfo.Type)
-	labels[DefaultNodePoolLabelKey] = nodeResourceInfo.GetFlavorName()
-
-	if !nodeResourceInfo.IsControlPlane() || !config.Nodes.ExcludeMasterNodesFromNodePools {
-		labels[DefaultKaiwoWorkerLabel] = True
-	}
-
-	if nodeResourceInfo.Type == CPUOnly {
-		return
-	}
-
-	gpuInfo := nodeResourceInfo.GpuInfo
-
-	if partitioned := nodeResourceInfo.IsGpuPartitioned(); partitioned != nil && *partitioned {
-		labels[NodeGpusPartitionedLabelKey] = True
-	} else if partitioned != nil && !*partitioned {
-		labels[NodeGpusPartitionedLabelKey] = False
-	}
-
-	labels[NodeGpuVendorLabelKey] = string(gpuInfo.Vendor)
-	labels[NodeGpuModelLabelKey] = gpuInfo.ModelCleaned()
-	labels[NodeGpuLogicalCountLabelKey] = strconv.Itoa(gpuInfo.LogicalCount)
-
-	if gpuInfo.PhysicalCount != nil {
-		labels[NodeGpuPhysicalCountLabelKey] = strconv.Itoa(*gpuInfo.PhysicalCount)
-	}
-	if gpuInfo.PhysicalVramPerGpu != nil {
-		labels[NodeGpuPhysicalVramLabelKey] = baseutils.QuantityToGi(*gpuInfo.PhysicalVramPerGpu)
-	}
-	if gpuInfo.LogicalVramPerGpu != nil {
-		labels[NodeGpuLogicalVramLabelKey] = baseutils.QuantityToGi(*gpuInfo.LogicalVramPerGpu)
-	}
-
-	// Topology level defaults
-	if _, exists := node.Labels[DefaultTopologyBlockLabel]; !exists {
-		node.Labels[DefaultTopologyBlockLabel] = "block-a"
-	}
-	if _, exists := node.Labels[DefaultTopologyRackLabel]; !exists {
-		node.Labels[DefaultTopologyRackLabel] = "rack-a"
-	}
-
-	node.SetLabels(labels)
-}
-
-func ensureNodeTaints(config KaiwoConfigContext, nodeResourceInfo NodeInfo, node *v1.Node) {
-	var taints []v1.Taint
-
-	if config.Nodes.AddTaintsToGpuNodes && !nodeResourceInfo.IsCpuOnlyNode() {
-		gpuTaint := v1.Taint{
-			Key:    config.Nodes.DefaultGpuTaintKey,
-			Value:  True,
-			Effect: v1.TaintEffectNoSchedule,
-		}
-		taints = append(taints, gpuTaint)
-
-		if partitioned := nodeResourceInfo.IsGpuPartitioned(); partitioned != nil && *partitioned {
-			taints = append(taints, v1.Taint{
-				Key:    NodePartitionedGpusTaint,
-				Value:  True,
-				Effect: v1.TaintEffectNoSchedule,
-			})
-		}
-	}
-
-	for _, taint := range taints {
-		addTaint := true
-		for _, t := range node.Spec.Taints {
-			if t.MatchTaint(&taint) {
-				addTaint = false
-				break
-			}
-		}
-		if addTaint {
-			node.Spec.Taints = append(node.Spec.Taints, taint)
-		}
-	}
-}
-
 // The code below is for extracting information from the AMD / NVIDIA system labels
 
 const (
@@ -438,7 +305,7 @@ const (
 	// NvidiaMigProfileLabelKey     = "nvidia.com/gpu.mig.profile"
 )
 
-func extractNodeGpuInfo(node v1.Node) (*NodeGpuInfo, error) {
+func ExtractNodeGpuInfo(node v1.Node) (*v1alpha1.NodeGpuInfo, error) {
 	if _, exists := node.Labels[AmdProductNameLabelKey]; exists {
 		return extractAmdNodeGpuInfo(node)
 	} else if _, exists := node.Labels[NvidiaProductNameLabelKey]; exists {
@@ -447,7 +314,7 @@ func extractNodeGpuInfo(node v1.Node) (*NodeGpuInfo, error) {
 	return nil, nil
 }
 
-func extractAmdNodeGpuInfo(node v1.Node) (*NodeGpuInfo, error) {
+func extractAmdNodeGpuInfo(node v1.Node) (*v1alpha1.NodeGpuInfo, error) {
 	labels := node.Labels
 
 	productName, ok := labels[AmdProductNameLabelKey]
@@ -490,7 +357,12 @@ func extractAmdNodeGpuInfo(node v1.Node) (*NodeGpuInfo, error) {
 		physicalVramPtr = baseutils.Pointer(q)
 	}
 
-	return &NodeGpuInfo{
+	var isPartitioned *bool = nil
+	if physGPUPtr != nil {
+		isPartitioned = baseutils.Pointer(*physGPUPtr != logicalCount)
+	}
+
+	return &v1alpha1.NodeGpuInfo{
 		Vendor:             v1alpha1.GpuVendorAmd,
 		ResourceName:       AmdGpuResourceName,
 		Model:              cleanAMDGPUName(productName),
@@ -498,6 +370,7 @@ func extractAmdNodeGpuInfo(node v1.Node) (*NodeGpuInfo, error) {
 		LogicalCount:       logicalCount,
 		PhysicalVramPerGpu: physicalVramPtr,
 		LogicalVramPerGpu:  logicalVramPtr,
+		IsPartitioned:      isPartitioned,
 	}, nil
 }
 
@@ -518,12 +391,12 @@ func cleanAMDGPUName(gpuID string) string {
 		gpuType = strings.ReplaceAll(gpuType, word, "")
 	}
 
-	return strings.TrimSpace(gpuType)
+	return baseutils.MakeRFC1123Compliant(strings.TrimSpace(gpuType))
 }
 
 // extractNvidiaNodeGpuInfo extracts Nvidia node information
 // currently only supports parsing the logical GPU count
-func extractNvidiaNodeGpuInfo(node v1.Node) (*NodeGpuInfo, error) {
+func extractNvidiaNodeGpuInfo(node v1.Node) (*v1alpha1.NodeGpuInfo, error) {
 	nodeLabels := node.Labels
 
 	// Mandatory info
@@ -591,9 +464,9 @@ func extractNvidiaNodeGpuInfo(node v1.Node) (*NodeGpuInfo, error) {
 	//	logicalGpus *= migCount
 	//}
 
-	return &NodeGpuInfo{
+	return &v1alpha1.NodeGpuInfo{
 		Vendor:       v1alpha1.GpuVendorNvidia,
-		Model:        productName,
+		Model:        baseutils.MakeRFC1123Compliant(productName),
 		LogicalCount: int(logicalGpusCount.Value()),
 		ResourceName: NvidiaGpuResourceName,
 	}, nil

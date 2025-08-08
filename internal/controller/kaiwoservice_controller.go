@@ -35,6 +35,8 @@ import (
 	appwrapperv1beta2 "github.com/project-codeflare/appwrapper/api/v1beta2"
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -135,6 +137,9 @@ func (r *KaiwoServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&appsv1.Deployment{}, builder.WithPredicates(DeploymentChangedPredicate())).
 		Owns(&rayv1.RayService{}).
 		Owns(&appwrapperv1beta2.AppWrapper{}, builder.WithPredicates(AppWrapperChangedPredicate())).
+		Owns(&batchv1.Job{}, builder.WithPredicates(JobStatusChangedPredicate())).
+		Owns(&corev1.PersistentVolumeClaim{}).
+		Owns(&corev1.ConfigMap{}).
 		Named("kaiwoservice").
 		Complete(r)
 }

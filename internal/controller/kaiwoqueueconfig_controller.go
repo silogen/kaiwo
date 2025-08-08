@@ -74,9 +74,9 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	config := common.ConfigFromContext(ctx)
 
-	if err := common.EnsureClusterNodesLabelsAndTaints(ctx, r.Client); err != nil {
-		return ctrl.Result{}, fmt.Errorf("could not ensure cluster nodes' taints and labels: %w", err)
-	}
+	//if err := common.EnsureClusterNodesLabelsAndTaints(ctx, r.Client); err != nil {
+	//	return ctrl.Result{}, fmt.Errorf("could not ensure cluster nodes' taints and labels: %w", err)
+	//}
 
 	if config.DynamicallyUpdateDefaultClusterQueue {
 		if err := r.EnsureKaiwoQueueConfig(ctx, common.KaiwoQueueConfigName, config.DefaultClusterQueueName, config.DefaultClusterQueueCohortName); err != nil {
@@ -161,7 +161,7 @@ func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, kai
 
 	// LocalQueues
 	existingClusterQueues := &kueuev1beta1.ClusterQueueList{}
-	if err := r.Client.List(ctx, existingClusterQueues); err != nil {
+	if err := r.List(ctx, existingClusterQueues); err != nil {
 		syncErrors = append(syncErrors, err)
 	} else {
 		actualClusterQueues := map[string]*kueuev1beta1.ClusterQueue{}
@@ -324,6 +324,14 @@ func (r *KaiwoQueueConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				}
 			}),
 			builder.WithPredicates(nodePred),
+		).
+		Watches(
+			&kaiwo.KaiwoNode{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				return []reconcile.Request{
+					{NamespacedName: types.NamespacedName{Name: common.KaiwoQueueConfigName}},
+				}
+			}),
 		).
 		Named("kaiwoqueueconfig").
 		Complete(r)
