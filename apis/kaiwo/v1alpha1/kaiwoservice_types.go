@@ -64,7 +64,7 @@ type KaiwoServiceStatus struct {
 // KaiwoService represents a long-running service workload managed by Kaiwo. It encapsulates either a standard Kubernetes Deployment  or a RayService (via an AppWrapper), along with common metadata, storage configurations, and scheduling preferences. The Kaiwo controller reconciles this resource to create and manage the underlying workload objects.
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.status"
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.status"
 // +kubebuilder:printcolumn:name="StartTime",type="string",JSONPath=".status.startTime"
 // +kubebuilder:printcolumn:name="Duration(s)",type="integer",JSONPath=".status.duration"
 type KaiwoService struct {
