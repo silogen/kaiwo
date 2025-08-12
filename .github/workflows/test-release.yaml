@@ -1,10 +1,6 @@
 name: test-release
 on:
-  pull_request:
-    paths:
-    - 'chart/**'
-    - 'Makefile'
-    - '.github/workflows/compile-release.yaml'
+  workflow_dispatch: null
 
 jobs:
   test-build:
