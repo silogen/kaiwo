@@ -66,9 +66,20 @@ Create the name of the service account to use
 Image name
 */}}
 {{- define "kaiwo.image" -}}
-{{- if .Values.image.registry }}
-{{- printf "%s/%s:%s" .Values.image.registry .Values.image.repository (.Values.image.tag | default .Chart.AppVersion) }}
+{{- $registry := .Values.image.registry | default "" -}}
+{{- $repo := .Values.image.repository -}}
+{{- if .Values.image.digest }}
+  {{- if $registry }}
+    {{- printf "%s/%s@%s" $registry $repo .Values.image.digest }}
+  {{- else }}
+    {{- printf "%s@%s" $repo .Values.image.digest }}
+  {{- end }}
 {{- else }}
-{{- printf "%s:%s" .Values.image.repository (.Values.image.tag | default .Chart.AppVersion) }}
+  {{- $tag := .Values.image.tag | default .Chart.AppVersion -}}
+  {{- if $registry }}
+    {{- printf "%s/%s:%s" $registry $repo $tag }}
+  {{- else }}
+    {{- printf "%s:%s" $repo $tag }}
+  {{- end }}
 {{- end }}
 {{- end }}

@@ -133,7 +133,7 @@ define copy-helm-resources
 	@cat config/webhook/service.yaml > $(CHART_DIR)/webhook-resources.yaml
 	@echo "---" >> $(CHART_DIR)/webhook-resources.yaml
 	@cat config/webhook/webhooks.yaml >> $(CHART_DIR)/webhook-resources.yaml
-	@echo "---" >> $(CHART_DIR)/webhook-resources.yaml  
+	@echo "---" >> $(CHART_DIR)/webhook-resources.yaml
 	@cat config/certmanager/issuer.yaml >> $(CHART_DIR)/webhook-resources.yaml
 	@echo "---" >> $(CHART_DIR)/webhook-resources.yaml
 	@cat config/certmanager/certificate-webhook.yaml >> $(CHART_DIR)/webhook-resources.yaml
@@ -174,6 +174,15 @@ helm-template: build-installer ## Generate Helm templates for inspection
 	helm template kaiwo $(CHART_DIR) --namespace kaiwo-system --output-dir dist/helm-output/
 	@rm -f $(CHART_DIR)/Chart.yaml.bak
 	$(call clean-helm-resources)
+
+.PHONY: helm-push-oci
+helm-push-oci: helm-package ## Push Helm chart to OCI registry
+	@echo "Pushing Helm chart to OCI registry..."
+	helm push dist/kaiwo-operator-$(CHART_VERSION).tgz oci://ghcr.io/$(shell echo $(IMG) | cut -d'/' -f2 | cut -d':' -f1)
+
+.PHONY: helm-release
+helm-release: helm-package ## Package chart for release (used by CI)
+	@echo "Helm chart packaged for release: dist/kaiwo-operator-$(CHART_VERSION).tgz"
 
 
 ##@ Deployment

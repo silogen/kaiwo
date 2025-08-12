@@ -7,15 +7,24 @@ This template creates the core operator resources with Helm customizations
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: {{ .Values.namespace }}
+  name: {{ .Release.Namespace }}
   labels:
     {{- include "kaiwo.labels" . | nindent 4 }}
+    {{- if .Values.security.podSecurityStandards.enforce }}
+    pod-security.kubernetes.io/enforce: {{ .Values.security.podSecurityStandards.enforce | quote }}
+    {{- end }}
+    {{- if .Values.security.podSecurityStandards.audit }}
+    pod-security.kubernetes.io/audit: {{ .Values.security.podSecurityStandards.audit | quote }}
+    {{- end }}
+    {{- if .Values.security.podSecurityStandards.warn }}
+    pod-security.kubernetes.io/warn: {{ .Values.security.podSecurityStandards.warn | quote }}
+    {{- end }}
     {{- with .Values.commonLabels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
-  {{- with .Values.commonAnnotations }}
+  {{- if .Values.commonAnnotations }}
   annotations:
-    {{- toYaml . | nindent 4 }}
+    {{- toYaml .Values.commonAnnotations | nindent 4 }}
   {{- end }}
 {{- end }}
 
@@ -25,16 +34,16 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: {{ include "kaiwo.serviceAccountName" . }}
-  namespace: {{ .Values.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "kaiwo.labels" . | nindent 4 }}
     control-plane: kaiwo-controller-manager
     {{- with .Values.commonLabels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
-  {{- with .Values.commonAnnotations }}
+  {{- if .Values.commonAnnotations }}
   annotations:
-    {{- toYaml . | nindent 4 }}
+    {{- toYaml .Values.commonAnnotations | nindent 4 }}
   {{- end }}
 
 ---
@@ -43,16 +52,16 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "kaiwo.fullname" . }}-controller-manager
-  namespace: {{ .Values.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "kaiwo.labels" . | nindent 4 }}
     control-plane: kaiwo-controller-manager
     {{- with .Values.commonLabels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
-  {{- with .Values.commonAnnotations }}
+  {{- if .Values.commonAnnotations }}
   annotations:
-    {{- toYaml . | nindent 4 }}
+    {{- toYaml .Values.commonAnnotations | nindent 4 }}
   {{- end }}
 spec:
   selector:
@@ -80,6 +89,15 @@ spec:
       {{- end }}
       securityContext:
         runAsNonRoot: true
+        {{- with .Values.security.securityContext.runAsUser }}
+        runAsUser: {{ . }}
+        {{- end }}
+        {{- with .Values.security.securityContext.runAsGroup }}
+        runAsGroup: {{ . }}
+        {{- end }}
+        {{- with .Values.security.securityContext.fsGroup }}
+        fsGroup: {{ . }}
+        {{- end }}
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -88,6 +106,9 @@ spec:
         args:
         - --leader-elect
         - --health-probe-bind-address=:8081
+        {{- if .Values.webhooks.enabled }}
+        - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
+        {{- end }}
         image: {{ include "kaiwo.image" . }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         env:
@@ -96,6 +117,16 @@ spec:
         - name: DEFAULT_CLUSTER_QUEUE_NAME
           value: "kaiwo"
         name: manager
+        {{- if .Values.webhooks.enabled }}
+        volumeMounts:
+          - mountPath: /tmp/k8s-webhook-server/serving-certs
+            name: cert
+            readOnly: true
+        ports:
+        - containerPort: 9443
+          name: webhook-server
+          protocol: TCP
+        {{- end }}
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -113,13 +144,9 @@ spec:
             port: 8081
           initialDelaySeconds: 5
           periodSeconds: 10
+        {{- with .Values.resources }}
         resources:
-          {{- toYaml .Values.resources | nindent 10 }}
-        {{- if .Values.webhooks.enabled }}
-        volumeMounts:
-        - mountPath: /tmp/k8s-webhook-server/serving-certs
-          name: cert
-          readOnly: true
+          {{- toYaml . | nindent 10 }}
         {{- end }}
       serviceAccountName: {{ include "kaiwo.serviceAccountName" . }}
       terminationGracePeriodSeconds: 10

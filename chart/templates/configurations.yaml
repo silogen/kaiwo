@@ -13,11 +13,11 @@ metadata:
   labels:
     {{- include "kaiwo.labels" . | nindent 4 }}
     {{- with .Values.commonLabels }}
-    {{- toYaml . | nindent 4 }}
+{{ toYaml . | nindent 4 }}
     {{- end }}
   {{- with .Values.commonAnnotations }}
   annotations:
-    {{- toYaml . | nindent 4 }}
+{{ toYaml . | nindent 4 }}
   {{- end }}
 spec:
   {{- if .Values.kaiwoConfig.spec.ray }}
@@ -100,11 +100,11 @@ metadata:
   labels:
     {{- include "kaiwo.labels" . | nindent 4 }}
     {{- with .Values.commonLabels }}
-    {{- toYaml . | nindent 4 }}
+{{ toYaml . | nindent 4 }}
     {{- end }}
   {{- with .Values.commonAnnotations }}
   annotations:
-    {{- toYaml . | nindent 4 }}
+{{ toYaml . | nindent 4 }}
   {{- end }}
 spec:
   {{- if .Values.kaiwoQueueConfig.spec.clusterQueues }}

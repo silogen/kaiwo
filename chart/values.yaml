@@ -7,6 +7,8 @@ image:
   repository: silogen/kaiwo-operator
   tag: ""  # Will be set to appVersion from Chart.yaml during installation
   pullPolicy: IfNotPresent
+  # Image digest for supply chain security (optional, overrides tag)
+  # digest: "sha256:abcd1234..."
 
 # Global image pull secrets
 imagePullSecrets: []
@@ -44,13 +46,36 @@ rbac:
   create: true
   # Additional annotations for ServiceAccount
   serviceAccountAnnotations: {}
-  # Additional annotations for ClusterRole/Role  
+  # Additional annotations for ClusterRole/Role
   roleAnnotations: {}
 
 # Webhook Configuration
 webhooks:
   # Enable webhook admission controllers
   enabled: true
+
+# Security settings
+security:
+  # Pod Security Standards (https://kubernetes.io/docs/concepts/security/pod-security-standards/)
+  podSecurityStandards:
+    enforce: "restricted"  # restricted, baseline, or privileged
+    audit: "restricted"
+    warn: "restricted"
+
+  # Additional security context options
+  securityContext:
+    # Run as specific user (optional)
+    runAsUser: 65532  # nobody user
+    runAsGroup: 65532
+    fsGroup: 65532
+
+# Admission control
+admission:
+  # Prevent pods without resource limits (optional)
+  enforceResourceLimits: false
+  # Prevent privileged containers
+  enforceNonPrivileged: true
+
 
 # Optional KaiwoConfig - global operator configuration
 # If provided, a KaiwoConfig resource will be created
