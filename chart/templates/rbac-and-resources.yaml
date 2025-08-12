@@ -1,14 +1,7 @@
 {{/*
-Note: This template is designed to work with the kustomize build output.
-In a production setup, you would include your pre-built install.yaml here.
-For now, this serves as a placeholder for additional resources.
+RBAC resources copied from config/rbac
 */}}
-
-{{/*
-If you have a pre-built install.yaml from 'make build-installer', 
-you can include it here:
-
-{{ .Files.Get "../dist/install.yaml" | replace "namespace: kaiwo-system" (printf "namespace: %s" .Values.namespace) }}
-
-For now, we'll let kustomize handle the remaining resources.
-*/}}
+{{- if .Values.rbac.create }}
+# Generated from config/rbac
+{{ (.Files.Get "rbac-resources.yaml") | replace "name: kaiwo-controller-manager" (printf "name: %s" (include "kaiwo.serviceAccountName" .)) }}
+{{- end }}

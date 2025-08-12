@@ -8,8 +8,8 @@ maintainers:
 - name: Silogen Team
   email: support@silogen.ai
 type: application
-version: 0.1.0
-appVersion: "latest"
+version: 0.1.7
+appVersion: "v0.1.7"
 keywords:
 - ai
 - gpu

@@ -46,9 +46,94 @@ bash dependencies/install_dependencies.sh --local
 !!!warning "GPU Operator Not Included"
     You must install the **AMD GPU Operator** separately according to its documentation *before* running the convenience script or installing Kaiwo. Ensure node labeling features are enabled.
 
+### Kaiwo operator via Helm (Recommended)
+
+The recommended way to install the Kaiwo operator is using Helm, which provides better configuration management and easier upgrades.
+
+#### Prerequisites
+
+- [Helm](https://helm.sh/docs/intro/install/) v3.0+ installed
+- Dependencies installed (see above)
+
+#### Quick Installation
+
+Install the latest version using Helm:
+
+```bash
+helm upgrade --install kaiwo \
+  oci://ghcr.io/silogen/kaiwo-operator \
+  --namespace kaiwo-system \
+  --create-namespace
+```
+
+#### Custom Installation
+
+For production deployments, you may want to customize the installation:
+
+1. **View available configuration options**:
+   ```bash
+   helm show values oci://ghcr.io/silogen/kaiwo-operator
+   ```
+
+2. **Create a custom values file** (e.g., `kaiwo-values.yaml`):
+   ```yaml
+   # Custom resource limits
+   resources:
+     limits:
+       memory: 8Gi
+     requests:
+       cpu: 1000m
+       memory: 2Gi
+   
+   # Enable custom KaiwoConfig
+   kaiwoConfig:
+     enabled: true
+     spec:
+       ray:
+         defaultRayImage: "ghcr.io/silogen/rocm-ray:6.4"
+       nodes:
+         defaultGpuResourceKey: "amd.com/gpu"
+   
+   # Add node selector for dedicated nodes
+   nodeSelector:
+     node-role.kubernetes.io/control-plane: ""
+   
+   tolerations:
+   - key: "node-role.kubernetes.io/control-plane"
+     operator: "Exists"
+     effect: "NoSchedule"
+   ```
+
+3. **Install with custom values**:
+   ```bash
+   helm upgrade --install kaiwo \
+     oci://ghcr.io/silogen/kaiwo-operator \
+     --namespace kaiwo-system \
+     --create-namespace \
+     --values kaiwo-values.yaml
+   ```
+
+#### Helm Configuration Reference
+
+For detailed configuration options, see the [values.yaml file](https://github.com/silogen/kaiwo/blob/main/chart/values.yaml) in the repository, which includes:
+
+- **Image configuration**: Custom image registry, repository, and tag
+- **Resource management**: CPU/memory limits and requests  
+- **RBAC settings**: ServiceAccount annotations and permissions
+- **Webhook configuration**: Enable/disable admission webhooks
+- **KaiwoConfig**: Global operator configuration (Ray images, storage, GPU settings)
+- **KaiwoQueueConfig**: Kueue resource management (queues, flavors, priorities)
+- **Scheduling**: Node selectors, affinity, and tolerations
+
+#### Managing Helm Installation
+
+- **Upgrade**: `helm upgrade kaiwo oci://ghcr.io/silogen/kaiwo-operator --namespace kaiwo-system`
+- **Uninstall**: `helm uninstall kaiwo --namespace kaiwo-system`
+- **Status**: `helm status kaiwo --namespace kaiwo-system`
+
 ### Kaiwo operator via install manifest
 
-Once dependencies are ready, install the Kaiwo operator itself.
+Alternatively, you can install using the static YAML manifests:
 
 You can install the latest version via:
 

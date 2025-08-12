@@ -5,7 +5,7 @@
 image:
   registry: ghcr.io
   repository: silogen/kaiwo-operator
-  tag: "latest"
+  tag: ""  # Will be set to appVersion from Chart.yaml during installation
   pullPolicy: IfNotPresent
 
 # Global image pull secrets
@@ -13,6 +13,10 @@ imagePullSecrets: []
 
 # Namespace where operator will be installed
 namespace: kaiwo-system
+
+# Create namespace resource (set to false if using --create-namespace flag)
+# Best practice: Use helm install --create-namespace instead
+createNamespace: false
 
 # Controller manager replicas
 replicas: 1
@@ -33,6 +37,20 @@ tolerations: []
 # Additional labels and annotations to add to all resources
 commonLabels: {}
 commonAnnotations: {}
+
+# RBAC Configuration
+rbac:
+  # Create RBAC resources
+  create: true
+  # Additional annotations for ServiceAccount
+  serviceAccountAnnotations: {}
+  # Additional annotations for ClusterRole/Role  
+  roleAnnotations: {}
+
+# Webhook Configuration
+webhooks:
+  # Enable webhook admission controllers
+  enabled: true
 
 # Optional KaiwoConfig - global operator configuration
 # If provided, a KaiwoConfig resource will be created
