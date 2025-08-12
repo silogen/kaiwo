@@ -54,6 +54,15 @@ webhooks:
   # Enable webhook admission controllers
   enabled: true
 
+# Scheduler Configuration
+scheduler:
+  # Enable Kaiwo custom scheduler (GPU-aware scheduling)
+  # Includes: ServiceAccount, RBAC, ConfigMap, and Deployment
+  # The scheduler optimizes GPU resource allocation and topology-aware scheduling
+  enabled: true
+  # Namespace where scheduler will be deployed (typically kube-system)
+  namespace: kube-system
+
 # Security settings
 security:
   # Pod Security Standards (https://kubernetes.io/docs/concepts/security/pod-security-standards/)

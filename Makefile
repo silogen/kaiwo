@@ -137,11 +137,13 @@ define copy-helm-resources
 	@cat config/certmanager/issuer.yaml >> $(CHART_DIR)/webhook-resources.yaml
 	@echo "---" >> $(CHART_DIR)/webhook-resources.yaml
 	@cat config/certmanager/certificate-webhook.yaml >> $(CHART_DIR)/webhook-resources.yaml
+	@echo "Copying scheduler resources from config/static/scheduler..."
+	@cat config/static/scheduler/kaiwo-scheduler.yaml > $(CHART_DIR)/scheduler-resources.yaml
 endef
 
 # Function to clean up copied resources
 define clean-helm-resources
-	@rm -f $(CHART_DIR)/rbac-resources.yaml $(CHART_DIR)/webhook-resources.yaml
+	@rm -f $(CHART_DIR)/rbac-resources.yaml $(CHART_DIR)/webhook-resources.yaml $(CHART_DIR)/scheduler-resources.yaml
 endef
 
 .PHONY: helm-package

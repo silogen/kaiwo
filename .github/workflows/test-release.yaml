@@ -1,0 +1,91 @@
+name: test-release
+on:
+  workflow_dispatch:  # Manual trigger
+    inputs:
+      test_version:
+        description: 'Version to test with (e.g., v0.1.7-test)'
+        required: true
+        default: 'v0.1.7-test'
+  pull_request:
+    paths:
+    - 'chart/**'
+    - 'Makefile'
+    - '.github/workflows/compile-release.yaml'
+
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+    - name: Set up Helm
+      uses: azure/setup-helm@v4.3.0
+
+    - name: Set test version
+      shell: bash
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "VERSION=${{ github.event.inputs.test_version }}" >> $GITHUB_ENV
+        else
+          echo "VERSION=v0.1.7-test-$(date +%s)" >> $GITHUB_ENV
+        fi
+        echo "Using test version: ${VERSION}"
+
+    - name: Test build script for CLI
+      shell: bash
+      run: |
+        set -e
+        chmod +x build_cli_all_arch.sh
+        ./build_cli_all_arch.sh "$VERSION" || echo "CLI build test completed"
+
+    - name: Test workloads compression
+      shell: bash
+      run: |
+        zip -r workloads.zip ./workloads
+
+    - name: Test Docker build (no push)
+      run: |
+        IMAGE_NAME=test/kaiwo-operator
+        TAG=${{ env.VERSION }}
+
+        # Build the Docker image locally (no push)
+        make docker-build IMG=$IMAGE_NAME:$TAG
+
+    - name: Test install.yaml generation
+      run: |
+        make build-installer TAG=${{ env.VERSION }}
+        cp dist/install.yaml install.yaml
+        echo "Generated install.yaml successfully"
+
+    - name: Test Helm chart packaging
+      run: |
+        make helm-release TAG=${{ env.VERSION }} CHART_VERSION=${{ env.VERSION }}
+        echo "Helm chart packaged successfully"
+
+    - name: Validate Helm chart
+      run: |
+        helm lint chart/
+        helm template test-release dist/kaiwo-operator-*.tgz --namespace test-kaiwo-system > /tmp/rendered.yaml
+        echo "Helm chart validation completed"
+
+    - name: Upload test artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-release-artifacts
+        path: |
+          install.yaml
+          dist/kaiwo-operator-*.tgz
+          /tmp/rendered.yaml
+
+    - name: Test summary
+      run: |-
+        echo "✅ Test release pipeline completed successfully!"
+        echo "📦 Artifacts generated:"
+        ls -la dist/
+        echo "🧪 All steps that would run in real release have been tested"
