@@ -3,16 +3,6 @@ on:
   push:
     tags:
     - "v*"
-  workflow_dispatch:  # Manual trigger for testing
-    inputs:
-      test_mode:
-        description: 'Run in test mode (no publishing)'
-        type: boolean
-        default: false
-      version:
-        description: 'Version to use for testing'
-        required: false
-        default: 'v0.1.7-test'
 
 jobs:
   build:
@@ -32,15 +22,8 @@ jobs:
     - name: Extract version from tag
       shell: bash
       run: |
-        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-          echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
-          echo "TEST_MODE=${{ github.event.inputs.test_mode }}" >> $GITHUB_ENV
-        else
-          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
-          echo "TEST_MODE=false" >> $GITHUB_ENV
-        fi
+        echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
         echo "Using version: ${VERSION}"
-        echo "Test mode: ${TEST_MODE}"
 
     - name: Run build script for CLI
       shell: bash
@@ -66,12 +49,8 @@ jobs:
         # Build the Docker image
         make docker-build IMG=$IMAGE_NAME:$TAG
 
-        # Push the image (skip in test mode)
-        if [ "${{ env.TEST_MODE }}" != "true" ]; then
-          make docker-push IMG=$IMAGE_NAME:$TAG
-        else
-          echo "Skipping image push (test mode)"
-        fi
+        # Push the image
+        make docker-push IMG=$IMAGE_NAME:$TAG
 
     - name: Generate install.yaml
       run: |
@@ -84,12 +63,8 @@ jobs:
 
     - name: Push Helm chart to OCI registry
       run: |
-        if [ "${{ env.TEST_MODE }}" != "true" ]; then
-          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u $GITHUB_ACTOR --password-stdin
-          make helm-push-oci TAG=${{ env.VERSION }} CHART_VERSION=${{ env.VERSION }}
-        else
-          echo "Skipping Helm chart push (test mode)"
-        fi
+        echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u $GITHUB_ACTOR --password-stdin
+        make helm-push-oci TAG=${{ env.VERSION }} CHART_VERSION=${{ env.VERSION }}
 
     - name: Upload install.yaml artifact
       uses: actions/upload-artifact@v4
@@ -104,7 +79,6 @@ jobs:
         path: dist/kaiwo-operator-*.tgz
 
     - name: Create draft release and upload assets
-      if: env.TEST_MODE != 'true'
       uses: softprops/action-gh-release@v2
       with:
         files: |
