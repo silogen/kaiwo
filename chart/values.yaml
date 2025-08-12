@@ -13,11 +13,8 @@ image:
 # Global image pull secrets
 imagePullSecrets: []
 
-# Namespace where operator will be installed
-namespace: kaiwo-system
-
-# Create namespace resource (set to false if using --create-namespace flag)
-# Best practice: Use helm install --create-namespace instead
+# Create namespace resource (set to false when using --create-namespace flag)
+# Best practice: Use 'helm install --create-namespace' instead of this option
 createNamespace: false
 
 # Controller manager replicas

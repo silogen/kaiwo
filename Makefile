@@ -162,12 +162,12 @@ helm-package: build-installer ## Package the Helm chart
 
 .PHONY: helm-install
 helm-install: helm-package ## Install the Helm chart locally
-	@echo "Installing Helm chart with namespace creation via --create-namespace..."
+	@echo "Installing Helm chart to kaiwo-system namespace..."
 	helm upgrade --install kaiwo dist/kaiwo-operator-$(CHART_VERSION).tgz --namespace kaiwo-system --create-namespace
 
 .PHONY: helm-uninstall
 helm-uninstall: ## Uninstall the Helm chart
-	helm uninstall kaiwo --namespace kaiwo-system
+	helm uninstall kaiwo -n kaiwo-system
 
 .PHONY: helm-template
 helm-template: build-installer ## Generate Helm templates for inspection

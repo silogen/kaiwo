@@ -14,12 +14,18 @@ This guide provides detailed instructions for installing Kaiwo using Helm charts
 ### Install from OCI Registry (Recommended)
 
 ```bash
-# Install latest version
-helm install kaiwo oci://ghcr.io/silogen/kaiwo-operator
+# Install latest version to kaiwo-system namespace
+helm install kaiwo oci://ghcr.io/silogen/kaiwo-operator \
+  --namespace kaiwo-system --create-namespace
 
 # Install specific version
-helm install kaiwo oci://ghcr.io/silogen/kaiwo-operator --version <version>
+helm install kaiwo oci://ghcr.io/silogen/kaiwo-operator \
+  --version <version> \
+  --namespace kaiwo-system --create-namespace
 ```
+
+!!! note "Namespace Requirement"
+    The Kaiwo operator should be installed in the `kaiwo-system` namespace for proper operation. The `--create-namespace` flag automatically creates the namespace if it doesn't exist.
 
 ## Configuration Options
 
@@ -28,6 +34,7 @@ helm install kaiwo oci://ghcr.io/silogen/kaiwo-operator --version <version>
 ```bash
 # Override image and resources
 helm install kaiwo oci://ghcr.io/silogen/kaiwo-operator \
+  --namespace kaiwo-system --create-namespace \
   --set image.tag=v0.1.7 \
   --set replicas=2 \
   --set resources.limits.memory=8Gi
@@ -36,9 +43,9 @@ helm install kaiwo oci://ghcr.io/silogen/kaiwo-operator \
 ### Custom Namespace
 
 ```bash
-# Install in custom namespace
-helm install kaiwo oci://ghcr.io/silogen/kaiwo-operator \
-  --set namespace=my-kaiwo-system
+# Install in custom namespace (for testing/staging)
+helm install kaiwo-staging oci://ghcr.io/silogen/kaiwo-operator \
+  --namespace kaiwo-staging --create-namespace
 ```
 
 ### With Global Configurations
@@ -107,7 +114,9 @@ kaiwoQueueConfig:
 Install with the configuration:
 
 ```bash
-helm install kaiwo oci://ghcr.io/silogen/kaiwo-operator -f production-values.yaml
+helm install kaiwo oci://ghcr.io/silogen/kaiwo-operator \
+  --namespace kaiwo-system --create-namespace \
+  -f production-values.yaml
 ```
 
 ## Installation Parameters
@@ -142,17 +151,19 @@ helm install kaiwo oci://ghcr.io/silogen/kaiwo-operator -f production-values.yam
 
 ```bash
 # Upgrade to specific version
-helm upgrade kaiwo oci://ghcr.io/silogen/kaiwo-operator --version 1.1.0
+helm upgrade kaiwo oci://ghcr.io/silogen/kaiwo-operator \
+  --version 1.1.0 --namespace kaiwo-system
 
 # Upgrade with new configuration
-helm upgrade kaiwo oci://ghcr.io/silogen/kaiwo-operator -f new-values.yaml
+helm upgrade kaiwo oci://ghcr.io/silogen/kaiwo-operator \
+  --namespace kaiwo-system -f new-values.yaml
 ```
 
 ## Uninstalling
 
 ```bash
 # Uninstall Kaiwo (keeps CRDs by default)
-helm uninstall kaiwo
+helm uninstall kaiwo --namespace kaiwo-system
 
 # Manually remove only Kaiwo CRDs if needed (WARNING: This will delete all data!)
 kubectl delete crd \
@@ -205,7 +216,8 @@ kubectl delete crd \
 
 3. **Test chart rendering**:
    ```bash
-   helm template kaiwo oci://ghcr.io/silogen/kaiwo-operator --debug
+   helm template kaiwo oci://ghcr.io/silogen/kaiwo-operator \
+     --namespace kaiwo-system --debug
    ```
 
 ### Operator Issues

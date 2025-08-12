@@ -100,12 +100,13 @@ jobs:
           ### Helm Install (from GitHub Releases)
           ```bash
           curl -L https://github.com/${{ github.repository }}/releases/download/${{ env.VERSION }}/kaiwo-operator-${{ env.VERSION }}.tgz -o kaiwo-operator.tgz
-          helm install kaiwo kaiwo-operator.tgz
+          helm install kaiwo kaiwo-operator.tgz --namespace kaiwo-system --create-namespace
           ```
 
           ### Helm Install (from OCI Registry)
           ```bash
-          helm install kaiwo oci://ghcr.io/${{ github.repository_owner }}/kaiwo-operator --version ${{ env.VERSION }}
+          helm install kaiwo oci://ghcr.io/${{ github.repository_owner }}/kaiwo-operator \
+            --version ${{ env.VERSION }} --namespace kaiwo-system --create-namespace
           ```
 
           ### Docker Images
