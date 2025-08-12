@@ -1,11 +1,5 @@
 name: test-release
 on:
-  workflow_dispatch:  # Manual trigger
-    inputs:
-      test_version:
-        description: 'Version to test with (e.g., v0.1.7-test)'
-        required: true
-        default: 'v0.1.7-test'
   pull_request:
     paths:
     - 'chart/**'
