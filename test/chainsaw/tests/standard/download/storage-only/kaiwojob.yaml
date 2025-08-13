@@ -1,0 +1,22 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoJob
+metadata:
+  name: storage-only
+spec:
+  user: test@amd.com
+  gpus: 0
+  resources:
+    limits:
+      cpu: "100m"
+      memory: "100Mi"
+    requests:
+      cpu: "100m"
+      memory: "100Mi"
+  image: busybox:latest
+  entrypoint: |
+    sleep 1
+  storage:
+    storageEnabled: true
+    storageClassName: "nfs-client"
+    data:
+      storageSize: "1Mi"

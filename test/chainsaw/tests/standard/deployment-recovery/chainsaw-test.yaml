@@ -1,0 +1,61 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: deployment-progress-deadline-exceeded-recovery
+spec:
+  timeouts:
+    assert: 120s
+    error: 60s
+  steps:
+  - try:
+    - apply:
+        file: kaiwoservice-deterministic-recovery.yaml
+    # Wait for the ProgressDeadlineExceeded condition to appear on the deployment
+    - assert:
+        resource:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: progress-deadline-test
+          status:
+            (conditions[?type == 'Progressing']):
+            - status: 'False'
+              reason: ProgressDeadlineExceeded
+    # Wait for the KaiwoService to go to ERROR status due to ProgressDeadlineExceeded
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoService
+          metadata:
+            name: progress-deadline-test
+          status:
+            status: ERROR
+    # Wait for the deployment to eventually become ready (after the container becomes healthy)
+    - assert:
+        resource:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: progress-deadline-test
+          status:
+            availableReplicas: 1
+            readyReplicas: 1
+            replicas: 1
+    # Assert that the KaiwoService recovers to RUNNING status
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoService
+          metadata:
+            name: progress-deadline-test
+          status:
+            status: RUNNING
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
