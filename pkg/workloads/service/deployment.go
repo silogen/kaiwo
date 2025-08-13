@@ -154,7 +154,7 @@ func (handler *DeploymentHandler) ObserveStatus(ctx context.Context, k8sClient c
 		if c.Type == appsv1.DeploymentProgressing &&
 			c.Status == corev1.ConditionFalse &&
 			c.Reason == "ProgressDeadlineExceeded" {
-			return baseutils.Pointer(kaiwo.WorkloadStatusFailed), nil, nil
+			return baseutils.Pointer(kaiwo.WorkloadStatusError), nil, nil
 		}
 	}
 

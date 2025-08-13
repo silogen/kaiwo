@@ -142,17 +142,27 @@ func (wr *Reconciler) observeOverallStatus(ctx context.Context) (v1alpha1.Worklo
 
 		conditions = append(conditions, storageConditions...)
 
-		switch storageStatus {
-		// If the download job is pending or running, return the Downloading status
-		case v1alpha1.WorkloadStatusNew, v1alpha1.WorkloadStatusPending, v1alpha1.WorkloadStatusRunning, v1alpha1.WorkloadStatusStarting:
-			return v1alpha1.WorkloadStatusDownloading, conditions, nil
-		// Propagate a failed status
-		case v1alpha1.WorkloadStatusFailed:
-			return storageStatus, conditions, nil
-		case v1alpha1.WorkloadStatusComplete:
-			// fall-through to workload handler
-		default:
-			return "", nil, fmt.Errorf(`unexpected storage status "%s"`, storageStatus)
+		// Only enter DOWNLOADING status if there are actual downloads configured
+		hasDownloads := wr.WorkloadHandler.Workload.GetCommonSpec().Storage.HasDownloads()
+		if hasDownloads {
+			switch storageStatus {
+			// If the download job is pending or running, return the Downloading status
+			case v1alpha1.WorkloadStatusNew, v1alpha1.WorkloadStatusPending, v1alpha1.WorkloadStatusRunning, v1alpha1.WorkloadStatusStarting:
+				return v1alpha1.WorkloadStatusDownloading, conditions, nil
+			// Propagate a failed status
+			case v1alpha1.WorkloadStatusFailed:
+				return storageStatus, conditions, nil
+			case v1alpha1.WorkloadStatusComplete:
+				// fall-through to workload handler
+			default:
+				return "", nil, fmt.Errorf(`unexpected storage status "%s"`, storageStatus)
+			}
+		} else {
+			// No downloads configured, only check for storage failures (PVC issues)
+			if storageStatus == v1alpha1.WorkloadStatusFailed {
+				return storageStatus, conditions, nil
+			}
+			// For storage-only scenarios, don't block on storage completion
 		}
 
 		// Download job is complete and / or storage is healthy

@@ -1,0 +1,77 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoService
+metadata:
+  name: progress-deadline-test
+spec:
+  user: test-user
+  deployment:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: progress-deadline-test
+      labels:
+        app: progress-deadline-test
+    spec:
+      replicas: 1
+      # Set a short progress deadline to force initial ProgressDeadlineExceeded
+      progressDeadlineSeconds: 15
+      selector:
+        matchLabels:
+          app: progress-deadline-test
+      template:
+        metadata:
+          labels:
+            app: progress-deadline-test
+        spec:
+          containers:
+          - name: progress-deadline-test
+            image: busybox:latest
+            # This script will create a health file after 25 seconds, causing recovery
+            command: ["sh"]
+            args:
+            - "-c"
+            - |
+              echo "Container starting..."
+              # Remove any existing health file
+              rm -f /tmp/healthy
+              # Wait 25 seconds, then create the health file and keep the container running
+              (sleep 25 && touch /tmp/healthy && echo "Health file created, container is now healthy") &
+              # Keep the main process running
+              while true; do
+                if [ -f /tmp/healthy ]; then
+                  echo "Container is healthy"
+                else
+                  echo "Container not yet healthy"
+                fi
+                sleep 5
+              done
+            resources:
+              requests:
+                cpu: "100m"
+                memory: "100Mi"
+              limits:
+                cpu: "100m"
+                memory: "100Mi"
+            # Readiness probe that checks for the health file
+            readinessProbe:
+              exec:
+                command:
+                - test
+                - "-f"
+                - "/tmp/healthy"
+              initialDelaySeconds: 1
+              periodSeconds: 2
+              timeoutSeconds: 1
+              successThreshold: 1
+              failureThreshold: 3
+            # Liveness probe with the same check but more lenient timing
+            livenessProbe:
+              exec:
+                command:
+                - test
+                - "-f"
+                - "/tmp/healthy"
+              initialDelaySeconds: 30  # Give it time to become healthy
+              periodSeconds: 10
+              timeoutSeconds: 3
+              failureThreshold: 5
