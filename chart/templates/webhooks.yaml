@@ -1,0 +1,17 @@
+{{/*
+Webhook resources templated from config files
+*/}}
+{{- if .Values.webhooks.enabled }}
+# Generated from config/webhook and config/certmanager
+{{- $webhookServiceName := printf "%s-webhook-service" .Release.Name }}
+{{- $servingCertName := printf "%s-serving-cert" .Release.Name }}
+{{- $issuerName := printf "%s-selfsigned-issuer" .Release.Name }}
+{{ (.Files.Get "webhook-resources.yaml") | 
+   replace "namespace: system" (printf "namespace: %s" .Release.Namespace) |
+   replace "namespace: kaiwo-system" (printf "namespace: %s" .Release.Namespace) |
+   replace "name: webhook-service" (printf "name: %s" $webhookServiceName) |
+   replace "name: serving-cert" (printf "name: %s" $servingCertName) |
+   replace "name: selfsigned-issuer" (printf "name: %s" $issuerName) |
+   replace "SERVICE_NAME.SERVICE_NAMESPACE.svc" (printf "%s.%s.svc" $webhookServiceName .Release.Namespace) |
+   replace "SERVICE_NAME.SERVICE_NAMESPACE.svc.cluster.local" (printf "%s.%s.svc.cluster.local" $webhookServiceName .Release.Namespace) }}
+{{- end }}

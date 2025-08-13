@@ -1,0 +1,43 @@
+name: test-release
+on:
+  workflow_dispatch: null
+
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Helm
+      uses: azure/setup-helm@v4.3.0
+
+    - name: Set test version
+      shell: bash
+      run: |
+        echo "VERSION=v0.1.7-test-$(date +%s)" >> $GITHUB_ENV
+        echo "Using test version: ${VERSION}"
+
+    - name: Test Helm chart packaging
+      run: |
+        make helm-release TAG=${{ env.VERSION }} CHART_VERSION=${{ env.VERSION }}
+        echo "Helm chart packaged successfully"
+
+    - name: Validate Helm chart
+      run: |
+        helm lint chart/
+        helm template test-release dist/kaiwo-operator-*.tgz --namespace test-kaiwo-system > /tmp/rendered.yaml
+        echo "Helm chart validation completed"
+
+    - name: Push Helm chart to OCI registry
+      run: |
+        echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u $GITHUB_ACTOR --password-stdin
+        make helm-push-oci TAG=${{ env.VERSION }} CHART_VERSION=${{ env.VERSION }}
+
+    - name: Test summary
+      run: |-
+        echo "✅ Test release pipeline completed successfully!"
+        echo "📦 Artifacts generated:"
+        ls -la dist/
+        echo "🧪 All steps that would run in real release have been tested"

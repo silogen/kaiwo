@@ -27,6 +27,9 @@ Kaiwo requires several core Kubernetes components to function correctly.
 
 There are several different ways that you can install the Kaiwo dependencies and operator. The following serve as references that you can adapt to your particular environment and workflow.
 
+!!! tip "Helm Installation Available"
+    For a more streamlined installation experience with configuration management, see the [Helm Installation Guide](helm-installation.md).
+
 ### Dependencies via convenience script
 
 You can install the dependencies using the convenience script:
@@ -46,9 +49,13 @@ bash dependencies/install_dependencies.sh --local
 !!!warning "GPU Operator Not Included"
     You must install the **AMD GPU Operator** separately according to its documentation *before* running the convenience script or installing Kaiwo. Ensure node labeling features are enabled.
 
+### Kaiwo operator via Helm (Recommended)
+
+The recommended way to install the Kaiwo operator is using Helm, which provides better configuration management and easier upgrades. Check the [Helm installation section](./helm-installation.md) for details.
+
 ### Kaiwo operator via install manifest
 
-Once dependencies are ready, install the Kaiwo operator itself.
+Alternatively, you can install using the static YAML manifests:
 
 You can install the latest version via:
 
