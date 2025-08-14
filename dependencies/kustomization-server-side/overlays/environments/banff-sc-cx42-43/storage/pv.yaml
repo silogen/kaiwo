@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-nfs-backing
+spec:
+  capacity:
+    storage: 500Gi        # set what you need
+  volumeMode: Filesystem
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Delete
+  storageClassName: ""
+  local:
+    path: /mnt/nvme1/nfs
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values: ["banff-sc-cx42-38"]      # or match on your label nfs-host=true

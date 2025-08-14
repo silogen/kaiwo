@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- namespace.yaml
+- gpu-config-cm.yaml
+- device-config.yaml
+- config-manager-config.yaml
