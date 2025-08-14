@@ -25,8 +25,10 @@ import (
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
 	batchv1 "k8s.io/api/batch/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -151,4 +153,106 @@ func GetDefaultJobSpec(config common.KaiwoConfigContext, dangerous bool) batchv1
 		BackoffLimit:            baseutils.Pointer(int32(0)),
 		Template:                common.GetPodTemplate(config, *resource.NewQuantity(1*1024*1024*1024, resource.BinarySI), dangerous, "workload"),
 	}
+}
+
+// JobObserver observes Kubernetes Job status
+type JobObserver struct {
+	NamespacedName types.NamespacedName
+	Group          string
+}
+
+func NewJobObserver(nn types.NamespacedName, group string) *JobObserver {
+	return &JobObserver{
+		NamespacedName: nn,
+		Group:          group,
+	}
+}
+
+func (o *JobObserver) Observe(ctx context.Context, c client.Client) (common.UnitStatus, error) {
+	var j batchv1.Job
+	if err := c.Get(ctx, o.NamespacedName, &j); errors.IsNotFound(err) {
+		return common.UnitStatus{
+			Name:  o.NamespacedName.Name,
+			Kind:  "Job",
+			Group: o.Group,
+			Phase: common.UnitPending,
+		}, nil
+	} else if err != nil {
+		return common.UnitStatus{
+			Name:    o.NamespacedName.Name,
+			Kind:    "Job",
+			Group:   o.Group,
+			Phase:   common.UnitUnknown,
+			Reason:  "GetError",
+			Message: err.Error(),
+		}, nil
+	}
+
+	// Convert job conditions to metav1.Condition
+	standardConditions := convertJobConditions(j.Status.Conditions)
+
+	// Check for terminal conditions first
+	for _, condition := range standardConditions {
+		switch condition.Type {
+		case "Complete":
+			if condition.Status == metav1.ConditionTrue {
+				return common.UnitStatus{
+					Name:       j.Name,
+					Kind:       "Job",
+					Group:      o.Group,
+					Phase:      common.UnitSucceeded,
+					Ready:      true,
+					Reason:     condition.Reason,
+					Message:    condition.Message,
+					Conditions: standardConditions,
+				}, nil
+			}
+		case "Failed":
+			if condition.Status == metav1.ConditionTrue {
+				return common.UnitStatus{
+					Name:       j.Name,
+					Kind:       "Job",
+					Group:      o.Group,
+					Phase:      common.UnitFailed,
+					Reason:     condition.Reason,
+					Message:    condition.Message,
+					Conditions: standardConditions,
+				}, nil
+			}
+		}
+	}
+
+	// Check if job is actively running
+	if j.Status.Active > 0 {
+		return common.UnitStatus{
+			Name:       j.Name,
+			Kind:       "Job",
+			Group:      o.Group,
+			Phase:      common.UnitProgressing,
+			Conditions: standardConditions,
+		}, nil
+	}
+
+	// Default to pending
+	return common.UnitStatus{
+		Name:       j.Name,
+		Kind:       "Job",
+		Group:      o.Group,
+		Phase:      common.UnitPending,
+		Conditions: standardConditions,
+	}, nil
+}
+
+func convertJobConditions(conditions []batchv1.JobCondition) []metav1.Condition {
+	var result []metav1.Condition
+	for _, c := range conditions {
+		result = append(result, metav1.Condition{
+			Type:               string(c.Type),
+			Status:             metav1.ConditionStatus(c.Status),
+			Reason:             c.Reason,
+			Message:            c.Message,
+			LastTransitionTime: c.LastTransitionTime,
+		})
+	}
+	return result
 }

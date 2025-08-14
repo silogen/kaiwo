@@ -230,12 +230,12 @@ func (handler *DeploymentHandler) ObserveStatus(ctx context.Context, k8sClient c
 		}
 		return baseutils.Pointer(kaiwo.WorkloadStatusStarting), nil, nil
 	}
-	// Check for a “Progressing=False / ProgressDeadlineExceeded”
+	// Check for a "Progressing=False / ProgressDeadlineExceeded"
 	for _, c := range deployment.Status.Conditions {
 		if c.Type == appsv1.DeploymentProgressing &&
 			c.Status == corev1.ConditionFalse &&
 			c.Reason == "ProgressDeadlineExceeded" {
-			return baseutils.Pointer(kaiwo.WorkloadStatusFailed), nil, nil
+			return baseutils.Pointer(kaiwo.WorkloadStatusDegraded), nil, nil
 		}
 	}
 
