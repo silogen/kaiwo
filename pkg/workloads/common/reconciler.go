@@ -87,9 +87,14 @@ func (wr *Reconciler) Reconcile(ctx context.Context) (ctrl.Result, error) {
 	wr.ClusterContext = *clusterContext
 
 	// Observe the current status based on cluster resources
-	observedStatus, conditions, err := wr.observeOverallStatus(ctx)
+	// Try new observation pattern first, fallback to old pattern if needed
+	observedStatus, conditions, err := wr.observeOverallStatusNew(ctx)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to compute observed status: %w", err)
+		// Fallback to old observation pattern
+		observedStatus, conditions, err = wr.observeOverallStatus(ctx)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to compute observed status: %w", err)
+		}
 	}
 
 	conditionsChanged := !ConditionsEqual(conditions, commonStatusSpec.Conditions)
@@ -131,6 +136,36 @@ func (wr *Reconciler) Reconcile(ctx context.Context) (ctrl.Result, error) {
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// observeOverallStatusNew uses the new observation pattern to determine workload status
+func (wr *Reconciler) observeOverallStatusNew(ctx context.Context) (v1alpha1.WorkloadStatus, []metav1.Condition, error) {
+	schedulableCondition, err := GetSchedulableCondition(ctx, wr.Client, wr.ClusterContext, wr.WorkloadHandler.Workload)
+	if err != nil {
+		return v1alpha1.WorkloadStatusError, nil, err
+	}
+	if schedulableCondition.Status == metav1.ConditionFalse {
+		return v1alpha1.WorkloadStatusError, []metav1.Condition{schedulableCondition}, nil
+	}
+
+	// Use new observation pattern
+	phase, units, err := ObserveWorkloadWithNewPattern(ctx, wr.Client, wr.WorkloadHandler.Workload)
+	if err != nil {
+		return v1alpha1.WorkloadStatusError, nil, fmt.Errorf("failed to observe workload with new pattern: %w", err)
+	}
+
+	// Convert WorkloadPhase to WorkloadStatus for backward compatibility
+	status := WorkloadPhaseToStatus(phase)
+
+	// Aggregate conditions from units
+	agg := Reduce(units)
+	_, conditions := Decide(wr.WorkloadHandler.Workload.GetKaiwoWorkloadObject(), agg, units)
+
+	// Add schedulable condition
+	allConditions := []metav1.Condition{schedulableCondition}
+	allConditions = append(allConditions, conditions...)
+
+	return status, allConditions, nil
 }
 
 // observeOverallStatus determines the overall workload's current status based on the current cluster context
@@ -214,6 +249,8 @@ func (wr *Reconciler) handleStatusTransition(ctx context.Context, newStatus v1al
 			commonStatusSpec.StartTime = &metav1.Time{Time: time.Now()}
 		case v1alpha1.WorkloadStatusComplete:
 			wr.Recorder.Event(obj, corev1.EventTypeNormal, "WorkloadComplete", "Workload has completed")
+		case v1alpha1.WorkloadStatusDegraded:
+			wr.Recorder.Event(obj, corev1.EventTypeWarning, "WorkloadDegraded", "Workload is degraded but may recover")
 		case v1alpha1.WorkloadStatusFailed:
 			wr.Recorder.Event(obj, corev1.EventTypeWarning, "WorkloadFailed", "Workload has failed")
 		case v1alpha1.WorkloadStatusTerminating:
@@ -224,7 +261,7 @@ func (wr *Reconciler) handleStatusTransition(ctx context.Context, newStatus v1al
 	}
 	// Update duration
 	switch commonStatusSpec.Status {
-	case v1alpha1.WorkloadStatusComplete, v1alpha1.WorkloadStatusFailed, v1alpha1.WorkloadStatusTerminating, v1alpha1.WorkloadStatusRunning:
+	case v1alpha1.WorkloadStatusComplete, v1alpha1.WorkloadStatusDegraded, v1alpha1.WorkloadStatusFailed, v1alpha1.WorkloadStatusTerminating, v1alpha1.WorkloadStatusRunning:
 		if commonStatusSpec.StartTime != nil {
 			commonStatusSpec.Duration = int64(time.Since(commonStatusSpec.StartTime.Time).Seconds())
 		}
@@ -248,7 +285,8 @@ func isActiveStatus(status v1alpha1.WorkloadStatus) bool {
 		v1alpha1.WorkloadStatusDownloading,
 		v1alpha1.WorkloadStatusPending,
 		v1alpha1.WorkloadStatusStarting,
-		v1alpha1.WorkloadStatusRunning:
+		v1alpha1.WorkloadStatusRunning,
+		v1alpha1.WorkloadStatusDegraded:
 		return true
 	default:
 		return false

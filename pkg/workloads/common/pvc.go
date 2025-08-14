@@ -16,12 +16,15 @@ package common
 
 import (
 	"context"
+	"fmt"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -101,4 +104,76 @@ func (r *PvcReconciler) ObserveStatus(ctx context.Context, k8sClient client.Clie
 	})
 
 	return &workloadStatus, conditions, nil
+}
+
+// PVCObserver observes PVC status
+type PVCObserver struct {
+	NamespacedName types.NamespacedName
+	Group          string
+}
+
+func NewPVCObserver(nn types.NamespacedName, group string) *PVCObserver {
+	return &PVCObserver{
+		NamespacedName: nn,
+		Group:          group,
+	}
+}
+
+func (o *PVCObserver) Observe(ctx context.Context, c client.Client) (UnitStatus, error) {
+	var pvc corev1.PersistentVolumeClaim
+	if err := c.Get(ctx, o.NamespacedName, &pvc); errors.IsNotFound(err) {
+		return UnitStatus{
+			Name:  o.NamespacedName.Name,
+			Kind:  "PersistentVolumeClaim",
+			Group: o.Group,
+			Phase: UnitPending,
+		}, nil
+	} else if err != nil {
+		return UnitStatus{
+			Name:    o.NamespacedName.Name,
+			Kind:    "PersistentVolumeClaim",
+			Group:   o.Group,
+			Phase:   UnitUnknown,
+			Reason:  "GetError",
+			Message: err.Error(),
+		}, nil
+	}
+
+	switch pvc.Status.Phase {
+	case corev1.ClaimBound:
+		return UnitStatus{
+			Name:  pvc.Name,
+			Kind:  "PersistentVolumeClaim",
+			Group: o.Group,
+			Phase: UnitReady,
+			Ready: true,
+		}, nil
+	case corev1.ClaimPending:
+		return UnitStatus{
+			Name:    pvc.Name,
+			Kind:    "PersistentVolumeClaim",
+			Group:   o.Group,
+			Phase:   UnitPending,
+			Reason:  "Pending",
+			Message: "PVC is pending",
+		}, nil
+	case corev1.ClaimLost:
+		return UnitStatus{
+			Name:    pvc.Name,
+			Kind:    "PersistentVolumeClaim",
+			Group:   o.Group,
+			Phase:   UnitFailed,
+			Reason:  "Lost",
+			Message: "PVC is lost",
+		}, nil
+	default:
+		return UnitStatus{
+			Name:    pvc.Name,
+			Kind:    "PersistentVolumeClaim",
+			Group:   o.Group,
+			Phase:   UnitUnknown,
+			Reason:  "UnknownPhase",
+			Message: fmt.Sprintf("Unknown PVC phase: %s", pvc.Status.Phase),
+		}, nil
+	}
 }

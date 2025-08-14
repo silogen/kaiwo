@@ -32,7 +32,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
@@ -157,4 +159,90 @@ func (handler *RayJobHandler) GetKueueWorkloads(ctx context.Context, k8sClient c
 		return []kueuev1beta1.Workload{}, nil
 	}
 	return []kueuev1beta1.Workload{*workload}, nil
+}
+
+// RayJobObserver observes RayJob status
+type RayJobObserver struct {
+	NamespacedName types.NamespacedName
+	Group          string
+}
+
+func NewRayJobObserver(nn types.NamespacedName, group string) *RayJobObserver {
+	return &RayJobObserver{
+		NamespacedName: nn,
+		Group:          group,
+	}
+}
+
+func (o *RayJobObserver) Observe(ctx context.Context, c client.Client) (common.UnitStatus, error) {
+	var rj rayv1.RayJob
+	if err := c.Get(ctx, o.NamespacedName, &rj); errors.IsNotFound(err) {
+		return common.UnitStatus{
+			Name:  o.NamespacedName.Name,
+			Kind:  "RayJob",
+			Group: o.Group,
+			Phase: common.UnitPending,
+		}, nil
+	} else if err != nil {
+		return common.UnitStatus{
+			Name:    o.NamespacedName.Name,
+			Kind:    "RayJob",
+			Group:   o.Group,
+			Phase:   common.UnitUnknown,
+			Reason:  "GetError",
+			Message: err.Error(),
+		}, nil
+	}
+
+	switch rj.Status.JobStatus {
+	case rayv1.JobStatusNew, rayv1.JobStatusPending:
+		return common.UnitStatus{
+			Name:  rj.Name,
+			Kind:  "RayJob",
+			Group: o.Group,
+			Phase: common.UnitPending,
+		}, nil
+	case rayv1.JobStatusRunning:
+		return common.UnitStatus{
+			Name:  rj.Name,
+			Kind:  "RayJob",
+			Group: o.Group,
+			Phase: common.UnitProgressing,
+		}, nil
+	case rayv1.JobStatusSucceeded:
+		return common.UnitStatus{
+			Name:  rj.Name,
+			Kind:  "RayJob",
+			Group: o.Group,
+			Phase: common.UnitSucceeded,
+			Ready: true,
+		}, nil
+	case rayv1.JobStatusFailed:
+		return common.UnitStatus{
+			Name:    rj.Name,
+			Kind:    "RayJob",
+			Group:   o.Group,
+			Phase:   common.UnitFailed,
+			Reason:  "JobFailed",
+			Message: "RayJob failed",
+		}, nil
+	case rayv1.JobStatusStopped:
+		return common.UnitStatus{
+			Name:    rj.Name,
+			Kind:    "RayJob",
+			Group:   o.Group,
+			Phase:   common.UnitFailed,
+			Reason:  "JobStopped",
+			Message: "RayJob was stopped",
+		}, nil
+	default:
+		return common.UnitStatus{
+			Name:    rj.Name,
+			Kind:    "RayJob",
+			Group:   o.Group,
+			Phase:   common.UnitUnknown,
+			Reason:  "UnknownStatus",
+			Message: fmt.Sprintf("Unknown RayJob status: %s", rj.Status.JobStatus),
+		}, nil
+	}
 }
