@@ -30,6 +30,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/util/retry"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -68,6 +69,10 @@ const (
 
 	AmdDcmProfileLabel           = "dcm.amd.com/gpu-config-profile"
 	AmdDcmPartitioningStateLabel = "dcm.amd.com/gpu-config-profile-state"
+	// DCM request ID label to avoid race conditions
+	AmdDcmPartitioningRequestIdLabel = "kaiwo.silogen.ai/partitioning-request-id"
+	// Controller managed field to identify our ownership
+	KaiwoPartitioningManagedLabel = "kaiwo.silogen.ai/partitioning-managed"
 
 	devicePluginDaemonsetSuffix = "device-plugin"
 	nodeLabelerDaemonsetSuffix  = "node-labeller"
@@ -81,9 +86,18 @@ const (
 	longRequeueDelay   = 30 * time.Second
 
 	resourceUpdateTimeout = 30 * time.Second
+	// Pod draining timeout - how long to wait for pods to be evicted
+	podDrainingTimeout = 5 * time.Minute
 )
 
 var (
+	// System component allowlist - pods with these labels are considered system components
+	systemComponentLabels = []string{
+		"k8s-app",
+		"app.kubernetes.io/name",
+		"app.kubernetes.io/component",
+	}
+
 	amdDcmTaint = corev1.Taint{
 		Key:    AmdDcmTaint,
 		Value:  AmdDcmUpValue,
@@ -188,6 +202,7 @@ func (t *GpuPartitionTask) Run(ctx context.Context, obj *KaiwoNodeWrapper) (*ctr
 // isPartitioningComplete checks if the current state matches the desired state
 func (t *GpuPartitionTask) isPartitioningComplete(obj *KaiwoNodeWrapper) bool {
 	profileState, profileStateExists := obj.Node.Labels[AmdDcmPartitioningStateLabel]
+	requestID := obj.Node.Labels[AmdDcmPartitioningRequestIdLabel]
 
 	appliedProfile := "<nil>"
 	if obj.KaiwoNode.Status.Partitioning.AppliedProfile != nil {
@@ -202,7 +217,8 @@ func (t *GpuPartitionTask) isPartitioningComplete(obj *KaiwoNodeWrapper) bool {
 		"desiredProfile", desiredProfile,
 		"phase", phase,
 		"dcmStateLabel", profileState,
-		"dcmStateLabelExists", profileStateExists)
+		"dcmStateLabelExists", profileStateExists,
+		"requestID", requestID)
 
 	// Check if we have the applied profile and it matches the desired profile
 	hasCorrectProfile := obj.KaiwoNode.Status.Partitioning.AppliedProfile != nil &&
@@ -215,7 +231,7 @@ func (t *GpuPartitionTask) isPartitioningComplete(obj *KaiwoNodeWrapper) bool {
 	// If we have the DCM state label and it indicates success, we're definitely complete
 	if profileStateExists && profileState == "success" && hasCorrectProfile {
 		log.FromContext(context.Background()).Info("Partitioning complete via DCM state label",
-			"node", obj.Node.Name)
+			"node", obj.Node.Name, "requestID", requestID)
 		return true
 	}
 
@@ -267,7 +283,9 @@ func (t *GpuPartitionTask) handleCompletedPartitioning(ctx context.Context, obj 
 	// Remove partitioning taint if it exists
 	if t.nodeHasTaint(obj.Node, kaiwoPartitioningTaint) {
 		logger.Info("GpuPartitionTask: Removing partitioning taint from node", "node", obj.Node.Name)
-		t.removeTaint(ctx, obj.Node, kaiwoPartitioningTaint)
+		if err := t.removeTaint(ctx, obj.Node, kaiwoPartitioningTaint); err != nil {
+			return nil, fmt.Errorf("failed to remove partitioning taint: %w", err)
+		}
 	} else {
 		baseutils.Debug(logger, "GpuPartitionTask: No partitioning taint found on node", "node", obj.Node.Name)
 	}
@@ -317,10 +335,16 @@ func (t *GpuPartitionTask) handlePartitioningPhase(ctx context.Context, obj *Kai
 			return t.handleCompletedPartitioning(ctx, obj)
 		}
 
-		logger.Info("GpuPartitionTask: Partitioning is in error state and not recoverable",
+		// Check if we should retry after some time (look for retry annotation or condition age)
+		if t.shouldRetryFromError(obj) {
+			logger.Info("GpuPartitionTask: Attempting retry from error state", "node", obj.Node.Name)
+			return t.handleInitializePartitioning(ctx, obj)
+		}
+
+		logger.Info("GpuPartitionTask: Partitioning is in error state, will retry after delay",
 			"node", obj.Node.Name)
-		baseutils.Debug(logger, "GpuPartitionTask: Node remains in error state, no recovery possible", "node", obj.Node.Name)
-		return nil, nil
+		// Requeue with backoff to allow for manual intervention or transient issue resolution
+		return &ctrl.Result{RequeueAfter: longRequeueDelay}, nil
 
 	default:
 		logger.Error(nil, "Unknown partitioning phase", "phase", obj.KaiwoNode.Status.Partitioning.Phase)
@@ -329,14 +353,28 @@ func (t *GpuPartitionTask) handlePartitioningPhase(ctx context.Context, obj *Kai
 	}
 }
 
-// handleInitializePartitioning sets up tolerations and taints for partitioning
+// handleInitializePartitioning sets up taints for partitioning
 func (t *GpuPartitionTask) handleInitializePartitioning(ctx context.Context, obj *KaiwoNodeWrapper) (*ctrl.Result, error) {
-	if err := t.setupSystemTolerations(ctx); err != nil {
-		return nil, fmt.Errorf("failed to setup system tolerations: %w", err)
+	logger := log.FromContext(ctx)
+
+	// Verify our own DaemonSets have the required tolerations (documentation check only)
+	if err := t.verifyOwnDaemonSetTolerations(ctx); err != nil {
+		logger.Info("Warning: Our DaemonSets may not have required tolerations", "error", err.Error())
+		// Don't fail the operation, just log the warning
 	}
 
+	// Add the partitioning taint first to prevent new scheduling
+	if !t.nodeHasTaint(obj.Node, kaiwoPartitioningTaint) {
+		if err := t.addTaint(ctx, obj.Node, kaiwoPartitioningTaint); err != nil {
+			return nil, fmt.Errorf("failed to add partitioning taint: %w", err)
+		}
+	}
+
+	// Add the DCM taint to trigger pod eviction
 	if !t.nodeHasTaint(obj.Node, amdDcmTaint) {
-		t.addTaint(ctx, obj.Node, amdDcmTaint)
+		if err := t.addTaint(ctx, obj.Node, amdDcmTaint); err != nil {
+			return nil, fmt.Errorf("failed to add DCM taint: %w", err)
+		}
 	}
 
 	t.setInProgressCondition(obj, v1alpha1.PartitioningPhaseDrainingUntoleratedPods, "Draining untolerated pods")
@@ -344,51 +382,113 @@ func (t *GpuPartitionTask) handleInitializePartitioning(ctx context.Context, obj
 	return &ctrl.Result{RequeueAfter: shortRequeueDelay}, nil
 }
 
-// handleDrainingPods waits for untolerated pods to be drained
+// handleDrainingPods waits for untolerated pods to be drained with timeout
 func (t *GpuPartitionTask) handleDrainingPods(ctx context.Context, obj *KaiwoNodeWrapper) (*ctrl.Result, error) {
-	hasOffending, err := t.hasOffendingPods(ctx, obj.Node)
+	logger := log.FromContext(ctx)
+
+	offendingPods, err := t.getOffendingPods(ctx, obj.Node)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check offending pods: %w", err)
 	}
 
-	if hasOffending {
+	if len(offendingPods) > 0 {
+		// Check if we've been draining for too long
+		condition := meta.FindStatusCondition(obj.KaiwoNode.Status.Conditions, v1alpha1.PartitioningCompletedConditionType)
+		if condition != nil {
+			elapsed := time.Since(condition.LastTransitionTime.Time)
+			if elapsed >= podDrainingTimeout {
+				// Log which pods are still stuck
+				podNames := make([]string, len(offendingPods))
+				for i, pod := range offendingPods {
+					podNames[i] = fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
+				}
+				message := fmt.Sprintf("Pod draining timeout exceeded. Stuck pods: %v. Check if pods have PDBs or are stuck in terminating state.", podNames)
+				t.setErrorCondition(obj, message)
+				return &ctrl.Result{RequeueAfter: longRequeueDelay}, nil
+			}
+
+			// Update status with progress information
+			message := fmt.Sprintf("Waiting for %d pod(s) to be evicted (elapsed: %v)", len(offendingPods), elapsed)
+			t.setInProgressCondition(obj, v1alpha1.PartitioningPhaseDrainingUntoleratedPods, message)
+		}
+
+		logger.Info("Still waiting for pods to be evicted",
+			"node", obj.Node.Name,
+			"podCount", len(offendingPods),
+			"pods", getPodNamesForLogging(offendingPods))
 		return &ctrl.Result{RequeueAfter: shortRequeueDelay}, nil
 	}
 
 	// No more offending pods, proceed to apply partitions
-	t.applyPartitioningLabels(obj)
+	logger.Info("All non-tolerant pods have been evicted, proceeding with partitioning", "node", obj.Node.Name)
+	if err := t.applyPartitioningLabels(ctx, obj); err != nil {
+		return nil, fmt.Errorf("failed to apply partitioning labels: %w", err)
+	}
 	t.setInProgressCondition(obj, v1alpha1.PartitioningPhaseApplyingPartitions, "Applying partitioning")
 
 	return &ctrl.Result{RequeueAfter: shortRequeueDelay}, nil
 }
 
-func (t *GpuPartitionTask) applyPartitioningLabels(obj *KaiwoNodeWrapper) {
-	// Setting the profile label triggers the partitioning
-	obj.Node.Labels[AmdDcmProfileLabel] = string(obj.KaiwoNode.Spec.Partitioning.Profile)
+func (t *GpuPartitionTask) applyPartitioningLabels(ctx context.Context, obj *KaiwoNodeWrapper) error {
+	// Generate a unique request ID to avoid race conditions with DCM
+	requestID := fmt.Sprintf("%d", time.Now().UnixNano())
 
-	// Remove any previous profile state label so we can track the new state
-	labels := obj.Node.GetLabels()
-	delete(labels, AmdDcmPartitioningStateLabel)
-	obj.Node.SetLabels(labels)
+	// Apply labels with safe patching
+	return t.patchNodeLabels(ctx, obj.Node, map[string]string{
+		AmdDcmProfileLabel:               string(obj.KaiwoNode.Spec.Partitioning.Profile),
+		AmdDcmPartitioningRequestIdLabel: requestID,
+		KaiwoPartitioningManagedLabel:    "true",
+	}, []string{AmdDcmPartitioningStateLabel})
 }
 
 // handleApplyingPartitions monitors the partitioning process
 func (t *GpuPartitionTask) handleApplyingPartitions(ctx context.Context, obj *KaiwoNodeWrapper) (*ctrl.Result, error) {
+	logger := log.FromContext(ctx)
 	profileState, profileStateExists := obj.Node.Labels[AmdDcmPartitioningStateLabel]
+	requestID := obj.Node.Labels[AmdDcmPartitioningRequestIdLabel]
+
+	logger.Info("Monitoring DCM partitioning progress",
+		"node", obj.Node.Name,
+		"profileState", profileState,
+		"profileStateExists", profileStateExists,
+		"requestID", requestID)
 
 	if profileStateExists && profileState == "failure" {
-		t.setErrorCondition(obj, "Partitioning failed (check device config manager logs)")
-		return nil, nil
+		message := fmt.Sprintf("Partitioning failed (check device config manager logs). Request ID: %s", requestID)
+		t.setErrorCondition(obj, message)
+		// Clean up taints on failure
+		if err := t.cleanupTaintsOnError(ctx, obj.Node); err != nil {
+			logger.Error(err, "Failed to clean up taints after partitioning failure")
+		}
+		return &ctrl.Result{RequeueAfter: longRequeueDelay}, nil
 	}
 
 	if profileStateExists && profileState == "success" {
+		logger.Info("DCM partitioning completed successfully", "node", obj.Node.Name, "requestID", requestID)
+
 		// Remove the DCM taint as partitioning is complete
 		if t.nodeHasTaint(obj.Node, amdDcmTaint) {
-			t.removeTaint(ctx, obj.Node, amdDcmTaint)
+			if err := t.removeTaint(ctx, obj.Node, amdDcmTaint); err != nil {
+				return nil, fmt.Errorf("failed to remove DCM taint: %w", err)
+			}
 		}
 
 		t.setInProgressCondition(obj, v1alpha1.PartitioningPhaseWaitingForResourceUpdate, "Waiting for resources and labels to update")
 		return &ctrl.Result{RequeueAfter: mediumRequeueDelay}, nil
+	}
+
+	// Check for timeout in this phase
+	condition := meta.FindStatusCondition(obj.KaiwoNode.Status.Conditions, v1alpha1.PartitioningCompletedConditionType)
+	if condition != nil {
+		elapsed := time.Since(condition.LastTransitionTime.Time)
+		if elapsed >= resourceUpdateTimeout*2 { // Give DCM more time than resource updates
+			message := fmt.Sprintf("DCM partitioning timeout after %v. Request ID: %s. Check DCM logs.", elapsed, requestID)
+			t.setErrorCondition(obj, message)
+			if err := t.cleanupTaintsOnError(ctx, obj.Node); err != nil {
+				logger.Error(err, "Failed to clean up taints after timeout")
+			}
+			return &ctrl.Result{RequeueAfter: longRequeueDelay}, nil
+		}
 	}
 
 	// Still in progress
@@ -511,73 +611,80 @@ func (t *GpuPartitionTask) setInProgressCondition(obj *KaiwoNodeWrapper, phase v
 	})
 }
 
-func (t *GpuPartitionTask) setupSystemTolerations(ctx context.Context) error {
-	namespaces := []string{"kube-system", "kube-amd-gpu"}
-	taints := []corev1.Taint{amdDcmTaint, kaiwoPartitioningTaint}
-
-	for _, namespace := range namespaces {
-		for _, taint := range taints {
-			if err := t.ensureSystemTolerations(ctx, taint, namespace); err != nil {
-				return fmt.Errorf("failed to ensure tolerations for %s in %s: %w", taint.Key, namespace, err)
-			}
-		}
-	}
-	return nil
-}
-
-// ensureSystemTolerations adds tolerations to kube-system Deployments and DaemonSets
-func (t *GpuPartitionTask) ensureSystemTolerations(ctx context.Context, taint corev1.Taint, namespace string) error {
+// verifyOwnDaemonSetTolerations checks that our own DaemonSets have required tolerations
+// This is a verification step - we don't modify them as they should be deployed with correct tolerations
+func (t *GpuPartitionTask) verifyOwnDaemonSetTolerations(ctx context.Context) error {
 	logger := log.FromContext(ctx)
+	requiredTaints := []corev1.Taint{amdDcmTaint, kaiwoPartitioningTaint}
 
-	toleration := corev1.Toleration{
-		Key:    taint.Key,
-		Value:  taint.Value,
-		Effect: taint.Effect,
-	}
-	if taint.Value == "" {
-		toleration.Operator = corev1.TolerationOpExists
-	} else {
-		toleration.Operator = corev1.TolerationOpEqual
-	}
-
-	// Deployments
-	deployments := &appsv1.DeploymentList{}
-	if err := t.Client.List(ctx, deployments, client.InNamespace(namespace)); err != nil {
-		return err
-	}
-	for i := range deployments.Items {
-		deployment := &deployments.Items[i]
-		if !hasToleration(deployment.Spec.Template.Spec.Tolerations, toleration) {
-			deployment.Spec.Template.Spec.Tolerations = append(deployment.Spec.Template.Spec.Tolerations, toleration)
-			if err := t.Client.Update(ctx, deployment); err != nil {
-				logger.Error(err, "failed to patch Deployment tolerations", "deployment", deployment.Name)
-				return err
-			}
-			t.Recorder.Eventf(deployment, corev1.EventTypeNormal, "AddToleration",
-				"Added toleration to Deployment %s in %s", deployment.Name, namespace)
-		}
-	}
-
-	// DaemonSets
+	// Check our own DaemonSets in kube-amd-gpu namespace
 	daemonSets := &appsv1.DaemonSetList{}
-	if err := t.Client.List(ctx, daemonSets, client.InNamespace(namespace)); err != nil {
-		return err
+	if err := t.Client.List(ctx, daemonSets, client.InNamespace(KubeAmdGpuNamespace)); err != nil {
+		// If namespace doesn't exist or we can't list, that's fine - components may not be deployed yet
+		return nil
 	}
-	for i := range daemonSets.Items {
-		daemonSet := &daemonSets.Items[i]
-		if !hasToleration(daemonSet.Spec.Template.Spec.Tolerations, toleration) {
-			daemonSet.Spec.Template.Spec.Tolerations = append(daemonSet.Spec.Template.Spec.Tolerations, toleration)
-			if err := t.Client.Update(ctx, daemonSet); err != nil {
-				logger.Error(err, "failed to patch DaemonSet tolerations", "daemonset", daemonSet.Name)
-				return err
+
+	var missingTolerations []string
+	for _, ds := range daemonSets.Items {
+		// Only check DaemonSets we manage (device-plugin, node-labeller, etc.)
+		if !t.isOwnDaemonSet(&ds) {
+			continue
+		}
+
+		for _, taint := range requiredTaints {
+			toleration := corev1.Toleration{
+				Key:    taint.Key,
+				Value:  taint.Value,
+				Effect: taint.Effect,
 			}
-			t.Recorder.Eventf(daemonSet, corev1.EventTypeNormal, "AddToleration",
-				"Added toleration to DaemonSet %s in %s", daemonSet.Name, namespace)
+			if taint.Value == "" {
+				toleration.Operator = corev1.TolerationOpExists
+			} else {
+				toleration.Operator = corev1.TolerationOpEqual
+			}
+
+			if !hasToleration(ds.Spec.Template.Spec.Tolerations, toleration) {
+				missingTolerations = append(missingTolerations,
+					fmt.Sprintf("%s/%s missing toleration for %s", ds.Namespace, ds.Name, taint.Key))
+			}
 		}
 	}
+
+	if len(missingTolerations) > 0 {
+		logger.Info("Found DaemonSets without required tolerations - they should be deployed with tolerations",
+			"missingTolerations", missingTolerations)
+		return fmt.Errorf("missing tolerations: %v", missingTolerations)
+	}
+
 	return nil
 }
 
+// isOwnDaemonSet checks if a DaemonSet is one that we manage
+func (t *GpuPartitionTask) isOwnDaemonSet(ds *appsv1.DaemonSet) bool {
+	// Check for known DaemonSet suffixes
+	knownSuffixes := []string{devicePluginDaemonsetSuffix, nodeLabelerDaemonsetSuffix}
+	for _, suffix := range knownSuffixes {
+		if strings.HasSuffix(ds.Name, suffix) {
+			return true
+		}
+	}
+
+	// Check for known labels that identify our DaemonSets
+	if ds.Labels != nil {
+		if component, exists := ds.Labels["app.kubernetes.io/component"]; exists {
+			knownComponents := []string{"device-plugin", "node-labeller", "amd-gpu"}
+			for _, knownComponent := range knownComponents {
+				if strings.Contains(component, knownComponent) {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
+}
+
+// hasToleration checks if a toleration list contains the specified toleration
 func hasToleration(list []corev1.Toleration, want corev1.Toleration) bool {
 	for _, toleration := range list {
 		if toleration.MatchToleration(&want) {
@@ -596,58 +703,260 @@ func (t *GpuPartitionTask) nodeHasTaint(node *corev1.Node, taint corev1.Taint) b
 	return false
 }
 
-// addTaint adds the AMD DCM taint to the node
-func (t *GpuPartitionTask) addTaint(_ context.Context, node *corev1.Node, taint corev1.Taint) {
-	node.Spec.Taints = append(node.Spec.Taints, taint)
-	t.Recorder.Eventf(node, corev1.EventTypeNormal, "TaintNode",
-		"Added %s=%s taint", taint.Key, taint.Value)
-}
-
-// removeTaint removes the AMD DCM taint from the node
-func (t *GpuPartitionTask) removeTaint(_ context.Context, node *corev1.Node, taint corev1.Taint) {
-	var newTaints []corev1.Taint
-	for _, nodeTaint := range node.Spec.Taints {
-		if !nodeTaint.MatchTaint(&taint) {
-			newTaints = append(newTaints, nodeTaint)
+// addTaint adds a taint to the node with safe patching
+func (t *GpuPartitionTask) addTaint(ctx context.Context, node *corev1.Node, taint corev1.Taint) error {
+	// Check if taint already exists
+	for _, existingTaint := range node.Spec.Taints {
+		if existingTaint.MatchTaint(&taint) {
+			return nil // Already exists
 		}
 	}
 
-	if len(newTaints) != len(node.Spec.Taints) {
-		node.Spec.Taints = newTaints
+	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		// Get fresh copy of the node
+		freshNode := &corev1.Node{}
+		if err := t.Client.Get(ctx, client.ObjectKeyFromObject(node), freshNode); err != nil {
+			return err
+		}
+
+		// Check again if taint was added by another controller
+		for _, existingTaint := range freshNode.Spec.Taints {
+			if existingTaint.MatchTaint(&taint) {
+				return nil // Already exists
+			}
+		}
+
+		// Add the taint and update
+		original := freshNode.DeepCopy()
+		freshNode.Spec.Taints = append(freshNode.Spec.Taints, taint)
+
+		if err := t.Client.Patch(ctx, freshNode, client.MergeFrom(original)); err != nil {
+			return err
+		}
+
+		t.Recorder.Eventf(node, corev1.EventTypeNormal, "TaintNode",
+			"Added %s=%s taint", taint.Key, taint.Value)
+		return nil
+	})
+}
+
+// removeTaint removes a taint from the node with safe patching
+func (t *GpuPartitionTask) removeTaint(ctx context.Context, node *corev1.Node, taint corev1.Taint) error {
+	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		// Get fresh copy of the node
+		freshNode := &corev1.Node{}
+		if err := t.Client.Get(ctx, client.ObjectKeyFromObject(node), freshNode); err != nil {
+			return err
+		}
+
+		// Filter out the taint
+		var newTaints []corev1.Taint
+		removed := false
+		for _, nodeTaint := range freshNode.Spec.Taints {
+			if !nodeTaint.MatchTaint(&taint) {
+				newTaints = append(newTaints, nodeTaint)
+			} else {
+				removed = true
+			}
+		}
+
+		if !removed {
+			return nil // Taint wasn't present
+		}
+
+		// Update taints and patch
+		original := freshNode.DeepCopy()
+		freshNode.Spec.Taints = newTaints
+
+		if err := t.Client.Patch(ctx, freshNode, client.MergeFrom(original)); err != nil {
+			return err
+		}
+
 		t.Recorder.Eventf(node, corev1.EventTypeNormal, "UntaintNode",
 			"Removed %s=%s taint", taint.Key, taint.Value)
+		return nil
+	})
+}
+
+// patchNodeLabels safely updates node labels with conflict retry
+func (t *GpuPartitionTask) patchNodeLabels(ctx context.Context, node *corev1.Node, addLabels map[string]string, removeLabels []string) error {
+	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		// Get fresh copy of the node
+		freshNode := &corev1.Node{}
+		if err := t.Client.Get(ctx, client.ObjectKeyFromObject(node), freshNode); err != nil {
+			return err
+		}
+
+		original := freshNode.DeepCopy()
+		labels := freshNode.GetLabels()
+		if labels == nil {
+			labels = make(map[string]string)
+		}
+
+		// Add labels
+		for key, value := range addLabels {
+			labels[key] = value
+		}
+
+		// Remove labels
+		for _, key := range removeLabels {
+			delete(labels, key)
+		}
+
+		freshNode.SetLabels(labels)
+		return t.Client.Patch(ctx, freshNode, client.MergeFrom(original))
+	})
+}
+
+// getOffendingPods returns pods that don't tolerate the DCM taint and should be evicted
+func (t *GpuPartitionTask) getOffendingPods(ctx context.Context, node *corev1.Node) ([]corev1.Pod, error) {
+	pods := &corev1.PodList{}
+	fieldSelector := client.MatchingFields{"spec.nodeName": node.Name}
+	if err := t.Client.List(ctx, pods, fieldSelector); err != nil {
+		return nil, err
 	}
+
+	var offendingPods []corev1.Pod
+	for _, pod := range pods.Items {
+		// Skip if pod tolerates DCM taint
+		if toleratesDCM(pod.Spec.Tolerations) {
+			continue
+		}
+
+		// Skip system components using allowlist approach instead of blanket kube-system exclusion
+		if t.isSystemComponent(&pod) {
+			continue
+		}
+
+		// Skip pods that are already terminating
+		if pod.DeletionTimestamp != nil {
+			continue
+		}
+
+		offendingPods = append(offendingPods, pod)
+	}
+
+	return offendingPods, nil
 }
 
 // hasOffendingPods checks if there are any pods remaining on the node that don't tolerate the taint
 func (t *GpuPartitionTask) hasOffendingPods(ctx context.Context, node *corev1.Node) (bool, error) {
-	pods := &corev1.PodList{}
-	fieldSelector := client.MatchingFields{"spec.nodeName": node.Name}
-	if err := t.Client.List(ctx, pods, fieldSelector); err != nil {
+	offendingPods, err := t.getOffendingPods(ctx, node)
+	if err != nil {
 		return false, err
 	}
-	for _, pod := range pods.Items {
-		if toleratesDCM(pod.Spec.Tolerations) {
-			continue
-		}
-		if pod.Namespace == "kube-system" {
-			continue
-		}
-		return true, nil
-	}
-	return false, nil
+	return len(offendingPods) > 0, nil
 }
 
+// isSystemComponent checks if a pod is a system component that should not be evicted
+func (t *GpuPartitionTask) isSystemComponent(pod *corev1.Pod) bool {
+	// Always exclude kube-system namespace
+	if pod.Namespace == "kube-system" {
+		return true
+	}
+
+	// Check for system component labels
+	for _, labelKey := range systemComponentLabels {
+		if _, hasLabel := pod.Labels[labelKey]; hasLabel {
+			// Further check if it's a known system component
+			if t.isKnownSystemComponent(pod, labelKey) {
+				return true
+			}
+		}
+	}
+
+	// Check for high priority class (system-critical components)
+	if pod.Spec.PriorityClassName == "system-cluster-critical" ||
+		pod.Spec.PriorityClassName == "system-node-critical" {
+		return true
+	}
+
+	return false
+}
+
+// isKnownSystemComponent checks if a pod with system labels is actually a system component
+func (t *GpuPartitionTask) isKnownSystemComponent(pod *corev1.Pod, labelKey string) bool {
+	labelValue := pod.Labels[labelKey]
+
+	// Known system components that should not be evicted
+	systemComponents := []string{
+		"kube-proxy", "flannel", "calico", "weave", "cilium", // Network components
+		"coredns", "kube-dns", // DNS components
+		"metrics-server", "node-exporter", // Monitoring components
+		"csi-", "ebs-csi", "aws-ebs", // Storage components (prefix match)
+		"cluster-autoscaler",              // Autoscaling
+		"nvidia-device-plugin", "amd-gpu", // Device plugins
+	}
+
+	for _, component := range systemComponents {
+		if strings.Contains(labelValue, component) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// getPodNamesForLogging returns a slice of pod names for logging purposes
+func getPodNamesForLogging(pods []corev1.Pod) []string {
+	names := make([]string, len(pods))
+	for i, pod := range pods {
+		names[i] = fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
+	}
+	return names
+}
+
+// cleanupTaintsOnError removes our taints when partitioning fails
+func (t *GpuPartitionTask) cleanupTaintsOnError(ctx context.Context, node *corev1.Node) error {
+	logger := log.FromContext(ctx)
+	taintsToRemove := []corev1.Taint{amdDcmTaint, kaiwoPartitioningTaint}
+
+	for _, taint := range taintsToRemove {
+		if t.nodeHasTaint(node, taint) {
+			if err := t.removeTaint(ctx, node, taint); err != nil {
+				logger.Error(err, "Failed to remove taint during cleanup", "taintKey", taint.Key)
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// shouldRetryFromError determines if we should retry partitioning from error state
+func (t *GpuPartitionTask) shouldRetryFromError(obj *KaiwoNodeWrapper) bool {
+	// Check for retry annotation that user can set to force retry
+	if obj.KaiwoNode.Annotations != nil {
+		if retryAnnotation, exists := obj.KaiwoNode.Annotations["kaiwo.silogen.ai/retry-partitioning"]; exists {
+			// Remove the annotation and allow retry
+			delete(obj.KaiwoNode.Annotations, "kaiwo.silogen.ai/retry-partitioning")
+			return retryAnnotation == "true"
+		}
+	}
+
+	// Check if we've been in error state for a long time - allow automatic retry
+	condition := meta.FindStatusCondition(obj.KaiwoNode.Status.Conditions, v1alpha1.PartitioningCompletedConditionType)
+	if condition != nil && condition.Status == metav1.ConditionFalse && condition.Reason == string(v1alpha1.PartitioningConditionFailed) {
+		elapsed := time.Since(condition.LastTransitionTime.Time)
+		// Auto-retry after 10 minutes in case it was a transient failure
+		if elapsed >= 10*time.Minute {
+			return true
+		}
+	}
+
+	return false
+}
+
+// toleratesDCM checks if a pod tolerates the AMD DCM taint
 func toleratesDCM(tolerations []corev1.Toleration) bool {
-	for _, t := range tolerations {
-		if t.Key != AmdDcmTaint || t.Effect != corev1.TaintEffectNoExecute {
+	for _, toleration := range tolerations {
+		if toleration.Key != AmdDcmTaint || toleration.Effect != corev1.TaintEffectNoExecute {
 			continue
 		}
-		switch t.Operator {
+		switch toleration.Operator {
 		case corev1.TolerationOpExists:
 			return true
 		case corev1.TolerationOpEqual:
-			if t.Value == AmdDcmUpValue {
+			if toleration.Value == AmdDcmUpValue {
 				return true
 			}
 		}
