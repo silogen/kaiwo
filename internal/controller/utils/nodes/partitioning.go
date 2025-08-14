@@ -49,6 +49,14 @@ type GpuPartitionTask struct {
 	Recorder record.EventRecorder
 }
 
+// BackoffConfig holds backoff configuration
+type BackoffConfig struct {
+	BaseDelay   time.Duration
+	MaxDelay    time.Duration
+	Multiplier  float64
+	MaxAttempts int
+}
+
 func NewGpuPartitionTask(client client.Client, recorder record.EventRecorder) *GpuPartitionTask {
 	return &GpuPartitionTask{
 		Client:   client,
@@ -80,14 +88,36 @@ const (
 	KubeAmdGpuNamespace                 = "kube-amd-gpu"
 	AmdDeviceConfigManagerConfigMapName = "config-manager-config"
 
-	// Timing constants
-	shortRequeueDelay  = 5 * time.Second
-	mediumRequeueDelay = 10 * time.Second
-	longRequeueDelay   = 30 * time.Second
+	// Label selectors for identifying our DaemonSets
+	AmdDevicePluginLabels = map[string]string{
+		"app.kubernetes.io/name":      "amd-gpu-device-plugin",
+		"app.kubernetes.io/component": "device-plugin",
+	}
+	AmdNodeLabelerLabels = map[string]string{
+		"app.kubernetes.io/name":      "amd-gpu-node-labeller",
+		"app.kubernetes.io/component": "node-labeller",
+	}
+	// Fallback label selector (broader match)
+	AmdGpuComponentLabel = "app.kubernetes.io/part-of"
+	AmdGpuComponentValue = "amd-gpu"
 
+	// Base timing constants
+	baseRequeueDelay      = 5 * time.Second
 	resourceUpdateTimeout = 30 * time.Second
 	// Pod draining timeout - how long to wait for pods to be evicted
 	podDrainingTimeout = 5 * time.Minute
+	// DCM operation timeout
+	dcmOperationTimeout = 2 * time.Minute
+	// Maximum backoff delay
+	maxRequeueDelay = 5 * time.Minute
+
+	// Retry attempt tracking annotation
+	retryAttemptAnnotation = "kaiwo.silogen.ai/retry-attempt"
+	// Progress tracking annotations
+	partitioningStartTimeAnnotation  = "kaiwo.silogen.ai/partitioning-started"
+	partitioningPhaseStartAnnotation = "kaiwo.silogen.ai/phase-started"
+	// Progress tracking labels for observability
+	progressTimestampLabel = "kaiwo.silogen.ai/last-progress"
 )
 
 var (
@@ -157,10 +187,11 @@ func (t *GpuPartitionTask) Run(ctx context.Context, obj *KaiwoNodeWrapper) (*ctr
 		return nil, nil
 	}
 
+	// Log detailed progress information
+	progress := t.getPartitioningProgress(obj)
 	logger.Info("GpuPartitionTask: Processing node for partitioning",
-		"node", obj.Node.Name,
-		"nodeType", obj.KaiwoNode.Status.NodeType,
-		"desiredProfile", obj.KaiwoNode.Spec.Partitioning.Profile)
+		"progress", progress,
+		"nodeType", obj.KaiwoNode.Status.NodeType)
 
 	// If the node is not a GPU node, return with error
 	if obj.KaiwoNode.Status.NodeType != v1alpha1.NodeTypeGpu {
@@ -193,9 +224,10 @@ func (t *GpuPartitionTask) Run(ctx context.Context, obj *KaiwoNodeWrapper) (*ctr
 	}
 
 	// Handle partitioning phases
+	// Log detailed phase transition info
+	progress := t.getPartitioningProgress(obj)
 	logger.Info("GpuPartitionTask: Partitioning not complete, handling partitioning phases",
-		"node", obj.Node.Name,
-		"currentPhase", obj.KaiwoNode.Status.Partitioning.Phase)
+		"progress", progress)
 	return t.handlePartitioningPhase(ctx, obj)
 }
 
@@ -273,6 +305,10 @@ func (t *GpuPartitionTask) handleCompletedPartitioning(ctx context.Context, obj 
 	obj.KaiwoNode.Status.Status = v1alpha1.KaiwoNodeStatusReady
 	obj.KaiwoNode.Status.Partitioning.Phase = v1alpha1.PartitioningPhaseCompleted
 
+	// Reset retry attempts and progress tracking on successful completion
+	t.resetRetryAttempt(obj)
+	t.resetProgressTracking(obj)
+
 	meta.SetStatusCondition(&obj.KaiwoNode.Status.Conditions, metav1.Condition{
 		Type:    v1alpha1.PartitioningCompletedConditionType,
 		Reason:  string(v1alpha1.PartitioningConditionComplete),
@@ -338,6 +374,9 @@ func (t *GpuPartitionTask) handlePartitioningPhase(ctx context.Context, obj *Kai
 		// Check if we should retry after some time (look for retry annotation or condition age)
 		if t.shouldRetryFromError(obj) {
 			logger.Info("GpuPartitionTask: Attempting retry from error state", "node", obj.Node.Name)
+			// Clear error state and start fresh
+			obj.KaiwoNode.Status.Status = v1alpha1.KaiwoNodeStatusPartitioning
+			obj.KaiwoNode.Status.Partitioning.Phase = ""
 			return t.handleInitializePartitioning(ctx, obj)
 		}
 
@@ -379,7 +418,7 @@ func (t *GpuPartitionTask) handleInitializePartitioning(ctx context.Context, obj
 
 	t.setInProgressCondition(obj, v1alpha1.PartitioningPhaseDrainingUntoleratedPods, "Draining untolerated pods")
 
-	return &ctrl.Result{RequeueAfter: shortRequeueDelay}, nil
+	return &ctrl.Result{RequeueAfter: t.calculateBackoffDelay(obj, 0)}, nil
 }
 
 // handleDrainingPods waits for untolerated pods to be drained with timeout
@@ -416,7 +455,7 @@ func (t *GpuPartitionTask) handleDrainingPods(ctx context.Context, obj *KaiwoNod
 			"node", obj.Node.Name,
 			"podCount", len(offendingPods),
 			"pods", getPodNamesForLogging(offendingPods))
-		return &ctrl.Result{RequeueAfter: shortRequeueDelay}, nil
+		return &ctrl.Result{RequeueAfter: t.calculateBackoffDelay(obj, 0)}, nil
 	}
 
 	// No more offending pods, proceed to apply partitions
@@ -426,7 +465,7 @@ func (t *GpuPartitionTask) handleDrainingPods(ctx context.Context, obj *KaiwoNod
 	}
 	t.setInProgressCondition(obj, v1alpha1.PartitioningPhaseApplyingPartitions, "Applying partitioning")
 
-	return &ctrl.Result{RequeueAfter: shortRequeueDelay}, nil
+	return &ctrl.Result{RequeueAfter: t.calculateBackoffDelay(obj, 0)}, nil
 }
 
 func (t *GpuPartitionTask) applyPartitioningLabels(ctx context.Context, obj *KaiwoNodeWrapper) error {
@@ -481,8 +520,8 @@ func (t *GpuPartitionTask) handleApplyingPartitions(ctx context.Context, obj *Ka
 	condition := meta.FindStatusCondition(obj.KaiwoNode.Status.Conditions, v1alpha1.PartitioningCompletedConditionType)
 	if condition != nil {
 		elapsed := time.Since(condition.LastTransitionTime.Time)
-		if elapsed >= resourceUpdateTimeout*2 { // Give DCM more time than resource updates
-			message := fmt.Sprintf("DCM partitioning timeout after %v. Request ID: %s. Check DCM logs.", elapsed, requestID)
+		if elapsed >= dcmOperationTimeout {
+			message := fmt.Sprintf("DCM partitioning timeout after %v (max: %v). Request ID: %s. Check DCM logs.", elapsed, dcmOperationTimeout, requestID)
 			t.setErrorCondition(obj, message)
 			if err := t.cleanupTaintsOnError(ctx, obj.Node); err != nil {
 				logger.Error(err, "Failed to clean up taints after timeout")
@@ -492,7 +531,7 @@ func (t *GpuPartitionTask) handleApplyingPartitions(ctx context.Context, obj *Ka
 	}
 
 	// Still in progress
-	return &ctrl.Result{RequeueAfter: shortRequeueDelay}, nil
+	return &ctrl.Result{RequeueAfter: t.calculateBackoffDelay(obj, 0)}, nil
 }
 
 // handleWaitingForResourceUpdate waits for natural resource/label updates before restarting pods
@@ -509,7 +548,7 @@ func (t *GpuPartitionTask) handleWaitingForResourceUpdate(ctx context.Context, o
 			// Resources have been updated correctly, skip to waiting for labels
 			logger.Info("Resources updated, skipping pod restarts", "node", obj.Node.Name, "profile", updatedProfile)
 			t.setInProgressCondition(obj, v1alpha1.PartitioningPhaseWaitingForLabels, "Resources updated, waiting for final label updates")
-			return &ctrl.Result{RequeueAfter: shortRequeueDelay}, nil
+			return &ctrl.Result{RequeueAfter: t.calculateBackoffDelay(obj, 0)}, nil
 		}
 	}
 
@@ -517,7 +556,7 @@ func (t *GpuPartitionTask) handleWaitingForResourceUpdate(ctx context.Context, o
 	if condition == nil {
 		// This shouldn't happen, but handle gracefully by setting a new condition
 		t.setInProgressCondition(obj, v1alpha1.PartitioningPhaseWaitingForResourceUpdate, "Waiting for resources and labels to update")
-		return &ctrl.Result{RequeueAfter: shortRequeueDelay}, nil
+		return &ctrl.Result{RequeueAfter: t.calculateBackoffDelay(obj, 0)}, nil
 	}
 
 	elapsed := time.Since(condition.LastTransitionTime.Time)
@@ -533,43 +572,140 @@ func (t *GpuPartitionTask) handleWaitingForResourceUpdate(ctx context.Context, o
 	baseutils.Debug(logger, "Still waiting for resource update",
 		"node", obj.Node.Name, "elapsed", elapsed, "remaining", remainingTime)
 
-	return &ctrl.Result{RequeueAfter: shortRequeueDelay}, nil
+	return &ctrl.Result{RequeueAfter: t.calculateBackoffDelay(obj, 0)}, nil
 }
 
-// handleRestartingPods deletes both device plugin and node labeler pods to force restart
+// handleRestartingPods triggers rollout restarts of DaemonSets to refresh GPU configuration
 func (t *GpuPartitionTask) handleRestartingPods(ctx context.Context, obj *KaiwoNodeWrapper) (*ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	// Delete device plugin pod if it exists
-	if devicePod, err := t.getDaemonSetPod(ctx, KubeAmdGpuNamespace, devicePluginDaemonsetSuffix, obj.Node.Name); err == nil && devicePod != nil {
-		logger.Info("Deleting device plugin pod to trigger restart",
-			"node", obj.Node.Name, "podName", devicePod.Name)
-		if err := t.Client.Delete(ctx, devicePod); err != nil && !errors.IsNotFound(err) {
-			return nil, fmt.Errorf("failed to delete device plugin pod: %w", err)
+	// Try to trigger rollout restart for device plugin DaemonSet
+	if err := t.rolloutRestartDaemonSet(ctx, AmdDevicePluginLabels, "amd-gpu-device-plugin"); err != nil {
+		logger.Info("Could not restart device plugin DaemonSet using labels, trying suffix-based approach", "error", err.Error())
+		// Fallback to old approach if labels don't work
+		if err := t.rolloutRestartDaemonSetBySuffix(ctx, KubeAmdGpuNamespace, devicePluginDaemonsetSuffix); err != nil {
+			logger.Info("Could not restart device plugin DaemonSet by suffix either, skipping", "error", err.Error())
 		}
 	}
 
-	// Delete node labeler pod if it exists
-	if labelerPod, err := t.getDaemonSetPod(ctx, KubeAmdGpuNamespace, nodeLabelerDaemonsetSuffix, obj.Node.Name); err == nil && labelerPod != nil {
-		logger.Info("Deleting node labeler pod to trigger restart",
-			"node", obj.Node.Name, "podName", labelerPod.Name)
-		if err := t.Client.Delete(ctx, labelerPod); err != nil && !errors.IsNotFound(err) {
-			return nil, fmt.Errorf("failed to delete node labeler pod: %w", err)
+	// Try to trigger rollout restart for node labeler DaemonSet
+	if err := t.rolloutRestartDaemonSet(ctx, AmdNodeLabelerLabels, "amd-gpu-node-labeller"); err != nil {
+		logger.Info("Could not restart node labeler DaemonSet using labels, trying suffix-based approach", "error", err.Error())
+		// Fallback to old approach if labels don't work
+		if err := t.rolloutRestartDaemonSetBySuffix(ctx, KubeAmdGpuNamespace, nodeLabelerDaemonsetSuffix); err != nil {
+			logger.Info("Could not restart node labeler DaemonSet by suffix either, skipping", "error", err.Error())
 		}
 	}
 
 	// Move to waiting for labels phase
-	t.setInProgressCondition(obj, v1alpha1.PartitioningPhaseWaitingForLabels, "Pods deleted, waiting for recreation and label updates")
-	return &ctrl.Result{RequeueAfter: mediumRequeueDelay}, nil
+	t.setInProgressCondition(obj, v1alpha1.PartitioningPhaseWaitingForLabels, "DaemonSets restarted, waiting for pod recreation and label updates")
+	return &ctrl.Result{RequeueAfter: t.calculateBackoffDelay(obj, 2)}, nil
 }
 
 // handleWaitingForLabels waits for the node labels to be updated and completes partitioning
 func (t *GpuPartitionTask) handleWaitingForLabels(_ context.Context, _ *KaiwoNodeWrapper) (*ctrl.Result, error) {
 	// This phase will naturally transition to completed state on the next reconcile
 	// when isPartitioningComplete() returns true
-	return &ctrl.Result{RequeueAfter: shortRequeueDelay}, nil
+	return &ctrl.Result{RequeueAfter: t.calculateBackoffDelay(obj, 0)}, nil
 }
 
+// rolloutRestartDaemonSet triggers a rollout restart using label selectors
+func (t *GpuPartitionTask) rolloutRestartDaemonSet(ctx context.Context, labels map[string]string, componentName string) error {
+	logger := log.FromContext(ctx)
+
+	// Build label selector
+	labelSelector := client.MatchingLabels(labels)
+
+	// Find DaemonSet by labels
+	daemonSets := &appsv1.DaemonSetList{}
+	if err := t.Client.List(ctx, daemonSets, client.InNamespace(KubeAmdGpuNamespace), labelSelector); err != nil {
+		return fmt.Errorf("failed to list DaemonSets with labels %v: %w", labels, err)
+	}
+
+	if len(daemonSets.Items) == 0 {
+		// Try broader search using component label
+		broadSelector := client.MatchingLabels(map[string]string{AmdGpuComponentLabel: AmdGpuComponentValue})
+		if err := t.Client.List(ctx, daemonSets, client.InNamespace(KubeAmdGpuNamespace), broadSelector); err != nil {
+			return fmt.Errorf("failed to find DaemonSets for component %s: %w", componentName, err)
+		}
+
+		// Filter by component name in the broader results
+		filteredDS := make([]appsv1.DaemonSet, 0)
+		for _, ds := range daemonSets.Items {
+			if strings.Contains(ds.Name, componentName) ||
+				strings.Contains(strings.ToLower(ds.Name), strings.Replace(componentName, "-", "", -1)) {
+				filteredDS = append(filteredDS, ds)
+			}
+		}
+		daemonSets.Items = filteredDS
+	}
+
+	if len(daemonSets.Items) == 0 {
+		return fmt.Errorf("no DaemonSets found for component %s", componentName)
+	}
+
+	// Restart each matching DaemonSet
+	for i := range daemonSets.Items {
+		ds := &daemonSets.Items[i]
+		logger.Info("Triggering rollout restart for DaemonSet",
+			"name", ds.Name, "namespace", ds.Namespace, "component", componentName)
+
+		// Update the restart annotation to trigger a rollout
+		original := ds.DeepCopy()
+		if ds.Spec.Template.Annotations == nil {
+			ds.Spec.Template.Annotations = make(map[string]string)
+		}
+		ds.Spec.Template.Annotations["kaiwo.silogen.ai/restartedAt"] = time.Now().Format(time.RFC3339)
+
+		if err := t.Client.Patch(ctx, ds, client.MergeFrom(original)); err != nil {
+			logger.Error(err, "Failed to trigger rollout restart for DaemonSet", "name", ds.Name)
+			return fmt.Errorf("failed to restart DaemonSet %s: %w", ds.Name, err)
+		}
+
+		t.Recorder.Eventf(ds, corev1.EventTypeNormal, "RolloutRestart",
+			"Triggered rollout restart for DaemonSet %s to refresh GPU configuration", ds.Name)
+	}
+
+	return nil
+}
+
+// rolloutRestartDaemonSetBySuffix triggers a rollout restart using name suffix (fallback method)
+func (t *GpuPartitionTask) rolloutRestartDaemonSetBySuffix(ctx context.Context, namespace, suffix string) error {
+	logger := log.FromContext(ctx)
+
+	daemonSets := &appsv1.DaemonSetList{}
+	if err := t.Client.List(ctx, daemonSets, client.InNamespace(namespace)); err != nil {
+		return fmt.Errorf("failed to list DaemonSets in namespace %s: %w", namespace, err)
+	}
+
+	for i := range daemonSets.Items {
+		ds := &daemonSets.Items[i]
+		if strings.HasSuffix(ds.Name, suffix) {
+			logger.Info("Triggering rollout restart for DaemonSet by suffix",
+				"name", ds.Name, "namespace", ds.Namespace, "suffix", suffix)
+
+			// Update the restart annotation to trigger a rollout
+			original := ds.DeepCopy()
+			if ds.Spec.Template.Annotations == nil {
+				ds.Spec.Template.Annotations = make(map[string]string)
+			}
+			ds.Spec.Template.Annotations["kaiwo.silogen.ai/restartedAt"] = time.Now().Format(time.RFC3339)
+
+			if err := t.Client.Patch(ctx, ds, client.MergeFrom(original)); err != nil {
+				logger.Error(err, "Failed to trigger rollout restart for DaemonSet", "name", ds.Name)
+				return fmt.Errorf("failed to restart DaemonSet %s: %w", ds.Name, err)
+			}
+
+			t.Recorder.Eventf(ds, corev1.EventTypeNormal, "RolloutRestart",
+				"Triggered rollout restart for DaemonSet %s to refresh GPU configuration", ds.Name)
+			return nil
+		}
+	}
+
+	return fmt.Errorf("no DaemonSet found with suffix %s in namespace %s", suffix, namespace)
+}
+
+// getDaemonSetPod is kept for compatibility but now mainly used for verification
 func (t *GpuPartitionTask) getDaemonSetPod(ctx context.Context, namespace, dsSuffix, nodeName string) (*corev1.Pod, error) {
 	podList := &corev1.PodList{}
 	// Use field selector to limit results to the specific node
@@ -593,21 +729,42 @@ func (t *GpuPartitionTask) getDaemonSetPod(ctx context.Context, namespace, dsSuf
 func (t *GpuPartitionTask) setErrorCondition(obj *KaiwoNodeWrapper, message string) {
 	obj.KaiwoNode.Status.Status = v1alpha1.KaiwoNodeStatusError
 	obj.KaiwoNode.Status.Partitioning.Phase = v1alpha1.PartitioningPhaseError
+
+	// Track error state
+	t.updateProgressTracking(obj, v1alpha1.PartitioningPhaseError)
+
+	// Add comprehensive error info
+	attempt := t.getRetryAttempt(obj)
+	elapsedTime := t.getElapsedTime(obj)
+	nextRetryTime := t.getRetryInterval(attempt)
+
+	detailedMessage := fmt.Sprintf("%s (attempt %d, elapsed: %v, next retry in: %v)",
+		message, attempt+1, elapsedTime, nextRetryTime)
+
 	meta.SetStatusCondition(&obj.KaiwoNode.Status.Conditions, metav1.Condition{
 		Type:    v1alpha1.PartitioningCompletedConditionType,
 		Reason:  string(v1alpha1.PartitioningConditionFailed),
 		Status:  metav1.ConditionFalse,
-		Message: message,
+		Message: detailedMessage,
 	})
 }
 
 func (t *GpuPartitionTask) setInProgressCondition(obj *KaiwoNodeWrapper, phase v1alpha1.PartitioningPhase, message string) {
 	obj.KaiwoNode.Status.Partitioning.Phase = phase
+
+	// Track phase transitions and timing
+	t.updateProgressTracking(obj, phase)
+
+	// Add retry attempt and timing info to the message
+	attempt := t.getRetryAttempt(obj)
+	elapsedTime := t.getElapsedTime(obj)
+	detailedMessage := t.buildDetailedStatusMessage(message, attempt, elapsedTime, phase)
+
 	meta.SetStatusCondition(&obj.KaiwoNode.Status.Conditions, metav1.Condition{
 		Type:    v1alpha1.PartitioningCompletedConditionType,
 		Reason:  string(v1alpha1.PartitioningConditionInProgress),
 		Status:  metav1.ConditionFalse,
-		Message: message,
+		Message: detailedMessage,
 	})
 }
 
@@ -924,26 +1081,336 @@ func (t *GpuPartitionTask) cleanupTaintsOnError(ctx context.Context, node *corev
 
 // shouldRetryFromError determines if we should retry partitioning from error state
 func (t *GpuPartitionTask) shouldRetryFromError(obj *KaiwoNodeWrapper) bool {
+	logger := log.FromContext(context.Background())
+	attempt := t.getRetryAttempt(obj)
+
 	// Check for retry annotation that user can set to force retry
 	if obj.KaiwoNode.Annotations != nil {
 		if retryAnnotation, exists := obj.KaiwoNode.Annotations["kaiwo.silogen.ai/retry-partitioning"]; exists {
 			// Remove the annotation and allow retry
 			delete(obj.KaiwoNode.Annotations, "kaiwo.silogen.ai/retry-partitioning")
+			logger.Info("Manual retry requested via annotation", "node", obj.KaiwoNode.Name, "attempt", attempt)
 			return retryAnnotation == "true"
 		}
 	}
 
-	// Check if we've been in error state for a long time - allow automatic retry
+	// Don't auto-retry if we've already made too many attempts
+	if attempt >= 5 {
+		logger.Info("Maximum retry attempts reached, not retrying", "node", obj.KaiwoNode.Name, "attempt", attempt)
+		return false
+	}
+
+	// Check if we've been in error state for a reasonable time
 	condition := meta.FindStatusCondition(obj.KaiwoNode.Status.Conditions, v1alpha1.PartitioningCompletedConditionType)
 	if condition != nil && condition.Status == metav1.ConditionFalse && condition.Reason == string(v1alpha1.PartitioningConditionFailed) {
 		elapsed := time.Since(condition.LastTransitionTime.Time)
-		// Auto-retry after 10 minutes in case it was a transient failure
-		if elapsed >= 10*time.Minute {
-			return true
+
+		// Implement progressive retry intervals based on attempt count
+		retryInterval := t.getRetryInterval(attempt)
+		logger.Info("Checking automatic retry conditions",
+			"node", obj.KaiwoNode.Name,
+			"attempt", attempt,
+			"elapsed", elapsed,
+			"retryInterval", retryInterval)
+
+		if elapsed >= retryInterval {
+			// Check if the error might be recoverable
+			if t.isErrorRecoverable(obj, condition) {
+				logger.Info("Attempting automatic recovery from error state",
+					"node", obj.KaiwoNode.Name, "attempt", attempt+1)
+				return true
+			}
 		}
 	}
 
 	return false
+}
+
+// getRetryInterval returns the retry interval based on attempt count
+func (t *GpuPartitionTask) getRetryInterval(attempt int) time.Duration {
+	// Progressive retry intervals: 2min, 5min, 10min, 20min, 30min
+	intervals := []time.Duration{
+		2 * time.Minute,
+		5 * time.Minute,
+		10 * time.Minute,
+		20 * time.Minute,
+		30 * time.Minute,
+	}
+
+	if attempt >= len(intervals) {
+		return intervals[len(intervals)-1]
+	}
+	return intervals[attempt]
+}
+
+// isErrorRecoverable determines if an error condition might be recoverable
+func (t *GpuPartitionTask) isErrorRecoverable(obj *KaiwoNodeWrapper, condition *metav1.Condition) bool {
+	if condition == nil {
+		return false
+	}
+
+	message := strings.ToLower(condition.Message)
+
+	// Non-recoverable errors (don't retry these automatically)
+	nonRecoverableErrors := []string{
+		"cannot partition a node without gpus",
+		"unknown partitioning phase",
+		"invalid profile",
+		"unsupported",
+	}
+
+	for _, nonRecoverable := range nonRecoverableErrors {
+		if strings.Contains(message, nonRecoverable) {
+			return false
+		}
+	}
+
+	// Potentially recoverable errors (retry these)
+	recoverableErrors := []string{
+		"timeout",
+		"failed to",
+		"connection",
+		"temporary",
+		"transient",
+		"dcm",                 // DCM-related errors might be transient
+		"partitioning failed", // Generic partitioning failures might recover
+	}
+
+	for _, recoverable := range recoverableErrors {
+		if strings.Contains(message, recoverable) {
+			return true
+		}
+	}
+
+	// If we can't categorize the error, be conservative and don't auto-retry
+	return false
+}
+
+// calculateBackoffDelay calculates exponential backoff delay with jitter
+func (t *GpuPartitionTask) calculateBackoffDelay(obj *KaiwoNodeWrapper, severity int) time.Duration {
+	// Get current retry attempt from annotation
+	attempt := t.getRetryAttempt(obj)
+
+	// Base delay increases with severity
+	baseDelay := baseRequeueDelay
+	switch severity {
+	case 0: // Normal operations
+		baseDelay = baseRequeueDelay
+	case 1: // Minor issues
+		baseDelay = baseRequeueDelay * 2
+	case 2: // Medium issues
+		baseDelay = baseRequeueDelay * 4
+	case 3: // Serious issues
+		baseDelay = baseRequeueDelay * 8
+	case 4: // Major issues
+		baseDelay = baseRequeueDelay * 16
+	default: // Critical issues
+		baseDelay = baseRequeueDelay * 32
+	}
+
+	// Apply exponential backoff based on attempt number
+	multiplier := 1.0
+	for i := 0; i < attempt && i < 6; i++ { // Cap at 2^6 = 64x multiplier
+		multiplier *= 2
+	}
+
+	delay := time.Duration(float64(baseDelay) * multiplier)
+	if delay > maxRequeueDelay {
+		delay = maxRequeueDelay
+	}
+
+	// Add jitter (±25%)
+	jitter := delay / 4
+	if jitter > 0 {
+		randomJitter := time.Duration(time.Now().UnixNano() % int64(jitter))
+		if time.Now().UnixNano()%2 == 0 {
+			delay += randomJitter
+		} else {
+			delay -= randomJitter
+		}
+	}
+
+	// Increment retry attempt for next time
+	t.incrementRetryAttempt(obj)
+
+	return delay
+}
+
+// calculateErrorBackoffDelay calculates backoff delay specifically for error states
+func (t *GpuPartitionTask) calculateErrorBackoffDelay(obj *KaiwoNodeWrapper) time.Duration {
+	attempt := t.getRetryAttempt(obj)
+
+	// Start with 1 minute for error states, exponentially increase
+	baseDelay := 1 * time.Minute
+	multiplier := 1.0
+	for i := 0; i < attempt && i < 4; i++ { // Cap at 2^4 = 16x multiplier for errors
+		multiplier *= 2
+	}
+
+	delay := time.Duration(float64(baseDelay) * multiplier)
+	if delay > maxRequeueDelay {
+		delay = maxRequeueDelay
+	}
+
+	t.incrementRetryAttempt(obj)
+	return delay
+}
+
+// getRetryAttempt gets the current retry attempt from KaiwoNode annotations
+func (t *GpuPartitionTask) getRetryAttempt(obj *KaiwoNodeWrapper) int {
+	if obj.KaiwoNode.Annotations == nil {
+		return 0
+	}
+	attemptStr, exists := obj.KaiwoNode.Annotations[retryAttemptAnnotation]
+	if !exists {
+		return 0
+	}
+	attempt := 0
+	if _, err := fmt.Sscanf(attemptStr, "%d", &attempt); err != nil {
+		return 0
+	}
+	return attempt
+}
+
+// incrementRetryAttempt increments the retry attempt counter
+func (t *GpuPartitionTask) incrementRetryAttempt(obj *KaiwoNodeWrapper) {
+	if obj.KaiwoNode.Annotations == nil {
+		obj.KaiwoNode.Annotations = make(map[string]string)
+	}
+	attempt := t.getRetryAttempt(obj)
+	obj.KaiwoNode.Annotations[retryAttemptAnnotation] = fmt.Sprintf("%d", attempt+1)
+}
+
+// resetRetryAttempt resets the retry attempt counter (called on successful operations)
+func (t *GpuPartitionTask) resetRetryAttempt(obj *KaiwoNodeWrapper) {
+	if obj.KaiwoNode.Annotations != nil {
+		delete(obj.KaiwoNode.Annotations, retryAttemptAnnotation)
+	}
+}
+
+// updateProgressTracking updates progress tracking annotations and labels
+func (t *GpuPartitionTask) updateProgressTracking(obj *KaiwoNodeWrapper, phase v1alpha1.PartitioningPhase) {
+	now := time.Now().Format(time.RFC3339)
+
+	if obj.KaiwoNode.Annotations == nil {
+		obj.KaiwoNode.Annotations = make(map[string]string)
+	}
+	if obj.Node.Labels == nil {
+		obj.Node.Labels = make(map[string]string)
+	}
+
+	// Set start time if this is the first phase
+	if _, exists := obj.KaiwoNode.Annotations[partitioningStartTimeAnnotation]; !exists {
+		obj.KaiwoNode.Annotations[partitioningStartTimeAnnotation] = now
+	}
+
+	// Update phase start time
+	obj.KaiwoNode.Annotations[partitioningPhaseStartAnnotation] = now
+
+	// Update progress timestamp label for external monitoring
+	obj.Node.Labels[progressTimestampLabel] = fmt.Sprintf("%d", time.Now().Unix())
+}
+
+// resetProgressTracking clears progress tracking annotations
+func (t *GpuPartitionTask) resetProgressTracking(obj *KaiwoNodeWrapper) {
+	if obj.KaiwoNode.Annotations != nil {
+		delete(obj.KaiwoNode.Annotations, partitioningStartTimeAnnotation)
+		delete(obj.KaiwoNode.Annotations, partitioningPhaseStartAnnotation)
+	}
+	if obj.Node.Labels != nil {
+		delete(obj.Node.Labels, progressTimestampLabel)
+	}
+}
+
+// getElapsedTime returns the total elapsed time since partitioning started
+func (t *GpuPartitionTask) getElapsedTime(obj *KaiwoNodeWrapper) time.Duration {
+	if obj.KaiwoNode.Annotations == nil {
+		return 0
+	}
+
+	startTimeStr, exists := obj.KaiwoNode.Annotations[partitioningStartTimeAnnotation]
+	if !exists {
+		return 0
+	}
+
+	startTime, err := time.Parse(time.RFC3339, startTimeStr)
+	if err != nil {
+		return 0
+	}
+
+	return time.Since(startTime)
+}
+
+// getPhaseElapsedTime returns the elapsed time since the current phase started
+func (t *GpuPartitionTask) getPhaseElapsedTime(obj *KaiwoNodeWrapper) time.Duration {
+	if obj.KaiwoNode.Annotations == nil {
+		return 0
+	}
+
+	phaseStartStr, exists := obj.KaiwoNode.Annotations[partitioningPhaseStartAnnotation]
+	if !exists {
+		return 0
+	}
+
+	phaseStart, err := time.Parse(time.RFC3339, phaseStartStr)
+	if err != nil {
+		return 0
+	}
+
+	return time.Since(phaseStart)
+}
+
+// buildDetailedStatusMessage creates a comprehensive status message with timing and attempt info
+func (t *GpuPartitionTask) buildDetailedStatusMessage(baseMessage string, attempt int, totalElapsed time.Duration, phase v1alpha1.PartitioningPhase) string {
+	var parts []string
+	parts = append(parts, baseMessage)
+
+	// Add attempt info if > 0
+	if attempt > 0 {
+		parts = append(parts, fmt.Sprintf("attempt %d", attempt+1))
+	}
+
+	// Add elapsed time if available
+	if totalElapsed > 0 {
+		parts = append(parts, fmt.Sprintf("elapsed: %v", totalElapsed.Round(time.Second)))
+	}
+
+	// Add phase-specific context
+	switch phase {
+	case v1alpha1.PartitioningPhaseDrainingUntoleratedPods:
+		parts = append(parts, fmt.Sprintf("timeout: %v", podDrainingTimeout))
+	case v1alpha1.PartitioningPhaseApplyingPartitions:
+		parts = append(parts, fmt.Sprintf("DCM timeout: %v", dcmOperationTimeout))
+	case v1alpha1.PartitioningPhaseWaitingForResourceUpdate:
+		parts = append(parts, fmt.Sprintf("resource timeout: %v", resourceUpdateTimeout))
+	}
+
+	return strings.Join(parts, ", ")
+}
+
+// getPartitioningProgress returns a structured progress report
+func (t *GpuPartitionTask) getPartitioningProgress(obj *KaiwoNodeWrapper) map[string]interface{} {
+	progress := map[string]interface{}{
+		"node":         obj.Node.Name,
+		"phase":        string(obj.KaiwoNode.Status.Partitioning.Phase),
+		"status":       string(obj.KaiwoNode.Status.Status),
+		"attempt":      t.getRetryAttempt(obj),
+		"totalElapsed": t.getElapsedTime(obj).String(),
+		"phaseElapsed": t.getPhaseElapsedTime(obj).String(),
+	}
+
+	// Add profile information
+	if obj.KaiwoNode.Status.Partitioning.AppliedProfile != nil {
+		progress["appliedProfile"] = string(*obj.KaiwoNode.Status.Partitioning.AppliedProfile)
+	}
+	progress["desiredProfile"] = string(obj.KaiwoNode.Spec.Partitioning.Profile)
+
+	// Add DCM request ID if available
+	if requestID := obj.Node.Labels[AmdDcmPartitioningRequestIdLabel]; requestID != "" {
+		progress["dcmRequestId"] = requestID
+	}
+
+	return progress
 }
 
 // toleratesDCM checks if a pod tolerates the AMD DCM taint
