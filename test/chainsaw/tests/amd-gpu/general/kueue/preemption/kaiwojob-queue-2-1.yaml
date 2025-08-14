@@ -17,11 +17,25 @@ spec:
       memory: "8Gi"
   entrypoint: |
     python3 - << 'EOF'
+    import signal
+    import sys
     import torch
+
+    def signal_handler(sig, frame):
+        print('Termination signal received. Exiting...')
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+
     dev = torch.device('cuda')
     a = torch.rand((4096, 4096), device=dev)
-    while True:
-      _ = torch.mm(a, a)
+    try:
+        while True:
+            _ = torch.mm(a, a)
+    except KeyboardInterrupt:
+        print('Interrupted. Exiting...')
+        sys.exit(0)
     EOF
 ---
 apiVersion: kaiwo.silogen.ai/v1alpha1
@@ -43,9 +57,23 @@ spec:
       memory: "8Gi"
   entrypoint: |-
     python3 - << 'EOF'
+    import signal
+    import sys
     import torch
+
+    def signal_handler(sig, frame):
+        print('Termination signal received. Exiting...')
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+
     dev = torch.device('cuda')
     a = torch.rand((4096, 4096), device=dev)
-    while True:
-      _ = torch.mm(a, a)
+    try:
+        while True:
+            _ = torch.mm(a, a)
+    except KeyboardInterrupt:
+        print('Interrupted. Exiting...')
+        sys.exit(0)
     EOF

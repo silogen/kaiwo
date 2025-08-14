@@ -1,13 +1,16 @@
 apiVersion: chainsaw.kyverno.io/v1alpha2
 kind: Configuration
 metadata:
-  name: ci-config
+  name: amd-gpu-cluster
 spec:
-  parallel: 30
+  execution:
+    parallel: 30
+  discovery:
+    fullName: true
   timeouts:
     apply: 10s
     assert: 90s
-    cleanup: 60s
+    cleanup: 120s
     delete: 90s
     error: 60s
     exec: 10s

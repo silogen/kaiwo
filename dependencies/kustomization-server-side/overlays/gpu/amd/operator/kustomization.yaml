@@ -3,6 +3,7 @@ kind: Kustomization
 
 resources:
 - https://raw.githubusercontent.com/ROCm/gpu-operator/main/config/crd/bases/amd.com_deviceconfigs.yaml
+- namespace.yaml
 - gpu-config-cm.yaml
 - device-config.yaml
 - config-manager-config.yaml
