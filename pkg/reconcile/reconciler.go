@@ -19,23 +19,23 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/silogen/kaiwo/pkg/monitoring/utilization"
+
+	"github.com/silogen/kaiwo/pkg/storage/download"
+
+	kueue2 "github.com/silogen/kaiwo/pkg/platform/kueue"
+
+	cluster2 "github.com/silogen/kaiwo/pkg/platform/cluster"
+
+	"github.com/silogen/kaiwo/pkg/runtime/config"
+
 	"github.com/silogen/kaiwo/pkg/app"
 
 	"github.com/silogen/kaiwo/pkg/api"
 
 	"github.com/silogen/kaiwo/pkg/observe"
 
-	"github.com/silogen/kaiwo/pkg/config"
-
-	"github.com/silogen/kaiwo/pkg/utilization"
-
-	"github.com/silogen/kaiwo/pkg/jobs/download"
-
-	"github.com/silogen/kaiwo/pkg/kueue"
-
 	"github.com/silogen/kaiwo/pkg/storage"
-
-	"github.com/silogen/kaiwo/pkg/cluster"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 
@@ -98,7 +98,7 @@ func (wr *Reconciler) Reconcile(ctx context.Context) (ctrl.Result, error) {
 		return ctrl.Result{}, nil
 	}
 
-	clusterContext, err := cluster.GetClusterContext(ctx, wr.Client)
+	clusterContext, err := cluster2.GetClusterContext(ctx, wr.Client)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to fetch cluster context: %w", err)
 	}
@@ -136,12 +136,12 @@ func (wr *Reconciler) Reconcile(ctx context.Context) (ctrl.Result, error) {
 	switch observedStatus {
 	case v1alpha1.WorkloadStatusPending:
 		// Attempt to clean up expired workloads so that this one can be admitted
-		if _, err := kueue.CleanupExpiredWorkloads(ctx, wr.Client); err != nil {
+		if _, err := kueue2.CleanupExpiredWorkloads(ctx, wr.Client); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to cleanup expired workloads: %w", err)
 		}
 	case v1alpha1.WorkloadStatusRunning:
 		// Requeue after the workload's duration is expired, so that the workload can become preemptable
-		if shouldRequeue, requeueAfter := kueue.ShouldRequeueAfter(wr.WorkloadHandler.Workload); shouldRequeue {
+		if shouldRequeue, requeueAfter := kueue2.ShouldRequeueAfter(wr.WorkloadHandler.Workload); shouldRequeue {
 			return ctrl.Result{RequeueAfter: *requeueAfter}, nil
 		}
 	}
@@ -151,7 +151,7 @@ func (wr *Reconciler) Reconcile(ctx context.Context) (ctrl.Result, error) {
 
 // observeOverallStatus uses the determines the workload status
 func (wr *Reconciler) observeOverallStatus(ctx context.Context) (v1alpha1.WorkloadStatus, []metav1.Condition, error) {
-	schedulableCondition, err := cluster.GetSchedulableCondition(ctx, wr.Client, wr.ClusterContext, wr.WorkloadHandler.Workload)
+	schedulableCondition, err := cluster2.GetSchedulableCondition(ctx, wr.Client, wr.ClusterContext, wr.WorkloadHandler.Workload)
 	if err != nil {
 		return v1alpha1.WorkloadStatusError, nil, err
 	}
@@ -223,7 +223,7 @@ func (wr *Reconciler) handleStatusTransition(ctx context.Context, newStatus v1al
 		}
 	}
 
-	condition := meta.FindStatusCondition(commonStatusSpec.Conditions, kueue.PreemptableConditionType)
+	condition := meta.FindStatusCondition(commonStatusSpec.Conditions, kueue2.PreemptableConditionType)
 	if condition != nil && condition.Status == metav1.ConditionTrue && condition.ObservedGeneration == 0 {
 		wr.Recorder.Event(obj, corev1.EventTypeNormal, "Preemptable", "Workload has exceeded its duration")
 	}
@@ -317,7 +317,7 @@ func (wr *Reconciler) ensureLocalQueue(ctx context.Context) error {
 	namespace := wr.WorkloadHandler.Workload.GetKaiwoWorkloadObject().GetNamespace()
 	clusterQueueName := api.GetClusterQueueName(ctx, wr.WorkloadHandler.Workload)
 
-	if err := kueue.EnsureLocalQueue(ctx, wr.Client, wr.Scheme, clusterQueueName, clusterQueueName, namespace); err != nil {
+	if err := kueue2.EnsureLocalQueue(ctx, wr.Client, wr.Scheme, clusterQueueName, clusterQueueName, namespace); err != nil {
 		return fmt.Errorf("failed to ensure local queue: %w", err)
 	}
 	return nil

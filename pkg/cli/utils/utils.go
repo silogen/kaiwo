@@ -18,9 +18,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/silogen/kaiwo/pkg/runtime/common"
+
 	"github.com/silogen/kaiwo/pkg/api"
 
-	"github.com/silogen/kaiwo/pkg/common"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )

@@ -18,17 +18,17 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/silogen/kaiwo/pkg/platform/ray"
+
+	"github.com/silogen/kaiwo/pkg/platform/kueue"
+
+	"github.com/silogen/kaiwo/pkg/runtime/config"
+
+	common2 "github.com/silogen/kaiwo/pkg/runtime/common"
+
 	"github.com/silogen/kaiwo/pkg/api"
 
-	"github.com/silogen/kaiwo/pkg/ray"
-
 	"github.com/silogen/kaiwo/pkg/observe"
-
-	"github.com/silogen/kaiwo/pkg/config"
-
-	"github.com/silogen/kaiwo/pkg/common"
-
-	"github.com/silogen/kaiwo/pkg/kueue"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
@@ -119,11 +119,11 @@ func (handler *RayJobHandler) BuildDesired(ctx context.Context, clusterCtx api.C
 	rayJob.Labels = rayJobSpec.RayClusterSpec.HeadGroupSpec.Template.Labels
 	rayJob.Spec = rayJobSpec
 
-	common.UpdateLabels(handler.KaiwoJob, &rayJob.ObjectMeta)
+	common2.UpdateLabels(handler.KaiwoJob, &rayJob.ObjectMeta)
 
-	rayJob.Labels[common.QueueLabel] = api.GetClusterQueueName(ctx, handler)
+	rayJob.Labels[common2.QueueLabel] = api.GetClusterQueueName(ctx, handler)
 	if priorityClass := handler.GetCommonSpec().WorkloadPriorityClass; priorityClass != "" {
-		rayJob.Labels[common.WorkloaddPriorityClassLabel] = priorityClass
+		rayJob.Labels[common2.WorkloaddPriorityClassLabel] = priorityClass
 	}
 
 	return rayJob, nil

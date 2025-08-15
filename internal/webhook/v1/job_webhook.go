@@ -19,9 +19,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/silogen/kaiwo/pkg/config"
+	"github.com/silogen/kaiwo/pkg/runtime/config"
 
-	"github.com/silogen/kaiwo/pkg/common"
+	common2 "github.com/silogen/kaiwo/pkg/runtime/common"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
@@ -83,14 +83,14 @@ func (j *JobWebhook) Default(ctx context.Context, obj runtime.Object) error {
 	if strings.ToLower(enforceKaiwoOnWorkloads) == "true" { //nolint:goconst
 		for _, container := range job.Spec.Template.Spec.Containers {
 			if CheckGPUReservation(container) {
-				job.Labels[common.KaiwoManagedLabel] = "true" //nolint:goconst
+				job.Labels[common2.KaiwoManagedLabel] = "true" //nolint:goconst
 			}
 		}
 	}
 
 	if kaiwoManages(job) {
-		if job.Labels[common.QueueLabel] == "" {
-			job.Labels[common.QueueLabel] = common.DefaultClusterQueueName
+		if job.Labels[common2.QueueLabel] == "" {
+			job.Labels[common2.QueueLabel] = common2.DefaultClusterQueueName
 		}
 		if job.Spec.Template.Spec.TerminationGracePeriodSeconds == nil {
 			job.Spec.Template.Spec.TerminationGracePeriodSeconds = baseutils.Pointer(int64(0))
@@ -99,8 +99,8 @@ func (j *JobWebhook) Default(ctx context.Context, obj runtime.Object) error {
 		if err := j.ensureKaiwoJob(ctx, job, authenticatedUser); err != nil {
 			return fmt.Errorf("failed to create KaiwoJob: %w", err)
 		}
-		if !baseutils.ContainsString(job.Finalizers, common.Finalizer) {
-			job.Finalizers = append(job.Finalizers, common.Finalizer)
+		if !baseutils.ContainsString(job.Finalizers, common2.Finalizer) {
+			job.Finalizers = append(job.Finalizers, common2.Finalizer)
 			logger.Info("Added finalizer to Job", "JobName", job.Name)
 		}
 
@@ -110,7 +110,7 @@ func (j *JobWebhook) Default(ctx context.Context, obj runtime.Object) error {
 }
 
 func kaiwoManages(job *batchv1.Job) bool {
-	return job.Labels[common.KaiwoManagedLabel] == "true" //nolint:goconst
+	return job.Labels[common2.KaiwoManagedLabel] == "true" //nolint:goconst
 }
 
 func getAuthenticatedUser(ctx context.Context) string {
@@ -143,8 +143,8 @@ func (j *JobWebhook) ensureKaiwoJob(ctx context.Context, job *batchv1.Job, authe
 		kaiwoJobLabels[key] = value
 	}
 
-	if _, exists := kaiwoJobLabels[common.QueueLabel]; !exists {
-		kaiwoJobLabels[common.QueueLabel] = common.DefaultClusterQueueName
+	if _, exists := kaiwoJobLabels[common2.QueueLabel]; !exists {
+		kaiwoJobLabels[common2.QueueLabel] = common2.DefaultClusterQueueName
 	}
 
 	kaiwoJob = &kaiwo.KaiwoJob{
@@ -161,11 +161,11 @@ func (j *JobWebhook) ensureKaiwoJob(ctx context.Context, job *batchv1.Job, authe
 		},
 	}
 
-	labelContext := common.GetKaiwoLabelContext(kaiwoJob)
+	labelContext := common2.GetKaiwoLabelContext(kaiwoJob)
 	// Set Kaiwo system labels on the Kaiwo job
-	common.SetKaiwoSystemLabels(labelContext, &kaiwoJob.ObjectMeta)
+	common2.SetKaiwoSystemLabels(labelContext, &kaiwoJob.ObjectMeta)
 	// Set Kaiwo system labels on the original job
-	common.SetKaiwoSystemLabels(labelContext, &job.ObjectMeta)
+	common2.SetKaiwoSystemLabels(labelContext, &job.ObjectMeta)
 
 	// TODO check
 	//if err := controllerutils.CreateLocalQueue(ctx, j.Client, kaiwoJobLabels[common.QueueLabel], kaiwoJob.Namespace); err != nil {
@@ -207,7 +207,7 @@ func (j *JobWebhook) ValidateCreate(ctx context.Context, obj runtime.Object) (ad
 	if strings.ToLower(enforceKaiwoOnWorkloads) == "true" {
 		for _, container := range job.Spec.Template.Spec.Containers {
 			if CheckGPUReservation(container) {
-				if _, exists := job.Labels[common.KaiwoManagedLabel]; !exists {
+				if _, exists := job.Labels[common2.KaiwoManagedLabel]; !exists {
 					return nil, fmt.Errorf("all jobs must have 'kaiwo.silogen.ai/managed' label")
 				}
 			}
@@ -230,7 +230,7 @@ func (j *JobWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) (ad
 	}
 
 	// **Ensure the job has a finalizer before deletion starts**
-	if !baseutils.ContainsString(job.Finalizers, common.Finalizer) {
+	if !baseutils.ContainsString(job.Finalizers, common2.Finalizer) {
 		return nil, nil
 	}
 
@@ -244,7 +244,7 @@ func (j *JobWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) (ad
 			return nil, fmt.Errorf("failed to refresh Job before removing finalizer: %w", err)
 		}
 
-		job.Finalizers = baseutils.RemoveString(job.Finalizers, common.Finalizer)
+		job.Finalizers = baseutils.RemoveString(job.Finalizers, common2.Finalizer)
 		if err := j.Client.Update(ctx, job); err != nil {
 			if errors.IsConflict(err) {
 				continue // Retry
@@ -263,8 +263,8 @@ func (j *JobWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) (ad
 		logger.Info("Deleting associated KaiwoJob", "KaiwoJob", kaiwoJob.Name)
 
 		// Remove finalizer from KaiwoJob
-		if baseutils.ContainsString(kaiwoJob.Finalizers, common.Finalizer) {
-			kaiwoJob.Finalizers = baseutils.RemoveString(kaiwoJob.Finalizers, common.Finalizer)
+		if baseutils.ContainsString(kaiwoJob.Finalizers, common2.Finalizer) {
+			kaiwoJob.Finalizers = baseutils.RemoveString(kaiwoJob.Finalizers, common2.Finalizer)
 			if err := j.Client.Update(ctx, kaiwoJob); err != nil {
 				return nil, fmt.Errorf("failed to remove finalizer from KaiwoJob: %w", err)
 			}

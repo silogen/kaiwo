@@ -22,7 +22,9 @@ import (
 	"path/filepath"
 	"regexp"
 
-	"github.com/silogen/kaiwo/pkg/common"
+	k8sUtils "github.com/silogen/kaiwo/pkg/kube/utils"
+
+	"github.com/silogen/kaiwo/pkg/runtime/common"
 
 	"github.com/charmbracelet/huh"
 	"github.com/sirupsen/logrus"
@@ -34,7 +36,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	cliutils "github.com/silogen/kaiwo/pkg/cli/utils"
-	k8sUtils "github.com/silogen/kaiwo/pkg/k8s"
 )
 
 var (

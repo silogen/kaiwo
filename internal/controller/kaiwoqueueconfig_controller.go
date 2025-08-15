@@ -18,11 +18,13 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/silogen/kaiwo/pkg/common"
+	controllerutils "github.com/silogen/kaiwo/pkg/platform/kueue"
 
-	"github.com/silogen/kaiwo/pkg/config"
+	"github.com/silogen/kaiwo/pkg/platform/cluster"
 
-	"github.com/silogen/kaiwo/pkg/cluster"
+	"github.com/silogen/kaiwo/pkg/runtime/config"
+
+	"github.com/silogen/kaiwo/pkg/runtime/common"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 
@@ -47,8 +49,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
-
-	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 )
 
 // KaiwoQueueConfigReconciler reconciles a KaiwoQueueConfig object

@@ -26,7 +26,9 @@ import (
 	"path/filepath"
 	"time"
 
-	controllerutils "github.com/silogen/kaiwo/pkg/workloads/common"
+	"github.com/silogen/kaiwo/pkg/monitoring/metrics"
+
+	controllerutils "github.com/silogen/kaiwo/pkg/runtime/config"
 
 	"github.com/go-logr/logr"
 
@@ -39,8 +41,6 @@ import (
 
 	configapi "github.com/silogen/kaiwo/apis/config/v1alpha1"
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
-
-	"github.com/silogen/kaiwo/pkg/utils/monitoring"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -423,10 +423,10 @@ func main() {
 	}
 
 	setupLog.Info("Adding metrics watcher")
-	metricsWatcher, err := monitoring.NewMetricsWatcher(
+	metricsWatcher, err := metrics.NewMetricsWatcher(
 		mgr.GetClient(),
 		mgr.GetScheme(),
-		mgr.GetEventRecorderFor(monitoring.MetricsComponentName),
+		mgr.GetEventRecorderFor(metrics.MetricsComponentName),
 	)
 	if err != nil {
 		setupLog.Error(err, "unable to create metrics watcher")

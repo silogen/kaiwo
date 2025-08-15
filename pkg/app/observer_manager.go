@@ -17,11 +17,12 @@ package app
 import (
 	"context"
 
+	"github.com/silogen/kaiwo/pkg/storage/download"
+
 	jobs "github.com/silogen/kaiwo/pkg/workloads/job"
 	services "github.com/silogen/kaiwo/pkg/workloads/service"
 
 	"github.com/silogen/kaiwo/pkg/api"
-	"github.com/silogen/kaiwo/pkg/jobs/download"
 	"github.com/silogen/kaiwo/pkg/observe"
 	"github.com/silogen/kaiwo/pkg/storage"
 
