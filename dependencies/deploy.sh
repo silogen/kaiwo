@@ -65,7 +65,12 @@ case "$ACTION" in
 
     echo "2. Applying server-side Kustomize resources from $KUSTOMIZE_SERVER..."
     if [ -d "$KUSTOMIZE_SERVER" ]; then
-      kubectl apply --server-side --force-conflicts -k "$KUSTOMIZE_SERVER"
+      kustomize build "$KUSTOMIZE_SERVER" > .build.yaml
+      yq 'select(.kind == "CustomResourceDefinition")' .build.yaml | kubectl apply --server-side -f -
+      yq -r 'select(.kind == "CustomResourceDefinition") | .metadata.name' .build.yaml | \
+        xargs -r -n1 kubectl wait --for=condition=Established --timeout=90s crd
+      kubectl apply --server-side -f .build.yaml
+
     else
       echo "Skip apply: kustomize path '$KUSTOMIZE_SERVER' not found."
     fi
@@ -74,8 +79,6 @@ case "$ACTION" in
     kubectl rollout status deployment/kueue-controller-manager -n kueue-system --timeout=5m || true
     kubectl rollout status deployment/kuberay-operator --timeout=5m || true
     kubectl rollout status deployment/appwrapper-controller-manager -n appwrapper-system --timeout=5m || true
-
-    kubectl wait --for=condition=Established --all CustomResourceDefinition --namespace=monitoring --timeout=5m || true
 
     echo "3. Installing Helm charts..."
     safe_helmfile sync
