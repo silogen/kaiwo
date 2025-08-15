@@ -20,6 +20,7 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
 	appwrapperv1beta2 "github.com/project-codeflare/appwrapper/api/v1beta2"
 
@@ -33,6 +34,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
@@ -272,4 +274,72 @@ func (handler *DeploymentHandler) GetKueueWorkloads(ctx context.Context, k8sClie
 		return []kueuev1beta1.Workload{}, nil
 	}
 	return []kueuev1beta1.Workload{*workload}, nil
+}
+
+// DeploymentObserver observes Deployment status
+type DeploymentObserver struct {
+	NamespacedName types.NamespacedName
+	Group          common.UnitGroup
+}
+
+func NewDeploymentObserver(nn types.NamespacedName, group common.UnitGroup) *DeploymentObserver {
+	return &DeploymentObserver{
+		NamespacedName: nn,
+		Group:          group,
+	}
+}
+
+func (o *DeploymentObserver) Kind() string {
+	return "Deployment"
+}
+
+func (o *DeploymentObserver) Observe(ctx context.Context, c client.Client) (common.UnitStatus, error) {
+	var d appsv1.Deployment
+	if err := c.Get(ctx, o.NamespacedName, &d); apierrors.IsNotFound(err) {
+		return common.UnitStatus{
+			Phase: common.UnitPending,
+		}, nil
+	} else if err != nil {
+		return common.UnitStatus{
+			Phase:   common.UnitUnknown,
+			Reason:  common.ReasonGetError,
+			Message: err.Error(),
+		}, nil
+	}
+
+	// Check for "Progressing=False / ProgressDeadlineExceeded"
+	for _, c := range d.Status.Conditions {
+		if c.Type == appsv1.DeploymentProgressing &&
+			c.Status == corev1.ConditionFalse &&
+			c.Reason == "ProgressDeadlineExceeded" {
+			return common.UnitStatus{
+				Phase:              common.UnitDegraded,
+				Reason:             c.Reason,
+				Message:            c.Message,
+				ObservedGeneration: d.Status.ObservedGeneration,
+			}, nil
+		}
+	}
+
+	// Check if all desired replicas are available and ready
+	desired := int32(1)
+	if d.Spec.Replicas != nil {
+		desired = *d.Spec.Replicas
+	}
+
+	switch {
+	case d.Status.UpdatedReplicas == desired &&
+		d.Status.ReadyReplicas == desired &&
+		d.Status.AvailableReplicas == desired:
+		return common.UnitStatus{
+			Phase:              common.UnitReady,
+			Ready:              true,
+			ObservedGeneration: d.Status.ObservedGeneration,
+		}, nil
+	default:
+		return common.UnitStatus{
+			Phase:              common.UnitProgressing,
+			ObservedGeneration: d.Status.ObservedGeneration,
+		}, nil
+	}
 }

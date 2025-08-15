@@ -148,22 +148,18 @@ func (wr *Reconciler) observeOverallStatusNew(ctx context.Context) (v1alpha1.Wor
 		return v1alpha1.WorkloadStatusError, []metav1.Condition{schedulableCondition}, nil
 	}
 
-	// Use new observation pattern
-	phase, units, err := ObserveWorkloadWithNewPattern(ctx, wr.Client, wr.WorkloadHandler.Workload)
+	// Use unified observation pattern - no more duplicate Decide() calls
+	observation, err := ObserveWorkload(ctx, wr.Client, wr.WorkloadHandler.Workload)
 	if err != nil {
-		return v1alpha1.WorkloadStatusError, nil, fmt.Errorf("failed to observe workload with new pattern: %w", err)
+		return v1alpha1.WorkloadStatusError, nil, fmt.Errorf("failed to observe workload: %w", err)
 	}
 
 	// Convert WorkloadPhase to WorkloadStatus for backward compatibility
-	status := WorkloadPhaseToStatus(phase)
+	status := WorkloadPhaseToStatus(observation.Phase)
 
-	// Aggregate conditions from units
-	agg := Reduce(units)
-	_, conditions := Decide(wr.WorkloadHandler.Workload.GetKaiwoWorkloadObject(), agg, units)
-
-	// Add schedulable condition
+	// Add schedulable condition to the existing conditions
 	allConditions := []metav1.Condition{schedulableCondition}
-	allConditions = append(allConditions, conditions...)
+	allConditions = append(allConditions, observation.Conditions...)
 
 	return status, allConditions, nil
 }
@@ -224,6 +220,9 @@ func (wr *Reconciler) handleStatusTransition(ctx context.Context, newStatus v1al
 	for _, condition := range conditions {
 		meta.SetStatusCondition(&commonStatusSpec.Conditions, condition)
 	}
+
+	// Update ObservedGeneration for debugging and retries
+	commonStatusSpec.ObservedGeneration = obj.GetGeneration()
 
 	result := ctrl.Result{Requeue: true}
 
