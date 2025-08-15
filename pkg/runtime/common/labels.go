@@ -15,8 +15,9 @@
 package common
 
 import (
-	"github.com/silogen/kaiwo/pkg/api"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/silogen/kaiwo/pkg/api"
 
 	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 

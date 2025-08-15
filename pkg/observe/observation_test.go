@@ -66,7 +66,6 @@ func TestWorkloadPhaseToStatus(t *testing.T) {
 		{PhaseSucceeded, v1alpha1.WorkloadStatusComplete},
 		{PhaseFailed, v1alpha1.WorkloadStatusFailed},
 		{PhaseDeleting, v1alpha1.WorkloadStatusTerminating},
-		{PhasePaused, v1alpha1.WorkloadStatusPending},
 	}
 
 	for _, test := range tests {

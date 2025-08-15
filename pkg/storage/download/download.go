@@ -21,17 +21,15 @@ import (
 
 	"github.com/silogen/kaiwo/pkg/runtime/common"
 
-	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
-	"github.com/silogen/kaiwo/pkg/api"
-	"github.com/silogen/kaiwo/pkg/observe"
-	baseutils "github.com/silogen/kaiwo/pkg/utils"
 	"gopkg.in/yaml.v3"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
+
+	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
+	"github.com/silogen/kaiwo/pkg/api"
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -346,128 +344,4 @@ func (r *DownloadJobReconciler) BuildDesired(ctx context.Context, clusterCtx api
 func (r *DownloadJobReconciler) MutateActual(ctx context.Context, clusterCtx api.ClusterContext, actual client.Object) error {
 	// TODO
 	return nil
-}
-
-func (r *DownloadJobReconciler) ObserveStatus(ctx context.Context, k8sClient client.Client, obj client.Object, previousWorkloadStatus v1alpha1.WorkloadStatus) (*v1alpha1.WorkloadStatus, []metav1.Condition, error) {
-	job := obj.(*batchv1.Job)
-
-	status, err := observe.ObserveBatchJob(job, previousWorkloadStatus)
-	if err != nil {
-		return nil, nil, fmt.Errorf("error observing batch job: %w", err)
-	}
-	var condition metav1.Condition
-
-	switch status {
-	case v1alpha1.WorkloadStatusPending:
-		status = v1alpha1.WorkloadStatusRunning
-		condition = metav1.Condition{
-			Type:    DownloadJobSucceededConditionType,
-			Status:  metav1.ConditionFalse,
-			Reason:  string(DownloadJobPending),
-			Message: "Download job pending",
-		}
-	case v1alpha1.WorkloadStatusRunning:
-		condition = metav1.Condition{
-			Type:    DownloadJobSucceededConditionType,
-			Status:  metav1.ConditionFalse,
-			Reason:  string(DownloadJobInProgress),
-			Message: "Download job in progress",
-		}
-	case v1alpha1.WorkloadStatusStarting:
-		condition = metav1.Condition{
-			Type:    DownloadJobSucceededConditionType,
-			Status:  metav1.ConditionFalse,
-			Reason:  string(DownloadJobInProgress),
-			Message: "Download job starting",
-		}
-	case v1alpha1.WorkloadStatusFailed:
-		condition = metav1.Condition{
-			Type:    DownloadJobSucceededConditionType,
-			Status:  metav1.ConditionFalse,
-			Reason:  string(DownloadJobFailed),
-			Message: "Download job failed",
-		}
-	case v1alpha1.WorkloadStatusComplete:
-		condition = metav1.Condition{
-			Type:    DownloadJobSucceededConditionType,
-			Status:  metav1.ConditionTrue,
-			Reason:  string(DownloadJobCompleted),
-			Message: "Download job succeeded",
-		}
-	default:
-		return nil, nil, fmt.Errorf("unexpected job status: %s", status)
-	}
-
-	return baseutils.Pointer(status), []metav1.Condition{condition}, nil
-}
-
-// Observer
-
-// DownloadJobObserver observes download Jobs
-type DownloadJobObserver struct {
-	observe.Identified
-}
-
-func NewDownloadJobObserver(nn types.NamespacedName, group observe.UnitGroup) *DownloadJobObserver {
-	return &DownloadJobObserver{
-		Identified: observe.Identified{
-			NamespacedName: nn,
-			Group:          group,
-		},
-	}
-}
-
-func (o *DownloadJobObserver) Kind() string {
-	return "Job"
-}
-
-func (o *DownloadJobObserver) Observe(ctx context.Context, c client.Client) (observe.UnitStatus, error) {
-	// Observe a regular Kubernetes Job used for downloading
-	var j batchv1.Job
-	if err := c.Get(ctx, o.NamespacedName, &j); apierrors.IsNotFound(err) {
-		return observe.UnitStatus{
-			Phase: observe.UnitPending,
-		}, nil
-	} else if err != nil {
-		return observe.UnitStatus{
-			Phase:   observe.UnitUnknown,
-			Reason:  observe.ReasonGetError,
-			Message: err.Error(),
-		}, nil
-	}
-
-	// Check for terminal conditions
-	for _, condition := range j.Status.Conditions {
-		switch condition.Type {
-		case batchv1.JobComplete:
-			if condition.Status == corev1.ConditionTrue {
-				return observe.UnitStatus{
-					Phase:   observe.UnitSucceeded,
-					Ready:   true,
-					Reason:  condition.Reason,
-					Message: condition.Message,
-				}, nil
-			}
-		case batchv1.JobFailed:
-			if condition.Status == corev1.ConditionTrue {
-				return observe.UnitStatus{
-					Phase:   observe.UnitFailed,
-					Reason:  condition.Reason,
-					Message: condition.Message,
-				}, nil
-			}
-		}
-	}
-
-	// Check if job is actively running
-	if j.Status.Active > 0 {
-		return observe.UnitStatus{
-			Phase: observe.UnitProgressing,
-		}, nil
-	}
-
-	// Default to pending
-	return observe.UnitStatus{
-		Phase: observe.UnitPending,
-	}, nil
 }

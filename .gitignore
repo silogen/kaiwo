@@ -39,3 +39,5 @@ dist/*
 
 .secrets
 kaiwo.logs
+
+dependencies/.build.yaml

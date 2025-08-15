@@ -1,3 +1,17 @@
+// Copyright 2025 Advanced Micro Devices, Inc.  All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package nodes
 
 import (
@@ -9,16 +23,16 @@ import (
 	"github.com/go-logr/logr"
 	"k8s.io/client-go/tools/record"
 
-	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 )
 
 const (
@@ -127,7 +141,7 @@ func (t *GpuPartitioner) Run(ctx context.Context, obj *KaiwoNodeWrapper) (*ctrl.
 
 // ----- Phase machine -----
 
-func (t *GpuPartitioner) dispatchPhase(ctx context.Context, obj *KaiwoNodeWrapper, l logr.Logger) (*ctrl.Result, error) {
+func (t *GpuPartitioner) dispatchPhase(ctx context.Context, obj *KaiwoNodeWrapper, _ logr.Logger) (*ctrl.Result, error) {
 	switch obj.KaiwoNode.Status.Partitioning.Phase {
 	case "", v1alpha1.PartitioningPhaseCompleted:
 		return t.phaseInit(ctx, obj)
@@ -178,13 +192,11 @@ func (t *GpuPartitioner) phaseDrain(ctx context.Context, obj *KaiwoNodeWrapper) 
 		return nil, fmt.Errorf("list offending pods: %w", err)
 	}
 	if len(offending) > 0 {
-		// Try active eviction (best-effort). This complements the NoExecute taint.
-		_ = t.evictPods(ctx, offending)
 
 		elapsed := t.phaseElapsed(obj)
 		if elapsed >= podDrainingTimeout {
 			t.setError(obj, fmt.Sprintf("Draining timeout; stuck pods: %v", names(offending)))
-			_ = t.cleanupTaints(ctx, obj.Node) // don't strand the node
+			t.cleanupTaints(ctx, obj.Node) // don't strand the node
 			return &ctrl.Result{RequeueAfter: t.backoff(obj, 3)}, nil
 		}
 		t.inProgress(obj, v1alpha1.PartitioningPhaseDrainingUntoleratedPods,
@@ -213,7 +225,7 @@ func (t *GpuPartitioner) phaseApply(ctx context.Context, obj *KaiwoNodeWrapper) 
 	switch {
 	case ok && state == "failure":
 		t.setError(obj, fmt.Sprintf("DCM reported failure (request %s). Check DCM logs.", reqID))
-		_ = t.cleanupTaints(ctx, obj.Node)
+		t.cleanupTaints(ctx, obj.Node)
 		return &ctrl.Result{RequeueAfter: t.backoff(obj, 3)}, nil
 
 	case ok && state == "success":
@@ -225,7 +237,7 @@ func (t *GpuPartitioner) phaseApply(ctx context.Context, obj *KaiwoNodeWrapper) 
 	default:
 		if t.phaseElapsed(obj) >= dcmOperationTimeout {
 			t.setError(obj, fmt.Sprintf("DCM timeout after %s (request %s)", dcmOperationTimeout, reqID))
-			_ = t.cleanupTaints(ctx, obj.Node)
+			t.cleanupTaints(ctx, obj.Node)
 			return &ctrl.Result{RequeueAfter: t.backoff(obj, 3)}, nil
 		}
 		return &ctrl.Result{RequeueAfter: t.backoff(obj, 1)}, nil
@@ -256,7 +268,7 @@ func (t *GpuPartitioner) phaseRestartPods(ctx context.Context, obj *KaiwoNodeWra
 	return &ctrl.Result{RequeueAfter: t.backoff(obj, 1)}, nil
 }
 
-func (t *GpuPartitioner) phaseWaitLabels(ctx context.Context, obj *KaiwoNodeWrapper) (*ctrl.Result, error) {
+func (t *GpuPartitioner) phaseWaitLabels(_ context.Context, obj *KaiwoNodeWrapper) (*ctrl.Result, error) {
 	// We complete as soon as isComplete() turns true on the next Reconcile
 	return &ctrl.Result{RequeueAfter: t.backoff(obj, 0)}, nil
 }
@@ -378,20 +390,6 @@ func (t *GpuPartitioner) listOffendingPods(ctx context.Context, node *corev1.Nod
 	return out, nil
 }
 
-func (t *GpuPartitioner) evictPods(ctx context.Context, pods []corev1.Pod) error {
-	grace := int64(30)
-	for i := range pods {
-		p := &pods[i]
-		ev := &policyv1.Eviction{
-			ObjectMeta:    metav1.ObjectMeta{Namespace: p.Namespace, Name: p.Name},
-			DeleteOptions: &metav1.DeleteOptions{GracePeriodSeconds: &grace},
-		}
-		// Ignore RBAC/feature errors; taint-based eviction still applies
-		_ = t.Client.SubResource("eviction").Create(ctx, p, ev)
-	}
-	return nil
-}
-
 // ----- Conditions / progress / backoff -----
 
 func (t *GpuPartitioner) setError(obj *KaiwoNodeWrapper, message string) {
@@ -419,7 +417,7 @@ func (t *GpuPartitioner) inProgress(obj *KaiwoNodeWrapper, phase v1alpha1.Partit
 	})
 }
 
-func (t *GpuPartitioner) touchProgress(obj *KaiwoNodeWrapper, phase v1alpha1.PartitioningPhase) {
+func (t *GpuPartitioner) touchProgress(obj *KaiwoNodeWrapper, _ v1alpha1.PartitioningPhase) {
 	now := time.Now().Format(time.RFC3339)
 	if obj.KaiwoNode.Annotations == nil {
 		obj.KaiwoNode.Annotations = map[string]string{}
@@ -490,7 +488,7 @@ func (t *GpuPartitioner) attempt(obj *KaiwoNodeWrapper) int {
 		return 0
 	}
 	var n int
-	fmt.Sscanf(obj.KaiwoNode.Annotations[retryAttemptAnnotation], "%d", &n)
+	_, _ = fmt.Sscanf(obj.KaiwoNode.Annotations[retryAttemptAnnotation], "%d", &n)
 	return n
 }
 
@@ -574,14 +572,13 @@ func (t *GpuPartitioner) rolloutRestartDaemonSets(ctx context.Context, sel map[s
 }
 
 // Remove both taints on error to avoid stranding the node
-func (t *GpuPartitioner) cleanupTaints(ctx context.Context, node *corev1.Node) error {
+func (t *GpuPartitioner) cleanupTaints(ctx context.Context, node *corev1.Node) {
 	_ = t.ensureTaint(ctx, node, amdDcmTaint, false)
 	_ = t.ensureTaint(ctx, node, kaiwoPartitioningTaint, false)
-	return nil
 }
 
 // Derive current profile from KaiwoNode status (still your original logic)
-func extractCurrentProfile(ctx context.Context, kn *v1alpha1.KaiwoNode) (v1alpha1.GpuPartitioningProfile, error) {
+func extractCurrentProfile(_ context.Context, kn *v1alpha1.KaiwoNode) (v1alpha1.GpuPartitioningProfile, error) {
 	g := kn.Status.Resources.Gpus
 	if g.LogicalVramPerGpu == nil {
 		return "", fmt.Errorf("no vRAM information; labels likely not ready")

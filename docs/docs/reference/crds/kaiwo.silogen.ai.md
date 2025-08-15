@@ -1007,6 +1007,7 @@ _Appears in:_
 | `RUNNING` | WorkloadStatusRunning indicates the workload pods are running. For KaiwoJob, this means the job has started execution. For KaiwoService, pods are up but may not yet be fully ready/healthy.<br /> |
 | `COMPLETE` | WorkloadStatusComplete indicates a KaiwoJob has finished successfully.<br /> |
 | `ERROR` | WorkloadStatusError indicates the workload encountered an error which can be recovered from.<br /> |
+| `DEGRADED` | WorkloadStatusDegraded indicates the workload is unhealthy but may recover (e.g., deployment deadline exceeded).<br /> |
 | `FAILED` | WorkloadStatusFailed indicates the workload (KaiwoJob or KaiwoService) encountered an error and cannot proceed or recover.<br /> |
 | `TERMINATING` | WorkloadStatusTerminating indicates that the workload should begin to terminate the underlying resources.<br /> |
 | `TERMINATED` | WorkloadStatusTerminated indicates the workload has been terminated by the user or system. This could be due to duration deadline being met and pressure for GPU demand.<br /> |

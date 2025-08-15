@@ -105,8 +105,10 @@ func (wr *Reconciler) Reconcile(ctx context.Context) (ctrl.Result, error) {
 	wr.ClusterContext = *clusterContext
 
 	// Observe the current status based on cluster resources
-	// Try new observation pattern first, fallback to old pattern if needed
 	observedStatus, conditions, err := wr.observeOverallStatus(ctx)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to observe overall status: %w", err)
+	}
 
 	conditionsChanged := !baseutils.ConditionsEqual(conditions, commonStatusSpec.Conditions)
 	// If the status is new, update and requeue

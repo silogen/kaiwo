@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/api/meta"
+
 	"github.com/silogen/kaiwo/pkg/api"
 
 	"github.com/silogen/kaiwo/pkg/observe"
@@ -131,9 +133,7 @@ func (o *PVCObserver) Kind() string {
 func (o *PVCObserver) Observe(ctx context.Context, c client.Client) (observe.UnitStatus, error) {
 	var pvc corev1.PersistentVolumeClaim
 	if err := c.Get(ctx, o.Identified.GetNamespacedName(), &pvc); apierrors.IsNotFound(err) {
-		return observe.UnitStatus{
-			Phase: observe.UnitPending,
-		}, nil
+		return observe.UnitStatus{Phase: observe.UnitPending}, nil
 	} else if err != nil {
 		return observe.UnitStatus{
 			Phase:   observe.UnitUnknown,
@@ -142,29 +142,92 @@ func (o *PVCObserver) Observe(ctx context.Context, c client.Client) (observe.Uni
 		}, nil
 	}
 
-	switch pvc.Status.Phase {
-	case corev1.ClaimBound:
+	// Deleting
+	if pvc.DeletionTimestamp != nil {
 		return observe.UnitStatus{
-			Phase: observe.UnitReady,
-			Ready: true,
-		}, nil
-	case corev1.ClaimPending:
-		return observe.UnitStatus{
-			Phase:   observe.UnitPending,
-			Reason:  observe.ReasonPVCPending,
-			Message: "PVC is pending",
-		}, nil
-	case corev1.ClaimLost:
-		return observe.UnitStatus{
-			Phase:   observe.UnitFailed,
-			Reason:  observe.ReasonPVCLost,
-			Message: "PVC is lost",
-		}, nil
-	default:
-		return observe.UnitStatus{
-			Phase:   observe.UnitUnknown,
-			Reason:  observe.ReasonUnknownPhase,
-			Message: fmt.Sprintf("Unknown PVC phase: %s", pvc.Status.Phase),
+			Phase:  observe.UnitProgressing,
+			Reason: observe.ReasonDeleting,
 		}, nil
 	}
+
+	conditions := convertPvcConditions(pvc.Status.Conditions)
+
+	fsResizePending := meta.IsStatusConditionTrue(conditions, string(corev1.PersistentVolumeClaimFileSystemResizePending)) &&
+		(pvc.Spec.VolumeMode == nil || *pvc.Spec.VolumeMode == corev1.PersistentVolumeFilesystem)
+
+	// Compare requested vs actual capacity (values, not pointers)
+	reqQty, haveReq := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
+	capQty, haveCap := pvc.Status.Capacity[corev1.ResourceStorage]
+	capBelowRequest := haveReq && haveCap && capQty.Cmp(reqQty) < 0
+
+	switch pvc.Status.Phase {
+	case corev1.ClaimBound:
+		// Bound but not fully “done” yet (resize in progress)
+		if capBelowRequest || fsResizePending {
+			var msg string
+			switch {
+			case capBelowRequest && fsResizePending:
+				msg = "PVC capacity below requested and filesystem resize pending"
+			case capBelowRequest:
+				msg = "PVC capacity below requested size"
+			case fsResizePending:
+				msg = "PVC filesystem resize pending"
+			}
+			return observe.UnitStatus{
+				Phase:      observe.UnitProgressing,
+				Reason:     observe.ReasonPvcResizing,
+				Message:    msg,
+				Conditions: conditions,
+			}, nil
+		}
+		// Fully usable
+		return observe.UnitStatus{
+			Phase:      observe.UnitReady,
+			Ready:      true,
+			Conditions: conditions,
+		}, nil
+
+	case corev1.ClaimPending:
+		reason := observe.ReasonPVCPending
+		msg := "PVC pending; waiting for volume binding/provisioning"
+		if pvc.Spec.VolumeName != "" {
+			msg = "PVC pending"
+		}
+		return observe.UnitStatus{
+			Phase:      observe.UnitPending,
+			Reason:     reason,
+			Message:    msg,
+			Conditions: conditions,
+		}, nil
+
+	case corev1.ClaimLost:
+		return observe.UnitStatus{
+			Phase:      observe.UnitFailed,
+			Reason:     observe.ReasonPVCLost,
+			Message:    "PVC is lost",
+			Conditions: conditions,
+		}, nil
+
+	default:
+		return observe.UnitStatus{
+			Phase:      observe.UnitUnknown,
+			Reason:     observe.ReasonUnknownPhase,
+			Message:    fmt.Sprintf("Unknown PVC phase: %s", pvc.Status.Phase),
+			Conditions: conditions,
+		}, nil
+	}
+}
+
+func convertPvcConditions(conditions []corev1.PersistentVolumeClaimCondition) []metav1.Condition {
+	var result []metav1.Condition
+	for _, c := range conditions {
+		result = append(result, metav1.Condition{
+			Type:               string(c.Type),
+			Status:             metav1.ConditionStatus(c.Status),
+			Reason:             c.Reason,
+			Message:            c.Message,
+			LastTransitionTime: c.LastTransitionTime,
+		})
+	}
+	return result
 }

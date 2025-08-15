@@ -17,7 +17,7 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/silogen/kaiwo/pkg/cli/tui/list"
+	tui "github.com/silogen/kaiwo/pkg/cli/tui/list"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"

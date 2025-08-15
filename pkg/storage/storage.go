@@ -21,10 +21,11 @@ import (
 
 	"github.com/silogen/kaiwo/pkg/runtime/config"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 	"github.com/silogen/kaiwo/pkg/api"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // StorageHandler handles the storage-related reconcilers (PVCs and download config map / job)
@@ -46,6 +47,7 @@ func NewStorageHandler(objectKey client.ObjectKey, commonSpec v1alpha1.CommonMet
 const (
 	DataStoragePostfix = "data"
 	HfStoragePostfix   = "hf"
+	DownloadPostfix    = "download"
 )
 
 func (h StorageHandler) GetResourceReconcilers(ctx context.Context) []api.ResourceReconciler {
