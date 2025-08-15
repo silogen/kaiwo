@@ -49,16 +49,13 @@ var ErrNoSuitableNode = errors.New("no suitable node found")
 type NodeType string
 
 const (
-	NodeTypeLabelKey             = common.KaiwoLabelBase + "/node.type"
-	NodeGpusPartitionedLabelKey  = common.KaiwoLabelBase + "/node.gpu.partitioned"
-	NodeStatusLabelKey           = common.KaiwoLabelBase + "/node.status"
-	NodeGpuVendorLabelKey        = common.KaiwoLabelBase + "/node.gpu.vendor"
-	NodeGpuModelLabelKey         = common.KaiwoLabelBase + "/node.gpu.model"
-	NodeGpuPhysicalCountLabelKey = common.KaiwoLabelBase + "/node.gpu"
-	NodeGpuPhysicalVramLabelKey  = common.KaiwoLabelBase + "/node.gpu.vram"
-	NodeGpuLogicalCountLabelKey  = common.KaiwoLabelBase + "/node.gpu.logical"
-	NodeGpuLogicalVramLabelKey   = common.KaiwoLabelBase + "/node.gpu.logical.vram"
-	DefaultNodePoolLabelKey      = common.KaiwoLabelBase + "/node.pool"
+	NodeTypeLabelKey            = common.KaiwoLabelBase + "/node.type"
+	NodeGpusPartitionedLabelKey = common.KaiwoLabelBase + "/node.gpu.partitioned"
+	NodeStatusLabelKey          = common.KaiwoLabelBase + "/node.status"
+	NodeGpuVendorLabelKey       = common.KaiwoLabelBase + "/node.gpu.vendor"
+	NodeGpuModelLabelKey        = common.KaiwoLabelBase + "/node.gpu.model"
+	NodeGpuLogicalVramLabelKey  = common.KaiwoLabelBase + "/node.gpu.logical.vram"
+	DefaultNodePoolLabelKey     = common.KaiwoLabelBase + "/node.pool"
 
 	NodeTypeCpuOnly NodeType = "cpu-only"
 	NodeTypeGpu     NodeType = "gpu"
@@ -201,7 +198,10 @@ func (info NodeInfo) GetFlavorName() string {
 	if info.IsCpuOnlyNode() {
 		components = append(components, "cpu-only")
 	} else {
-		model := strings.ReplaceAll(gpuInfo.Model, "-", "")
+		model := "unknown"
+		if gpuModel := gpuInfo.Model; gpuModel != nil {
+			model = strings.ReplaceAll(*gpuInfo.Model, "-", "")
+		}
 		gpuComponent := fmt.Sprintf("%dgpu.%s.%s", gpuInfo.LogicalCount, string(gpuInfo.Vendor), model)
 		if partitioned := gpuInfo.IsPartitioned; partitioned != nil && *partitioned {
 			gpuComponent += ".partitioned"
@@ -295,10 +295,14 @@ const (
 // The code below is for extracting information from the AMD / NVIDIA system labels
 
 const (
+	AmdGpuFeatureLabelKey  = "feature.node.kubernetes.io/amd-gpu"
+	AmdVGpuFeatureLabelKey = "feature.node.kubernetes.io/amd-vgpu"
+
 	AmdProductNameLabelKey      = "amd.com/gpu.product-name"
 	AmdGpuFamilyAiCountLabelKey = "beta.amd.com/gpu.family.AI"
 	AmdGpuVramLabelKey          = "amd.com/gpu.vram"
 
+	NvidiaGpuFeatureLabelKey  = "feature.node.kubernetes.io/pci-10de.present"
 	NvidiaProductNameLabelKey = "nvidia.com/gpu.product"
 	// NvidiaGpuCountLabelKey       = "nvidia.com/gpu.count"
 	// NvidiaGpuTotalMemoryLabelKey = "nvidia.com/gpu.memory.total"
@@ -308,9 +312,11 @@ const (
 )
 
 func ExtractNodeGpuInfo(node v1.Node) (*v1alpha1.NodeGpuInfo, error) {
-	if _, exists := node.Labels[AmdProductNameLabelKey]; exists {
+	if value, exists := node.Labels[AmdGpuFeatureLabelKey]; exists && value == common.True {
 		return extractAmdNodeGpuInfo(node)
-	} else if _, exists := node.Labels[NvidiaProductNameLabelKey]; exists {
+	} else if value, exists := node.Labels[AmdVGpuFeatureLabelKey]; exists && value == common.True {
+		return extractAmdNodeGpuInfo(node)
+	} else if value, exists := node.Labels[NvidiaGpuFeatureLabelKey]; exists && value == common.True {
 		return extractNvidiaNodeGpuInfo(node)
 	}
 	return nil, nil
@@ -319,9 +325,11 @@ func ExtractNodeGpuInfo(node v1.Node) (*v1alpha1.NodeGpuInfo, error) {
 func extractAmdNodeGpuInfo(node v1.Node) (*v1alpha1.NodeGpuInfo, error) {
 	labels := node.Labels
 
-	productName, ok := labels[AmdProductNameLabelKey]
-	if !ok {
-		return nil, fmt.Errorf("missing label %q", AmdProductNameLabelKey)
+	var productName *string = nil
+
+	if productNameValue, ok := labels[AmdProductNameLabelKey]; ok && productNameValue != "" {
+		cleaned := cleanAMDGPUName(productNameValue)
+		productName = &cleaned
 	}
 
 	// logical count (total logical GPUs seen by K8s)
@@ -367,7 +375,7 @@ func extractAmdNodeGpuInfo(node v1.Node) (*v1alpha1.NodeGpuInfo, error) {
 	return &v1alpha1.NodeGpuInfo{
 		Vendor:             v1alpha1.GpuVendorAmd,
 		ResourceName:       gpu.AmdGpuResourceName,
-		Model:              cleanAMDGPUName(productName),
+		Model:              productName,
 		PhysicalCount:      physGPUPtr,
 		LogicalCount:       logicalCount,
 		PhysicalVramPerGpu: physicalVramPtr,
@@ -407,6 +415,7 @@ func extractNvidiaNodeGpuInfo(node v1.Node) (*v1alpha1.NodeGpuInfo, error) {
 	if !exists {
 		return nil, fmt.Errorf("failed to extract product name from labels, label %s does not exist", NvidiaProductNameLabelKey)
 	}
+	productName = baseutils.MakeRFC1123Compliant(productName)
 
 	logicalGpusCount, exists := node.Status.Capacity[gpu.NvidiaGpuResourceName]
 	if !exists {
@@ -468,7 +477,7 @@ func extractNvidiaNodeGpuInfo(node v1.Node) (*v1alpha1.NodeGpuInfo, error) {
 
 	return &v1alpha1.NodeGpuInfo{
 		Vendor:       v1alpha1.GpuVendorNvidia,
-		Model:        baseutils.MakeRFC1123Compliant(productName),
+		Model:        &productName,
 		LogicalCount: int(logicalGpusCount.Value()),
 		ResourceName: gpu.NvidiaGpuResourceName,
 	}, nil
