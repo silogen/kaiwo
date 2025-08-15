@@ -18,6 +18,11 @@ import (
 	"context"
 	"fmt"
 
+	"golang.org/x/sync/errgroup"
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -41,15 +46,83 @@ func (om *ObserverManager) AddObserver(observer Observer) {
 }
 
 func (om *ObserverManager) ObserveAll(ctx context.Context, c client.Client) ([]UnitStatus, error) {
-	var units []UnitStatus
-	for _, observer := range om.observers {
-		unit, err := observer.Observe(ctx, c)
-		if err != nil {
-			return nil, fmt.Errorf("failed to observe unit: %w", err)
-		}
-		units = append(units, unit)
+	units := make([]UnitStatus, len(om.observers))
+	g, ctx := errgroup.WithContext(ctx)
+
+	for i := range om.observers {
+		i := i // capture loop variable
+		g.Go(func() error {
+			u, err := om.observers[i].Observe(ctx, c)
+			if err != nil {
+				// Keep the entry with Unknown + error details, don't fail the whole operation
+				units[i] = UnitStatus{
+					Name:    getObserverName(om.observers[i]),
+					Kind:    om.observers[i].Kind(),
+					Group:   getObserverGroup(om.observers[i]),
+					Phase:   UnitUnknown,
+					Reason:  ReasonObserveError,
+					Message: err.Error(),
+				}
+				// Don't return err: continue collecting
+				return nil
+			}
+			// Set the common fields at this level
+			u.Name = getObserverName(om.observers[i])
+			u.Kind = om.observers[i].Kind()
+			u.Group = getObserverGroup(om.observers[i])
+			units[i] = u
+			return nil
+		})
 	}
+
+	_ = g.Wait() // Always returns nil since we don't return errors from goroutines
 	return units, nil
+}
+
+// Helper functions to extract name and group from observer structs using interface methods
+func getObserverName(observer Observer) string {
+	// Use type assertions to access NamespacedName field
+	switch o := observer.(type) {
+	case interface{ GetNamespacedName() types.NamespacedName }:
+		return o.GetNamespacedName().Name
+	default:
+		// For observers that follow the NamespacedName field pattern
+		if hasNamespacedName, ok := observer.(interface{ NamespacedName types.NamespacedName }); ok {
+			// This won't work directly, need field access through reflection or type switches
+			_ = hasNamespacedName
+		}
+		
+		// Fallback to type switches for known observer types
+		switch obs := observer.(type) {
+		case *PVCObserver:
+			return obs.NamespacedName.Name
+		case *DownloadJobObserver:
+			return obs.NamespacedName.Name
+		}
+		
+		// Try to get from external packages through interface pattern
+		if nameProvider, ok := observer.(interface{ GetName() string }); ok {
+			return nameProvider.GetName()
+		}
+		return "unknown"
+	}
+}
+
+func getObserverGroup(observer Observer) UnitGroup {
+	// Similar pattern for Group
+	switch o := observer.(type) {
+	case interface{ GetGroup() UnitGroup }:
+		return o.GetGroup()
+	default:
+		// Fallback to type switches for known observer types
+		switch obs := observer.(type) {
+		case *PVCObserver:
+			return obs.Group
+		case *DownloadJobObserver:
+			return obs.Group
+		}
+		return GroupWorkload
+	}
 }
 
 // BuildObserversForWorkload creates observers for a given workload
@@ -66,7 +139,7 @@ func BuildObserversForWorkload(workload KaiwoWorkload) *ObserverManager {
 					Name:      baseutils.FormatNameWithPostfix(objKey.Name, DataStoragePostfix),
 					Namespace: objKey.Namespace,
 				},
-				"Prereqs",
+				GroupPrereqs,
 			))
 		}
 		if commonSpec.Storage.HasHfDownloads() {
@@ -75,7 +148,7 @@ func BuildObserversForWorkload(workload KaiwoWorkload) *ObserverManager {
 					Name:      baseutils.FormatNameWithPostfix(objKey.Name, HfStoragePostfix),
 					Namespace: objKey.Namespace,
 				},
-				"Prereqs",
+				GroupPrereqs,
 			))
 		}
 		if commonSpec.Storage.HasDownloads() {
@@ -86,33 +159,32 @@ func BuildObserversForWorkload(workload KaiwoWorkload) *ObserverManager {
 					Name:      baseutils.FormatNameWithPostfix(objKey.Name, "download"),
 					Namespace: objKey.Namespace,
 				},
-				Group: "Prereqs",
+				Group: GroupPrereqs,
 			})
 		}
 	}
 
-	// Note: For now, we can create observers for the main resource types
-	// In the future, this could be enhanced to dynamically determine the correct observer
-	// based on the workload handler configuration
-
-	// Add workload observers based on workload type
-	gvk := workload.GetKaiwoWorkloadObject().GetObjectKind().GroupVersionKind()
-
-	switch gvk.Kind {
-	case "KaiwoJob":
-		// For now, add a generic Job observer
-		// The actual reconciler will determine whether it's a BatchJob or RayJob
-		manager.AddObserver(&GenericJobObserver{
-			NamespacedName: objKey,
-			Group:          "Workload",
-		})
-	case "KaiwoService":
-		// For now, add a generic Service observer
-		// The actual reconciler will determine whether it's a Deployment or RayService
-		manager.AddObserver(&GenericServiceObserver{
-			NamespacedName: objKey,
-			Group:          "Workload",
-		})
+	// Add workload observers based on workload type and spec
+	// Note: These constructors are defined in their respective packages:
+	// - NewJobObserver and NewRayJobObserver from pkg/workloads/job
+	// - NewDeploymentObserver and NewRayServiceObserver from pkg/workloads/service
+	switch wl := workload.GetKaiwoWorkloadObject().(type) {
+	case *v1alpha1.KaiwoJob:
+		if wl.Spec.IsRayJob() {
+			// TODO: Import NewRayJobObserver from pkg/workloads/job and add observer
+			// manager.AddObserver(NewRayJobObserver(objKey, GroupWorkload))
+		} else {
+			// TODO: Import NewJobObserver from pkg/workloads/job and add observer
+			// manager.AddObserver(NewJobObserver(objKey, GroupWorkload))
+		}
+	case *v1alpha1.KaiwoService:
+		if wl.Spec.IsRayService() {
+			// TODO: Import NewRayServiceObserver from pkg/workloads/service and add observer
+			// manager.AddObserver(NewRayServiceObserver(objKey, GroupWorkload))
+		} else {
+			// TODO: Import NewDeploymentObserver from pkg/workloads/service and add observer
+			// manager.AddObserver(NewDeploymentObserver(objKey, GroupWorkload))
+		}
 	}
 
 	return manager
@@ -121,111 +193,77 @@ func BuildObserversForWorkload(workload KaiwoWorkload) *ObserverManager {
 // ObserveWorkloadWithNewPattern provides the new observation pattern as an alternative
 // to the existing ObserveOverallStatus function
 func ObserveWorkloadWithNewPattern(ctx context.Context, c client.Client, workload KaiwoWorkload) (WorkloadPhase, []UnitStatus, error) {
-	// Build observers for this workload
-	manager := BuildObserversForWorkload(workload)
-
-	// Observe all units
-	units, err := manager.ObserveAll(ctx, c)
+	// Use the unified observation function
+	observation, err := ObserveWorkload(ctx, c, workload)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to observe units: %w", err)
+		return "", nil, fmt.Errorf("failed to observe workload: %w", err)
 	}
 
-	// Aggregate results
-	agg := Reduce(units)
-
-	// Decide phase and conditions
-	phase, _ := Decide(workload.GetKaiwoWorkloadObject(), agg, units)
-
-	return phase, units, nil
+	return observation.Phase, observation.Units, nil
 }
 
-// GenericJobObserver can observe either BatchJob or RayJob
-type GenericJobObserver struct {
-	NamespacedName types.NamespacedName
-	Group          string
-}
-
-func (o *GenericJobObserver) Observe(ctx context.Context, c client.Client) (UnitStatus, error) {
-	// Try to get as RayJob first
-	var rayJob v1alpha1.KaiwoJob
-	if err := c.Get(ctx, o.NamespacedName, &rayJob); err == nil {
-		if rayJob.Spec.IsRayJob() {
-			// Observe RayJob - for now return a simple status
-			return UnitStatus{
-				Name:  o.NamespacedName.Name,
-				Kind:  "RayJob",
-				Group: o.Group,
-				Phase: UnitProgressing, // Simplified for now
-			}, nil
-		} else {
-			// Observe BatchJob - for now return a simple status
-			return UnitStatus{
-				Name:  o.NamespacedName.Name,
-				Kind:  "Job",
-				Group: o.Group,
-				Phase: UnitProgressing, // Simplified for now
-			}, nil
-		}
-	}
-
-	return UnitStatus{
-		Name:  o.NamespacedName.Name,
-		Kind:  "Job",
-		Group: o.Group,
-		Phase: UnitPending,
-	}, nil
-}
-
-// GenericServiceObserver can observe either Deployment or RayService
-type GenericServiceObserver struct {
-	NamespacedName types.NamespacedName
-	Group          string
-}
-
-func (o *GenericServiceObserver) Observe(ctx context.Context, c client.Client) (UnitStatus, error) {
-	// Try to get as KaiwoService first
-	var kaiwoService v1alpha1.KaiwoService
-	if err := c.Get(ctx, o.NamespacedName, &kaiwoService); err == nil {
-		if kaiwoService.Spec.IsRayService() {
-			// Observe RayService - for now return a simple status
-			return UnitStatus{
-				Name:  o.NamespacedName.Name,
-				Kind:  "RayService",
-				Group: o.Group,
-				Phase: UnitProgressing, // Simplified for now
-			}, nil
-		} else {
-			// Observe Deployment - for now return a simple status
-			return UnitStatus{
-				Name:  o.NamespacedName.Name,
-				Kind:  "Deployment",
-				Group: o.Group,
-				Phase: UnitProgressing, // Simplified for now
-			}, nil
-		}
-	}
-
-	return UnitStatus{
-		Name:  o.NamespacedName.Name,
-		Kind:  "Service",
-		Group: o.Group,
-		Phase: UnitPending,
-	}, nil
-}
 
 // DownloadJobObserver observes download Jobs
 type DownloadJobObserver struct {
 	NamespacedName types.NamespacedName
-	Group          string
+	Group          UnitGroup
+}
+
+func (o *DownloadJobObserver) Kind() string {
+	return "Job"
 }
 
 func (o *DownloadJobObserver) Observe(ctx context.Context, c client.Client) (UnitStatus, error) {
-	// This would observe a regular Kubernetes Job used for downloading
-	// For now, return a simple status
+	// Observe a regular Kubernetes Job used for downloading
+	var j batchv1.Job
+	if err := c.Get(ctx, o.NamespacedName, &j); apierrors.IsNotFound(err) {
+		return UnitStatus{
+			Phase: UnitPending,
+		}, nil
+	} else if err != nil {
+		return UnitStatus{
+			Phase:   UnitUnknown,
+			Reason:  ReasonGetError,
+			Message: err.Error(),
+		}, nil
+	}
+
+	// Check for terminal conditions
+	for _, condition := range j.Status.Conditions {
+		switch condition.Type {
+		case batchv1.JobComplete:
+			if condition.Status == corev1.ConditionTrue {
+				return UnitStatus{
+					Phase:              UnitSucceeded,
+					Ready:              true,
+					Reason:             condition.Reason,
+					Message:            condition.Message,
+					ObservedGeneration: j.Status.ObservedGeneration,
+				}, nil
+			}
+		case batchv1.JobFailed:
+			if condition.Status == corev1.ConditionTrue {
+				return UnitStatus{
+					Phase:              UnitFailed,
+					Reason:             condition.Reason,
+					Message:            condition.Message,
+					ObservedGeneration: j.Status.ObservedGeneration,
+				}, nil
+			}
+		}
+	}
+
+	// Check if job is actively running
+	if j.Status.Active > 0 {
+		return UnitStatus{
+			Phase:              UnitProgressing,
+			ObservedGeneration: j.Status.ObservedGeneration,
+		}, nil
+	}
+
+	// Default to pending
 	return UnitStatus{
-		Name:  o.NamespacedName.Name,
-		Kind:  "Job",
-		Group: o.Group,
-		Phase: UnitProgressing, // Simplified for now
+		Phase:              UnitPending,
+		ObservedGeneration: j.Status.ObservedGeneration,
 	}, nil
 }

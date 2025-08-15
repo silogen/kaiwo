@@ -20,6 +20,7 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
@@ -32,6 +33,7 @@ import (
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
@@ -220,4 +222,60 @@ func GetDefaultRayServiceSpec(config common.KaiwoConfigContext, dangerous bool) 
 	return rayv1.RayServiceSpec{
 		RayClusterSpec: *utils.GetRayClusterTemplate(config, dangerous),
 	}
+}
+
+// RayServiceObserver observes RayService status
+type RayServiceObserver struct {
+	NamespacedName types.NamespacedName
+	Group          common.UnitGroup
+}
+
+func NewRayServiceObserver(nn types.NamespacedName, group common.UnitGroup) *RayServiceObserver {
+	return &RayServiceObserver{
+		NamespacedName: nn,
+		Group:          group,
+	}
+}
+
+func (o *RayServiceObserver) Kind() string {
+	return "RayService"
+}
+
+func (o *RayServiceObserver) Observe(ctx context.Context, c client.Client) (common.UnitStatus, error) {
+	var rs rayv1.RayService
+	if err := c.Get(ctx, o.NamespacedName, &rs); apierrors.IsNotFound(err) {
+		return common.UnitStatus{
+			Phase: common.UnitPending,
+		}, nil
+	} else if err != nil {
+		return common.UnitStatus{
+			Phase:   common.UnitUnknown,
+			Reason:  common.ReasonGetError,
+			Message: err.Error(),
+		}, nil
+	}
+
+	// Check if RayService is ready
+	if meta.IsStatusConditionTrue(rs.Status.Conditions, string(rayv1.RayServiceReady)) {
+		return common.UnitStatus{
+			Phase: common.UnitReady,
+			Ready: true,
+		}, nil
+	}
+
+	// Check for application failures
+	for _, appStat := range rs.Status.ActiveServiceStatus.Applications {
+		if appStat.Status == "UNHEALTHY" || appStat.Status == "DEPLOY_FAILED" {
+			return common.UnitStatus{
+				Phase:   common.UnitFailed,
+				Reason:  common.ReasonApplicationFailed,
+				Message: fmt.Sprintf("Application %s status: %s", appStat.Name, appStat.Status),
+			}, nil
+		}
+	}
+
+	// Still deploying/starting
+	return common.UnitStatus{
+		Phase: common.UnitProgressing,
+	}, nil
 }

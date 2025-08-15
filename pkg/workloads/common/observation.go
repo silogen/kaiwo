@@ -37,11 +37,40 @@ const (
 	UnitUnknown     UnitPhase = "Unknown"
 )
 
+// UnitGroup represents the logical grouping of units
+type UnitGroup string
+
+const (
+	GroupPrereqs  UnitGroup = "Prereqs"
+	GroupWorkload UnitGroup = "Workload"
+	GroupPost     UnitGroup = "Post"
+)
+
+// Reason constants for consistent error and status reporting
+const (
+	ReasonGetError                 = "GetError"
+	ReasonObserveError             = "ObserveError"
+	ReasonWaitingForPVC            = "WaitingForPVC"
+	ReasonPVCPending               = "PVCPending"
+	ReasonPVCLost                  = "PVCLost"
+	ReasonJobFailed                = "JobFailed"
+	ReasonJobStopped               = "JobStopped"
+	ReasonUnknownStatus            = "UnknownStatus"
+	ReasonUnknownPhase             = "UnknownPhase"
+	ReasonRolloutInProgress        = "RolloutInProgress"
+	ReasonProgressDeadlineExceeded = "ProgressDeadlineExceeded"
+	ReasonApplicationFailed        = "ApplicationFailed"
+	ReasonDownloadJobPending       = "DownloadJobPending"
+	ReasonDownloadJobInProgress    = "DownloadJobInProgress"
+	ReasonDownloadJobCompleted     = "DownloadJobCompleted"
+	ReasonDownloadJobFailed        = "DownloadJobFailed"
+)
+
 // UnitStatus provides a normalized view of any child resource status
 type UnitStatus struct {
 	Name               string
 	Kind               string
-	Group              string // optional: "Prereqs" | "Workload" | "Post"
+	Group              UnitGroup // logical grouping: "Prereqs" | "Workload" | "Post"
 	Phase              UnitPhase
 	Ready              bool // a quick boolean (for Deployments)
 	ObservedGeneration int64
@@ -67,6 +96,7 @@ const (
 // Observer interface for reading resource status
 type Observer interface {
 	Observe(ctx context.Context, c client.Client) (UnitStatus, error)
+	Kind() string
 }
 
 // AggregateResult summarizes the status of all observed units
@@ -76,6 +106,13 @@ type AggregateResult struct {
 	AnyDegraded       bool
 	AnyFailed         bool
 	Messages          []string
+}
+
+// Observation contains the complete result of observing a workload
+type Observation struct {
+	Phase      WorkloadPhase
+	Units      []UnitStatus
+	Conditions []metav1.Condition
 }
 
 // Reduce aggregates a list of UnitStatus into an AggregateResult
@@ -88,8 +125,8 @@ func Reduce(units []UnitStatus) AggregateResult {
 	}
 
 	// Groups: Prereqs vs Workload
-	prereqs := filter(units, func(u UnitStatus) bool { return u.Group == "Prereqs" })
-	workload := filter(units, func(u UnitStatus) bool { return u.Group == "Workload" })
+	prereqs := filter(units, func(u UnitStatus) bool { return u.Group == GroupPrereqs })
+	workload := filter(units, func(u UnitStatus) bool { return u.Group == GroupWorkload })
 
 	r.PrereqsReady = all(prereqs, func(u UnitStatus) bool {
 		return u.Phase == UnitReady || u.Phase == UnitSucceeded
@@ -242,13 +279,26 @@ func isJob(owner client.Object) bool {
 }
 
 func workloadSucceeded(units []UnitStatus) bool {
-	workloadUnits := filter(units, func(u UnitStatus) bool { return u.Group == "Workload" })
+	workloadUnits := filter(units, func(u UnitStatus) bool { return u.Group == GroupWorkload })
 	return any(workloadUnits, func(u UnitStatus) bool { return u.Phase == UnitSucceeded })
 }
 
 func workloadDegraded(units []UnitStatus) bool {
-	workloadUnits := filter(units, func(u UnitStatus) bool { return u.Group == "Workload" })
+	workloadUnits := filter(units, func(u UnitStatus) bool { return u.Group == GroupWorkload })
 	return any(workloadUnits, func(u UnitStatus) bool { return u.Phase == UnitDegraded || u.Phase == UnitFailed })
+}
+
+// ObserveWorkload provides a unified observation function that returns phase + conditions + units
+func ObserveWorkload(ctx context.Context, c client.Client, workload KaiwoWorkload) (Observation, error) {
+	mgr := BuildObserversForWorkload(workload)
+	units, _ := mgr.ObserveAll(ctx, c) // ObserveAll now handles errors internally
+	agg := Reduce(units)
+	phase, conds := Decide(workload.GetKaiwoWorkloadObject(), agg, units)
+	return Observation{
+		Phase:      phase,
+		Units:      units,
+		Conditions: conds,
+	}, nil
 }
 
 // Map WorkloadPhase to WorkloadStatus for backward compatibility

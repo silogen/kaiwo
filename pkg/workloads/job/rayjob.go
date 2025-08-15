@@ -164,32 +164,30 @@ func (handler *RayJobHandler) GetKueueWorkloads(ctx context.Context, k8sClient c
 // RayJobObserver observes RayJob status
 type RayJobObserver struct {
 	NamespacedName types.NamespacedName
-	Group          string
+	Group          common.UnitGroup
 }
 
-func NewRayJobObserver(nn types.NamespacedName, group string) *RayJobObserver {
+func NewRayJobObserver(nn types.NamespacedName, group common.UnitGroup) *RayJobObserver {
 	return &RayJobObserver{
 		NamespacedName: nn,
 		Group:          group,
 	}
 }
 
+func (o *RayJobObserver) Kind() string {
+	return "RayJob"
+}
+
 func (o *RayJobObserver) Observe(ctx context.Context, c client.Client) (common.UnitStatus, error) {
 	var rj rayv1.RayJob
 	if err := c.Get(ctx, o.NamespacedName, &rj); errors.IsNotFound(err) {
 		return common.UnitStatus{
-			Name:  o.NamespacedName.Name,
-			Kind:  "RayJob",
-			Group: o.Group,
 			Phase: common.UnitPending,
 		}, nil
 	} else if err != nil {
 		return common.UnitStatus{
-			Name:    o.NamespacedName.Name,
-			Kind:    "RayJob",
-			Group:   o.Group,
 			Phase:   common.UnitUnknown,
-			Reason:  "GetError",
+			Reason:  common.ReasonGetError,
 			Message: err.Error(),
 		}, nil
 	}
@@ -197,51 +195,33 @@ func (o *RayJobObserver) Observe(ctx context.Context, c client.Client) (common.U
 	switch rj.Status.JobStatus {
 	case rayv1.JobStatusNew, rayv1.JobStatusPending:
 		return common.UnitStatus{
-			Name:  rj.Name,
-			Kind:  "RayJob",
-			Group: o.Group,
 			Phase: common.UnitPending,
 		}, nil
 	case rayv1.JobStatusRunning:
 		return common.UnitStatus{
-			Name:  rj.Name,
-			Kind:  "RayJob",
-			Group: o.Group,
 			Phase: common.UnitProgressing,
 		}, nil
 	case rayv1.JobStatusSucceeded:
 		return common.UnitStatus{
-			Name:  rj.Name,
-			Kind:  "RayJob",
-			Group: o.Group,
 			Phase: common.UnitSucceeded,
 			Ready: true,
 		}, nil
 	case rayv1.JobStatusFailed:
 		return common.UnitStatus{
-			Name:    rj.Name,
-			Kind:    "RayJob",
-			Group:   o.Group,
 			Phase:   common.UnitFailed,
-			Reason:  "JobFailed",
+			Reason:  common.ReasonJobFailed,
 			Message: "RayJob failed",
 		}, nil
 	case rayv1.JobStatusStopped:
 		return common.UnitStatus{
-			Name:    rj.Name,
-			Kind:    "RayJob",
-			Group:   o.Group,
 			Phase:   common.UnitFailed,
-			Reason:  "JobStopped",
+			Reason:  common.ReasonJobStopped,
 			Message: "RayJob was stopped",
 		}, nil
 	default:
 		return common.UnitStatus{
-			Name:    rj.Name,
-			Kind:    "RayJob",
-			Group:   o.Group,
 			Phase:   common.UnitUnknown,
-			Reason:  "UnknownStatus",
+			Reason:  common.ReasonUnknownStatus,
 			Message: fmt.Sprintf("Unknown RayJob status: %s", rj.Status.JobStatus),
 		}, nil
 	}

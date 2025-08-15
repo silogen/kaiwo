@@ -158,32 +158,30 @@ func GetDefaultJobSpec(config common.KaiwoConfigContext, dangerous bool) batchv1
 // JobObserver observes Kubernetes Job status
 type JobObserver struct {
 	NamespacedName types.NamespacedName
-	Group          string
+	Group          common.UnitGroup
 }
 
-func NewJobObserver(nn types.NamespacedName, group string) *JobObserver {
+func NewJobObserver(nn types.NamespacedName, group common.UnitGroup) *JobObserver {
 	return &JobObserver{
 		NamespacedName: nn,
 		Group:          group,
 	}
 }
 
+func (o *JobObserver) Kind() string {
+	return "Job"
+}
+
 func (o *JobObserver) Observe(ctx context.Context, c client.Client) (common.UnitStatus, error) {
 	var j batchv1.Job
 	if err := c.Get(ctx, o.NamespacedName, &j); errors.IsNotFound(err) {
 		return common.UnitStatus{
-			Name:  o.NamespacedName.Name,
-			Kind:  "Job",
-			Group: o.Group,
 			Phase: common.UnitPending,
 		}, nil
 	} else if err != nil {
 		return common.UnitStatus{
-			Name:    o.NamespacedName.Name,
-			Kind:    "Job",
-			Group:   o.Group,
 			Phase:   common.UnitUnknown,
-			Reason:  "GetError",
+			Reason:  common.ReasonGetError,
 			Message: err.Error(),
 		}, nil
 	}
@@ -197,9 +195,6 @@ func (o *JobObserver) Observe(ctx context.Context, c client.Client) (common.Unit
 		case "Complete":
 			if condition.Status == metav1.ConditionTrue {
 				return common.UnitStatus{
-					Name:       j.Name,
-					Kind:       "Job",
-					Group:      o.Group,
 					Phase:      common.UnitSucceeded,
 					Ready:      true,
 					Reason:     condition.Reason,
@@ -210,9 +205,6 @@ func (o *JobObserver) Observe(ctx context.Context, c client.Client) (common.Unit
 		case "Failed":
 			if condition.Status == metav1.ConditionTrue {
 				return common.UnitStatus{
-					Name:       j.Name,
-					Kind:       "Job",
-					Group:      o.Group,
 					Phase:      common.UnitFailed,
 					Reason:     condition.Reason,
 					Message:    condition.Message,
@@ -225,9 +217,6 @@ func (o *JobObserver) Observe(ctx context.Context, c client.Client) (common.Unit
 	// Check if job is actively running
 	if j.Status.Active > 0 {
 		return common.UnitStatus{
-			Name:       j.Name,
-			Kind:       "Job",
-			Group:      o.Group,
 			Phase:      common.UnitProgressing,
 			Conditions: standardConditions,
 		}, nil
@@ -235,9 +224,6 @@ func (o *JobObserver) Observe(ctx context.Context, c client.Client) (common.Unit
 
 	// Default to pending
 	return common.UnitStatus{
-		Name:       j.Name,
-		Kind:       "Job",
-		Group:      o.Group,
 		Phase:      common.UnitPending,
 		Conditions: standardConditions,
 	}, nil

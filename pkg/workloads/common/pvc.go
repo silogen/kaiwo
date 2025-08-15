@@ -21,7 +21,7 @@ import (
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -109,32 +109,30 @@ func (r *PvcReconciler) ObserveStatus(ctx context.Context, k8sClient client.Clie
 // PVCObserver observes PVC status
 type PVCObserver struct {
 	NamespacedName types.NamespacedName
-	Group          string
+	Group          UnitGroup
 }
 
-func NewPVCObserver(nn types.NamespacedName, group string) *PVCObserver {
+func NewPVCObserver(nn types.NamespacedName, group UnitGroup) *PVCObserver {
 	return &PVCObserver{
 		NamespacedName: nn,
 		Group:          group,
 	}
 }
 
+func (o *PVCObserver) Kind() string {
+	return "PersistentVolumeClaim"
+}
+
 func (o *PVCObserver) Observe(ctx context.Context, c client.Client) (UnitStatus, error) {
 	var pvc corev1.PersistentVolumeClaim
-	if err := c.Get(ctx, o.NamespacedName, &pvc); errors.IsNotFound(err) {
+	if err := c.Get(ctx, o.NamespacedName, &pvc); apierrors.IsNotFound(err) {
 		return UnitStatus{
-			Name:  o.NamespacedName.Name,
-			Kind:  "PersistentVolumeClaim",
-			Group: o.Group,
 			Phase: UnitPending,
 		}, nil
 	} else if err != nil {
 		return UnitStatus{
-			Name:    o.NamespacedName.Name,
-			Kind:    "PersistentVolumeClaim",
-			Group:   o.Group,
 			Phase:   UnitUnknown,
-			Reason:  "GetError",
+			Reason:  ReasonGetError,
 			Message: err.Error(),
 		}, nil
 	}
@@ -142,37 +140,25 @@ func (o *PVCObserver) Observe(ctx context.Context, c client.Client) (UnitStatus,
 	switch pvc.Status.Phase {
 	case corev1.ClaimBound:
 		return UnitStatus{
-			Name:  pvc.Name,
-			Kind:  "PersistentVolumeClaim",
-			Group: o.Group,
 			Phase: UnitReady,
 			Ready: true,
 		}, nil
 	case corev1.ClaimPending:
 		return UnitStatus{
-			Name:    pvc.Name,
-			Kind:    "PersistentVolumeClaim",
-			Group:   o.Group,
 			Phase:   UnitPending,
-			Reason:  "Pending",
+			Reason:  ReasonPVCPending,
 			Message: "PVC is pending",
 		}, nil
 	case corev1.ClaimLost:
 		return UnitStatus{
-			Name:    pvc.Name,
-			Kind:    "PersistentVolumeClaim",
-			Group:   o.Group,
 			Phase:   UnitFailed,
-			Reason:  "Lost",
+			Reason:  ReasonPVCLost,
 			Message: "PVC is lost",
 		}, nil
 	default:
 		return UnitStatus{
-			Name:    pvc.Name,
-			Kind:    "PersistentVolumeClaim",
-			Group:   o.Group,
 			Phase:   UnitUnknown,
-			Reason:  "UnknownPhase",
+			Reason:  ReasonUnknownPhase,
 			Message: fmt.Sprintf("Unknown PVC phase: %s", pvc.Status.Phase),
 		}, nil
 	}
