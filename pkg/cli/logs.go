@@ -18,12 +18,13 @@ import (
 	"context"
 	"fmt"
 
+	list "github.com/silogen/kaiwo/pkg/cli/tui/list/pod"
+
+	"github.com/silogen/kaiwo/pkg/kube/utils"
+
 	utils2 "github.com/silogen/kaiwo/pkg/cli/utils"
 
 	"github.com/spf13/cobra"
-
-	"github.com/silogen/kaiwo/pkg/k8s"
-	list "github.com/silogen/kaiwo/pkg/tui/list/pod"
 )
 
 var (
@@ -61,7 +62,7 @@ func BuildLogCmd() *cobra.Command {
 func executeLogsCommand(_ *cobra.Command, args []string) error {
 	ctx := context.Background()
 
-	clients, err := k8s.GetKubernetesClients()
+	clients, err := utils.GetKubernetesClients()
 	if err != nil {
 		return fmt.Errorf("failed to get k8s clients: %w", err)
 	}

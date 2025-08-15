@@ -18,11 +18,12 @@ import (
 	"context"
 	"fmt"
 
+	k8sUtils "github.com/silogen/kaiwo/pkg/kube/utils"
+
 	"github.com/sirupsen/logrus"
 
 	"github.com/spf13/cobra"
 
-	k8sUtils "github.com/silogen/kaiwo/pkg/k8s"
 	testutils "github.com/silogen/kaiwo/pkg/utils/test"
 )
 

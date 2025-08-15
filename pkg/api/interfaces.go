@@ -17,7 +17,7 @@ package api
 import (
 	"context"
 
-	config2 "github.com/silogen/kaiwo/pkg/config"
+	config2 "github.com/silogen/kaiwo/pkg/runtime/config"
 
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 

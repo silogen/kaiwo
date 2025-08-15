@@ -17,10 +17,12 @@ package storage
 import (
 	"context"
 
+	"github.com/silogen/kaiwo/pkg/storage/download"
+
+	"github.com/silogen/kaiwo/pkg/runtime/config"
+
 	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 	"github.com/silogen/kaiwo/pkg/api"
-	"github.com/silogen/kaiwo/pkg/config"
-	"github.com/silogen/kaiwo/pkg/jobs/download"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )

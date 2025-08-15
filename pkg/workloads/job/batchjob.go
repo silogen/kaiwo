@@ -18,21 +18,21 @@ import (
 	"context"
 	"fmt"
 
+	podspec2 "github.com/silogen/kaiwo/pkg/kube/podspec"
+
+	"github.com/silogen/kaiwo/pkg/platform/kueue"
+
+	"github.com/silogen/kaiwo/pkg/platform/cluster"
+
+	"github.com/silogen/kaiwo/pkg/runtime/config"
+
+	common2 "github.com/silogen/kaiwo/pkg/runtime/common"
+
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/silogen/kaiwo/pkg/api"
 
 	"github.com/silogen/kaiwo/pkg/observe"
-
-	"github.com/silogen/kaiwo/pkg/config"
-
-	"github.com/silogen/kaiwo/pkg/podspec"
-
-	"github.com/silogen/kaiwo/pkg/common"
-
-	"github.com/silogen/kaiwo/pkg/cluster"
-
-	"github.com/silogen/kaiwo/pkg/kueue"
 
 	"k8s.io/apimachinery/pkg/runtime"
 
@@ -113,7 +113,7 @@ func (handler *BatchJobHandler) BuildDesired(ctx context.Context, clusterCtx api
 		jobSpec.TTLSecondsAfterFinished = baseutils.Pointer(defaultTTLSecondsAfterFinished)
 	}
 
-	if err := podspec.AddEntrypoint(spec.EntryPoint, &jobSpec.Template); err != nil {
+	if err := podspec2.AddEntrypoint(spec.EntryPoint, &jobSpec.Template); err != nil {
 		return nil, baseutils.LogErrorf(logger, "failed to add entrypoint: %v", err)
 	}
 
@@ -124,15 +124,15 @@ func (handler *BatchJobHandler) BuildDesired(ctx context.Context, clusterCtx api
 		return nil, baseutils.LogErrorf(logger, "failed to calculate gpu requirements: %v", err)
 	}
 
-	podspec.UpdatePodTemplateSpecNonRay(config, handler, gpuSchedulingResult, &jobSpec.Template)
+	podspec2.UpdatePodTemplateSpecNonRay(config, handler, gpuSchedulingResult, &jobSpec.Template)
 
 	batchJob := handler.GetInitializedObject().(*batchv1.Job)
 	batchJob.Spec = jobSpec
 
-	common.UpdateLabels(handler.KaiwoJob, &batchJob.ObjectMeta)
-	common.UpdateLabels(handler.KaiwoJob, &batchJob.Spec.Template.ObjectMeta)
+	common2.UpdateLabels(handler.KaiwoJob, &batchJob.ObjectMeta)
+	common2.UpdateLabels(handler.KaiwoJob, &batchJob.Spec.Template.ObjectMeta)
 
-	batchJob.Labels[common.QueueLabel] = api.GetClusterQueueName(ctx, handler)
+	batchJob.Labels[common2.QueueLabel] = api.GetClusterQueueName(ctx, handler)
 
 	return batchJob, nil
 }
@@ -156,7 +156,7 @@ func GetDefaultJobSpec(config config.KaiwoConfigContext, dangerous bool) batchv1
 	return batchv1.JobSpec{
 		TTLSecondsAfterFinished: baseutils.Pointer(defaultTTLSecondsAfterFinished),
 		BackoffLimit:            baseutils.Pointer(int32(0)),
-		Template:                podspec.GetPodTemplate(config, *resource.NewQuantity(1*1024*1024*1024, resource.BinarySI), dangerous, "workload"),
+		Template:                podspec2.GetPodTemplate(config, *resource.NewQuantity(1*1024*1024*1024, resource.BinarySI), dangerous, "workload"),
 	}
 }
 

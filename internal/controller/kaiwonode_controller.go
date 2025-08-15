@@ -20,7 +20,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/silogen/kaiwo/pkg/config"
+	nodeutils2 "github.com/silogen/kaiwo/internal/controller/nodes"
+
+	"github.com/silogen/kaiwo/pkg/runtime/config"
 
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/client-go/util/retry"
@@ -34,8 +36,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 
 	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
-
-	nodeutils "github.com/silogen/kaiwo/internal/controller/utils/nodes"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -53,7 +53,7 @@ type KaiwoNodeReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
-	Tasks    []nodeutils.ReconcileTask[*nodeutils.KaiwoNodeWrapper]
+	Tasks    []nodeutils2.ReconcileTask[*nodeutils2.KaiwoNodeWrapper]
 }
 
 // +kubebuilder:rbac:groups=kaiwo.silogen.ai,resources=nodes,verbs=get;list;watch;create;update;patch;delete
@@ -83,13 +83,13 @@ func (r *KaiwoNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		kaiwoNode = nil
 	}
 
-	wrapper := &nodeutils.KaiwoNodeWrapper{
+	wrapper := &nodeutils2.KaiwoNodeWrapper{
 		Node:      node,
 		KaiwoNode: kaiwoNode,
 	}
 
 	// Keep a copy of the original objects for later patching
-	originalObjects := &nodeutils.KaiwoNodeWrapper{}
+	originalObjects := &nodeutils2.KaiwoNodeWrapper{}
 	originalObjects.Node = node.DeepCopy()
 
 	if kaiwoNode != nil {
@@ -118,8 +118,8 @@ func (r *KaiwoNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 }
 
 func (r *KaiwoNodeReconciler) applyPatches(ctx context.Context,
-	original *nodeutils.KaiwoNodeWrapper,
-	wrapper *nodeutils.KaiwoNodeWrapper,
+	original *nodeutils2.KaiwoNodeWrapper,
+	wrapper *nodeutils2.KaiwoNodeWrapper,
 ) error {
 	if original.KaiwoNode == nil {
 		newCR := wrapper.KaiwoNode
@@ -188,18 +188,18 @@ func NewKaiwoNodeReconciler(mgr ctrl.Manager) *KaiwoNodeReconciler {
 		Client:   k8sClient,
 		Scheme:   scheme,
 		Recorder: recorder,
-		Tasks: []nodeutils.ReconcileTask[*nodeutils.KaiwoNodeWrapper]{
-			&nodeutils.EnsureKaiwoNodeTask{
+		Tasks: []nodeutils2.ReconcileTask[*nodeutils2.KaiwoNodeWrapper]{
+			&nodeutils2.EnsureKaiwoNodeTask{
 				Client: k8sClient,
 				Scheme: scheme,
 			},
-			&nodeutils.UpdateKaiwoNodeTask{
+			&nodeutils2.UpdateKaiwoNodeTask{
 				Client: k8sClient,
 			},
-			&nodeutils.NodeLabelsAndTaintsTask{
+			&nodeutils2.NodeLabelsAndTaintsTask{
 				Client: k8sClient,
 			},
-			&nodeutils.GpuPartitionTask{
+			&nodeutils2.GpuPartitionTask{
 				Client:   k8sClient,
 				Recorder: recorder,
 			},

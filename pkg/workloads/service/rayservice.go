@@ -19,17 +19,17 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/silogen/kaiwo/pkg/platform/ray"
+
+	"github.com/silogen/kaiwo/pkg/platform/kueue"
+
+	"github.com/silogen/kaiwo/pkg/runtime/config"
+
+	common2 "github.com/silogen/kaiwo/pkg/runtime/common"
+
 	"github.com/silogen/kaiwo/pkg/api"
 
-	"github.com/silogen/kaiwo/pkg/ray"
-
 	"github.com/silogen/kaiwo/pkg/observe"
-
-	"github.com/silogen/kaiwo/pkg/config"
-
-	"github.com/silogen/kaiwo/pkg/common"
-
-	"github.com/silogen/kaiwo/pkg/kueue"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -105,7 +105,7 @@ func (handler *RayServiceHandler) BuildDesired(ctx context.Context, clusterCtx a
 
 	appWrapper := handler.GetInitializedObject().(*appwrapperv1beta2.AppWrapper)
 	appWrapper.Labels = map[string]string{
-		common.QueueLabel: api.GetClusterQueueName(ctx, handler),
+		common2.QueueLabel: api.GetClusterQueueName(ctx, handler),
 	}
 
 	appWrapper.Spec = appwrapperv1beta2.AppWrapperSpec{
@@ -132,7 +132,7 @@ func (handler *RayServiceHandler) BuildDesired(ctx context.Context, clusterCtx a
 		},
 	}
 
-	common.UpdateLabels(handler.KaiwoService, &appWrapper.ObjectMeta)
+	common2.UpdateLabels(handler.KaiwoService, &appWrapper.ObjectMeta)
 
 	return appWrapper, nil
 }
@@ -175,7 +175,7 @@ func (handler *RayServiceHandler) buildRayService(ctx context.Context, clusterCt
 		Spec: rayServiceSpec,
 	}
 
-	common.UpdateLabels(handler.KaiwoService, &rayService.ObjectMeta)
+	common2.UpdateLabels(handler.KaiwoService, &rayService.ObjectMeta)
 	return rayService, nil
 }
 

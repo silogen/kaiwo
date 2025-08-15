@@ -17,10 +17,11 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/silogen/kaiwo/pkg/cli/tui/list"
+
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
-	tui "github.com/silogen/kaiwo/pkg/tui/list"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 

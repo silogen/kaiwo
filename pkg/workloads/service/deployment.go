@@ -19,19 +19,19 @@ import (
 	"encoding/json"
 	"fmt"
 
+	podspec2 "github.com/silogen/kaiwo/pkg/kube/podspec"
+
+	"github.com/silogen/kaiwo/pkg/platform/kueue"
+
+	"github.com/silogen/kaiwo/pkg/platform/cluster"
+
+	"github.com/silogen/kaiwo/pkg/runtime/config"
+
+	common2 "github.com/silogen/kaiwo/pkg/runtime/common"
+
 	"github.com/silogen/kaiwo/pkg/api"
 
 	"github.com/silogen/kaiwo/pkg/observe"
-
-	"github.com/silogen/kaiwo/pkg/config"
-
-	"github.com/silogen/kaiwo/pkg/podspec"
-
-	"github.com/silogen/kaiwo/pkg/common"
-
-	"github.com/silogen/kaiwo/pkg/cluster"
-
-	"github.com/silogen/kaiwo/pkg/kueue"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -60,7 +60,7 @@ func GetDefaultDeploymentSpec(config config.KaiwoConfigContext, dangerous bool) 
 		Selector: &metav1.LabelSelector{
 			MatchLabels: map[string]string{},
 		},
-		Template: podspec.GetPodTemplate(
+		Template: podspec2.GetPodTemplate(
 			config,
 			*resource.NewQuantity(1*1024*1024*1024, resource.BinarySI),
 			dangerous,
@@ -118,10 +118,10 @@ func (handler *DeploymentHandler) BuildDesired(ctx context.Context, clusterCtx a
 	// 3) initialize the AppWrapper
 	applicationWrapper := handler.GetInitializedObject().(*appwrapperv1beta2.AppWrapper)
 	applicationWrapper.Labels = map[string]string{
-		common.QueueLabel: api.GetClusterQueueName(ctx, handler),
+		common2.QueueLabel: api.GetClusterQueueName(ctx, handler),
 	}
 	if priorityClass := handler.GetCommonSpec().WorkloadPriorityClass; priorityClass != "" {
-		applicationWrapper.Labels[common.WorkloaddPriorityClassLabel] = priorityClass
+		applicationWrapper.Labels[common2.WorkloaddPriorityClassLabel] = priorityClass
 	}
 
 	// 4) configure the wrapper to suspend until Kueue admits all replicas
@@ -151,7 +151,7 @@ func (handler *DeploymentHandler) BuildDesired(ctx context.Context, clusterCtx a
 	}
 
 	// 5) propagate KaiwoService labels onto the AppWrapper itself
-	common.UpdateLabels(handler.KaiwoService, &applicationWrapper.ObjectMeta)
+	common2.UpdateLabels(handler.KaiwoService, &applicationWrapper.ObjectMeta)
 
 	return applicationWrapper, nil
 }
@@ -194,18 +194,18 @@ func (handler *DeploymentHandler) buildDeploymentTemplate(
 		deploymentSpec.Replicas = baseutils.Pointer(int32(*gpuSchedulingResult.Replicas))
 	}
 
-	if err := podspec.AddEntrypoint(
+	if err := podspec2.AddEntrypoint(
 		kaiwoService.Spec.EntryPoint,
 		&deploymentSpec.Template,
 	); err != nil {
 		return nil, fmt.Errorf("failed to add entrypoint: %w", err)
 	}
 
-	podspec.UpdatePodTemplateSpecNonRay(configuration, handler, gpuSchedulingResult, &deploymentSpec.Template)
+	podspec2.UpdatePodTemplateSpecNonRay(configuration, handler, gpuSchedulingResult, &deploymentSpec.Template)
 
 	deploymentSpec.Template.Labels["app"] = kaiwoService.Name
-	deploymentSpec.Template.Labels[common.KaiwoRunIdLabel] = string(kaiwoService.UID)
-	deploymentSpec.Template.Labels[common.QueueLabel] = api.GetClusterQueueName(ctx, handler)
+	deploymentSpec.Template.Labels[common2.KaiwoRunIdLabel] = string(kaiwoService.UID)
+	deploymentSpec.Template.Labels[common2.QueueLabel] = api.GetClusterQueueName(ctx, handler)
 
 	desiredDeployment := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
