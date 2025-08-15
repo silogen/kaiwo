@@ -66,7 +66,7 @@ func UpdateRayClusterSpec(ctx context.Context, clusterCtx api.ClusterContext, wo
 	}
 
 	commonSpec := workload.GetCommonSpec()
-	workerOptions := podspec.WithBaseOptions(workload)
+	workerOptions := podspec.WithBaseOptions(config, workload)
 	workerOptions = append(workerOptions, podspec.WithGpuSchedulingOptions(config, commonSpec.Resources, gpuSchedulingResult)...)
 	workerOptions = append(workerOptions, podspec.WithImage(config.Ray.DefaultRayImage))
 
@@ -78,7 +78,7 @@ func UpdateRayClusterSpec(ctx context.Context, clusterCtx api.ClusterContext, wo
 		rayClusterSpec.WorkerGroupSpecs[i].MaxReplicas = baseutils.Pointer(int32(*gpuSchedulingResult.Replicas))
 	}
 
-	headOptions := podspec.WithBaseOptions(workload)
+	headOptions := podspec.WithBaseOptions(config, workload)
 	headOptions = append(headOptions, podspec.WithGpuEnvVars(gpuSchedulingResult))
 	headOptions = append(headOptions, podspec.WithResourceRequirements(commonSpec.Resources))
 	headOptions = append(headOptions,

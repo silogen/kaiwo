@@ -97,7 +97,7 @@ type PodTemplateSpecOption func(*corev1.PodTemplateSpec)
 // UpdatePodTemplateSpecNonRay updates the pod template spec with the default options (for non-Ray use cases)
 func UpdatePodTemplateSpecNonRay(config config.KaiwoConfigContext, workload api.KaiwoWorkload, gpuSchedulingResult *cluster.GpuSchedulingResult, template *corev1.PodTemplateSpec) {
 	commonSpec := workload.GetCommonSpec()
-	options := WithBaseOptions(workload)
+	options := WithBaseOptions(config, workload)
 	options = append(options, WithGpuSchedulingOptions(config, commonSpec.Resources, gpuSchedulingResult)...)
 	UpdatePodTemplateSpec(template, options...)
 }
@@ -119,6 +119,7 @@ func UpdatePodTemplateSpec(tpl *corev1.PodTemplateSpec, opts ...PodTemplateSpecO
 
 // WithBaseOptions returns all the base options that are applied to all workloads
 func WithBaseOptions(
+	cfg config.KaiwoConfigContext,
 	workload api.KaiwoWorkload,
 ) []PodTemplateSpecOption {
 	commonMetaSpec := workload.GetCommonSpec()
@@ -126,6 +127,7 @@ func WithBaseOptions(
 		WithImage(commonMetaSpec.Image),
 		WithCommonEnvVars(commonMetaSpec),
 		WithCommonLabels(workload),
+		WithImage(cfg.Ray.DefaultRayImage),
 		WithAnnotations(workload),
 		WithKueueTopology(commonMetaSpec.RequiredTopologyLabel, commonMetaSpec.PreferredTopologyLabel),
 		WithImagePullSecrets(commonMetaSpec.ImagePullSecrets),
