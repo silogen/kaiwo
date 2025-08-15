@@ -17,14 +17,18 @@ package nodeutils
 import (
 	"context"
 
+	"github.com/silogen/kaiwo/pkg/common"
+
+	"github.com/silogen/kaiwo/pkg/config"
+
+	"github.com/silogen/kaiwo/pkg/cluster"
+
 	v1 "k8s.io/api/core/v1"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	"github.com/silogen/kaiwo/pkg/workloads/common"
-
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -42,17 +46,17 @@ func (t *NodeLabelsAndTaintsTask) Run(ctx context.Context, obj *KaiwoNodeWrapper
 }
 
 func (t *NodeLabelsAndTaintsTask) ensureNodeLabels(ctx context.Context, obj *KaiwoNodeWrapper) {
-	config := common.ConfigFromContext(ctx)
+	cfg := config.ConfigFromContext(ctx)
 
 	labels := obj.Node.GetLabels()
-	labels[common.NodeTypeLabelKey] = string(obj.KaiwoNode.Status.NodeType)
-	labels[common.DefaultNodePoolLabelKey] = obj.KaiwoNode.Status.KueueFlavorName
+	labels[cluster.NodeTypeLabelKey] = string(obj.KaiwoNode.Status.NodeType)
+	labels[cluster.DefaultNodePoolLabelKey] = obj.KaiwoNode.Status.KueueFlavorName
 
-	if !obj.KaiwoNode.Status.IsControlPlane || !config.Nodes.ExcludeMasterNodesFromNodePools {
+	if !obj.KaiwoNode.Status.IsControlPlane || !cfg.Nodes.ExcludeMasterNodesFromNodePools {
 		labels[common.DefaultKaiwoWorkerLabel] = common.True
 	}
 
-	labels[common.NodeStatusLabelKey] = string(obj.KaiwoNode.Status.Status)
+	labels[cluster.NodeStatusLabelKey] = string(obj.KaiwoNode.Status.Status)
 
 	if obj.KaiwoNode.Status.NodeType == v1alpha1.NodeTypeCpu {
 		return
@@ -61,16 +65,16 @@ func (t *NodeLabelsAndTaintsTask) ensureNodeLabels(ctx context.Context, obj *Kai
 	gpuInfo := obj.KaiwoNode.Status.Resources.Gpus
 
 	if partitioned := gpuInfo.IsPartitioned; partitioned != nil && *partitioned {
-		labels[common.NodeGpusPartitionedLabelKey] = common.True
+		labels[cluster.NodeGpusPartitionedLabelKey] = common.True
 	} else if partitioned != nil && !*partitioned {
-		labels[common.NodeGpusPartitionedLabelKey] = common.False
+		labels[cluster.NodeGpusPartitionedLabelKey] = common.False
 	}
 
-	labels[common.NodeGpuVendorLabelKey] = string(gpuInfo.Vendor)
-	labels[common.NodeGpuModelLabelKey] = gpuInfo.Model
+	labels[cluster.NodeGpuVendorLabelKey] = string(gpuInfo.Vendor)
+	labels[cluster.NodeGpuModelLabelKey] = gpuInfo.Model
 
 	if gpuInfo.LogicalVramPerGpu != nil {
-		labels[common.NodeGpuLogicalVramLabelKey] = baseutils.QuantityToGi(*gpuInfo.LogicalVramPerGpu)
+		labels[cluster.NodeGpuLogicalVramLabelKey] = baseutils.QuantityToGi(*gpuInfo.LogicalVramPerGpu)
 	}
 
 	// Topology level defaults
@@ -85,7 +89,7 @@ func (t *NodeLabelsAndTaintsTask) ensureNodeLabels(ctx context.Context, obj *Kai
 }
 
 func (t *NodeLabelsAndTaintsTask) ensureTaints(ctx context.Context, obj *KaiwoNodeWrapper) {
-	config := common.ConfigFromContext(ctx)
+	config := config.ConfigFromContext(ctx)
 
 	var taints []v1.Taint
 
@@ -99,7 +103,7 @@ func (t *NodeLabelsAndTaintsTask) ensureTaints(ctx context.Context, obj *KaiwoNo
 
 		if partitioned := obj.KaiwoNode.Status.Resources.Gpus.IsPartitioned; partitioned != nil && *partitioned {
 			taints = append(taints, v1.Taint{
-				Key:    common.NodePartitionedGpusTaint,
+				Key:    cluster.NodePartitionedGpusTaint,
 				Value:  common.True,
 				Effect: v1.TaintEffectNoSchedule,
 			})

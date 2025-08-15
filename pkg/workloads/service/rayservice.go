@@ -12,20 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package workloadservice
+package workloads
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 
+	"github.com/silogen/kaiwo/pkg/api"
+
+	"github.com/silogen/kaiwo/pkg/ray"
+
+	"github.com/silogen/kaiwo/pkg/observe"
+
+	"github.com/silogen/kaiwo/pkg/config"
+
+	"github.com/silogen/kaiwo/pkg/common"
+
+	"github.com/silogen/kaiwo/pkg/kueue"
+
 	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
-
-	"github.com/silogen/kaiwo/pkg/workloads/utils"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
@@ -37,7 +47,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	"github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 type RayServiceHandler struct {
@@ -71,7 +80,7 @@ func (handler *RayServiceHandler) GetInitializedObject() client.Object {
 	}
 }
 
-func (handler *RayServiceHandler) BuildDesired(ctx context.Context, clusterCtx common.ClusterContext) (client.Object, error) {
+func (handler *RayServiceHandler) BuildDesired(ctx context.Context, clusterCtx api.ClusterContext) (client.Object, error) {
 	rayService, err := handler.buildRayService(ctx, clusterCtx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build ray service: %w", err)
@@ -96,7 +105,7 @@ func (handler *RayServiceHandler) BuildDesired(ctx context.Context, clusterCtx c
 
 	appWrapper := handler.GetInitializedObject().(*appwrapperv1beta2.AppWrapper)
 	appWrapper.Labels = map[string]string{
-		common.QueueLabel: common.GetClusterQueueName(ctx, handler),
+		common.QueueLabel: api.GetClusterQueueName(ctx, handler),
 	}
 
 	appWrapper.Spec = appwrapperv1beta2.AppWrapperSpec{
@@ -128,8 +137,8 @@ func (handler *RayServiceHandler) BuildDesired(ctx context.Context, clusterCtx c
 	return appWrapper, nil
 }
 
-func (handler *RayServiceHandler) buildRayService(ctx context.Context, clusterCtx common.ClusterContext) (*rayv1.RayService, error) {
-	config := common.ConfigFromContext(ctx)
+func (handler *RayServiceHandler) buildRayService(ctx context.Context, clusterCtx api.ClusterContext) (*rayv1.RayService, error) {
+	config := config.ConfigFromContext(ctx)
 
 	spec := handler.KaiwoService.Spec
 
@@ -149,7 +158,7 @@ func (handler *RayServiceHandler) buildRayService(ctx context.Context, clusterCt
 	}
 
 	// Update ray cluster specs
-	if err := utils.UpdateRayClusterSpec(ctx, clusterCtx, handler.KaiwoService, &rayServiceSpec.RayClusterSpec); err != nil {
+	if err := ray.UpdateRayClusterSpec(ctx, clusterCtx, handler.KaiwoService, &rayServiceSpec.RayClusterSpec); err != nil {
 		return nil, fmt.Errorf("failed to update ray cluster spec: %w", err)
 	}
 
@@ -170,7 +179,7 @@ func (handler *RayServiceHandler) buildRayService(ctx context.Context, clusterCt
 	return rayService, nil
 }
 
-func (handler *RayServiceHandler) MutateActual(ctx context.Context, clusterCtx common.ClusterContext, actual client.Object) error {
+func (handler *RayServiceHandler) MutateActual(ctx context.Context, clusterCtx api.ClusterContext, actual client.Object) error {
 	// TODO
 	return nil
 }
@@ -204,7 +213,7 @@ func (handler *RayServiceHandler) GetKueueWorkloads(ctx context.Context, k8sClie
 		return nil, fmt.Errorf("failed to get app wrapper: %w", err)
 	}
 
-	workload, err := common.GetKueueWorkload(ctx, k8sClient, appWrapper.GetNamespace(), string(appWrapper.GetUID()))
+	workload, err := kueue.GetKueueWorkload(ctx, k8sClient, appWrapper.GetNamespace(), string(appWrapper.GetUID()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract workload from handler: %w", err)
 	}
@@ -218,19 +227,19 @@ func (handler *RayServiceHandler) HandleStatusChange(ctx context.Context, k8sCli
 	return nil
 }
 
-func GetDefaultRayServiceSpec(config common.KaiwoConfigContext, dangerous bool) rayv1.RayServiceSpec {
+func GetDefaultRayServiceSpec(config config.KaiwoConfigContext, dangerous bool) rayv1.RayServiceSpec {
 	return rayv1.RayServiceSpec{
-		RayClusterSpec: *utils.GetRayClusterTemplate(config, dangerous),
+		RayClusterSpec: *ray.GetRayClusterTemplate(config, dangerous),
 	}
 }
 
 // RayServiceObserver observes RayService status
 type RayServiceObserver struct {
 	NamespacedName types.NamespacedName
-	Group          common.UnitGroup
+	Group          observe.UnitGroup
 }
 
-func NewRayServiceObserver(nn types.NamespacedName, group common.UnitGroup) *RayServiceObserver {
+func NewRayServiceObserver(nn types.NamespacedName, group observe.UnitGroup) *RayServiceObserver {
 	return &RayServiceObserver{
 		NamespacedName: nn,
 		Group:          group,
@@ -241,24 +250,24 @@ func (o *RayServiceObserver) Kind() string {
 	return "RayService"
 }
 
-func (o *RayServiceObserver) Observe(ctx context.Context, c client.Client) (common.UnitStatus, error) {
+func (o *RayServiceObserver) Observe(ctx context.Context, c client.Client) (observe.UnitStatus, error) {
 	var rs rayv1.RayService
 	if err := c.Get(ctx, o.NamespacedName, &rs); apierrors.IsNotFound(err) {
-		return common.UnitStatus{
-			Phase: common.UnitPending,
+		return observe.UnitStatus{
+			Phase: observe.UnitPending,
 		}, nil
 	} else if err != nil {
-		return common.UnitStatus{
-			Phase:   common.UnitUnknown,
-			Reason:  common.ReasonGetError,
+		return observe.UnitStatus{
+			Phase:   observe.UnitUnknown,
+			Reason:  observe.ReasonGetError,
 			Message: err.Error(),
 		}, nil
 	}
 
 	// Check if RayService is ready
 	if meta.IsStatusConditionTrue(rs.Status.Conditions, string(rayv1.RayServiceReady)) {
-		return common.UnitStatus{
-			Phase: common.UnitReady,
+		return observe.UnitStatus{
+			Phase: observe.UnitReady,
 			Ready: true,
 		}, nil
 	}
@@ -266,16 +275,16 @@ func (o *RayServiceObserver) Observe(ctx context.Context, c client.Client) (comm
 	// Check for application failures
 	for _, appStat := range rs.Status.ActiveServiceStatus.Applications {
 		if appStat.Status == "UNHEALTHY" || appStat.Status == "DEPLOY_FAILED" {
-			return common.UnitStatus{
-				Phase:   common.UnitFailed,
-				Reason:  common.ReasonApplicationFailed,
+			return observe.UnitStatus{
+				Phase:   observe.UnitFailed,
+				Reason:  observe.ReasonApplicationFailed,
 				Message: fmt.Sprintf("Application %s status: %s", appStat.Name, appStat.Status),
 			}, nil
 		}
 	}
 
 	// Still deploying/starting
-	return common.UnitStatus{
-		Phase: common.UnitProgressing,
+	return observe.UnitStatus{
+		Phase: observe.UnitProgressing,
 	}, nil
 }

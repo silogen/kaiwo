@@ -12,20 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package workloadjob
+package workloads
 
 import (
 	"context"
 	"fmt"
 
+	"github.com/silogen/kaiwo/pkg/api"
+
+	"github.com/silogen/kaiwo/pkg/ray"
+
+	"github.com/silogen/kaiwo/pkg/observe"
+
+	"github.com/silogen/kaiwo/pkg/config"
+
+	"github.com/silogen/kaiwo/pkg/common"
+
+	"github.com/silogen/kaiwo/pkg/kueue"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
-	"github.com/silogen/kaiwo/pkg/workloads/utils"
-
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
-
-	"github.com/silogen/kaiwo/pkg/workloads/common"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -39,10 +47,10 @@ import (
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
-func GetDefaultRayJobSpec(config common.KaiwoConfigContext, dangerous bool) rayv1.RayJobSpec {
+func GetDefaultRayJobSpec(config config.KaiwoConfigContext, dangerous bool) rayv1.RayJobSpec {
 	return rayv1.RayJobSpec{
 		ShutdownAfterJobFinishes: true,
-		RayClusterSpec:           utils.GetRayClusterTemplate(config, dangerous),
+		RayClusterSpec:           ray.GetRayClusterTemplate(config, dangerous),
 	}
 }
 
@@ -77,16 +85,16 @@ func (handler *RayJobHandler) GetCommonStatusSpec() *kaiwo.CommonStatusSpec {
 	return &handler.KaiwoJob.Status.CommonStatusSpec
 }
 
-func (handler *RayJobHandler) BuildDesired(ctx context.Context, clusterCtx common.ClusterContext) (client.Object, error) {
+func (handler *RayJobHandler) BuildDesired(ctx context.Context, clusterCtx api.ClusterContext) (client.Object, error) {
 	logger := log.FromContext(ctx)
-	config := common.ConfigFromContext(ctx)
+	cfg := config.ConfigFromContext(ctx)
 
 	spec := handler.KaiwoJob.Spec
 
 	var rayJobSpec rayv1.RayJobSpec
 
 	if spec.RayJob == nil {
-		rayJobSpec = GetDefaultRayJobSpec(config, spec.Dangerous)
+		rayJobSpec = GetDefaultRayJobSpec(cfg, spec.Dangerous)
 	} else {
 		rayJobSpec = spec.RayJob.Spec
 	}
@@ -103,7 +111,7 @@ func (handler *RayJobHandler) BuildDesired(ctx context.Context, clusterCtx commo
 	}
 
 	// Update ray cluster specs
-	if err := utils.UpdateRayClusterSpec(ctx, clusterCtx, handler.KaiwoJob, rayJobSpec.RayClusterSpec); err != nil {
+	if err := ray.UpdateRayClusterSpec(ctx, clusterCtx, handler.KaiwoJob, rayJobSpec.RayClusterSpec); err != nil {
 		return nil, fmt.Errorf("failed to update ray cluster spec: %w", err)
 	}
 
@@ -113,15 +121,15 @@ func (handler *RayJobHandler) BuildDesired(ctx context.Context, clusterCtx commo
 
 	common.UpdateLabels(handler.KaiwoJob, &rayJob.ObjectMeta)
 
-	rayJob.Labels[common.QueueLabel] = common.GetClusterQueueName(ctx, handler)
-	if priorityclass := handler.GetCommonSpec().WorkloadPriorityClass; priorityclass != "" {
-		rayJob.Labels[common.WorkloaddPriorityClassLabel] = priorityclass
+	rayJob.Labels[common.QueueLabel] = api.GetClusterQueueName(ctx, handler)
+	if priorityClass := handler.GetCommonSpec().WorkloadPriorityClass; priorityClass != "" {
+		rayJob.Labels[common.WorkloaddPriorityClassLabel] = priorityClass
 	}
 
 	return rayJob, nil
 }
 
-func (handler *RayJobHandler) MutateActual(ctx context.Context, clusterCtx common.ClusterContext, actual client.Object) error {
+func (handler *RayJobHandler) MutateActual(ctx context.Context, clusterCtx api.ClusterContext, actual client.Object) error {
 	// TODO
 	return nil
 }
@@ -151,7 +159,7 @@ func (handler *RayJobHandler) GetKueueWorkloads(ctx context.Context, k8sClient c
 	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(handler.KaiwoJob), rayJob); err != nil {
 		return nil, fmt.Errorf("failed to get rayJob: %w", err)
 	}
-	workload, err := common.GetKueueWorkload(ctx, k8sClient, rayJob.GetNamespace(), string(rayJob.GetUID()))
+	workload, err := kueue.GetKueueWorkload(ctx, k8sClient, rayJob.GetNamespace(), string(rayJob.GetUID()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract workload from handler: %w", err)
 	}
@@ -164,10 +172,10 @@ func (handler *RayJobHandler) GetKueueWorkloads(ctx context.Context, k8sClient c
 // RayJobObserver observes RayJob status
 type RayJobObserver struct {
 	NamespacedName types.NamespacedName
-	Group          common.UnitGroup
+	Group          observe.UnitGroup
 }
 
-func NewRayJobObserver(nn types.NamespacedName, group common.UnitGroup) *RayJobObserver {
+func NewRayJobObserver(nn types.NamespacedName, group observe.UnitGroup) *RayJobObserver {
 	return &RayJobObserver{
 		NamespacedName: nn,
 		Group:          group,
@@ -178,50 +186,50 @@ func (o *RayJobObserver) Kind() string {
 	return "RayJob"
 }
 
-func (o *RayJobObserver) Observe(ctx context.Context, c client.Client) (common.UnitStatus, error) {
+func (o *RayJobObserver) Observe(ctx context.Context, c client.Client) (observe.UnitStatus, error) {
 	var rj rayv1.RayJob
 	if err := c.Get(ctx, o.NamespacedName, &rj); errors.IsNotFound(err) {
-		return common.UnitStatus{
-			Phase: common.UnitPending,
+		return observe.UnitStatus{
+			Phase: observe.UnitPending,
 		}, nil
 	} else if err != nil {
-		return common.UnitStatus{
-			Phase:   common.UnitUnknown,
-			Reason:  common.ReasonGetError,
+		return observe.UnitStatus{
+			Phase:   observe.UnitUnknown,
+			Reason:  observe.ReasonGetError,
 			Message: err.Error(),
 		}, nil
 	}
 
 	switch rj.Status.JobStatus {
 	case rayv1.JobStatusNew, rayv1.JobStatusPending:
-		return common.UnitStatus{
-			Phase: common.UnitPending,
+		return observe.UnitStatus{
+			Phase: observe.UnitPending,
 		}, nil
 	case rayv1.JobStatusRunning:
-		return common.UnitStatus{
-			Phase: common.UnitProgressing,
+		return observe.UnitStatus{
+			Phase: observe.UnitProgressing,
 		}, nil
 	case rayv1.JobStatusSucceeded:
-		return common.UnitStatus{
-			Phase: common.UnitSucceeded,
+		return observe.UnitStatus{
+			Phase: observe.UnitSucceeded,
 			Ready: true,
 		}, nil
 	case rayv1.JobStatusFailed:
-		return common.UnitStatus{
-			Phase:   common.UnitFailed,
-			Reason:  common.ReasonJobFailed,
+		return observe.UnitStatus{
+			Phase:   observe.UnitFailed,
+			Reason:  observe.ReasonJobFailed,
 			Message: "RayJob failed",
 		}, nil
 	case rayv1.JobStatusStopped:
-		return common.UnitStatus{
-			Phase:   common.UnitFailed,
-			Reason:  common.ReasonJobStopped,
+		return observe.UnitStatus{
+			Phase:   observe.UnitFailed,
+			Reason:  observe.ReasonJobStopped,
 			Message: "RayJob was stopped",
 		}, nil
 	default:
-		return common.UnitStatus{
-			Phase:   common.UnitUnknown,
-			Reason:  common.ReasonUnknownStatus,
+		return observe.UnitStatus{
+			Phase:   observe.UnitUnknown,
+			Reason:  observe.ReasonUnknownStatus,
 			Message: fmt.Sprintf("Unknown RayJob status: %s", rj.Status.JobStatus),
 		}, nil
 	}

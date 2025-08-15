@@ -18,6 +18,12 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/silogen/kaiwo/pkg/common"
+
+	"github.com/silogen/kaiwo/pkg/config"
+
+	"github.com/silogen/kaiwo/pkg/cluster"
+
 	"k8s.io/apimachinery/pkg/api/meta"
 
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
@@ -29,8 +35,6 @@ import (
 	"k8s.io/client-go/tools/record"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
-	"github.com/silogen/kaiwo/pkg/workloads/common"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -67,12 +71,12 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, fmt.Errorf("only a KaiwoQueueConfig named 'kaiwo' is allowed")
 	}
 
-	ctx, err := common.GetContextWithConfig(ctx, r.Client)
+	ctx, err := config.GetContextWithConfig(ctx, r.Client)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("could not get config context: %w", err)
 	}
 
-	config := common.ConfigFromContext(ctx)
+	config := config.ConfigFromContext(ctx)
 
 	//if err := common.EnsureClusterNodesLabelsAndTaints(ctx, r.Client); err != nil {
 	//	return ctrl.Result{}, fmt.Errorf("could not ensure cluster nodes' taints and labels: %w", err)
@@ -340,7 +344,7 @@ func (r *KaiwoQueueConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *KaiwoQueueConfigReconciler) EnsureKaiwoQueueConfig(ctx context.Context, kaiwoQueueConfigName string, clusterQueueName string, cohort string) error {
 	logger := log.FromContext(ctx)
 
-	clusterCtx, err := common.GetClusterContext(ctx, r.Client)
+	clusterCtx, err := cluster.GetClusterContext(ctx, r.Client)
 	if err != nil {
 		return fmt.Errorf("could not get cluster context: %w", err)
 	}

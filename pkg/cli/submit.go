@@ -22,7 +22,7 @@ import (
 	"path/filepath"
 	"regexp"
 
-	"github.com/silogen/kaiwo/pkg/workloads/common"
+	"github.com/silogen/kaiwo/pkg/common"
 
 	"github.com/charmbracelet/huh"
 	"github.com/sirupsen/logrus"

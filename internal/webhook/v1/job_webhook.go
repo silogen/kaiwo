@@ -19,6 +19,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/silogen/kaiwo/pkg/config"
+
+	"github.com/silogen/kaiwo/pkg/common"
+
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -33,7 +37,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	common "github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 var (
@@ -60,7 +63,7 @@ func (j *JobWebhook) Default(ctx context.Context, obj runtime.Object) error {
 		return fmt.Errorf("expected a Job object but got %T", obj)
 	}
 
-	ctx, err := common.GetContextWithConfig(ctx, j.Client)
+	ctx, err := config.GetContextWithConfig(ctx, j.Client)
 	if err != nil {
 		return fmt.Errorf("could not get kaiwo config: %w", err)
 	}

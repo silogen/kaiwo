@@ -12,19 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tuicomponents
+package podspec
 
 import (
-	kaiwo "github.com/silogen/kaiwo/pkg/api"
-	cliutils "github.com/silogen/kaiwo/pkg/cli/utils"
+	"fmt"
+
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
+	corev1 "k8s.io/api/core/v1"
 )
 
-type RunState struct {
-	Workload               kaiwo.KaiwoWorkload
-	WorkloadType           string
-	User                   string
-	Namespace              string
-	PodName                string
-	ContainerName          string
-	PodSelectionPredicates []cliutils.PodSelectionPredicate
+// AddEntrypoint updates the entrypoint command in the PodTemplateSpec.
+func AddEntrypoint(entrypoint string, podTemplateSpec *corev1.PodTemplateSpec) error {
+	if entrypoint == "" {
+		// logger.Info("Entrypoint is empty, skipping modification")
+		return nil
+	}
+
+	if len(podTemplateSpec.Spec.Containers) == 0 {
+		err := fmt.Errorf("podTemplateSpec has no containers to modify")
+		return err
+	}
+
+	podTemplateSpec.Spec.Containers[0].Command = baseutils.ConvertMultilineEntrypoint(entrypoint, false).([]string)
+
+	return nil
 }

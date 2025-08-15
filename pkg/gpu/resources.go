@@ -12,19 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tuicomponents
+package gpu
 
 import (
-	kaiwo "github.com/silogen/kaiwo/pkg/api"
-	cliutils "github.com/silogen/kaiwo/pkg/cli/utils"
+	"fmt"
+
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+
+	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 )
 
-type RunState struct {
-	Workload               kaiwo.KaiwoWorkload
-	WorkloadType           string
-	User                   string
-	Namespace              string
-	PodName                string
-	ContainerName          string
-	PodSelectionPredicates []cliutils.PodSelectionPredicate
+const (
+	AmdGpuResourceName    = corev1.ResourceName("amd.com/gpu")
+	NvidiaGpuResourceName = corev1.ResourceName("nvidia.com/gpu")
+)
+
+var (
+	DefaultMemory = resource.MustParse("16Gi")
+	DefaultCPU    = resource.MustParse("2")
+)
+
+func VendorToResourceName(vendor v1alpha1.GpuVendor) corev1.ResourceName {
+	switch vendor {
+	case v1alpha1.GpuVendorAmd:
+		return AmdGpuResourceName
+	case v1alpha1.GpuVendorNvidia:
+		return NvidiaGpuResourceName
+	}
+	panic(fmt.Sprintf("unknown vendor: %v", vendor))
 }
