@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package nodeutils
+package nodes
 
 import (
 	"context"
@@ -29,23 +29,15 @@ import (
 
 	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-// NodeLabelsAndTaintsTask is responsible for ensuring that the nodes are labeled and tainted correctly
-type NodeLabelsAndTaintsTask struct {
-	Client client.Client
+// UpdateNodeLabelsAndTaints ensures that the nodes are labeled and tainted correctly
+func UpdateNodeLabelsAndTaints(ctx context.Context, client client.Client, obj *KaiwoNodeWrapper) {
+	ensureNodeLabels(ctx, obj)
+	ensureTaints(ctx, obj)
 }
 
-func (t *NodeLabelsAndTaintsTask) Name() string { return "NodeLabelsAndTaints" }
-
-func (t *NodeLabelsAndTaintsTask) Run(ctx context.Context, obj *KaiwoNodeWrapper) (*ctrl.Result, error) {
-	t.ensureNodeLabels(ctx, obj)
-	t.ensureTaints(ctx, obj)
-	return nil, nil
-}
-
-func (t *NodeLabelsAndTaintsTask) ensureNodeLabels(ctx context.Context, obj *KaiwoNodeWrapper) {
+func ensureNodeLabels(ctx context.Context, obj *KaiwoNodeWrapper) {
 	cfg := config.ConfigFromContext(ctx)
 
 	labels := obj.Node.GetLabels()
@@ -88,7 +80,7 @@ func (t *NodeLabelsAndTaintsTask) ensureNodeLabels(ctx context.Context, obj *Kai
 	obj.Node.SetLabels(labels)
 }
 
-func (t *NodeLabelsAndTaintsTask) ensureTaints(ctx context.Context, obj *KaiwoNodeWrapper) {
+func ensureTaints(ctx context.Context, obj *KaiwoNodeWrapper) {
 	config := config.ConfigFromContext(ctx)
 
 	var taints []v1.Taint

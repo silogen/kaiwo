@@ -12,22 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package nodeutils
+package nodes
 
 import (
-	"context"
-
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
-
-	ctrl "sigs.k8s.io/controller-runtime"
 )
-
-type ReconcileTask[T any] interface {
-	Name() string
-	Run(ctx context.Context, obj T) (*ctrl.Result, error)
-}
 
 type KaiwoNodeWrapper struct {
 	Node      *corev1.Node
