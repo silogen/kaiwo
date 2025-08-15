@@ -23,11 +23,17 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/silogen/kaiwo/pkg/api"
+
+	"github.com/silogen/kaiwo/pkg/common"
+
+	"github.com/silogen/kaiwo/pkg/config"
+
+	"github.com/silogen/kaiwo/pkg/utilization"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"k8s.io/client-go/kubernetes"
-
-	"github.com/silogen/kaiwo/pkg/workloads/common"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 
@@ -102,12 +108,12 @@ func (m *MetricsWatcher) Start(ctx context.Context) error {
 	logger := log.FromContext(ctx).WithName("MetricsWatcher")
 	logger.Info("Starting metrics watcher")
 
-	ctx2, err := common.GetContextWithConfig(ctx, m.k8sClient)
+	ctx2, err := config.GetContextWithConfig(ctx, m.k8sClient)
 	if err != nil {
 		return fmt.Errorf("getting config: %w", err)
 	}
-	config := common.ConfigFromContext(ctx2)
-	pollInterval := config.ResourceMonitoring.GetPollInterval()
+	cfg := config.ConfigFromContext(ctx2)
+	pollInterval := cfg.ResourceMonitoring.GetPollInterval()
 
 	for {
 		select {
@@ -116,19 +122,19 @@ func (m *MetricsWatcher) Start(ctx context.Context) error {
 			return nil
 
 		case <-time.After(pollInterval):
-			if config.ResourceMonitoring.Enabled {
+			if cfg.ResourceMonitoring.Enabled {
 				if err := m.pollMetrics(ctx2); err != nil {
 					logger.Error(err, "failed to poll metrics")
 				}
 			}
 
 			// Update polling interval
-			ctx2, err = common.GetContextWithConfig(ctx, m.k8sClient)
+			ctx2, err = config.GetContextWithConfig(ctx, m.k8sClient)
 			if err != nil {
 				return fmt.Errorf("getting config: %w", err)
 			}
-			config = common.ConfigFromContext(ctx2)
-			pollInterval = config.ResourceMonitoring.GetPollInterval()
+			cfg = config.ConfigFromContext(ctx2)
+			pollInterval = cfg.ResourceMonitoring.GetPollInterval()
 		}
 	}
 }
@@ -153,7 +159,7 @@ func (entry *GpuMetricsEntry) IsValid() bool {
 
 // pollMetrics fetches Prometheus data and processes each result.
 func (m *MetricsWatcher) pollMetrics(ctx context.Context) error {
-	config := common.ConfigFromContext(ctx)
+	config := config.ConfigFromContext(ctx)
 	if !m.isCollectorAvailable(ctx) {
 		return fmt.Errorf("no service '%s' in namespace '%s'", config.ResourceMonitoring.MetricsServiceConfig.Name, config.ResourceMonitoring.MetricsServiceConfig.Namespace)
 	}
@@ -177,7 +183,7 @@ func (m *MetricsWatcher) pollMetrics(ctx context.Context) error {
 	return nil
 }
 
-func filterForKaiwoPods(config common.KaiwoConfigContext, metrics *dto.MetricFamily) map[string]GpuMetricsEntry {
+func filterForKaiwoPods(config config.KaiwoConfigContext, metrics *dto.MetricFamily) map[string]GpuMetricsEntry {
 	kaiwoPods := make(map[string]GpuMetricsEntry)
 
 	// Find all pods that are underutilizing the GPU
@@ -246,7 +252,7 @@ func fetchKaiwoWorkloads(ctx context.Context, k8sClient client.Client, kaiwoPods
 	return kaiwoWorkloads, nil
 }
 
-func (m *MetricsWatcher) handleKaiwoWorkloads(ctx context.Context, config common.KaiwoConfigContext, kaiwoWorkloads map[string][]GpuMetricsEntry) error {
+func (m *MetricsWatcher) handleKaiwoWorkloads(ctx context.Context, config config.KaiwoConfigContext, kaiwoWorkloads map[string][]GpuMetricsEntry) error {
 	for kaiwoWorkloadId, entries := range kaiwoWorkloads {
 		pod := kaiwoWorkloads[kaiwoWorkloadId][0].AssociatedPod
 		kaiwoWorkloadType := pod.Labels[common.KaiwoTypeLabel]
@@ -276,7 +282,7 @@ func (m *MetricsWatcher) handleKaiwoWorkloads(ctx context.Context, config common
 				m.recorder.Eventf(
 					obj,
 					corev1.EventTypeWarning,
-					string(common.GpuResourceUtilizationLow),
+					string(utilization.GpuResourceUtilizationLow),
 					"Pod '%s' is underutilizing GPU %s/%s",
 					entry.PodName,
 					entry.GpuID,
@@ -289,7 +295,7 @@ func (m *MetricsWatcher) handleKaiwoWorkloads(ctx context.Context, config common
 			err = m.syncKaiwoStatus(
 				ctx,
 				kaiwoWorkload,
-				common.GpuResourceUtilizationLow,
+				utilization.GpuResourceUtilizationLow,
 				"One or more GPUs are underutilizing requested resources",
 				false,
 			)
@@ -297,7 +303,7 @@ func (m *MetricsWatcher) handleKaiwoWorkloads(ctx context.Context, config common
 			err = m.syncKaiwoStatus(
 				ctx,
 				kaiwoWorkload,
-				common.GpuResourceUtilizationNormal,
+				utilization.GpuResourceUtilizationNormal,
 				"GPU utilization is normal",
 				true,
 			)
@@ -318,7 +324,7 @@ func (m *MetricsWatcher) handleKaiwoWorkloads(ctx context.Context, config common
 // and returns a map from metric name → MetricFamily.
 func (m *MetricsWatcher) scrapeMetrics(ctx context.Context) (map[string]*dto.MetricFamily, error) {
 	logger := log.FromContext(ctx)
-	config := common.ConfigFromContext(ctx)
+	config := config.ConfigFromContext(ctx)
 	var (
 		namespace   = config.ResourceMonitoring.MetricsServiceConfig.Namespace
 		serviceName = config.ResourceMonitoring.MetricsServiceConfig.Name
@@ -357,7 +363,7 @@ func (m *MetricsWatcher) scrapeMetrics(ctx context.Context) (map[string]*dto.Met
 }
 
 func (m *MetricsWatcher) isCollectorAvailable(ctx context.Context) bool {
-	config := common.ConfigFromContext(ctx)
+	config := config.ConfigFromContext(ctx)
 
 	_, err := m.clientset.CoreV1().Services(config.ResourceMonitoring.MetricsServiceConfig.Namespace).Get(ctx, config.ResourceMonitoring.MetricsServiceConfig.Name, metav1.GetOptions{})
 	return err == nil
@@ -371,7 +377,7 @@ func parseLabels(metric *dto.Metric) map[string]string {
 	return labelLookup
 }
 
-func GetKaiwoWorkload(ctx context.Context, k8sClient client.Client, name string, namespace string, workloadType string) (common.KaiwoWorkload, error) {
+func GetKaiwoWorkload(ctx context.Context, k8sClient client.Client, name string, namespace string, workloadType string) (api.KaiwoWorkload, error) {
 	var obj client.Object
 	switch workloadType {
 	case "job":
@@ -384,19 +390,19 @@ func GetKaiwoWorkload(ctx context.Context, k8sClient client.Client, name string,
 	if err := k8sClient.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, obj); err != nil {
 		return nil, fmt.Errorf("failed to fetch Kaiwo workload: %w", err)
 	}
-	return obj.(common.KaiwoWorkload), nil
+	return obj.(api.KaiwoWorkload), nil
 }
 
 // syncKaiwoStatus updates the condition of the Kaiwo workload
 func (m *MetricsWatcher) syncKaiwoStatus(
 	ctx context.Context,
-	kaiwoWorkload common.KaiwoWorkload,
-	reason common.ResourceUnderutilizationStatus,
+	kaiwoWorkload api.KaiwoWorkload,
+	reason utilization.ResourceUnderutilizationStatus,
 	msg string,
 	healthy bool,
 ) error {
 	cond := metav1.Condition{
-		Type:               common.KaiwoResourceUtilizationType,
+		Type:               utilization.KaiwoResourceUtilizationType,
 		Status:             healthyString(healthy),
 		Reason:             string(reason),
 		Message:            msg,
@@ -421,9 +427,9 @@ func (m *MetricsWatcher) syncKaiwoStatus(
 
 func (m *MetricsWatcher) flagIfUnderutilized(
 	ctx context.Context,
-	workload common.KaiwoWorkload,
+	workload api.KaiwoWorkload,
 ) error {
-	common.SetEarlyTerminationIfLowUtilizationThresholdExceeded(ctx, workload)
+	utilization.SetEarlyTerminationIfLowUtilizationThresholdExceeded(ctx, workload)
 	obj := workload.GetKaiwoWorkloadObject()
 	if err := m.k8sClient.Status().Update(ctx, obj); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)

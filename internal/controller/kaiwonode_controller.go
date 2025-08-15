@@ -20,7 +20,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/silogen/kaiwo/pkg/workloads/common"
+	"github.com/silogen/kaiwo/pkg/config"
 
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/client-go/util/retry"
@@ -60,7 +60,7 @@ type KaiwoNodeReconciler struct {
 // +kubebuilder:rbac:groups=config.kaiwo.silogen.ai,resources=kaiwoconfigs,verbs=get;list;watch;create;update;patch;delete
 
 func (r *KaiwoNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	ctx, err := common.GetContextWithConfig(ctx, r.Client)
+	ctx, err := config.GetContextWithConfig(ctx, r.Client)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error getting context: %w", err)
 	}

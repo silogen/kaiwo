@@ -19,7 +19,9 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/silogen/kaiwo/pkg/workloads/common"
+	"github.com/silogen/kaiwo/pkg/common"
+
+	"github.com/silogen/kaiwo/pkg/cluster"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -95,7 +97,7 @@ func (t *EnsureKaiwoNodeTask) ensureKaiwoNode(_ context.Context, node *corev1.No
 	kaiwoNode.Status.Status = kaiwoNodeStatus
 
 	// Update resources
-	nodeInfo, err := common.ExtractRawNodeResources(*node)
+	nodeInfo, err := cluster.ExtractRawNodeResources(*node)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract raw node info: %w", err)
 	}

@@ -18,7 +18,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/silogen/kaiwo/pkg/workloads/common"
+	"github.com/silogen/kaiwo/pkg/api"
+
+	"github.com/silogen/kaiwo/pkg/common"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
@@ -26,11 +28,9 @@ import (
 	"github.com/sirupsen/logrus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	podlist "github.com/silogen/kaiwo/pkg/tui/list/pod"
-	"github.com/silogen/kaiwo/pkg/workloads"
-
 	"github.com/silogen/kaiwo/pkg/k8s"
 	tuicomponents "github.com/silogen/kaiwo/pkg/tui/components"
+	podlist "github.com/silogen/kaiwo/pkg/tui/list/pod"
 )
 
 func RunSelectWorkloadType(_ context.Context, _ k8s.KubernetesClients, state *tuicomponents.RunState) (tuicomponents.StepResult, tuicomponents.RunStep[tuicomponents.RunState], error) {
@@ -55,12 +55,12 @@ func runSelectWorkload(ctx context.Context, clients k8s.KubernetesClients, state
 	labelSelector := client.MatchingLabels{}
 
 	if state.User != "" {
-		labelSelector[workloads.KaiwoUsernameLabel] = state.User
+		labelSelector[common.KaiwoUsernameLabel] = state.User
 	}
 
 	var err error
 
-	var workloadReferences []common.KaiwoWorkload
+	var workloadReferences []api.KaiwoWorkload
 
 	var loadErr error
 	loadReferences := func() {

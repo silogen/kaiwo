@@ -12,11 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package workloadjob
+package workloads
 
 import (
 	"context"
 	"fmt"
+
+	corev1 "k8s.io/api/core/v1"
+
+	"github.com/silogen/kaiwo/pkg/api"
+
+	"github.com/silogen/kaiwo/pkg/observe"
+
+	"github.com/silogen/kaiwo/pkg/config"
+
+	"github.com/silogen/kaiwo/pkg/podspec"
+
+	"github.com/silogen/kaiwo/pkg/common"
+
+	"github.com/silogen/kaiwo/pkg/cluster"
+
+	"github.com/silogen/kaiwo/pkg/kueue"
 
 	"k8s.io/apimachinery/pkg/runtime"
 
@@ -33,7 +49,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	"github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 const (
@@ -59,7 +74,7 @@ func (handler *BatchJobHandler) GetInitializedObject() client.Object {
 	}
 }
 
-func (handler *BatchJobHandler) MutateActual(ctx context.Context, clusterCtx common.ClusterContext, actual client.Object) error {
+func (handler *BatchJobHandler) MutateActual(ctx context.Context, clusterCtx api.ClusterContext, actual client.Object) error {
 	return nil
 }
 
@@ -75,9 +90,9 @@ func (handler *BatchJobHandler) GetCommonStatusSpec() *kaiwo.CommonStatusSpec {
 	return &handler.KaiwoJob.Status.CommonStatusSpec
 }
 
-func (handler *BatchJobHandler) BuildDesired(ctx context.Context, clusterCtx common.ClusterContext) (client.Object, error) {
+func (handler *BatchJobHandler) BuildDesired(ctx context.Context, clusterCtx api.ClusterContext) (client.Object, error) {
 	logger := log.FromContext(ctx)
-	config := common.ConfigFromContext(ctx)
+	config := config.ConfigFromContext(ctx)
 
 	spec := handler.KaiwoJob.Spec
 
@@ -98,18 +113,18 @@ func (handler *BatchJobHandler) BuildDesired(ctx context.Context, clusterCtx com
 		jobSpec.TTLSecondsAfterFinished = baseutils.Pointer(defaultTTLSecondsAfterFinished)
 	}
 
-	if err := common.AddEntrypoint(spec.EntryPoint, &jobSpec.Template); err != nil {
+	if err := podspec.AddEntrypoint(spec.EntryPoint, &jobSpec.Template); err != nil {
 		return nil, baseutils.LogErrorf(logger, "failed to add entrypoint: %v", err)
 	}
 
 	jobSpec.Suspend = baseutils.Pointer(true)
 
-	gpuSchedulingResult, err := common.CalculateGpuRequirements(ctx, clusterCtx, handler.KaiwoJob.Spec.GpuResources, baseutils.Pointer(1))
+	gpuSchedulingResult, err := cluster.CalculateGpuRequirements(ctx, clusterCtx, handler.KaiwoJob.Spec.GpuResources, baseutils.Pointer(1))
 	if err != nil {
 		return nil, baseutils.LogErrorf(logger, "failed to calculate gpu requirements: %v", err)
 	}
 
-	common.UpdatePodTemplateSpecNonRay(config, handler, gpuSchedulingResult, &jobSpec.Template)
+	podspec.UpdatePodTemplateSpecNonRay(config, handler, gpuSchedulingResult, &jobSpec.Template)
 
 	batchJob := handler.GetInitializedObject().(*batchv1.Job)
 	batchJob.Spec = jobSpec
@@ -117,19 +132,9 @@ func (handler *BatchJobHandler) BuildDesired(ctx context.Context, clusterCtx com
 	common.UpdateLabels(handler.KaiwoJob, &batchJob.ObjectMeta)
 	common.UpdateLabels(handler.KaiwoJob, &batchJob.Spec.Template.ObjectMeta)
 
-	batchJob.Labels[common.QueueLabel] = common.GetClusterQueueName(ctx, handler)
+	batchJob.Labels[common.QueueLabel] = api.GetClusterQueueName(ctx, handler)
 
 	return batchJob, nil
-}
-
-func (handler *BatchJobHandler) ObserveStatus(_ context.Context, k8sClient client.Client, obj client.Object, previousStatus kaiwo.WorkloadStatus) (*kaiwo.WorkloadStatus, []metav1.Condition, error) {
-	actualJob := obj.(*batchv1.Job)
-	status, err := common.ObserveBatchJob(actualJob, previousStatus)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to observe batch job status: %w", err)
-	}
-
-	return &status, []metav1.Condition{}, nil
 }
 
 func (handler *BatchJobHandler) GetKueueWorkloads(ctx context.Context, k8sClient client.Client) ([]kueuev1beta1.Workload, error) {
@@ -137,7 +142,7 @@ func (handler *BatchJobHandler) GetKueueWorkloads(ctx context.Context, k8sClient
 	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(job), job); err != nil {
 		return nil, fmt.Errorf("failed to get job: %w", err)
 	}
-	workload, err := common.GetKueueWorkload(ctx, k8sClient, job.GetNamespace(), string(job.GetUID()))
+	workload, err := kueue.GetKueueWorkload(ctx, k8sClient, job.GetNamespace(), string(job.GetUID()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract workload from handler: %w", err)
 	}
@@ -147,21 +152,21 @@ func (handler *BatchJobHandler) GetKueueWorkloads(ctx context.Context, k8sClient
 	return []kueuev1beta1.Workload{*workload}, nil
 }
 
-func GetDefaultJobSpec(config common.KaiwoConfigContext, dangerous bool) batchv1.JobSpec {
+func GetDefaultJobSpec(config config.KaiwoConfigContext, dangerous bool) batchv1.JobSpec {
 	return batchv1.JobSpec{
 		TTLSecondsAfterFinished: baseutils.Pointer(defaultTTLSecondsAfterFinished),
 		BackoffLimit:            baseutils.Pointer(int32(0)),
-		Template:                common.GetPodTemplate(config, *resource.NewQuantity(1*1024*1024*1024, resource.BinarySI), dangerous, "workload"),
+		Template:                podspec.GetPodTemplate(config, *resource.NewQuantity(1*1024*1024*1024, resource.BinarySI), dangerous, "workload"),
 	}
 }
 
 // JobObserver observes Kubernetes Job status
 type JobObserver struct {
 	NamespacedName types.NamespacedName
-	Group          common.UnitGroup
+	Group          observe.UnitGroup
 }
 
-func NewJobObserver(nn types.NamespacedName, group common.UnitGroup) *JobObserver {
+func NewJobObserver(nn types.NamespacedName, group observe.UnitGroup) *JobObserver {
 	return &JobObserver{
 		NamespacedName: nn,
 		Group:          group,
@@ -172,16 +177,16 @@ func (o *JobObserver) Kind() string {
 	return "Job"
 }
 
-func (o *JobObserver) Observe(ctx context.Context, c client.Client) (common.UnitStatus, error) {
+func (o *JobObserver) Observe(ctx context.Context, c client.Client) (observe.UnitStatus, error) {
 	var j batchv1.Job
 	if err := c.Get(ctx, o.NamespacedName, &j); errors.IsNotFound(err) {
-		return common.UnitStatus{
-			Phase: common.UnitPending,
+		return observe.UnitStatus{
+			Phase: observe.UnitPending,
 		}, nil
 	} else if err != nil {
-		return common.UnitStatus{
-			Phase:   common.UnitUnknown,
-			Reason:  common.ReasonGetError,
+		return observe.UnitStatus{
+			Phase:   observe.UnitUnknown,
+			Reason:  observe.ReasonGetError,
 			Message: err.Error(),
 		}, nil
 	}
@@ -194,8 +199,8 @@ func (o *JobObserver) Observe(ctx context.Context, c client.Client) (common.Unit
 		switch condition.Type {
 		case "Complete":
 			if condition.Status == metav1.ConditionTrue {
-				return common.UnitStatus{
-					Phase:      common.UnitSucceeded,
+				return observe.UnitStatus{
+					Phase:      observe.UnitSucceeded,
 					Ready:      true,
 					Reason:     condition.Reason,
 					Message:    condition.Message,
@@ -204,8 +209,8 @@ func (o *JobObserver) Observe(ctx context.Context, c client.Client) (common.Unit
 			}
 		case "Failed":
 			if condition.Status == metav1.ConditionTrue {
-				return common.UnitStatus{
-					Phase:      common.UnitFailed,
+				return observe.UnitStatus{
+					Phase:      observe.UnitFailed,
 					Reason:     condition.Reason,
 					Message:    condition.Message,
 					Conditions: standardConditions,
@@ -216,17 +221,59 @@ func (o *JobObserver) Observe(ctx context.Context, c client.Client) (common.Unit
 
 	// Check if job is actively running
 	if j.Status.Active > 0 {
-		return common.UnitStatus{
-			Phase:      common.UnitProgressing,
+		return observe.UnitStatus{
+			Phase:      observe.UnitProgressing,
 			Conditions: standardConditions,
 		}, nil
 	}
 
 	// Default to pending
-	return common.UnitStatus{
-		Phase:      common.UnitPending,
+	return observe.UnitStatus{
+		Phase:      observe.UnitPending,
 		Conditions: standardConditions,
 	}, nil
+}
+
+func ObserveBatchJob(job *batchv1.Job, previousStatus kaiwo.WorkloadStatus) (kaiwo.WorkloadStatus, error) {
+	for _, condition := range job.Status.Conditions {
+		if condition.Type == batchv1.JobSuccessCriteriaMet && condition.Status == corev1.ConditionTrue {
+			// Job has succeeded
+			return kaiwo.WorkloadStatusComplete, nil
+		} else if condition.Type == batchv1.JobFailed && condition.Status == corev1.ConditionTrue {
+			// Job has failed
+			return kaiwo.WorkloadStatusFailed, nil
+		} else if condition.Type == batchv1.JobSuspended && condition.Status == corev1.ConditionTrue {
+			// Job is suspended
+			return kaiwo.WorkloadStatusPending, nil
+		}
+	}
+
+	if job.Status.Failed > 0 {
+		return kaiwo.WorkloadStatusFailed, nil
+	}
+
+	// Check if job has completed successfully by examining job status fields
+	// A job is complete when it has succeeded pods and no active pods
+	if job.Status.Succeeded > 0 && job.Status.Active == 0 {
+		return kaiwo.WorkloadStatusComplete, nil
+	}
+
+	// If we are here, the job is not complete, failed or suspended
+
+	if baseutils.ValueOrDefault(job.Status.Ready) > 0 {
+		// Pods are running (not pending)
+		return kaiwo.WorkloadStatusRunning, nil
+	} else if previousStatus == kaiwo.WorkloadStatusRunning && job.Status.Active > 0 {
+		// Before completing, a Job will have active but not ready pods and no other conditions
+		// This check is added to avoid going back to starting phase
+		// But only if there are still active pods - if no active pods, the job might be completing
+		return previousStatus, nil
+	} else if job.Status.Active > 0 {
+		// Pods are running or pending
+		return kaiwo.WorkloadStatusStarting, nil
+	}
+
+	return kaiwo.WorkloadStatusPending, nil
 }
 
 func convertJobConditions(conditions []batchv1.JobCondition) []metav1.Condition {

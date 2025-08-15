@@ -12,19 +12,4 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tuicomponents
-
-import (
-	kaiwo "github.com/silogen/kaiwo/pkg/api"
-	cliutils "github.com/silogen/kaiwo/pkg/cli/utils"
-)
-
-type RunState struct {
-	Workload               kaiwo.KaiwoWorkload
-	WorkloadType           string
-	User                   string
-	Namespace              string
-	PodName                string
-	ContainerName          string
-	PodSelectionPredicates []cliutils.PodSelectionPredicate
-}
+package observe

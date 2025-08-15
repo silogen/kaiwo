@@ -27,7 +27,7 @@ import (
 	"syscall"
 	"time"
 
-	workloadutils "github.com/silogen/kaiwo/pkg/workloads/common"
+	cliutils "github.com/silogen/kaiwo/pkg/cli/utils"
 
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/huh/spinner"
@@ -50,7 +50,7 @@ func runPortForward(ctx context.Context, clients k8s.KubernetesClients, state *t
 	var services []v1.Service
 
 	loadServices := func() {
-		services, err = workloadutils.GetWorkloadServices(ctx, clients.Client, workloadReference)
+		services, err = cliutils.GetWorkloadServices(ctx, clients.Client, workloadReference)
 	}
 
 	if spinnerErr := spinner.New().Title("Discovering services").Action(loadServices).Run(); spinnerErr != nil {
@@ -71,7 +71,7 @@ func runPortForward(ctx context.Context, clients k8s.KubernetesClients, state *t
 	}
 
 	// TODO add spinner
-	workloadPods, err := workloadutils.GetWorkloadPods(ctx, clients.Client, workloadReference)
+	workloadPods, err := cliutils.GetWorkloadPods(ctx, clients.Client, workloadReference)
 	if err != nil {
 		return tuicomponents.StepResultErr, nil, fmt.Errorf("failed to get pods for workload %v", err)
 	}

@@ -21,6 +21,14 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/silogen/kaiwo/pkg/api"
+
+	"github.com/silogen/kaiwo/pkg/config"
+
+	"github.com/silogen/kaiwo/pkg/common"
+
+	"github.com/silogen/kaiwo/pkg/cluster"
+
 	"k8s.io/client-go/tools/record"
 
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
@@ -42,7 +50,6 @@ import (
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
-	"github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 // SyncQueueResource syncs a list of resources with the Kubernetes API
@@ -405,7 +412,7 @@ func (c ResourceFlavorConverter) Convert(input kaiwo.ResourceFlavorSpec) (*kueue
 	}
 
 	// Only schedule on nodes with KaiwoNode status = Ready
-	nodeLabels[common.NodeStatusLabelKey] = string(kaiwo.KaiwoNodeStatusReady)
+	nodeLabels[cluster.NodeStatusLabelKey] = string(kaiwo.KaiwoNodeStatusReady)
 
 	return &kueuev1beta1.ResourceFlavor{
 		ObjectMeta: metav1.ObjectMeta{Name: input.Name},
@@ -429,9 +436,9 @@ func (c ResourceFlavorConverter) Mutate(desired *kueuev1beta1.ResourceFlavor, ac
 	actual.Spec = desired.Spec
 }
 
-func ConstructDefaultResourceFlavors(ctx context.Context, clusterContext common.ClusterContext) ([]kaiwo.ResourceFlavorSpec, map[string]kueuev1beta1.FlavorQuotas, error) {
+func ConstructDefaultResourceFlavors(ctx context.Context, clusterContext api.ClusterContext) ([]kaiwo.ResourceFlavorSpec, map[string]kueuev1beta1.FlavorQuotas, error) {
 	logger := log.FromContext(ctx)
-	config := common.ConfigFromContext(ctx)
+	config := config.ConfigFromContext(ctx)
 
 	var resourceFlavors []kaiwo.ResourceFlavorSpec
 	nodePoolResources := make(map[string]kueuev1beta1.FlavorQuotas)
@@ -515,17 +522,17 @@ func ConstructDefaultResourceFlavors(ctx context.Context, clusterContext common.
 		flavor := kaiwo.ResourceFlavorSpec{
 			Name: flavorName,
 			NodeLabels: map[string]string{
-				common.DefaultNodePoolLabelKey: flavorName,
+				cluster.DefaultNodePoolLabelKey: flavorName,
 			},
 			TopologyName: common.DefaultTopologyName,
 		}
 		if !node.IsCpuOnlyNode() {
 			if logicalVramPerGpu := gpuInfo.LogicalVramPerGpu; logicalVramPerGpu != nil {
-				flavor.NodeLabels[common.NodeGpuLogicalVramLabelKey] = baseutils.QuantityToGi(*logicalVramPerGpu)
+				flavor.NodeLabels[cluster.NodeGpuLogicalVramLabelKey] = baseutils.QuantityToGi(*logicalVramPerGpu)
 			}
-			flavor.NodeLabels[common.NodeGpuModelLabelKey] = gpuInfo.Model
+			flavor.NodeLabels[cluster.NodeGpuModelLabelKey] = gpuInfo.Model
 			if partitioned := gpuInfo.IsPartitioned; partitioned != nil {
-				flavor.NodeLabels[common.NodeGpusPartitionedLabelKey] = strconv.FormatBool(*partitioned)
+				flavor.NodeLabels[cluster.NodeGpusPartitionedLabelKey] = strconv.FormatBool(*partitioned)
 			}
 		}
 

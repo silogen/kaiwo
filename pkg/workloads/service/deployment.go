@@ -12,12 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package workloadservice
+package workloads
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+
+	"github.com/silogen/kaiwo/pkg/api"
+
+	"github.com/silogen/kaiwo/pkg/observe"
+
+	"github.com/silogen/kaiwo/pkg/config"
+
+	"github.com/silogen/kaiwo/pkg/podspec"
+
+	"github.com/silogen/kaiwo/pkg/common"
+
+	"github.com/silogen/kaiwo/pkg/cluster"
+
+	"github.com/silogen/kaiwo/pkg/kueue"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -38,16 +52,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	"github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
-func GetDefaultDeploymentSpec(config common.KaiwoConfigContext, dangerous bool) appsv1.DeploymentSpec {
+func GetDefaultDeploymentSpec(config config.KaiwoConfigContext, dangerous bool) appsv1.DeploymentSpec {
 	return appsv1.DeploymentSpec{
 		Replicas: baseutils.Pointer(int32(1)),
 		Selector: &metav1.LabelSelector{
 			MatchLabels: map[string]string{},
 		},
-		Template: common.GetPodTemplate(
+		Template: podspec.GetPodTemplate(
 			config,
 			*resource.NewQuantity(1*1024*1024*1024, resource.BinarySI),
 			dangerous,
@@ -87,7 +100,7 @@ func (handler *DeploymentHandler) GetInitializedObject() client.Object {
 	}
 }
 
-func (handler *DeploymentHandler) BuildDesired(ctx context.Context, clusterCtx common.ClusterContext) (client.Object, error) {
+func (handler *DeploymentHandler) BuildDesired(ctx context.Context, clusterCtx api.ClusterContext) (client.Object, error) {
 	desiredDeployment, err := handler.buildDeploymentTemplate(ctx, clusterCtx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build desired deployment: %w", err)
@@ -105,7 +118,7 @@ func (handler *DeploymentHandler) BuildDesired(ctx context.Context, clusterCtx c
 	// 3) initialize the AppWrapper
 	applicationWrapper := handler.GetInitializedObject().(*appwrapperv1beta2.AppWrapper)
 	applicationWrapper.Labels = map[string]string{
-		common.QueueLabel: common.GetClusterQueueName(ctx, handler),
+		common.QueueLabel: api.GetClusterQueueName(ctx, handler),
 	}
 	if priorityClass := handler.GetCommonSpec().WorkloadPriorityClass; priorityClass != "" {
 		applicationWrapper.Labels[common.WorkloaddPriorityClassLabel] = priorityClass
@@ -145,10 +158,10 @@ func (handler *DeploymentHandler) BuildDesired(ctx context.Context, clusterCtx c
 
 func (handler *DeploymentHandler) buildDeploymentTemplate(
 	ctx context.Context,
-	clusterContext common.ClusterContext,
+	clusterContext api.ClusterContext,
 ) (*appsv1.Deployment, error) {
 	kaiwoService := handler.KaiwoService
-	configuration := common.ConfigFromContext(ctx)
+	configuration := config.ConfigFromContext(ctx)
 
 	var deploymentSpec appsv1.DeploymentSpec
 	if kaiwoService.Spec.Deployment == nil {
@@ -169,7 +182,7 @@ func (handler *DeploymentHandler) buildDeploymentTemplate(
 	}
 	deploymentSpec.Selector.MatchLabels["app"] = kaiwoService.Name
 
-	gpuSchedulingResult, err := common.CalculateGpuRequirements(
+	gpuSchedulingResult, err := cluster.CalculateGpuRequirements(
 		ctx, clusterContext,
 		kaiwoService.Spec.GpuResources,
 		kaiwoService.Spec.Replicas,
@@ -181,18 +194,18 @@ func (handler *DeploymentHandler) buildDeploymentTemplate(
 		deploymentSpec.Replicas = baseutils.Pointer(int32(*gpuSchedulingResult.Replicas))
 	}
 
-	if err := common.AddEntrypoint(
+	if err := podspec.AddEntrypoint(
 		kaiwoService.Spec.EntryPoint,
 		&deploymentSpec.Template,
 	); err != nil {
 		return nil, fmt.Errorf("failed to add entrypoint: %w", err)
 	}
 
-	common.UpdatePodTemplateSpecNonRay(configuration, handler, gpuSchedulingResult, &deploymentSpec.Template)
+	podspec.UpdatePodTemplateSpecNonRay(configuration, handler, gpuSchedulingResult, &deploymentSpec.Template)
 
 	deploymentSpec.Template.Labels["app"] = kaiwoService.Name
 	deploymentSpec.Template.Labels[common.KaiwoRunIdLabel] = string(kaiwoService.UID)
-	deploymentSpec.Template.Labels[common.QueueLabel] = common.GetClusterQueueName(ctx, handler)
+	deploymentSpec.Template.Labels[common.QueueLabel] = api.GetClusterQueueName(ctx, handler)
 
 	desiredDeployment := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
@@ -210,7 +223,7 @@ func (handler *DeploymentHandler) buildDeploymentTemplate(
 	return desiredDeployment, nil
 }
 
-func (handler *DeploymentHandler) MutateActual(ctx context.Context, clusterCtx common.ClusterContext, actual client.Object) error {
+func (handler *DeploymentHandler) MutateActual(ctx context.Context, clusterCtx api.ClusterContext, actual client.Object) error {
 	// TODO
 	return nil
 }
@@ -266,7 +279,7 @@ func (handler *DeploymentHandler) GetKueueWorkloads(ctx context.Context, k8sClie
 		return nil, fmt.Errorf("failed to get app wrapper: %w", err)
 	}
 
-	workload, err := common.GetKueueWorkload(ctx, k8sClient, appWrapper.GetNamespace(), string(appWrapper.GetUID()))
+	workload, err := kueue.GetKueueWorkload(ctx, k8sClient, appWrapper.GetNamespace(), string(appWrapper.GetUID()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract workload from handler: %w", err)
 	}
@@ -279,10 +292,10 @@ func (handler *DeploymentHandler) GetKueueWorkloads(ctx context.Context, k8sClie
 // DeploymentObserver observes Deployment status
 type DeploymentObserver struct {
 	NamespacedName types.NamespacedName
-	Group          common.UnitGroup
+	Group          observe.UnitGroup
 }
 
-func NewDeploymentObserver(nn types.NamespacedName, group common.UnitGroup) *DeploymentObserver {
+func NewDeploymentObserver(nn types.NamespacedName, group observe.UnitGroup) *DeploymentObserver {
 	return &DeploymentObserver{
 		NamespacedName: nn,
 		Group:          group,
@@ -293,16 +306,16 @@ func (o *DeploymentObserver) Kind() string {
 	return "Deployment"
 }
 
-func (o *DeploymentObserver) Observe(ctx context.Context, c client.Client) (common.UnitStatus, error) {
+func (o *DeploymentObserver) Observe(ctx context.Context, c client.Client) (observe.UnitStatus, error) {
 	var d appsv1.Deployment
 	if err := c.Get(ctx, o.NamespacedName, &d); apierrors.IsNotFound(err) {
-		return common.UnitStatus{
-			Phase: common.UnitPending,
+		return observe.UnitStatus{
+			Phase: observe.UnitPending,
 		}, nil
 	} else if err != nil {
-		return common.UnitStatus{
-			Phase:   common.UnitUnknown,
-			Reason:  common.ReasonGetError,
+		return observe.UnitStatus{
+			Phase:   observe.UnitUnknown,
+			Reason:  observe.ReasonGetError,
 			Message: err.Error(),
 		}, nil
 	}
@@ -312,8 +325,8 @@ func (o *DeploymentObserver) Observe(ctx context.Context, c client.Client) (comm
 		if c.Type == appsv1.DeploymentProgressing &&
 			c.Status == corev1.ConditionFalse &&
 			c.Reason == "ProgressDeadlineExceeded" {
-			return common.UnitStatus{
-				Phase:              common.UnitDegraded,
+			return observe.UnitStatus{
+				Phase:              observe.UnitDegraded,
 				Reason:             c.Reason,
 				Message:            c.Message,
 				ObservedGeneration: d.Status.ObservedGeneration,
@@ -331,14 +344,14 @@ func (o *DeploymentObserver) Observe(ctx context.Context, c client.Client) (comm
 	case d.Status.UpdatedReplicas == desired &&
 		d.Status.ReadyReplicas == desired &&
 		d.Status.AvailableReplicas == desired:
-		return common.UnitStatus{
-			Phase:              common.UnitReady,
+		return observe.UnitStatus{
+			Phase:              observe.UnitReady,
 			Ready:              true,
 			ObservedGeneration: d.Status.ObservedGeneration,
 		}, nil
 	default:
-		return common.UnitStatus{
-			Phase:              common.UnitProgressing,
+		return observe.UnitStatus{
+			Phase:              observe.UnitProgressing,
 			ObservedGeneration: d.Status.ObservedGeneration,
 		}, nil
 	}

@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"time"
 
-	kaiwo "github.com/silogen/kaiwo/pkg/workloads/common"
+	"github.com/silogen/kaiwo/pkg/api"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -37,7 +37,7 @@ var containerSelectColumns = []string{
 
 // ChoosePodAndContainer allows the User to choose the pod and the container they want to interact with
 // predicates define an optional list of predicates that must be matched in order to include the pod in the list
-func ChoosePodAndContainer(ctx context.Context, clients k8s.KubernetesClients, reference kaiwo.KaiwoWorkload, predicates ...cliutils.PodSelectionPredicate) (string, string, error, bool) {
+func ChoosePodAndContainer(ctx context.Context, clients k8s.KubernetesClients, reference api.KaiwoWorkload, predicates ...cliutils.PodSelectionPredicate) (string, string, error, bool) {
 	state := &tuicomponents.RunState{
 		Workload:               reference,
 		PodSelectionPredicates: predicates,
@@ -53,7 +53,7 @@ func ChoosePodAndContainer(ctx context.Context, clients k8s.KubernetesClients, r
 }
 
 func RunSelectPodAndContainer(ctx context.Context, clients k8s.KubernetesClients, state *tuicomponents.RunState) (tuicomponents.StepResult, tuicomponents.RunStep[tuicomponents.RunState], error) {
-	allPods, err := kaiwo.GetWorkloadPods(ctx, clients.Client, state.Workload)
+	allPods, err := cliutils.GetWorkloadPods(ctx, clients.Client, state.Workload)
 	if err != nil {
 		return tuicomponents.StepResultErr, nil, fmt.Errorf("failed to list pods: %w", err)
 	}

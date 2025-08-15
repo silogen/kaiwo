@@ -22,6 +22,8 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/silogen/kaiwo/pkg/common"
+
 	"k8s.io/apimachinery/pkg/api/meta"
 
 	"sigs.k8s.io/kueue/apis/kueue/v1beta1"
@@ -36,7 +38,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/silogen/kaiwo/pkg/k8s"
-	"github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 func BuildStatsCmd() *cobra.Command {
