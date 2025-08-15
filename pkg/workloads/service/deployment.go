@@ -19,6 +19,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/api/meta"
+
 	podspec2 "github.com/silogen/kaiwo/pkg/kube/podspec"
 
 	"github.com/silogen/kaiwo/pkg/platform/kueue"
@@ -33,7 +35,6 @@ import (
 
 	"github.com/silogen/kaiwo/pkg/observe"
 
-	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
 	appwrapperv1beta2 "github.com/project-codeflare/appwrapper/api/v1beta2"
@@ -240,7 +241,7 @@ func (handler *DeploymentHandler) GetActual(ctx context.Context, k8sClient clien
 func (handler *DeploymentHandler) ObserveStatus(ctx context.Context, k8sClient client.Client, obj client.Object, previousStatus kaiwo.WorkloadStatus) (*kaiwo.WorkloadStatus, []metav1.Condition, error) {
 	deployment := &appsv1.Deployment{}
 	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(obj), deployment); err != nil {
-		if !errors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			return nil, nil, fmt.Errorf("failed to get deployment: %w", err)
 		}
 		return baseutils.Pointer(kaiwo.WorkloadStatusStarting), nil, nil
@@ -309,9 +310,7 @@ func (o *DeploymentObserver) Kind() string {
 func (o *DeploymentObserver) Observe(ctx context.Context, c client.Client) (observe.UnitStatus, error) {
 	var d appsv1.Deployment
 	if err := c.Get(ctx, o.NamespacedName, &d); apierrors.IsNotFound(err) {
-		return observe.UnitStatus{
-			Phase: observe.UnitPending,
-		}, nil
+		return observe.UnitStatus{Phase: observe.UnitPending}, nil
 	} else if err != nil {
 		return observe.UnitStatus{
 			Phase:   observe.UnitUnknown,
@@ -320,39 +319,94 @@ func (o *DeploymentObserver) Observe(ctx context.Context, c client.Client) (obse
 		}, nil
 	}
 
-	// Check for "Progressing=False / ProgressDeadlineExceeded"
-	for _, c := range d.Status.Conditions {
-		if c.Type == appsv1.DeploymentProgressing &&
-			c.Status == corev1.ConditionFalse &&
-			c.Reason == "ProgressDeadlineExceeded" {
-			return observe.UnitStatus{
-				Phase:              observe.UnitDegraded,
-				Reason:             c.Reason,
-				Message:            c.Message,
-				ObservedGeneration: d.Status.ObservedGeneration,
-			}, nil
-		}
-	}
+	obsGen := d.Status.ObservedGeneration
 
-	// Check if all desired replicas are available and ready
+	// Desired replicas (default 1)
 	desired := int32(1)
 	if d.Spec.Replicas != nil {
 		desired = *d.Spec.Replicas
 	}
 
-	switch {
-	case d.Status.UpdatedReplicas == desired &&
+	// 0) Quick admin gates
+	if d.Spec.Paused {
+		return observe.UnitStatus{
+			Phase:              observe.UnitSuspended,
+			Reason:             observe.ReasonPaused,
+			ObservedGeneration: obsGen,
+		}, nil
+	}
+	if desired == 0 && d.DeletionTimestamp == nil {
+		return observe.UnitStatus{
+			Phase:              observe.UnitSuspended,
+			Reason:             observe.ReasonScaledToZero,
+			ObservedGeneration: obsGen,
+		}, nil
+	}
+
+	conditions := convertDeploymentConditions(d.Status.Conditions)
+
+	// 1) Conditions (authoritative)
+	progressing := meta.FindStatusCondition(conditions, string(appsv1.DeploymentProgressing))
+	available := meta.FindStatusCondition(conditions, string(appsv1.DeploymentAvailable))
+	replicaFailure := meta.FindStatusCondition(conditions, string(appsv1.DeploymentReplicaFailure))
+
+	if replicaFailure != nil && replicaFailure.Status == metav1.ConditionTrue {
+		return observe.UnitStatus{
+			Phase:              observe.UnitDegraded,
+			Reason:             replicaFailure.Reason,
+			Message:            replicaFailure.Message,
+			ObservedGeneration: obsGen,
+		}, nil
+	}
+	if progressing != nil && progressing.Status == metav1.ConditionFalse && progressing.Reason == "ProgressDeadlineExceeded" {
+		return observe.UnitStatus{
+			Phase:              observe.UnitDegraded,
+			Reason:             progressing.Reason,
+			Message:            progressing.Message,
+			ObservedGeneration: obsGen,
+		}, nil
+	}
+
+	// 2) Ready when everything lines up
+	if available != nil && available.Status == metav1.ConditionTrue &&
+		d.Status.UpdatedReplicas == desired &&
 		d.Status.ReadyReplicas == desired &&
-		d.Status.AvailableReplicas == desired:
+		d.Status.AvailableReplicas == desired &&
+		obsGen >= d.Generation {
 		return observe.UnitStatus{
 			Phase:              observe.UnitReady,
 			Ready:              true,
-			ObservedGeneration: d.Status.ObservedGeneration,
-		}, nil
-	default:
-		return observe.UnitStatus{
-			Phase:              observe.UnitProgressing,
-			ObservedGeneration: d.Status.ObservedGeneration,
+			ObservedGeneration: obsGen,
 		}, nil
 	}
+
+	// 3) New generation not yet observed → still rolling
+	if obsGen < d.Generation {
+		return observe.UnitStatus{
+			Phase:              observe.UnitProgressing,
+			Reason:             "NewGeneration",
+			ObservedGeneration: obsGen,
+		}, nil
+	}
+
+	// 4) Default rolling out
+	return observe.UnitStatus{
+		Phase:              observe.UnitProgressing,
+		Reason:             "RollingUpdate",
+		ObservedGeneration: obsGen,
+	}, nil
+}
+
+func convertDeploymentConditions(conditions []appsv1.DeploymentCondition) []metav1.Condition {
+	var result []metav1.Condition
+	for _, c := range conditions {
+		result = append(result, metav1.Condition{
+			Type:               string(c.Type),
+			Status:             metav1.ConditionStatus(c.Status),
+			Reason:             c.Reason,
+			Message:            c.Message,
+			LastTransitionTime: c.LastTransitionTime,
+		})
+	}
+	return result
 }

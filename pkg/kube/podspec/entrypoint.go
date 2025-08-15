@@ -17,8 +17,9 @@ package podspec
 import (
 	"fmt"
 
-	baseutils "github.com/silogen/kaiwo/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
+
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
 // AddEntrypoint updates the entrypoint command in the PodTemplateSpec.

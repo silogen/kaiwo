@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/api/meta"
+
 	"github.com/silogen/kaiwo/pkg/platform/ray"
 
 	"github.com/silogen/kaiwo/pkg/platform/kueue"
@@ -189,9 +191,7 @@ func (o *RayJobObserver) Kind() string {
 func (o *RayJobObserver) Observe(ctx context.Context, c client.Client) (observe.UnitStatus, error) {
 	var rj rayv1.RayJob
 	if err := c.Get(ctx, o.NamespacedName, &rj); errors.IsNotFound(err) {
-		return observe.UnitStatus{
-			Phase: observe.UnitPending,
-		}, nil
+		return observe.UnitStatus{Phase: observe.UnitPending}, nil
 	} else if err != nil {
 		return observe.UnitStatus{
 			Phase:   observe.UnitUnknown,
@@ -200,37 +200,137 @@ func (o *RayJobObserver) Observe(ctx context.Context, c client.Client) (observe.
 		}, nil
 	}
 
+	obsGen := rj.Status.ObservedGeneration
+
+	// 0) Respect "suspend" (intentional pause)
+	if rj.Spec.Suspend {
+		// It's an intentional pause. If it had started before, mark PausedAfterStart; otherwise Paused.
+		if rj.Status.JobStatus == rayv1.JobStatusRunning {
+			return observe.UnitStatus{
+				Phase:              observe.UnitSuspended,
+				Reason:             "Paused",
+				ObservedGeneration: obsGen,
+			}, nil
+		}
+		return observe.UnitStatus{
+			Phase:              observe.UnitSuspended,
+			Reason:             "Suspended",
+			ObservedGeneration: obsGen,
+		}, nil
+	}
+
+	// 1) Terminal RayJob states first
+	switch rj.Status.JobStatus {
+	case rayv1.JobStatusSucceeded:
+		return observe.UnitStatus{
+			Phase:              observe.UnitSucceeded,
+			Ready:              true,
+			ObservedGeneration: obsGen,
+		}, nil
+	case rayv1.JobStatusFailed:
+		msg := rj.Status.Message
+		if msg == "" {
+			msg = "RayJob failed"
+		}
+		return observe.UnitStatus{
+			Phase:              observe.UnitFailed,
+			Reason:             observe.ReasonJobFailed,
+			Message:            msg,
+			ObservedGeneration: obsGen,
+		}, nil
+	case rayv1.JobStatusStopped:
+		msg := rj.Status.Message
+		if msg == "" {
+			msg = "RayJob was stopped"
+		}
+		return observe.UnitStatus{
+			Phase:              observe.UnitStopped,
+			Reason:             observe.ReasonJobStopped,
+			Message:            msg,
+			ObservedGeneration: obsGen,
+		}, nil
+	}
+
+	// 2) Cluster health via Conditions (preferred in v1.3+)
+	rayClusterStatus := rj.Status.RayClusterStatus
+	conditions := rayClusterStatus.Conditions
+
+	// Helper to pull reason/message from a specific condition.
+	conditionMessage := func(t string) (reason, message string) {
+		if c := meta.FindStatusCondition(conditions, t); c != nil {
+			return c.Reason, c.Message
+		}
+		return "", ""
+	}
+
+	// Common recoverable/unhealthy cluster signals -> Degraded (non-terminal)
+	if len(conditions) > 0 {
+		// ReplicaFailure means pods couldn’t be created/deleted; generally recoverable.
+		if meta.IsStatusConditionPresentAndEqual(conditions, string(rayv1.RayClusterReplicaFailure), metav1.ConditionTrue) {
+			r, m := conditionMessage(string(rayv1.RayClusterReplicaFailure))
+			if m == "" {
+				m = "Replica failure while creating/deleting Ray pods"
+			}
+			return observe.UnitStatus{
+				Phase:              observe.UnitDegraded,
+				Reason:             ifEmpty(r, "ReplicaFailure"),
+				Message:            m,
+				ObservedGeneration: rayClusterStatus.ObservedGeneration,
+				Conditions:         conditions,
+			}, nil
+		}
+		// Head not ready is also recoverable; keep it non-terminal.
+		if meta.IsStatusConditionPresentAndEqual(conditions, string(rayv1.HeadPodReady), metav1.ConditionFalse) {
+			r, m := conditionMessage(string(rayv1.HeadPodReady))
+			if m == "" {
+				m = "Ray head pod is not ready"
+			}
+			return observe.UnitStatus{
+				Phase:              observe.UnitDegraded,
+				Reason:             ifEmpty(r, "HeadPodNotReady"),
+				Message:            m,
+				ObservedGeneration: rayClusterStatus.ObservedGeneration,
+				Conditions:         conditions,
+			}, nil
+		}
+		// If we’ve never provisioned the cluster yet, we’re still pending/progressing.
+		if !meta.IsStatusConditionPresentAndEqual(conditions, string(rayv1.RayClusterProvisioned), metav1.ConditionTrue) {
+			return observe.UnitStatus{
+				Phase:              observe.UnitPending, // or UnitProgressing if you prefer
+				ObservedGeneration: rayClusterStatus.ObservedGeneration,
+				Conditions:         conditions,
+			}, nil
+		}
+	}
+
+	// 4) Non-terminal RayJob states
 	switch rj.Status.JobStatus {
 	case rayv1.JobStatusNew, rayv1.JobStatusPending:
 		return observe.UnitStatus{
-			Phase: observe.UnitPending,
+			Phase:              observe.UnitPending,
+			ObservedGeneration: obsGen,
+			Conditions:         conditions,
 		}, nil
 	case rayv1.JobStatusRunning:
 		return observe.UnitStatus{
-			Phase: observe.UnitProgressing,
-		}, nil
-	case rayv1.JobStatusSucceeded:
-		return observe.UnitStatus{
-			Phase: observe.UnitSucceeded,
-			Ready: true,
-		}, nil
-	case rayv1.JobStatusFailed:
-		return observe.UnitStatus{
-			Phase:   observe.UnitFailed,
-			Reason:  observe.ReasonJobFailed,
-			Message: "RayJob failed",
-		}, nil
-	case rayv1.JobStatusStopped:
-		return observe.UnitStatus{
-			Phase:   observe.UnitFailed,
-			Reason:  observe.ReasonJobStopped,
-			Message: "RayJob was stopped",
+			Phase:              observe.UnitProgressing,
+			ObservedGeneration: obsGen,
+			Conditions:         conditions,
 		}, nil
 	default:
 		return observe.UnitStatus{
-			Phase:   observe.UnitUnknown,
-			Reason:  observe.ReasonUnknownStatus,
-			Message: fmt.Sprintf("Unknown RayJob status: %s", rj.Status.JobStatus),
+			Phase:              observe.UnitUnknown,
+			Reason:             observe.ReasonUnknownStatus,
+			Message:            fmt.Sprintf("unknown RayJob status: %q", rj.Status.JobStatus),
+			ObservedGeneration: obsGen,
+			Conditions:         conditions,
 		}, nil
 	}
+}
+
+func ifEmpty(s, fallback string) string {
+	if s == "" {
+		return fallback
+	}
+	return s
 }

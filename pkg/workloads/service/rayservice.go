@@ -31,7 +31,6 @@ import (
 
 	"github.com/silogen/kaiwo/pkg/observe"
 
-	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 
@@ -184,28 +183,6 @@ func (handler *RayServiceHandler) MutateActual(ctx context.Context, clusterCtx a
 	return nil
 }
 
-func (handler *RayServiceHandler) ObserveStatus(ctx context.Context, k8sClient client.Client, obj client.Object, previousStatus kaiwo.WorkloadStatus) (*kaiwo.WorkloadStatus, []metav1.Condition, error) {
-	rayService := &rayv1.RayService{}
-	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(obj), rayService); err != nil {
-		if !errors.IsNotFound(err) {
-			return nil, nil, fmt.Errorf("failed to get rayService: %w", err)
-		}
-		return baseutils.Pointer(kaiwo.WorkloadStatusStarting), nil, nil
-	}
-
-	if meta.IsStatusConditionTrue(rayService.Status.Conditions, string(rayv1.RayServiceReady)) {
-		return baseutils.Pointer(kaiwo.WorkloadStatusRunning), nil, nil
-	}
-
-	for _, appStat := range rayService.Status.ActiveServiceStatus.Applications {
-		if appStat.Status == "UNHEALTHY" || appStat.Status == "DEPLOY_FAILED" {
-			return baseutils.Pointer(kaiwo.WorkloadStatusFailed), nil, nil
-		}
-	}
-
-	return baseutils.Pointer(kaiwo.WorkloadStatusStarting), nil, nil
-}
-
 func (handler *RayServiceHandler) GetKueueWorkloads(ctx context.Context, k8sClient client.Client) ([]kueuev1beta1.Workload, error) {
 	appWrapper := &appwrapperv1beta2.AppWrapper{}
 
@@ -253,38 +230,84 @@ func (o *RayServiceObserver) Kind() string {
 func (o *RayServiceObserver) Observe(ctx context.Context, c client.Client) (observe.UnitStatus, error) {
 	var rs rayv1.RayService
 	if err := c.Get(ctx, o.NamespacedName, &rs); apierrors.IsNotFound(err) {
-		return observe.UnitStatus{
-			Phase: observe.UnitPending,
-		}, nil
+		return observe.UnitStatus{Phase: observe.UnitPending}, nil
 	} else if err != nil {
+		return observe.UnitStatus{Phase: observe.UnitUnknown, Reason: observe.ReasonGetError, Message: err.Error()}, nil
+	}
+
+	conditions := rs.Status.Conditions
+	observedGeneration := rs.Status.ObservedGeneration
+
+	// 1) Conditions-first (authoritative in v1.3+)
+	if meta.IsStatusConditionTrue(conditions, string(rayv1.RayServiceReady)) {
 		return observe.UnitStatus{
-			Phase:   observe.UnitUnknown,
-			Reason:  observe.ReasonGetError,
-			Message: err.Error(),
+			Phase:              observe.UnitReady,
+			Ready:              true,
+			ObservedGeneration: observedGeneration,
+			Conditions:         conditions,
+		}, nil
+	}
+	if meta.IsStatusConditionTrue(conditions, string(rayv1.UpgradeInProgress)) {
+		return observe.UnitStatus{
+			Phase:              observe.UnitProgressing,
+			Reason:             "UpgradeInProgress",
+			ObservedGeneration: observedGeneration,
+			Conditions:         conditions,
 		}, nil
 	}
 
-	// Check if RayService is ready
-	if meta.IsStatusConditionTrue(rs.Status.Conditions, string(rayv1.RayServiceReady)) {
-		return observe.UnitStatus{
-			Phase: observe.UnitReady,
-			Ready: true,
-		}, nil
-	}
-
-	// Check for application failures
-	for _, appStat := range rs.Status.ActiveServiceStatus.Applications {
-		if appStat.Status == "UNHEALTHY" || appStat.Status == "DEPLOY_FAILED" {
-			return observe.UnitStatus{
-				Phase:   observe.UnitFailed,
-				Reason:  observe.ReasonApplicationFailed,
-				Message: fmt.Sprintf("Application %s status: %s", appStat.Name, appStat.Status),
-			}, nil
+	// 2) Health of applications / deployments
+	as := rs.Status.ActiveServiceStatus
+	if as.Applications != nil {
+		for appName, app := range as.Applications {
+			switch app.Status {
+			case rayv1.ApplicationStatusEnum.DEPLOY_FAILED:
+				msg := app.Message
+				if msg == "" {
+					msg = "application deploy failed"
+				}
+				return observe.UnitStatus{
+					Phase:              observe.UnitFailed,
+					Reason:             observe.ReasonRayDeploymentUnhealthy,
+					Message:            fmt.Sprintf("app %q: %s", appName, msg),
+					ObservedGeneration: observedGeneration,
+					Conditions:         conditions,
+				}, nil
+			case rayv1.ApplicationStatusEnum.UNHEALTHY:
+				msg := app.Message
+				if msg == "" {
+					msg = "application unhealthy"
+				}
+				return observe.UnitStatus{
+					Phase:              observe.UnitDegraded,
+					Reason:             observe.ReasonRayDeploymentUnhealthy,
+					Message:            fmt.Sprintf("app %q: %s", appName, msg),
+					ObservedGeneration: observedGeneration,
+					Conditions:         conditions,
+				}, nil
+			}
+			for deploymentName, deployment := range app.Deployments {
+				if deployment.Status == rayv1.DeploymentStatusEnum.UNHEALTHY {
+					msg := deployment.Message
+					if msg == "" {
+						msg = "deployment unhealthy"
+					}
+					return observe.UnitStatus{
+						Phase:              observe.UnitDegraded, // non-terminal
+						Reason:             "DeploymentUnhealthy",
+						Message:            fmt.Sprintf("%s/%s: %s", appName, deploymentName, msg),
+						ObservedGeneration: observedGeneration,
+						Conditions:         conditions,
+					}, nil
+				}
+			}
 		}
 	}
 
-	// Still deploying/starting
+	// 3) Not ready and no explicit failure → still rolling out
 	return observe.UnitStatus{
-		Phase: observe.UnitProgressing,
+		Phase:              observe.UnitProgressing,
+		ObservedGeneration: observedGeneration,
+		Conditions:         conditions,
 	}, nil
 }

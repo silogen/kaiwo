@@ -28,11 +28,7 @@ import (
 
 	common2 "github.com/silogen/kaiwo/pkg/runtime/common"
 
-	corev1 "k8s.io/api/core/v1"
-
 	"github.com/silogen/kaiwo/pkg/api"
-
-	"github.com/silogen/kaiwo/pkg/observe"
 
 	"k8s.io/apimachinery/pkg/runtime"
 
@@ -41,10 +37,8 @@ import (
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
 	batchv1 "k8s.io/api/batch/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -158,134 +152,4 @@ func GetDefaultJobSpec(config config.KaiwoConfigContext, dangerous bool) batchv1
 		BackoffLimit:            baseutils.Pointer(int32(0)),
 		Template:                podspec2.GetPodTemplate(config, *resource.NewQuantity(1*1024*1024*1024, resource.BinarySI), dangerous, "workload"),
 	}
-}
-
-// JobObserver observes Kubernetes Job status
-type JobObserver struct {
-	NamespacedName types.NamespacedName
-	Group          observe.UnitGroup
-}
-
-func NewJobObserver(nn types.NamespacedName, group observe.UnitGroup) *JobObserver {
-	return &JobObserver{
-		NamespacedName: nn,
-		Group:          group,
-	}
-}
-
-func (o *JobObserver) Kind() string {
-	return "Job"
-}
-
-func (o *JobObserver) Observe(ctx context.Context, c client.Client) (observe.UnitStatus, error) {
-	var j batchv1.Job
-	if err := c.Get(ctx, o.NamespacedName, &j); errors.IsNotFound(err) {
-		return observe.UnitStatus{
-			Phase: observe.UnitPending,
-		}, nil
-	} else if err != nil {
-		return observe.UnitStatus{
-			Phase:   observe.UnitUnknown,
-			Reason:  observe.ReasonGetError,
-			Message: err.Error(),
-		}, nil
-	}
-
-	// Convert job conditions to metav1.Condition
-	standardConditions := convertJobConditions(j.Status.Conditions)
-
-	// Check for terminal conditions first
-	for _, condition := range standardConditions {
-		switch condition.Type {
-		case "Complete":
-			if condition.Status == metav1.ConditionTrue {
-				return observe.UnitStatus{
-					Phase:      observe.UnitSucceeded,
-					Ready:      true,
-					Reason:     condition.Reason,
-					Message:    condition.Message,
-					Conditions: standardConditions,
-				}, nil
-			}
-		case "Failed":
-			if condition.Status == metav1.ConditionTrue {
-				return observe.UnitStatus{
-					Phase:      observe.UnitFailed,
-					Reason:     condition.Reason,
-					Message:    condition.Message,
-					Conditions: standardConditions,
-				}, nil
-			}
-		}
-	}
-
-	// Check if job is actively running
-	if j.Status.Active > 0 {
-		return observe.UnitStatus{
-			Phase:      observe.UnitProgressing,
-			Conditions: standardConditions,
-		}, nil
-	}
-
-	// Default to pending
-	return observe.UnitStatus{
-		Phase:      observe.UnitPending,
-		Conditions: standardConditions,
-	}, nil
-}
-
-func ObserveBatchJob(job *batchv1.Job, previousStatus kaiwo.WorkloadStatus) (kaiwo.WorkloadStatus, error) {
-	for _, condition := range job.Status.Conditions {
-		if condition.Type == batchv1.JobSuccessCriteriaMet && condition.Status == corev1.ConditionTrue {
-			// Job has succeeded
-			return kaiwo.WorkloadStatusComplete, nil
-		} else if condition.Type == batchv1.JobFailed && condition.Status == corev1.ConditionTrue {
-			// Job has failed
-			return kaiwo.WorkloadStatusFailed, nil
-		} else if condition.Type == batchv1.JobSuspended && condition.Status == corev1.ConditionTrue {
-			// Job is suspended
-			return kaiwo.WorkloadStatusPending, nil
-		}
-	}
-
-	if job.Status.Failed > 0 {
-		return kaiwo.WorkloadStatusFailed, nil
-	}
-
-	// Check if job has completed successfully by examining job status fields
-	// A job is complete when it has succeeded pods and no active pods
-	if job.Status.Succeeded > 0 && job.Status.Active == 0 {
-		return kaiwo.WorkloadStatusComplete, nil
-	}
-
-	// If we are here, the job is not complete, failed or suspended
-
-	if baseutils.ValueOrDefault(job.Status.Ready) > 0 {
-		// Pods are running (not pending)
-		return kaiwo.WorkloadStatusRunning, nil
-	} else if previousStatus == kaiwo.WorkloadStatusRunning && job.Status.Active > 0 {
-		// Before completing, a Job will have active but not ready pods and no other conditions
-		// This check is added to avoid going back to starting phase
-		// But only if there are still active pods - if no active pods, the job might be completing
-		return previousStatus, nil
-	} else if job.Status.Active > 0 {
-		// Pods are running or pending
-		return kaiwo.WorkloadStatusStarting, nil
-	}
-
-	return kaiwo.WorkloadStatusPending, nil
-}
-
-func convertJobConditions(conditions []batchv1.JobCondition) []metav1.Condition {
-	var result []metav1.Condition
-	for _, c := range conditions {
-		result = append(result, metav1.Condition{
-			Type:               string(c.Type),
-			Status:             metav1.ConditionStatus(c.Status),
-			Reason:             c.Reason,
-			Message:            c.Message,
-			LastTransitionTime: c.LastTransitionTime,
-		})
-	}
-	return result
 }

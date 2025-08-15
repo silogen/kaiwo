@@ -253,7 +253,7 @@ func nodeMatchesRequirements(ctx context.Context, node v1alpha1.KaiwoNode, gpuRe
 	if len(gpuResourceRequirements.Models) > 0 {
 		match := false
 		for _, model := range gpuResourceRequirements.Models {
-			if model == gpuInfo.Model {
+			if gpuInfo.Model != nil && model == *gpuInfo.Model {
 				match = true
 				break
 			}

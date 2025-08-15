@@ -33,6 +33,8 @@ const (
 	UnitReady       UnitPhase = "Ready"       // steady-state workloads
 	UnitSucceeded   UnitPhase = "Succeeded"   // terminal for batch
 	UnitDegraded    UnitPhase = "Degraded"    // kube says it's unhealthy (e.g., deadline exceeded)
+	UnitStopped     UnitPhase = "Stopped"     // intentionally terminated by user/action (terminal for batch)
+	UnitSuspended   UnitPhase = "Suspended"   // intentionally paused/quiesced (non-terminal)
 	UnitFailed      UnitPhase = "Failed"      // terminal error
 	UnitUnknown     UnitPhase = "Unknown"
 )
@@ -53,10 +55,16 @@ const (
 	ReasonWaitingForPVC            = "WaitingForPVC"
 	ReasonPVCPending               = "PVCPending"
 	ReasonPVCLost                  = "PVCLost"
+	ReasonPaused                   = "Paused"
+	ReasonScaledToZero             = "ScaledToZero"
+	ReasonDeleting                 = "Deleting"
 	ReasonJobFailed                = "JobFailed"
 	ReasonJobStopped               = "JobStopped"
 	ReasonUnknownStatus            = "UnknownStatus"
 	ReasonUnknownPhase             = "UnknownPhase"
+	ReasonRayDeploymentUnhealthy   = "RayDeploymentUnhealthy"
+	ReasonRayServiceAppUnhealthy   = "RayServiceAppUnhealthy"
+	ReasonPvcResizing              = "PvcResizing"
 	ReasonRolloutInProgress        = "RolloutInProgress"
 	ReasonProgressDeadlineExceeded = "ProgressDeadlineExceeded"
 	ReasonApplicationFailed        = "ApplicationFailed"
@@ -88,9 +96,10 @@ const (
 	PhaseDeploying      WorkloadPhase = "Deploying"      // main workload rolling out
 	PhaseRunning        WorkloadPhase = "Running"        // steady-state (services)
 	PhaseSucceeded      WorkloadPhase = "Succeeded"      // terminal (jobs)
+	PhaseSuspended      WorkloadPhase = "Suspended"      // workload deliberately quiesced (service-like)
+	PhaseStopped        WorkloadPhase = "Stopped"        // workload intentionally stopped (job-like terminal)
 	PhaseFailed         WorkloadPhase = "Failed"         // terminal
 	PhaseDeleting       WorkloadPhase = "Deleting"
-	PhasePaused         WorkloadPhase = "Paused"
 )
 
 // Observer interface for reading resource status
@@ -173,10 +182,6 @@ func Decide(owner client.Object, agg AggregateResult, units []UnitStatus) (Workl
 		cs.Set("Progressing", metav1.ConditionTrue, "Deleting", "Owner is being deleted")
 		return PhaseDeleting, cs.Done()
 	}
-	if paused(owner) {
-		cs.Set("Progressing", metav1.ConditionFalse, "Paused", "Reconciliation is paused")
-		return PhasePaused, cs.Done()
-	}
 
 	// failures first
 	if agg.AnyFailed {
@@ -257,15 +262,6 @@ func isDeleting(owner client.Object) bool {
 	return owner.GetDeletionTimestamp() != nil
 }
 
-func paused(owner client.Object) bool {
-	// Check for pause annotation or label
-	annotations := owner.GetAnnotations()
-	if annotations != nil {
-		return annotations["kaiwo.silogen.ai/paused"] == "true"
-	}
-	return false
-}
-
 func firstMessage(agg AggregateResult) string {
 	if len(agg.Messages) > 0 {
 		return agg.Messages[0]
@@ -305,8 +301,6 @@ func WorkloadPhaseToStatus(phase WorkloadPhase) v1alpha1.WorkloadStatus {
 		return v1alpha1.WorkloadStatusFailed
 	case PhaseDeleting:
 		return v1alpha1.WorkloadStatusTerminating
-	case PhasePaused:
-		return v1alpha1.WorkloadStatusPending
 	default:
 		return v1alpha1.WorkloadStatusNew
 	}

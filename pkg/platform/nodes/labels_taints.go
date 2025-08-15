@@ -63,7 +63,9 @@ func ensureNodeLabels(ctx context.Context, obj *KaiwoNodeWrapper) {
 	}
 
 	labels[cluster.NodeGpuVendorLabelKey] = string(gpuInfo.Vendor)
-	labels[cluster.NodeGpuModelLabelKey] = gpuInfo.Model
+	if gpuInfo.Model != nil {
+		labels[cluster.NodeGpuModelLabelKey] = *gpuInfo.Model
+	}
 
 	if gpuInfo.LogicalVramPerGpu != nil {
 		labels[cluster.NodeGpuLogicalVramLabelKey] = baseutils.QuantityToGi(*gpuInfo.LogicalVramPerGpu)

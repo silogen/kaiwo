@@ -19,7 +19,7 @@ import (
 	"fmt"
 
 	tuicomponents2 "github.com/silogen/kaiwo/pkg/cli/tui/components"
-	"github.com/silogen/kaiwo/pkg/cli/tui/list/workload"
+	workloadlist "github.com/silogen/kaiwo/pkg/cli/tui/list/workload"
 
 	"github.com/silogen/kaiwo/pkg/kube/utils"
 )

@@ -17,8 +17,6 @@ package app
 import (
 	"context"
 
-	"github.com/silogen/kaiwo/pkg/storage/download"
-
 	jobs "github.com/silogen/kaiwo/pkg/workloads/job"
 	services "github.com/silogen/kaiwo/pkg/workloads/service"
 
@@ -54,7 +52,7 @@ func (om *ObserverManager) ObserveAll(ctx context.Context, c client.Client) ([]o
 	g, ctx := errgroup.WithContext(ctx)
 
 	for i := range om.observers {
-		i := i // capture loop variable
+		// capture loop variable
 		g.Go(func() error {
 			u, err := om.observers[i].Observe(ctx, c)
 			if err != nil {
@@ -125,15 +123,7 @@ func BuildObserversForWorkload(workload api.KaiwoWorkload) *ObserverManager {
 			))
 		}
 		if commonSpec.Storage.HasDownloads() {
-			// For download jobs, we need a generic observer since the download job
-			// will be a regular Kubernetes Job
-			manager.AddObserver(download.NewDownloadJobObserver(
-				types.NamespacedName{
-					Name:      baseutils.FormatNameWithPostfix(objKey.Name, "download"),
-					Namespace: objKey.Namespace,
-				},
-				observe.GroupPrereqs,
-			))
+			manager.AddObserver(observe.NewJobObserver(objKey, observe.GroupPrereqs))
 		}
 	}
 
@@ -142,7 +132,7 @@ func BuildObserversForWorkload(workload api.KaiwoWorkload) *ObserverManager {
 		if wl.Spec.IsRayJob() {
 			manager.AddObserver(jobs.NewRayJobObserver(objKey, observe.GroupWorkload))
 		} else {
-			manager.AddObserver(jobs.NewJobObserver(objKey, observe.GroupWorkload))
+			manager.AddObserver(observe.NewJobObserver(objKey, observe.GroupWorkload))
 		}
 	case *v1alpha1.KaiwoService:
 		if wl.Spec.IsRayService() {
@@ -158,12 +148,12 @@ func BuildObserversForWorkload(workload api.KaiwoWorkload) *ObserverManager {
 // ObserveWorkload provides a unified observation function that returns phase + conditions + units
 func ObserveWorkload(ctx context.Context, c client.Client, workload api.KaiwoWorkload) (observe.Observation, error) {
 	mgr := BuildObserversForWorkload(workload)
-	units, _ := mgr.ObserveAll(ctx, c) // ObserveAll now handles errors internally
+	units, _ := mgr.ObserveAll(ctx, c)
 	agg := observe.Reduce(units)
-	phase, conds := observe.Decide(workload.GetKaiwoWorkloadObject(), agg, units)
+	phase, conditions := observe.Decide(workload.GetKaiwoWorkloadObject(), agg, units)
 	return observe.Observation{
 		Phase:      phase,
 		Units:      units,
-		Conditions: conds,
+		Conditions: conditions,
 	}, nil
 }

@@ -530,7 +530,9 @@ func ConstructDefaultResourceFlavors(ctx context.Context, clusterContext api.Clu
 			if logicalVramPerGpu := gpuInfo.LogicalVramPerGpu; logicalVramPerGpu != nil {
 				flavor.NodeLabels[cluster.NodeGpuLogicalVramLabelKey] = baseutils.QuantityToGi(*logicalVramPerGpu)
 			}
-			flavor.NodeLabels[cluster.NodeGpuModelLabelKey] = gpuInfo.Model
+			if gpuInfo.Model != nil {
+				flavor.NodeLabels[cluster.NodeGpuModelLabelKey] = *gpuInfo.Model
+			}
 			if partitioned := gpuInfo.IsPartitioned; partitioned != nil {
 				flavor.NodeLabels[cluster.NodeGpusPartitionedLabelKey] = strconv.FormatBool(*partitioned)
 			}
