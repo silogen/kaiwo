@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package nodeutils
+package nodes
 
 import (
 	"context"
@@ -31,34 +31,23 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	ctrl "sigs.k8s.io/controller-runtime"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type EnsureKaiwoNodeTask struct {
-	Client client.Client
-	Scheme *runtime.Scheme
-}
-
-func (t *EnsureKaiwoNodeTask) Name() string {
-	return "EnsureKaiwoNode"
-}
-
-func (t *EnsureKaiwoNodeTask) Run(ctx context.Context, obj *KaiwoNodeWrapper) (*ctrl.Result, error) {
-	kaiwoNode, err := t.ensureKaiwoNode(ctx, obj.Node)
+func EnsureKaiwoNode(ctx context.Context, client client.Client, scheme *runtime.Scheme, obj *KaiwoNodeWrapper) error {
+	kaiwoNode, err := ensureKaiwoNode(ctx, scheme, obj.Node)
 	if err != nil {
-		return nil, fmt.Errorf("failed to ensure Kaiwo node: %w", err)
+		return fmt.Errorf("failed to ensure Kaiwo node: %w", err)
 	}
 	if obj.KaiwoNode != nil {
 		kaiwoNode.Status.Partitioning = obj.KaiwoNode.Status.Partitioning
 		kaiwoNode.Status.Conditions = obj.KaiwoNode.Status.Conditions
 	}
 	obj.KaiwoNode = kaiwoNode
-	return nil, nil
+	return nil
 }
 
-func (t *EnsureKaiwoNodeTask) ensureKaiwoNode(_ context.Context, node *corev1.Node) (*v1alpha1.KaiwoNode, error) {
+func ensureKaiwoNode(_ context.Context, scheme *runtime.Scheme, node *corev1.Node) (*v1alpha1.KaiwoNode, error) {
 	kaiwoNode := &v1alpha1.KaiwoNode{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "KaiwoNode",
@@ -68,7 +57,7 @@ func (t *EnsureKaiwoNodeTask) ensureKaiwoNode(_ context.Context, node *corev1.No
 			Name: node.Name,
 		},
 	}
-	if err := controllerutil.SetOwnerReference(node, kaiwoNode, t.Scheme); err != nil {
+	if err := controllerutil.SetOwnerReference(node, kaiwoNode, scheme); err != nil {
 		return nil, fmt.Errorf("failed to set Kaiwo node owner reference: %w", err)
 	}
 

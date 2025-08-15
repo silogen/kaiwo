@@ -1,4 +1,4 @@
-package nodeutils
+package nodes
 
 import (
 	"context"
@@ -81,16 +81,23 @@ var (
 	}
 )
 
-type GpuPartitionTask struct {
+type GpuPartitioner struct {
 	Client   client.Client
 	Recorder record.EventRecorder
 }
 
-func (t *GpuPartitionTask) Name() string { return "GpuPartition" }
+// HandleGpuPartitioning manages GPU partitioning for a KaiwoNode
+func HandleGpuPartitioning(ctx context.Context, client client.Client, recorder record.EventRecorder, obj *KaiwoNodeWrapper) (*ctrl.Result, error) {
+	partitioner := &GpuPartitioner{
+		Client:   client,
+		Recorder: recorder,
+	}
+	return partitioner.Run(ctx, obj)
+}
 
 // ----- Entry -----
 
-func (t *GpuPartitionTask) Run(ctx context.Context, obj *KaiwoNodeWrapper) (*ctrl.Result, error) {
+func (t *GpuPartitioner) Run(ctx context.Context, obj *KaiwoNodeWrapper) (*ctrl.Result, error) {
 	l := log.FromContext(ctx)
 	if obj.KaiwoNode == nil || obj.Node == nil {
 		return nil, nil
@@ -120,7 +127,7 @@ func (t *GpuPartitionTask) Run(ctx context.Context, obj *KaiwoNodeWrapper) (*ctr
 
 // ----- Phase machine -----
 
-func (t *GpuPartitionTask) dispatchPhase(ctx context.Context, obj *KaiwoNodeWrapper, l logr.Logger) (*ctrl.Result, error) {
+func (t *GpuPartitioner) dispatchPhase(ctx context.Context, obj *KaiwoNodeWrapper, l logr.Logger) (*ctrl.Result, error) {
 	switch obj.KaiwoNode.Status.Partitioning.Phase {
 	case "", v1alpha1.PartitioningPhaseCompleted:
 		return t.phaseInit(ctx, obj)
@@ -152,7 +159,7 @@ func (t *GpuPartitionTask) dispatchPhase(ctx context.Context, obj *KaiwoNodeWrap
 
 // ----- Phases -----
 
-func (t *GpuPartitionTask) phaseInit(ctx context.Context, obj *KaiwoNodeWrapper) (*ctrl.Result, error) {
+func (t *GpuPartitioner) phaseInit(ctx context.Context, obj *KaiwoNodeWrapper) (*ctrl.Result, error) {
 	// Add taints: NoSchedule first (stop new), then NoExecute (evict existing)
 	if err := t.ensureTaint(ctx, obj.Node, kaiwoPartitioningTaint, true); err != nil {
 		return nil, fmt.Errorf("add partitioning taint: %w", err)
@@ -164,7 +171,7 @@ func (t *GpuPartitionTask) phaseInit(ctx context.Context, obj *KaiwoNodeWrapper)
 	return &ctrl.Result{RequeueAfter: t.backoff(obj, 0)}, nil
 }
 
-func (t *GpuPartitionTask) phaseDrain(ctx context.Context, obj *KaiwoNodeWrapper) (*ctrl.Result, error) {
+func (t *GpuPartitioner) phaseDrain(ctx context.Context, obj *KaiwoNodeWrapper) (*ctrl.Result, error) {
 	l := log.FromContext(ctx)
 	offending, err := t.listOffendingPods(ctx, obj.Node)
 	if err != nil {
@@ -199,7 +206,7 @@ func (t *GpuPartitionTask) phaseDrain(ctx context.Context, obj *KaiwoNodeWrapper
 	return &ctrl.Result{RequeueAfter: t.backoff(obj, 0)}, nil
 }
 
-func (t *GpuPartitionTask) phaseApply(ctx context.Context, obj *KaiwoNodeWrapper) (*ctrl.Result, error) {
+func (t *GpuPartitioner) phaseApply(ctx context.Context, obj *KaiwoNodeWrapper) (*ctrl.Result, error) {
 	state, ok := obj.Node.Labels[AmdDcmPartitioningStateLabel]
 	reqID := obj.Node.Labels[AmdDcmPartitioningRequestIdLabel]
 
@@ -225,7 +232,7 @@ func (t *GpuPartitionTask) phaseApply(ctx context.Context, obj *KaiwoNodeWrapper
 	}
 }
 
-func (t *GpuPartitionTask) phaseWaitResources(ctx context.Context, obj *KaiwoNodeWrapper) (*ctrl.Result, error) {
+func (t *GpuPartitioner) phaseWaitResources(ctx context.Context, obj *KaiwoNodeWrapper) (*ctrl.Result, error) {
 	if prof, err := extractCurrentProfile(ctx, obj.KaiwoNode); err == nil {
 		obj.KaiwoNode.Status.Partitioning.AppliedProfile = &prof
 		if prof == obj.KaiwoNode.Spec.Partitioning.Profile {
@@ -241,7 +248,7 @@ func (t *GpuPartitionTask) phaseWaitResources(ctx context.Context, obj *KaiwoNod
 	return &ctrl.Result{RequeueAfter: t.backoff(obj, 0)}, nil
 }
 
-func (t *GpuPartitionTask) phaseRestartPods(ctx context.Context, obj *KaiwoNodeWrapper) (*ctrl.Result, error) {
+func (t *GpuPartitioner) phaseRestartPods(ctx context.Context, obj *KaiwoNodeWrapper) (*ctrl.Result, error) {
 	// Restart device-plugin & labeler by label; suffix fallback remains
 	_ = t.rolloutRestartDaemonSets(ctx, map[string]string{AmdDevicePluginSelectorKey: AmdDevicePluginSelectorValue})
 	_ = t.rolloutRestartDaemonSets(ctx, map[string]string{AmdNodeLabelerSelectorKey: AmdNodeLabelerSelectorValue})
@@ -249,14 +256,14 @@ func (t *GpuPartitionTask) phaseRestartPods(ctx context.Context, obj *KaiwoNodeW
 	return &ctrl.Result{RequeueAfter: t.backoff(obj, 1)}, nil
 }
 
-func (t *GpuPartitionTask) phaseWaitLabels(ctx context.Context, obj *KaiwoNodeWrapper) (*ctrl.Result, error) {
+func (t *GpuPartitioner) phaseWaitLabels(ctx context.Context, obj *KaiwoNodeWrapper) (*ctrl.Result, error) {
 	// We complete as soon as isComplete() turns true on the next Reconcile
 	return &ctrl.Result{RequeueAfter: t.backoff(obj, 0)}, nil
 }
 
 // ----- Completion -----
 
-func (t *GpuPartitionTask) isComplete(obj *KaiwoNodeWrapper) bool {
+func (t *GpuPartitioner) isComplete(obj *KaiwoNodeWrapper) bool {
 	state, ok := obj.Node.Labels[AmdDcmPartitioningStateLabel]
 	hasDesired := obj.KaiwoNode.Status.Partitioning.AppliedProfile != nil &&
 		*obj.KaiwoNode.Status.Partitioning.AppliedProfile == obj.KaiwoNode.Spec.Partitioning.Profile
@@ -269,7 +276,7 @@ func (t *GpuPartitionTask) isComplete(obj *KaiwoNodeWrapper) bool {
 	return !ok && hasDesired && obj.KaiwoNode.Status.Partitioning.Phase == v1alpha1.PartitioningPhaseCompleted
 }
 
-func (t *GpuPartitionTask) onCompleted(ctx context.Context, obj *KaiwoNodeWrapper) (*ctrl.Result, error) {
+func (t *GpuPartitioner) onCompleted(ctx context.Context, obj *KaiwoNodeWrapper) (*ctrl.Result, error) {
 	l := log.FromContext(ctx)
 
 	obj.KaiwoNode.Status.Status = v1alpha1.KaiwoNodeStatusReady
@@ -293,7 +300,7 @@ func (t *GpuPartitionTask) onCompleted(ctx context.Context, obj *KaiwoNodeWrappe
 
 // ----- Node patch helpers -----
 
-func (t *GpuPartitionTask) ensureTaint(ctx context.Context, node *corev1.Node, taint corev1.Taint, present bool) error {
+func (t *GpuPartitioner) ensureTaint(ctx context.Context, node *corev1.Node, taint corev1.Taint, present bool) error {
 	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 		var fresh corev1.Node
 		if err := t.Client.Get(ctx, client.ObjectKeyFromObject(node), &fresh); err != nil {
@@ -326,7 +333,7 @@ func (t *GpuPartitionTask) ensureTaint(ctx context.Context, node *corev1.Node, t
 	})
 }
 
-func (t *GpuPartitionTask) patchNodeLabels(ctx context.Context, node *corev1.Node, add map[string]string, remove []string) error {
+func (t *GpuPartitioner) patchNodeLabels(ctx context.Context, node *corev1.Node, add map[string]string, remove []string) error {
 	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 		var fresh corev1.Node
 		if err := t.Client.Get(ctx, client.ObjectKeyFromObject(node), &fresh); err != nil {
@@ -350,7 +357,7 @@ func (t *GpuPartitionTask) patchNodeLabels(ctx context.Context, node *corev1.Nod
 
 // ----- Pods: list / evict -----
 
-func (t *GpuPartitionTask) listOffendingPods(ctx context.Context, node *corev1.Node) ([]corev1.Pod, error) {
+func (t *GpuPartitioner) listOffendingPods(ctx context.Context, node *corev1.Node) ([]corev1.Pod, error) {
 	var pods corev1.PodList
 	if err := t.Client.List(ctx, &pods, client.MatchingFields{"spec.nodeName": node.Name}); err != nil {
 		return nil, err
@@ -371,7 +378,7 @@ func (t *GpuPartitionTask) listOffendingPods(ctx context.Context, node *corev1.N
 	return out, nil
 }
 
-func (t *GpuPartitionTask) evictPods(ctx context.Context, pods []corev1.Pod) error {
+func (t *GpuPartitioner) evictPods(ctx context.Context, pods []corev1.Pod) error {
 	grace := int64(30)
 	for i := range pods {
 		p := &pods[i]
@@ -387,7 +394,7 @@ func (t *GpuPartitionTask) evictPods(ctx context.Context, pods []corev1.Pod) err
 
 // ----- Conditions / progress / backoff -----
 
-func (t *GpuPartitionTask) setError(obj *KaiwoNodeWrapper, message string) {
+func (t *GpuPartitioner) setError(obj *KaiwoNodeWrapper, message string) {
 	obj.KaiwoNode.Status.Status = v1alpha1.KaiwoNodeStatusError
 	obj.KaiwoNode.Status.Partitioning.Phase = v1alpha1.PartitioningPhaseError
 	t.touchProgress(obj, v1alpha1.PartitioningPhaseError)
@@ -401,7 +408,7 @@ func (t *GpuPartitionTask) setError(obj *KaiwoNodeWrapper, message string) {
 	})
 }
 
-func (t *GpuPartitionTask) inProgress(obj *KaiwoNodeWrapper, phase v1alpha1.PartitioningPhase, msg string) {
+func (t *GpuPartitioner) inProgress(obj *KaiwoNodeWrapper, phase v1alpha1.PartitioningPhase, msg string) {
 	obj.KaiwoNode.Status.Partitioning.Phase = phase
 	t.touchProgress(obj, phase)
 	meta.SetStatusCondition(&obj.KaiwoNode.Status.Conditions, metav1.Condition{
@@ -412,7 +419,7 @@ func (t *GpuPartitionTask) inProgress(obj *KaiwoNodeWrapper, phase v1alpha1.Part
 	})
 }
 
-func (t *GpuPartitionTask) touchProgress(obj *KaiwoNodeWrapper, phase v1alpha1.PartitioningPhase) {
+func (t *GpuPartitioner) touchProgress(obj *KaiwoNodeWrapper, phase v1alpha1.PartitioningPhase) {
 	now := time.Now().Format(time.RFC3339)
 	if obj.KaiwoNode.Annotations == nil {
 		obj.KaiwoNode.Annotations = map[string]string{}
@@ -427,7 +434,7 @@ func (t *GpuPartitionTask) touchProgress(obj *KaiwoNodeWrapper, phase v1alpha1.P
 	obj.Node.Labels[progressTimestampLabel] = fmt.Sprintf("%d", time.Now().Unix())
 }
 
-func (t *GpuPartitionTask) resetProgress(obj *KaiwoNodeWrapper) {
+func (t *GpuPartitioner) resetProgress(obj *KaiwoNodeWrapper) {
 	if obj.KaiwoNode.Annotations != nil {
 		delete(obj.KaiwoNode.Annotations, partitioningStartTimeAnnotation)
 		delete(obj.KaiwoNode.Annotations, phaseStartTimeAnnotation)
@@ -437,7 +444,7 @@ func (t *GpuPartitionTask) resetProgress(obj *KaiwoNodeWrapper) {
 	}
 }
 
-func (t *GpuPartitionTask) phaseElapsed(obj *KaiwoNodeWrapper) time.Duration {
+func (t *GpuPartitioner) phaseElapsed(obj *KaiwoNodeWrapper) time.Duration {
 	if obj.KaiwoNode.Annotations == nil {
 		return 0
 	}
@@ -452,7 +459,7 @@ func (t *GpuPartitionTask) phaseElapsed(obj *KaiwoNodeWrapper) time.Duration {
 	return time.Since(tm)
 }
 
-func (t *GpuPartitionTask) backoff(obj *KaiwoNodeWrapper, severity int) time.Duration {
+func (t *GpuPartitioner) backoff(obj *KaiwoNodeWrapper, severity int) time.Duration {
 	// exponential by attempts, scaled by severity (0..4)
 	n := t.attempt(obj)
 	f := 1 << min(n, 6) // cap at 64x
@@ -478,7 +485,7 @@ func withJitter(d time.Duration, frac float64) time.Duration {
 	return d - time.Duration(n%int64(j))
 }
 
-func (t *GpuPartitionTask) attempt(obj *KaiwoNodeWrapper) int {
+func (t *GpuPartitioner) attempt(obj *KaiwoNodeWrapper) int {
 	if obj.KaiwoNode.Annotations == nil {
 		return 0
 	}
@@ -487,14 +494,14 @@ func (t *GpuPartitionTask) attempt(obj *KaiwoNodeWrapper) int {
 	return n
 }
 
-func (t *GpuPartitionTask) bumpAttempt(obj *KaiwoNodeWrapper) {
+func (t *GpuPartitioner) bumpAttempt(obj *KaiwoNodeWrapper) {
 	if obj.KaiwoNode.Annotations == nil {
 		obj.KaiwoNode.Annotations = map[string]string{}
 	}
 	obj.KaiwoNode.Annotations[retryAttemptAnnotation] = fmt.Sprintf("%d", t.attempt(obj)+1)
 }
 
-func (t *GpuPartitionTask) resetAttempts(obj *KaiwoNodeWrapper) {
+func (t *GpuPartitioner) resetAttempts(obj *KaiwoNodeWrapper) {
 	if obj.KaiwoNode.Annotations != nil {
 		delete(obj.KaiwoNode.Annotations, retryAttemptAnnotation)
 	}
@@ -546,7 +553,7 @@ func names(pods []corev1.Pod) []string {
 }
 
 // Restart DaemonSets by label selector
-func (t *GpuPartitionTask) rolloutRestartDaemonSets(ctx context.Context, sel map[string]string) error {
+func (t *GpuPartitioner) rolloutRestartDaemonSets(ctx context.Context, sel map[string]string) error {
 	var dsList appsv1.DaemonSetList
 	if err := t.Client.List(ctx, &dsList, client.InNamespace(KubeAmdGpuNamespace), client.MatchingLabels(sel)); err != nil {
 		return err
@@ -567,7 +574,7 @@ func (t *GpuPartitionTask) rolloutRestartDaemonSets(ctx context.Context, sel map
 }
 
 // Remove both taints on error to avoid stranding the node
-func (t *GpuPartitionTask) cleanupTaints(ctx context.Context, node *corev1.Node) error {
+func (t *GpuPartitioner) cleanupTaints(ctx context.Context, node *corev1.Node) error {
 	_ = t.ensureTaint(ctx, node, amdDcmTaint, false)
 	_ = t.ensureTaint(ctx, node, kaiwoPartitioningTaint, false)
 	return nil
@@ -586,7 +593,7 @@ func extractCurrentProfile(ctx context.Context, kn *v1alpha1.KaiwoNode) (v1alpha
 }
 
 // Manual retry hook from Error phase
-func (t *GpuPartitionTask) shouldRetryFromError(obj *KaiwoNodeWrapper) bool {
+func (t *GpuPartitioner) shouldRetryFromError(obj *KaiwoNodeWrapper) bool {
 	attempt := t.attempt(obj)
 	if attempt >= 5 {
 		return false
