@@ -43,9 +43,6 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
 // KaiwoNodeReconciler operates on the Kaiwo nodes
@@ -63,8 +60,8 @@ func (r *KaiwoNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error getting context: %w", err)
 	}
-	logger := log.FromContext(ctx)
-	baseutils.Debug(logger, "Running reconciliation")
+	// logger := log.FromContext(ctx)
+	// baseutils.Debug(logger, "Running reconciliation")
 
 	node := &corev1.Node{}
 	if err := r.Get(ctx, req.NamespacedName, node); err != nil && !errors.IsNotFound(err) {
@@ -98,15 +95,15 @@ func (r *KaiwoNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	result := ctrl.Result{}
 
 	// Run node logic functions in sequence
-	baseutils.Debug(logger, "Ensuring KaiwoNode")
+	// baseutils.Debug(logger, "Ensuring KaiwoNode")
 	if err := nodes.EnsureKaiwoNode(ctx, r.Client, r.Scheme, wrapper); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to ensure KaiwoNode: %w", err)
 	}
 
-	baseutils.Debug(logger, "Updating node labels and taints")
+	// baseutils.Debug(logger, "Updating node labels and taints")
 	nodes.UpdateNodeLabelsAndTaints(ctx, r.Client, wrapper)
 
-	baseutils.Debug(logger, "Handling GPU partitioning")
+	// baseutils.Debug(logger, "Handling GPU partitioning")
 	if res, err := nodes.HandleGpuPartitioning(ctx, r.Client, r.Recorder, wrapper); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to handle GPU partitioning: %w", err)
 	} else if res != nil {

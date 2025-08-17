@@ -173,14 +173,15 @@ func (handler *RayJobHandler) GetKueueWorkloads(ctx context.Context, k8sClient c
 
 // RayJobObserver observes RayJob status
 type RayJobObserver struct {
-	NamespacedName types.NamespacedName
-	Group          observe.UnitGroup
+	observe.Identified
 }
 
 func NewRayJobObserver(nn types.NamespacedName, group observe.UnitGroup) *RayJobObserver {
 	return &RayJobObserver{
-		NamespacedName: nn,
-		Group:          group,
+		observe.Identified{
+			NamespacedName: nn,
+			Group:          group,
+		},
 	}
 }
 
@@ -190,7 +191,7 @@ func (o *RayJobObserver) Kind() string {
 
 func (o *RayJobObserver) Observe(ctx context.Context, c client.Client) (observe.UnitStatus, error) {
 	var rj rayv1.RayJob
-	if err := c.Get(ctx, o.NamespacedName, &rj); errors.IsNotFound(err) {
+	if err := c.Get(ctx, o.GetNamespacedName(), &rj); errors.IsNotFound(err) {
 		return observe.UnitStatus{Phase: observe.UnitPending}, nil
 	} else if err != nil {
 		return observe.UnitStatus{

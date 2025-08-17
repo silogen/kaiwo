@@ -22,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
+	"github.com/silogen/kaiwo/pkg/storage/download"
 )
 
 // UnitPhase represents the normalized status of any child resource
@@ -194,9 +195,16 @@ func Decide(owner client.Object, agg AggregateResult, units []UnitStatus) (Workl
 	if !agg.PrereqsReady {
 		cs.Set("PrereqsReady", metav1.ConditionFalse, "WaitingForPrereqs", firstMessage(agg))
 		cs.Set("Progressing", metav1.ConditionTrue, "Reconciling", "")
+		
+		// Set download job condition based on download job status
+		setDownloadJobCondition(cs, units)
+		
 		return PhasePendingPrereqs, cs.Done()
 	}
 	cs.Set("PrereqsReady", metav1.ConditionTrue, "AllPrereqsReady", "")
+	
+	// Set download job succeeded condition when prereqs are ready
+	setDownloadJobCondition(cs, units)
 
 	// main workload
 	if isJob(owner) {
@@ -290,7 +298,7 @@ func WorkloadPhaseToStatus(phase WorkloadPhase) v1alpha1.WorkloadStatus {
 	case PhasePlanning:
 		return v1alpha1.WorkloadStatusNew
 	case PhasePendingPrereqs:
-		return v1alpha1.WorkloadStatusPending
+		return v1alpha1.WorkloadStatusDownloading
 	case PhaseDeploying:
 		return v1alpha1.WorkloadStatusStarting
 	case PhaseRunning:
@@ -303,5 +311,42 @@ func WorkloadPhaseToStatus(phase WorkloadPhase) v1alpha1.WorkloadStatus {
 		return v1alpha1.WorkloadStatusTerminating
 	default:
 		return v1alpha1.WorkloadStatusNew
+	}
+}
+
+// setDownloadJobCondition sets the DownloadJobSucceeded condition based on download job status in prereqs
+func setDownloadJobCondition(cs *ConditionSet, units []UnitStatus) {
+	downloadJobs := filter(units, func(u UnitStatus) bool {
+		return u.Group == GroupPrereqs && u.Kind == "Job"
+	})
+	
+	if len(downloadJobs) == 0 {
+		// No download jobs, so the condition doesn't apply
+		return
+	}
+	
+	// Check if all download jobs are successful
+	allDownloadsSucceeded := all(downloadJobs, func(u UnitStatus) bool {
+		return u.Phase == UnitSucceeded
+	})
+	
+	// Check if any download jobs failed
+	anyDownloadsFailed := any(downloadJobs, func(u UnitStatus) bool {
+		return u.Phase == UnitFailed
+	})
+	
+	// Check if any download jobs are still progressing
+	anyDownloadsProgressing := any(downloadJobs, func(u UnitStatus) bool {
+		return u.Phase == UnitProgressing
+	})
+	
+	if allDownloadsSucceeded {
+		cs.Set(download.DownloadJobSucceededConditionType, metav1.ConditionTrue, ReasonDownloadJobCompleted, "All download jobs succeeded")
+	} else if anyDownloadsFailed {
+		cs.Set(download.DownloadJobSucceededConditionType, metav1.ConditionFalse, ReasonDownloadJobFailed, "Download job failed")
+	} else if anyDownloadsProgressing {
+		cs.Set(download.DownloadJobSucceededConditionType, metav1.ConditionFalse, ReasonDownloadJobInProgress, "Download job in progress")
+	} else {
+		cs.Set(download.DownloadJobSucceededConditionType, metav1.ConditionFalse, ReasonDownloadJobPending, "Download job pending")
 	}
 }

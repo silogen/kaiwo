@@ -292,14 +292,15 @@ func (handler *DeploymentHandler) GetKueueWorkloads(ctx context.Context, k8sClie
 
 // DeploymentObserver observes Deployment status
 type DeploymentObserver struct {
-	NamespacedName types.NamespacedName
-	Group          observe.UnitGroup
+	observe.Identified
 }
 
 func NewDeploymentObserver(nn types.NamespacedName, group observe.UnitGroup) *DeploymentObserver {
 	return &DeploymentObserver{
-		NamespacedName: nn,
-		Group:          group,
+		observe.Identified{
+			NamespacedName: nn,
+			Group:          group,
+		},
 	}
 }
 
@@ -309,7 +310,7 @@ func (o *DeploymentObserver) Kind() string {
 
 func (o *DeploymentObserver) Observe(ctx context.Context, c client.Client) (observe.UnitStatus, error) {
 	var d appsv1.Deployment
-	if err := c.Get(ctx, o.NamespacedName, &d); apierrors.IsNotFound(err) {
+	if err := c.Get(ctx, o.GetNamespacedName(), &d); apierrors.IsNotFound(err) {
 		return observe.UnitStatus{Phase: observe.UnitPending}, nil
 	} else if err != nil {
 		return observe.UnitStatus{
