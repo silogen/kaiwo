@@ -114,12 +114,12 @@ func (r *PvcReconciler) ObserveStatus(ctx context.Context, k8sClient client.Clie
 
 // PVCObserver observes PVC status
 type PVCObserver struct {
-	Identified observe.Identified
+	observe.Identified
 }
 
 func NewPVCObserver(nn types.NamespacedName, group observe.UnitGroup) *PVCObserver {
 	return &PVCObserver{
-		Identified: observe.Identified{
+		observe.Identified{
 			NamespacedName: nn,
 			Group:          group,
 		},
@@ -132,7 +132,7 @@ func (o *PVCObserver) Kind() string {
 
 func (o *PVCObserver) Observe(ctx context.Context, c client.Client) (observe.UnitStatus, error) {
 	var pvc corev1.PersistentVolumeClaim
-	if err := c.Get(ctx, o.Identified.GetNamespacedName(), &pvc); apierrors.IsNotFound(err) {
+	if err := c.Get(ctx, o.GetNamespacedName(), &pvc); apierrors.IsNotFound(err) {
 		return observe.UnitStatus{Phase: observe.UnitPending}, nil
 	} else if err != nil {
 		return observe.UnitStatus{

@@ -28,14 +28,15 @@ import (
 
 // JobObserver observes Kubernetes Job status
 type JobObserver struct {
-	NamespacedName types.NamespacedName
-	Group          UnitGroup
+	Identified
 }
 
 func NewJobObserver(nn types.NamespacedName, group UnitGroup) *JobObserver {
 	return &JobObserver{
-		NamespacedName: nn,
-		Group:          group,
+		Identified{
+			NamespacedName: nn,
+			Group:          group,
+		},
 	}
 }
 
@@ -45,7 +46,7 @@ func (o *JobObserver) Kind() string {
 
 func (o *JobObserver) Observe(ctx context.Context, c client.Client) (UnitStatus, error) {
 	var j batchv1.Job
-	if err := c.Get(ctx, o.NamespacedName, &j); errors.IsNotFound(err) {
+	if err := c.Get(ctx, o.GetNamespacedName(), &j); errors.IsNotFound(err) {
 		return UnitStatus{
 			Phase: UnitPending,
 		}, nil
@@ -122,7 +123,7 @@ func (o *JobObserver) Observe(ctx context.Context, c client.Client) (UnitStatus,
 	switch {
 	case j.Status.Active > 0 && ready > 0:
 		return UnitStatus{
-			Phase:      UnitProgressing,
+			Phase:      UnitReady,
 			Reason:     "Running",
 			Conditions: convertJobConditions(conds),
 		}, nil

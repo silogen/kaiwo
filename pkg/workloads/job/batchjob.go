@@ -18,7 +18,7 @@ import (
 	"context"
 	"fmt"
 
-	podspec2 "github.com/silogen/kaiwo/pkg/kube/podspec"
+	"github.com/silogen/kaiwo/pkg/kube/podspec"
 
 	"github.com/silogen/kaiwo/pkg/platform/kueue"
 
@@ -107,7 +107,7 @@ func (handler *BatchJobHandler) BuildDesired(ctx context.Context, clusterCtx api
 		jobSpec.TTLSecondsAfterFinished = baseutils.Pointer(defaultTTLSecondsAfterFinished)
 	}
 
-	if err := podspec2.AddEntrypoint(spec.EntryPoint, &jobSpec.Template); err != nil {
+	if err := podspec.AddEntrypoint(spec.EntryPoint, &jobSpec.Template); err != nil {
 		return nil, baseutils.LogErrorf(logger, "failed to add entrypoint: %v", err)
 	}
 
@@ -118,7 +118,10 @@ func (handler *BatchJobHandler) BuildDesired(ctx context.Context, clusterCtx api
 		return nil, baseutils.LogErrorf(logger, "failed to calculate gpu requirements: %v", err)
 	}
 
-	podspec2.UpdatePodTemplateSpecNonRay(config, handler, gpuSchedulingResult, &jobSpec.Template)
+	podspec.UpdatePodTemplateSpecNonRay(config, handler, gpuSchedulingResult, &jobSpec.Template)
+
+	// IndexedCompletion is required by Kueue TAS
+	jobSpec.CompletionMode = baseutils.Pointer(batchv1.IndexedCompletion)
 
 	batchJob := handler.GetInitializedObject().(*batchv1.Job)
 	batchJob.Spec = jobSpec
@@ -150,6 +153,9 @@ func GetDefaultJobSpec(config config.KaiwoConfigContext, dangerous bool) batchv1
 	return batchv1.JobSpec{
 		TTLSecondsAfterFinished: baseutils.Pointer(defaultTTLSecondsAfterFinished),
 		BackoffLimit:            baseutils.Pointer(int32(0)),
-		Template:                podspec2.GetPodTemplate(config, *resource.NewQuantity(1*1024*1024*1024, resource.BinarySI), dangerous, "workload"),
+		Template:                podspec.GetPodTemplate(config, *resource.NewQuantity(1*1024*1024*1024, resource.BinarySI), dangerous, "workload"),
+		// Just to be explicit about the values
+		Completions: baseutils.Pointer(int32(1)),
+		Parallelism: baseutils.Pointer(int32(1)),
 	}
 }

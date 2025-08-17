@@ -1,17 +1,3 @@
-// Copyright 2025 Advanced Micro Devices, Inc.  All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//       http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package main
 
 import (
@@ -20,7 +6,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -46,13 +31,6 @@ const (
 	srcRay          = "Ray"
 	srcKaiwo        = "Kaiwo"
 	srcNamespacePod = "NamespacePod"
-
-	levelTrace = "trace"
-	levelDebug = "debug"
-	levelInfo  = "info"
-	levelWarn  = "warn"
-	levelError = "error"
-	levelFatal = "fatal"
 )
 
 var (
@@ -67,7 +45,6 @@ var (
 	colorMagenta = "\033[35m"
 	colorCyan    = "\033[36m"
 	colorBRed    = "\033[91m"
-	colorOrange  = "\033[38;5;214m"
 
 	sourceColors = map[string]string{
 		srcEvent:        colorMagenta,
@@ -78,23 +55,23 @@ var (
 	}
 
 	levelColors = map[string]string{
-		levelTrace: colorGray,
-		levelDebug: colorGray,
-		levelInfo:  colorGreen,
-		levelWarn:  colorYellow,
-		levelError: colorRed,
-		levelFatal: colorBRed,
+		"trace": colorGray,
+		"debug": colorGray,
+		"info":  colorGreen,
+		"warn":  colorYellow,
+		"error": colorRed,
+		"fatal": colorBRed,
 	}
 
 	// Severity ranking for filtering
 	levelRank = map[string]int{
-		levelTrace: 0,
-		levelDebug: 1,
-		levelInfo:  2,
-		levelWarn:  3,
-		"warning":  3,
-		levelError: 4,
-		levelFatal: 5,
+		"trace":   0,
+		"debug":   1,
+		"info":    2,
+		"warn":    3,
+		"warning": 3,
+		"error":   4,
+		"fatal":   5,
 	}
 )
 
@@ -127,14 +104,14 @@ func defaultControllers() []string {
 
 func main() {
 	// Avoid noisy glog flags from client-go
-	_ = flag.CommandLine.Parse([]string{})
+	flag.CommandLine.Parse([]string{})
 
 	opts := &options{
 		controllerDeployments: defaultControllers(),
 		kaiwoDeployment:       "kaiwo-system/kaiwo-controller-manager",
 		limitLines:            0,
-		namespacedLevel:       levelDebug,
-		clusterLevel:          levelInfo,
+		namespacedLevel:       "debug",
+		clusterLevel:          "info",
 	}
 
 	root := &cobra.Command{
@@ -325,9 +302,9 @@ func collectEventsV1(ctx context.Context, clientset *kubernetes.Clientset, names
 			ts = time.Now()
 		}
 
-		level := levelInfo
+		level := "info"
 		if strings.EqualFold(ev.Type, "Warning") {
-			level = levelWarn
+			level = "warn"
 		}
 
 		msg := ev.Note
@@ -380,9 +357,9 @@ func collectEventsCoreV1(ctx context.Context, clientset *kubernetes.Clientset, n
 		default:
 			ts = now
 		}
-		level := levelInfo
+		level := "info"
 		if strings.EqualFold(ev.Type, "Warning") {
-			level = levelWarn
+			level = "warn"
 		}
 		extras := map[string]any{
 			"reason":     ev.Reason,
@@ -447,12 +424,7 @@ func collectLocalKaiwo(path string, out chan<- *logEntry) error {
 	if err != nil {
 		return err
 	}
-	defer func(file *os.File) {
-		err := file.Close()
-		if err != nil {
-			panic(err)
-		}
-	}(file)
+	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -479,7 +451,7 @@ func collectLocalKaiwo(path string, out chan<- *logEntry) error {
 
 		out <- &logEntry{
 			Time:    time.Now(),
-			Level:   levelInfo,
+			Level:   "info",
 			Source:  srcKaiwo,
 			Message: strings.TrimSpace(line),
 			Extras:  map[string]any{},
@@ -553,12 +525,7 @@ func streamPodLogs(ctx context.Context, clientset *kubernetes.Clientset, namespa
 	if stream == nil {
 		return fmt.Errorf("unable to stream logs for %s/%s[%s]", namespace, podName, containerName)
 	}
-	defer func(stream io.ReadCloser) {
-		err := stream.Close()
-		if err != nil {
-			panic(err)
-		}
-	}(stream)
+	defer stream.Close()
 
 	reader := bufio.NewScanner(stream)
 	for reader.Scan() {
@@ -655,7 +622,7 @@ func parseGenericLine(ts time.Time, line string) *logEntry {
 	}
 	return &logEntry{
 		Time:    ts,
-		Level:   levelInfo,
+		Level:   "info",
 		Message: trim,
 		Extras:  map[string]any{},
 	}
@@ -719,7 +686,7 @@ func severityRank(s string) int {
 	r, ok := levelRank[lowerString(s)]
 	if !ok {
 		// Treat unknown/missing as "info"
-		return levelRank[levelInfo]
+		return levelRank["info"]
 	}
 	return r
 }
@@ -779,114 +746,6 @@ func filterEntries(entries []*logEntry, testNamespace string, opts *options) []*
 	return out
 }
 
-// --- Resource extraction ---
-
-func extractResourceInfo(e *logEntry) string {
-	if e.Extras == nil {
-		// Fallback to namespace if available
-		if e.Namespace != "" {
-			return fmt.Sprintf("ns/%s", e.Namespace)
-		}
-		return ""
-	}
-
-	// Priority 1: Controller-runtime structured logging patterns
-	// Look for controllerKind + namespace + name (most specific)
-	kind := getStringFromExtras(e.Extras, "controllerKind", "kind")
-	name := getStringFromExtras(e.Extras, "name")
-	namespace := getStringFromExtras(e.Extras, "namespace")
-
-	if kind != "" && name != "" && namespace != "" {
-		return fmt.Sprintf("%s/%s/%s", kind, namespace, name)
-	}
-	if kind != "" && name != "" {
-		return fmt.Sprintf("%s/%s", kind, name)
-	}
-
-	// Priority 2: Nested resource objects (like KaiwoJob: {name: "...", namespace: "..."})
-	for k, v := range e.Extras {
-		if objMap, ok := v.(map[string]any); ok {
-			objName := getStringFromExtras(objMap, "name")
-			objNamespace := getStringFromExtras(objMap, "namespace")
-			if objName != "" && objNamespace != "" {
-				return fmt.Sprintf("%s/%s/%s", k, objNamespace, objName)
-			}
-			if objName != "" {
-				return fmt.Sprintf("%s/%s", k, objName)
-			}
-		}
-	}
-
-	// Priority 3: Common name + namespace patterns
-	if name != "" && namespace != "" {
-		return fmt.Sprintf("%s/%s", namespace, name)
-	}
-	if name != "" {
-		return name
-	}
-
-	// Priority 4: Kueue workqueue patterns
-	if workload := getStringFromExtras(e.Extras, "workload"); workload != "" {
-		if queue := getStringFromExtras(e.Extras, "queue"); queue != "" {
-			return fmt.Sprintf("queue/%s/workload/%s", queue, workload)
-		}
-		return fmt.Sprintf("workload/%s", workload)
-	}
-
-	// Priority 5: Cluster queue patterns
-	if cq := getStringFromExtras(e.Extras, "clusterQueue", "cluster-queue"); cq != "" {
-		return fmt.Sprintf("clusterQueue/%s", cq)
-	}
-
-	// Priority 6: Resource quota patterns
-	if rq := getStringFromExtras(e.Extras, "resourceQuota"); rq != "" {
-		if namespace != "" {
-			return fmt.Sprintf("resourceQuota/%s/%s", namespace, rq)
-		}
-		return fmt.Sprintf("resourceQuota/%s", rq)
-	}
-
-	// Priority 7: Event involved object pattern
-	if involved := getStringFromExtras(e.Extras, "involved"); involved != "" {
-		if namespace != "" {
-			return fmt.Sprintf("%s/%s", namespace, involved)
-		}
-		return involved
-	}
-
-	// Priority 8: Pod/container patterns
-	if pod := getStringFromExtras(e.Extras, "pod"); pod != "" {
-		if namespace != "" {
-			return fmt.Sprintf("pod/%s/%s", namespace, pod)
-		}
-		return fmt.Sprintf("pod/%s", pod)
-	}
-
-	// Priority 9: Controller patterns
-	if controller := getStringFromExtras(e.Extras, "controller"); controller != "" {
-		return fmt.Sprintf("controller/%s", controller)
-	}
-
-	// Priority 10: Fallback to namespace if available
-	if e.Namespace != "" {
-		return fmt.Sprintf("ns/%s", e.Namespace)
-	}
-
-	return ""
-}
-
-func getStringFromExtras(extras map[string]any, keys ...string) string {
-	for _, k := range keys {
-		if v, ok := extras[k]; ok {
-			if s, ok := v.(string); ok {
-				return s
-			}
-			return fmt.Sprint(v)
-		}
-	}
-	return ""
-}
-
 // --- Printing ---
 
 func printEntry(e *logEntry, baseTime time.Time) {
@@ -895,7 +754,7 @@ func printEntry(e *logEntry, baseTime time.Time) {
 
 	level := lowerString(e.Level)
 	if level == "" {
-		level = levelInfo
+		level = "info"
 	}
 	levelColor := levelColors[level]
 	if levelColor == "" {
@@ -927,20 +786,10 @@ func printEntry(e *logEntry, baseTime time.Time) {
 		namespaceStr = fmt.Sprintf(" %sns=%s%s", colorGray, e.Namespace, colorReset)
 	}
 
-	// Extract and format resource info
-	resourceStr := ""
-	if resource := extractResourceInfo(e); resource != "" {
-		resourceStr = fmt.Sprintf(" %s%-20s%s", colorOrange, resource, colorReset)
-	} else {
-		// Keep consistent spacing even when no resource info
-		resourceStr = fmt.Sprintf(" %-20s", "")
-	}
-
-	fmt.Printf("%s (%.3fs)  %s%-9s%s  %s%s%s%s  %s%s%s%s\n",
+	fmt.Printf("%s (%.3fs)  %s%-9s%s  %s%s%s  %s%s%s%s\n",
 		timestamp, age,
 		levelColor, strings.ToUpper(levelOrDefault(level)), colorReset,
 		sourceColor, e.Source, colorReset,
-		resourceStr,
 		colorWhite, e.Message, colorReset,
 		namespaceStr+extras,
 	)
@@ -951,23 +800,23 @@ var levelParenRe = regexp.MustCompile(`(?i)^level\((-?\d+)\)$`)
 func normalizeLevel(raw string) string {
 	s := strings.TrimSpace(strings.ToLower(raw))
 	if s == "" {
-		return levelInfo
+		return "info"
 	}
 	// If it's exactly an integer like "-2", map it.
 	if i, err := strconv.Atoi(s); err == nil {
 		switch {
 		case i <= -2:
-			return levelTrace
+			return "trace"
 		case i == -1:
-			return levelDebug
+			return "debug"
 		case i == 0:
-			return levelInfo
+			return "info"
 		case i == 1:
-			return levelWarn
+			return "warn"
 		case i >= 5:
-			return levelFatal
+			return "fatal"
 		default:
-			return levelError // 2..4
+			return "error" // 2..4
 		}
 	}
 	// If it's in the Zap string form "Level(-2)"
@@ -975,23 +824,23 @@ func normalizeLevel(raw string) string {
 		if i, err := strconv.Atoi(m[1]); err == nil {
 			switch {
 			case i <= -2:
-				return levelTrace
+				return "trace"
 			case i == -1:
-				return levelDebug
+				return "debug"
 			case i == 0:
-				return levelInfo
+				return "info"
 			case i == 1:
-				return levelWarn
+				return "warn"
 			case i >= 5:
-				return levelFatal
+				return "fatal"
 			default:
-				return levelError
+				return "error"
 			}
 		}
 	}
 	// normalize synonyms
 	if s == "warning" {
-		return levelWarn
+		return "warn"
 	}
 	return s
 }

@@ -50,6 +50,14 @@ func ensureNodeLabels(ctx context.Context, obj *KaiwoNodeWrapper) {
 
 	labels[cluster.NodeStatusLabelKey] = string(obj.KaiwoNode.Status.Status)
 
+	// Topology level defaults
+	if _, exists := obj.Node.Labels[common2.DefaultTopologyBlockLabel]; !exists {
+		obj.Node.Labels[common2.DefaultTopologyBlockLabel] = "block-a"
+	}
+	if _, exists := obj.Node.Labels[common2.DefaultTopologyRackLabel]; !exists {
+		obj.Node.Labels[common2.DefaultTopologyRackLabel] = "rack-a"
+	}
+
 	if obj.KaiwoNode.Status.NodeType == v1alpha1.NodeTypeCpu {
 		return
 	}
@@ -69,14 +77,6 @@ func ensureNodeLabels(ctx context.Context, obj *KaiwoNodeWrapper) {
 
 	if gpuInfo.LogicalVramPerGpu != nil {
 		labels[cluster.NodeGpuLogicalVramLabelKey] = baseutils.QuantityToGi(*gpuInfo.LogicalVramPerGpu)
-	}
-
-	// Topology level defaults
-	if _, exists := obj.Node.Labels[common2.DefaultTopologyBlockLabel]; !exists {
-		obj.Node.Labels[common2.DefaultTopologyBlockLabel] = "block-a"
-	}
-	if _, exists := obj.Node.Labels[common2.DefaultTopologyRackLabel]; !exists {
-		obj.Node.Labels[common2.DefaultTopologyRackLabel] = "rack-a"
 	}
 
 	obj.Node.SetLabels(labels)
