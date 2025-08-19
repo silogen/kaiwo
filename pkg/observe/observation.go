@@ -18,10 +18,13 @@ import (
 	"context"
 	"fmt"
 
+	metautil "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
 	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
+	"github.com/silogen/kaiwo/pkg/platform/kueue"
 	"github.com/silogen/kaiwo/pkg/storage/download"
 )
 
@@ -29,15 +32,16 @@ import (
 type UnitPhase string
 
 const (
-	UnitPending     UnitPhase = "Pending"     // created but not doing work yet
-	UnitProgressing UnitPhase = "Progressing" // making forward progress
-	UnitReady       UnitPhase = "Ready"       // steady-state workloads
-	UnitSucceeded   UnitPhase = "Succeeded"   // terminal for batch
-	UnitDegraded    UnitPhase = "Degraded"    // kube says it's unhealthy (e.g., deadline exceeded)
-	UnitStopped     UnitPhase = "Stopped"     // intentionally terminated by user/action (terminal for batch)
-	UnitSuspended   UnitPhase = "Suspended"   // intentionally paused/quiesced (non-terminal)
-	UnitFailed      UnitPhase = "Failed"      // terminal error
-	UnitUnknown     UnitPhase = "Unknown"
+	UnitPending          UnitPhase = "Pending"          // created but not doing work yet
+	UnitPendingAdmission UnitPhase = "PendingAdmission" // waiting for Kueue admission
+	UnitProgressing      UnitPhase = "Progressing"      // making forward progress
+	UnitReady            UnitPhase = "Ready"            // steady-state workloads
+	UnitSucceeded        UnitPhase = "Succeeded"        // terminal for batch
+	UnitDegraded         UnitPhase = "Degraded"         // kube says it's unhealthy (e.g., deadline exceeded)
+	UnitStopped          UnitPhase = "Stopped"          // intentionally terminated by user/action (terminal for batch)
+	UnitSuspended        UnitPhase = "Suspended"        // intentionally paused/quiesced (non-terminal)
+	UnitFailed           UnitPhase = "Failed"           // terminal error
+	UnitUnknown          UnitPhase = "Unknown"
 )
 
 // UnitGroup represents the logical grouping of units
@@ -73,6 +77,8 @@ const (
 	ReasonDownloadJobInProgress    = "DownloadJobInProgress"
 	ReasonDownloadJobCompleted     = "DownloadJobCompleted"
 	ReasonDownloadJobFailed        = "DownloadJobFailed"
+	ReasonPendingKueueAdmission    = "PendingKueueAdmission"
+	ReasonAdmissionCheckError      = "AdmissionCheckError"
 )
 
 // UnitStatus provides a normalized view of any child resource status
@@ -92,15 +98,16 @@ type UnitStatus struct {
 type WorkloadPhase string
 
 const (
-	PhasePlanning       WorkloadPhase = "Planning"       // new spec or generation bump
-	PhasePendingPrereqs WorkloadPhase = "PendingPrereqs" // waiting on PVCs, pre-download
-	PhaseDeploying      WorkloadPhase = "Deploying"      // main workload rolling out
-	PhaseRunning        WorkloadPhase = "Running"        // steady-state (services)
-	PhaseSucceeded      WorkloadPhase = "Succeeded"      // terminal (jobs)
-	PhaseSuspended      WorkloadPhase = "Suspended"      // workload deliberately quiesced (service-like)
-	PhaseStopped        WorkloadPhase = "Stopped"        // workload intentionally stopped (job-like terminal)
-	PhaseFailed         WorkloadPhase = "Failed"         // terminal
-	PhaseDeleting       WorkloadPhase = "Deleting"
+	PhasePlanning         WorkloadPhase = "Planning"         // new spec or generation bump
+	PhasePendingPrereqs   WorkloadPhase = "PendingPrereqs"   // waiting on PVCs, pre-download
+	PhasePendingAdmission WorkloadPhase = "PendingAdmission" // waiting for Kueue admission
+	PhaseDeploying        WorkloadPhase = "Deploying"        // main workload rolling out
+	PhaseRunning          WorkloadPhase = "Running"          // steady-state (services)
+	PhaseSucceeded        WorkloadPhase = "Succeeded"        // terminal (jobs)
+	PhaseSuspended        WorkloadPhase = "Suspended"        // workload deliberately quiesced (service-like)
+	PhaseStopped          WorkloadPhase = "Stopped"          // workload intentionally stopped (job-like terminal)
+	PhaseFailed           WorkloadPhase = "Failed"           // terminal
+	PhaseDeleting         WorkloadPhase = "Deleting"
 )
 
 // Observer interface for reading resource status
@@ -139,6 +146,11 @@ func Reduce(units []UnitStatus) AggregateResult {
 	workload := filter(units, func(u UnitStatus) bool { return u.Group == GroupWorkload })
 
 	r.PrereqsReady = all(prereqs, func(u UnitStatus) bool {
+		// Jobs (download jobs) must complete before unblocking main workload
+		if u.Kind == "Job" {
+			return u.Phase == UnitSucceeded
+		}
+		// Other prereqs (PVCs) can be ready or succeeded
 		return u.Phase == UnitReady || u.Phase == UnitSucceeded
 	})
 	r.WorkloadAvailable = all(workload, func(u UnitStatus) bool {
@@ -186,7 +198,7 @@ func Decide(owner client.Object, agg AggregateResult, units []UnitStatus) (Workl
 
 	// failures first
 	if agg.AnyFailed {
-		cs.Set("Failed", metav1.ConditionTrue, "ChildFailed", firstMessage(agg))
+		cs.Set("Failed", metav1.ConditionTrue, "ChildFailed", firstFailureMessage(units))
 		cs.Set("Ready", metav1.ConditionFalse, "NotReady", "")
 		return PhaseFailed, cs.Done()
 	}
@@ -195,16 +207,27 @@ func Decide(owner client.Object, agg AggregateResult, units []UnitStatus) (Workl
 	if !agg.PrereqsReady {
 		cs.Set("PrereqsReady", metav1.ConditionFalse, "WaitingForPrereqs", firstMessage(agg))
 		cs.Set("Progressing", metav1.ConditionTrue, "Reconciling", "")
-		
+
 		// Set download job condition based on download job status
 		setDownloadJobCondition(cs, units)
-		
+
 		return PhasePendingPrereqs, cs.Done()
 	}
 	cs.Set("PrereqsReady", metav1.ConditionTrue, "AllPrereqsReady", "")
-	
+
 	// Set download job succeeded condition when prereqs are ready
 	setDownloadJobCondition(cs, units)
+
+	// Check if any workload units are pending admission
+	workloadUnits := filter(units, func(u UnitStatus) bool { return u.Group == GroupWorkload })
+	anyPendingAdmission := any(workloadUnits, func(u UnitStatus) bool { return u.Phase == UnitPendingAdmission })
+	if anyPendingAdmission {
+		cs.Set("WorkloadAdmitted", metav1.ConditionFalse, "PendingKueueAdmission", "Workload is pending Kueue admission")
+		cs.Set("Progressing", metav1.ConditionTrue, "Reconciling", "")
+		cs.Set("Ready", metav1.ConditionFalse, "NotReady", "")
+		return PhasePendingAdmission, cs.Done()
+	}
+	cs.Set("WorkloadAdmitted", metav1.ConditionTrue, "Admitted", "Workload is admitted by Kueue")
 
 	// main workload
 	if isJob(owner) {
@@ -215,9 +238,15 @@ func Decide(owner client.Object, agg AggregateResult, units []UnitStatus) (Workl
 			return PhaseSucceeded, cs.Done()
 		}
 		if workloadDegraded(units) {
-			cs.Set("Failed", metav1.ConditionTrue, "JobFailed", firstMessage(agg))
+			cs.Set("Failed", metav1.ConditionTrue, "JobFailed", firstFailureMessage(units))
 			cs.Set("Ready", metav1.ConditionFalse, "NotReady", "")
 			return PhaseFailed, cs.Done()
+		}
+		if agg.WorkloadAvailable {
+			cs.Set("WorkloadAvailable", metav1.ConditionTrue, "Available", "")
+			cs.Set("Progressing", metav1.ConditionFalse, "Idle", "")
+			cs.Set("Ready", metav1.ConditionTrue, "Ready", "")
+			return PhaseRunning, cs.Done()
 		}
 		cs.Set("Progressing", metav1.ConditionTrue, "JobRunning", "")
 		cs.Set("Ready", metav1.ConditionFalse, "NotReady", "")
@@ -277,6 +306,27 @@ func firstMessage(agg AggregateResult) string {
 	return ""
 }
 
+func firstFailureMessage(units []UnitStatus) string {
+	for _, u := range units {
+		if u.Phase == UnitFailed && u.Message != "" {
+			return fmt.Sprintf("%s/%s: %s", u.Kind, u.Name, u.Message)
+		}
+	}
+	// If no failed unit has a message, try failed units without messages
+	for _, u := range units {
+		if u.Phase == UnitFailed {
+			return fmt.Sprintf("%s/%s failed", u.Kind, u.Name)
+		}
+	}
+	// Fallback to any message if no failed units found (shouldn't happen)
+	for _, u := range units {
+		if u.Message != "" {
+			return fmt.Sprintf("%s/%s: %s", u.Kind, u.Name, u.Message)
+		}
+	}
+	return "Unknown failure"
+}
+
 func isJob(owner client.Object) bool {
 	gvk := owner.GetObjectKind().GroupVersionKind()
 	return gvk.Kind == "KaiwoJob"
@@ -299,6 +349,8 @@ func WorkloadPhaseToStatus(phase WorkloadPhase) v1alpha1.WorkloadStatus {
 		return v1alpha1.WorkloadStatusNew
 	case PhasePendingPrereqs:
 		return v1alpha1.WorkloadStatusDownloading
+	case PhasePendingAdmission:
+		return v1alpha1.WorkloadStatusPending
 	case PhaseDeploying:
 		return v1alpha1.WorkloadStatusStarting
 	case PhaseRunning:
@@ -319,27 +371,27 @@ func setDownloadJobCondition(cs *ConditionSet, units []UnitStatus) {
 	downloadJobs := filter(units, func(u UnitStatus) bool {
 		return u.Group == GroupPrereqs && u.Kind == "Job"
 	})
-	
+
 	if len(downloadJobs) == 0 {
 		// No download jobs, so the condition doesn't apply
 		return
 	}
-	
+
 	// Check if all download jobs are successful
 	allDownloadsSucceeded := all(downloadJobs, func(u UnitStatus) bool {
 		return u.Phase == UnitSucceeded
 	})
-	
+
 	// Check if any download jobs failed
 	anyDownloadsFailed := any(downloadJobs, func(u UnitStatus) bool {
 		return u.Phase == UnitFailed
 	})
-	
+
 	// Check if any download jobs are still progressing
 	anyDownloadsProgressing := any(downloadJobs, func(u UnitStatus) bool {
-		return u.Phase == UnitProgressing
+		return u.Phase == UnitProgressing || u.Phase == UnitReady
 	})
-	
+
 	if allDownloadsSucceeded {
 		cs.Set(download.DownloadJobSucceededConditionType, metav1.ConditionTrue, ReasonDownloadJobCompleted, "All download jobs succeeded")
 	} else if anyDownloadsFailed {
@@ -349,4 +401,20 @@ func setDownloadJobCondition(cs *ConditionSet, units []UnitStatus) {
 	} else {
 		cs.Set(download.DownloadJobSucceededConditionType, metav1.ConditionFalse, ReasonDownloadJobPending, "Download job pending")
 	}
+}
+
+// CheckKueueAdmission checks if a workload is admitted by Kueue
+func CheckKueueAdmission(ctx context.Context, c client.Client, namespace, uid string) (bool, error) {
+	workload, err := kueue.GetKueueWorkload(ctx, c, namespace, uid)
+	if err != nil {
+		return false, fmt.Errorf("failed to get kueue workload: %w", err)
+	}
+	if workload == nil {
+		// No Kueue workload exists yet
+		return false, nil
+	}
+
+	// Direct condition check - much simpler than wrapper approach
+	admittedCondition := metautil.FindStatusCondition(workload.Status.Conditions, kueuev1beta1.WorkloadAdmitted)
+	return admittedCondition != nil && admittedCondition.Status == metav1.ConditionTrue, nil
 }

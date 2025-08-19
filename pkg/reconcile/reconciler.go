@@ -19,6 +19,17 @@ import (
 	"fmt"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
 	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 	"github.com/silogen/kaiwo/pkg/api"
 	"github.com/silogen/kaiwo/pkg/app"
@@ -30,16 +41,6 @@ import (
 	"github.com/silogen/kaiwo/pkg/storage"
 	"github.com/silogen/kaiwo/pkg/storage/download"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/record"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type Reconciler struct {
@@ -141,7 +142,7 @@ func (wr *Reconciler) observeOverallStatus(ctx context.Context) (v1alpha1.Worklo
 		return v1alpha1.WorkloadStatusError, nil, err
 	}
 	if schedulableCondition.Status == metav1.ConditionFalse {
-		return v1alpha1.WorkloadStatusError, []metav1.Condition{schedulableCondition}, nil
+		return v1alpha1.WorkloadStatusDegraded, []metav1.Condition{schedulableCondition}, nil
 	}
 
 	// Use unified observation pattern - no more duplicate Decide() calls

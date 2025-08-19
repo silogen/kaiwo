@@ -309,6 +309,45 @@ func (o *DeploymentObserver) Kind() string {
 }
 
 func (o *DeploymentObserver) Observe(ctx context.Context, c client.Client) (observe.UnitStatus, error) {
+	// Check Kueue admission FIRST - this blocks everything else
+	// For services, AppWrapper controls Deployment creation, so check admission before existence
+	var appWrapper appwrapperv1beta2.AppWrapper
+	appWrapperKey := types.NamespacedName{
+		Name:      o.GetNamespacedName().Name, // AppWrapper has same name as Deployment
+		Namespace: o.GetNamespacedName().Namespace,
+	}
+
+	if err := c.Get(ctx, appWrapperKey, &appWrapper); apierrors.IsNotFound(err) {
+		// No AppWrapper means pending admission
+		return observe.UnitStatus{
+			Phase:  observe.UnitPendingAdmission,
+			Reason: observe.ReasonPendingKueueAdmission,
+		}, nil
+	} else if err != nil {
+		return observe.UnitStatus{
+			Phase:   observe.UnitUnknown,
+			Reason:  observe.ReasonAdmissionCheckError,
+			Message: fmt.Sprintf("failed to get AppWrapper: %v", err),
+		}, nil
+	}
+
+	// Check if AppWrapper workload is admitted
+	admitted, err := observe.CheckKueueAdmission(ctx, c, appWrapper.GetNamespace(), string(appWrapper.GetUID()))
+	if err != nil {
+		return observe.UnitStatus{
+			Phase:   observe.UnitUnknown,
+			Reason:  observe.ReasonAdmissionCheckError,
+			Message: err.Error(),
+		}, nil
+	}
+	if !admitted {
+		return observe.UnitStatus{
+			Phase:  observe.UnitPendingAdmission,
+			Reason: observe.ReasonPendingKueueAdmission,
+		}, nil
+	}
+
+	// Now check if Deployment exists (after admission confirmed)
 	var d appsv1.Deployment
 	if err := c.Get(ctx, o.GetNamespacedName(), &d); apierrors.IsNotFound(err) {
 		return observe.UnitStatus{Phase: observe.UnitPending}, nil

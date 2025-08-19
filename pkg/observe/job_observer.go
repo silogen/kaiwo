@@ -29,14 +29,16 @@ import (
 // JobObserver observes Kubernetes Job status
 type JobObserver struct {
 	Identified
+	CheckKueueAdmission bool
 }
 
-func NewJobObserver(nn types.NamespacedName, group UnitGroup) *JobObserver {
+func NewJobObserver(nn types.NamespacedName, group UnitGroup, checkKueueAdmission bool) *JobObserver {
 	return &JobObserver{
-		Identified{
+		Identified: Identified{
 			NamespacedName: nn,
 			Group:          group,
 		},
+		CheckKueueAdmission: checkKueueAdmission,
 	}
 }
 
@@ -56,6 +58,24 @@ func (o *JobObserver) Observe(ctx context.Context, c client.Client) (UnitStatus,
 			Reason:  ReasonGetError,
 			Message: err.Error(),
 		}, nil
+	}
+
+	// Check Kueue admission only if required (workload jobs, not download jobs)
+	if o.CheckKueueAdmission {
+		admitted, err := CheckKueueAdmission(ctx, c, j.GetNamespace(), string(j.GetUID()))
+		if err != nil {
+			return UnitStatus{
+				Phase:   UnitUnknown,
+				Reason:  ReasonAdmissionCheckError,
+				Message: err.Error(),
+			}, nil
+		}
+		if !admitted {
+			return UnitStatus{
+				Phase:  UnitPendingAdmission,
+				Reason: ReasonPendingKueueAdmission,
+			}, nil
+		}
 	}
 
 	conds := j.Status.Conditions
@@ -143,7 +163,7 @@ func (o *JobObserver) Observe(ctx context.Context, c client.Client) (UnitStatus,
 		}, nil
 	default:
 		// Optional heuristic: if backoff limit exceeded & no active pods, likely failing.
-		if j.Spec.BackoffLimit != nil && j.Status.Active == 0 && j.Status.Failed >= *j.Spec.BackoffLimit {
+		if j.Spec.BackoffLimit != nil && j.Status.Active == 0 && j.Status.Failed > *j.Spec.BackoffLimit {
 			return UnitStatus{
 				Phase:      UnitFailed, // heuristic; prefer condition when available
 				Reason:     "BackoffLimitExceeded(heuristic)",

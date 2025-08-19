@@ -123,7 +123,11 @@ func BuildObserversForWorkload(workload api.KaiwoWorkload) *ObserverManager {
 			))
 		}
 		if commonSpec.Storage.HasDownloads() {
-			manager.AddObserver(observe.NewJobObserver(objKey, observe.GroupPrereqs))
+			key := client.ObjectKey{
+				Name:      baseutils.FormatNameWithPostfix(objKey.Name, storage.DownloadPostfix),
+				Namespace: objKey.Namespace,
+			}
+			manager.AddObserver(observe.NewJobObserver(key, observe.GroupPrereqs, false)) // Download jobs don't use Kueue
 		}
 	}
 
@@ -132,7 +136,7 @@ func BuildObserversForWorkload(workload api.KaiwoWorkload) *ObserverManager {
 		if wl.Spec.IsRayJob() {
 			manager.AddObserver(jobs.NewRayJobObserver(objKey, observe.GroupWorkload))
 		} else {
-			manager.AddObserver(observe.NewJobObserver(objKey, observe.GroupWorkload))
+			manager.AddObserver(observe.NewJobObserver(objKey, observe.GroupWorkload, true)) // Workload jobs use Kueue
 		}
 	case *v1alpha1.KaiwoService:
 		if wl.Spec.IsRayService() {

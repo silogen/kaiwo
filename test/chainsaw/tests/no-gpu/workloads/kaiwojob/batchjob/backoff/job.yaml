@@ -2,7 +2,6 @@ apiVersion: kaiwo.silogen.ai/v1alpha1
 kind: KaiwoJob
 metadata:
   name: job-backoff-test
-  namespace: test1
 spec:
   user: test@amd.com
   image: busybox:latest
