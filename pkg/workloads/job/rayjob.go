@@ -201,6 +201,22 @@ func (o *RayJobObserver) Observe(ctx context.Context, c client.Client) (observe.
 		}, nil
 	}
 
+	// Check Kueue admission - this blocks everything else
+	admitted, err := observe.CheckKueueAdmission(ctx, c, rj.GetNamespace(), string(rj.GetUID()))
+	if err != nil {
+		return observe.UnitStatus{
+			Phase:   observe.UnitUnknown,
+			Reason:  observe.ReasonAdmissionCheckError,
+			Message: err.Error(),
+		}, nil
+	}
+	if !admitted {
+		return observe.UnitStatus{
+			Phase:  observe.UnitPendingAdmission,
+			Reason: observe.ReasonPendingKueueAdmission,
+		}, nil
+	}
+
 	obsGen := rj.Status.ObservedGeneration
 
 	// 0) Respect "suspend" (intentional pause)
