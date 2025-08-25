@@ -17,6 +17,7 @@ package observe
 import (
 	"context"
 	"fmt"
+	"time"
 
 	metautil "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,6 +25,7 @@ import (
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
 	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
+	"github.com/silogen/kaiwo/pkg/api"
 	"github.com/silogen/kaiwo/pkg/platform/kueue"
 	"github.com/silogen/kaiwo/pkg/storage/download"
 )
@@ -53,6 +55,11 @@ const (
 	GroupPost     UnitGroup = "Post"
 )
 
+// Condition type constants
+const (
+	DurationExceededConditionType = "DurationExceeded"
+)
+
 // Reason constants for consistent error and status reporting
 const (
 	ReasonGetError                 = "GetError"
@@ -79,6 +86,8 @@ const (
 	ReasonDownloadJobFailed        = "DownloadJobFailed"
 	ReasonPendingKueueAdmission    = "PendingKueueAdmission"
 	ReasonAdmissionCheckError      = "AdmissionCheckError"
+	ReasonDurationExceeded         = "DurationExceeded"
+	ReasonDurationNotExceeded      = "DurationNotExceeded"
 )
 
 // UnitStatus provides a normalized view of any child resource status
@@ -189,6 +198,11 @@ func (cs *ConditionSet) Done() []metav1.Condition {
 // Decide maps AggregateResult + owner kind into (WorkloadPhase, Conditions)
 func Decide(owner client.Object, agg AggregateResult, units []UnitStatus) (WorkloadPhase, []metav1.Condition) {
 	cs := NewConditionSet()
+
+	// Add duration exceeded condition if applicable
+	if durationCondition := getDurationExceededCondition(owner); durationCondition != nil {
+		cs.Set(durationCondition.Type, durationCondition.Status, durationCondition.Reason, durationCondition.Message)
+	}
 
 	// terminal / admin gates
 	if isDeleting(owner) {
@@ -417,4 +431,63 @@ func CheckKueueAdmission(ctx context.Context, c client.Client, namespace, uid st
 	// Direct condition check - much simpler than wrapper approach
 	admittedCondition := metautil.FindStatusCondition(workload.Status.Conditions, kueuev1beta1.WorkloadAdmitted)
 	return admittedCondition != nil && admittedCondition.Status == metav1.ConditionTrue, nil
+}
+
+// getDurationExceededCondition checks if a workload has exceeded its duration based on admitted time
+func getDurationExceededCondition(owner client.Object) *metav1.Condition {
+	// Check if this is a Kaiwo workload with duration settings
+	var kaiwoWorkload api.KaiwoWorkload
+	switch obj := owner.(type) {
+	case *v1alpha1.KaiwoJob:
+		kaiwoWorkload = obj
+	case *v1alpha1.KaiwoService:
+		kaiwoWorkload = obj
+	default:
+		// Not a Kaiwo workload, no duration condition
+		return nil
+	}
+
+	status := kaiwoWorkload.GetCommonStatusSpec()
+	spec := kaiwoWorkload.GetCommonSpec()
+
+	// Only check duration if workload has a duration set and is or was admitted
+	if spec.Duration == nil {
+		return nil
+	}
+
+	// Calculate total admitted time
+	totalAdmittedSeconds := calculateTotalAdmittedTime(status)
+	totalAdmittedDuration := time.Duration(totalAdmittedSeconds) * time.Second
+	remaining := spec.Duration.Duration - totalAdmittedDuration
+
+	if remaining.Seconds() > 0 {
+		return &metav1.Condition{
+			Type:               DurationExceededConditionType,
+			Status:             metav1.ConditionFalse,
+			Reason:             ReasonDurationNotExceeded,
+			Message:            fmt.Sprintf("Workload admitted duration has not been exceeded (admitted: %v, remaining: %v)", totalAdmittedDuration, remaining),
+			ObservedGeneration: owner.GetGeneration(),
+		}
+	} else {
+		return &metav1.Condition{
+			Type:               DurationExceededConditionType,
+			Status:             metav1.ConditionTrue,
+			Reason:             ReasonDurationExceeded,
+			Message:            fmt.Sprintf("Workload admitted duration has been exceeded (admitted: %v, limit: %v)", totalAdmittedDuration, spec.Duration.Duration),
+			ObservedGeneration: owner.GetGeneration(),
+		}
+	}
+}
+
+// calculateTotalAdmittedTime calculates the total time a workload has been admitted by Kueue
+func calculateTotalAdmittedTime(status *v1alpha1.CommonStatusSpec) int64 {
+	totalSeconds := status.AccumulatedAdmittedSeconds
+
+	// If currently admitted (has LastAdmittedTime), add current streak
+	if status.LastAdmittedTime != nil {
+		currentStreak := time.Since(status.LastAdmittedTime.Time)
+		totalSeconds += int64(currentStreak.Seconds())
+	}
+
+	return totalSeconds
 }
