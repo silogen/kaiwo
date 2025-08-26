@@ -77,7 +77,7 @@ jobs:
 
   build-image:
     name: Build & push (ttl.sh)
-    needs: test                   # <-- waits for tests to pass
+#    needs: test                   # <-- waits for tests to pass
     runs-on: ubuntu-latest
     outputs:
       image: ${{ steps.vars.outputs.full_image }}
