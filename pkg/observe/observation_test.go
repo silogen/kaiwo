@@ -60,7 +60,7 @@ func TestWorkloadPhaseToStatus(t *testing.T) {
 		expectedStatus v1alpha1.WorkloadStatus
 	}{
 		{PhasePlanning, v1alpha1.WorkloadStatusNew},
-		{PhasePendingPrereqs, v1alpha1.WorkloadStatusPending},
+		{PhasePendingPrereqs, v1alpha1.WorkloadStatusDownloading},
 		{PhaseDeploying, v1alpha1.WorkloadStatusStarting},
 		{PhaseRunning, v1alpha1.WorkloadStatusRunning},
 		{PhaseSucceeded, v1alpha1.WorkloadStatusComplete},
