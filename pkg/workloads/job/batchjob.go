@@ -22,6 +22,8 @@ import (
 
 	"github.com/silogen/kaiwo/pkg/platform/kueue"
 
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
 	"github.com/silogen/kaiwo/pkg/platform/cluster"
 
 	"github.com/silogen/kaiwo/pkg/runtime/config"
@@ -40,7 +42,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
@@ -135,17 +136,27 @@ func (handler *BatchJobHandler) BuildDesired(ctx context.Context, clusterCtx api
 }
 
 func (handler *BatchJobHandler) GetKueueWorkloads(ctx context.Context, k8sClient client.Client) ([]kueuev1beta1.Workload, error) {
+	logger := log.FromContext(ctx).WithName("GetKueueWorkloads")
+
 	job := handler.GetInitializedObject().(*batchv1.Job)
 	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(job), job); err != nil {
 		return nil, fmt.Errorf("failed to get job: %w", err)
 	}
+
+	// Use the Job UID to match Kueue Workload ownerReference
+	logger.Info("Looking up Kueue Workload by Job owner", "namespace", job.GetNamespace(), "jobUID", string(job.GetUID()), "jobName", job.Name)
+
 	workload, err := kueue.GetKueueWorkload(ctx, k8sClient, job.GetNamespace(), string(job.GetUID()))
 	if err != nil {
+		logger.Error(err, "failed to get Kueue Workload", "namespace", job.GetNamespace(), "jobUID", string(job.GetUID()))
 		return nil, fmt.Errorf("failed to extract workload from handler: %w", err)
 	}
 	if workload == nil {
+		logger.Info("No Kueue Workload found for Job", "namespace", job.GetNamespace(), "jobUID", string(job.GetUID()))
 		return []kueuev1beta1.Workload{}, nil
 	}
+
+	logger.Info("Found Kueue Workload", "workloadName", workload.Name, "admitted", workload.Status.Conditions)
 	return []kueuev1beta1.Workload{*workload}, nil
 }
 

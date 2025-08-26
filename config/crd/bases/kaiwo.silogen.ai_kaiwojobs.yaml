@@ -35340,6 +35340,12 @@ spec:
             description: Status reflects the most recently observed state of the KaiwoJob,
               including its phase, start/completion times, and conditions.
             properties:
+              accumulatedAdmittedSeconds:
+                description: |-
+                  AccumulatedAdmittedSeconds tracks the total time this workload has been admitted by Kueue, in seconds.
+                  This excludes time spent pending, suspended, or evicted, providing accurate runtime for duration limits.
+                format: int64
+                type: integer
               completionTime:
                 description: CompletionTime records the timestamp when the KaiwoJob
                   finished execution (either successfully or with failure).
@@ -35409,6 +35415,12 @@ spec:
                   since StartTime, in seconds. Calculated periodically while running.
                 format: int64
                 type: integer
+              lastAdmittedTime:
+                description: |-
+                  LastAdmittedTime records when the workload was last admitted by Kueue.
+                  Used to calculate current admission streak duration.
+                format: date-time
+                type: string
               observedGeneration:
                 description: ObservedGeneration records the `.metadata.generation`
                   of the workload resource that was last processed by the controller.

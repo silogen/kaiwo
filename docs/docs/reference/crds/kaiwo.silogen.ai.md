@@ -158,6 +158,8 @@ _Appears in:_
 | `status` _[WorkloadStatus](#workloadstatus)_ | Status reflects the current high-level phase of the workload lifecycle (e.g., PENDING, STARTING, READY, FAILED). |  |  |
 | `duration` _integer_ | Duration indicates how long the service has been running since StartTime, in seconds. Calculated periodically while running. |  |  |
 | `observedGeneration` _integer_ | ObservedGeneration records the `.metadata.generation` of the workload resource that was last processed by the controller. |  |  |
+| `accumulatedAdmittedSeconds` _integer_ | AccumulatedAdmittedSeconds tracks the total time this workload has been admitted by Kueue, in seconds.<br />This excludes time spent pending, suspended, or evicted, providing accurate runtime for duration limits. |  |  |
+| `lastAdmittedTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | LastAdmittedTime records when the workload was last admitted by Kueue.<br />Used to calculate current admission streak duration. |  |  |
 
 
 #### DataStorageSpec
@@ -407,6 +409,8 @@ _Appears in:_
 | `status` _[WorkloadStatus](#workloadstatus)_ | Status reflects the current high-level phase of the workload lifecycle (e.g., PENDING, STARTING, READY, FAILED). |  |  |
 | `duration` _integer_ | Duration indicates how long the service has been running since StartTime, in seconds. Calculated periodically while running. |  |  |
 | `observedGeneration` _integer_ | ObservedGeneration records the `.metadata.generation` of the workload resource that was last processed by the controller. |  |  |
+| `accumulatedAdmittedSeconds` _integer_ | AccumulatedAdmittedSeconds tracks the total time this workload has been admitted by Kueue, in seconds.<br />This excludes time spent pending, suspended, or evicted, providing accurate runtime for duration limits. |  |  |
+| `lastAdmittedTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | LastAdmittedTime records when the workload was last admitted by Kueue.<br />Used to calculate current admission streak duration. |  |  |
 | `completionTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | CompletionTime records the timestamp when the KaiwoJob finished execution (either successfully or with failure). |  |  |
 
 
@@ -676,6 +680,8 @@ _Appears in:_
 | `status` _[WorkloadStatus](#workloadstatus)_ | Status reflects the current high-level phase of the workload lifecycle (e.g., PENDING, STARTING, READY, FAILED). |  |  |
 | `duration` _integer_ | Duration indicates how long the service has been running since StartTime, in seconds. Calculated periodically while running. |  |  |
 | `observedGeneration` _integer_ | ObservedGeneration records the `.metadata.generation` of the workload resource that was last processed by the controller. |  |  |
+| `accumulatedAdmittedSeconds` _integer_ | AccumulatedAdmittedSeconds tracks the total time this workload has been admitted by Kueue, in seconds.<br />This excludes time spent pending, suspended, or evicted, providing accurate runtime for duration limits. |  |  |
+| `lastAdmittedTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | LastAdmittedTime records when the workload was last admitted by Kueue.<br />Used to calculate current admission streak duration. |  |  |
 
 
 #### NodeGpuInfo

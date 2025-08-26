@@ -9,6 +9,9 @@ certs/
 *~
 __debug*
 
+# Test runtime files
+test/values/runtime.yaml
+
 # Binaries for programs and plugins
 *.exe
 *.exe~

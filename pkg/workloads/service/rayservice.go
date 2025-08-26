@@ -190,6 +190,7 @@ func (handler *RayServiceHandler) GetKueueWorkloads(ctx context.Context, k8sClie
 		return nil, fmt.Errorf("failed to get app wrapper: %w", err)
 	}
 
+	// Use the AppWrapper UID to match Kueue Workload ownerReference
 	workload, err := kueue.GetKueueWorkload(ctx, k8sClient, appWrapper.GetNamespace(), string(appWrapper.GetUID()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract workload from handler: %w", err)
@@ -249,6 +250,17 @@ func (o *RayServiceObserver) Observe(ctx context.Context, c client.Client) (obse
 			Reason:  observe.ReasonAdmissionCheckError,
 			Message: fmt.Sprintf("failed to get AppWrapper: %v", err),
 		}, nil
+	}
+
+	// If the Kueue Workload exists but is inactive (spec.active=false), it was reclaimed
+	if wl, _ := kueue.GetKueueWorkload(ctx, c, appWrapper.GetNamespace(), string(appWrapper.GetUID())); wl != nil {
+		if wl.Spec.Active != nil && !*wl.Spec.Active {
+			return observe.UnitStatus{
+				Phase:   observe.UnitStopped,
+				Reason:  "Reclaimed",
+				Message: "Evicted by reclaimer (spec.active=false)",
+			}, nil
+		}
 	}
 
 	// Check if AppWrapper workload is admitted

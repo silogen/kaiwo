@@ -161,6 +161,8 @@ func (handler *RayJobHandler) GetKueueWorkloads(ctx context.Context, k8sClient c
 	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(handler.KaiwoJob), rayJob); err != nil {
 		return nil, fmt.Errorf("failed to get rayJob: %w", err)
 	}
+
+	// Use the RayJob UID to match Kueue Workload ownerReference
 	workload, err := kueue.GetKueueWorkload(ctx, k8sClient, rayJob.GetNamespace(), string(rayJob.GetUID()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract workload from handler: %w", err)
@@ -202,6 +204,17 @@ func (o *RayJobObserver) Observe(ctx context.Context, c client.Client) (observe.
 	}
 
 	// Check Kueue admission - this blocks everything else
+	// If the Kueue Workload exists but is inactive (spec.active=false), it was reclaimed
+	if wl, _ := kueue.GetKueueWorkload(ctx, c, rj.GetNamespace(), string(rj.GetUID())); wl != nil {
+		if wl.Spec.Active != nil && !*wl.Spec.Active {
+			return observe.UnitStatus{
+				Phase:   observe.UnitStopped,
+				Reason:  "Reclaimed",
+				Message: "Evicted by reclaimer (spec.active=false)",
+			}, nil
+		}
+	}
+
 	admitted, err := observe.CheckKueueAdmission(ctx, c, rj.GetNamespace(), string(rj.GetUID()))
 	if err != nil {
 		return observe.UnitStatus{

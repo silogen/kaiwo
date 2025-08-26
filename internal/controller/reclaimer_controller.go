@@ -16,8 +16,11 @@ package controller
 
 import (
 	"context"
+	"math/rand"
+	"os"
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -45,6 +48,7 @@ type ReclaimerReconciler struct {
 // +kubebuilder:rbac:groups=kueue.x-k8s.io,resources=workloads,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=kueue.x-k8s.io,resources=clusterqueues,verbs=get;list;watch
 // +kubebuilder:rbac:groups=visibility.kueue.x-k8s.io,resources=clusterqueues/pendingworkloads;localqueues/pendingworkloads,verbs=get;list;watch
+// +kubebuilder:rbac:groups=kueue.x-k8s.io,resources=localqueues,verbs=get;list;watch
 
 func (r *ReclaimerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx).WithName("ReclaimerReconciler").WithValues("clusterQueue", req.Name)
@@ -57,24 +61,29 @@ func (r *ReclaimerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// Perform reclamation for this ClusterQueue
 	if err := r.reclaimer.Reclaim(ctx, req.Name); err != nil {
 		logger.Error(err, "Failed to perform reclamation")
-		// Requeue with backoff for retries
-		return ctrl.Result{RequeueAfter: 30 * time.Second}, err
+		// Requeue with configurable backoff and jitter
+		return ctrl.Result{RequeueAfter: jitterDuration(getDurationEnv("RECLAIMER_ERROR_BACKOFF", 30*time.Second), 0.2)}, err
 	}
 
-	// Requeue after a reasonable interval to check for new pending workloads
-	// This ensures we periodically check even if no events trigger reconciliation
-	return ctrl.Result{RequeueAfter: 2 * time.Minute}, nil
+	// Requeue periodically (configurable) to check for new pending workloads
+	return ctrl.Result{RequeueAfter: jitterDuration(getDurationEnv("RECLAIMER_RESYNC_PERIOD", 2*time.Minute), 0.2)}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ReclaimerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// Watch workloads to trigger reconciliation when workloads change state
 	workloadPredicate := predicate.Funcs{
-		// Only react to workloads that are pending or have the expired label
+		// Only react to meaningful creations (pending or explicitly expired)
 		CreateFunc: func(e event.CreateEvent) bool {
 			wl, ok := e.Object.(*kueuev1beta1.Workload)
 			if !ok {
 				return false
+			}
+			// Must have a LocalQueue reference (spec or label) to map; reduce noise
+			if string(wl.Spec.QueueName) == "" {
+				if wl.Labels == nil || wl.Labels["kueue.x-k8s.io/queue-name"] == "" {
+					return false
+				}
 			}
 			return isWorkloadPending(wl) || isWorkloadExpired(wl)
 		},
@@ -84,11 +93,6 @@ func (r *ReclaimerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			if !oldOk || !newOk {
 				return false
 			}
-
-			// React to state changes:
-			// 1. Workload becomes pending
-			// 2. Workload gets the expired label
-			// 3. Admitted workload becomes inactive (evicted)
 			oldPending := isWorkloadPending(oldWl)
 			newPending := isWorkloadPending(newWl)
 			oldExpired := isWorkloadExpired(oldWl)
@@ -100,10 +104,8 @@ func (r *ReclaimerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				(!oldExpired && newExpired) || // became expired
 				(oldActive && !newActive) // became inactive (evicted)
 		},
-		DeleteFunc: func(e event.DeleteEvent) bool {
-			// React to workload deletion as it frees resources
-			return true
-		},
+		// Deletions are noisy and periodic resync covers freeing
+		DeleteFunc: func(e event.DeleteEvent) bool { return false },
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
@@ -123,8 +125,8 @@ func (r *ReclaimerReconciler) mapWorkloadToClusterQueue(ctx context.Context, obj
 		return nil
 	}
 
-	// Extract ClusterQueue name from workload labels
-	clusterQueueName := wl.Labels["kueue.x-k8s.io/queue-name"]
+	// Resolve ClusterQueue by first reading the LocalQueue referenced by the workload label
+	clusterQueueName := kueue.ResolveClusterQueueFromWorkload(ctx, r.Client, wl)
 	if clusterQueueName == "" {
 		return nil
 	}
@@ -139,12 +141,12 @@ func (r *ReclaimerReconciler) mapWorkloadToClusterQueue(ctx context.Context, obj
 // Helper functions
 
 func isWorkloadPending(wl *kueuev1beta1.Workload) bool {
+	// Pending if NOT admitted (missing condition or condition != True)
 	for _, condition := range wl.Status.Conditions {
 		if condition.Type == kueuev1beta1.WorkloadAdmitted {
-			return condition.Status != "True"
+			return condition.Status != metav1.ConditionTrue
 		}
 	}
-	// If no admission condition exists, consider it pending
 	return true
 }
 
@@ -157,4 +159,24 @@ func isWorkloadExpired(wl *kueuev1beta1.Workload) bool {
 
 func isWorkloadActive(wl *kueuev1beta1.Workload) bool {
 	return wl.Spec.Active == nil || *wl.Spec.Active
+}
+
+// getDurationEnv reads a duration from env or returns default
+func getDurationEnv(key string, def time.Duration) time.Duration {
+	if v := os.Getenv(key); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			return d
+		}
+	}
+	return def
+}
+
+// jitterDuration applies +/- factor jitter to duration
+func jitterDuration(d time.Duration, factor float64) time.Duration {
+	if factor <= 0 {
+		return d
+	}
+	// rand seeded per process; intentional small jitter
+	delta := (rand.Float64()*2 - 1) * factor // [-factor, +factor]
+	return time.Duration(float64(d) * (1 + delta))
 }

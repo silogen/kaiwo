@@ -376,6 +376,14 @@ func main() {
 	if err := controller.NewKaiwoNodeReconciler(mgr).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "KaiwoNodeWatch")
 	}
+	if err = (&controller.ReclaimerReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("reclaimer"),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Reclaimer")
+		os.Exit(1)
+	}
 
 	if webhooksEnabled {
 		decoder := admission.NewDecoder(scheme)
