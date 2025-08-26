@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -67,10 +68,7 @@ func (r *ReclaimerLogic) Reclaim(ctx context.Context, clusterQueueName string) e
 	logger.Info("Found head-of-line pending workload", "workload", pendingWorkload.Name)
 
 	// Calculate resource requirements for the pending workload
-	requiredResources, err := r.calculateResourceRequirements(pendingWorkload)
-	if err != nil {
-		return fmt.Errorf("failed to calculate resource requirements: %w", err)
-	}
+	requiredResources := r.calculateResourceRequirements(pendingWorkload)
 
 	if len(requiredResources) == 0 {
 		logger.V(1).Info("Pending workload has no resource requirements")
@@ -128,41 +126,50 @@ func (r *ReclaimerLogic) getHeadOfLinePendingWorkload(ctx context.Context, clust
 		return nil, nil
 	}
 
-	// Find the workload with position 0 (head-of-line)
-	for _, item := range pendingWorkloads.Items {
-		if item.PositionInClusterQueue == 0 {
-			// Get the full workload object
-			var workload kueuev1beta1.Workload
-			key := types.NamespacedName{
-				Name:      item.Name,
-				Namespace: item.Namespace,
-			}
-			if err := r.client.Get(ctx, key, &workload); err != nil {
-				return nil, fmt.Errorf("failed to get workload %s: %w", key, err)
-			}
-			return &workload, nil
+	// Pick the item with the smallest PositionInClusterQueue (HoL)
+	minIdx := 0
+	minPos := pendingWorkloads.Items[0].PositionInClusterQueue
+	for i := 1; i < len(pendingWorkloads.Items); i++ {
+		if pendingWorkloads.Items[i].PositionInClusterQueue < minPos {
+			minPos = pendingWorkloads.Items[i].PositionInClusterQueue
+			minIdx = i
 		}
 	}
 
-	return nil, nil
+	var workload kueuev1beta1.Workload
+	key := types.NamespacedName{
+		Name:      pendingWorkloads.Items[minIdx].Name,
+		Namespace: pendingWorkloads.Items[minIdx].Namespace,
+	}
+	if err := r.client.Get(ctx, key, &workload); err != nil {
+		return nil, fmt.Errorf("failed to get workload %s: %w", key, err)
+	}
+	return &workload, nil
 }
 
 // getHeadOfLinePendingWorkloadFallback is a fallback when Visibility API is not available
 func (r *ReclaimerLogic) getHeadOfLinePendingWorkloadFallback(ctx context.Context, clusterQueueName string) (*kueuev1beta1.Workload, error) {
-	var workloadList kueuev1beta1.WorkloadList
-	listOptions := []client.ListOption{
-		client.MatchingLabels(map[string]string{
-			"kueue.x-k8s.io/queue-name": clusterQueueName,
-		}),
+	// Build a set of LocalQueue names that map to this ClusterQueue
+	lqNames, err := GetLocalQueueNamesForCluster(ctx, r.client, clusterQueueName)
+	if err != nil {
+		return nil, err
 	}
 
-	if err := r.client.List(ctx, &workloadList, listOptions...); err != nil {
+	var workloadList kueuev1beta1.WorkloadList
+	if err := r.client.List(ctx, &workloadList); err != nil {
 		return nil, fmt.Errorf("failed to list workloads: %w", err)
 	}
 
-	// Filter for pending workloads and sort by creation time
+	// Filter for pending workloads that belong to one of the LocalQueues and sort by creation time
 	var pendingWorkloads []kueuev1beta1.Workload
 	for _, wl := range workloadList.Items {
+		lqName := string(wl.Spec.QueueName)
+		if lqName == "" {
+			continue
+		}
+		if _, ok := lqNames[types.NamespacedName{Namespace: wl.Namespace, Name: lqName}]; !ok {
+			continue
+		}
 		if !isWorkloadAdmitted(&wl) {
 			pendingWorkloads = append(pendingWorkloads, wl)
 		}
@@ -190,14 +197,14 @@ func (r *ReclaimerLogic) getPendingWorkloadsFromVisibilityAPI(ctx context.Contex
 
 // calculateResourceRequirements extracts resource requirements from a workload
 // Prefers status.resourceRequests (normalized by Kueue) over spec calculation
-func (r *ReclaimerLogic) calculateResourceRequirements(workload *kueuev1beta1.Workload) (map[corev1.ResourceName]resource.Quantity, error) {
+func (r *ReclaimerLogic) calculateResourceRequirements(workload *kueuev1beta1.Workload) map[corev1.ResourceName]resource.Quantity {
 	// Prefer normalized resource requests from status (matches Kueue's math)
 	if len(workload.Status.ResourceRequests) > 0 {
-		return r.calculateFromStatusResourceRequests(workload), nil
+		return r.calculateFromStatusResourceRequests(workload)
 	}
 
 	// Fallback to spec-based calculation if status is not available
-	return r.calculateFromSpecPodSets(workload), nil
+	return r.calculateFromSpecPodSets(workload)
 }
 
 // calculateFromStatusResourceRequests uses Kueue's normalized resource requests
@@ -248,31 +255,62 @@ func (r *ReclaimerLogic) calculateFromSpecPodSets(workload *kueuev1beta1.Workloa
 
 // getExpiredAdmittedWorkloads gets all expired and admitted workloads in the cluster queue
 func (r *ReclaimerLogic) getExpiredAdmittedWorkloads(ctx context.Context, clusterQueueName string) ([]kueuev1beta1.Workload, error) {
-	var workloadList kueuev1beta1.WorkloadList
-	listOptions := []client.ListOption{
-		client.MatchingLabels(map[string]string{
-			"kueue.x-k8s.io/queue-name": clusterQueueName,
-			ExpiredLabel:                "true",
-		}),
+	logger := log.FromContext(ctx).WithName("getExpiredAdmittedWorkloads")
+
+	// Build a set of LocalQueue names that map to this ClusterQueue
+	lqNames, err := GetLocalQueueNamesForCluster(ctx, r.client, clusterQueueName)
+	if err != nil {
+		return nil, err
 	}
 
+	logger.Info("Searching for expired workloads", "clusterQueue", clusterQueueName, "localQueues", lqNames)
+
+	var workloadList kueuev1beta1.WorkloadList
+	// Limit initial list by expired label to reduce load
+	listOptions := []client.ListOption{client.MatchingLabels(map[string]string{ExpiredLabel: "true"})}
 	if err := r.client.List(ctx, &workloadList, listOptions...); err != nil {
 		return nil, fmt.Errorf("failed to list expired workloads: %w", err)
 	}
 
-	// Filter for admitted workloads only
+	logger.Info("Found workloads with expired label", "count", len(workloadList.Items))
+
+	// Filter for admitted & active workloads that belong to one of the LocalQueues
 	var expiredAdmitted []kueuev1beta1.Workload
 	for _, wl := range workloadList.Items {
-		if isWorkloadAdmitted(&wl) && isWorkloadActive(&wl) {
+		logger.V(1).Info("Examining workload", "name", wl.Name, "namespace", wl.Namespace)
+
+		lqName := string(wl.Spec.QueueName)
+		if lqName == "" {
+			logger.V(1).Info("Skipping workload with empty queue name", "name", wl.Name)
+			continue
+		}
+		if _, ok := lqNames[types.NamespacedName{Namespace: wl.Namespace, Name: lqName}]; !ok {
+			logger.V(1).Info("Skipping workload not in target queue", "name", wl.Name, "queue", lqName)
+			continue
+		}
+
+		admitted := isWorkloadAdmitted(&wl)
+		active := isWorkloadActive(&wl)
+		logger.V(1).Info("Workload status", "name", wl.Name, "admitted", admitted, "active", active)
+
+		if admitted && active {
+			logger.Info("Adding workload as eviction candidate", "name", wl.Name, "namespace", wl.Namespace)
 			expiredAdmitted = append(expiredAdmitted, wl)
 		}
 	}
 
+	logger.Info("Found expired admitted workloads", "count", len(expiredAdmitted))
 	return expiredAdmitted, nil
 }
 
 // selectVictims selects the minimal set of expired workloads to satisfy resource requirements
 func (r *ReclaimerLogic) selectVictims(expiredWorkloads []kueuev1beta1.Workload, requiredResources map[corev1.ResourceName]resource.Quantity) []kueuev1beta1.Workload {
+	// Consider only GPU-like resources for eviction logic
+	requiredResources = filterGpuResources(requiredResources)
+	if len(requiredResources) == 0 {
+		return nil
+	}
+
 	// Sort expired workloads by creation time (oldest first)
 	sort.Slice(expiredWorkloads, func(i, j int) bool {
 		return expiredWorkloads[i].CreationTimestamp.Before(&expiredWorkloads[j].CreationTimestamp)
@@ -286,10 +324,8 @@ func (r *ReclaimerLogic) selectVictims(expiredWorkloads []kueuev1beta1.Workload,
 			break
 		}
 
-		workloadResources, err := r.calculateResourceRequirements(&workload)
-		if err != nil {
-			continue
-		}
+		workloadResources := r.calculateResourceRequirements(&workload)
+		workloadResources = filterGpuResources(workloadResources)
 
 		// Check if this workload can contribute to satisfying any remaining needs
 		canContribute := false
@@ -321,6 +357,24 @@ func (r *ReclaimerLogic) selectVictims(expiredWorkloads []kueuev1beta1.Workload,
 
 	return victims
 }
+
+// filterGpuResources keeps only resource names that look like GPU quantities
+func filterGpuResources(resources map[corev1.ResourceName]resource.Quantity) map[corev1.ResourceName]resource.Quantity {
+	if len(resources) == 0 {
+		return resources
+	}
+	out := make(map[corev1.ResourceName]resource.Quantity, len(resources))
+	for name, qty := range resources {
+		s := string(name)
+		// naive but practical: match substrings containing "gpu"
+		if containsGPU(s) {
+			out[name] = qty
+		}
+	}
+	return out
+}
+
+func containsGPU(s string) bool { return strings.Contains(strings.ToLower(s), "gpu") }
 
 // evictWorkload evicts a workload by setting spec.active=false with optimistic concurrency
 func (r *ReclaimerLogic) evictWorkload(ctx context.Context, workload kueuev1beta1.Workload, pendingWorkloadName string) error {

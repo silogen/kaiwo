@@ -25,7 +25,7 @@ spec:
     --optim="adamw_torch"  
   storage:
     storageEnabled: true
-    storageClassName: multinode
+#    storageClassName: multinode
     data:
       storageSize: 20Mi
       mountPath: /workload

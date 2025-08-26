@@ -22,6 +22,7 @@ import (
 	metautil "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
 	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
@@ -44,6 +45,8 @@ const (
 	UnitSuspended        UnitPhase = "Suspended"        // intentionally paused/quiesced (non-terminal)
 	UnitFailed           UnitPhase = "Failed"           // terminal error
 	UnitUnknown          UnitPhase = "Unknown"
+
+	jobType = "Job"
 )
 
 // UnitGroup represents the logical grouping of units
@@ -156,7 +159,7 @@ func Reduce(units []UnitStatus) AggregateResult {
 
 	r.PrereqsReady = all(prereqs, func(u UnitStatus) bool {
 		// Jobs (download jobs) must complete before unblocking main workload
-		if u.Kind == "Job" {
+		if u.Kind == jobType {
 			return u.Phase == UnitSucceeded
 		}
 		// Other prereqs (PVCs) can be ready or succeeded
@@ -232,7 +235,7 @@ func Decide(owner client.Object, agg AggregateResult, units []UnitStatus) (Workl
 	// Set download job succeeded condition when prereqs are ready
 	setDownloadJobCondition(cs, units)
 
-	// Check if any workload units are pending admission
+	// Check if any workload units are pending admission or explicitly stopped (reclaimed)
 	workloadUnits := filter(units, func(u UnitStatus) bool { return u.Group == GroupWorkload })
 	anyPendingAdmission := any(workloadUnits, func(u UnitStatus) bool { return u.Phase == UnitPendingAdmission })
 	if anyPendingAdmission {
@@ -240,6 +243,14 @@ func Decide(owner client.Object, agg AggregateResult, units []UnitStatus) (Workl
 		cs.Set("Progressing", metav1.ConditionTrue, "Reconciling", "")
 		cs.Set("Ready", metav1.ConditionFalse, "NotReady", "")
 		return PhasePendingAdmission, cs.Done()
+	}
+
+	anyStopped := any(workloadUnits, func(u UnitStatus) bool { return u.Phase == UnitStopped })
+	if anyStopped {
+		cs.Set("Stopped", metav1.ConditionTrue, "Reclaimed", "Workload was reclaimed (evicted)")
+		cs.Set("Ready", metav1.ConditionFalse, "NotReady", "")
+		cs.Set("Progressing", metav1.ConditionFalse, "Idle", "")
+		return PhaseStopped, cs.Done()
 	}
 	cs.Set("WorkloadAdmitted", metav1.ConditionTrue, "Admitted", "Workload is admitted by Kueue")
 
@@ -375,6 +386,8 @@ func WorkloadPhaseToStatus(phase WorkloadPhase) v1alpha1.WorkloadStatus {
 		return v1alpha1.WorkloadStatusFailed
 	case PhaseDeleting:
 		return v1alpha1.WorkloadStatusTerminating
+	case PhaseStopped:
+		return v1alpha1.WorkloadStatusTerminated
 	default:
 		return v1alpha1.WorkloadStatusNew
 	}
@@ -383,7 +396,7 @@ func WorkloadPhaseToStatus(phase WorkloadPhase) v1alpha1.WorkloadStatus {
 // setDownloadJobCondition sets the DownloadJobSucceeded condition based on download job status in prereqs
 func setDownloadJobCondition(cs *ConditionSet, units []UnitStatus) {
 	downloadJobs := filter(units, func(u UnitStatus) bool {
-		return u.Group == GroupPrereqs && u.Kind == "Job"
+		return u.Group == GroupPrereqs && u.Kind == jobType
 	})
 
 	if len(downloadJobs) == 0 {
@@ -419,18 +432,25 @@ func setDownloadJobCondition(cs *ConditionSet, units []UnitStatus) {
 
 // CheckKueueAdmission checks if a workload is admitted by Kueue
 func CheckKueueAdmission(ctx context.Context, c client.Client, namespace, uid string) (bool, error) {
+	logger := log.FromContext(ctx).WithName("CheckKueueAdmission")
+	logger.Info("Checking Kueue admission", "namespace", namespace, "uid", uid)
+
 	workload, err := kueue.GetKueueWorkload(ctx, c, namespace, uid)
 	if err != nil {
+		logger.Error(err, "Failed to get Kueue workload", "namespace", namespace, "uid", uid)
 		return false, fmt.Errorf("failed to get kueue workload: %w", err)
 	}
 	if workload == nil {
+		logger.Info("No Kueue workload found", "namespace", namespace, "uid", uid)
 		// No Kueue workload exists yet
 		return false, nil
 	}
 
 	// Direct condition check - much simpler than wrapper approach
 	admittedCondition := metautil.FindStatusCondition(workload.Status.Conditions, kueuev1beta1.WorkloadAdmitted)
-	return admittedCondition != nil && admittedCondition.Status == metav1.ConditionTrue, nil
+	admitted := admittedCondition != nil && admittedCondition.Status == metav1.ConditionTrue
+	logger.Info("Kueue admission result", "workloadName", workload.Name, "admitted", admitted)
+	return admitted, nil
 }
 
 // getDurationExceededCondition checks if a workload has exceeded its duration based on admitted time

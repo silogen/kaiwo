@@ -1,18 +1,24 @@
-name: lint-and-test
+# .github/workflows/lint-test-e2e.yml
+name: lint-test-and-e2e
+
 on:
   push:
-    branches:
-    - main
-    - master
+    branches: [main, master]
   pull_request: {}
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
+env:
+  TTL_TAG: 1h   # how long images live in ttl.sh (max 24h)
+
 jobs:
-  lint:
-    name: lint
+  lint-go:
+    name: Lint (Go)
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -24,25 +30,9 @@ jobs:
       with:
         version: v2.1
         args: --timeout=10m
-  test:
-    name: Run tests
-    runs-on: ubuntu-latest
-    steps:
-    - name: Clone the code
-      uses: actions/checkout@v4
-
-    - name: Setup Go
-      uses: actions/setup-go@v5
-      with:
-        go-version-file: go.mod
-
-    - name: Running Tests
-      run: |
-        go mod tidy
-        make test
 
   lint-python:
-    name: Lint Python code
+    name: Lint (Python)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -51,55 +41,140 @@ jobs:
     - uses: actions/checkout@v4
     - uses: actions/setup-python@v5
       with:
-        python-version: 3.12
+        python-version: '3.12'
+        cache: 'pip'
+        cache-dependency-path: 'python/requirements-dev.txt'
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements-dev.txt
-    - name: Run flake8
+    - name: flake8
       run: flake8 kaiwo
-    - name: Run Black
-      run: black kaiwo
-    - name: Run isort
-      run: isort kaiwo
+    - name: black (check)
+      run: black --check --diff kaiwo
+    - name: isort (check)
+      run: isort --check-only --diff kaiwo
 
-  test-e2e:
-    name: Run e2e tests
+  test:
+    name: Unit tests
+    needs: [lint-go, lint-python]
     runs-on: ubuntu-latest
     steps:
-    - name: Clone the code
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
+    - name: Run tests
+      run: |
+        go mod tidy
+        make test
+      # (optional) Upload test reports if you have them
+      # - uses: actions/upload-artifact@v4
+      #   with:
+      #     name: junit
+      #     path: path/to/junit-xml/*.xml
+      #     retention-days: 7
 
-    - name: Setup Go
-      uses: actions/setup-go@v5
+  build-image:
+    name: Build & push (ttl.sh)
+    needs: test                   # <-- waits for tests to pass
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.vars.outputs.full_image }}
+      repo: ${{ steps.vars.outputs.repo }}
+      tag: ${{ steps.vars.outputs.tag }}
+    steps:
+    - uses: actions/checkout@v4
+    - uses: docker/setup-qemu-action@v3
+    - uses: docker/setup-buildx-action@v3
+    - uses: actions/setup-go@v5
       with:
         go-version-file: go.mod
 
-    - name: Install kind
+    - name: Compute ttl.sh image ref
+      id: vars
+      shell: bash
       run: |
-        curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.26.0/kind-linux-amd64
-        chmod +x ./kind
-        sudo mv ./kind /usr/local/bin/kind
+        ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
+        REPO="ttl.sh/${ID}"
+        TAG="${{ env.TTL_TAG }}"
+        echo "repo=${REPO}"                >> "$GITHUB_OUTPUT"
+        echo "tag=${TAG}"                  >> "$GITHUB_OUTPUT"
+        echo "full_image=${REPO}:${TAG}"   >> "$GITHUB_OUTPUT"
 
-    - name: Verify kind installation
-      run: kind version
+    - name: Build & push to ttl.sh
+      run: |
+        TTL=${{ env.TTL_TAG }} IMAGE_NAME=${{ steps.vars.outputs.full_image }} \
+        ./kaiwo.sh --build --push=ttl.sh
+
+    - name: Build CLI binary
+      run: |
+        make build-cli
+        mkdir -p builds
+        cp bin/kaiwo builds/
+
+    - name: Upload CLI artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: kaiwo-cli
+        path: builds/kaiwo
+        if-no-files-found: error
+        retention-days: 5
+
+  e2e-kind:
+    name: E2E on kind (${{ matrix.installer }})
+    needs: build-image
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        installer: [kustomize, helm]
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
+
+    - name: Download CLI artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: kaiwo-cli
+        path: builds
+    - name: Make CLI executable
+      run: chmod +x builds/kaiwo && ls -l builds
+
+    - name: Create Kind cluster (action)
+      uses: helm/kind-action@v1
+      with:
+        cluster_name: kind-${{ matrix.installer }}
 
     - name: Install Chainsaw
       uses: kyverno/action-install-chainsaw@v0.2.12
       with:
         release: v0.2.12
 
-    - name: Setup Flux CLI
-      uses: fluxcd/flux2/action@main
-      with:
-        version: 'latest'
-
-    - name: Create kind cluster
+      # Optional: if you still need your custom setup
+    - name: Install kind (CLI) & verify
       run: |
-        FLUX_BRANCH=automation-upgrade test/setup/kind.sh
+        curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.26.0/kind-linux-amd64
+        chmod +x ./kind
+        sudo mv ./kind /usr/local/bin/kind
+        kind version
+    - name: Additional cluster setup
+      run: ./test/scripts/setup_kind.sh
 
-    - name: Running Test e2e
-      run: |-
-        go mod tidy
+    - name: Install CRDs and Deploy (${{ matrix.installer }})
+      env:
+        IMAGE_NAME: ${{ needs.build-image.outputs.image }}
+      run: |
+        ./kaiwo.sh --install-crds --deploy-via=${{ matrix.installer }} up
+
+    - name: Wait for rollout
+      run: |
+        kubectl -n kaiwo-system rollout status deployment/kaiwo-controller-manager --timeout=300s
+        kubectl -n kaiwo-system get pods -o wide
+
+    - name: Run E2E tests
+      run: |
         cd test
-        make test-kind-deploy
+        make test-kind

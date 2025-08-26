@@ -23,44 +23,79 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metautil "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 )
 
+// GetKueueWorkload finds the Kueue Workload owned by the given controller UID (Job, RayJob, AppWrapper)
 func GetKueueWorkload(ctx context.Context, k8sClient client.Client, namespace string, uid string) (*kueuev1beta1.Workload, error) {
+	logger := log.FromContext(ctx).WithName("GetKueueWorkload")
+	logger.Info("Resolving Kueue Workload by owner UID", "namespace", namespace, "ownerUID", uid)
+
 	workloadList := &kueuev1beta1.WorkloadList{}
 	listOptions := []client.ListOption{
 		client.InNamespace(namespace),
-		client.MatchingLabels(map[string]string{"kueue.x-k8s.io/job-uid": uid}),
 	}
 	if err := k8sClient.List(ctx, workloadList, listOptions...); err != nil {
 		return nil, fmt.Errorf("failed to list kueue workloads: %w", err)
 	}
-	if len(workloadList.Items) == 0 {
-		return nil, nil
-	} else if len(workloadList.Items) > 1 {
-		return nil, fmt.Errorf("expected a single workload for job '%s/%s', but found %d workloads", namespace, uid, len(workloadList.Items))
+
+	var matches []kueuev1beta1.Workload
+	for _, wl := range workloadList.Items {
+		for _, owner := range wl.OwnerReferences {
+			if owner.UID == types.UID(uid) {
+				matches = append(matches, wl)
+				break
+			}
+		}
 	}
-	return &workloadList.Items[0], nil
+
+	switch len(matches) {
+	case 0:
+		logger.V(1).Info("No matching Workload found for owner", "ownerUID", uid)
+		return nil, nil
+	case 1:
+		logger.Info("Matched Workload by owner", "workload", matches[0].Name)
+		return &matches[0], nil
+	default:
+		return nil, fmt.Errorf("expected a single workload for '%s/%s', found %d", namespace, uid, len(matches))
+	}
 }
 
 // IsAdmitted checks if a workload is fully admitted by Kueue
 func IsAdmitted(ctx context.Context, k8sClient client.Client, workload api.WorkloadReconciler) (bool, error) {
+	logger := log.FromContext(ctx).WithName("IsAdmitted")
+	logger.Info("Checking workload admission status")
+
 	workloads, err := workload.GetKueueWorkloads(ctx, k8sClient)
 	if err != nil {
+		logger.Error(err, "Failed to get Kueue workloads")
 		if errors.IsNotFound(err) {
 			return false, nil
 		}
 		return false, fmt.Errorf("failed to get kueue workloads: %w", err)
 	}
+
+	logger.Info("Retrieved Kueue workloads", "count", len(workloads))
 	if len(workloads) == 0 {
+		logger.Info("No Kueue workloads found - not admitted")
 		return false, nil
 	}
-	for _, w := range workloads {
+
+	for i, w := range workloads {
 		admittedCondition := metautil.FindStatusCondition(w.Status.Conditions, kueuev1beta1.WorkloadAdmitted)
+		logger.Info("Checking workload condition", "workloadIndex", i, "workloadName", w.Name, "hasAdmittedCondition", admittedCondition != nil)
+		if admittedCondition != nil {
+			logger.Info("Admitted condition details", "status", admittedCondition.Status, "reason", admittedCondition.Reason, "message", admittedCondition.Message)
+		}
 		if admittedCondition == nil || admittedCondition.Status == metav1.ConditionFalse {
+			logger.Info("Workload not admitted", "workloadName", w.Name)
 			return false, nil
 		}
 	}
+
+	logger.Info("All workloads are admitted")
 	return true, nil
 }

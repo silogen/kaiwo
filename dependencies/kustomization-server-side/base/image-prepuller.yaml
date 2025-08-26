@@ -28,6 +28,9 @@ spec:
       - name: pull-kaiwo-python
         image: ghcr.io/silogen/kaiwo-python:0.6
         command: ["sh", "-c", "echo warmed kaiwo-python"]
+      - name: pull-ray
+        image: rayproject/ray:2.41.0
+        command: ["sh", "-c", "echo warmed ray"]
       containers:
       - name: hold
         image: registry.k8s.io/pause:3.9

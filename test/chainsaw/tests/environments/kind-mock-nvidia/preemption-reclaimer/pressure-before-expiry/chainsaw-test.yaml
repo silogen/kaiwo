@@ -1,0 +1,79 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: test-pressure-before-expiry
+spec:
+  concurrent: false
+  description: "Test that workloads are not terminated until duration expires, even if demand exists before expiry"
+  steps:
+  - name: Create kaiwo queue config
+    try:
+    - apply:
+        file: kaiwo-queue-config.yaml
+  - name: setup-workloads-and-pressure
+    description: Create workloads and apply pressure before they expire
+    try:
+    - apply:
+        file: kaiwojob-with-duration.yaml
+    - apply:
+        file: kaiwoservice-with-duration.yaml
+    - apply:
+        file: gpu-demand-pressure.yaml
+    # Immediately after adding pressure, they should still be RUNNING (not expired yet)
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: kaiwojob-with-duration
+          status:
+            status: RUNNING
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoService
+          metadata:
+            name: kaiwoservice-with-duration
+          status:
+            status: RUNNING
+
+  - name: verify-eviction-after-expiry
+    description: Once expired, workloads should be evicted despite pre-existing pressure
+    try:
+    # Once Preemptable=true (expiry reached), they should be evicted (TERMINATED)
+    - wait:
+        apiVersion: kaiwo.silogen.ai/v1alpha1
+        kind: KaiwoJob
+        name: kaiwojob-with-duration
+        timeout: 90s
+        for:
+          condition:
+            name: Preemptable
+            value: "true"
+    - wait:
+        apiVersion: kaiwo.silogen.ai/v1alpha1
+        kind: KaiwoService
+        name: kaiwoservice-with-duration
+        timeout: 90s
+        for:
+          condition:
+            name: Preemptable
+            value: "true"
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: kaiwojob-with-duration
+          status:
+            status: TERMINATED
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoService
+          metadata:
+            name: kaiwoservice-with-duration
+          status:
+            status: TERMINATED
+    - script:
+        content: kubectl delete kaiwoqueueconfig kaiwo

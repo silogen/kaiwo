@@ -1,5 +1,13 @@
+# Default tag from git
+TAG ?= $(shell git describe --tags --abbrev=0 2>/dev/null || echo "latest")
+
 # Image URL to use for all building/pushing image targets
 IMG ?= ghcr.io/silogen/kaiwo-operator:${TAG}
+
+# Helm chart configuration
+CHART_DIR ?= chart
+CHART_VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "0.1.0")
+APP_VERSION ?= ${TAG}
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -112,6 +120,63 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/default > dist/install.yaml
 	find config/static -type f -name "*.yaml" -exec sh -c 'echo "---" >> dist/install.yaml && cat {} >> dist/install.yaml' \;
+
+##@ Helm
+
+# Function to copy resources needed for Helm chart
+define copy-helm-resources
+	@echo "Copying RBAC resources from config/rbac..."
+	@cat config/rbac/role.yaml > $(CHART_DIR)/rbac-resources.yaml
+	@echo "---" >> $(CHART_DIR)/rbac-resources.yaml
+	@cat config/rbac/role_binding.yaml >> $(CHART_DIR)/rbac-resources.yaml
+	@echo "Copying scheduler resources from config/static/scheduler..."
+	@cat config/static/scheduler/kaiwo-scheduler.yaml > $(CHART_DIR)/scheduler-resources.yaml
+endef
+
+# Function to clean up copied resources
+define clean-helm-resources
+	@rm -f $(CHART_DIR)/rbac-resources.yaml $(CHART_DIR)/webhook-resources.yaml $(CHART_DIR)/scheduler-resources.yaml
+endef
+
+.PHONY: helm-package
+helm-package: build-installer ## Package the Helm chart
+	@command -v helm >/dev/null 2>&1 || { \
+		echo "Helm is not installed. Please install Helm."; \
+		exit 1; \
+	}
+	@echo "Packaging Helm chart with version $(CHART_VERSION) and app version $(APP_VERSION)"
+	$(call copy-helm-resources)
+	@sed -i.bak 's/^version:.*/version: $(CHART_VERSION)/' $(CHART_DIR)/Chart.yaml
+	@sed -i.bak 's/^appVersion:.*/appVersion: "$(APP_VERSION)"/' $(CHART_DIR)/Chart.yaml
+	helm package $(CHART_DIR) --version=$(CHART_VERSION) --app-version=$(APP_VERSION) --destination=dist/
+	@rm -f $(CHART_DIR)/Chart.yaml.bak
+	$(call clean-helm-resources)
+
+.PHONY: helm-install
+helm-install: helm-package ## Install the Helm chart locally
+	@echo "Installing Helm chart to kaiwo-system namespace..."
+	helm upgrade --install kaiwo dist/kaiwo-operator-$(CHART_VERSION).tgz --namespace kaiwo-system --create-namespace
+
+.PHONY: helm-uninstall
+helm-uninstall: ## Uninstall the Helm chart
+	helm uninstall kaiwo -n kaiwo-system
+
+.PHONY: helm-template
+helm-template: build-installer ## Generate Helm templates for inspection
+	$(call copy-helm-resources)
+	@sed -i.bak 's/^appVersion:.*/appVersion: "$(APP_VERSION)"/' $(CHART_DIR)/Chart.yaml
+	helm template kaiwo $(CHART_DIR) --namespace kaiwo-system --output-dir dist/helm-output/
+	@rm -f $(CHART_DIR)/Chart.yaml.bak
+	$(call clean-helm-resources)
+
+.PHONY: helm-push-oci
+helm-push-oci: helm-package ## Push Helm chart to OCI registry
+	@echo "Pushing Helm chart to OCI registry..."
+	helm push dist/kaiwo-operator-$(CHART_VERSION).tgz oci://ghcr.io/$(shell echo $(IMG) | cut -d'/' -f2 | cut -d':' -f1)
+
+.PHONY: helm-release
+helm-release: helm-package ## Package chart for release (used by CI)
+	@echo "Helm chart packaged for release: dist/kaiwo-operator-$(CHART_VERSION).tgz"
 
 
 ##@ Deployment

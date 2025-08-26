@@ -1,61 +1,41 @@
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
-  name: test-preemption
+  name: test-eviction-after-expiry
 spec:
   concurrent: false
+  description: "Test that expired workloads are terminated when GPU demand appears after expiry"
   steps:
-  - name: expire-before-pressure
-    description: Ensure that the expired workloads are terminated when they expire before there is GPU demand added
+  - name: setup-expired-workloads
+    description: Create workloads that will expire
     try:
     - apply:
         file: kaiwojob-with-duration.yaml
     - apply:
         file: kaiwoservice-with-duration.yaml
-    - wait:
+    - wait: # wait until both report Preemptable=true
         apiVersion: kaiwo.silogen.ai/v1alpha1
         kind: KaiwoJob
         name: kaiwojob-with-duration
-        timeout: 1m
+        timeout: 90s
         for:
           condition:
             name: Preemptable
-            value: 'true'
+            value: "true"
     - wait:
         apiVersion: kaiwo.silogen.ai/v1alpha1
         kind: KaiwoService
         name: kaiwoservice-with-duration
-        timeout: 1m
+        timeout: 90s
         for:
           condition:
             name: Preemptable
-            value: 'true'
-    - apply:
-        file: gpu-demand-pressure.yaml
-    - assert:
-        resource:
-          apiVersion: kaiwo.silogen.ai/v1alpha1
-          kind: KaiwoJob
-          metadata:
-            name: kaiwojob-with-duration
-          status:
-            status: TERMINATED
-    - assert:
-        resource:
-          apiVersion: kaiwo.silogen.ai/v1alpha1
-          kind: KaiwoService
-          metadata:
-            name: kaiwoservice-with-duration
-          status:
-            status: TERMINATED
-  - name: expire-after-pressure
-    description: Ensure that the expired workloads are terminated when they expire after there is GPU demand added
+            value: "true"
+
+  - name: apply-pressure-and-verify-eviction
+    description: Apply GPU pressure and verify expired workloads are evicted
     try:
     - apply:
-        file: kaiwojob-with-duration.yaml
-    - apply:
-        file: kaiwoservice-with-duration.yaml
-    - apply:
         file: gpu-demand-pressure.yaml
     - assert:
         resource:
@@ -73,4 +53,3 @@ spec:
             name: kaiwoservice-with-duration
           status:
             status: TERMINATED
-

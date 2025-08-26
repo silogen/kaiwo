@@ -41,7 +41,6 @@ import (
 	"github.com/silogen/kaiwo/pkg/storage"
 	"github.com/silogen/kaiwo/pkg/storage/download"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 )
 
 type Reconciler struct {
@@ -153,6 +152,11 @@ func (wr *Reconciler) observeOverallStatus(ctx context.Context) (v1alpha1.Worklo
 	// Add schedulable condition to the existing conditions
 	allConditions := []metav1.Condition{schedulableCondition}
 	allConditions = append(allConditions, observation.Conditions...)
+
+	// Add Preemptable condition if workload is running and has duration
+	if preemptableCondition := kueue.GetPreemptableCondition(ctx, wr.WorkloadHandler.Workload); preemptableCondition != nil {
+		allConditions = append(allConditions, *preemptableCondition)
+	}
 
 	return status, allConditions, nil
 }
@@ -381,74 +385,66 @@ func (wr *Reconciler) stampGVK(obj client.Object) error {
 
 // labelKueueWorkloadIfExpired labels the Kueue workload with expired=true if duration exceeded
 func (wr *Reconciler) labelKueueWorkloadIfExpired(ctx context.Context, conditions []metav1.Condition) error {
-	// Check if duration exceeded condition is present and true
+	logger := log.FromContext(ctx).WithName("labelKueueWorkloadIfExpired")
+
+	// Check if Preemptable condition is present and true (duration exceeded)
 	var durationExceeded bool
 	for _, condition := range conditions {
-		if condition.Type == observe.DurationExceededConditionType && condition.Status == metav1.ConditionTrue {
+		if condition.Type == kueue.PreemptableConditionType && condition.Status == metav1.ConditionTrue {
 			durationExceeded = true
+			logger.Info("Found Preemptable condition with status True", "reason", condition.Reason, "message", condition.Message)
 			break
 		}
 	}
 
 	if !durationExceeded {
+		logger.V(1).Info("Duration not exceeded, skipping labeling")
 		return nil
 	}
 
-	// Get the Kueue workload and label it
-	obj := wr.WorkloadHandler.Workload.GetKaiwoWorkloadObject()
-	kueueWorkload, err := kueue.GetKueueWorkload(ctx, wr.Client, obj.GetNamespace(), string(obj.GetUID()))
+	logger.Info("Duration exceeded, attempting to label Kueue workload")
+
+	// Get the Kueue workload(s) via the handler and label them
+	workloads, err := wr.WorkloadHandler.Workload.GetKueueWorkloads(ctx, wr.Client)
 	if err != nil {
-		return fmt.Errorf("failed to get Kueue workload: %w", err)
+		logger.Error(err, "Failed to get Kueue workloads for labeling")
+		return fmt.Errorf("failed to get Kueue workloads: %w", err)
 	}
-	if kueueWorkload == nil {
-		// No Kueue workload exists, nothing to label
+	if len(workloads) == 0 {
+		logger.Info("No Kueue workloads exist, nothing to label")
 		return nil
 	}
 
-	// Check if already labeled
-	if kueueWorkload.Labels != nil {
-		if val, exists := kueueWorkload.Labels["kaiwo.silogen.ai/expired"]; exists && val == "true" {
-			// Already labeled
-			return nil
+	for i := range workloads {
+		wl := &workloads[i]
+		logger.Info("Labeling Kueue workload as expired", "name", wl.Name, "namespace", wl.Namespace)
+		if wl.Labels == nil {
+			wl.Labels = make(map[string]string)
 		}
+		// Skip if already labeled
+		if val, ok := wl.Labels["kaiwo.silogen.ai/expired"]; ok && val == "true" {
+			logger.V(1).Info("Workload already labeled as expired", "name", wl.Name)
+			continue
+		}
+		wl.Labels["kaiwo.silogen.ai/expired"] = "true"
+		if err := wr.Client.Update(ctx, wl); err != nil {
+			logger.Error(err, "Failed to update Kueue workload with expired label", "name", wl.Name)
+			return fmt.Errorf("failed to update Kueue workload with expired label: %w", err)
+		}
+		logger.Info("Successfully labeled Kueue workload as expired", "name", wl.Name)
 	}
-
-	// Add the expired label
-	if kueueWorkload.Labels == nil {
-		kueueWorkload.Labels = make(map[string]string)
-	}
-	kueueWorkload.Labels["kaiwo.silogen.ai/expired"] = "true"
-
-	if err := wr.Client.Update(ctx, kueueWorkload); err != nil {
-		return fmt.Errorf("failed to update Kueue workload with expired label: %w", err)
-	}
-
 	return nil
 }
 
 // updateAdmittedTimeTracking updates the accumulated admitted time based on Kueue workload admission status
 func (wr *Reconciler) updateAdmittedTimeTracking(ctx context.Context) error {
-	obj := wr.WorkloadHandler.Workload.GetKaiwoWorkloadObject()
 	status := wr.WorkloadHandler.Workload.GetCommonStatusSpec()
 
-	// Get the Kueue workload to check admission status
-	kueueWorkload, err := kueue.GetKueueWorkload(ctx, wr.Client, obj.GetNamespace(), string(obj.GetUID()))
+	// Determine admission via WorkloadReconciler (all governing workloads must be admitted)
+	isCurrentlyAdmitted, err := kueue.IsAdmitted(ctx, wr.Client, wr.WorkloadHandler.Workload)
 	if err != nil {
-		return fmt.Errorf("failed to get Kueue workload: %w", err)
+		return fmt.Errorf("failed to check Kueue admission: %w", err)
 	}
-	if kueueWorkload == nil {
-		// No Kueue workload exists, reset admission tracking
-		if status.LastAdmittedTime != nil {
-			// Was admitted before, add to accumulated time
-			streak := time.Since(status.LastAdmittedTime.Time)
-			status.AccumulatedAdmittedSeconds += int64(streak.Seconds())
-			status.LastAdmittedTime = nil
-		}
-		return nil
-	}
-
-	// Check current admission status
-	isCurrentlyAdmitted := isKueueWorkloadAdmitted(kueueWorkload)
 	wasAdmitted := status.LastAdmittedTime != nil
 
 	if isCurrentlyAdmitted && !wasAdmitted {
@@ -462,14 +458,4 @@ func (wr *Reconciler) updateAdmittedTimeTracking(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-// isKueueWorkloadAdmitted checks if a Kueue workload is currently admitted
-func isKueueWorkloadAdmitted(workload *kueuev1beta1.Workload) bool {
-	for _, condition := range workload.Status.Conditions {
-		if condition.Type == kueuev1beta1.WorkloadAdmitted && condition.Status == metav1.ConditionTrue {
-			return true
-		}
-	}
-	return false
 }

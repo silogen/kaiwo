@@ -1,0 +1,17 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoJob
+metadata:
+  name: concurrent-pending-2
+spec:
+  user: test@amd.com
+  image: busybox:latest
+  gpuResources:
+    count: 1
+    vendor: nvidia
+  entrypoint: /bin/sh -c "trap 'exit 0' SIGTERM; while true; do sleep 1; done"
+  resources:
+    limits:
+      memory: 200M
+    requests:
+      memory: 100M
+      cpu: 100m

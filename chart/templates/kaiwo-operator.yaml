@@ -1,0 +1,171 @@
+{{/*
+This template creates the core operator resources with Helm customizations
+*/}}
+
+{{- if .Values.createNamespace }}
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Release.Namespace }}
+  labels:
+    {{- include "kaiwo.labels" . | nindent 4 }}
+    {{- if .Values.security.podSecurityStandards.enforce }}
+    pod-security.kubernetes.io/enforce: {{ .Values.security.podSecurityStandards.enforce | quote }}
+    {{- end }}
+    {{- if .Values.security.podSecurityStandards.audit }}
+    pod-security.kubernetes.io/audit: {{ .Values.security.podSecurityStandards.audit | quote }}
+    {{- end }}
+    {{- if .Values.security.podSecurityStandards.warn }}
+    pod-security.kubernetes.io/warn: {{ .Values.security.podSecurityStandards.warn | quote }}
+    {{- end }}
+    {{- with .Values.commonLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- if .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml .Values.commonAnnotations | nindent 4 }}
+  {{- end }}
+{{- end }}
+
+---
+# Service Account (customized)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "kaiwo.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kaiwo.labels" . | nindent 4 }}
+    control-plane: kaiwo-controller-manager
+    {{- with .Values.commonLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- if .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml .Values.commonAnnotations | nindent 4 }}
+  {{- end }}
+
+---
+# Controller Manager Deployment (customized from config/manager/manager.yaml)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kaiwo.fullname" . }}-controller-manager
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kaiwo.labels" . | nindent 4 }}
+    control-plane: kaiwo-controller-manager
+    {{- with .Values.commonLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- if .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml .Values.commonAnnotations | nindent 4 }}
+  {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "kaiwo.selectorLabels" . | nindent 6 }}
+      control-plane: kaiwo-controller-manager
+  replicas: {{ .Values.replicas }}
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+        {{- with .Values.commonAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "kaiwo.selectorLabels" . | nindent 8 }}
+        control-plane: kaiwo-controller-manager
+        {{- with .Values.commonLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        {{- with .Values.security.securityContext.runAsUser }}
+        runAsUser: {{ . }}
+        {{- end }}
+        {{- with .Values.security.securityContext.runAsGroup }}
+        runAsGroup: {{ . }}
+        {{- end }}
+        {{- with .Values.security.securityContext.fsGroup }}
+        fsGroup: {{ . }}
+        {{- end }}
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - command:
+        - /manager
+        args:
+        - --leader-elect
+        - --health-probe-bind-address=:8081
+        {{- if .Values.webhooks.enabled }}
+        - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
+        {{- end }}
+        image: {{ include "kaiwo.image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: DEFAULT_KAIWO_QUEUE_CONFIG_NAME
+          value: "kaiwo"
+        - name: DEFAULT_CLUSTER_QUEUE_NAME
+          value: "kaiwo"
+        name: manager
+        {{- if .Values.webhooks.enabled }}
+        volumeMounts:
+          - mountPath: /tmp/k8s-webhook-server/serving-certs
+            name: cert
+            readOnly: true
+        ports:
+        - containerPort: 9443
+          name: webhook-server
+          protocol: TCP
+        {{- end }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - "ALL"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        {{- with .Values.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      serviceAccountName: {{ include "kaiwo.serviceAccountName" . }}
+      terminationGracePeriodSeconds: 10
+      {{- if .Values.webhooks.enabled }}
+      volumes:
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: webhook-server-cert
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -5,11 +5,12 @@ metadata:
 spec:
   user: test@amd.com
   image: busybox:latest
+  clusterQueue: kaiwo-test
   duration: 5s
   gpuResources:
     count: 1
     vendor: nvidia
-  entrypoint: sleep 60000
+  entrypoint: /bin/sh -c "trap 'exit 0' SIGTERM; while true; do sleep 1; done"
   resources:
     limits:
       memory: 200M

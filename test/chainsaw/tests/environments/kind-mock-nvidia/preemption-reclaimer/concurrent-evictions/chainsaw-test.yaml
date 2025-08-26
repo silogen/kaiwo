@@ -1,0 +1,71 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: test-concurrent-evictions
+spec:
+  concurrent: false
+  description: "Test reclaimer stability with multiple pending workloads and rapid state changes"
+  steps:
+  - name: setup-multiple-expired-workloads
+    description: Create multiple expired workloads that will be candidates for eviction
+    try:
+    - apply:
+        file: concurrent-expired-1.yaml
+    - apply:
+        file: concurrent-expired-2.yaml
+    - apply:
+        file: concurrent-expired-3.yaml
+    # Wait for all to expire
+    - wait:
+        apiVersion: kaiwo.silogen.ai/v1alpha1
+        kind: KaiwoJob
+        name: concurrent-expired-1
+        timeout: 90s
+        for:
+          condition:
+            name: Preemptable
+            value: "true"
+    - wait:
+        apiVersion: kaiwo.silogen.ai/v1alpha1
+        kind: KaiwoJob
+        name: concurrent-expired-2
+        timeout: 90s
+        for:
+          condition:
+            name: Preemptable
+            value: "true"
+    - wait:
+        apiVersion: kaiwo.silogen.ai/v1alpha1
+        kind: KaiwoJob
+        name: concurrent-expired-3
+        timeout: 90s
+        for:
+          condition:
+            name: Preemptable
+            value: "true"
+
+  - name: apply-concurrent-pressure
+    description: Apply multiple pending workloads simultaneously to test concurrent processing
+    try:
+    # Apply multiple pending workloads simultaneously
+    - apply:
+        file: concurrent-pending-1.yaml
+    - apply:
+        file: concurrent-pending-2.yaml
+    # Allow some time for reclaimer to process concurrency
+    - sleep:
+        duration: 10s
+
+  - name: verify-stable-eviction
+    description: Verify system handles concurrent requests stably
+    try:
+    # At least one expired should be evicted to make room for head-of-line
+    # (exact behavior depends on Kueue's ordering and resource availability)
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: concurrent-expired-1
+          status:
+            status: TERMINATED

@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -45,6 +46,13 @@ const (
 	srcRay          = "Ray"
 	srcKaiwo        = "Kaiwo"
 	srcNamespacePod = "NamespacePod"
+
+	levelTrace = "trace"
+	levelDebug = "debug"
+	levelInfo  = "info"
+	levelWarn  = "warn"
+	levelError = "error"
+	levelFatal = "fatal"
 )
 
 var (
@@ -69,23 +77,23 @@ var (
 	}
 
 	levelColors = map[string]string{
-		"trace": colorGray,
-		"debug": colorGray,
-		"info":  colorGreen,
-		"warn":  colorYellow,
-		"error": colorRed,
-		"fatal": colorBRed,
+		levelTrace: colorGray,
+		levelDebug: colorGray,
+		levelInfo:  colorGreen,
+		levelWarn:  colorYellow,
+		levelError: colorRed,
+		levelFatal: colorBRed,
 	}
 
 	// Severity ranking for filtering
 	levelRank = map[string]int{
-		"trace":   0,
-		"debug":   1,
-		"info":    2,
-		"warn":    3,
-		"warning": 3,
-		"error":   4,
-		"fatal":   5,
+		levelTrace: 0,
+		levelDebug: 1,
+		levelInfo:  2,
+		levelWarn:  3,
+		"warning":  3,
+		levelError: 4,
+		levelFatal: 5,
 	}
 )
 
@@ -118,14 +126,14 @@ func defaultControllers() []string {
 
 func main() {
 	// Avoid noisy glog flags from client-go
-	flag.CommandLine.Parse([]string{})
+	_ = flag.CommandLine.Parse([]string{})
 
 	opts := &options{
 		controllerDeployments: defaultControllers(),
 		kaiwoDeployment:       "kaiwo-system/kaiwo-controller-manager",
 		limitLines:            0,
-		namespacedLevel:       "debug",
-		clusterLevel:          "info",
+		namespacedLevel:       levelDebug,
+		clusterLevel:          levelInfo,
 	}
 
 	root := &cobra.Command{
@@ -316,9 +324,9 @@ func collectEventsV1(ctx context.Context, clientset *kubernetes.Clientset, names
 			ts = time.Now()
 		}
 
-		level := "info"
+		level := levelInfo
 		if strings.EqualFold(ev.Type, "Warning") {
-			level = "warn"
+			level = levelWarn
 		}
 
 		msg := ev.Note
@@ -371,9 +379,9 @@ func collectEventsCoreV1(ctx context.Context, clientset *kubernetes.Clientset, n
 		default:
 			ts = now
 		}
-		level := "info"
+		level := levelInfo
 		if strings.EqualFold(ev.Type, "Warning") {
-			level = "warn"
+			level = levelWarn
 		}
 		extras := map[string]any{
 			"reason":     ev.Reason,
@@ -438,7 +446,12 @@ func collectLocalKaiwo(path string, out chan<- *logEntry) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			panic(err)
+		}
+	}(file)
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -465,7 +478,7 @@ func collectLocalKaiwo(path string, out chan<- *logEntry) error {
 
 		out <- &logEntry{
 			Time:    time.Now(),
-			Level:   "info",
+			Level:   levelInfo,
 			Source:  srcKaiwo,
 			Message: strings.TrimSpace(line),
 			Extras:  map[string]any{},
@@ -539,7 +552,12 @@ func streamPodLogs(ctx context.Context, clientset *kubernetes.Clientset, namespa
 	if stream == nil {
 		return fmt.Errorf("unable to stream logs for %s/%s[%s]", namespace, podName, containerName)
 	}
-	defer stream.Close()
+	defer func(stream io.ReadCloser) {
+		err := stream.Close()
+		if err != nil {
+			panic(err)
+		}
+	}(stream)
 
 	reader := bufio.NewScanner(stream)
 	for reader.Scan() {
@@ -636,7 +654,7 @@ func parseGenericLine(ts time.Time, line string) *logEntry {
 	}
 	return &logEntry{
 		Time:    ts,
-		Level:   "info",
+		Level:   levelInfo,
 		Message: trim,
 		Extras:  map[string]any{},
 	}
@@ -700,7 +718,7 @@ func severityRank(s string) int {
 	r, ok := levelRank[lowerString(s)]
 	if !ok {
 		// Treat unknown/missing as "info"
-		return levelRank["info"]
+		return levelRank[levelInfo]
 	}
 	return r
 }
@@ -768,7 +786,7 @@ func printEntry(e *logEntry, baseTime time.Time) {
 
 	level := lowerString(e.Level)
 	if level == "" {
-		level = "info"
+		level = levelInfo
 	}
 	levelColor := levelColors[level]
 	if levelColor == "" {
@@ -814,23 +832,23 @@ var levelParenRe = regexp.MustCompile(`(?i)^level\((-?\d+)\)$`)
 func normalizeLevel(raw string) string {
 	s := strings.TrimSpace(strings.ToLower(raw))
 	if s == "" {
-		return "info"
+		return levelInfo
 	}
 	// If it's exactly an integer like "-2", map it.
 	if i, err := strconv.Atoi(s); err == nil {
 		switch {
 		case i <= -2:
-			return "trace"
+			return levelTrace
 		case i == -1:
-			return "debug"
+			return levelDebug
 		case i == 0:
-			return "info"
+			return levelInfo
 		case i == 1:
-			return "warn"
+			return levelWarn
 		case i >= 5:
-			return "fatal"
+			return levelFatal
 		default:
-			return "error" // 2..4
+			return levelError // 2..4
 		}
 	}
 	// If it's in the Zap string form "Level(-2)"
@@ -838,23 +856,23 @@ func normalizeLevel(raw string) string {
 		if i, err := strconv.Atoi(m[1]); err == nil {
 			switch {
 			case i <= -2:
-				return "trace"
+				return levelTrace
 			case i == -1:
-				return "debug"
+				return levelDebug
 			case i == 0:
-				return "info"
+				return levelInfo
 			case i == 1:
-				return "warn"
+				return levelWarn
 			case i >= 5:
-				return "fatal"
+				return levelFatal
 			default:
-				return "error"
+				return levelError
 			}
 		}
 	}
 	// normalize synonyms
 	if s == "warning" {
-		return "warn"
+		return levelWarn
 	}
 	return s
 }
