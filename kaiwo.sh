@@ -104,7 +104,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Default command if push is specified but no command given
-if [[ -n "$PUSH" && -z "$COMMAND" ]]; then
+# Only set default "up" if we also have a deploy method specified
+if [[ -n "$PUSH" && -z "$COMMAND" && -n "$DEPLOY_VIA" ]]; then
   COMMAND="up"
 fi
 
