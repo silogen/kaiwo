@@ -87,6 +87,10 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 build: manifests generate fmt vet ## Build manager binary.
 	go build -o bin/manager cmd/operator/main.go
 
+.PHONY: build-cli
+build-cli: ## Build CLI binary.
+	go build -o bin/kaiwo cmd/cli/main.go
+
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./cmd/operator/main.go
