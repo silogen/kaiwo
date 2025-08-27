@@ -91,6 +91,11 @@ build: manifests generate fmt vet ## Build manager binary.
 build-cli: ## Build CLI binary.
 	go build -o bin/kaiwo cmd/cli/main.go
 
+.PHONY: build-log
+build-log: ## Build log collection binary for Chainsaw tests.
+	mkdir -p builds
+	go build -o builds/log pkg/cli/dev/main.go
+
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./cmd/operator/main.go
