@@ -170,8 +170,10 @@ jobs:
         chmod +x ./kind
         sudo mv ./kind /usr/local/bin/kind
         kind version
+
     - name: Additional cluster setup
-      run: ./test/scripts/setup_kind.sh
+      # Static Kaiwo components (scheduler, namespace) are skipped, as these are included in the Kustomization manifests and the Helm chart
+      run: ./test/scripts/setup_kind.sh --skip-static
 
     - name: Install CRDs and Deploy (${{ matrix.installer }})
       env:

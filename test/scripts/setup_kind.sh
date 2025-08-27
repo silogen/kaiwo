@@ -5,10 +5,14 @@ set -e
 TEST_NAME=${TEST_NAME:-"kaiwo-test"}
 
 SKIP_DEPENDENCIES=false
+SKIP_KAIWO_STATIC=false
 
 for arg in "$@"; do
   if [[ "$arg" == "--no-dependencies" ]]; then
     SKIP_DEPENDENCIES=true
+  fi
+  if [[ "$arg" == "--skip-static" ]]; then
+    SKIP_KAIWO_STATIC=true
   fi
 done
 
@@ -43,7 +47,10 @@ kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 "$TEST_NAME"-worker3
 kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 "$TEST_NAME"-worker3 "$TEST_NAME"-worker4 feature.node.kubernetes.io/pci-10de.present=true
 kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 "$TEST_NAME"-worker3 "$TEST_NAME"-worker4 kaiwo.silogen.ai/node.gpu.partitioned=false
 
-find config/static -name '*.yaml' -print0 | xargs -0 -n1 kubectl apply -f
+if [ "$SKIP_KAIWO_STATIC" = false ]; then
+  find config/static -name '*.yaml' -print0 | xargs -0 -n1 kubectl apply -f
+fi
+
 make install
 
 kubectl apply -f test/configs/kaiwoconfig/local-kind.yaml

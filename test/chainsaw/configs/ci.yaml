@@ -15,7 +15,7 @@ spec:
   error:
     catch:
     - command:
-        entrypoint: builds/log
+        entrypoint: log
         env:
         - name: NAMESPACE
           value: ($namespace)
