@@ -128,7 +128,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        installer: [kustomize, helm]
+        installer: [kustomization, helm]
     steps:
     - uses: actions/checkout@v4
 
