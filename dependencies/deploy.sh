@@ -65,17 +65,17 @@ case "$ACTION" in
 
     echo "2. Applying server-side Kustomize resources from $KUSTOMIZE_SERVER..."
     if [ -d "$KUSTOMIZE_SERVER" ]; then
-      kustomize build "$KUSTOMIZE_SERVER" > .build.yaml
+      kubectl kustomize "$KUSTOMIZE_SERVER" > .build.yaml
 
       # Apply CRDs first (server-side)
       yq eval 'select(.kind == "CustomResourceDefinition")' .build.yaml \
-        | kubectl apply --server-side -f -
+        | kubectl apply --server-side --force-conflicts -f -
 
       # Wait for each CRD to become Established
       yq eval --no-doc -r 'select(.kind == "CustomResourceDefinition") | .metadata.name' .build.yaml \
         | xargs -r -n1 -I{} kubectl wait --for=condition=Established --timeout=90s crd/{}
 
-      kubectl apply --server-side -f .build.yaml
+      kubectl apply --server-side --force-conflicts -f .build.yaml
 
     else
       echo "Skip apply: kustomize path '$KUSTOMIZE_SERVER' not found."

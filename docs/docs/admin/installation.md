@@ -15,8 +15,8 @@ Kaiwo requires several core Kubernetes components to function correctly:
 
 1.  **Cert-Manager**: Manages TLS certificates for webhooks.
 2.  **GPU Operator**:
-    *   **NVIDIA**: [NVIDIA GPU Operator](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/overview.html) + [GPU Feature Discovery](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/gpu-feature-discovery.html).
     *   **AMD**: [AMD GPU Operator](https://github.com/ROCm/amdgpu-operator). (Includes Node Labeller).
+    *   **NVIDIA**: [NVIDIA GPU Operator](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/overview.html) + [GPU Feature Discovery](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/gpu-feature-discovery.html).
     *   Ensures GPU drivers are installed and nodes are correctly labeled with GPU information.
 3.  **Kueue**: Provides job queueing, fair sharing, and quota management. ([Docs](https://kueue.sigs.k8s.io/)).
 4.  **KubeRay Operator**: Required *only* if users will run Ray-based workloads (`spec.ray: true`). Manages Ray clusters. ([Docs](https://docs.ray.io/en/latest/cluster/kubernetes/index.html)).
@@ -27,14 +27,12 @@ Kaiwo requires several core Kubernetes components to function correctly:
 
 There are two recommended approaches for installing Kaiwo. Choose the method that best fits your infrastructure and preferences.
 
-### Method 1: Helm Chart (Recommended)
+### Install Dependencies
 
-The **recommended** approach is to use the official Helm chart from GitHub releases.
+You can either install the dependencies yourself, or use the following helper script for testing.
 
-#### Step 1: Install Dependencies
-
-!!!warning "GPU Operator Required"
-    You must install the **AMD GPU Operator** or **NVIDIA GPU Operator** separately according to their documentation *before* proceeding. Ensure node labeling features are enabled.
+!!!note
+You need to also have [Helmfile](https://github.com/helmfile/helmfile) and [yq](https://github.com/mikefarah/yq) installed.
 
 Clone the repository and install dependencies using the deployment script:
 
@@ -46,10 +44,19 @@ dependencies/deploy.sh kind-test up  # Use appropriate environment
 
 Available environments:
 - `kind-test`: For Kind/testing clusters
-- `tw-009-038`: GPU environment example  
+- `tw-009-038`: GPU environment example
 - `banff-sc-cx42-43`: GPU environment example
 
-#### Step 2: Install Kaiwo Operator via Helm
+!!!info
+The GPU environments are examples, if you want to install dependencies with this deployment helper script and you have your own GPU environment, you should:
+
+      1. Create a new environment YAML file in `dependencies/environments/<my-env>.yaml`
+      2. Create a new environment overlay in `dependencies/kustomization-server-side/overlays/environments/<my-env>/kustomization.yaml`
+
+    After this, you can install your environment dependencies via `dependencies/deploy.sh <my-env> up
+
+
+### Helm Chart
 
 ```bash
 # Add the Kaiwo Helm repository (if published) or use local chart
@@ -69,21 +76,7 @@ helm install kaiwo-operator kaiwo/kaiwo-operator \
   --create-namespace
 ```
 
-### Method 2: Kustomize Install Manifest
-
-For environments where Helm is not available, you can use the install manifest.
-
-#### Step 1: Install Dependencies
-
-Same as Method 1 - clone the repository and run the dependency script:
-
-```bash
-git clone https://github.com/silogen/kaiwo.git
-cd kaiwo
-dependencies/deploy.sh kind-test up  # Use appropriate environment
-```
-
-#### Step 2: Install Kaiwo Operator via Manifest
+### Kustomize Install Manifest
 
 Install the latest version:
 
