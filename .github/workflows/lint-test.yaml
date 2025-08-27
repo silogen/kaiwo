@@ -171,6 +171,15 @@ jobs:
         sudo mv ./kind /usr/local/bin/kind
         kind version
 
+    - name: Install Helmfile
+      run: |
+        curl -Lo helmfile.tar.gz https://github.com/helmfile/helmfile/releases/latest/download/helmfile_linux_amd64.tar.gz
+        tar -xzf helmfile.tar.gz
+        chmod +x ./helmfile
+        sudo mv ./helmfile /usr/local/bin/helmfile
+        rm helmfile.tar.gz
+        helmfile version
+
     - name: Additional cluster setup
       # Static Kaiwo components (scheduler, namespace) are skipped, as these are included in the Kustomization manifests and the Helm chart
       run: ./test/scripts/setup_kind.sh --skip-static
@@ -184,6 +193,7 @@ jobs:
     - name: Wait for rollout
       run: |
         kubectl -n kaiwo-system rollout status deployment/kaiwo-controller-manager --timeout=300s
+        kubectl -n kube-system rollout status deployment/kaiwo-scheduler --timeout=300s
         kubectl -n kaiwo-system get pods -o wide
 
     - name: Run E2E tests

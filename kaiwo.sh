@@ -10,7 +10,7 @@ IMAGE_REGISTRY="${IMAGE_REGISTRY:-ghcr.io/silogen}"
 TAG="${TAG:-$(git rev-parse --short HEAD 2>/dev/null || echo dev)}"
 TTL="${TTL:-1h}"
 KIND_CLUSTER="${KIND_CLUSTER:-kaiwo-test}"
-HELM_RELEASE_NAME="${HELM_RELEASE_NAME:-kaiwo-operator}"
+HELM_RELEASE_NAME="${HELM_RELEASE_NAME:-kaiwo}"
 HELM_NAMESPACE="${HELM_NAMESPACE:-kaiwo-system}"
 CONTAINER_TOOL="${CONTAINER_TOOL:-docker}"
 
