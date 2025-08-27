@@ -122,13 +122,13 @@ jobs:
         retention-days: 5
 
   e2e-kind:
-    name: E2E on kind (${{ matrix.installer }})
+    name: E2E on kind
     needs: build-image
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        installer: [kustomize, helm]
+#    strategy:
+#      fail-fast: false
+#      matrix:
+#        installer: [kustomize, helm]
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-go@v5
@@ -143,31 +143,45 @@ jobs:
     - name: Make CLI executable
       run: chmod +x builds/kaiwo && ls -l builds
 
-    - name: Create Kind cluster (action)
-      uses: helm/kind-action@v1
-      with:
-        cluster_name: kind-${{ matrix.installer }}
-
     - name: Install Chainsaw
       uses: kyverno/action-install-chainsaw@v0.2.12
       with:
         release: v0.2.12
 
-      # Optional: if you still need your custom setup
     - name: Install kind (CLI) & verify
       run: |
         curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.26.0/kind-linux-amd64
         chmod +x ./kind
         sudo mv ./kind /usr/local/bin/kind
         kind version
-    - name: Additional cluster setup
+
+    - name: Setup Kind cluster (1/2)
       run: ./test/scripts/setup_kind.sh
 
-    - name: Install CRDs and Deploy (${{ matrix.installer }})
+    - name: Install CRDs and Deploy via Kustomization
       env:
         IMAGE_NAME: ${{ needs.build-image.outputs.image }}
       run: |
-        ./kaiwo.sh --install-crds --deploy-via=${{ matrix.installer }} up
+        ./kaiwo.sh --install-crds --deploy-via=kustomization up
+
+    - name: Wait for rollout
+      run: |
+        kubectl -n kaiwo-system rollout status deployment/kaiwo-controller-manager --timeout=300s
+        kubectl -n kaiwo-system get pods -o wide
+
+    - name: Run E2E tests
+      run: |
+        cd test
+        make test-kind
+
+    - name: Setup Kind cluster (2/2)
+      run: ./test/scripts/setup_kind.sh
+
+    - name: Install CRDs and Deploy via Helm
+      env:
+        IMAGE_NAME: ${{ needs.build-image.outputs.image }}
+      run: |
+        ./kaiwo.sh --install-crds --deploy-via=helm up
 
     - name: Wait for rollout
       run: |
