@@ -14,3 +14,14 @@ spec:
     delete: 90s
     error: 60s
     exec: 10s
+  error:
+    catch:
+    - command:
+        entrypoint: builds/log
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        args:
+        - $NAMESPACE
+        - --namespaced-level=debug
+        - --cluster-level=info

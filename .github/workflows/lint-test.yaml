@@ -113,6 +113,7 @@ jobs:
         make build-log
         mkdir -p builds
         cp bin/kaiwo builds/
+        cp bin/log builds/
 
     - name: Upload CLI artifact
       uses: actions/upload-artifact@v4
