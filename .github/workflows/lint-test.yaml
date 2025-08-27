@@ -142,15 +142,16 @@ jobs:
         docker system prune -af || true
         df -h
 
-#    - uses: actions/setup-go@v5
-#      with:
-#        go-version-file: go.mod
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
 
     - name: Download CLI artifact
       uses: actions/download-artifact@v4
       with:
         name: kaiwo-cli
         path: builds
+
     - name: Make CLI executable
       run: chmod +x builds/kaiwo && ls -l builds
 
@@ -183,3 +184,10 @@ jobs:
       run: |
         cd test
         make test-kind
+
+    - name: Disk usage report (post-mortem)
+      if: always()
+      run: |-
+        df -h
+        sudo du -xh /var/lib/docker | sort -rh | head -n 20
+        sudo du -xh /home/runner/work | sort -rh | head -n 20
