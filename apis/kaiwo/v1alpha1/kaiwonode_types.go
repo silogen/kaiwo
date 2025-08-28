@@ -110,7 +110,7 @@ type NodeGpuInfo struct {
 	Vendor GpuVendor `json:"vendor,omitempty"`
 
 	// Model is the model name of the GPU
-	Model string `json:"model,omitempty"`
+	Model *string `json:"model,omitempty"`
 
 	// ResourceName is the GPU resource name for this GPU
 	ResourceName v1.ResourceName `json:"resourceName,omitempty"`

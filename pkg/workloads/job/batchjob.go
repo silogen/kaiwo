@@ -12,11 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package workloadjob
+package workloads
 
 import (
 	"context"
 	"fmt"
+
+	"github.com/silogen/kaiwo/pkg/kube/podspec"
+
+	"github.com/silogen/kaiwo/pkg/platform/kueue"
+
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/silogen/kaiwo/pkg/platform/cluster"
+
+	"github.com/silogen/kaiwo/pkg/runtime/config"
+
+	common2 "github.com/silogen/kaiwo/pkg/runtime/common"
+
+	"github.com/silogen/kaiwo/pkg/api"
 
 	"k8s.io/apimachinery/pkg/runtime"
 
@@ -28,10 +42,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	"github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 const (
@@ -57,7 +69,7 @@ func (handler *BatchJobHandler) GetInitializedObject() client.Object {
 	}
 }
 
-func (handler *BatchJobHandler) MutateActual(ctx context.Context, clusterCtx common.ClusterContext, actual client.Object) error {
+func (handler *BatchJobHandler) MutateActual(ctx context.Context, clusterCtx api.ClusterContext, actual client.Object) error {
 	return nil
 }
 
@@ -73,9 +85,9 @@ func (handler *BatchJobHandler) GetCommonStatusSpec() *kaiwo.CommonStatusSpec {
 	return &handler.KaiwoJob.Status.CommonStatusSpec
 }
 
-func (handler *BatchJobHandler) BuildDesired(ctx context.Context, clusterCtx common.ClusterContext) (client.Object, error) {
+func (handler *BatchJobHandler) BuildDesired(ctx context.Context, clusterCtx api.ClusterContext) (client.Object, error) {
 	logger := log.FromContext(ctx)
-	config := common.ConfigFromContext(ctx)
+	config := config.ConfigFromContext(ctx)
 
 	spec := handler.KaiwoJob.Spec
 
@@ -96,59 +108,62 @@ func (handler *BatchJobHandler) BuildDesired(ctx context.Context, clusterCtx com
 		jobSpec.TTLSecondsAfterFinished = baseutils.Pointer(defaultTTLSecondsAfterFinished)
 	}
 
-	if err := common.AddEntrypoint(spec.EntryPoint, &jobSpec.Template); err != nil {
+	if err := podspec.AddEntrypoint(spec.EntryPoint, &jobSpec.Template); err != nil {
 		return nil, baseutils.LogErrorf(logger, "failed to add entrypoint: %v", err)
 	}
 
 	jobSpec.Suspend = baseutils.Pointer(true)
 
-	gpuSchedulingResult, err := common.CalculateGpuRequirements(ctx, clusterCtx, handler.KaiwoJob.Spec.GpuResources, baseutils.Pointer(1))
+	gpuSchedulingResult, err := cluster.CalculateGpuRequirements(ctx, clusterCtx, handler.KaiwoJob.Spec.GpuResources, baseutils.Pointer(1))
 	if err != nil {
 		return nil, baseutils.LogErrorf(logger, "failed to calculate gpu requirements: %v", err)
 	}
 
-	common.UpdatePodTemplateSpecNonRay(config, handler, gpuSchedulingResult, &jobSpec.Template)
+	podspec.UpdatePodTemplateSpecNonRay(config, handler, gpuSchedulingResult, &jobSpec.Template)
+
+	// IndexedCompletion is required by Kueue TAS
+	jobSpec.CompletionMode = baseutils.Pointer(batchv1.IndexedCompletion)
 
 	batchJob := handler.GetInitializedObject().(*batchv1.Job)
 	batchJob.Spec = jobSpec
 
-	common.UpdateLabels(handler.KaiwoJob, &batchJob.ObjectMeta)
-	common.UpdateLabels(handler.KaiwoJob, &batchJob.Spec.Template.ObjectMeta)
+	common2.UpdateLabels(handler.KaiwoJob, &batchJob.ObjectMeta)
+	common2.UpdateLabels(handler.KaiwoJob, &batchJob.Spec.Template.ObjectMeta)
 
-	batchJob.Labels[common.QueueLabel] = common.GetClusterQueueName(ctx, handler)
+	batchJob.Labels[common2.QueueLabel] = api.GetClusterQueueName(ctx, handler)
 
 	return batchJob, nil
 }
 
-func (handler *BatchJobHandler) ObserveStatus(_ context.Context, k8sClient client.Client, obj client.Object, previousStatus kaiwo.WorkloadStatus) (*kaiwo.WorkloadStatus, []metav1.Condition, error) {
-	actualJob := obj.(*batchv1.Job)
-	status, err := common.ObserveBatchJob(actualJob, previousStatus)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to observe batch job status: %w", err)
-	}
-
-	return &status, []metav1.Condition{}, nil
-}
-
 func (handler *BatchJobHandler) GetKueueWorkloads(ctx context.Context, k8sClient client.Client) ([]kueuev1beta1.Workload, error) {
+	logger := log.FromContext(ctx).WithName("GetKueueWorkloads")
+
 	job := handler.GetInitializedObject().(*batchv1.Job)
 	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(job), job); err != nil {
 		return nil, fmt.Errorf("failed to get job: %w", err)
 	}
-	workload, err := common.GetKueueWorkload(ctx, k8sClient, job.GetNamespace(), string(job.GetUID()))
+
+	// Use the Job UID to match Kueue Workload ownerReference
+
+	workload, err := kueue.GetKueueWorkload(ctx, k8sClient, job.GetNamespace(), string(job.GetUID()))
 	if err != nil {
+		logger.Error(err, "failed to get Kueue Workload", "namespace", job.GetNamespace(), "jobUID", string(job.GetUID()))
 		return nil, fmt.Errorf("failed to extract workload from handler: %w", err)
 	}
 	if workload == nil {
 		return []kueuev1beta1.Workload{}, nil
 	}
+
 	return []kueuev1beta1.Workload{*workload}, nil
 }
 
-func GetDefaultJobSpec(config common.KaiwoConfigContext, dangerous bool) batchv1.JobSpec {
+func GetDefaultJobSpec(config config.KaiwoConfigContext, dangerous bool) batchv1.JobSpec {
 	return batchv1.JobSpec{
 		TTLSecondsAfterFinished: baseutils.Pointer(defaultTTLSecondsAfterFinished),
 		BackoffLimit:            baseutils.Pointer(int32(0)),
-		Template:                common.GetPodTemplate(config, *resource.NewQuantity(1*1024*1024*1024, resource.BinarySI), dangerous, "workload"),
+		Template:                podspec.GetPodTemplate(config, *resource.NewQuantity(1*1024*1024*1024, resource.BinarySI), dangerous, "workload"),
+		// Just to be explicit about the values
+		Completions: baseutils.Pointer(int32(1)),
+		Parallelism: baseutils.Pointer(int32(1)),
 	}
 }

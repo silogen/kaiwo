@@ -1,0 +1,12 @@
+- op: add
+  path: /spec/template/spec/initContainers/-
+  value:
+    name: pull-rocm-pytorch
+    image: rocm/pytorch:rocm6.4_ubuntu24.04_py3.12_pytorch_release_2.6.0
+    command: ["sh", "-c", "echo warmed rocm-pytorch"]
+- op: add
+  path: /spec/template/spec/initContainers/-
+  value:
+    name: pull-rocm-ray
+    image: ghcr.io/silogen/rocm-ray:6.4
+    command: ["sh", "-c", "echo warmed rocm-ray"]

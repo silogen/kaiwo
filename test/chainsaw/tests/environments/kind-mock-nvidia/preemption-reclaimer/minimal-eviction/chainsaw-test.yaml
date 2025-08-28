@@ -1,0 +1,84 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: test-minimal-eviction
+spec:
+  concurrent: false
+  description: "Test that reclaimer evicts the minimal number of expired workloads to satisfy pending GPU demand"
+  steps:
+  - name: Create kaiwo queue config
+    try:
+    - apply:
+        file: kaiwo-queue-config.yaml
+  - name: setup-multiple-expired-workloads
+    description: Create multiple expired workloads
+    try:
+    - apply:
+        file: expired-a.yaml
+    - apply:
+        file: expired-b.yaml
+    - apply:
+        file: expired-c.yaml
+    # Wait for all 3 to become Preemptable (expired)
+    - wait:
+        apiVersion: kaiwo.silogen.ai/v1alpha1
+        kind: KaiwoJob
+        name: kaiwo-expired-a
+        timeout: 90s
+        for:
+          condition:
+            name: Preemptable
+            value: "true"
+    - wait:
+        apiVersion: kaiwo.silogen.ai/v1alpha1
+        kind: KaiwoJob
+        name: kaiwo-expired-b
+        timeout: 90s
+        for:
+          condition:
+            name: Preemptable
+            value: "true"
+    - wait:
+        apiVersion: kaiwo.silogen.ai/v1alpha1
+        kind: KaiwoJob
+        name: kaiwo-expired-c
+        timeout: 90s
+        for:
+          condition:
+            name: Preemptable
+            value: "true"
+
+  - name: apply-demand-and-verify-minimal-eviction
+    description: Apply 2 GPU demand and verify only 2 oldest expired workloads are evicted
+    try:
+    # Create a consumer needing 2 GPUs
+    - apply:
+        file: gpu-demand-2.yaml
+    # Expect exactly two oldest (a,b) to be terminated; c remains running
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: kaiwo-expired-a
+          status:
+            status: TERMINATED
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: kaiwo-expired-b
+          status:
+            status: TERMINATED
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: kaiwo-expired-c
+          status:
+            status: RUNNING
+
+    - script:
+        content: kubectl delete kaiwoqueueconfig kaiwo

@@ -20,6 +20,12 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/silogen/kaiwo/pkg/workloads/factory"
+
+	"github.com/silogen/kaiwo/pkg/reconcile"
+
+	"github.com/silogen/kaiwo/pkg/storage"
+
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -34,9 +40,6 @@ import (
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	"github.com/silogen/kaiwo/pkg/workloads/common"
-
-	workloadjob "github.com/silogen/kaiwo/pkg/workloads/job"
 )
 
 // KaiwoJobReconciler reconciles a KaiwoJob object
@@ -65,10 +68,10 @@ func (r *KaiwoJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, nil
 	}
 
-	workloadHandler := workloadjob.NewKaiwoJobHandler(r.Scheme, &kaiwoJob)
-	reconciler := common.Reconciler{
+	workloadHandler := reconcile.WorkloadHandler{Workload: factory.NewJobReconciler(r.Scheme, &kaiwoJob)}
+	reconciler := reconcile.Reconciler{
 		WorkloadHandler: workloadHandler,
-		StorageHandler:  common.NewStorageHandler(workloadHandler),
+		StorageHandler:  storage.NewStorageHandler(req.NamespacedName, workloadHandler.Workload.GetCommonSpec()),
 		Client:          r.Client,
 		Scheme:          r.Scheme,
 		Recorder:        r.Recorder,

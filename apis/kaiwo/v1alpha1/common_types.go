@@ -44,6 +44,9 @@ const (
 	// WorkloadStatusError indicates the workload encountered an error which can be recovered from.
 	WorkloadStatusError WorkloadStatus = "ERROR"
 
+	// WorkloadStatusDegraded indicates the workload is unhealthy but may recover (e.g., deployment deadline exceeded).
+	WorkloadStatusDegraded WorkloadStatus = "DEGRADED"
+
 	// WorkloadStatusFailed indicates the workload (KaiwoJob or KaiwoService) encountered an error and cannot proceed or recover.
 	WorkloadStatusFailed WorkloadStatus = "FAILED"
 
@@ -60,9 +63,10 @@ var workloadStatusRank = map[WorkloadStatus]int{
 	WorkloadStatusPending:     2,
 	WorkloadStatusStarting:    3,
 	WorkloadStatusError:       4,
-	WorkloadStatusFailed:      5,
-	WorkloadStatusTerminating: 6,
-	WorkloadStatusTerminated:  7,
+	WorkloadStatusDegraded:    5,
+	WorkloadStatusFailed:      6,
+	WorkloadStatusTerminating: 7,
+	WorkloadStatusTerminated:  8,
 }
 
 // DetermineOverallStatus chooses an overall status value from a list of statuses
@@ -234,6 +238,14 @@ type CommonStatusSpec struct {
 
 	// ObservedGeneration records the `.metadata.generation` of the workload resource that was last processed by the controller.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// AccumulatedAdmittedSeconds tracks the total time this workload has been admitted by Kueue, in seconds.
+	// This excludes time spent pending, suspended, or evicted, providing accurate runtime for duration limits.
+	AccumulatedAdmittedSeconds int64 `json:"accumulatedAdmittedSeconds,omitempty"`
+
+	// LastAdmittedTime records when the workload was last admitted by Kueue.
+	// Used to calculate current admission streak duration.
+	LastAdmittedTime *metav1.Time `json:"lastAdmittedTime,omitempty"`
 }
 
 // StorageSpec defines the storage configuration for the workload.

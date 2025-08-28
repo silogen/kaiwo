@@ -63,6 +63,12 @@ rules:
   - "topologies"
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
+- apiGroups: ["visibility.kueue.x-k8s.io"]
+  resources:
+  - "clusterqueues/pendingworkloads"
+  - "localqueues/pendingworkloads"
+  verbs: ["get", "list", "watch"]
+
 - apiGroups: ["apiextensions.k8s.io"]
   resources:
   - customresourcedefinitions
@@ -83,4 +89,8 @@ rules:
 
 - apiGroups: ["workload.codeflare.dev"]
   resources: ["appwrappers"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

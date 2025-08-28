@@ -1,0 +1,18 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoService
+metadata:
+  name: kaiwoservice-with-duration
+spec:
+  user: test@amd.com
+  image: busybox:latest
+  duration: 5s
+  gpuResources:
+    count: 1
+    vendor: nvidia
+  entrypoint: /bin/sh -c "trap 'exit 0' SIGTERM; while true; do sleep 1; done"
+  resources:
+    limits:
+      memory: 200M
+    requests:
+      memory: 100M
+      cpu: 100m

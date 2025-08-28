@@ -12,14 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package workloadservice
+package workloads
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+
+	podspec2 "github.com/silogen/kaiwo/pkg/kube/podspec"
+
+	"github.com/silogen/kaiwo/pkg/platform/kueue"
+
+	"github.com/silogen/kaiwo/pkg/platform/cluster"
+
+	"github.com/silogen/kaiwo/pkg/runtime/config"
+
+	common2 "github.com/silogen/kaiwo/pkg/runtime/common"
+
+	"github.com/silogen/kaiwo/pkg/api"
+
+	"github.com/silogen/kaiwo/pkg/observe"
+
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
 	appwrapperv1beta2 "github.com/project-codeflare/appwrapper/api/v1beta2"
 
@@ -33,19 +49,19 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	"github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
-func GetDefaultDeploymentSpec(config common.KaiwoConfigContext, dangerous bool) appsv1.DeploymentSpec {
+func GetDefaultDeploymentSpec(config config.KaiwoConfigContext, dangerous bool) appsv1.DeploymentSpec {
 	return appsv1.DeploymentSpec{
 		Replicas: baseutils.Pointer(int32(1)),
 		Selector: &metav1.LabelSelector{
 			MatchLabels: map[string]string{},
 		},
-		Template: common.GetPodTemplate(
+		Template: podspec2.GetPodTemplate(
 			config,
 			*resource.NewQuantity(1*1024*1024*1024, resource.BinarySI),
 			dangerous,
@@ -85,7 +101,7 @@ func (handler *DeploymentHandler) GetInitializedObject() client.Object {
 	}
 }
 
-func (handler *DeploymentHandler) BuildDesired(ctx context.Context, clusterCtx common.ClusterContext) (client.Object, error) {
+func (handler *DeploymentHandler) BuildDesired(ctx context.Context, clusterCtx api.ClusterContext) (client.Object, error) {
 	desiredDeployment, err := handler.buildDeploymentTemplate(ctx, clusterCtx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build desired deployment: %w", err)
@@ -103,10 +119,10 @@ func (handler *DeploymentHandler) BuildDesired(ctx context.Context, clusterCtx c
 	// 3) initialize the AppWrapper
 	applicationWrapper := handler.GetInitializedObject().(*appwrapperv1beta2.AppWrapper)
 	applicationWrapper.Labels = map[string]string{
-		common.QueueLabel: common.GetClusterQueueName(ctx, handler),
+		common2.QueueLabel: api.GetClusterQueueName(ctx, handler),
 	}
 	if priorityClass := handler.GetCommonSpec().WorkloadPriorityClass; priorityClass != "" {
-		applicationWrapper.Labels[common.WorkloaddPriorityClassLabel] = priorityClass
+		applicationWrapper.Labels[common2.WorkloaddPriorityClassLabel] = priorityClass
 	}
 
 	// 4) configure the wrapper to suspend until Kueue admits all replicas
@@ -136,17 +152,17 @@ func (handler *DeploymentHandler) BuildDesired(ctx context.Context, clusterCtx c
 	}
 
 	// 5) propagate KaiwoService labels onto the AppWrapper itself
-	common.UpdateLabels(handler.KaiwoService, &applicationWrapper.ObjectMeta)
+	common2.UpdateLabels(handler.KaiwoService, &applicationWrapper.ObjectMeta)
 
 	return applicationWrapper, nil
 }
 
 func (handler *DeploymentHandler) buildDeploymentTemplate(
 	ctx context.Context,
-	clusterContext common.ClusterContext,
+	clusterContext api.ClusterContext,
 ) (*appsv1.Deployment, error) {
 	kaiwoService := handler.KaiwoService
-	configuration := common.ConfigFromContext(ctx)
+	configuration := config.ConfigFromContext(ctx)
 
 	var deploymentSpec appsv1.DeploymentSpec
 	if kaiwoService.Spec.Deployment == nil {
@@ -167,7 +183,7 @@ func (handler *DeploymentHandler) buildDeploymentTemplate(
 	}
 	deploymentSpec.Selector.MatchLabels["app"] = kaiwoService.Name
 
-	gpuSchedulingResult, err := common.CalculateGpuRequirements(
+	gpuSchedulingResult, err := cluster.CalculateGpuRequirements(
 		ctx, clusterContext,
 		kaiwoService.Spec.GpuResources,
 		kaiwoService.Spec.Replicas,
@@ -179,18 +195,18 @@ func (handler *DeploymentHandler) buildDeploymentTemplate(
 		deploymentSpec.Replicas = baseutils.Pointer(int32(*gpuSchedulingResult.Replicas))
 	}
 
-	if err := common.AddEntrypoint(
+	if err := podspec2.AddEntrypoint(
 		kaiwoService.Spec.EntryPoint,
 		&deploymentSpec.Template,
 	); err != nil {
 		return nil, fmt.Errorf("failed to add entrypoint: %w", err)
 	}
 
-	common.UpdatePodTemplateSpecNonRay(configuration, handler, gpuSchedulingResult, &deploymentSpec.Template)
+	podspec2.UpdatePodTemplateSpecNonRay(configuration, handler, gpuSchedulingResult, &deploymentSpec.Template)
 
 	deploymentSpec.Template.Labels["app"] = kaiwoService.Name
-	deploymentSpec.Template.Labels[common.KaiwoRunIdLabel] = string(kaiwoService.UID)
-	deploymentSpec.Template.Labels[common.QueueLabel] = common.GetClusterQueueName(ctx, handler)
+	deploymentSpec.Template.Labels[common2.KaiwoRunIdLabel] = string(kaiwoService.UID)
+	deploymentSpec.Template.Labels[common2.QueueLabel] = api.GetClusterQueueName(ctx, handler)
 
 	desiredDeployment := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
@@ -208,7 +224,7 @@ func (handler *DeploymentHandler) buildDeploymentTemplate(
 	return desiredDeployment, nil
 }
 
-func (handler *DeploymentHandler) MutateActual(ctx context.Context, clusterCtx common.ClusterContext, actual client.Object) error {
+func (handler *DeploymentHandler) MutateActual(ctx context.Context, clusterCtx api.ClusterContext, actual client.Object) error {
 	// TODO
 	return nil
 }
@@ -225,17 +241,17 @@ func (handler *DeploymentHandler) GetActual(ctx context.Context, k8sClient clien
 func (handler *DeploymentHandler) ObserveStatus(ctx context.Context, k8sClient client.Client, obj client.Object, previousStatus kaiwo.WorkloadStatus) (*kaiwo.WorkloadStatus, []metav1.Condition, error) {
 	deployment := &appsv1.Deployment{}
 	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(obj), deployment); err != nil {
-		if !errors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			return nil, nil, fmt.Errorf("failed to get deployment: %w", err)
 		}
 		return baseutils.Pointer(kaiwo.WorkloadStatusStarting), nil, nil
 	}
-	// Check for a “Progressing=False / ProgressDeadlineExceeded”
+	// Check for a "Progressing=False / ProgressDeadlineExceeded"
 	for _, c := range deployment.Status.Conditions {
 		if c.Type == appsv1.DeploymentProgressing &&
 			c.Status == corev1.ConditionFalse &&
 			c.Reason == "ProgressDeadlineExceeded" {
-			return baseutils.Pointer(kaiwo.WorkloadStatusFailed), nil, nil
+			return baseutils.Pointer(kaiwo.WorkloadStatusDegraded), nil, nil
 		}
 	}
 
@@ -264,7 +280,8 @@ func (handler *DeploymentHandler) GetKueueWorkloads(ctx context.Context, k8sClie
 		return nil, fmt.Errorf("failed to get app wrapper: %w", err)
 	}
 
-	workload, err := common.GetKueueWorkload(ctx, k8sClient, appWrapper.GetNamespace(), string(appWrapper.GetUID()))
+	// Use the AppWrapper UID to match Kueue Workload ownerReference
+	workload, err := kueue.GetKueueWorkload(ctx, k8sClient, appWrapper.GetNamespace(), string(appWrapper.GetUID()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract workload from handler: %w", err)
 	}
@@ -272,4 +289,176 @@ func (handler *DeploymentHandler) GetKueueWorkloads(ctx context.Context, k8sClie
 		return []kueuev1beta1.Workload{}, nil
 	}
 	return []kueuev1beta1.Workload{*workload}, nil
+}
+
+// DeploymentObserver observes Deployment status
+type DeploymentObserver struct {
+	observe.Identified
+}
+
+func NewDeploymentObserver(nn types.NamespacedName, group observe.UnitGroup) *DeploymentObserver {
+	return &DeploymentObserver{
+		observe.Identified{
+			NamespacedName: nn,
+			Group:          group,
+		},
+	}
+}
+
+func (o *DeploymentObserver) Kind() string {
+	return "Deployment"
+}
+
+func (o *DeploymentObserver) Observe(ctx context.Context, c client.Client) (observe.UnitStatus, error) {
+	// Check Kueue admission FIRST - this blocks everything else
+	// For services, AppWrapper controls Deployment creation, so check admission before existence
+	var appWrapper appwrapperv1beta2.AppWrapper
+	appWrapperKey := types.NamespacedName{
+		Name:      o.GetNamespacedName().Name, // AppWrapper has same name as Deployment
+		Namespace: o.GetNamespacedName().Namespace,
+	}
+
+	if err := c.Get(ctx, appWrapperKey, &appWrapper); apierrors.IsNotFound(err) {
+		// No AppWrapper means pending admission
+		return observe.UnitStatus{
+			Phase:  observe.UnitPendingAdmission,
+			Reason: observe.ReasonPendingKueueAdmission,
+		}, nil
+	} else if err != nil {
+		return observe.UnitStatus{
+			Phase:   observe.UnitUnknown,
+			Reason:  observe.ReasonAdmissionCheckError,
+			Message: fmt.Sprintf("failed to get AppWrapper: %v", err),
+		}, nil
+	}
+
+	// If the Kueue Workload exists but is inactive (spec.active=false), it was reclaimed
+	if wl, _ := kueue.GetKueueWorkload(ctx, c, appWrapper.GetNamespace(), string(appWrapper.GetUID())); wl != nil {
+		if wl.Spec.Active != nil && !*wl.Spec.Active {
+			return observe.UnitStatus{
+				Phase:   observe.UnitStopped,
+				Reason:  "Reclaimed",
+				Message: "Evicted by reclaimer (spec.active=false)",
+			}, nil
+		}
+	}
+
+	// Check if AppWrapper workload is admitted
+	admitted, err := observe.CheckKueueAdmission(ctx, c, appWrapper.GetNamespace(), string(appWrapper.GetUID()))
+	if err != nil {
+		return observe.UnitStatus{
+			Phase:   observe.UnitUnknown,
+			Reason:  observe.ReasonAdmissionCheckError,
+			Message: err.Error(),
+		}, nil
+	}
+	if !admitted {
+		return observe.UnitStatus{
+			Phase:  observe.UnitPendingAdmission,
+			Reason: observe.ReasonPendingKueueAdmission,
+		}, nil
+	}
+
+	// Now check if Deployment exists (after admission confirmed)
+	var d appsv1.Deployment
+	if err := c.Get(ctx, o.GetNamespacedName(), &d); apierrors.IsNotFound(err) {
+		return observe.UnitStatus{Phase: observe.UnitPending}, nil
+	} else if err != nil {
+		return observe.UnitStatus{
+			Phase:   observe.UnitUnknown,
+			Reason:  observe.ReasonGetError,
+			Message: err.Error(),
+		}, nil
+	}
+
+	obsGen := d.Status.ObservedGeneration
+
+	// Desired replicas (default 1)
+	desired := int32(1)
+	if d.Spec.Replicas != nil {
+		desired = *d.Spec.Replicas
+	}
+
+	// 0) Quick admin gates
+	if d.Spec.Paused {
+		return observe.UnitStatus{
+			Phase:              observe.UnitSuspended,
+			Reason:             observe.ReasonPaused,
+			ObservedGeneration: obsGen,
+		}, nil
+	}
+	if desired == 0 && d.DeletionTimestamp == nil {
+		return observe.UnitStatus{
+			Phase:              observe.UnitSuspended,
+			Reason:             observe.ReasonScaledToZero,
+			ObservedGeneration: obsGen,
+		}, nil
+	}
+
+	conditions := convertDeploymentConditions(d.Status.Conditions)
+
+	// 1) Conditions (authoritative)
+	progressing := meta.FindStatusCondition(conditions, string(appsv1.DeploymentProgressing))
+	available := meta.FindStatusCondition(conditions, string(appsv1.DeploymentAvailable))
+	replicaFailure := meta.FindStatusCondition(conditions, string(appsv1.DeploymentReplicaFailure))
+
+	if replicaFailure != nil && replicaFailure.Status == metav1.ConditionTrue {
+		return observe.UnitStatus{
+			Phase:              observe.UnitDegraded,
+			Reason:             replicaFailure.Reason,
+			Message:            replicaFailure.Message,
+			ObservedGeneration: obsGen,
+		}, nil
+	}
+	if progressing != nil && progressing.Status == metav1.ConditionFalse && progressing.Reason == "ProgressDeadlineExceeded" {
+		return observe.UnitStatus{
+			Phase:              observe.UnitDegraded,
+			Reason:             progressing.Reason,
+			Message:            progressing.Message,
+			ObservedGeneration: obsGen,
+		}, nil
+	}
+
+	// 2) Ready when everything lines up
+	if available != nil && available.Status == metav1.ConditionTrue &&
+		d.Status.UpdatedReplicas == desired &&
+		d.Status.ReadyReplicas == desired &&
+		d.Status.AvailableReplicas == desired &&
+		obsGen >= d.Generation {
+		return observe.UnitStatus{
+			Phase:              observe.UnitReady,
+			Ready:              true,
+			ObservedGeneration: obsGen,
+		}, nil
+	}
+
+	// 3) New generation not yet observed → still rolling
+	if obsGen < d.Generation {
+		return observe.UnitStatus{
+			Phase:              observe.UnitProgressing,
+			Reason:             "NewGeneration",
+			ObservedGeneration: obsGen,
+		}, nil
+	}
+
+	// 4) Default rolling out
+	return observe.UnitStatus{
+		Phase:              observe.UnitProgressing,
+		Reason:             "RollingUpdate",
+		ObservedGeneration: obsGen,
+	}, nil
+}
+
+func convertDeploymentConditions(conditions []appsv1.DeploymentCondition) []metav1.Condition {
+	var result []metav1.Condition
+	for _, c := range conditions {
+		result = append(result, metav1.Condition{
+			Type:               string(c.Type),
+			Status:             metav1.ConditionStatus(c.Status),
+			Reason:             c.Reason,
+			Message:            c.Message,
+			LastTransitionTime: c.LastTransitionTime,
+		})
+	}
+	return result
 }

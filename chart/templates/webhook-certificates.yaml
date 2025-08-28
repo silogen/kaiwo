@@ -1,0 +1,33 @@
+{{- if .Values.webhooks.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ printf "%s-serving-cert" .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kaiwo.labels" . | nindent 4 }}
+spec:
+  secretName: webhook-server-cert     # your Deployment mounts this exact name
+  issuerRef:
+    kind: Issuer
+    name: {{ printf "%s-selfsigned-issuer" .Release.Name }}
+  dnsNames:
+    - {{ printf "%s-webhook-service.%s.svc" .Release.Name .Release.Namespace }}
+    - {{ printf "%s-webhook-service.%s.svc.cluster.local" .Release.Name .Release.Namespace }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ printf "%s-metrics-certs" .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kaiwo.labels" . | nindent 4 }}
+spec:
+  secretName: metrics-server-cert
+  issuerRef:
+    kind: Issuer
+    name: {{ printf "%s-selfsigned-issuer" .Release.Name }}
+  dnsNames:
+    - {{ printf "%s-controller-manager-metrics-service.%s.svc" (include "kaiwo.fullname" .) .Release.Namespace }}
+    - {{ printf "%s-controller-manager-metrics-service.%s.svc.cluster.local" (include "kaiwo.fullname" .) .Release.Namespace }}
+{{- end }}

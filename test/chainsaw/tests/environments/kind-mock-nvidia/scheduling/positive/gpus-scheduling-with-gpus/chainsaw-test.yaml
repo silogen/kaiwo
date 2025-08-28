@@ -28,7 +28,7 @@ spec:
               name: kaiwojob-job-resource-scheduling
           spec:
             backoffLimit: 0
-            completionMode: NonIndexed
+            completionMode: Indexed
             completions: 1
             manualSelector: false
             parallelism: 1

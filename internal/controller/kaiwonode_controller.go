@@ -20,7 +20,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/silogen/kaiwo/pkg/workloads/common"
+	"github.com/silogen/kaiwo/pkg/platform/nodes"
+
+	"github.com/silogen/kaiwo/pkg/runtime/config"
 
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/client-go/util/retry"
@@ -35,17 +37,12 @@ import (
 
 	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
-	nodeutils "github.com/silogen/kaiwo/internal/controller/utils/nodes"
-
 	corev1 "k8s.io/api/core/v1"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
 // KaiwoNodeReconciler operates on the Kaiwo nodes
@@ -53,19 +50,18 @@ type KaiwoNodeReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
-	Tasks    []nodeutils.ReconcileTask[*nodeutils.KaiwoNodeWrapper]
 }
 
 // +kubebuilder:rbac:groups=kaiwo.silogen.ai,resources=nodes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=config.kaiwo.silogen.ai,resources=kaiwoconfigs,verbs=get;list;watch;create;update;patch;delete
 
 func (r *KaiwoNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	ctx, err := common.GetContextWithConfig(ctx, r.Client)
+	ctx, err := config.GetContextWithConfig(ctx, r.Client)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error getting context: %w", err)
 	}
-	logger := log.FromContext(ctx)
-	baseutils.Debug(logger, "Running reconciliation")
+	// logger := log.FromContext(ctx)
+	// baseutils.Debug(logger, "Running reconciliation")
 
 	node := &corev1.Node{}
 	if err := r.Get(ctx, req.NamespacedName, node); err != nil && !errors.IsNotFound(err) {
@@ -83,13 +79,13 @@ func (r *KaiwoNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		kaiwoNode = nil
 	}
 
-	wrapper := &nodeutils.KaiwoNodeWrapper{
+	wrapper := &nodes.KaiwoNodeWrapper{
 		Node:      node,
 		KaiwoNode: kaiwoNode,
 	}
 
 	// Keep a copy of the original objects for later patching
-	originalObjects := &nodeutils.KaiwoNodeWrapper{}
+	originalObjects := &nodes.KaiwoNodeWrapper{}
 	originalObjects.Node = node.DeepCopy()
 
 	if kaiwoNode != nil {
@@ -98,16 +94,20 @@ func (r *KaiwoNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	result := ctrl.Result{}
 
-	for _, task := range r.Tasks {
-		baseutils.Debug(logger, fmt.Sprintf("Running task %s", task.Name()))
-		res, err := task.Run(ctx, wrapper)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to run task %s: %w", task.Name(), err)
-		}
-		if res != nil {
-			result = *res
-			break
-		}
+	// Run node logic functions in sequence
+	// baseutils.Debug(logger, "Ensuring KaiwoNode")
+	if err := nodes.EnsureKaiwoNode(ctx, r.Client, r.Scheme, wrapper); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to ensure KaiwoNode: %w", err)
+	}
+
+	// baseutils.Debug(logger, "Updating node labels and taints")
+	nodes.UpdateNodeLabelsAndTaints(ctx, r.Client, wrapper)
+
+	// baseutils.Debug(logger, "Handling GPU partitioning")
+	if res, err := nodes.HandleGpuPartitioning(ctx, r.Client, r.Recorder, wrapper); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to handle GPU partitioning: %w", err)
+	} else if res != nil {
+		result = *res
 	}
 
 	if err := r.applyPatches(ctx, originalObjects, wrapper); err != nil {
@@ -118,8 +118,8 @@ func (r *KaiwoNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 }
 
 func (r *KaiwoNodeReconciler) applyPatches(ctx context.Context,
-	original *nodeutils.KaiwoNodeWrapper,
-	wrapper *nodeutils.KaiwoNodeWrapper,
+	original *nodes.KaiwoNodeWrapper,
+	wrapper *nodes.KaiwoNodeWrapper,
 ) error {
 	if original.KaiwoNode == nil {
 		newCR := wrapper.KaiwoNode
@@ -188,21 +188,5 @@ func NewKaiwoNodeReconciler(mgr ctrl.Manager) *KaiwoNodeReconciler {
 		Client:   k8sClient,
 		Scheme:   scheme,
 		Recorder: recorder,
-		Tasks: []nodeutils.ReconcileTask[*nodeutils.KaiwoNodeWrapper]{
-			&nodeutils.EnsureKaiwoNodeTask{
-				Client: k8sClient,
-				Scheme: scheme,
-			},
-			&nodeutils.UpdateKaiwoNodeTask{
-				Client: k8sClient,
-			},
-			&nodeutils.NodeLabelsAndTaintsTask{
-				Client: k8sClient,
-			},
-			&nodeutils.GpuPartitionTask{
-				Client:   k8sClient,
-				Recorder: recorder,
-			},
-		},
 	}
 }

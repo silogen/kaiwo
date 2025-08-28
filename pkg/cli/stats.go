@@ -22,6 +22,10 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/silogen/kaiwo/pkg/kube/utils"
+
+	"github.com/silogen/kaiwo/pkg/runtime/common"
+
 	"k8s.io/apimachinery/pkg/api/meta"
 
 	"sigs.k8s.io/kueue/apis/kueue/v1beta1"
@@ -34,9 +38,6 @@ import (
 	"github.com/spf13/cobra"
 	v1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/silogen/kaiwo/pkg/k8s"
-	"github.com/silogen/kaiwo/pkg/workloads/common"
 )
 
 func BuildStatsCmd() *cobra.Command {
@@ -105,7 +106,7 @@ func fetchWithSpinner(ctx context.Context, k8sClient client.Client, list client.
 
 func runNodesStatsCmd(gpuResourceName v1.ResourceName) func(cmd *cobra.Command, args []string) error {
 	return func(_ *cobra.Command, _ []string) error {
-		clients, err := k8s.GetKubernetesClients()
+		clients, err := utils.GetKubernetesClients()
 		if err != nil {
 			return fmt.Errorf("failed to get k8s clients: %w", err)
 		}
@@ -209,7 +210,7 @@ func runNodesStatsCmd(gpuResourceName v1.ResourceName) func(cmd *cobra.Command, 
 
 func runQueueStatsCmd(gpuResourceName v1.ResourceName) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
-		clients, err := k8s.GetKubernetesClients()
+		clients, err := utils.GetKubernetesClients()
 		if err != nil {
 			return fmt.Errorf("failed to get k8s clients: %w", err)
 		}

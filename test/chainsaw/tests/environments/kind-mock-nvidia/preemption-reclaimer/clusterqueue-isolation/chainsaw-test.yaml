@@ -1,0 +1,64 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: test-clusterqueue-isolation
+spec:
+  concurrent: false
+  description: "Test that reclaimer only affects workloads in the same ClusterQueue and properly isolates different queues"
+  steps:
+  - name: Create kaiwo queue config
+    try:
+    - apply:
+        file: kaiwo-queue-config.yaml
+  - name: setup-workloads-in-different-queues
+    description: Create expired workloads in different conceptual queues
+    try:
+    - apply:
+        file: expired-queue-a.yaml
+    - apply:
+        file: expired-queue-b.yaml
+    - apply:
+        file: pressure-queue-a.yaml
+    # Wait for expiry in both queues
+    - wait:
+        apiVersion: kaiwo.silogen.ai/v1alpha1
+        kind: KaiwoJob
+        name: expired-queue-a
+        timeout: 90s
+        for:
+          condition:
+            name: Preemptable
+            value: "true"
+    - wait:
+        apiVersion: kaiwo.silogen.ai/v1alpha1
+        kind: KaiwoJob
+        name: expired-queue-b
+        timeout: 90s
+        for:
+          condition:
+            name: Preemptable
+            value: "true"
+
+  - name: verify-queue-isolation
+    description: Verify that only queue-a expired workload is terminated due to queue-a pressure
+    try:
+    # Only queue-a expired should be terminated due to queue-a pressure
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: expired-queue-a
+          status:
+            status: TERMINATED
+    # queue-b expired should remain running (different ClusterQueue isolation)
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoJob
+          metadata:
+            name: expired-queue-b
+          status:
+            status: RUNNING
+    - script:
+        content: kubectl delete kaiwoqueueconfig kaiwo

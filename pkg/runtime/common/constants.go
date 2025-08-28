@@ -1,0 +1,44 @@
+// Copyright 2025 Advanced Micro Devices, Inc.  All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package common
+
+import baseutils "github.com/silogen/kaiwo/pkg/utils"
+
+var DefaultClusterQueueName = baseutils.GetEnv("DEFAULT_CLUSTER_QUEUE_NAME", "kaiwo")
+
+const (
+	Finalizer            = "kaiwo.silogen.ai/finalizer"
+	KaiwoQueueConfigName = "kaiwo"
+)
+
+const (
+	KaiwoUsernameLabel          = "kaiwo-cli/username"
+	KaiwoLabelBase              = "kaiwo.silogen.ai"
+	KaiwoUserLabel              = KaiwoLabelBase + "/user"
+	KaiwoNameLabel              = KaiwoLabelBase + "/name"
+	KaiwoTypeLabel              = KaiwoLabelBase + "/type"
+	KaiwoRunIdLabel             = KaiwoLabelBase + "/run-id"
+	KaiwoManagedLabel           = KaiwoLabelBase + "/managed"
+	QueueLabel                  = "kueue.x-k8s.io/queue-name"
+	WorkloaddPriorityClassLabel = "kueue.x-k8s.io/priority-class"
+	CPUOnly                     = "cpu-only"
+	KueueRequiredTopologyKey    = "kueue.x-k8s.io/podset-required-topology"
+	KueuePreferredTopologyKey   = "kueue.x-k8s.io/podset-preferred-topology"
+	True                        = "true"
+	False                       = "false"
+
+	DataStoragePostfix = "data"
+	HfStoragePostfix   = "hf"
+)

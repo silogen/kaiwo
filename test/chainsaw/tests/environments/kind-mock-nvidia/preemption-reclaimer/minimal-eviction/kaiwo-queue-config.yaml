@@ -1,0 +1,23 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoQueueConfig
+metadata:
+  name: kaiwo
+spec:
+  clusterQueues:
+  - name: kaiwo-test
+    spec:
+      namespaceSelector: {}     # All namespaces
+      queueingStrategy: BestEffortFIFO
+      resourceGroups:
+      - coveredResources: ["cpu", "memory", "nvidia.com/gpu"]
+        flavors:
+        - name: "default"
+          resources:
+          - name: cpu
+            nominalQuota: "2"
+          - name: memory
+            nominalQuota: 6Gi
+          - name: nvidia.com/gpu
+            nominalQuota: "3"
+  resourceFlavors:
+  - name: default

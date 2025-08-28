@@ -20,6 +20,12 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/silogen/kaiwo/pkg/workloads/factory"
+
+	"github.com/silogen/kaiwo/pkg/reconcile"
+
+	"github.com/silogen/kaiwo/pkg/storage"
+
 	"k8s.io/apimachinery/pkg/api/equality"
 
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -27,8 +33,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-
-	"github.com/silogen/kaiwo/pkg/workloads/common"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
@@ -44,7 +48,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	workloadservice "github.com/silogen/kaiwo/pkg/workloads/service"
 )
 
 // KaiwoServiceReconciler reconciles a KaiwoService object
@@ -72,10 +75,10 @@ func (r *KaiwoServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, nil
 	}
 
-	workloadHandler := workloadservice.NewKaiwoServiceHandler(r.Scheme, &kaiwoService)
-	reconciler := common.Reconciler{
+	workloadHandler := reconcile.WorkloadHandler{Workload: factory.NewServiceReconciler(r.Scheme, &kaiwoService)}
+	reconciler := reconcile.Reconciler{
 		WorkloadHandler: workloadHandler,
-		StorageHandler:  common.NewStorageHandler(workloadHandler),
+		StorageHandler:  storage.NewStorageHandler(req.NamespacedName, workloadHandler.Workload.GetCommonSpec()),
 		Client:          r.Client,
 		Scheme:          r.Scheme,
 		Recorder:        r.Recorder,

@@ -1,82 +1,79 @@
-# Makefile for E2E test execution
-# Usage: make <target>
-# Targets: test-kind, test-kind-deploy, test-gpu
+# Test directories for different environments
+KIND_DIRS = chainsaw/tests/environments/kind-mock-nvidia chainsaw/tests/no-gpu chainsaw/tests/cli
+GPU_DIRS = chainsaw/tests/amd-gpu chainsaw/tests/sensitive
 
-.PHONY: help test-kind test-kind-deploy test-gpu test-clean
+# Values file configuration (can be overridden via env var)
+VALUES_FILE ?= values/base.yaml
 
-# Default target
-.DEFAULT_GOAL := help
+# Default environment variables for testing
+GH_TOKEN_BASE64 ?=
+HF_TOKEN_BASE64 ?=
+AMD_GPU_PARTITIONING_NODE ?=
+AMD_GPU_UNPARTITIONED_VRAM ?=
+AMD_GPU_PARTITIONED_VRAM ?=
+OPERATOR_NAMESPACE ?= kaiwo-system
+TEST_TIMEOUT ?= 300s
 
-# Pattern 2: Kind with local operator (requires operator running locally)
-test-kind:
-	@echo "Running Kind tests with local operator..."
-	@echo "PREREQUISITE: Operator should be running locally with KAIWO_LOG_FILE set"
-	@echo "Example: KAIWO_LOG_FILE=\$$PWD/../kaiwo.logs go run ../cmd/operator/main.go --zap-log-level=debug"
-	@cd e2e && \
-	KAIWO_LOG_FILE="$(PWD)/../kaiwo.logs" \
-	KAIWO_TEST_CHAINSAW_CONFIG="test/chainsaw/configs/local.yaml" \
-	KAIWO_TEST_KAIWOCONFIG="test/configs/kaiwoconfig/local-kind.yaml" \
-	go test -timeout=30m -count=1 -v --ginkgo.v --ginkgo.label-filter="basic || kind || cli"
+export GH_TOKEN_BASE64 HF_TOKEN_BASE64 AMD_GPU_PARTITIONING_NODE AMD_GPU_UNPARTITIONED_VRAM AMD_GPU_PARTITIONED_VRAM OPERATOR_NAMESPACE TEST_TIMEOUT
 
-# Pattern 1: Kind with deployed operator (deploys operator automatically)
-test-kind-deploy:
-	@echo "Running Kind tests with operator deployment..."
-	@cd e2e && \
-	KAIWO_TEST_DEPLOY_TO_KIND=true \
-	KAIWO_TEST_CHAINSAW_CONFIG="test/chainsaw/configs/local.yaml" \
-	KAIWO_TEST_KAIWOCONFIG="test/configs/kaiwoconfig/local-kind.yaml" \
-	go test -timeout=30m -count=1 -v --ginkgo.label-filter="kind || basic || cli" -ginkgo.v
+.PHONY: test
+test: test-kind ## Default target - run tests against Kind cluster
 
-# Pattern 3: GPU tests against remote cluster (requires operator running locally)
-test-gpu:
-	@if [ -z "$(KUBECONFIG)" ]; then \
-		echo "Error: KUBECONFIG must be set for GPU tests"; \
-		echo "Example: make test-gpu KUBECONFIG=/path/to/gpu-cluster-config"; \
+.PHONY: substitute-values
+substitute-values: ## Create runtime values file with environment variable substitution
+	@if [ -z "$(VALUES_FILE)" ]; then \
+		echo "Error: VALUES_FILE is not set"; \
 		exit 1; \
 	fi
-	@echo "Running GPU tests on cluster: $(KUBECONFIG)..."
-	@echo "PREREQUISITE: Operator should be running locally with KAIWO_LOG_FILE set"
-	@echo "Example: KAIWO_LOG_FILE=\$$PWD/../kaiwo.logs go run ../cmd/operator/main.go --zap-log-level=debug"
-	@cd e2e && \
-	KAIWO_LOG_FILE="$(PWD)/../kaiwo.logs" \
-	KAIWO_TEST_CHAINSAW_CONFIG="test/chainsaw/configs/mi300x-dev.yaml" \
-	KAIWO_TEST_KAIWOCONFIG="test/configs/kaiwoconfig/kaiwo-tw.yaml" \
-	go test -timeout=30m -count=1 -v --ginkgo.v --ginkgo.label-filter="(gpu && amd) || (gpu && amd && partitioning)"
+	@sed -e "s/\$${GH_TOKEN_BASE64}/$(GH_TOKEN_BASE64)/g" \
+	     -e "s/\$${HF_TOKEN_BASE64}/$(HF_TOKEN_BASE64)/g" \
+	     -e "s/\$${AMD_GPU_PARTITIONING_NODE}/$(AMD_GPU_PARTITIONING_NODE)/g" \
+	     -e "s/\$${AMD_GPU_UNPARTITIONED_VRAM}/$(AMD_GPU_UNPARTITIONED_VRAM)/g" \
+	     -e "s/\$${AMD_GPU_PARTITIONED_VRAM}/$(AMD_GPU_PARTITIONED_VRAM)/g" \
+	     -e "s/\$${OPERATOR_NAMESPACE}/$(OPERATOR_NAMESPACE)/g" \
+	     -e "s/\$${TEST_TIMEOUT}/$(TEST_TIMEOUT)/g" \
+	     $(VALUES_FILE) > values/runtime.yaml
 
-# Help target
-help:
-	@echo "Kaiwo E2E Test Execution"
-	@echo "========================"
-	@echo ""
-	@echo "Available targets:"
-	@echo "  test-kind         - Run tests with local operator (Pattern 2)"
-	@echo "  test-kind-deploy  - Run tests with deployed operator (Pattern 1)" 
-	@echo "  test-gpu          - Run GPU tests with local operator (Pattern 3)"
-	@echo "  test-clean        - Clean test artifacts and logs"
-	@echo "  help              - Show this help message"
-	@echo ""
-	@echo "Prerequisites:"
-	@echo "  test-kind:"
-	@echo "    - Kind cluster configured (KUBECONFIG pointing to Kind)"
-	@echo "    - Operator running locally with KAIWO_LOG_FILE set"
-	@echo "    - Example: KAIWO_LOG_FILE=\$$PWD/kaiwo.logs go run cmd/operator/main.go"
-	@echo ""
-	@echo "  test-kind-deploy:"
-	@echo "    - Kind cluster configured"
-	@echo "    - Operator will be deployed automatically"
-	@echo ""
-	@echo "  test-gpu:"
-	@echo "    - GPU cluster configured (set KUBECONFIG)"
-	@echo "    - Operator running locally with KAIWO_LOG_FILE set"
-	@echo "    - Example: make test-gpu KUBECONFIG=/path/to/gpu-config"
-	@echo ""
-	@echo "Environment variables:"
-	@echo "  KUBECONFIG        - Path to kubernetes config (required for test-gpu)"
-	@echo "  KAIWO_LOG_FILE    - Set to same path in both operator and tests"
+.PHONY: test-kind
+test-kind: substitute-values ## Run tests against Kind cluster
+	kubectl apply -f configs/kaiwoconfig/local-kind.yaml
+	sleep 3
+	@PATH="$(shell pwd)/../builds:$$PATH" chainsaw test \
+	  --config ./chainsaw/configs/local.yaml \
+	  --test-dir $(KIND_DIRS) \
+	  --values values/runtime.yaml
 
-# Clean test artifacts
-test-clean:
-	@echo "Cleaning test artifacts..."
-	@rm -f ../kaiwo.logs
-	@rm -rf /tmp/kaiwo-test-reports/*
-	@echo "Cleaned: kaiwo.logs and test reports"
+# Deployment targets removed - use ../kaiwo.sh for deployment
+
+.PHONY: test-gpu
+test-gpu: substitute-values ## Remote GPU cluster; operator typically local
+	kubectl apply -f configs/kaiwoconfig/amd-gpu.yaml
+	@PATH="$(shell pwd)/../builds:$$PATH" chainsaw test \
+	  --config ./chainsaw/configs/amd-gpu-cluster.yaml \
+	  --test-dir $(GPU_DIRS) \
+	  --values values/runtime.yaml
+
+.PHONY: test-gpu-partition
+test-gpu-partition: substitute-values ## Run GPU partitioning suite in isolation, with setup/teardown
+	kubectl apply -f configs/kaiwoconfig/amd-gpu.yaml
+	# 1) setup
+	@PATH="$(shell pwd)/../builds:$$PATH" chainsaw test \
+	  --config ./chainsaw/configs/amd-gpu-cluster.yaml \
+	  --kube-context gpu-cluster \
+	  --parallel 1 \
+	  --test-dir chainsaw/tests/amd-gpu/partitioning-setup \
+	  --values values/runtime.yaml
+	# 2) tests
+	@PATH="$(shell pwd)/../builds:$$PATH" chainsaw test \
+	  --config ./chainsaw/configs/amd-gpu-cluster.yaml \
+	  --kube-context gpu-cluster \
+	  --parallel 1 \
+	  --test-dir chainsaw/tests/amd-gpu/partitioning \
+	  --values values/runtime.yaml
+	# 3) teardown (always run)
+	-@PATH="$(shell pwd)/../builds:$$PATH" chainsaw test \
+	  --config ./chainsaw/configs/amd-gpu-cluster.yaml \
+	  --kube-context gpu-cluster \
+	  --parallel 1 \
+	  --test-dir chainsaw/tests/amd-gpu/partitioning-setup \
+	  --values values/runtime.yaml

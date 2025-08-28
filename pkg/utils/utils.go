@@ -19,7 +19,12 @@ import (
 	"math"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
+
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 
@@ -179,4 +184,16 @@ func ExtractAndConvertLabelIfExists[T any](labels map[string]string, key string,
 		return nil, fmt.Errorf("key %s could not be converted: %w", key, err)
 	}
 	return &converted, nil
+}
+
+// ConditionsEqual checks if two sets of conditions are the same, ignoring the LastTransitionTime
+func ConditionsEqual(a, b []metav1.Condition) bool {
+	// Sort so the slices are in a consistent order
+	sort.Slice(a, func(i, j int) bool { return a[i].Type < a[j].Type })
+	sort.Slice(b, func(i, j int) bool { return b[i].Type < b[j].Type })
+
+	// Use cmpopts to ignore LastTransitionTime
+	return cmp.Equal(a, b,
+		cmpopts.IgnoreFields(metav1.Condition{}, "LastTransitionTime", "ObservedGeneration"),
+	)
 }

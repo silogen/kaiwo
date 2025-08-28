@@ -1,0 +1,4 @@
+gpuType: amd
+nfs:
+  persistence:
+    enabled: false

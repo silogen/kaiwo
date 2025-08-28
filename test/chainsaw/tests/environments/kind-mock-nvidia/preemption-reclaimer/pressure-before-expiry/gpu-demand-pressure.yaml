@@ -1,0 +1,19 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoJob
+metadata:
+  name: gpu-demand-pressure
+spec:
+  user: test@amd.com
+#  ray: true
+  image: busybox
+  clusterQueue: kaiwo-test
+  gpuResources:
+    count: 2
+    vendor: nvidia
+  entrypoint: /bin/sh -c "trap 'exit 0' SIGTERM; sleep 1"
+  resources:
+    limits:
+      memory: 200M
+    requests:
+      memory: 100M
+      cpu: 100m

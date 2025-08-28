@@ -3,6 +3,3 @@ kind: Kustomization
 
 resources:
 - merged.yaml
-
-patches:
-- path: ci-patches.yaml

@@ -18,15 +18,13 @@ import (
 	"context"
 	"fmt"
 
-	workloadutils "github.com/silogen/kaiwo/pkg/workloads/common"
+	list "github.com/silogen/kaiwo/pkg/cli/tui/list/pod"
+
+	"github.com/silogen/kaiwo/pkg/kube/utils"
 
 	utils2 "github.com/silogen/kaiwo/pkg/cli/utils"
 
-	list "github.com/silogen/kaiwo/pkg/tui/list/pod"
-
 	"github.com/spf13/cobra"
-
-	"github.com/silogen/kaiwo/pkg/k8s"
 )
 
 var (
@@ -85,7 +83,7 @@ func BuildExecCommand() *cobra.Command {
 func executeContainerCommand(args []string, command []string, gpuPodsOnly bool) error {
 	ctx := context.Background()
 
-	clients, err := k8s.GetKubernetesClients()
+	clients, err := utils.GetKubernetesClients()
 	if err != nil {
 		return fmt.Errorf("failed to get k8s clients: %w", err)
 	}
@@ -96,7 +94,7 @@ func executeContainerCommand(args []string, command []string, gpuPodsOnly bool) 
 		return fmt.Errorf("failed to get workload and object key: %w", err)
 	}
 
-	allPods, err := workloadutils.GetWorkloadPods(ctx, clients.Client, workload)
+	allPods, err := utils2.GetWorkloadPods(ctx, clients.Client, workload)
 	if err != nil {
 		return fmt.Errorf("failed to get pods: %w", err)
 	}

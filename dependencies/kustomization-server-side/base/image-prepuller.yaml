@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: image-prepuller
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: image-prepuller
+  template:
+    metadata:
+      labels:
+        app: image-prepuller
+    spec:
+      tolerations:
+        # run on control-plane nodes too, in case tests schedule there
+      - key: "node-role.kubernetes.io/control-plane"
+        operator: "Exists"
+        effect: "NoSchedule"
+      - key: "node-role.kubernetes.io/master"
+        operator: "Exists"
+        effect: "NoSchedule"
+      priorityClassName: system-cluster-critical
+      initContainers:
+      - name: pull-ray-test
+        image: ghcr.io/silogen/ray-test:v0.3
+        command: ["sh", "-c", "echo warmed gpu"]
+      - name: pull-kaiwo-python
+        image: ghcr.io/silogen/kaiwo-python:0.6
+        command: ["sh", "-c", "echo warmed kaiwo-python"]
+      - name: pull-ray
+        image: rayproject/ray:2.41.0
+        command: ["sh", "-c", "echo warmed ray"]
+      containers:
+      - name: hold
+        image: registry.k8s.io/pause:3.9
+        resources:
+          requests: {cpu: "5m", memory: "8Mi"}
