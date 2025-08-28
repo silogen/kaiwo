@@ -433,7 +433,6 @@ func setDownloadJobCondition(cs *ConditionSet, units []UnitStatus) {
 // CheckKueueAdmission checks if a workload is admitted by Kueue
 func CheckKueueAdmission(ctx context.Context, c client.Client, namespace, uid string) (bool, error) {
 	logger := log.FromContext(ctx).WithName("CheckKueueAdmission")
-	logger.Info("Checking Kueue admission", "namespace", namespace, "uid", uid)
 
 	workload, err := kueue.GetKueueWorkload(ctx, c, namespace, uid)
 	if err != nil {
@@ -441,15 +440,12 @@ func CheckKueueAdmission(ctx context.Context, c client.Client, namespace, uid st
 		return false, fmt.Errorf("failed to get kueue workload: %w", err)
 	}
 	if workload == nil {
-		logger.Info("No Kueue workload found", "namespace", namespace, "uid", uid)
-		// No Kueue workload exists yet
 		return false, nil
 	}
 
 	// Direct condition check - much simpler than wrapper approach
 	admittedCondition := metautil.FindStatusCondition(workload.Status.Conditions, kueuev1beta1.WorkloadAdmitted)
 	admitted := admittedCondition != nil && admittedCondition.Status == metav1.ConditionTrue
-	logger.Info("Kueue admission result", "workloadName", workload.Name, "admitted", admitted)
 	return admitted, nil
 }
 

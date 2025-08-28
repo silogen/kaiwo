@@ -85,7 +85,7 @@ func (r *ReclaimerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 					return false
 				}
 			}
-			return isWorkloadPending(wl) || isWorkloadExpired(wl)
+			return isWorkloadPending(wl) //  || isWorkloadExpired(wl)
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			oldWl, oldOk := e.ObjectOld.(*kueuev1beta1.Workload)
@@ -95,14 +95,14 @@ func (r *ReclaimerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			}
 			oldPending := isWorkloadPending(oldWl)
 			newPending := isWorkloadPending(newWl)
-			oldExpired := isWorkloadExpired(oldWl)
-			newExpired := isWorkloadExpired(newWl)
-			oldActive := isWorkloadActive(oldWl)
-			newActive := isWorkloadActive(newWl)
+			// oldExpired := isWorkloadExpired(oldWl)
+			// newExpired := isWorkloadExpired(newWl)
+			// oldActive := isWorkloadActive(oldWl)
+			// newActive := isWorkloadActive(newWl)
 
-			return (!oldPending && newPending) || // became pending
-				(!oldExpired && newExpired) || // became expired
-				(oldActive && !newActive) // became inactive (evicted)
+			return !oldPending && newPending // became pending
+			//(!oldExpired && newExpired) // became expired
+			//(oldActive && !newActive) // became inactive (evicted)
 		},
 		// Deletions are noisy and periodic resync covers freeing
 		DeleteFunc: func(e event.DeleteEvent) bool { return false },
@@ -150,16 +150,12 @@ func isWorkloadPending(wl *kueuev1beta1.Workload) bool {
 	return true
 }
 
-func isWorkloadExpired(wl *kueuev1beta1.Workload) bool {
-	if wl.Labels == nil {
-		return false
-	}
-	return wl.Labels["kaiwo.silogen.ai/expired"] == "true"
-}
-
-func isWorkloadActive(wl *kueuev1beta1.Workload) bool {
-	return wl.Spec.Active == nil || *wl.Spec.Active
-}
+//func isWorkloadExpired(wl *kueuev1beta1.Workload) bool {
+//	if wl.Labels == nil {
+//		return false
+//	}
+//	return wl.Labels["kaiwo.silogen.ai/expired"] == "true"
+//}
 
 // getDurationEnv reads a duration from env or returns default
 func getDurationEnv(key string, def time.Duration) time.Duration {
