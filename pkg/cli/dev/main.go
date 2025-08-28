@@ -67,6 +67,7 @@ var (
 	colorMagenta = "\033[35m"
 	colorCyan    = "\033[36m"
 	colorBRed    = "\033[91m"
+	colorOrange  = "\033[38;5;214m"
 
 	sourceColors = map[string]string{
 		srcEvent:        colorMagenta,
@@ -778,6 +779,114 @@ func filterEntries(entries []*logEntry, testNamespace string, opts *options) []*
 	return out
 }
 
+// --- Resource extraction ---
+
+func extractResourceInfo(e *logEntry) string {
+	if e.Extras == nil {
+		// Fallback to namespace if available
+		if e.Namespace != "" {
+			return fmt.Sprintf("ns/%s", e.Namespace)
+		}
+		return ""
+	}
+
+	// Priority 1: Controller-runtime structured logging patterns
+	// Look for controllerKind + namespace + name (most specific)
+	kind := getStringFromExtras(e.Extras, "controllerKind", "kind")
+	name := getStringFromExtras(e.Extras, "name")
+	namespace := getStringFromExtras(e.Extras, "namespace")
+
+	if kind != "" && name != "" && namespace != "" {
+		return fmt.Sprintf("%s/%s/%s", kind, namespace, name)
+	}
+	if kind != "" && name != "" {
+		return fmt.Sprintf("%s/%s", kind, name)
+	}
+
+	// Priority 2: Nested resource objects (like KaiwoJob: {name: "...", namespace: "..."})
+	for k, v := range e.Extras {
+		if objMap, ok := v.(map[string]any); ok {
+			objName := getStringFromExtras(objMap, "name")
+			objNamespace := getStringFromExtras(objMap, "namespace")
+			if objName != "" && objNamespace != "" {
+				return fmt.Sprintf("%s/%s/%s", k, objNamespace, objName)
+			}
+			if objName != "" {
+				return fmt.Sprintf("%s/%s", k, objName)
+			}
+		}
+	}
+
+	// Priority 3: Common name + namespace patterns
+	if name != "" && namespace != "" {
+		return fmt.Sprintf("%s/%s", namespace, name)
+	}
+	if name != "" {
+		return name
+	}
+
+	// Priority 4: Kueue workqueue patterns
+	if workload := getStringFromExtras(e.Extras, "workload"); workload != "" {
+		if queue := getStringFromExtras(e.Extras, "queue"); queue != "" {
+			return fmt.Sprintf("queue/%s/workload/%s", queue, workload)
+		}
+		return fmt.Sprintf("workload/%s", workload)
+	}
+
+	// Priority 5: Cluster queue patterns
+	if cq := getStringFromExtras(e.Extras, "clusterQueue", "cluster-queue"); cq != "" {
+		return fmt.Sprintf("clusterQueue/%s", cq)
+	}
+
+	// Priority 6: Resource quota patterns
+	if rq := getStringFromExtras(e.Extras, "resourceQuota"); rq != "" {
+		if namespace != "" {
+			return fmt.Sprintf("resourceQuota/%s/%s", namespace, rq)
+		}
+		return fmt.Sprintf("resourceQuota/%s", rq)
+	}
+
+	// Priority 7: Event involved object pattern
+	if involved := getStringFromExtras(e.Extras, "involved"); involved != "" {
+		if namespace != "" {
+			return fmt.Sprintf("%s/%s", namespace, involved)
+		}
+		return involved
+	}
+
+	// Priority 8: Pod/container patterns
+	if pod := getStringFromExtras(e.Extras, "pod"); pod != "" {
+		if namespace != "" {
+			return fmt.Sprintf("pod/%s/%s", namespace, pod)
+		}
+		return fmt.Sprintf("pod/%s", pod)
+	}
+
+	// Priority 9: Controller patterns
+	if controller := getStringFromExtras(e.Extras, "controller"); controller != "" {
+		return fmt.Sprintf("controller/%s", controller)
+	}
+
+	// Priority 10: Fallback to namespace if available
+	if e.Namespace != "" {
+		return fmt.Sprintf("ns/%s", e.Namespace)
+	}
+
+	return ""
+}
+
+func getStringFromExtras(extras map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := extras[k]; ok {
+			if s, ok := v.(string); ok {
+				return s
+			}
+			return fmt.Sprint(v)
+		}
+	}
+	return ""
+}
+
 // --- Printing ---
 
 func printEntry(e *logEntry, baseTime time.Time) {
@@ -818,10 +927,20 @@ func printEntry(e *logEntry, baseTime time.Time) {
 		namespaceStr = fmt.Sprintf(" %sns=%s%s", colorGray, e.Namespace, colorReset)
 	}
 
-	fmt.Printf("%s (%.3fs)  %s%-9s%s  %s%s%s  %s%s%s%s\n",
+	// Extract and format resource info
+	resourceStr := ""
+	if resource := extractResourceInfo(e); resource != "" {
+		resourceStr = fmt.Sprintf(" %s%-20s%s", colorOrange, resource, colorReset)
+	} else {
+		// Keep consistent spacing even when no resource info
+		resourceStr = fmt.Sprintf(" %-20s", "")
+	}
+
+	fmt.Printf("%s (%.3fs)  %s%-9s%s  %s%s%s%s  %s%s%s%s\n",
 		timestamp, age,
 		levelColor, strings.ToUpper(levelOrDefault(level)), colorReset,
 		sourceColor, e.Source, colorReset,
+		resourceStr,
 		colorWhite, e.Message, colorReset,
 		namespaceStr+extras,
 	)

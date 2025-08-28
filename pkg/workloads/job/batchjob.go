@@ -144,7 +144,6 @@ func (handler *BatchJobHandler) GetKueueWorkloads(ctx context.Context, k8sClient
 	}
 
 	// Use the Job UID to match Kueue Workload ownerReference
-	logger.Info("Looking up Kueue Workload by Job owner", "namespace", job.GetNamespace(), "jobUID", string(job.GetUID()), "jobName", job.Name)
 
 	workload, err := kueue.GetKueueWorkload(ctx, k8sClient, job.GetNamespace(), string(job.GetUID()))
 	if err != nil {
@@ -152,11 +151,9 @@ func (handler *BatchJobHandler) GetKueueWorkloads(ctx context.Context, k8sClient
 		return nil, fmt.Errorf("failed to extract workload from handler: %w", err)
 	}
 	if workload == nil {
-		logger.Info("No Kueue Workload found for Job", "namespace", job.GetNamespace(), "jobUID", string(job.GetUID()))
 		return []kueuev1beta1.Workload{}, nil
 	}
 
-	logger.Info("Found Kueue Workload", "workloadName", workload.Name, "admitted", workload.Status.Conditions)
 	return []kueuev1beta1.Workload{*workload}, nil
 }
 

@@ -21,6 +21,8 @@ import (
 	"strings"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/meta"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -60,22 +62,37 @@ func (r *ReclaimerLogic) Reclaim(ctx context.Context, clusterQueueName string) e
 		return fmt.Errorf("failed to get pending workloads: %w", err)
 	}
 	if pendingWorkload == nil {
-		// No pending workloads, nothing to do
-		logger.V(1).Info("No pending workloads found")
 		return nil
 	}
 
-	logger.Info("Found head-of-line pending workload", "workload", pendingWorkload.Name)
+	// Re-fetch the pending workload to ensure it's still pending (avoid race conditions)
+	var currentPendingWorkload kueuev1beta1.Workload
+	pendingKey := client.ObjectKeyFromObject(pendingWorkload)
+	if err := r.client.Get(ctx, pendingKey, &currentPendingWorkload); err != nil {
+		return fmt.Errorf("failed to re-read pending workload: %w", err)
+	}
+
+	// Check if the workload is still pending (not admitted yet)
+	if isWorkloadAdmitted(&currentPendingWorkload) {
+		logger.Info("Race condition avoided: pending workload was already admitted", "workload", pendingWorkload.Name)
+		return nil
+	}
+
+	// Use the current version for resource calculations
+	pendingWorkload = &currentPendingWorkload
 
 	// Calculate resource requirements for the pending workload
 	requiredResources := r.calculateResourceRequirements(pendingWorkload)
+	gpuResources := filterGpuResources(requiredResources)
 
-	if len(requiredResources) == 0 {
-		logger.V(1).Info("Pending workload has no resource requirements")
+	if len(gpuResources) == 0 {
 		return nil
 	}
 
-	logger.Info("Calculated resource requirements", "resources", requiredResources)
+	logger.Info("Starting reclamation for pending workload",
+		"workload", pendingWorkload.Name,
+		"namespace", pendingWorkload.Namespace,
+		"requiredGpuResources", gpuResources)
 
 	// Find expired and admitted workloads in the same ClusterQueue
 	expiredWorkloads, err := r.getExpiredAdmittedWorkloads(ctx, clusterQueueName)
@@ -84,30 +101,105 @@ func (r *ReclaimerLogic) Reclaim(ctx context.Context, clusterQueueName string) e
 	}
 
 	if len(expiredWorkloads) == 0 {
-		logger.V(1).Info("No expired workloads found")
+		logger.Info("No evictable workloads found - reclamation not possible",
+			"pendingWorkload", pendingWorkload.Name,
+			"requiredGpuResources", gpuResources)
 		return nil
 	}
-
-	logger.Info("Found expired workloads", "count", len(expiredWorkloads))
 
 	// Select minimal set of expired workloads to cover the resource need
 	victimsToEvict := r.selectVictims(expiredWorkloads, requiredResources)
 
 	if len(victimsToEvict) == 0 {
-		logger.V(1).Info("No suitable victims found for eviction")
+		logger.Info("Resource needs cannot be satisfied by available expired workloads",
+			"pendingWorkload", pendingWorkload.Name,
+			"requiredGpuResources", gpuResources,
+			"expiredWorkloadCount", len(expiredWorkloads))
 		return nil
 	}
 
-	logger.Info("Selected victims for eviction", "count", len(victimsToEvict))
+	// Build victim names for logging
+	victimNames := make([]string, len(victimsToEvict))
+	totalGpuResources := make(map[corev1.ResourceName]resource.Quantity)
+	for i, victim := range victimsToEvict {
+		victimNames[i] = victim.Name
+		victimResources := filterGpuResources(r.calculateResourceRequirements(&victim))
+		for name, qty := range victimResources {
+			if existing, exists := totalGpuResources[name]; exists {
+				existing.Add(qty)
+				totalGpuResources[name] = existing
+			} else {
+				totalGpuResources[name] = qty.DeepCopy()
+			}
+		}
+	}
 
-	// Evict the selected workloads
-	for _, victim := range victimsToEvict {
+	logger.Info("Minimal eviction plan selected",
+		"pendingWorkload", pendingWorkload.Name,
+		"victimsToEvict", victimNames,
+		"totalGpuResourcesFromVictims", totalGpuResources)
+
+	// Evict the selected workloads with optimistic concurrency protection
+	actuallyEvicted := 0
+	evictionFailures := 0
+	freedResources := make(map[corev1.ResourceName]resource.Quantity)
+
+	for i, victim := range victimsToEvict {
 		if err := r.evictWorkload(ctx, victim, pendingWorkload.Name); err != nil {
-			logger.Error(err, "failed to evict workload", "victim", victim.Name)
+			evictionFailures++
+			logger.Info("Workload eviction failed - may have been evicted by another process",
+				"victim", victim.Name,
+				"error", err.Error(),
+				"progress", fmt.Sprintf("%d/%d", i+1, len(victimsToEvict)))
 			// Continue with other victims even if one fails
 		} else {
-			logger.Info("Successfully evicted workload", "victim", victim.Name)
+			actuallyEvicted++
+
+			// Track freed resources to avoid over-eviction
+			victimResources := r.calculateResourceRequirements(&victim)
+			victimResources = filterGpuResources(victimResources)
+
+			for resourceName, available := range victimResources {
+				if existing, exists := freedResources[resourceName]; exists {
+					existing.Add(available)
+					freedResources[resourceName] = existing
+				} else {
+					freedResources[resourceName] = available.DeepCopy()
+				}
+			}
+
+			// Check if we've freed enough resources for the pending workload
+			resourcesSatisfied := true
+			for resourceName, needed := range filterGpuResources(requiredResources) {
+				if freed, exists := freedResources[resourceName]; !exists || freed.Cmp(needed) < 0 {
+					resourcesSatisfied = false
+					break
+				}
+			}
+
+			if resourcesSatisfied {
+				logger.Info("Minimal eviction completed successfully - early termination",
+					"pendingWorkload", pendingWorkload.Name,
+					"victimEvicted", victim.Name,
+					"totalEvicted", actuallyEvicted,
+					"totalPlanned", len(victimsToEvict),
+					"freedGpuResources", freedResources)
+				break
+			}
 		}
+	}
+
+	if actuallyEvicted > 0 {
+		logger.Info("Reclamation completed",
+			"pendingWorkload", pendingWorkload.Name,
+			"successfulEvictions", actuallyEvicted,
+			"failedEvictions", evictionFailures,
+			"totalFreedGpuResources", freedResources)
+	} else {
+		logger.Info("Reclamation failed - no workloads could be evicted",
+			"pendingWorkload", pendingWorkload.Name,
+			"plannedVictims", len(victimsToEvict),
+			"failedEvictions", evictionFailures)
 	}
 
 	return nil
@@ -255,15 +347,11 @@ func (r *ReclaimerLogic) calculateFromSpecPodSets(workload *kueuev1beta1.Workloa
 
 // getExpiredAdmittedWorkloads gets all expired and admitted workloads in the cluster queue
 func (r *ReclaimerLogic) getExpiredAdmittedWorkloads(ctx context.Context, clusterQueueName string) ([]kueuev1beta1.Workload, error) {
-	logger := log.FromContext(ctx).WithName("getExpiredAdmittedWorkloads")
-
 	// Build a set of LocalQueue names that map to this ClusterQueue
 	lqNames, err := GetLocalQueueNamesForCluster(ctx, r.client, clusterQueueName)
 	if err != nil {
 		return nil, err
 	}
-
-	logger.Info("Searching for expired workloads", "clusterQueue", clusterQueueName, "localQueues", lqNames)
 
 	var workloadList kueuev1beta1.WorkloadList
 	// Limit initial list by expired label to reduce load
@@ -272,34 +360,42 @@ func (r *ReclaimerLogic) getExpiredAdmittedWorkloads(ctx context.Context, cluste
 		return nil, fmt.Errorf("failed to list expired workloads: %w", err)
 	}
 
-	logger.Info("Found workloads with expired label", "count", len(workloadList.Items))
-
 	// Filter for admitted & active workloads that belong to one of the LocalQueues
 	var expiredAdmitted []kueuev1beta1.Workload
-	for _, wl := range workloadList.Items {
-		logger.V(1).Info("Examining workload", "name", wl.Name, "namespace", wl.Namespace)
+	var expiredWorkloadNames []string
+	skippedCount := 0
 
+	for _, wl := range workloadList.Items {
 		lqName := string(wl.Spec.QueueName)
 		if lqName == "" {
-			logger.V(1).Info("Skipping workload with empty queue name", "name", wl.Name)
+			skippedCount++
 			continue
 		}
 		if _, ok := lqNames[types.NamespacedName{Namespace: wl.Namespace, Name: lqName}]; !ok {
-			logger.V(1).Info("Skipping workload not in target queue", "name", wl.Name, "queue", lqName)
+			skippedCount++
 			continue
 		}
 
 		admitted := isWorkloadAdmitted(&wl)
 		active := isWorkloadActive(&wl)
-		logger.V(1).Info("Workload status", "name", wl.Name, "admitted", admitted, "active", active)
 
 		if admitted && active {
-			logger.Info("Adding workload as eviction candidate", "name", wl.Name, "namespace", wl.Namespace)
 			expiredAdmitted = append(expiredAdmitted, wl)
+			expiredWorkloadNames = append(expiredWorkloadNames, wl.Name)
+		} else {
+			skippedCount++
 		}
 	}
 
-	logger.Info("Found expired admitted workloads", "count", len(expiredAdmitted))
+	if len(expiredAdmitted) > 0 {
+		logger := log.FromContext(ctx).WithName("getExpiredAdmittedWorkloads")
+		logger.Info("Found evictable expired workloads",
+			"clusterQueue", clusterQueueName,
+			"evictableCount", len(expiredAdmitted),
+			"skippedCount", skippedCount,
+			"workloadNames", expiredWorkloadNames)
+	}
+
 	return expiredAdmitted, nil
 }
 
@@ -415,12 +511,7 @@ func (r *ReclaimerLogic) evictWorkload(ctx context.Context, workload kueuev1beta
 // Helper functions
 
 func isWorkloadAdmitted(workload *kueuev1beta1.Workload) bool {
-	for _, condition := range workload.Status.Conditions {
-		if condition.Type == kueuev1beta1.WorkloadAdmitted && condition.Status == metav1.ConditionTrue {
-			return true
-		}
-	}
-	return false
+	return meta.IsStatusConditionTrue(workload.Status.Conditions, kueuev1beta1.WorkloadAdmitted)
 }
 
 func isWorkloadActive(workload *kueuev1beta1.Workload) bool {

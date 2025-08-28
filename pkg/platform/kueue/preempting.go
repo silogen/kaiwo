@@ -56,14 +56,12 @@ func GetRemainingTimeBeforeBecomingPreemptable(handler api.KaiwoWorkload) *time.
 }
 
 // GetPreemptableCondition gets the correct preemptable condition
-func GetPreemptableCondition(ctx context.Context, handler api.KaiwoWorkload) *metav1.Condition {
-	logger := log.FromContext(ctx)
+func GetPreemptableCondition(_ context.Context, handler api.KaiwoWorkload) *metav1.Condition {
 	remaining := GetRemainingTimeBeforeBecomingPreemptable(handler)
 	obj := handler.GetKaiwoWorkloadObject()
 	if remaining == nil {
 		return nil
 	}
-	logger.Info(fmt.Sprintf("Preemptable condition found, remaining: %v", *remaining))
 	if remaining.Seconds() > 0 {
 		return &metav1.Condition{
 			Type:               PreemptableConditionType,
