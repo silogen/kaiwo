@@ -134,6 +134,7 @@ func (r *ReclaimerReconciler) mapKaiwoToClusterQueue() handler.MapFunc {
 
 		clusterQueueName := workload.GetCommonSpec().ClusterQueue
 		if clusterQueueName == "" {
+			ctx, _ = config2.GetContextWithConfig(ctx, r.Client)
 			cfg := config2.ConfigFromContext(ctx)
 			clusterQueueName = cfg.DefaultClusterQueueName
 		}

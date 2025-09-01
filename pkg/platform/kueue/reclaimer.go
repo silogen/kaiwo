@@ -35,7 +35,6 @@ const (
 const (
 	// Kaiwo condition types (status.conditions on your Kaiwo CR)
 	KaiwoCondAdmissionPrep = "AdmissionPrep"
-	KaiwoCondExpired       = "Expired"
 	KaiwoCondEvicted       = "Evicted"
 
 	// Reasons/messages
@@ -282,7 +281,7 @@ func (r *ReclaimerLogic) evictWorkload(ctx context.Context, workload kueuev1beta
 
 func isKaiwoExpired(k api.KaiwoWorkload) bool {
 	// Kaiwo CR exposes standard metav1.Conditions in Status.Conditions
-	return meta.IsStatusConditionTrue(k.GetCommonStatusSpec().Conditions, KaiwoCondExpired)
+	return meta.IsStatusConditionTrue(k.GetCommonStatusSpec().Conditions, PreemptableConditionType)
 }
 
 // ---------- HoL gate ----------
