@@ -1,17 +1,3 @@
-// Copyright 2025 Advanced Micro Devices, Inc.  All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//       http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package kueue
 
 import (
@@ -20,6 +6,9 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/silogen/kaiwo/pkg/api"
+	workloadutils "github.com/silogen/kaiwo/pkg/workloads/utils"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 
@@ -39,29 +28,29 @@ type Outcome int
 const (
 	Idle Outcome = iota
 	PendingInsufficient
-	EvictedOne
+	Evicted
 	Settling
-	AdmittedOrChanged
 )
 
 const (
-	// ExpiredLabel is the label used to mark expired workloads
-	ExpiredLabel = "kaiwo.silogen.ai/expired"
-	// EvictedForAnnotation tracks which pending workload caused the eviction
-	EvictedForAnnotation = "kaiwo.silogen.ai/evicted-for"
-	// EvictedAtAnnotation tracks when the eviction happened
-	EvictedAtAnnotation = "kaiwo.silogen.ai/evicted-at"
-	// AnnLastHolUID annotation on ClusterQueue to track last head-of-line workload UID
-	AnnLastHolUID = "kaiwo.silogen.ai/reclaimer-last-hol-uid"
-	// AnnLastEvictAt annotation on ClusterQueue to track when last eviction happened
-	AnnLastEvictAt = "kaiwo.silogen.ai/reclaimer-last-evict-at"
-	// GuardTTL is how long to wait before allowing another eviction for the same HoL
-	GuardTTL = 12 * time.Second
+	// Kaiwo condition types (status.conditions on your Kaiwo CR)
+	KaiwoCondAdmissionPrep = "AdmissionPrep"
+	KaiwoCondExpired       = "Expired"
+	KaiwoCondEvicted       = "Evicted"
+
+	// Reasons/messages
+	AdmissionPrepReasonEvicting = "EvictingExpiredWorkloads"
+	EvictedReasonAdmissionPrep  = "AdmissionPrep"
+
+	// Gate TTL: how long AdmissionPrep blocks another batch
+	AdmissionPrepTTL = 2 * time.Minute
 )
 
 // ReclaimerLogic contains the core logic for workload reclamation
 type ReclaimerLogic struct {
-	client client.Client
+	client                  client.Client
+	headOfLineKueueWorkload *kueuev1beta1.Workload
+	headOfLineKaiwoWorkload api.KaiwoWorkload
 }
 
 // NewReclaimerLogic creates a new ReclaimerLogic instance
@@ -73,87 +62,82 @@ func NewReclaimerLogic(c client.Client) *ReclaimerLogic {
 func (r *ReclaimerLogic) Reclaim(ctx context.Context, clusterQueueName string) (Outcome, error) {
 	logger := log.FromContext(ctx).WithName("ReclaimerLogic").WithValues("clusterQueue", clusterQueueName)
 
-	// Get the ClusterQueue to check/update annotations
-	var clusterQueue kueuev1beta1.ClusterQueue
-	if err := r.client.Get(ctx, types.NamespacedName{Name: clusterQueueName}, &clusterQueue); err != nil {
-		return Idle, fmt.Errorf("failed to get ClusterQueue: %w", err)
-	}
-
-	// Find Head of Line (HOL) pending workload
-	pendingWorkload, err := r.getHeadOfLinePendingWorkload(ctx, clusterQueueName)
+	// Head-of-Line pending WL
+	hol, err := r.getHeadOfLinePendingWorkload(ctx, clusterQueueName)
 	if err != nil {
 		return Idle, fmt.Errorf("failed to get pending workloads: %w", err)
 	}
-	if pendingWorkload == nil {
-		return Idle, nil // No pending workloads
+	if hol == nil {
+		return Idle, nil
 	}
+	r.headOfLineKueueWorkload = hol
 
-	// Re-fetch to ensure it's still pending
-	var currentPendingWorkload kueuev1beta1.Workload
-	pendingKey := client.ObjectKeyFromObject(pendingWorkload)
-	if err := r.client.Get(ctx, pendingKey, &currentPendingWorkload); err != nil {
-		return Idle, fmt.Errorf("failed to re-read pending workload: %w", err)
-	}
-
-	// 3. If HoL already admitted or HoL UID changed since last action → AdmittedOrChanged
-	if isWorkloadAdmitted(&currentPendingWorkload) {
-		return AdmittedOrChanged, nil
-	}
-
-	pendingWorkload = &currentPendingWorkload
-
-	// Check if HoL UID changed
-	lastHolUID := r.getLastHolUID(&clusterQueue)
-	if lastHolUID != "" && lastHolUID != string(pendingWorkload.UID) {
-		return AdmittedOrChanged, nil
-	}
-
-	// 4. Compute HoL demand, filter to reclaimable resources
-	requiredResources := r.calculateResourceRequirements(pendingWorkload)
-	gpuResources := filterGpuResources(requiredResources)
-	if len(gpuResources) == 0 {
-		return Idle, nil // No GPU resources needed
-	}
-
-	// 5. Collect expired + admitted + active candidates
-	expiredWorkloads, err := r.getExpiredAdmittedWorkloads(ctx, clusterQueueName)
+	// Resolve HoL Kaiwo CR
+	holKaiwo, err := workloadutils.GetKaiwoForWorkload(ctx, r.client, hol)
 	if err != nil {
-		return Idle, fmt.Errorf("failed to get expired workloads: %w", err)
+		return Idle, fmt.Errorf("failed to get Kaiwo workload: %w", err)
 	}
 
-	// 6. If sum(candidates) < need → PendingInsufficient
-	if !r.canSatisfyResourceNeeds(expiredWorkloads, gpuResources) {
-		return PendingInsufficient, nil
-	}
-
-	// 7. Fresh-eviction guard: check if same HoL and recent eviction
-	if r.shouldSettle(&clusterQueue, pendingWorkload.UID) {
+	// Gate via Kaiwo condition
+	if isKaiwoAdmissionPrepActive(holKaiwo, AdmissionPrepTTL) {
 		return Settling, nil
 	}
 
-	// 8. Pick one victim (oldest expired who contributes to any needed resource)
-	victim := r.selectSingleVictim(expiredWorkloads, gpuResources)
-	if victim == nil {
-		return PendingInsufficient, nil // No suitable victim found
+	// GPU demand for HoL
+	requiredAll := r.calculateResourceRequirements(hol)
+	gpuNeed := filterGpuResources(requiredAll)
+	if len(gpuNeed) == 0 {
+		return Idle, nil
 	}
 
-	// 9. Evict the victim
-	if err := r.evictWorkload(ctx, *victim, pendingWorkload.Name); err != nil {
-		logger.Info("Workload eviction failed", "victim", victim.Name, "error", err.Error())
-		return Settling, nil // Short requeue on conflict
+	// Candidates: admitted+active AND Kaiwo.Expired=True
+	expired, err := r.getExpiredAdmittedWorkloads(ctx, clusterQueueName)
+	if err != nil {
+		return Idle, fmt.Errorf("failed to get expired workloads: %w", err)
+	}
+	if !r.canSatisfyResourceNeeds(expired, gpuNeed) {
+		return PendingInsufficient, nil
 	}
 
-	// 10. Write guard on CQ
-	if err := r.markEvicted(ctx, &clusterQueue, pendingWorkload.UID); err != nil {
-		logger.Info("Failed to update ClusterQueue guard", "error", err.Error())
-		// Continue - eviction succeeded even if guard failed
+	// Mark HoL: Kaiwo.AdmissionPrep=True (status condition)
+	if err := setKaiwoCondition(
+		ctx,
+		r.client,
+		holKaiwo,
+		KaiwoCondAdmissionPrep,
+		metav1.ConditionTrue,
+		AdmissionPrepReasonEvicting,
+		fmt.Sprintf("Preparing admission for pending %s", hol.Name),
+	); err != nil {
+		logger.Info("Failed to set Kaiwo AdmissionPrep; will not evict in this pass", "error", err.Error())
+		return Settling, nil
 	}
 
-	logger.Info("Successfully evicted one workload",
-		"pendingWorkload", pendingWorkload.Name,
-		"victimEvicted", victim.Name)
+	// Pick victims to cover GPU needs (single pass)
+	victims := r.selectVictimsCoveringNeeds(expired, gpuNeed)
 
-	return EvictedOne, nil
+	// Evict and reflect on each victim's Kaiwo CR
+	evicted := 0
+	for i := range victims {
+		v := victims[i]
+		if err := r.evictWorkload(ctx, v, hol.Name); err != nil {
+			logger.Info("Workload eviction failed; continuing best-effort", "victim", v.Name, "error", err.Error())
+			continue
+		}
+		// Set Kaiwo.Evicted=True on victim CR (no WL annotations)
+		if kaiwoVictim, err := workloadutils.GetKaiwoForWorkload(ctx, r.client, &v); err == nil {
+			_ = setKaiwoCondition(ctx, r.client, kaiwoVictim, KaiwoCondEvicted, metav1.ConditionTrue,
+				EvictedReasonAdmissionPrep, fmt.Sprintf("Evicted for pending %s", hol.Name))
+		}
+		evicted++
+	}
+
+	if evicted == 0 {
+		return Settling, nil
+	}
+
+	logger.Info("Batch eviction complete", "pendingWorkload", hol.Name, "victimsEvicted", evicted)
+	return Evicted, nil
 }
 
 // getHeadOfLinePendingWorkload retrieves the first pending workload using Kueue's Visibility API
@@ -230,7 +214,81 @@ func (r *ReclaimerLogic) getHeadOfLinePendingWorkloadFallback(ctx context.Contex
 	return &pendingWorkloads[0], nil
 }
 
-// getPendingWorkloadsFromVisibilityAPI calls the Kueue Visibility API subresource
+// ---------- Kaiwo-driven expiry ----------
+func (r *ReclaimerLogic) getExpiredAdmittedWorkloads(ctx context.Context, clusterQueueName string) ([]kueuev1beta1.Workload, error) {
+	lqNames, err := GetLocalQueueNamesForCluster(ctx, r.client, clusterQueueName)
+	if err != nil {
+		return nil, err
+	}
+
+	var workloadList kueuev1beta1.WorkloadList
+	if err := r.client.List(ctx, &workloadList); err != nil {
+		return nil, fmt.Errorf("failed to list workloads: %w", err)
+	}
+
+	var out []kueuev1beta1.Workload
+	var names []string
+	skipped := 0
+
+	for _, wl := range workloadList.Items {
+		lqName := string(wl.Spec.QueueName)
+		if lqName == "" || !isWorkloadAdmitted(&wl) || !isWorkloadActive(&wl) {
+			skipped++
+			continue
+		}
+		if _, ok := lqNames[types.NamespacedName{Namespace: wl.Namespace, Name: lqName}]; !ok {
+			skipped++
+			continue
+		}
+		// Join WL -> Kaiwo and require Expired=True
+		kaiwoCR, err := workloadutils.GetKaiwoForWorkload(ctx, r.client, &wl)
+		if err != nil || !isKaiwoExpired(kaiwoCR) {
+			skipped++
+			continue
+		}
+		out = append(out, wl)
+		names = append(names, wl.Name)
+	}
+
+	if len(out) > 0 {
+		log.FromContext(ctx).WithName("getExpiredAdmittedWorkloads").Info(
+			"Found evictable expired workloads (via Kaiwo conditions)",
+			"clusterQueue", clusterQueueName, "evictableCount", len(out), "skippedCount", skipped, "workloadNames", names,
+		)
+	}
+	return out, nil
+}
+
+func (r *ReclaimerLogic) evictWorkload(ctx context.Context, workload kueuev1beta1.Workload, pendingWorkloadName string) error {
+	var current kueuev1beta1.Workload
+	key := client.ObjectKeyFromObject(&workload)
+	if err := r.client.Get(ctx, key, &current); err != nil {
+		return fmt.Errorf("failed to re-read workload: %w", err)
+	}
+	if !isWorkloadAdmitted(&current) || !isWorkloadActive(&current) {
+		return fmt.Errorf("workload is no longer admitted or active")
+	}
+
+	patch := client.MergeFrom(current.DeepCopy())
+	active := false
+	current.Spec.Active = &active
+
+	// No annotations/labels; just deactivate
+	if err := r.client.Patch(ctx, &current, patch); err != nil {
+		return fmt.Errorf("failed to evict workload: %w", err)
+	}
+	return nil
+}
+
+func isKaiwoExpired(k api.KaiwoWorkload) bool {
+	// Kaiwo CR exposes standard metav1.Conditions in Status.Conditions
+	return meta.IsStatusConditionTrue(k.GetCommonStatusSpec().Conditions, KaiwoCondExpired)
+}
+
+// ---------- HoL gate ----------
+
+// ---------- Visibility API ----------
+
 func (r *ReclaimerLogic) getPendingWorkloadsFromVisibilityAPI(ctx context.Context, clusterQueueName string, result *visibilityv1beta1.PendingWorkloadsSummary) error {
 	// Use the SubResource method to access the visibility API
 	return r.client.SubResource("pendingworkloads").Get(ctx, &kueuev1beta1.ClusterQueue{
@@ -238,222 +296,140 @@ func (r *ReclaimerLogic) getPendingWorkloadsFromVisibilityAPI(ctx context.Contex
 	}, result)
 }
 
-// calculateResourceRequirements extracts resource requirements from a workload
-// Prefers status.resourceRequests (normalized by Kueue) over spec calculation
+// ---------- Resource accounting ----------
+
 func (r *ReclaimerLogic) calculateResourceRequirements(workload *kueuev1beta1.Workload) map[corev1.ResourceName]resource.Quantity {
 	// Prefer normalized resource requests from status (matches Kueue's math)
 	if len(workload.Status.ResourceRequests) > 0 {
 		return r.calculateFromStatusResourceRequests(workload)
 	}
-
 	// Fallback to spec-based calculation if status is not available
 	return r.calculateFromSpecPodSets(workload)
 }
 
-// calculateFromStatusResourceRequests uses Kueue's normalized resource requests
 func (r *ReclaimerLogic) calculateFromStatusResourceRequests(workload *kueuev1beta1.Workload) map[corev1.ResourceName]resource.Quantity {
 	resources := make(map[corev1.ResourceName]resource.Quantity)
-
-	for _, resourceRequest := range workload.Status.ResourceRequests {
-		for resourceName, quantity := range resourceRequest.Resources {
-			if existing, exists := resources[resourceName]; exists {
-				existing.Add(quantity)
-				resources[resourceName] = existing
+	for _, rr := range workload.Status.ResourceRequests {
+		for rn, q := range rr.Resources {
+			if existing, exists := resources[rn]; exists {
+				existing.Add(q)
+				resources[rn] = existing
 			} else {
-				resources[resourceName] = quantity.DeepCopy()
+				resources[rn] = q.DeepCopy()
 			}
 		}
 	}
-
 	return resources
 }
 
-// calculateFromSpecPodSets calculates resources from spec as fallback
 func (r *ReclaimerLogic) calculateFromSpecPodSets(workload *kueuev1beta1.Workload) map[corev1.ResourceName]resource.Quantity {
 	resources := make(map[corev1.ResourceName]resource.Quantity)
-
-	for _, podSet := range workload.Spec.PodSets {
-		count := int64(podSet.Count)
-
-		for _, container := range podSet.Template.Spec.Containers {
-			for resourceName, quantity := range container.Resources.Requests {
-				// Multiply by pod count and add to total
-				totalQuantity := quantity.DeepCopy()
+	for _, ps := range workload.Spec.PodSets {
+		count := int64(ps.Count)
+		for _, c := range ps.Template.Spec.Containers {
+			for rn, q := range c.Resources.Requests {
+				total := q.DeepCopy()
 				if count > 1 {
-					totalQuantity.SetMilli(totalQuantity.MilliValue() * count)
+					total.SetMilli(total.MilliValue() * count)
 				}
-
-				if existing, exists := resources[resourceName]; exists {
-					existing.Add(totalQuantity)
-					resources[resourceName] = existing
+				if existing, ok := resources[rn]; ok {
+					existing.Add(total)
+					resources[rn] = existing
 				} else {
-					resources[resourceName] = totalQuantity
+					resources[rn] = total
 				}
 			}
 		}
 	}
-
 	return resources
 }
 
-// getExpiredAdmittedWorkloads gets all expired and admitted workloads in the cluster queue
-func (r *ReclaimerLogic) getExpiredAdmittedWorkloads(ctx context.Context, clusterQueueName string) ([]kueuev1beta1.Workload, error) {
-	// Build a set of LocalQueue names that map to this ClusterQueue
-	lqNames, err := GetLocalQueueNamesForCluster(ctx, r.client, clusterQueueName)
-	if err != nil {
-		return nil, err
-	}
+// ---------- Candidate selection ----------
 
-	var workloadList kueuev1beta1.WorkloadList
-	// Limit initial list by expired label to reduce load
-	listOptions := []client.ListOption{client.MatchingLabels(map[string]string{ExpiredLabel: "true"})}
-	if err := r.client.List(ctx, &workloadList, listOptions...); err != nil {
-		return nil, fmt.Errorf("failed to list expired workloads: %w", err)
-	}
-
-	// Filter for admitted & active workloads that belong to one of the LocalQueues
-	var expiredAdmitted []kueuev1beta1.Workload
-	var expiredWorkloadNames []string
-	skippedCount := 0
-
-	for _, wl := range workloadList.Items {
-		lqName := string(wl.Spec.QueueName)
-		if lqName == "" {
-			skippedCount++
-			continue
-		}
-		if _, ok := lqNames[types.NamespacedName{Namespace: wl.Namespace, Name: lqName}]; !ok {
-			skippedCount++
-			continue
-		}
-
-		admitted := isWorkloadAdmitted(&wl)
-		active := isWorkloadActive(&wl)
-
-		if admitted && active {
-			expiredAdmitted = append(expiredAdmitted, wl)
-			expiredWorkloadNames = append(expiredWorkloadNames, wl.Name)
-		} else {
-			skippedCount++
-		}
-	}
-
-	if len(expiredAdmitted) > 0 {
-		logger := log.FromContext(ctx).WithName("getExpiredAdmittedWorkloads")
-		logger.Info("Found evictable expired workloads",
-			"clusterQueue", clusterQueueName,
-			"evictableCount", len(expiredAdmitted),
-			"skippedCount", skippedCount,
-			"workloadNames", expiredWorkloadNames)
-	}
-
-	return expiredAdmitted, nil
-}
-
-// canSatisfyResourceNeeds checks if expired workloads can collectively satisfy resource needs
 func (r *ReclaimerLogic) canSatisfyResourceNeeds(expiredWorkloads []kueuev1beta1.Workload, requiredResources map[corev1.ResourceName]resource.Quantity) bool {
 	totalAvailable := make(map[corev1.ResourceName]resource.Quantity)
-
-	for _, workload := range expiredWorkloads {
-		workloadResources := filterGpuResources(r.calculateResourceRequirements(&workload))
-		for resourceName, quantity := range workloadResources {
-			if existing, exists := totalAvailable[resourceName]; exists {
-				existing.Add(quantity)
-				totalAvailable[resourceName] = existing
+	for _, wl := range expiredWorkloads {
+		workloadResources := filterGpuResources(r.calculateResourceRequirements(&wl))
+		for rn, q := range workloadResources {
+			if existing, exists := totalAvailable[rn]; exists {
+				existing.Add(q)
+				totalAvailable[rn] = existing
 			} else {
-				totalAvailable[resourceName] = quantity.DeepCopy()
+				totalAvailable[rn] = q.DeepCopy()
 			}
 		}
 	}
-
-	// Check if we have enough of each required resource
-	for resourceName, needed := range requiredResources {
-		if available, exists := totalAvailable[resourceName]; !exists || available.Cmp(needed) < 0 {
+	for rn, need := range requiredResources {
+		if have, ok := totalAvailable[rn]; !ok || have.Cmp(need) < 0 {
 			return false
 		}
 	}
-
 	return true
 }
 
-// selectSingleVictim selects one expired workload that can contribute to resource needs
-func (r *ReclaimerLogic) selectSingleVictim(expiredWorkloads []kueuev1beta1.Workload, requiredResources map[corev1.ResourceName]resource.Quantity) *kueuev1beta1.Workload {
-	if len(expiredWorkloads) == 0 {
-		return nil
-	}
-
-	// Sort expired workloads by creation time (oldest first)
-	sort.Slice(expiredWorkloads, func(i, j int) bool {
-		return expiredWorkloads[i].CreationTimestamp.Before(&expiredWorkloads[j].CreationTimestamp)
+func (r *ReclaimerLogic) selectVictimsCoveringNeeds(
+	expired []kueuev1beta1.Workload,
+	required map[corev1.ResourceName]resource.Quantity,
+) []kueuev1beta1.Workload {
+	remaining := copyResourceMap(required)
+	sort.Slice(expired, func(i, j int) bool {
+		return expired[i].CreationTimestamp.Before(&expired[j].CreationTimestamp)
 	})
 
-	// Pick the first (oldest) workload that can contribute to any needed resource
-	for _, workload := range expiredWorkloads {
-		workloadResources := filterGpuResources(r.calculateResourceRequirements(&workload))
-
-		// Check if this workload can contribute to satisfying any resource needs
-		for resourceName := range requiredResources {
-			if available, exists := workloadResources[resourceName]; exists && available.Cmp(resource.Quantity{}) > 0 {
-				return &workload
-			}
+	var victims []kueuev1beta1.Workload
+	for _, wl := range expired {
+		if allZeroOrLess(remaining) {
+			break
+		}
+		contrib := filterGpuResources(r.calculateResourceRequirements(&wl))
+		if contributes(contrib, remaining) {
+			victims = append(victims, wl)
+			decrementRemaining(remaining, contrib)
 		}
 	}
-
-	return nil
+	return victims
 }
 
-// getLastHolUID gets the last head-of-line workload UID from ClusterQueue annotations
-func (r *ReclaimerLogic) getLastHolUID(cq *kueuev1beta1.ClusterQueue) string {
-	if cq.Annotations == nil {
-		return ""
-	}
-	return cq.Annotations[AnnLastHolUID]
-}
-
-// shouldSettle checks if we should wait before evicting again for the same HoL workload
-func (r *ReclaimerLogic) shouldSettle(cq *kueuev1beta1.ClusterQueue, holUID types.UID) bool {
-	if cq.Annotations == nil {
-		return false
-	}
-
-	// Check if this is the same HoL workload
-	if cq.Annotations[AnnLastHolUID] != string(holUID) {
-		return false
-	}
-
-	// Check if the last eviction was recent
-	if timeStr, exists := cq.Annotations[AnnLastEvictAt]; exists {
-		if lastEvictTime, err := time.Parse(time.RFC3339, timeStr); err == nil {
-			return time.Since(lastEvictTime) < GuardTTL
+func contributes(offer, need map[corev1.ResourceName]resource.Quantity) bool {
+	for k, v := range need {
+		if ov, ok := offer[k]; ok && ov.Cmp(resource.MustParse("0")) > 0 && v.Cmp(resource.MustParse("0")) > 0 {
+			return true
 		}
 	}
-
 	return false
 }
 
-// markEvicted updates ClusterQueue annotations to record the eviction
-func (r *ReclaimerLogic) markEvicted(ctx context.Context, cq *kueuev1beta1.ClusterQueue, holUID types.UID) error {
-	patch := client.MergeFrom(cq.DeepCopy())
-
-	if cq.Annotations == nil {
-		cq.Annotations = make(map[string]string)
+func allZeroOrLess(m map[corev1.ResourceName]resource.Quantity) bool {
+	for _, q := range m {
+		if q.Sign() > 0 {
+			return false
+		}
 	}
-	cq.Annotations[AnnLastHolUID] = string(holUID)
-	cq.Annotations[AnnLastEvictAt] = time.Now().Format(time.RFC3339)
-
-	return r.client.Patch(ctx, cq, patch)
+	return true
 }
 
-// filterGpuResources keeps only resource names that look like GPU quantities
+func decrementRemaining(remaining, offer map[corev1.ResourceName]resource.Quantity) {
+	for k, need := range remaining {
+		if off, ok := offer[k]; ok {
+			rv := need.MilliValue() - off.MilliValue()
+			if rv < 0 {
+				rv = 0
+			}
+			need.SetMilli(rv)
+			remaining[k] = need
+		}
+	}
+}
+
+// ---------- Visibility helpers ----------
+
 func filterGpuResources(resources map[corev1.ResourceName]resource.Quantity) map[corev1.ResourceName]resource.Quantity {
 	if len(resources) == 0 {
 		return resources
 	}
 	out := make(map[corev1.ResourceName]resource.Quantity, len(resources))
 	for name, qty := range resources {
-		s := string(name)
-		// naive but practical: match substrings containing "gpu"
-		if containsGPU(s) {
+		if containsGPU(string(name)) {
 			out[name] = qty
 		}
 	}
@@ -462,43 +438,7 @@ func filterGpuResources(resources map[corev1.ResourceName]resource.Quantity) map
 
 func containsGPU(s string) bool { return strings.Contains(strings.ToLower(s), "gpu") }
 
-// evictWorkload evicts a workload by setting spec.active=false with optimistic concurrency
-func (r *ReclaimerLogic) evictWorkload(ctx context.Context, workload kueuev1beta1.Workload, pendingWorkloadName string) error {
-	// Re-read the workload to ensure we have the latest version
-	var current kueuev1beta1.Workload
-	key := client.ObjectKeyFromObject(&workload)
-	if err := r.client.Get(ctx, key, &current); err != nil {
-		return fmt.Errorf("failed to re-read workload: %w", err)
-	}
-
-	// Check if still admitted and active
-	if !isWorkloadAdmitted(&current) || !isWorkloadActive(&current) {
-		return fmt.Errorf("workload is no longer admitted or active")
-	}
-
-	// Create patch from current state
-	patch := client.MergeFrom(current.DeepCopy())
-
-	// Set spec.active=false
-	active := false
-	current.Spec.Active = &active
-
-	// Add eviction annotations
-	if current.Annotations == nil {
-		current.Annotations = make(map[string]string)
-	}
-	current.Annotations[EvictedForAnnotation] = pendingWorkloadName
-	current.Annotations[EvictedAtAnnotation] = time.Now().Format(time.RFC3339)
-
-	// Use optimistic concurrency with patch to avoid conflicts
-	if err := r.client.Patch(ctx, &current, patch); err != nil {
-		return fmt.Errorf("failed to evict workload: %w", err)
-	}
-
-	return nil
-}
-
-// Helper functions
+// ---------- Generic helpers ----------
 
 func isWorkloadAdmitted(workload *kueuev1beta1.Workload) bool {
 	return meta.IsStatusConditionTrue(workload.Status.Conditions, kueuev1beta1.WorkloadAdmitted)
@@ -509,9 +449,41 @@ func isWorkloadActive(workload *kueuev1beta1.Workload) bool {
 }
 
 func copyResourceMap(original map[corev1.ResourceName]resource.Quantity) map[corev1.ResourceName]resource.Quantity {
-	copy := make(map[corev1.ResourceName]resource.Quantity)
+	cp := make(map[corev1.ResourceName]resource.Quantity)
 	for k, v := range original {
-		copy[k] = v.DeepCopy()
+		cp[k] = v.DeepCopy()
 	}
-	return copy
+	return cp
+}
+
+// Gate check: Kaiwo.AdmissionPrep=True and still fresh
+func isKaiwoAdmissionPrepActive(kaiwoWorkload api.KaiwoWorkload, ttl time.Duration) bool {
+	cond := meta.FindStatusCondition(kaiwoWorkload.GetCommonStatusSpec().Conditions, KaiwoCondAdmissionPrep)
+	if cond == nil || cond.Status != metav1.ConditionTrue {
+		return false
+	}
+	// Use LastTransitionTime as "last seen" marker for TTL
+	if ttl <= 0 || cond.LastTransitionTime.IsZero() {
+		return true
+	}
+	return time.Since(cond.LastTransitionTime.Time) <= ttl
+}
+
+// setKaiwoCondition sets/updates a Kaiwo status condition idempotently.
+func setKaiwoCondition(ctx context.Context, c client.Client, k api.KaiwoWorkload,
+	condType string, status metav1.ConditionStatus, reason, msg string,
+) error {
+	obj := k.(client.Object)
+	orig := obj.DeepCopyObject().(client.Object)
+
+	newCond := metav1.Condition{
+		Type:               condType,
+		Status:             status,
+		Reason:             reason,
+		Message:            msg,
+		ObservedGeneration: obj.GetGeneration(),
+		LastTransitionTime: metav1.Now(),
+	}
+	meta.SetStatusCondition(&k.GetCommonStatusSpec().Conditions, newCond)
+	return c.Status().Patch(ctx, obj, client.MergeFrom(orig))
 }
