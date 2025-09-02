@@ -30,4 +30,19 @@ To set up your development environment, follow these steps:
 2. Install Go on your machine.
 3. Install the dependencies by running `go mod tidy`.
 4. Install GolangCI-Lint by running `brew install golangci-lint`
-5. Install pre-commit hooks by running `pre-commit install`
+5. Install pre-commit by running `brew install pre-commit`
+6. Install pre-commit hooks by running `pre-commit install`
+7. [install kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) 
+8. install kubectl with `brew install kubectl`
+9. [install docker](https://docs.docker.com/engine/install/) 
+10. install chainsaw with `brew tap kyverno/chainsaw https://github.com/kyverno/chainsaw && brew install kyverno/chainsaw/chainsaw`
+11. Set up dev environment by running ./test/setup_dev_env.sh
+12. Make sure you have .env file in the repo's root directory for your IDE with the following content:
+
+    ```
+    WEBHOOK_CERT_DIRECTORY=/repo_root_path/certs
+    KUBECONFIG=/repo_root_path/kaiwo_test_kubeconfig.yaml
+    ```
+12. Run operator with debugger on IDE
+13. Try running a chainsaw test with `chainsaw test path/to/test`
+14. Try running the entire test suite with `make test-e2e`
