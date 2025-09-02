@@ -85,7 +85,10 @@ func (r *ReclaimerLogic) Reclaim(ctx context.Context, clusterQueueName string) (
 	// GPU demand for HoL
 	requiredAll := r.calculateResourceRequirements(hol)
 	gpuNeed := filterGpuResources(requiredAll)
+	logger.Info("Head-of-line workload resource analysis",
+		"workload", hol.Name, "totalResources", requiredAll, "gpuResources", gpuNeed)
 	if len(gpuNeed) == 0 {
+		logger.Info("No GPU resources needed by head-of-line workload, returning Idle")
 		return Idle, nil
 	}
 
@@ -94,7 +97,16 @@ func (r *ReclaimerLogic) Reclaim(ctx context.Context, clusterQueueName string) (
 	if err != nil {
 		return Idle, fmt.Errorf("failed to get expired workloads: %w", err)
 	}
-	if !r.canSatisfyResourceNeeds(expired, gpuNeed) {
+	logger.Info("Found expired admitted workloads", "count", len(expired))
+	for i, wl := range expired {
+		logger.Info("Expired workload details", "index", i, "workload", wl.Name,
+			"namespace", wl.Namespace, "admitted", isWorkloadAdmitted(&wl), "active", isWorkloadActive(&wl))
+	}
+
+	canSatisfy := r.canSatisfyResourceNeeds(expired, gpuNeed)
+	logger.Info("Resource satisfaction analysis", "canSatisfyNeeds", canSatisfy, "gpuNeed", gpuNeed)
+	if !canSatisfy {
+		logger.Info("Expired workloads cannot satisfy resource needs, returning PendingInsufficient")
 		return PendingInsufficient, nil
 	}
 
@@ -241,7 +253,18 @@ func (r *ReclaimerLogic) getExpiredAdmittedWorkloads(ctx context.Context, cluste
 		}
 		// Join WL -> Kaiwo and require Expired=True
 		kaiwoCR, err := workloadutils.GetKaiwoForWorkload(ctx, r.client, &wl)
-		if err != nil || !isKaiwoExpired(kaiwoCR) {
+		if err != nil {
+			log.FromContext(ctx).WithName("getExpiredAdmittedWorkloads").Info(
+				"Failed to get Kaiwo CR for workload", "workload", wl.Name, "error", err.Error())
+			skipped++
+			continue
+		}
+
+		expired := isKaiwoExpired(kaiwoCR)
+		log.FromContext(ctx).WithName("getExpiredAdmittedWorkloads").Info(
+			"Checking workload expiry", "workload", wl.Name, "kaiwoName", kaiwoCR.GetKaiwoWorkloadObject().GetName(), "isExpired", expired)
+
+		if !expired {
 			skipped++
 			continue
 		}
@@ -281,7 +304,19 @@ func (r *ReclaimerLogic) evictWorkload(ctx context.Context, workload kueuev1beta
 
 func isKaiwoExpired(k api.KaiwoWorkload) bool {
 	// Kaiwo CR exposes standard metav1.Conditions in Status.Conditions
-	return meta.IsStatusConditionTrue(k.GetCommonStatusSpec().Conditions, PreemptableConditionType)
+	conditions := k.GetCommonStatusSpec().Conditions
+	hasPreemptable := meta.IsStatusConditionTrue(conditions, PreemptableConditionType)
+
+	// Debug logging to understand the condition check
+	condNames := make([]string, len(conditions))
+	for i, cond := range conditions {
+		condNames[i] = fmt.Sprintf("%s=%s", cond.Type, cond.Status)
+	}
+
+	fmt.Printf("DEBUG isKaiwoExpired: workload=%s, conditions=%v, PreemptableConditionType=%s, hasPreemptable=%t\n",
+		k.GetKaiwoWorkloadObject().GetName(), condNames, PreemptableConditionType, hasPreemptable)
+
+	return hasPreemptable
 }
 
 // ---------- HoL gate ----------
