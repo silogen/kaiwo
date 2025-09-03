@@ -20,15 +20,15 @@ spec:
       - coveredResources:
         - cpu
         - memory
-        - nvidia.com/gpu
+        - gpu
         flavors:
-        - name: foo
+        - name: foobaz
           resources:
           - name: cpu
             nominalQuota: "14"
           - name: memory
             nominalQuota: "13529146982"
-          - name: nvidia.com/gpu
+          - name: gpu
             nominalQuota: "8"
       stopPolicy: None
   resourceFlavors:
