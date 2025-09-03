@@ -585,9 +585,11 @@ func (r *KaiwoQueueConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		if err := r.CreateTopology(ctx); err != nil {
 			logger.Error(err, "Failed to create default topology on startup")
 		}
-		if err = r.EnsureKaiwoQueueConfig(ctx, common.KaiwoQueueConfigName, config.DefaultClusterQueueName, config.DefaultClusterQueueCohortName); err != nil {
-			logger.Error(err, "Failed to ensure default KaiwoQueueConfig on startup")
-			return err
+		if config.DynamicallyUpdateDefaultClusterQueue {
+			if err = r.EnsureKaiwoQueueConfig(ctx, common.KaiwoQueueConfigName, config.DefaultClusterQueueName, config.DefaultClusterQueueCohortName); err != nil {
+				logger.Error(err, "Failed to ensure default KaiwoQueueConfig on startup")
+				return err
+			}
 		}
 		return nil
 	})); err != nil {
