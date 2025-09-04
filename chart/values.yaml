@@ -1,0 +1,171 @@
+# Default values for kaiwo-operator
+# This is a YAML-formatted file.
+
+# Image configuration
+image:
+  registry: ghcr.io
+  repository: silogen/kaiwo-operator
+  tag: ""  # Will be set to appVersion from Chart.yaml during installation
+  pullPolicy: IfNotPresent
+  # Image digest for supply chain security (optional, overrides tag)
+  # digest: "sha256:abcd1234..."
+
+# Global image pull secrets
+imagePullSecrets: []
+
+# Create namespace resource (set to false when using --create-namespace flag)
+# Best practice: Use 'helm install --create-namespace' instead of this option
+createNamespace: false
+
+# Controller manager replicas
+replicas: 1
+
+# Resource limits and requests
+resources:
+  limits:
+    memory: 4Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
+
+# Node selector, affinity and tolerations
+nodeSelector: {}
+affinity: {}
+tolerations: []
+
+# Additional labels and annotations to add to all resources
+commonLabels: {}
+commonAnnotations: {}
+
+# RBAC Configuration
+rbac:
+  # Create RBAC resources
+  create: true
+  # Additional annotations for ServiceAccount
+  serviceAccountAnnotations: {}
+  # Additional annotations for ClusterRole/Role
+  roleAnnotations: {}
+
+# Webhook Configuration
+webhooks:
+  # Enable webhook admission controllers
+  enabled: true
+
+# Scheduler Configuration
+scheduler:
+  # Enable Kaiwo custom scheduler (GPU-aware scheduling)
+  # Includes: ServiceAccount, RBAC, ConfigMap, and Deployment
+  # The scheduler optimizes GPU resource allocation and topology-aware scheduling
+  enabled: true
+  # Namespace where scheduler will be deployed (typically kube-system)
+  namespace: kube-system
+
+# Security settings
+security:
+  # Pod Security Standards (https://kubernetes.io/docs/concepts/security/pod-security-standards/)
+  podSecurityStandards:
+    enforce: "restricted"  # restricted, baseline, or privileged
+    audit: "restricted"
+    warn: "restricted"
+
+  # Additional security context options
+  securityContext:
+    # Run as specific user (optional)
+    runAsUser: 65532  # nobody user
+    runAsGroup: 65532
+    fsGroup: 65532
+
+# Admission control
+admission:
+  # Prevent pods without resource limits (optional)
+  enforceResourceLimits: false
+  # Prevent privileged containers
+  enforceNonPrivileged: true
+
+
+# Optional KaiwoConfig - global operator configuration
+# If provided, a KaiwoConfig resource will be created
+# If not provided, the operator will use defaults
+kaiwoConfig:
+  # Set to true to create the KaiwoConfig resource
+  enabled: false
+  # name: kaiwo  # Optional name override, defaults to "kaiwo"
+  spec:
+    # Ray configuration
+    ray:
+      defaultRayImage: "ghcr.io/silogen/rocm-ray:6.4"
+      headPodMemory: "16Gi"
+
+    # Storage configuration
+    data:
+      defaultStorageClass: ""  # Leave empty to use cluster default
+      defaultDataMountPath: "/workload"
+      defaultHfMountPath: "/hf_cache"
+
+    # Node configuration
+    nodes:
+      defaultGpuResourceKey: "amd.com/gpu"
+      defaultGpuTaintKey: "kaiwo.silogen.ai/gpu"
+      excludeMasterNodesFromNodePools: false
+
+    # Scheduling configuration
+    scheduling:
+      enablePreemption: true
+      defaultTimeoutSeconds: 3600
+
+    # Resource monitoring configuration
+    resourceMonitoring:
+      enabled: false
+      pollingInterval: "15s"
+      prometheusEndpoint: "http://prometheus-k8s.monitoring.svc.cluster.local:9090"
+
+    # Default cluster queue settings
+    defaultClusterQueueName: "kaiwo"
+    defaultClusterQueueCohortName: "kaiwo"
+    dynamicallyUpdateDefaultClusterQueue: false
+
+# Optional KaiwoQueueConfig - manages Kueue resources
+# If provided, a KaiwoQueueConfig resource will be created
+# If not provided, the operator will create default queue configuration
+kaiwoQueueConfig:
+  # Set to true to create the KaiwoQueueConfig resource
+  enabled: false
+  # name: kaiwo  # Optional name override, defaults to "kaiwo"
+  spec:
+    # ClusterQueues to create and manage
+    clusterQueues: []
+    # Example:
+    # - name: kaiwo
+    #   spec:
+    #     resourceGroups:
+    #     - flavors:
+    #       - name: default-flavor
+    #       resources:
+    #       - name: cpu
+    #         nominalQuota: 100
+    #       - name: memory
+    #         nominalQuota: 1000Gi
+    #   namespaces:
+    #   - default
+    #   - kaiwo-workloads
+    # ResourceFlavors to create and manage
+    resourceFlavors: []
+    # Example:
+    # - name: default-flavor
+    #   nodeLabels:
+    #     node-type: gpu
+    # WorkloadPriorityClasses to create and manage
+    workloadPriorityClasses: []
+    # Example:
+    # - metadata:
+    #     name: high-priority
+    #   value: 1000
+    #   description: "High priority workloads"
+    # Topologies to create and manage
+    topologies: []
+    # Example:
+    # - metadata:
+    #     name: gpu-topology
+    #   spec:
+    #     levels:
+    #     - nodeLabel: topology.kubernetes.io/zone

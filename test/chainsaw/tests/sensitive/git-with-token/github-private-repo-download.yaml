@@ -15,8 +15,8 @@ spec:
   entrypoint: |
     sleep 10
   storage:
+    storageClassName: rwx-nfs
     storageEnabled: true
-    storageClassName: "nfs-client"
     data:
       storageSize: 1Gi
       mountPath: /workload

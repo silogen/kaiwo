@@ -39,8 +39,10 @@ for deploy in cert-manager cert-manager-webhook cert-manager-cainjector; do
 done
 echo "Cert-Manager deployed"
 
+#- https://github.com/kubernetes-sigs/node-feature-discovery/deployment/overlays/default?ref=v0.17.3
+
 echo "Deploying other dependencies"
-kubectl apply --server-side -k "$SERVER_SIDE_DEPS_PATH"
+kubectl apply --server-side --force-conflicts -k "$SERVER_SIDE_DEPS_PATH"
 echo "Waiting for other dependencies to be deployed..."
 kubectl -n kueue-system patch deployment kueue-controller-manager   --type json   -p='[{"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--feature-gates=TopologyAwareScheduling=true"}]'
 kubectl rollout status deployment/kueue-controller-manager -n kueue-system --timeout=5m

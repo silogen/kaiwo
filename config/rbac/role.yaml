@@ -82,3 +82,8 @@ rules:
 - apiGroups: ["workload.codeflare.dev"]
   resources: ["appwrappers"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+# Leader election permissions
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

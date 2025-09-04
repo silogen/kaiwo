@@ -3,6 +3,8 @@ kind: Configuration
 metadata:
   name: ci-config
 spec:
+  discovery:
+    fullName: true
   timeouts:
     apply: 10s
     assert: 90s
@@ -10,3 +12,14 @@ spec:
     delete: 90s
     error: 60s
     exec: 10s
+  error:
+    catch:
+    - command:
+        entrypoint: log
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        args:
+        - $NAMESPACE
+        - --namespaced-level=debug
+        - --cluster-level=info

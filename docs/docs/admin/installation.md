@@ -1,137 +1,222 @@
 # Installation Guide
 
-This guide provides detailed steps for installing the Kaiwo operator and its dependencies on a Kubernetes cluster.
+This guide provides clear, step‑by‑step instructions to install the Kaiwo operator and its dependencies on a Kubernetes cluster.
 
 ## Prerequisites
 
-*   A running Kubernetes cluster (v1.22+ recommended).
-*   `kubectl` installed and configured with cluster-admin privileges.
-*   `git` (if cloning repositories).
-*   Go (if using Cluster Forge).
+- A running Kubernetes cluster (v1.22+ recommended)
+- `kubectl` configured with cluster-admin privileges
+- `helm` (for Helm-based install)
+- `git` (if using the helper scripts)
+
+Optional (for GPU workloads): GPU-capable nodes and the appropriate GPU operator (AMD or NVIDIA).
 
 ## Dependency Overview
 
-Kaiwo requires several core Kubernetes components to function correctly.
+Kaiwo requires several core Kubernetes components to function correctly:
 
 1.  **Cert-Manager**: Manages TLS certificates for webhooks.
 2.  **GPU Operator**:
+    *   **AMD**: [AMD GPU Operator](https://github.com/ROCm/amdgpu-operator). (Includes Node Labeler).
     *   **NVIDIA**: [NVIDIA GPU Operator](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/overview.html) + [GPU Feature Discovery](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/gpu-feature-discovery.html).
-    *   **AMD**: [AMD GPU Operator](https://github.com/ROCm/amdgpu-operator). (Includes Node Labeller).
     *   Ensures GPU drivers are installed and nodes are correctly labeled with GPU information.
 3.  **Kueue**: Provides job queueing, fair sharing, and quota management. ([Docs](https://kueue.sigs.k8s.io/)).
 4.  **KubeRay Operator**: Required *only* if users will run Ray-based workloads (`spec.ray: true`). Manages Ray clusters. ([Docs](https://docs.ray.io/en/latest/cluster/kubernetes/index.html)).
 5.  **AppWrapper**: Used by Kueue to manage atomic scheduling of complex workloads, particularly Ray clusters/services. ([GitHub](https://github.com/project-codeflare/appwrapper)).
 6.  **Prometheus (Recommended)**: For monitoring the Kaiwo operator and cluster metrics.
 
-## Step 1: Install Kaiwo and its dependencies
+## Installation Methods
 
-There are several different ways that you can install the Kaiwo dependencies and operator. The following serve as references that you can adapt to your particular environment and workflow.
+There are two main phases: install dependencies (Step 1) and install Kaiwo (Step 2). Choose the option(s) that fit your environment.
 
-### Dependencies via convenience script
+### Step 1: Install Dependencies
 
-You can install the dependencies using the convenience script:
+You can either install dependencies yourself or use the helper script (handy for dev/test).
 
-**From the remote script**
+!!! note
+    The helper script requires [Helmfile](https://github.com/helmfile/helmfile) and [yq](https://github.com/mikefarah/yq).
 
-```bash
-curl -sSL https://raw.githubusercontent.com/silogen/kaiwo/refs/heads/main/dependencies/install_dependencies.sh | bash -s --
-```
-
-**Or if you have cloned the repository**
+Clone the repository and install dependencies using the script:
 
 ```bash
-bash dependencies/install_dependencies.sh --local
+git clone https://github.com/silogen/kaiwo.git
+cd kaiwo
+dependencies/deploy.sh kind-test up  # Use appropriate environment
 ```
 
-!!!warning "GPU Operator Not Included"
-    You must install the **AMD GPU Operator** separately according to its documentation *before* running the convenience script or installing Kaiwo. Ensure node labeling features are enabled.
+Available environments:
+- `kind-test`: For Kind/testing clusters
+- `tw-009-038`: GPU environment example
+- `banff-sc-cx42-43`: GPU environment example
 
-### Kaiwo operator via install manifest
+!!! info
+    The GPU environments above are examples with hard-coded values for specific environments. To use the helper script with your own GPU cluster:
 
-Once dependencies are ready, install the Kaiwo operator itself.
+    1. Create a new environment file: `dependencies/environments/<my-env>.yaml`
+    2. Create a new overlay: `dependencies/kustomization-server-side/overlays/environments/<my-env>/kustomization.yaml`
 
-You can install the latest version via:
+    Then install: `dependencies/deploy.sh <my-env> up`
+
+
+### Step 2: Install the Kaiwo Operator
+
+You can install Kaiwo via Helm (recommended) or by applying a prebuilt manifest with Kustomize.
+
+#### Option A — Helm
+
+Install from the OCI registry:
+
+```bash
+# Install latest version to kaiwo-system namespace
+helm install kaiwo oci://ghcr.io/silogen/kaiwo-operator \
+  --namespace kaiwo-system --create-namespace
+
+# Install a specific version
+helm install kaiwo oci://ghcr.io/silogen/kaiwo-operator \
+  --version <version> \
+  --namespace kaiwo-system --create-namespace
+```
+
+#### Option B — Kustomize Manifests
+
+Install the latest version:
 
 ```bash
 kubectl apply -f https://github.com/silogen/kaiwo/releases/latest/download/install.yaml --server-side
 ```
 
-If you want to choose the release, follow these steps:
+Or install a specific version:
 
-1.  **Choose Release**: Find the latest stable release tag on the [Kaiwo GitHub Releases page](https://github.com/silogen/kaiwo/releases).
-2.  **Apply Manifest**: Use `kubectl apply` with the `--server-side` flag (recommended for managing large manifests and CRDs). Replace `vX.Y.Z` with your chosen release tag.
+```bash
+export KAIWO_VERSION=vX.Y.Z
+kubectl apply -f https://github.com/silogen/kaiwo/releases/download/${KAIWO_VERSION}/install.yaml --server-side
+```
 
-    ```bash
-    export KAIWO_VERSION=vX.Y.Z
-    kubectl apply -f https://github.com/silogen/kaiwo/releases/download/${KAIWO_VERSION}/install.yaml --server-side
-    ```
+Install from a local build (useful for development):
 
-    This installs:
+```bash
+make build-installer # produces dist/install.yaml
+kubectl apply -f dist/install.yaml --server-side
+```
 
-    *   Kaiwo CRDs (`KaiwoJob`, `KaiwoService`, `KaiwoQueueConfig`)
-    *   The Kaiwo Controller Manager `Deployment` in the `kaiwo-system` namespace.
-    *   RBAC rules (`ClusterRole`, `Role`, `ClusterRoleBinding`, `RoleBinding`).
-    *   Webhook configurations (if enabled in the release).
-    *   Service for webhooks/metrics.
+This installs:
 
-### Everything via Cluster Forge
+- Kaiwo CRDs (cluster-scoped)
+  - `kaiwojobs.kaiwo.silogen.ai`
+  - `kaiwoservices.kaiwo.silogen.ai`
+  - `kaiwoqueueconfigs.kaiwo.silogen.ai`
+  - `kaiwoconfigs.config.kaiwo.silogen.ai`
+  - `resourceflavors.kaiwo.silogen.ai`
+  - `topologies.kaiwo.silogen.ai`
+- The Kaiwo controller `Deployment` in the `kaiwo-system` namespace
+- RBAC rules (`ClusterRole`, `Role`, `ClusterRoleBinding`, `RoleBinding`)
+- Webhook configurations and services
 
-[Cluster Forge](https://github.com/silogen/cluster-forge) is a tool for managing Kubernetes stacks. You can use it to install Kaiwo and its dependencies.
+## Verification
 
-1.  Clone the Cluster Forge repository: `git clone https://github.com/silogen/cluster-forge.git`
-2.  Navigate into the directory: `cd cluster-forge`
-3.  Ensure Go is installed (`go version`).
-4.  Run the forge command, selecting `kaiwo-all` and optionally the relevant GPU operator (`amd-gpu-operator`):
-    ```bash
-    go run . forge -s kaiwo
-    # Follow prompts to select 'kaiwo-all' and your GPU operator stack.
-    ```
-5.  Deploy the selected stack:
-    ```bash
-    bash stacks/kaiwo/deploy.sh
-    ```
-6.  Verify pods in relevant namespaces (`kaiwo-system`, `cert-manager`, `kueue-system`, etc.).
+After installation, verify that all components are running correctly:
 
-### Manually
+### 1. Check Dependencies
 
-If you prefer to manage the dependencies yourself, you can inspect the `/dependencies` folder to see what is required, and install Kaiwo yourself by using the `install.yaml` release from the [releases page](https://github.com/silogen/kaiwo/releases).
+Verify that all dependency components are running (only the ones you installed/apply):
 
-## Step 2: Verify Installation
+```bash
+# Check Cert-Manager
+kubectl get pods -n cert-manager
 
-1.  **Check Operator Pod**: Ensure the Kaiwo controller manager pod is running.
-    ```bash
-    kubectl get pods -n kaiwo-system -l control-plane=kaiwo-controller-manager
-    # Example Output:
-    # NAME                                          READY   STATUS    RESTARTS   AGE
-    # kaiwo-controller-manager-6c...-...            1/1     Running   0          2m
-    ```
+# Check Kueue
+kubectl get pods -n kueue-system
 
-2.  **Check CRDs**: Verify that the Kaiwo Custom Resource Definitions are installed.
-    ```bash
-    kubectl get crds | grep kaiwo.silogen.ai
-    # Example Output:
-    # kaiwojoblists.kaiwo.silogen.ai          ...
-    # kaiwojobs.kaiwo.silogen.ai              ...
-    # kaiwoqueueconfigs.kaiwo.silogen.ai      ...
-    # kaiwoservicelists.kaiwo.silogen.ai      ...
-    # kaiwoservices.kaiwo.silogen.ai          ...
-    ```
+# Check KubeRay (if Ray workloads are used)
+kubectl get pods -A | grep kuberay-operator || true
 
-3.  **Check Default QueueConfig**: The operator should automatically create a default `KaiwoQueueConfig`.
-    ```bash
-    kubectl get kaiwoqueueconfig kaiwo
-    # Example Output:
-    # NAME    AGE
-    # kaiwo   3m
-    ```
-    If this is missing, check the operator logs: `kubectl logs -n kaiwo-system -l control-plane=kaiwo-controller-manager`
+# Check AppWrapper
+kubectl get pods -n appwrapper-system
+```
 
-## Step 3: Provide Kaiwo CLI to Users
+### 2. Check Kaiwo Operator
 
-Instruct your users (AI Scientists/Engineers) on how to download and install the `kaiwo` CLI tool. Point them to the [User Quickstart guide](../scientist/quickstart.md) or the [CLI Installation instructions](./../getting-started/installation.md#kaiwo-cli-tool).
+Ensure the Kaiwo controller manager pod is running:
+
+```bash
+kubectl get pods -n kaiwo-system
+# Expected output:
+# NAME                                        READY   STATUS    RESTARTS   AGE
+# kaiwo-controller-manager-xxxxxxxxxx-xxxxx   2/2     Running   0          2m
+```
+
+### 3. Verify CRDs
+
+Check that the Kaiwo Custom Resource Definitions are installed:
+
+```bash
+kubectl get crds | grep -E 'kaiwo\.silogen\.ai|config\.kaiwo\.silogen\.ai'
+# Expected output (at minimum):
+# kaiwojobs.kaiwo.silogen.ai
+# kaiwoservices.kaiwo.silogen.ai
+# kaiwoqueueconfigs.kaiwo.silogen.ai
+# kaiwoconfigs.config.kaiwo.silogen.ai
+# resourceflavors.kaiwo.silogen.ai
+# topologies.kaiwo.silogen.ai
+```
+
+### 4. Check Default Configuration
+
+The operator should automatically create a default `KaiwoQueueConfig`:
+
+```bash
+kubectl get kaiwoqueueconfig kaiwo
+# Expected output:
+# NAME    AGE
+# kaiwo   3m
+```
+
+If this is missing, check the operator logs:
+
+```bash
+kubectl logs -n kaiwo-system -l app.kubernetes.io/name=kaiwo
+```
+
+If pods are pending or webhooks fail, see [Troubleshooting](./troubleshooting.md).
+
+## Uninstallation
+
+### Remove Kaiwo Operator
+
+For Helm installations:
+
+```bash
+helm uninstall kaiwo -n kaiwo-system
+```
+
+!!! danger "CRD Removal"
+    Helm uninstall keeps CRDs by default. Deleting CRDs will remove all Kaiwo resources. Only delete CRDs if you intend to wipe all Kaiwo state.
+
+For Kustomize installations:
+
+```bash
+kubectl delete -f https://github.com/silogen/kaiwo/releases/latest/download/install.yaml
+```
+
+!!! danger "CRD Removal"
+    Kustomize **will** delete CRDs, which removes all Kaiwo resources. Only delete CRDs if you intend to wipe all Kaiwo state.
+
+### Remove Dependencies
+
+To remove dependencies:
+
+```bash
+cd kaiwo  # Your cloned repository
+dependencies/deploy.sh kind-test down  # Use same environment as installation
+```
+
+## Provide CLI to Users
+
+Instruct your users (AI Scientists/Engineers) on how to download and install the `kaiwo` CLI tool. Point them to the [User Quickstart guide](../scientist/quickstart.md) or the CLI Installation instructions.
 
 ## Next Steps
 
-*   **Configure Kaiwo**: Customize the default `KaiwoQueueConfig` (`kubectl edit kaiwoqueueconfig kaiwo`) to define appropriate Kueue `ResourceFlavors` and `ClusterQueues` reflecting your cluster's hardware and policies. See the [Configuration Guide](./configuration.md).
-*   **Set up Monitoring**: Integrate Kaiwo operator metrics with your monitoring system (e.g., Prometheus). See the [Monitoring Guide](./monitoring.md).
-*   **Authentication**: Ensure users have the necessary `kubeconfig` files and any required authentication plugins installed. See [Authentication & Authorization](./auth.md).
+- **Configure Kaiwo**: Customize `KaiwoQueueConfig` and (optionally) `KaiwoConfig` to reflect your cluster’s hardware and policies. See the [Configuration Guide](./configuration.md).
+- **Set up Monitoring**: Integrate Kaiwo operator metrics with your monitoring system (e.g., Prometheus). See the [Monitoring Guide](./monitoring.md).
+- **Authentication**: Ensure users have the necessary `kubeconfig` files and any required authentication plugins installed. See [Authentication & Authorization](./auth.md).
+- **Troubleshooting**: If something isn’t working, review common issues and fixes in [Troubleshooting](./troubleshooting.md).

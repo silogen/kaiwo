@@ -137,7 +137,7 @@ The primary configuration resource is the `KaiwoConfig` CRD, typically maintaine
 
 - **`kueue`**: Configures default integration settings with Kueue, including the default cluster queue name.
 - **`ray`**: Specifies Ray-specific parameters, including default container images and memory allocations.
-- **`data`**: Manages default filesystem paths for mounting data storage and HuggingFace caches.
+- **`storage`**: Manages default filesystem paths for mounting data storage and HuggingFace caches.
 - **`nodes`**: Defines node-specific settings such as GPU resource keys, GPU node taints, and node pool exclusions.
 - **`scheduling`**: Sets scheduling-related configurations, like the Kubernetes scheduler name.
 - **`resourceMonitoring`**: Configures resource monitoring, including averaging intervals, utilization thresholds, and targeted namespaces.
