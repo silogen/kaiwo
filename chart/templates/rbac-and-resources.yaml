@@ -1,0 +1,13 @@
+{{/*
+RBAC resources extracted from kustomize build.
+This includes ClusterRole and ClusterRoleBinding with proper templating.
+*/}}
+
+{{- if .Values.rbac.create }}
+{{- $rbacResources := .Files.Get "rbac-resources.yaml" -}}
+{{- if $rbacResources }}
+{{- $rbacResources | replace "namespace: kaiwo-system" (printf "namespace: %s" .Release.Namespace) | replace "name: kaiwo-controller-manager" (printf "name: %s" (include "kaiwo.serviceAccountName" .)) }}
+{{- else }}
+{{- fail "RBAC resources file not found. Please run 'make helm-package' to generate it." }}
+{{- end }}
+{{- end }}

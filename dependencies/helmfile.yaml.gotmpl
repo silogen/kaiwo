@@ -1,0 +1,35 @@
+---
+repositories:
+  - name: rocm
+    url: https://rocm.github.io/gpu-operator
+  - name: nfs-ganesha-server-and-external-provisioner
+    url: https://kubernetes-sigs.github.io/nfs-ganesha-server-and-external-provisioner/
+
+releases:
+  - name: amd-gpu-operator
+    namespace: kube-amd-gpu
+    chart: rocm/gpu-operator-charts
+    version: v1.3.0
+    createNamespace: false
+    # install only if gpuType == "amd" in the state-values file
+    installed: {{ eq .Values.gpuType "amd" }}
+    values:
+      - upgradeCRD: false
+      - crds:
+          defaultCR:
+            install: false
+
+  - name: nfs-provisioner
+    namespace: storage
+    chart: nfs-ganesha-server-and-external-provisioner/nfs-server-provisioner
+    version: 1.8.0
+    createNamespace: true
+    values:
+      - persistence:
+          enabled: {{ .Values.nfs.persistence.enabled | default false }}
+          {{- if .Values.nfs.persistence.enabled }}
+          existingClaim: pvc-nfs-backing
+          {{- end }}
+      - storageClass:
+          create: true
+          name: rwx-nfs

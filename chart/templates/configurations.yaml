@@ -1,0 +1,129 @@
+{{/*
+Optional configuration resources for Kaiwo operator
+These are created only if enabled in values
+*/}}
+
+{{- if .Values.kaiwoConfig.enabled }}
+---
+# KaiwoConfig - Global operator configuration
+apiVersion: config.kaiwo.silogen.ai/v1alpha1
+kind: KaiwoConfig
+metadata:
+  name: {{ .Values.kaiwoConfig.name | default "kaiwo" }}
+  labels:
+    {{- include "kaiwo.labels" . | nindent 4 }}
+    {{- with .Values.commonLabels }}
+{{ toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+{{ toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.kaiwoConfig.spec.ray }}
+  ray:
+    {{- with .Values.kaiwoConfig.spec.ray.defaultRayImage }}
+    defaultRayImage: {{ . | quote }}
+    {{- end }}
+    {{- with .Values.kaiwoConfig.spec.ray.headPodMemory }}
+    headPodMemory: {{ . | quote }}
+    {{- end }}
+  {{- end }}
+  
+  {{- if .Values.kaiwoConfig.spec.data }}
+  data:
+    {{- with .Values.kaiwoConfig.spec.data.defaultStorageClass }}
+    defaultStorageClass: {{ . | quote }}
+    {{- end }}
+    {{- with .Values.kaiwoConfig.spec.data.defaultDataMountPath }}
+    defaultDataMountPath: {{ . | quote }}
+    {{- end }}
+    {{- with .Values.kaiwoConfig.spec.data.defaultHfMountPath }}
+    defaultHfMountPath: {{ . | quote }}
+    {{- end }}
+  {{- end }}
+  
+  {{- if .Values.kaiwoConfig.spec.nodes }}
+  nodes:
+    {{- with .Values.kaiwoConfig.spec.nodes.defaultGpuResourceKey }}
+    defaultGpuResourceKey: {{ . | quote }}
+    {{- end }}
+    {{- with .Values.kaiwoConfig.spec.nodes.defaultGpuTaintKey }}
+    defaultGpuTaintKey: {{ . | quote }}
+    {{- end }}
+    {{- if hasKey .Values.kaiwoConfig.spec.nodes "excludeMasterNodesFromNodePools" }}
+    excludeMasterNodesFromNodePools: {{ .Values.kaiwoConfig.spec.nodes.excludeMasterNodesFromNodePools }}
+    {{- end }}
+  {{- end }}
+  
+  {{- if .Values.kaiwoConfig.spec.scheduling }}
+  scheduling:
+    {{- if hasKey .Values.kaiwoConfig.spec.scheduling "enablePreemption" }}
+    enablePreemption: {{ .Values.kaiwoConfig.spec.scheduling.enablePreemption }}
+    {{- end }}
+    {{- with .Values.kaiwoConfig.spec.scheduling.defaultTimeoutSeconds }}
+    defaultTimeoutSeconds: {{ . }}
+    {{- end }}
+  {{- end }}
+  
+  {{- if .Values.kaiwoConfig.spec.resourceMonitoring }}
+  resourceMonitoring:
+    {{- if hasKey .Values.kaiwoConfig.spec.resourceMonitoring "enabled" }}
+    enabled: {{ .Values.kaiwoConfig.spec.resourceMonitoring.enabled }}
+    {{- end }}
+    {{- with .Values.kaiwoConfig.spec.resourceMonitoring.pollingInterval }}
+    pollingInterval: {{ . | quote }}
+    {{- end }}
+    {{- with .Values.kaiwoConfig.spec.resourceMonitoring.prometheusEndpoint }}
+    prometheusEndpoint: {{ . | quote }}
+    {{- end }}
+  {{- end }}
+  
+  {{- with .Values.kaiwoConfig.spec.defaultClusterQueueName }}
+  defaultClusterQueueName: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.kaiwoConfig.spec.defaultClusterQueueCohortName }}
+  defaultClusterQueueCohortName: {{ . | quote }}
+  {{- end }}
+  {{- if hasKey .Values.kaiwoConfig.spec "dynamicallyUpdateDefaultClusterQueue" }}
+  dynamicallyUpdateDefaultClusterQueue: {{ .Values.kaiwoConfig.spec.dynamicallyUpdateDefaultClusterQueue }}
+  {{- end }}
+{{- end }}
+
+{{- if .Values.kaiwoQueueConfig.enabled }}
+---
+# KaiwoQueueConfig - Manages Kueue resources
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoQueueConfig
+metadata:
+  name: {{ .Values.kaiwoQueueConfig.name | default "kaiwo" }}
+  labels:
+    {{- include "kaiwo.labels" . | nindent 4 }}
+    {{- with .Values.commonLabels }}
+{{ toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+{{ toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.kaiwoQueueConfig.spec.clusterQueues }}
+  clusterQueues:
+    {{- toYaml .Values.kaiwoQueueConfig.spec.clusterQueues | nindent 2 }}
+  {{- end }}
+  
+  {{- if .Values.kaiwoQueueConfig.spec.resourceFlavors }}
+  resourceFlavors:
+    {{- toYaml .Values.kaiwoQueueConfig.spec.resourceFlavors | nindent 2 }}
+  {{- end }}
+  
+  {{- if .Values.kaiwoQueueConfig.spec.workloadPriorityClasses }}
+  workloadPriorityClasses:
+    {{- toYaml .Values.kaiwoQueueConfig.spec.workloadPriorityClasses | nindent 2 }}
+  {{- end }}
+  
+  {{- if .Values.kaiwoQueueConfig.spec.topologies }}
+  topologies:
+    {{- toYaml .Values.kaiwoQueueConfig.spec.topologies | nindent 2 }}
+  {{- end }}
+{{- end }}

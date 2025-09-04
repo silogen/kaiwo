@@ -1,0 +1,7 @@
+{{/*
+Kaiwo Scheduler resources
+*/}}
+{{- if .Values.scheduler.enabled }}
+# Generated from config/static/scheduler
+{{ (.Files.Get "scheduler-resources.yaml") | replace "namespace: kube-system" (printf "namespace: %s" .Values.scheduler.namespace) }}
+{{- end }}

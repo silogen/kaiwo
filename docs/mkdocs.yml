@@ -36,6 +36,7 @@ nav:
 - "Administrator":
   - "Overview": "admin/overview.md"
   - "Installation": "admin/installation.md"
+  - "Helm Installation": "admin/helm-installation.md"
   - "Configuration": "admin/configuration.md"
   - "Maintenance": "admin/maintenance.md"
   - "Monitoring": "admin/monitoring.md"
