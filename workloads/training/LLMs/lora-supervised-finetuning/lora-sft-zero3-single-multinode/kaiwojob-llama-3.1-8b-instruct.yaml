@@ -4,7 +4,7 @@ metadata:
   name: multinode-stage-zero3-finetuning-example
 spec:
   user: test@amd.com
-  gpus: 16
+  gpus: 8
   ray: true
   entrypoint: |
     python code/main.py \
@@ -38,7 +38,7 @@ spec:
     value: meta-llama/Llama-3.1-8B-Instruct
   storage:
     storageEnabled: true
-    storageClassName: multinode
+    storageClassName: rwx-nfs
     data:
       storageSize: 20Mi
       mountPath: /workload

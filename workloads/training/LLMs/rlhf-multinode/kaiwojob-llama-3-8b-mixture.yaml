@@ -53,7 +53,7 @@ spec:
         key: hf-token
   storage:
     storageEnabled: true
-    storageClassName: multinode
+    storageclassName: rwx-nfs
     huggingFace:
       storageSize: "100Gi"
       mountPath: "/hf_cache" # Also sets the env var HF_HOME to this value in each container

@@ -19,7 +19,7 @@ spec:
   resources:
     requests:
       storage: 500Gi
-  storageClassName: multinode
+  storageclassName: rwx-nfs
 ---
 apiVersion: apps/v1
 kind: Deployment
