@@ -12,7 +12,7 @@ spec:
     value: TinyLlama/TinyLlama-1.1B-Chat-v1.0
   storage:
     storageEnabled: true
-    storageClassName: multinode
+    storageclassName: rwx-nfs
     data:
       storageSize: 10Mi
       mountPath: /workload

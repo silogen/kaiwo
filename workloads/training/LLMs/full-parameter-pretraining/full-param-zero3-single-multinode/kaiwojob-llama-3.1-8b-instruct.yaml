@@ -36,7 +36,7 @@ spec:
     value: meta-llama/Llama-3.1-8B-Instruct
   storage:
     storageEnabled: true
-    storageClassName: multinode
+    storageclassName: rwx-nfs
     data:
       storageSize: 20Mi
       mountPath: /workload

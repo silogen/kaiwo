@@ -5,6 +5,7 @@ metadata:
 spec:
   user: test@amd.com
   gpus: 4
+  image: ghcr.io/silogen/rocm-ray:6.4
   entrypoint: |
     accelerate launch code/dpo.py \
     --dataset_name trl-lib/ultrafeedback_binarized \
@@ -24,7 +25,7 @@ spec:
     --optim="adamw_torch"  
   storage:
     storageEnabled: true
-    storageClassName: multinode
+    storageClassName: rwx-nfs
     data:
       storageSize: 20Mi
       mountPath: /workload
