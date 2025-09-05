@@ -183,7 +183,7 @@ helm-template: build-installer ## Generate Helm templates for inspection
 .PHONY: helm-push-oci
 helm-push-oci: helm-package ## Push Helm chart to OCI registry
 	@echo "Pushing Helm chart to OCI registry..."
-	helm push dist/kaiwo-operator-$(CHART_VERSION).tgz oci://ghcr.io/$(shell echo $(IMG) | cut -d'/' -f2 | cut -d':' -f1)
+	helm push dist/kaiwo-$(CHART_VERSION).tgz oci://ghcr.io/$(shell echo $(IMG) | cut -d'/' -f2 | cut -d':' -f1)
 
 .PHONY: helm-release
 helm-release: helm-package ## Package chart for release (used by CI)
