@@ -4,7 +4,7 @@ set -e
 
 TEST_NAME=${TEST_NAME:-"kaiwo-test"}
 
-./test/setup_kind.sh
+./test/scripts/setup_kind.sh
 
 kind get kubeconfig -n "$TEST_NAME" > kaiwo_test_kubeconfig.yaml 
 
@@ -40,6 +40,6 @@ find config/static -name '*.yaml' -print0 | xargs -0 -n1 kubectl apply -f
 
 kubectl apply -f config/webhook_local_dev/webhooks.yaml
 
-kubectl apply -f test/kaiwoconfig.yaml
+#kubectl apply -f test/kaiwoconfig.yaml
 
 echo "You can now run debugger in your IDE"
