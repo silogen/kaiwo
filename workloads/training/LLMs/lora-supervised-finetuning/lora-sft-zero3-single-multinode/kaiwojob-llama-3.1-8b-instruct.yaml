@@ -14,7 +14,6 @@ spec:
     --bucket=silogen-dev \
     --num-epochs=1 \
     --lora \
-    --num-devices=$NUM_GPUS \
     --batch-size-per-device=32 \
     --eval-batch-size-per-device=32 \
     --ctx-len=1024

@@ -18,7 +18,7 @@ spec:
     value: meta-llama/Llama-3.1-8B-Instruct
   storage:
     storageEnabled: true
-    storageclassName: rwx-nfs
+    storageClassName: rwx-nfs
     data:
       storageSize: 20Mi
       mountPath: /workload
