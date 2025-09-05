@@ -62,7 +62,7 @@ OPTIM_EPS = 1e-8
 NUM_WARMUP_STEPS = 10
 OPTIM_WEIGHT_DECAY = 0.0
 ATTENTION_LAYER_NAME = "self_attn"
-NUM_GPUS = os.getenv("NUM_GPUS")
+NUM_GPUS = int(os.getenv("NUM_GPUS"))
 
 
 def load_gsm8k_dataset():
