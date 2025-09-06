@@ -1,0 +1,823 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nvidia-device-plugin
+  namespace: gpu-operator
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kwok-gpu-device-plugin
+  namespace: gpu-operator
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mig-faker
+  namespace: gpu-operator
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: status-exporter
+  namespace: gpu-operator
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: status-updater
+  namespace: gpu-operator
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: topology-server
+  namespace: gpu-operator
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hostpath-init
+  namespace: gpu-operator
+data:
+  init.sh: |
+    #!/bin/bash
+
+    set -e
+
+    RUNAI_DIR=/runai
+
+    # Allow containers to read/write to RUNAI_DIR
+    chmod 777 $RUNAI_DIR
+    chcon -Rt svirt_sandbox_file_t $RUNAI_DIR || echo "Failed to set SELinux context, this is expected if SELinux is not enabled"
+---
+apiVersion: v1
+data:
+  topology.yml: |-
+    migStrategy: mixed
+    nodePoolLabelKey: run.ai/simulated-gpu-node-pool
+    nodePools:
+      default:
+        gpuCount: 8
+        gpuMemory: 11441
+        gpuProduct: Tesla-K80
+kind: ConfigMap
+metadata:
+  name: topology
+  namespace: gpu-operator
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: fake-device-plugin
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+- apiGroups:
+  - ""
+  resources:
+  - nodes/status
+  verbs:
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: fake-kwok-gpu-device-plugin
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  - nodes/status
+  verbs:
+  - update
+  - list
+  - get
+  - watch
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - update
+  - create
+  - list
+  - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: mig-faker
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - update
+  - watch
+  - list
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+  - update
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: fake-status-exporter
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - update
+  - watch
+  - list
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+  - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: fake-status-updater
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - nodes
+  verbs:
+  - get
+  - list
+  - watch
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - update
+  - patch
+  - create
+  - list
+  - delete
+- apiGroups:
+  - scheduling.run.ai
+  resources:
+  - podgroups
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: topology-server
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: fake-device-plugin
+roleRef:
+  kind: ClusterRole
+  apiGroup: rbac.authorization.k8s.io
+  name: fake-device-plugin
+subjects:
+- kind: ServiceAccount
+  name: nvidia-device-plugin
+  namespace: "gpu-operator"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: fake-kwok-gpu-device-plugin
+roleRef:
+  kind: ClusterRole
+  apiGroup: rbac.authorization.k8s.io
+  name: fake-kwok-gpu-device-plugin
+subjects:
+- kind: ServiceAccount
+  name: kwok-gpu-device-plugin
+  namespace: "gpu-operator"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: mig-faker
+roleRef:
+  kind: ClusterRole
+  apiGroup: rbac.authorization.k8s.io
+  name: mig-faker
+subjects:
+- kind: ServiceAccount
+  name: mig-faker
+  namespace: "gpu-operator"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: fake-status-exporter
+roleRef:
+  kind: ClusterRole
+  apiGroup: rbac.authorization.k8s.io
+  name: fake-status-exporter
+subjects:
+- kind: ServiceAccount
+  name: status-exporter
+  namespace: "gpu-operator"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: fake-status-updater
+roleRef:
+  kind: ClusterRole
+  apiGroup: rbac.authorization.k8s.io
+  name: fake-status-updater
+subjects:
+- kind: ServiceAccount
+  name: status-updater
+  namespace: "gpu-operator"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: topology-server
+roleRef:
+  kind: ClusterRole
+  apiGroup: rbac.authorization.k8s.io
+  name: topology-server
+subjects:
+- kind: ServiceAccount
+  name: topology-server
+  namespace: "gpu-operator"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: fake-kwok-gpu-device-plugin
+  namespace: gpu-operator
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - list
+  - get
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: fake-status-updater
+  namespace: gpu-operator
+rules:
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - update
+  - list
+  - get
+  - watch
+  - create
+  - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fake-kwok-gpu-device-plugin
+  namespace: gpu-operator
+roleRef:
+  kind: Role
+  apiGroup: rbac.authorization.k8s.io
+  name: fake-kwok-gpu-device-plugin
+subjects:
+- kind: ServiceAccount
+  name: kwok-gpu-device-plugin
+  namespace: "gpu-operator"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fake-status-updater
+  namespace: gpu-operator
+roleRef:
+  kind: Role
+  apiGroup: rbac.authorization.k8s.io
+  name: fake-status-updater
+subjects:
+- kind: ServiceAccount
+  name: status-updater
+  namespace: "gpu-operator"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    prometheus.io/scrape: "true"
+  labels:
+    app: nvidia-dcgm-exporter
+  name: nvidia-dcgm-exporter
+  namespace: gpu-operator
+spec:
+  ports:
+  - name: gpu-metrics
+    port: 9400
+    protocol: TCP
+    targetPort: 9400
+  selector:
+    app: nvidia-dcgm-exporter
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: topology-server
+  namespace: gpu-operator
+spec:
+  selector:
+    app: topology-server
+  type: ClusterIP
+  ports:
+  - name: topology-server
+    protocol: TCP
+    port: 80
+    targetPort: 8080
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: device-plugin
+  namespace: gpu-operator
+  labels:
+    app: device-plugin
+spec:
+  selector:
+
+    matchLabels:
+      app: device-plugin
+      component: device-plugin
+  template:
+    metadata:
+
+      annotations:
+        checksum/topology: 235897b3c2551673e7e5c51cbfc84ad61aa794f5491222b8d0593cd44f5d5315
+      labels:
+        app: device-plugin
+        component: device-plugin
+    spec:
+
+      containers:
+      - image: "ghcr.io/silogen/fake-gpu-operator-device-plugin:0.0.0-dev"
+        imagePullPolicy: "IfNotPresent"
+        resources:
+          limits:
+            cpu: 200m
+            memory: 200Mi
+          requests:
+            cpu: 100m
+            memory: 100Mi
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: TOPOLOGY_CM_NAME
+          value: topology
+        - name: TOPOLOGY_CM_NAMESPACE
+          value: "default"
+        name: nvidia-device-plugin-ctr
+        securityContext:
+          privileged: true
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /runai/bin
+          name: runai-bin-directory
+        - mountPath: /runai/shared
+          name: runai-shared-directory
+        - mountPath: /var/lib/kubelet/device-plugins
+          name: device-plugin
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      serviceAccountName: nvidia-device-plugin
+      terminationGracePeriodSeconds: 30
+      tolerations:
+      - effect: NoSchedule
+        key: nvidia.com/gpu
+        operator: Exists
+      volumes:
+      - hostPath:
+          path: /var/lib/kubelet/device-plugins
+          type: ""
+        name: device-plugin
+      - hostPath:
+          path: /var/lib/runai/bin
+          type: DirectoryOrCreate
+        name: runai-bin-directory
+      - hostPath:
+          path: /var/lib/runai/shared
+          type: DirectoryOrCreate
+        name: runai-shared-directory
+      nodeSelector:
+        nvidia.com/gpu.deploy.device-plugin: "true"
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  labels:
+    app: mig-faker
+  name: mig-faker
+  namespace: gpu-operator
+spec:
+  selector:
+    matchLabels:
+      app: mig-faker
+      component: mig-faker
+  template:
+    metadata:
+      annotations:
+        checksum/topology: 235897b3c2551673e7e5c51cbfc84ad61aa794f5491222b8d0593cd44f5d5315
+      labels:
+        app: mig-faker
+        component: mig-faker
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: nvidia.com/gpu.present
+                operator: In
+                values:
+                - "true"
+      containers:
+      - image: "ghcr.io/silogen/fake-gpu-operator-mig-faker:0.0.0-dev"
+        imagePullPolicy: "IfNotPresent"
+        resources: null
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        name: mig-faker
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      nodeSelector:
+        node-role.kubernetes.io/runai-dynamic-mig: "true"
+      restartPolicy: Always
+      serviceAccountName: mig-faker
+      terminationGracePeriodSeconds: 30
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: nvidia-dcgm-exporter
+  namespace: gpu-operator
+  labels:
+    app: nvidia-dcgm-exporter
+    component: status-exporter
+    app.kubernetes.io/name: nvidia-container-toolkit
+spec:
+  selector:
+    matchLabels:
+      app: nvidia-dcgm-exporter
+  template:
+    metadata:
+      labels:
+        app: nvidia-dcgm-exporter
+        app.kubernetes.io/name: nvidia-container-toolkit
+      annotations:
+        checksum/hostpath-init-configmap: 9695ce1f38c65bf54e51e5a6b65a2de91a72df661457019682d1c442f9c9410a
+    spec:
+      containers:
+      - image: "ghcr.io/silogen/fake-gpu-operator-status-exporter:0.0.0-dev"
+        imagePullPolicy: "IfNotPresent"
+        resources:
+          limits:
+            cpu: 200m
+            memory: 200Mi
+          requests:
+            cpu: 100m
+            memory: 100Mi
+        name: nvidia-dcgm-exporter
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: TOPOLOGY_CM_NAME
+          value: topology
+        - name: TOPOLOGY_CM_NAMESPACE
+          value: "default"
+        - name: TOPOLOGY_MAX_EXPORT_INTERVAL
+          value: "10s"
+        ports:
+        - containerPort: 9400
+          name: http
+        volumeMounts:
+        - mountPath: /runai
+          name: runai-data
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      serviceAccount: status-exporter
+      serviceAccountName: status-exporter
+      tolerations:
+      - effect: NoSchedule
+        key: nvidia.com/gpu
+        operator: Exists
+      volumes:
+      - name: runai-data
+        hostPath:
+          path: /var/lib/runai
+          type: DirectoryOrCreate
+      - name: hostpath-init-script
+        configMap:
+          name: hostpath-init
+      initContainers:
+      - name: hostpath-init
+        image: "ubuntu:24.04"
+        command: ["/bin/bash", "/hostpath-init/init.sh"]
+        volumeMounts:
+        - name: runai-data
+          mountPath: /runai
+        - name: hostpath-init-script
+          mountPath: /hostpath-init
+        securityContext:
+          seccompProfile:
+            type: RuntimeDefault
+          privileged: true
+      nodeSelector:
+        nvidia.com/gpu.deploy.dcgm-exporter: "true"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gpu-operator
+  namespace: gpu-operator
+  labels:
+    app: gpu-operator
+spec:
+  selector:
+    matchLabels:
+      app: gpu-operator
+      component: gpu-operator
+  replicas: 0
+  template:
+    metadata:
+      labels:
+        app: gpu-operator
+        component: gpu-operator
+    spec:
+      containers:
+      - name: gpu-operator
+        image: ubuntu:22.04
+        args:
+        - sleep
+        - infinity
+      restartPolicy: Always
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kwok-gpu-device-plugin
+  namespace: gpu-operator
+  annotations:
+    checksum/topology: 235897b3c2551673e7e5c51cbfc84ad61aa794f5491222b8d0593cd44f5d5315
+  labels:
+    app: kwok-gpu-device-plugin
+spec:
+  selector:
+    matchLabels:
+      app: kwok-gpu-device-plugin
+      component: kwok-gpu-device-plugin
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+        checksum/topology: 235897b3c2551673e7e5c51cbfc84ad61aa794f5491222b8d0593cd44f5d5315
+      labels:
+        app: kwok-gpu-device-plugin
+        component: kwok-gpu-device-plugin
+    spec:
+      containers:
+      - name: kwok-gpu-device-plugin
+        image: "ghcr.io/silogen/fake-gpu-operator-kwok-gpu-device-plugin:0.0.0-dev"
+        imagePullPolicy: "IfNotPresent"
+        resources:
+          limits:
+            cpu: 200m
+            memory: 400Mi
+          requests:
+            cpu: 100m
+            memory: 200Mi
+        env:
+        - name: TOPOLOGY_CM_NAME
+          value: topology
+        - name: TOPOLOGY_CM_NAMESPACE
+          value: "default"
+        - name: FAKE_GPU_OPERATOR_NAMESPACE
+          value: "default"
+      restartPolicy: Always
+      serviceAccountName: kwok-gpu-device-plugin
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nvidia-dcgm-exporter
+  namespace: gpu-operator
+  labels:
+    app: nvidia-dcgm-exporter
+    component: status-exporter
+    app.kubernetes.io/name: nvidia-container-toolkit
+    run.ai/fake-node-deployment-template: "true"
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: nvidia-dcgm-exporter
+  template:
+    metadata:
+      labels:
+        app: nvidia-dcgm-exporter
+        app.kubernetes.io/name: nvidia-container-toolkit
+      annotations:
+        checksum/hostpath-init-configmap: 9695ce1f38c65bf54e51e5a6b65a2de91a72df661457019682d1c442f9c9410a
+    spec:
+      containers:
+      - image: "ghcr.io/silogen/fake-gpu-operator-status-exporter:0.0.0-dev"
+        imagePullPolicy: "IfNotPresent"
+        resources:
+          limits:
+            cpu: 200m
+            memory: 200Mi
+          requests:
+            cpu: 100m
+            memory: 100Mi
+        name: nvidia-dcgm-exporter
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: TOPOLOGY_CM_NAME
+          value: topology
+        - name: TOPOLOGY_CM_NAMESPACE
+          value: "default"
+        - name: TOPOLOGY_MAX_EXPORT_INTERVAL
+          value: "10s"
+        ports:
+        - containerPort: 9400
+          name: http
+        volumeMounts:
+        - mountPath: /runai
+          name: runai-data
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      serviceAccount: status-exporter
+      serviceAccountName: status-exporter
+      tolerations:
+      - effect: NoSchedule
+        key: nvidia.com/gpu
+        operator: Exists
+      volumes:
+      - name: runai-data
+        hostPath:
+          path: /var/lib/runai
+          type: DirectoryOrCreate
+      - name: hostpath-init-script
+        configMap:
+          name: hostpath-init
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: status-updater
+  namespace: gpu-operator
+  annotations:
+    checksum/topology: 235897b3c2551673e7e5c51cbfc84ad61aa794f5491222b8d0593cd44f5d5315
+  labels:
+    app: status-updater
+spec:
+  selector:
+    matchLabels:
+      app: status-updater
+      component: status-updater
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+        checksum/topology: 235897b3c2551673e7e5c51cbfc84ad61aa794f5491222b8d0593cd44f5d5315
+      labels:
+        app: status-updater
+        component: status-updater
+    spec:
+      containers:
+      - name: status-updater
+        image: "ghcr.io/silogen/fake-gpu-operator-status-updater:0.0.0-dev"
+        imagePullPolicy: "IfNotPresent"
+        resources:
+          limits:
+            cpu: 400m
+            memory: 400Mi
+          requests:
+            cpu: 200m
+            memory: 200Mi
+        env:
+        - name: TOPOLOGY_CM_NAME
+          value: topology
+        - name: TOPOLOGY_CM_NAMESPACE
+          value: "default"
+        - name: FAKE_GPU_OPERATOR_NAMESPACE
+          value: "default"
+      restartPolicy: Always
+      serviceAccountName: status-updater
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: topology-server
+  namespace: gpu-operator
+
+  labels:
+    app: topology-server
+spec:
+  selector:
+    matchLabels:
+      app: topology-server
+      component: topology-server
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: topology-server
+        component: topology-server
+    spec:
+      containers:
+      - name: topology-server
+        image: "ghcr.io/silogen/fake-gpu-operator-topology-server:0.0.0-dev"
+        imagePullPolicy: "IfNotPresent"
+        resources:
+          limits:
+            cpu: 200m
+            memory: 200Mi
+          requests:
+            cpu: 100m
+            memory: 100Mi
+        env:
+        - name: TOPOLOGY_CM_NAME
+          value: topology
+        - name: TOPOLOGY_CM_NAMESPACE
+          value: "default"
+        ports:
+        - name: http
+          containerPort: 8080
+      restartPolicy: Always
+      serviceAccountName: topology-server
+---
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: nvidia
+handler: runc

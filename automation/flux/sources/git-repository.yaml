@@ -1,0 +1,13 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: kaiwo-source
+  namespace: flux-system
+spec:
+  interval: 5m
+  url: https://github.com/silogen/kaiwo
+  ref:
+    branch: main
+  # For private repositories, uncomment and create the secret:
+  # secretRef:
+  #   name: kaiwo-git-credentials

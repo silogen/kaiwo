@@ -1,0 +1,9 @@
+# Ansible inventory files with real IPs/secrets
+inventory.ini
+inventory.yml
+inventory.yaml
+group_vars/
+host_vars/
+
+# Kubeconfig for RKE2
+kubeconfig_rke2.yaml
