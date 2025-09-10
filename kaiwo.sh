@@ -350,20 +350,7 @@ deploy_kustomization_with_ref() {
   # Prepare test overlay and apply
   cp dist/install.yaml test/merged.yaml
   kubectl apply --server-side -k test/
-
-  # Wait for operator readiness
-  local selector="app.kubernetes.io/name=kaiwo"
-  info "Waiting for operator pods to be Ready in namespace ${HELM_NAMESPACE}"
-  # Wait for at least one pod to appear (max ~120s)
-  for _ in {1..60}; do
-    if kubectl -n "${HELM_NAMESPACE}" get pods -l "${selector}" --no-headers 2>/dev/null | grep -q .; then
-      break
-    fi
-    sleep 2
-  done
-  kubectl -n "${HELM_NAMESPACE}" wait --for=condition=Ready pods -l "${selector}" --timeout=180s
-
-  ok "Kustomization deployment completed"
+  
 }
 
 # ---------- Undeploy Functions ----------
