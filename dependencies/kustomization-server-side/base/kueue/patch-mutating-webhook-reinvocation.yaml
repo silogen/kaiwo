@@ -1,0 +1,41 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: kueue-mutating-webhook-configuration
+webhooks:
+- name: mpod.kb.io
+  reinvocationPolicy: IfNeeded
+- name: mdeployment.kb.io
+  reinvocationPolicy: IfNeeded
+- name: mstatefulset.kb.io
+  reinvocationPolicy: IfNeeded
+- name: mappwrapper.kb.io
+  reinvocationPolicy: IfNeeded
+- name: mjob.kb.io
+  reinvocationPolicy: IfNeeded
+- name: mjobset.kb.io
+  reinvocationPolicy: IfNeeded
+- name: mjaxjob.kb.io
+  reinvocationPolicy: IfNeeded
+- name: mpaddlejob.kb.io
+  reinvocationPolicy: IfNeeded
+- name: mpytorchjob.kb.io
+  reinvocationPolicy: IfNeeded
+- name: mtfjob.kb.io
+  reinvocationPolicy: IfNeeded
+- name: mxgboostjob.kb.io
+  reinvocationPolicy: IfNeeded
+- name: mleaderworkerset.kb.io
+  reinvocationPolicy: IfNeeded
+- name: mmpijob.kb.io
+  reinvocationPolicy: IfNeeded
+- name: mraycluster.kb.io
+  reinvocationPolicy: IfNeeded
+- name: mrayjob.kb.io
+  reinvocationPolicy: IfNeeded
+- name: mclusterqueue.kb.io
+  reinvocationPolicy: IfNeeded
+- name: mresourceflavor.kb.io
+  reinvocationPolicy: IfNeeded
+- name: mworkload.kb.io
+  reinvocationPolicy: IfNeeded
