@@ -112,63 +112,15 @@ const (
 
 	UnschedulableNoGPUs           SchedulingReason = "NoGPUs"
 	UnschedulableInsufficientGPUs SchedulingReason = "InsufficientGPUs"
-
-	UnschedulableWrongQueueNamespace  SchedulingReason = "WrongQueueNamespace"
-	UnschedulableClusterQueueNotFound SchedulingReason = "ClusterQueueNotFound"
 )
 
 func GetSchedulableCondition(ctx context.Context, clusterCtx ClusterContext, workload KaiwoWorkload) metav1.Condition {
-	queueConfigCondition := getQueueConfigCondition(ctx, clusterCtx, workload)
-
-	if queueConfigCondition.Status == metav1.ConditionFalse {
-		return queueConfigCondition
-	}
 	gpuSchedulableCondition := getGpuSchedulableCondition(ctx, clusterCtx, workload)
 
 	// TODO add another reason that indicates the workload can be scheduled, but not immediately?
 	// TODO add checks for other cluster resources?
 
 	return gpuSchedulableCondition
-}
-
-func getQueueConfigCondition(ctx context.Context, clusterCtx ClusterContext, workload KaiwoWorkload) metav1.Condition {
-	kaiwoQueueConfig := clusterCtx.KaiwoQueueConfig
-	clusterQueueName := GetClusterQueueName(ctx, workload)
-	workloadNamespace := workload.GetKaiwoWorkloadObject().GetNamespace()
-	for _, clusterQueue := range kaiwoQueueConfig.Spec.ClusterQueues {
-		if clusterQueue.Name == clusterQueueName {
-			if len(clusterQueue.Namespaces) == 0 {
-				return metav1.Condition{
-					Type:    SchedulableType,
-					Status:  metav1.ConditionTrue,
-					Reason:  string(Schedulable),
-					Message: "Cluster queue has no namespace restrictions",
-				}
-			}
-			for _, namespace := range clusterQueue.Namespaces {
-				if namespace == workloadNamespace {
-					return metav1.Condition{
-						Type:    SchedulableType,
-						Status:  metav1.ConditionTrue,
-						Reason:  string(Schedulable),
-						Message: "Cluster queue namespace matches",
-					}
-				}
-			}
-			return metav1.Condition{
-				Type:    SchedulableType,
-				Status:  metav1.ConditionFalse,
-				Reason:  string(UnschedulableWrongQueueNamespace),
-				Message: fmt.Sprintf("Cluster queue '%s' defines one or more namespaces, but workload namespace '%s' is not one of them", clusterQueueName, workloadNamespace),
-			}
-		}
-	}
-	return metav1.Condition{
-		Type:    SchedulableType,
-		Status:  metav1.ConditionFalse,
-		Reason:  string(UnschedulableClusterQueueNotFound),
-		Message: fmt.Sprintf("Cluster queue '%s' is not defined in KaiwoQueueConfig '%s'", clusterQueueName, kaiwoQueueConfig.Name),
-	}
 }
 
 func getGpuSchedulableCondition(ctx context.Context, clusterCtx ClusterContext, workload KaiwoWorkload) metav1.Condition {

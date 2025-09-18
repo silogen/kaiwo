@@ -11,8 +11,6 @@ Package v1alpha1 contains API Schema definitions for the kaiwo v1alpha1 API grou
 ### Resource Types
 - [KaiwoJob](#kaiwojob)
 - [KaiwoJobList](#kaiwojoblist)
-- [KaiwoQueueConfig](#kaiwoqueueconfig)
-- [KaiwoQueueConfigList](#kaiwoqueueconfiglist)
 - [KaiwoService](#kaiwoservice)
 - [KaiwoServiceList](#kaiwoservicelist)
 
@@ -60,49 +58,6 @@ _Appears in:_
 
 
 
-#### ClusterQueue
-
-
-
-ClusterQueue defines the configuration for a Kueue ClusterQueue managed by Kaiwo.
-
-
-
-_Appears in:_
-- [KaiwoQueueConfigSpec](#kaiwoqueueconfigspec)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `name` _string_ | Name specifies the name of the Kueue ClusterQueue resource. |  |  |
-| `spec` _[ClusterQueueSpec](#clusterqueuespec)_ | Spec contains the desired Kueue `ClusterQueueSpec`. Kaiwo ensures the corresponding ClusterQueue resource matches this spec. See Kueue documentation for `ClusterQueueSpec` fields like `resourceGroups`, `cohort`, `preemption`, etc. |  |  |
-| `namespaces` _string array_ | Namespaces optionally lists Kubernetes namespaces where Kaiwo should automatically create a Kueue `LocalQueue` resource pointing to this ClusterQueue.<br />If one or more namespaces are provided, the KaiwoQueueConfig controller takes over managing the LocalQueues for this ClusterQueue.<br />Leave this empty if you want to be able to create your own LocalQueues for this ClusterQueue. |  |  |
-
-
-#### ClusterQueueSpec
-
-
-
-
-
-
-
-_Appears in:_
-- [ClusterQueue](#clusterqueue)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `resourceGroups` _ResourceGroup array_ | resourceGroups describes groups of resources.<br />Each resource group defines the list of resources and a list of flavors<br />that provide quotas for these resources.<br />Each resource and each flavor can only form part of one resource group.<br />resourceGroups can be up to 16. |  | MaxItems: 16 <br /> |
-| `cohort` _[CohortReference](#cohortreference)_ | cohort that this ClusterQueue belongs to. CQs that belong to the<br />same cohort can borrow unused resources from each other.<br />A CQ can be a member of a single borrowing cohort. A workload submitted<br />to a queue referencing this CQ can borrow quota from any CQ in the cohort.<br />Only quota for the [resource, flavor] pairs listed in the CQ can be<br />borrowed.<br />If empty, this ClusterQueue cannot borrow from any other ClusterQueue and<br />vice versa.<br />A cohort is a name that links CQs together, but it doesn't reference any<br />object. |  |  |
-| `queueingStrategy` _[QueueingStrategy](#queueingstrategy)_ | QueueingStrategy indicates the queueing strategy of the workloads<br />across the queues in this ClusterQueue.<br />Current Supported Strategies:<br />- StrictFIFO: workloads are ordered strictly by creation time.<br />Older workloads that can't be admitted will block admitting newer<br />workloads even if they fit available quota.<br />- BestEffortFIFO: workloads are ordered by creation time,<br />however older workloads that can't be admitted will not block<br />admitting newer workloads that fit existing quota. | BestEffortFIFO | Enum: [StrictFIFO BestEffortFIFO] <br /> |
-| `namespaceSelector` _[LabelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#labelselector-v1-meta)_ | namespaceSelector defines which namespaces are allowed to submit workloads to<br />this clusterQueue. Beyond this basic support for policy, a policy agent like<br />Gatekeeper should be used to enforce more advanced policies.<br />Defaults to null which is a nothing selector (no namespaces eligible).<br />If set to an empty selector `\{\}`, then all namespaces are eligible. |  |  |
-| `flavorFungibility` _[FlavorFungibility](#flavorfungibility)_ | flavorFungibility defines whether a workload should try the next flavor<br />before borrowing or preempting in the flavor being evaluated. | \{  \} |  |
-| `preemption` _[ClusterQueuePreemption](#clusterqueuepreemption)_ |  | \{  \} |  |
-| `admissionChecks` _[AdmissionCheckReference](#admissioncheckreference) array_ | admissionChecks lists the AdmissionChecks required by this ClusterQueue.<br />Cannot be used along with AdmissionCheckStrategy. |  |  |
-| `admissionChecksStrategy` _[AdmissionChecksStrategy](#admissionchecksstrategy)_ | admissionCheckStrategy defines a list of strategies to determine which ResourceFlavors require AdmissionChecks.<br />This property cannot be used in conjunction with the 'admissionChecks' property. |  |  |
-| `stopPolicy` _[StopPolicy](#stoppolicy)_ | stopPolicy - if set to a value different from None, the ClusterQueue is considered Inactive, no new reservation being<br />made.<br />Depending on its value, its associated workloads will:<br />- None - Workloads are admitted<br />- HoldAndDrain - Admitted workloads are evicted and Reserving workloads will cancel the reservation.<br />- Hold - Admitted workloads will run to completion and Reserving workloads will cancel the reservation. | None | Enum: [None Hold HoldAndDrain] <br /> |
-| `fairSharing` _[FairSharing](#fairsharing)_ | fairSharing defines the properties of the ClusterQueue when<br />participating in FairSharing.  The values are only relevant<br />if FairSharing is enabled in the Kueue configuration. |  |  |
-
-
 #### CommonMetaSpec
 
 
@@ -136,7 +91,6 @@ _Appears in:_
 | `ray` _boolean_ | Ray determines whether the operator should use RayCluster for workload execution.<br />If `true`, Kaiwo will create Ray-specific resources.<br />If `false` (default), Kaiwo will create standard Kubernetes resources (BatchJob for `KaiwoJob`, Deployment for `KaiwoService`).<br />This setting dictates which underlying spec (`job`/`rayJob` or `deployment`/`rayService`) is primarily used. | false |  |
 | `storage` _[StorageSpec](#storagespec)_ | Storage configures persistent storage using Kubernetes PersistentVolumeClaims (PVCs).<br />Enabling `storage.data.download` or `storage.huggingFace.preCacheRepos` will cause Kaiwo to create a temporary Kubernetes Job (the "download job") before starting the main workload. This job runs a container that performs the downloads into the respective PVCs. The main workload only starts after the download job completes successfully. |  |  |
 | `dangerous` _boolean_ | Dangerous, if when set to `true`, Kaiwo will *not* add the default `PodSecurityContext` (which normally sets `runAsUser: 1000`, `runAsGroup: 1000`, `fsGroup: 1000`) to the generated pods. Use this only if you need to run containers as root or a different specific user and understand the security implications. | false |  |
-| `clusterQueue` _string_ | ClusterQueue specifies the name of the Kueue `ClusterQueue` that the workload should be submitted to for scheduling and resource management.<br />This value is set as the `kueue.x-k8s.io/queue-name` label on the underlying resources.<br />If omitted, it defaults to the value specified by the `DEFAULT_CLUSTER_QUEUE_NAME` environment variable in the Kaiwo controller (typically "kaiwo"), which is set during installation.<br />Note! If the applied KaiwoQueueConfig includes no quota for the default queue, no workload will run that tries to fall back on it.<br />The `kaiwo submit` CLI command can override this using the `--queue` flag or the `clusterQueue` field in the `kaiwoconfig.yaml` file. |  |  |
 | `priorityClass` _string_ | WorkloadPriorityClass specifies the name of Kueue `WorkloadPriorityClass` to be assigned to the job's pods. This influences the scheduling priority relative to other pods in the cluster. |  |  |
 
 
@@ -328,7 +282,6 @@ _Appears in:_
 | `ray` _boolean_ | Ray determines whether the operator should use RayCluster for workload execution.<br />If `true`, Kaiwo will create Ray-specific resources.<br />If `false` (default), Kaiwo will create standard Kubernetes resources (BatchJob for `KaiwoJob`, Deployment for `KaiwoService`).<br />This setting dictates which underlying spec (`job`/`rayJob` or `deployment`/`rayService`) is primarily used. | false |  |
 | `storage` _[StorageSpec](#storagespec)_ | Storage configures persistent storage using Kubernetes PersistentVolumeClaims (PVCs).<br />Enabling `storage.data.download` or `storage.huggingFace.preCacheRepos` will cause Kaiwo to create a temporary Kubernetes Job (the "download job") before starting the main workload. This job runs a container that performs the downloads into the respective PVCs. The main workload only starts after the download job completes successfully. |  |  |
 | `dangerous` _boolean_ | Dangerous, if when set to `true`, Kaiwo will *not* add the default `PodSecurityContext` (which normally sets `runAsUser: 1000`, `runAsGroup: 1000`, `fsGroup: 1000`) to the generated pods. Use this only if you need to run containers as root or a different specific user and understand the security implications. | false |  |
-| `clusterQueue` _string_ | ClusterQueue specifies the name of the Kueue `ClusterQueue` that the workload should be submitted to for scheduling and resource management.<br />This value is set as the `kueue.x-k8s.io/queue-name` label on the underlying resources.<br />If omitted, it defaults to the value specified by the `DEFAULT_CLUSTER_QUEUE_NAME` environment variable in the Kaiwo controller (typically "kaiwo"), which is set during installation.<br />Note! If the applied KaiwoQueueConfig includes no quota for the default queue, no workload will run that tries to fall back on it.<br />The `kaiwo submit` CLI command can override this using the `--queue` flag or the `clusterQueue` field in the `kaiwoconfig.yaml` file. |  |  |
 | `priorityClass` _string_ | WorkloadPriorityClass specifies the name of Kueue `WorkloadPriorityClass` to be assigned to the job's pods. This influences the scheduling priority relative to other pods in the cluster. |  |  |
 | `entrypoint` _string_ | EntryPoint defines the command or script that the primary container in the job's pod(s) should execute.<br />It can be a multi-line string. Shell script shebangs (`#!/bin/bash`) are detected.<br />For standard Kubernetes Jobs (`ray: false`), this populates the `command` and `args` fields of the container spec (typically `["/bin/sh", "-c", "<entrypoint_script>"]`).<br />For RayJobs (`ray: true`), this populates the `rayJob.spec.entrypoint` field. For RayJobs, this must reference a Python script.<br />This overrides any default command specified in the container image or the underlying `job` or `rayJob` spec sections if they are also defined. |  |  |
 | `rayJob` _[RayJob](#rayjob)_ | RayJob defines the RayJob configuration.<br />If this field is present (or if `spec.ray` is `true`), Kaiwo will create a `RayJob` resource instead of a standard `batchv1.Job`.<br />Common fields like `image`, `resources`, `gpus`, `replicas`, etc., will be merged into this spec, potentially overriding values defined here unless explicitly configured otherwise.<br />This provides fine-grained control over the Ray cluster configuration (head/worker groups) and Ray job submission parameters. |  |  |
@@ -354,82 +307,6 @@ _Appears in:_
 | `duration` _integer_ | Duration indicates how long the service has been running since StartTime, in seconds. Calculated periodically while running. |  |  |
 | `observedGeneration` _integer_ | ObservedGeneration records the `.metadata.generation` of the workload resource that was last processed by the controller. |  |  |
 | `completionTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | CompletionTime records the timestamp when the KaiwoJob finished execution (either successfully or with failure). |  |  |
-
-
-#### KaiwoQueueConfig
-
-
-
-KaiwoQueueConfig manages Kueue resources like ClusterQueues, ResourceFlavors, and WorkloadPriorityClasses based on its spec. It acts as a central configuration point for Kaiwo's integration with Kueue. Typically, only one cluster-scoped resource named 'kaiwo' should exist. The controller ensures that the specified Kueue resources are created, updated, or deleted to match the desired state defined here.
-KaiwoQueueConfig manages Kueue resources.
-
-
-
-_Appears in:_
-- [KaiwoQueueConfigList](#kaiwoqueueconfiglist)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `apiVersion` _string_ | `kaiwo.silogen.ai/v1alpha1` | | |
-| `kind` _string_ | `KaiwoQueueConfig` | | |
-| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
-| `spec` _[KaiwoQueueConfigSpec](#kaiwoqueueconfigspec)_ | Spec defines the desired state for Kueue resources managed by Kaiwo. |  |  |
-| `status` _[KaiwoQueueConfigStatus](#kaiwoqueueconfigstatus)_ | Status reflects the most recently observed state of the Kueue resource synchronization. |  |  |
-
-
-#### KaiwoQueueConfigList
-
-
-
-KaiwoQueueConfigList contains a list of KaiwoQueueConfig resources.
-
-
-
-
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `apiVersion` _string_ | `kaiwo.silogen.ai/v1alpha1` | | |
-| `kind` _string_ | `KaiwoQueueConfigList` | | |
-| `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
-| `items` _[KaiwoQueueConfig](#kaiwoqueueconfig) array_ |  |  |  |
-
-
-#### KaiwoQueueConfigSpec
-
-
-
-KaiwoQueueConfigSpec defines the desired configuration for Kaiwo's management of Kueue resources.
-There should typically be only one KaiwoQueueConfig resource in the cluster, named 'kaiwo'.
-
-
-
-_Appears in:_
-- [KaiwoQueueConfig](#kaiwoqueueconfig)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `clusterQueues` _[ClusterQueue](#clusterqueue) array_ | ClusterQueues defines a list of Kueue ClusterQueues that Kaiwo should manage. Kaiwo ensures these ClusterQueues exist and match the provided specs. |  | MaxItems: 1000 <br /> |
-| `resourceFlavors` _[ResourceFlavorSpec](#resourceflavorspec) array_ | ResourceFlavors defines a list of Kueue ResourceFlavors that Kaiwo should manage. Kaiwo ensures these ResourceFlavors exist and match the provided specs. If omitted or empty, Kaiwo attempts to automatically discover node pools and create default flavors based on node labels. |  | MaxItems: 20 <br /> |
-| `workloadPriorityClasses` _WorkloadPriorityClass array_ | WorkloadPriorityClasses defines a list of Kueue WorkloadPriorityClasses that Kaiwo should manage. Kaiwo ensures these priority classes exist with the specified values. See Kueue documentation for `WorkloadPriorityClass`. |  | MaxItems: 20 <br /> |
-| `topologies` _[Topology](#topology) array_ | Topologies defines a list of Kueue Topologies that Kaiwo should manage. Kaiwo ensures these Topologies exist with the specified values. See Kueue documentation for `Topology`. |  | MaxItems: 10 <br /> |
-
-
-#### KaiwoQueueConfigStatus
-
-
-
-KaiwoQueueConfigStatus represents the observed state of KaiwoQueueConfig.
-
-
-
-_Appears in:_
-- [KaiwoQueueConfig](#kaiwoqueueconfig)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions lists the observed conditions of the KaiwoQueueConfig resource, such as whether the managed Kueue resources are synchronized and ready. |  |  |
-| `status` _[QueueConfigStatusDescription](#queueconfigstatusdescription)_ | Status reflects the overall status of the Kueue resource synchronization managed by this config (e.g., READY, FAILED). |  |  |
 
 
 #### KaiwoService
@@ -502,7 +379,6 @@ _Appears in:_
 | `ray` _boolean_ | Ray determines whether the operator should use RayCluster for workload execution.<br />If `true`, Kaiwo will create Ray-specific resources.<br />If `false` (default), Kaiwo will create standard Kubernetes resources (BatchJob for `KaiwoJob`, Deployment for `KaiwoService`).<br />This setting dictates which underlying spec (`job`/`rayJob` or `deployment`/`rayService`) is primarily used. | false |  |
 | `storage` _[StorageSpec](#storagespec)_ | Storage configures persistent storage using Kubernetes PersistentVolumeClaims (PVCs).<br />Enabling `storage.data.download` or `storage.huggingFace.preCacheRepos` will cause Kaiwo to create a temporary Kubernetes Job (the "download job") before starting the main workload. This job runs a container that performs the downloads into the respective PVCs. The main workload only starts after the download job completes successfully. |  |  |
 | `dangerous` _boolean_ | Dangerous, if when set to `true`, Kaiwo will *not* add the default `PodSecurityContext` (which normally sets `runAsUser: 1000`, `runAsGroup: 1000`, `fsGroup: 1000`) to the generated pods. Use this only if you need to run containers as root or a different specific user and understand the security implications. | false |  |
-| `clusterQueue` _string_ | ClusterQueue specifies the name of the Kueue `ClusterQueue` that the workload should be submitted to for scheduling and resource management.<br />This value is set as the `kueue.x-k8s.io/queue-name` label on the underlying resources.<br />If omitted, it defaults to the value specified by the `DEFAULT_CLUSTER_QUEUE_NAME` environment variable in the Kaiwo controller (typically "kaiwo"), which is set during installation.<br />Note! If the applied KaiwoQueueConfig includes no quota for the default queue, no workload will run that tries to fall back on it.<br />The `kaiwo submit` CLI command can override this using the `--queue` flag or the `clusterQueue` field in the `kaiwoconfig.yaml` file. |  |  |
 | `priorityClass` _string_ | WorkloadPriorityClass specifies the name of Kueue `WorkloadPriorityClass` to be assigned to the job's pods. This influences the scheduling priority relative to other pods in the cluster. |  |  |
 | `entrypoint` _string_ | EntryPoint specifies the command or script executed in a Deployment.<br />Can also be defined inside Deployment struct as regular command in the form of string array.<br />It is *not* used when `ray: true` (use `serveConfigV2` or the `rayService` spec instead for Ray entrypoints). |  |  |
 | `serveConfigV2` _string_ | Defines the applications and deployments to deploy, should be a YAML multi-line scalar string.<br />Can also be defined inside RayService struct |  |  |
@@ -547,43 +423,6 @@ _Appears in:_
 | `gcs` _[GCSDownloadItem](#gcsdownloaditem) array_ | GCS lists and Google Cloud Storage downloads |  |  |
 | `azureBlob` _[AzureBlobStorageDownloadItem](#azureblobstoragedownloaditem) array_ | AzureBlob lists any Azure Blob Storage downloads |  |  |
 | `git` _[GitDownloadItem](#gitdownloaditem) array_ | Git lists any Git downloads |  |  |
-
-
-#### QueueConfigStatusDescription
-
-_Underlying type:_ _string_
-
-
-
-
-
-_Appears in:_
-- [KaiwoQueueConfigStatus](#kaiwoqueueconfigstatus)
-
-| Field | Description |
-| --- | --- |
-| `READY` |  |
-| `FAILED` |  |
-
-
-#### ResourceFlavorSpec
-
-
-
-ResourceFlavorSpec defines the configuration for a Kueue ResourceFlavor managed by Kaiwo.
-
-
-
-_Appears in:_
-- [KaiwoQueueConfigSpec](#kaiwoqueueconfigspec)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `name` _string_ | Name specifies the name of the Kueue ResourceFlavor resource (e.g., "amd-mi300-8gpu"). |  |  |
-| `nodeLabels` _object (keys:string, values:string)_ | NodeLabels specifies the labels that pods requesting this flavor must match on nodes. This is used by Kueue for scheduling decisions. Keys and values should correspond to actual node labels. Example: `\{"kaiwo/nodepool": "amd-gpu-nodes"\}` |  | MaxProperties: 10 <br /> |
-| `taints` _[Taint](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#taint-v1-core) array_ | Taints specifies a list of taints associated with this flavor. |  | MaxItems: 5 <br /> |
-| `tolerations` _[Toleration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#toleration-v1-core) array_ | Tolerations specifies a list of tolerations associated with this flavor. This is less common than using Taints; Kueue primarily uses Taints to derive Tolerations. |  | MaxItems: 5 <br /> |
-| `topologyName` _string_ | TopologyName specifies the name of the Kueue Topology that this flavor belongs to. If specified, it must match one of the Topologies defined in the KaiwoQueueConfig.<br />This is used to group flavors by topology for scheduling purposes. |  |  |
 
 
 #### S3DownloadItem
@@ -650,39 +489,6 @@ _Appears in:_
 | `huggingFace` _[HfStorageSpec](#hfstoragespec)_ | HuggingFace configures a PersistentVolumeClaim specifically for caching Hugging Face models and datasets, with options for pre-caching. |  |  |
 
 
-#### Topology
-
-
-
-Topology is the Schema for the topology API
-
-
-
-_Appears in:_
-- [KaiwoQueueConfigSpec](#kaiwoqueueconfigspec)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
-| `spec` _[TopologySpec](#topologyspec)_ |  |  | Required: \{\} <br /> |
-
-
-#### TopologySpec
-
-
-
-
-
-
-
-_Appears in:_
-- [Topology](#topology)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `levels` _TopologyLevel array_ | levels define the levels of topology. |  | MaxItems: 8 <br />MinItems: 1 <br /> |
-
-
 #### ValueReference
 
 
@@ -721,8 +527,8 @@ _Appears in:_
 | --- | --- |
 | `` | WorkloadStatusNew indicates the resource has been created but not yet processed by the controller.<br /> |
 | `DOWNLOADING` | WorkloadStatusDownloading indicates that the resource is currently running the download job<br /> |
-| `PENDING` | WorkloadStatusPending indicates the resource is waiting for prerequisites (like Kueue admission) to complete.<br /> |
-| `STARTING` | WorkloadStatusStarting indicates the Kaiwo workload has been admitted, and the underlying workload (Job, Deployment, RayService) is being created or started.<br /> |
+| `PENDING` | WorkloadStatusPending indicates the resource is waiting for pods to start.<br /> |
+| `STARTING` | WorkloadStatusStarting indicates the workload pods have been scheduled and started, but the workload is not yet fully ready<br /> |
 | `RUNNING` | WorkloadStatusRunning indicates the workload pods are running. For KaiwoJob, this means the job has started execution. For KaiwoService, pods are up but may not yet be fully ready/healthy.<br /> |
 | `COMPLETE` | WorkloadStatusComplete indicates a KaiwoJob has finished successfully.<br /> |
 | `ERROR` | WorkloadStatusError indicates the workload encountered an error which can be recovered from.<br /> |

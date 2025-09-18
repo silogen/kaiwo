@@ -18,8 +18,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/silogen/kaiwo/pkg/workloads/utils"
 	"k8s.io/apimachinery/pkg/runtime"
+
+	"github.com/silogen/kaiwo/pkg/workloads/utils"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 

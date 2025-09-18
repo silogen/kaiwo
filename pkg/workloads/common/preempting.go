@@ -148,7 +148,6 @@ func ClusterHasGpuDemand(ctx context.Context, k8sClient client.Client, gpuVendor
 	for _, job := range jobs.Items {
 		if job.Status.Status == v1alpha1.WorkloadStatusPending &&
 			job.Spec.Gpus > 0 &&
-			job.Spec.ClusterQueue == clusterQueue &&
 			job.Spec.GpuVendor == gpuVendor &&
 			isPendingForLong(ctx, job.ObjectMeta) {
 			return true, nil
@@ -162,7 +161,6 @@ func ClusterHasGpuDemand(ctx context.Context, k8sClient client.Client, gpuVendor
 	for _, svc := range services.Items {
 		if svc.Status.Status == v1alpha1.WorkloadStatusPending &&
 			svc.Spec.Gpus > 0 &&
-			svc.Spec.ClusterQueue == clusterQueue &&
 			svc.Spec.GpuVendor == gpuVendor &&
 			isPendingForLong(ctx, svc.ObjectMeta) {
 			return true, nil

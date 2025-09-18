@@ -16,7 +16,6 @@ package controllerutils
 
 import (
 	"context"
-	"strconv"
 	"strings"
 	"time"
 
@@ -24,10 +23,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-)
-
-const (
-	cpuMemoryDiscountFactor = 0.9
 )
 
 type NodeResourceInfo struct {
@@ -84,29 +79,28 @@ func GetNodeResources(ctx context.Context, c client.Client) []NodeResourceInfo {
 }
 
 func LabelNode(ctx context.Context, c client.Client, nodeName, key, value string) error {
-    cctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-    defer cancel()
+	cctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-    return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-        var node corev1.Node
-        if err := c.Get(cctx, client.ObjectKey{Name: nodeName}, &node); err != nil {
-            return err
-        }
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		var node corev1.Node
+		if err := c.Get(cctx, client.ObjectKey{Name: nodeName}, &node); err != nil {
+			return err
+		}
 
-        if node.Labels != nil && node.Labels[key] == value {
-            return nil
-        }
+		if node.Labels != nil && node.Labels[key] == value {
+			return nil
+		}
 
-        base := node.DeepCopy()
-        if node.Labels == nil {
-            node.Labels = make(map[string]string)
-        }
-        node.Labels[key] = value
+		base := node.DeepCopy()
+		if node.Labels == nil {
+			node.Labels = make(map[string]string)
+		}
+		node.Labels[key] = value
 
-        return c.Patch(cctx, &node, client.MergeFrom(base))
-    })
+		return c.Patch(cctx, &node, client.MergeFrom(base))
+	})
 }
-
 
 func TaintNode(ctx context.Context, client client.Client, nodeName string, taint corev1.Taint) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -124,39 +118,4 @@ func TaintNode(ctx context.Context, client client.Client, nodeName string, taint
 		node.Spec.Taints = append(node.Spec.Taints, taint)
 		return client.Update(ctx, &node)
 	})
-}
-
-func getGPUCount(flavorName string) int {
-	if strings.Contains(flavorName, "nvidia") || strings.Contains(flavorName, "amd") {
-		parts := strings.Split(flavorName, "-")
-		for _, p := range parts {
-			if strings.HasSuffix(p, "gpu") {
-				count, _ := strconv.Atoi(strings.TrimSuffix(p, "gpu"))
-				return count
-			}
-		}
-	}
-	return 0
-}
-
-func getCPUCount(flavorName string) int {
-	parts := strings.Split(flavorName, "-")
-	for _, p := range parts {
-		if strings.HasSuffix(p, "core") {
-			count, _ := strconv.Atoi(strings.TrimSuffix(p, "core"))
-			return count
-		}
-	}
-	return 0
-}
-
-func getMemoryCount(flavorName string) int {
-	parts := strings.Split(flavorName, "-")
-	for _, p := range parts {
-		if strings.HasSuffix(p, "Gi") {
-			count, _ := strconv.Atoi(strings.TrimSuffix(p, "Gi"))
-			return count
-		}
-	}
-	return 0
 }

@@ -58,8 +58,6 @@ func BuildStatsCmd() *cobra.Command {
 	return statsCmd
 }
 
-var defaultGPUResourceName = v1.ResourceName("amd.com/gpu")
-
 func extractGPUModel(poolLabel string) string {
 	if strings.HasPrefix(poolLabel, common.CPUOnly) {
 		return common.CPUOnly

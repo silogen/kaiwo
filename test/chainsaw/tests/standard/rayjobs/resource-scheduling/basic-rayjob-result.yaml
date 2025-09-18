@@ -3,8 +3,6 @@ kind: RayJob
 metadata:
   finalizers:
   - ray.io/rayjob-finalizer
-  labels:
-    kueue.x-k8s.io/queue-name: kaiwo
   name: kaiwojob-rayjob-resource-scheduling
   ownerReferences:
   - apiVersion: kaiwo.silogen.ai/v1alpha1

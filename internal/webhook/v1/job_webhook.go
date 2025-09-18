@@ -34,8 +34,6 @@ import (
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 	common "github.com/silogen/kaiwo/pkg/workloads/common"
-
-	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 )
 
 var (
@@ -88,9 +86,6 @@ func (j *JobWebhook) Default(ctx context.Context, obj runtime.Object) error {
 	}
 
 	if kaiwoManages(job) {
-		if job.Labels[common.QueueLabel] == "" {
-			job.Labels[common.QueueLabel] = common.DefaultClusterQueueName
-		}
 		if job.Spec.Template.Spec.TerminationGracePeriodSeconds == nil {
 			job.Spec.Template.Spec.TerminationGracePeriodSeconds = baseutils.Pointer(int64(0))
 			baseutils.Debug(logger, "Set terminationGracePeriodSeconds to 0", "JobName", job.Name)
@@ -142,10 +137,6 @@ func (j *JobWebhook) ensureKaiwoJob(ctx context.Context, job *batchv1.Job, authe
 		kaiwoJobLabels[key] = value
 	}
 
-	if _, exists := kaiwoJobLabels[common.QueueLabel]; !exists {
-		kaiwoJobLabels[common.QueueLabel] = common.DefaultClusterQueueName
-	}
-
 	kaiwoJob = &kaiwo.KaiwoJob{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      job.Name,
@@ -165,10 +156,6 @@ func (j *JobWebhook) ensureKaiwoJob(ctx context.Context, job *batchv1.Job, authe
 	common.SetKaiwoSystemLabels(labelContext, &kaiwoJob.ObjectMeta)
 	// Set Kaiwo system labels on the original job
 	common.SetKaiwoSystemLabels(labelContext, &job.ObjectMeta)
-
-	if err := controllerutils.CreateLocalQueue(ctx, j.Client, kaiwoJobLabels[common.QueueLabel], kaiwoJob.Namespace); err != nil {
-		return fmt.Errorf("failed to create local queue: %w", err)
-	}
 
 	if err := j.Client.Create(ctx, kaiwoJob); err != nil {
 		logger.Error(err, "Failed to create KaiwoJob")

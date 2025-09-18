@@ -28,7 +28,6 @@ spec:
               kaiwo.silogen.ai/name: kaiwojob-job-resource-scheduling
               kaiwo.silogen.ai/type: job
               kaiwo.silogen.ai/user: test-amd.com
-              kueue.x-k8s.io/queue-name: kaiwo
             name: kaiwojob-job-resource-scheduling
             ownerReferences:
             - apiVersion: kaiwo.silogen.ai/v1alpha1
@@ -151,7 +150,6 @@ spec:
               kaiwo.silogen.ai/name: kaiwojob-job-resource-scheduling-no-gpu
               kaiwo.silogen.ai/type: job
               kaiwo.silogen.ai/user: test-amd.com
-              kueue.x-k8s.io/queue-name: kaiwo
             name: kaiwojob-job-resource-scheduling-no-gpu
             ownerReferences:
             - apiVersion: kaiwo.silogen.ai/v1alpha1

@@ -64,7 +64,6 @@ var (
 	colorYellow  = "\033[33m"
 	colorBlue    = "\033[34m"
 	colorMagenta = "\033[35m"
-	colorCyan    = "\033[36m"
 	colorBRed    = "\033[91m"
 	colorOrange  = "\033[38;5;214m"
 
