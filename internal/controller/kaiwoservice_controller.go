@@ -36,7 +36,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	appwrapperv1beta2 "github.com/project-codeflare/appwrapper/api/v1beta2"
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	"k8s.io/client-go/tools/record"
 
@@ -96,7 +95,6 @@ func (r *KaiwoServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		).
 		Owns(&appsv1.Deployment{}).
 		Owns(&rayv1.RayService{}).
-		Owns(&appwrapperv1beta2.AppWrapper{}).
 		Watches(
 			&kaiwo.KaiwoJob{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
@@ -106,7 +104,7 @@ func (r *KaiwoServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				}
 				var requests []reconcile.Request
 				for _, svc := range services.Items {
-					if svc.Spec.Duration != nil && svc.Status.Status == kaiwo.WorkloadStatusRunning {
+					if svc.Spec.Duration != nil && (svc.Status.Status == kaiwo.WorkloadStatusRunning) {
 						requests = append(requests, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&svc)})
 					}
 				}

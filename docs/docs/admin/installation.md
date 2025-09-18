@@ -22,7 +22,6 @@ Kaiwo requires several core Kubernetes components to function correctly:
     *   Ensures GPU drivers are installed and nodes are correctly labeled with GPU information.
 3.  **Kueue**: Provides job queueing, fair sharing, and quota management. ([Docs](https://kueue.sigs.k8s.io/)).
 4.  **KubeRay Operator**: Required *only* if users will run Ray-based workloads (`spec.ray: true`). Manages Ray clusters. ([Docs](https://docs.ray.io/en/latest/cluster/kubernetes/index.html)).
-5.  **AppWrapper**: Used by Kueue to manage atomic scheduling of complex workloads, particularly Ray clusters/services. ([GitHub](https://github.com/project-codeflare/appwrapper)).
 6.  **Prometheus (Recommended)**: For monitoring the Kaiwo operator and cluster metrics.
 
 ## Installation Methods
@@ -130,8 +129,6 @@ kubectl get pods -n kueue-system
 # Check KubeRay (if Ray workloads are used)
 kubectl get pods -A | grep kuberay-operator || true
 
-# Check AppWrapper
-kubectl get pods -n appwrapper-system
 ```
 
 ### 2. Check Kaiwo Operator

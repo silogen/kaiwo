@@ -9,7 +9,7 @@ Kaiwo provides a layer on top of Kubernetes, Kueue, and Ray to streamline the ma
     *   Manages the lifecycle of Kaiwo Custom Resources (`KaiwoJob`, `KaiwoService`, `KaiwoQueueConfig`).
     *   **Controllers**: Includes specific controllers for each CRD:
         *   `KaiwoJobController`: Translates `KaiwoJob` into `batchv1.Job` or `rayv1.RayJob`, manages dependencies (like download jobs, PVCs), and updates status.
-        *   `KaiwoServiceController`: Translates `KaiwoService` into `appsv1.Deployment` or `rayv1.RayService` (wrapped in an `AppWrapper`), manages dependencies, and updates status.
+*   `KaiwoServiceController`: Translates `KaiwoService` into `appsv1.Deployment` or `rayv1.RayService`, manages dependencies, and updates status.
         *   `KaiwoQueueConfigController`: Manages Kueue resources (`ClusterQueue`, `ResourceFlavor`, `WorkloadPriorityClass`) based on the cluster-scoped `KaiwoQueueConfig` CRD. Ensures a default configuration exists.
     *   **Integration**: Interacts with the Kubernetes API, Kueue, and Ray operators.
 

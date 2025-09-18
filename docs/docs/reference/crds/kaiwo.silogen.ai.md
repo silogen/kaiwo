@@ -313,7 +313,7 @@ _Appears in:_
 
 
 
-KaiwoService represents a long-running service workload managed by Kaiwo. It encapsulates either a standard Kubernetes Deployment  or a RayService (via an AppWrapper), along with common metadata, storage configurations, and scheduling preferences. The Kaiwo controller reconciles this resource to create and manage the underlying workload objects.
+KaiwoService represents a long-running service workload managed by Kaiwo. It encapsulates either a standard Kubernetes Deployment or a RayService, along with common metadata, storage configurations, and scheduling preferences. The Kaiwo controller reconciles this resource to create and manage the underlying workload objects.
 
 
 
@@ -382,7 +382,7 @@ _Appears in:_
 | `priorityClass` _string_ | WorkloadPriorityClass specifies the name of Kueue `WorkloadPriorityClass` to be assigned to the job's pods. This influences the scheduling priority relative to other pods in the cluster. |  |  |
 | `entrypoint` _string_ | EntryPoint specifies the command or script executed in a Deployment.<br />Can also be defined inside Deployment struct as regular command in the form of string array.<br />It is *not* used when `ray: true` (use `serveConfigV2` or the `rayService` spec instead for Ray entrypoints). |  |  |
 | `serveConfigV2` _string_ | Defines the applications and deployments to deploy, should be a YAML multi-line scalar string.<br />Can also be defined inside RayService struct |  |  |
-| `rayService` _[RayService](#rayservice)_ | RayService allows providing a full `rayv1.RayService` spec.<br />If present (or `spec.ray` is `true`), Kaiwo creates a `RayService` (wrapped in an AppWrapper for Kueue integration) instead of a `Deployment`.<br />Common fields are merged into the `RayClusterSpec` within this spec.<br />Allows fine-grained control over the Ray cluster and Ray Serve configurations. |  |  |
+| `rayService` _[RayService](#rayservice)_ | RayService allows providing a full `rayv1.RayService` spec.<br />If present (or `spec.ray` is `true`), Kaiwo creates a `RayService` instead of a `Deployment`.<br />Common fields are merged into the `RayClusterSpec` within this spec.<br />Allows fine-grained control over the Ray cluster and Ray Serve configurations. |  |  |
 | `deployment` _[Deployment](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#deployment-v1-apps)_ | Deployment allows providing a full `appsv1.Deployment` spec.<br />If present and `spec.ray` is `false`, this is used as the base for the created `Deployment`.<br />Common fields are merged into this spec.<br />Allows fine-grained control over Kubernetes Deployment parameters (strategy, selectors, pod template, etc.). |  |  |
 
 

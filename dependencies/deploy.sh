@@ -83,7 +83,6 @@ case "$ACTION" in
 
     echo "Waiting for other dependencies to be deployed..."
     kubectl rollout status deployment/kuberay-operator --timeout=5m || true
-    kubectl rollout status deployment/appwrapper-controller-manager -n appwrapper-system --timeout=5m || true
 
     echo "3. Installing Helm charts..."
     safe_helmfile sync

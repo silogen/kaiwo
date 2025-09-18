@@ -64,7 +64,6 @@ import (
 
 	// +kubebuilder:scaffold:imports
 
-	appwrapperv1beta2 "github.com/project-codeflare/appwrapper/api/v1beta2"
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
@@ -85,7 +84,6 @@ func init() {
 	// +kubebuilder:scaffold:scheme
 
 	utilruntime.Must(rayv1.AddToScheme(scheme))
-	utilruntime.Must(appwrapperv1beta2.AddToScheme(scheme))
 }
 
 func setupFormattedLogOutput() logr.Logger {

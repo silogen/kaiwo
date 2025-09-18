@@ -45,7 +45,6 @@ echo "Deploying other dependencies"
 kubectl apply --server-side --force-conflicts -k "$SERVER_SIDE_DEPS_PATH"
 echo "Waiting for other dependencies to be deployed..."
 kubectl rollout status deployment/kuberay-operator --timeout=5m
-kubectl rollout status deployment/appwrapper-controller-manager -n appwrapper-system --timeout=5m
 echo "Other dependencies deployed"
 
 kubectl wait \

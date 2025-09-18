@@ -37,7 +37,7 @@ type KaiwoServiceSpec struct {
 
 	// RayService allows providing a full `rayv1.RayService` spec.
 	//
-	// If present (or `spec.ray` is `true`), Kaiwo creates a `RayService` (wrapped in an AppWrapper for Kueue integration) instead of a `Deployment`.
+	// If present (or `spec.ray` is `true`), Kaiwo creates a `RayService` instead of a `Deployment`.
 	//
 	// Common fields are merged into the `RayClusterSpec` within this spec.
 	//
@@ -61,7 +61,7 @@ type KaiwoServiceStatus struct {
 	CommonStatusSpec `json:",inline"`
 }
 
-// KaiwoService represents a long-running service workload managed by Kaiwo. It encapsulates either a standard Kubernetes Deployment  or a RayService (via an AppWrapper), along with common metadata, storage configurations, and scheduling preferences. The Kaiwo controller reconciles this resource to create and manage the underlying workload objects.
+// KaiwoService represents a long-running service workload managed by Kaiwo. It encapsulates either a standard Kubernetes Deployment or a RayService, along with common metadata, storage configurations, and scheduling preferences. The Kaiwo controller reconciles this resource to create and manage the underlying workload objects.
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.status"

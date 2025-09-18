@@ -26,7 +26,7 @@ This guide provides steps for diagnosing common issues with Kaiwo.
     ```
     Check for events related to scheduling failures (resource constraints, taints/tolerations), image pull errors, readiness/liveness probe failures, or volume mount issues.
 
-4.  **Check Dependencies**: Ensure all dependencies (Cert-Manager, Kueue, Ray Operator, GPU Operator, AppWrapper) are running correctly in their respective namespaces. Check their logs if necessary.
+4.  **Check Dependencies**: Ensure all dependencies (Cert-Manager, Ray Operator, GPU Operator) are running correctly in their respective namespaces. Check their logs if necessary.
 
 5.  **RBAC Permissions**: Verify the Kaiwo operator's `ServiceAccount`, `ClusterRole`, and `ClusterRoleBinding` grant sufficient permissions. Errors related to "forbidden" access often point to RBAC issues.
 

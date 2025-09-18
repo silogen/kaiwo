@@ -16,8 +16,9 @@ package workloadservice
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+
+	"k8s.io/apimachinery/pkg/runtime"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -26,10 +27,8 @@ import (
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
-	appwrapperv1beta2 "github.com/project-codeflare/appwrapper/api/v1beta2"
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
@@ -54,10 +53,10 @@ func (handler *RayServiceHandler) GetCommonStatusSpec() *kaiwo.CommonStatusSpec 
 }
 
 func (handler *RayServiceHandler) GetInitializedObject() client.Object {
-	return &appwrapperv1beta2.AppWrapper{
+	return &rayv1.RayService{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: appwrapperv1beta2.GroupVersion.String(),
-			Kind:       "AppWrapper",
+			APIVersion: rayv1.SchemeGroupVersion.String(),
+			Kind:       "RayService",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      handler.KaiwoService.Name,
@@ -68,49 +67,12 @@ func (handler *RayServiceHandler) GetInitializedObject() client.Object {
 }
 
 func (handler *RayServiceHandler) BuildDesired(ctx context.Context, clusterCtx common.ClusterContext) (client.Object, error) {
+	// Compute resource config so Ray worker replicas match desired
+	_ = common.CalculateResourceConfig(ctx, clusterCtx, handler.KaiwoService, true)
+
 	rayService := handler.buildRayService(ctx, clusterCtx)
-
-	// Wrap the RayService with an AppWrapper
-	resourceConfig := common.CalculateResourceConfig(ctx, clusterCtx, handler.KaiwoService, true)
-
-	rayServiceSpecBytes, err := json.Marshal(rayService.Spec)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal RayServiceSpec: %w", err)
-	}
-
-	labelsBytes, err := json.Marshal(rayService.Labels)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal labels: %w", err)
-	}
-
-	appWrapper := handler.GetInitializedObject().(*appwrapperv1beta2.AppWrapper)
-
-	appWrapper.Spec = appwrapperv1beta2.AppWrapperSpec{
-		Components: []appwrapperv1beta2.AppWrapperComponent{
-			{
-				DeclaredPodSets: []appwrapperv1beta2.AppWrapperPodSet{
-					{Replicas: baseutils.Pointer(int32(1)), Path: "template.spec.rayClusterConfig.headGroupSpec.template"},
-					{Replicas: baseutils.Pointer(int32(resourceConfig.Replicas)), Path: "template.spec.rayClusterConfig.workerGroupSpecs[0].template"},
-				},
-				Template: runtime.RawExtension{
-					Raw: []byte(fmt.Sprintf(`{
-				    "apiVersion": "ray.io/v1",
-				    "kind": "RayService",
-				    "metadata": {
-					"name": "%s",
-					"namespace": "%s",
-					"labels": %s
-				    },
-				    "spec": %s
-				}`, handler.KaiwoService.Name, handler.KaiwoService.Namespace, labelsBytes, rayServiceSpecBytes)),
-				},
-			},
-		},
-	}
-
-	common.UpdateLabels(handler.KaiwoService, &appWrapper.ObjectMeta)
-
-	return appWrapper, nil
+	common.UpdateLabels(handler.KaiwoService, &rayService.ObjectMeta)
+	return &rayService, nil
 }
 
 func (handler *RayServiceHandler) buildRayService(ctx context.Context, clusterCtx common.ClusterContext) rayv1.RayService {

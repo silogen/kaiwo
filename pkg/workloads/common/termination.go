@@ -21,7 +21,6 @@ import (
 
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/project-codeflare/appwrapper/api/v1beta2"
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -118,7 +117,6 @@ func DeleteUnderlyingResources(ctx context.Context, uid types.UID, name string, 
 	resourceTypes := []client.ObjectList{
 		&appsv1.DeploymentList{},
 		&rayv1.RayServiceList{},
-		&v1beta2.AppWrapperList{},
 		&batchv1.JobList{},
 		&rayv1.RayJobList{},
 		&corev1.PersistentVolumeClaimList{},
