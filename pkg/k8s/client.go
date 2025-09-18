@@ -35,7 +35,6 @@ import (
 	"k8s.io/client-go/util/homedir"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
-	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 )
 
 var (
@@ -121,11 +120,6 @@ func buildScheme() (*runtime.Scheme, error) {
 	// Add batch API types
 	if err := batchv1.AddToScheme(scheme); err != nil {
 		return nil, fmt.Errorf("failed to add batch Kubernetes types to scheme: %v", err)
-	}
-
-	// Add Kueue API types
-	if err := kueuev1beta1.AddToScheme(scheme); err != nil {
-		return nil, fmt.Errorf("failed to add kueue Kubernetes types to scheme: %v", err)
 	}
 
 	// Add RayService custom resource API types

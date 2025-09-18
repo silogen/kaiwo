@@ -47,14 +47,6 @@ func UpdatePodSpec(config KaiwoConfigContext, workload KaiwoWorkload, resourceCo
 		template.Annotations[key] = value
 	}
 
-	if commonMetaSpec.RequiredTopologyLabel != "" {
-		template.Annotations[KueueRequiredTopologyKey] = commonMetaSpec.RequiredTopologyLabel
-	} else if commonMetaSpec.PreferredTopologyLabel != "" {
-		template.Annotations[KueuePreferredTopologyKey] = commonMetaSpec.PreferredTopologyLabel
-	} else {
-		template.Annotations[KueuePreferredTopologyKey] = DefaultTopologyHostLabel
-	}
-
 	// Add image pull secrets
 	if commonMetaSpec.ImagePullSecrets != nil {
 		template.Spec.ImagePullSecrets = append(template.Spec.ImagePullSecrets, commonMetaSpec.ImagePullSecrets...)

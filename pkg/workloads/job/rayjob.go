@@ -18,10 +18,8 @@ import (
 	"context"
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/runtime"
-	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
-
 	"github.com/silogen/kaiwo/pkg/workloads/utils"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
@@ -109,11 +107,6 @@ func (handler *RayJobHandler) BuildDesired(ctx context.Context, clusterCtx commo
 
 	common.UpdateLabels(handler.KaiwoJob, &rayJob.ObjectMeta)
 
-	rayJob.Labels[common.QueueLabel] = common.GetClusterQueueName(ctx, handler)
-	if priorityclass := handler.GetCommonSpec().WorkloadPriorityClass; priorityclass != "" {
-		rayJob.Labels[common.WorkloaddPriorityClassLabel] = priorityclass
-	}
-
 	return rayJob, nil
 }
 
@@ -140,19 +133,4 @@ func (handler *RayJobHandler) ObserveStatus(ctx context.Context, k8sClient clien
 	default:
 		return nil, nil, fmt.Errorf("unexpected job status: %s", job.Status.JobStatus)
 	}
-}
-
-func (handler *RayJobHandler) GetKueueWorkloads(ctx context.Context, k8sClient client.Client) ([]kueuev1beta1.Workload, error) {
-	rayJob := &rayv1.RayJob{}
-	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(handler.KaiwoJob), rayJob); err != nil {
-		return nil, fmt.Errorf("failed to get rayJob: %w", err)
-	}
-	workload, err := common.GetKueueWorkload(ctx, k8sClient, rayJob.GetNamespace(), string(rayJob.GetUID()))
-	if err != nil {
-		return nil, fmt.Errorf("failed to extract workload from handler: %w", err)
-	}
-	if workload == nil {
-		return []kueuev1beta1.Workload{}, nil
-	}
-	return []kueuev1beta1.Workload{*workload}, nil
 }

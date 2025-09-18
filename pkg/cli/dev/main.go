@@ -42,7 +42,6 @@ import (
 
 const (
 	srcEvent        = "Event"
-	srcKueue        = "Kueue"
 	srcRay          = "Ray"
 	srcKaiwo        = "Kaiwo"
 	srcNamespacePod = "NamespacePod"
@@ -71,7 +70,6 @@ var (
 
 	sourceColors = map[string]string{
 		srcEvent:        colorMagenta,
-		srcKueue:        colorCyan,
 		srcRay:          colorYellow,
 		srcKaiwo:        colorGreen,
 		srcNamespacePod: colorBlue,
@@ -120,7 +118,6 @@ type options struct {
 
 func defaultControllers() []string {
 	return []string{
-		"kueue-system/kueue-controller-manager",
 		"default/kuberay-operator",
 	}
 }
@@ -415,12 +412,10 @@ func collectControllerLogs(ctx context.Context, clientset *kubernetes.Clientset,
 		if err != nil {
 			return err
 		}
-		source := srcKueue
+		source := ""
 		lower := strings.ToLower(name)
 		if strings.Contains(lower, "ray") {
 			source = srcRay
-		} else if strings.Contains(lower, "kueue") {
-			source = srcKueue
 		}
 		nsCopy, nameCopy, sourceCopy := namespace, name, source
 		group.Go(func() error {
@@ -823,27 +818,6 @@ func extractResourceInfo(e *logEntry) string {
 	}
 	if name != "" {
 		return name
-	}
-
-	// Priority 4: Kueue workqueue patterns
-	if workload := getStringFromExtras(e.Extras, "workload"); workload != "" {
-		if queue := getStringFromExtras(e.Extras, "queue"); queue != "" {
-			return fmt.Sprintf("queue/%s/workload/%s", queue, workload)
-		}
-		return fmt.Sprintf("workload/%s", workload)
-	}
-
-	// Priority 5: Cluster queue patterns
-	if cq := getStringFromExtras(e.Extras, "clusterQueue", "cluster-queue"); cq != "" {
-		return fmt.Sprintf("clusterQueue/%s", cq)
-	}
-
-	// Priority 6: Resource quota patterns
-	if rq := getStringFromExtras(e.Extras, "resourceQuota"); rq != "" {
-		if namespace != "" {
-			return fmt.Sprintf("resourceQuota/%s/%s", namespace, rq)
-		}
-		return fmt.Sprintf("resourceQuota/%s", rq)
 	}
 
 	// Priority 7: Event involved object pattern

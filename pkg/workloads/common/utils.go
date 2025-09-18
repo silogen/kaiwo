@@ -121,15 +121,6 @@ func GetWorkloadServices(ctx context.Context, k8sClient client.Client, workload 
 	return serviceList.Items, nil
 }
 
-func GetClusterQueueName(ctx context.Context, workload KaiwoWorkload) string {
-	if clusterQueue := workload.GetCommonSpec().ClusterQueue; clusterQueue != "" {
-		return clusterQueue
-	} else {
-		config := ConfigFromContext(ctx)
-		return config.DefaultClusterQueueName
-	}
-}
-
 // ObserveOverallStatus observes the overall status from a list of reconcilers, gathering any conditions they report as well
 func ObserveOverallStatus(ctx context.Context, k8sClient client.Client, reconcilers []ResourceReconciler, previousWorkloadStatus kaiwo.WorkloadStatus) (*kaiwo.WorkloadStatus, []metav1.Condition, error) {
 	var conditions []metav1.Condition

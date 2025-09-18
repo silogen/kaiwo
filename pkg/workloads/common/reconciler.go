@@ -309,23 +309,7 @@ func (wr *Reconciler) ensureStorageResources(ctx context.Context, clusterContext
 
 // ensureWorkloadResources ensures that the workload resources exist if the workload is in the main run phase
 func (wr *Reconciler) ensureWorkloadResources(ctx context.Context, clusterContext ClusterContext) error {
-	if err := wr.ensureLocalQueue(ctx); err != nil {
-		return fmt.Errorf("failed to ensure local queue: %w", err)
-	}
 	return wr.reconcileHandler(ctx, clusterContext, wr.WorkloadHandler)
-}
-
-// ensureLocalQueue makes sure a LocalQueue exists for the current namespace / ClusterQueue combination
-// If no LocalQueue exists and the KaiwoQueueConfig ClusterConfig has no namespaces defined, a new LocalQueue is created.
-// If there are namespaces defined but the workload's namespace is not one of them, an error is raised
-func (wr *Reconciler) ensureLocalQueue(ctx context.Context) error {
-	namespace := wr.WorkloadHandler.Workload.GetKaiwoWorkloadObject().GetNamespace()
-	clusterQueueName := GetClusterQueueName(ctx, wr.WorkloadHandler.Workload)
-
-	if err := EnsureLocalQueue(ctx, wr.Client, wr.Scheme, clusterQueueName, clusterQueueName, namespace); err != nil {
-		return fmt.Errorf("failed to ensure local queue: %w", err)
-	}
-	return nil
 }
 
 func (wr *Reconciler) reconcileHandler(ctx context.Context, clusterCtx ClusterContext, handler GroupReconciler) error {

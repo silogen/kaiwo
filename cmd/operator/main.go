@@ -66,8 +66,6 @@ import (
 
 	appwrapperv1beta2 "github.com/project-codeflare/appwrapper/api/v1beta2"
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
-	kueuev1alpha1 "sigs.k8s.io/kueue/apis/kueue/v1alpha1"
-	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
@@ -86,8 +84,6 @@ func init() {
 	utilruntime.Must(configapi.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 
-	utilruntime.Must(kueuev1beta1.AddToScheme(scheme))
-	utilruntime.Must(kueuev1alpha1.AddToScheme(scheme))
 	utilruntime.Must(rayv1.AddToScheme(scheme))
 	utilruntime.Must(appwrapperv1beta2.AddToScheme(scheme))
 }

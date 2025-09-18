@@ -16,9 +16,6 @@ package workloadservice
 
 import (
 	"context"
-	"fmt"
-
-	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
 	"k8s.io/apimachinery/pkg/runtime"
 
@@ -119,10 +116,6 @@ func (handler *DeploymentHandler) BuildDesired(ctx context.Context, clusterCtx c
 	common.UpdatePodSpec(config, handler.KaiwoService, resourceConfig, &depSpec.Template, false)
 
 	depSpec.Template.Labels["app"] = svc.Name
-	depSpec.Template.Labels[common.QueueLabel] = common.GetClusterQueueName(ctx, handler)
-	if priorityclass := handler.GetCommonSpec().WorkloadPriorityClass; priorityclass != "" {
-		depSpec.Template.Labels[common.WorkloaddPriorityClassLabel] = priorityclass
-	}
 
 	dep := handler.GetInitializedObject().(*appsv1.Deployment)
 	dep.Labels = depSpec.Template.Labels
@@ -174,28 +167,4 @@ func (handler *DeploymentHandler) ObserveStatus(ctx context.Context, k8sClient c
 
 	// Deployment exists and is running
 	return baseutils.Pointer(kaiwo.WorkloadStatusRunning), nil, nil
-}
-
-func (handler *DeploymentHandler) GetKueueWorkloads(ctx context.Context, k8sClient client.Client) ([]kueuev1beta1.Workload, error) {
-	podList := &corev1.PodList{}
-
-	if err := k8sClient.List(ctx, podList, client.MatchingLabels{
-		common.KaiwoRunIdLabel: string(handler.KaiwoService.UID),
-	}); err != nil {
-		return nil, fmt.Errorf("failed to list pods: %w", err)
-	}
-
-	var workloads []kueuev1beta1.Workload
-
-	for _, pod := range podList.Items {
-		workload, err := common.GetKueueWorkload(ctx, k8sClient, pod.Namespace, string(pod.UID))
-		if err != nil {
-			return nil, fmt.Errorf("failed to get workload: %w", err)
-		}
-		if workload == nil {
-			continue
-		}
-		workloads = append(workloads, *workload)
-	}
-	return workloads, nil
 }

@@ -21,8 +21,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
-
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	v1 "k8s.io/api/core/v1"
@@ -31,9 +29,8 @@ import (
 
 // ClusterContext provides context of the cluster and its resources to help build downstream objects
 type ClusterContext struct {
-	Nodes            []v1.Node
-	GpuStats         GPUStats
-	KaiwoQueueConfig v1alpha1.KaiwoQueueConfig
+	Nodes    []v1.Node
+	GpuStats GPUStats
 }
 
 type GPUStats struct {
@@ -64,12 +61,6 @@ func GetClusterContext(ctx context.Context, k8sClient client.Client, workload Ka
 	}
 
 	clusterCtx.GpuStats = fillGpuStats(ctx, clusterCtx, workload.GetCommonSpec().GpuVendor, true)
-
-	kaiwoQueueConfig := &v1alpha1.KaiwoQueueConfig{}
-	if err := k8sClient.Get(ctx, client.ObjectKey{Name: KaiwoQueueConfigName}, kaiwoQueueConfig); err != nil {
-		return nil, fmt.Errorf("failed to get KaiwoQueueConfig: %w", err)
-	}
-	clusterCtx.KaiwoQueueConfig = *kaiwoQueueConfig
 
 	return &clusterCtx, nil
 }

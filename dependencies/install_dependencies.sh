@@ -44,8 +44,6 @@ echo "Cert-Manager deployed"
 echo "Deploying other dependencies"
 kubectl apply --server-side --force-conflicts -k "$SERVER_SIDE_DEPS_PATH"
 echo "Waiting for other dependencies to be deployed..."
-kubectl -n kueue-system patch deployment kueue-controller-manager   --type json   -p='[{"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--feature-gates=TopologyAwareScheduling=true"}]'
-kubectl rollout status deployment/kueue-controller-manager -n kueue-system --timeout=5m
 kubectl rollout status deployment/kuberay-operator --timeout=5m
 kubectl rollout status deployment/appwrapper-controller-manager -n appwrapper-system --timeout=5m
 echo "Other dependencies deployed"

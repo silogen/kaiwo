@@ -22,10 +22,6 @@ import (
 	"reflect"
 	"strings"
 
-	"k8s.io/apimachinery/pkg/api/meta"
-
-	"sigs.k8s.io/kueue/apis/kueue/v1beta1"
-
 	"github.com/olekukonko/tablewriter"
 
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -44,12 +40,6 @@ func BuildStatsCmd() *cobra.Command {
 		Use:   "status",
 		Short: "Show Kaiwo cluster status",
 	}
-
-	statsCmd.AddCommand(&cobra.Command{
-		Use:   "queues",
-		Short: "Show queue status",
-		RunE:  runQueueStatsCmd(defaultGPUResourceName),
-	})
 
 	// AMD subcommand
 	statsCmd.AddCommand(&cobra.Command{
@@ -203,161 +193,6 @@ func runNodesStatsCmd(gpuResourceName v1.ResourceName) func(cmd *cobra.Command, 
 
 		nodesTable.Render()
 
-		return nil
-	}
-}
-
-func runQueueStatsCmd(gpuResourceName v1.ResourceName) func(cmd *cobra.Command, args []string) error {
-	return func(cmd *cobra.Command, args []string) error {
-		clients, err := k8s.GetKubernetesClients()
-		if err != nil {
-			return fmt.Errorf("failed to get k8s clients: %w", err)
-		}
-
-		ctx := context.Background()
-
-		clusterQueueList := v1beta1.ClusterQueueList{}
-		if err := fetchWithSpinner(ctx, clients.Client, &clusterQueueList); err != nil {
-			return fmt.Errorf("failed to fetch cluster queues: %w", err)
-		}
-
-		localQueueList := v1beta1.LocalQueueList{}
-		if err := fetchWithSpinner(ctx, clients.Client, &localQueueList); err != nil {
-			return fmt.Errorf("failed to fetch local queues: %w", err)
-		}
-
-		workloadList := v1beta1.WorkloadList{}
-		if err := fetchWithSpinner(ctx, clients.Client, &workloadList); err != nil {
-			return fmt.Errorf("failed to fetch workloads: %w", err)
-		}
-
-		// 3) Prepare data structures
-		// map[clusterQueueName] -> []LocalQueue
-		localQueuesByCluster := make(map[string][]v1beta1.LocalQueue, len(clusterQueueList.Items))
-
-		// GPU counts at cluster level
-		clusterAdmittedGPU := make(map[string]int, len(clusterQueueList.Items))
-		clusterPendingGPU := make(map[string]int, len(clusterQueueList.Items))
-
-		// GPU counts at local-queue level: map[clusterQueueName] -> map[localQueueName] -> count
-		localAdmittedGPU := make(map[string]map[string]int, len(clusterQueueList.Items))
-		localPendingGPU := make(map[string]map[string]int, len(clusterQueueList.Items))
-
-		// Reverse lookup: map[namespace] -> map[localQueueName] -> clusterQueueName
-		localQueueToCluster := make(map[string]map[string]string, len(localQueueList.Items))
-
-		// 3a) Initialize cluster-level entries
-		for _, clusterQueue := range clusterQueueList.Items {
-			localQueuesByCluster[clusterQueue.Name] = nil
-			clusterAdmittedGPU[clusterQueue.Name] = 0
-			clusterPendingGPU[clusterQueue.Name] = 0
-			localAdmittedGPU[clusterQueue.Name] = make(map[string]int)
-			localPendingGPU[clusterQueue.Name] = make(map[string]int)
-		}
-
-		// 3b) Initialize local-level entries and build reverse lookup
-		for _, localQueue := range localQueueList.Items {
-			// Ensure the namespace map exists
-			if _, ok := localQueueToCluster[localQueue.Namespace]; !ok {
-				localQueueToCluster[localQueue.Namespace] = make(map[string]string)
-			}
-			clusterName := string(localQueue.Spec.ClusterQueue)
-			// Map this LocalQueue to its ClusterQueue
-			localQueueToCluster[localQueue.Namespace][localQueue.Name] = clusterName
-
-			// Append the LocalQueue under its ClusterQueue
-			localQueuesByCluster[clusterName] = append(localQueuesByCluster[clusterName], localQueue)
-
-			// Zero out our GPU counters at the local level
-			localAdmittedGPU[clusterName][localQueue.Name] = 0
-			localPendingGPU[clusterName][localQueue.Name] = 0
-		}
-
-		// 4) Filter for GPU-requesting workloads
-		var gpuWorkloads []v1beta1.Workload
-		for _, workload := range workloadList.Items {
-			if condition := meta.FindStatusCondition(workload.Status.Conditions, v1beta1.WorkloadFinished); condition != nil {
-				continue
-			}
-			requestsGpu := false
-
-			for _, podSet := range workload.Spec.PodSets {
-				// check each container in the PodTemplate
-				for _, container := range podSet.Template.Spec.Containers {
-					if qty, ok := container.Resources.Requests[gpuResourceName]; ok && qty.Value() > 0 {
-						requestsGpu = true
-						break
-					}
-				}
-				if requestsGpu {
-					break
-				}
-				for _, initContainer := range podSet.Template.Spec.InitContainers {
-					if qty, ok := initContainer.Resources.Requests[gpuResourceName]; ok && qty.Value() > 0 {
-						requestsGpu = true
-						break
-					}
-				}
-				if requestsGpu {
-					break
-				}
-			}
-
-			if requestsGpu {
-				gpuWorkloads = append(gpuWorkloads, workload)
-			}
-		}
-
-		// 5) Count admitted vs pending for each GPU-requesting workload
-		for _, workload := range gpuWorkloads {
-			namespace := workload.Namespace
-			localQueueName := workload.Spec.QueueName
-
-			// Find the ClusterQueue for this LocalQueue
-			clusterQueueName := "<unknown>"
-			if m, ok := localQueueToCluster[namespace]; ok {
-				if cqName, ok2 := m[string(localQueueName)]; ok2 {
-					clusterQueueName = cqName
-				}
-			}
-
-			if workload.Status.Admission != nil {
-				clusterAdmittedGPU[clusterQueueName]++
-				localAdmittedGPU[clusterQueueName][string(localQueueName)]++
-			} else {
-				clusterPendingGPU[clusterQueueName]++
-				localPendingGPU[clusterQueueName][string(localQueueName)]++
-			}
-		}
-
-		// 6) Render results in a table
-		table := tablewriter.NewWriter(os.Stdout)
-		table.SetHeader([]string{"Cluster queue", "Local queue", "Admitted", "Pending"})
-		table.SetAutoWrapText(false)
-		table.SetAlignment(tablewriter.ALIGN_LEFT)
-		table.SetCaption(true, fmt.Sprintf("Only workloads that include requests to '%s' are included", gpuResourceName))
-
-		for _, clusterQueue := range clusterQueueList.Items {
-			// Cluster-level totals
-			table.Append([]string{
-				clusterQueue.Name,
-				"[TOTAL]",
-				fmt.Sprintf("%d", clusterAdmittedGPU[clusterQueue.Name]),
-				fmt.Sprintf("%d", clusterPendingGPU[clusterQueue.Name]),
-			})
-
-			// Local-level breakdown
-			for _, localQueue := range localQueuesByCluster[clusterQueue.Name] {
-				table.Append([]string{
-					clusterQueue.Name,
-					localQueue.Name,
-					fmt.Sprintf("%d", localAdmittedGPU[clusterQueue.Name][localQueue.Name]),
-					fmt.Sprintf("%d", localPendingGPU[clusterQueue.Name][localQueue.Name]),
-				})
-			}
-		}
-
-		table.Render()
 		return nil
 	}
 }

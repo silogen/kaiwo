@@ -22,8 +22,7 @@ import (
 )
 
 type KaiwoCliConfig struct {
-	User         string `yaml:"user"`
-	ClusterQueue string `yaml:"clusterQueue"`
+	User string `yaml:"user"`
 }
 
 const (

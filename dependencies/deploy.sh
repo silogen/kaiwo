@@ -82,7 +82,6 @@ case "$ACTION" in
     fi
 
     echo "Waiting for other dependencies to be deployed..."
-    kubectl rollout status deployment/kueue-controller-manager -n kueue-system --timeout=5m || true
     kubectl rollout status deployment/kuberay-operator --timeout=5m || true
     kubectl rollout status deployment/appwrapper-controller-manager -n appwrapper-system --timeout=5m || true
 

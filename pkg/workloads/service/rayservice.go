@@ -22,8 +22,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 
-	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
-
 	"github.com/silogen/kaiwo/pkg/workloads/utils"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
@@ -86,12 +84,7 @@ func (handler *RayServiceHandler) BuildDesired(ctx context.Context, clusterCtx c
 	}
 
 	appWrapper := handler.GetInitializedObject().(*appwrapperv1beta2.AppWrapper)
-	appWrapper.Labels = map[string]string{
-		common.QueueLabel: common.GetClusterQueueName(ctx, handler),
-	}
-	if priorityclass := handler.GetCommonSpec().WorkloadPriorityClass; priorityclass != "" {
-		appWrapper.Labels[common.WorkloaddPriorityClassLabel] = priorityclass
-	}
+
 	appWrapper.Spec = appwrapperv1beta2.AppWrapperSpec{
 		Components: []appwrapperv1beta2.AppWrapperComponent{
 			{
@@ -185,23 +178,6 @@ func (handler *RayServiceHandler) ObserveStatus(ctx context.Context, k8sClient c
 	}
 
 	return baseutils.Pointer(kaiwo.WorkloadStatusStarting), nil, nil
-}
-
-func (handler *RayServiceHandler) GetKueueWorkloads(ctx context.Context, k8sClient client.Client) ([]kueuev1beta1.Workload, error) {
-	appWrapper := &appwrapperv1beta2.AppWrapper{}
-
-	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(handler.KaiwoService), appWrapper); err != nil {
-		return nil, fmt.Errorf("failed to get app wrapper: %w", err)
-	}
-
-	workload, err := common.GetKueueWorkload(ctx, k8sClient, appWrapper.GetNamespace(), string(appWrapper.GetUID()))
-	if err != nil {
-		return nil, fmt.Errorf("failed to extract workload from handler: %w", err)
-	}
-	if workload == nil {
-		return []kueuev1beta1.Workload{}, nil
-	}
-	return []kueuev1beta1.Workload{*workload}, nil
 }
 
 func (handler *RayServiceHandler) HandleStatusChange(ctx context.Context, k8sClient client.Client, obj client.Object, newStatus kaiwo.WorkloadStatus) error {

@@ -17,8 +17,6 @@ package common
 import (
 	"context"
 
-	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
-
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -66,7 +64,4 @@ type KaiwoWorkload interface {
 type WorkloadReconciler interface {
 	ResourceReconciler
 	KaiwoWorkload
-
-	// GetKueueWorkloads returns a list of the Kueue Workloads that govern the admission of this workload
-	GetKueueWorkloads(ctx context.Context, k8sClient client.Client) ([]kueuev1beta1.Workload, error)
 }

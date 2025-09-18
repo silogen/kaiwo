@@ -22,8 +22,6 @@ import (
 	"path/filepath"
 	"regexp"
 
-	"github.com/silogen/kaiwo/pkg/workloads/common"
-
 	"github.com/charmbracelet/huh"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -38,7 +36,6 @@ import (
 )
 
 var (
-	queue     string
 	user      string
 	namespace string
 
@@ -105,10 +102,6 @@ func BuildSubmitCmd() *cobra.Command {
 				// Override the user
 				kaiwoConfig.User = user
 			}
-			if queue != "" {
-				// Override the cluster queue
-				kaiwoConfig.ClusterQueue = queue
-			}
 
 			ctx := context.Background()
 			clients, err := k8sUtils.GetKubernetesClients()
@@ -119,16 +112,12 @@ func BuildSubmitCmd() *cobra.Command {
 			if err := ensureObjectNestedStringField(&obj, kaiwoConfig.User, "spec", "user"); err != nil {
 				return fmt.Errorf("failed to ensure user field: %v", err)
 			}
-			if err := ensureObjectNestedStringField(&obj, kaiwoConfig.ClusterQueue, "spec", "clusterQueue"); err != nil {
-				return fmt.Errorf("failed to ensure queue field: %v", err)
-			}
 
 			return Apply(ctx, clients.Client, &obj)
 		},
 	}
 
 	cmd.Flags().StringVarP(&user, "user", "", "", "The user to run as")
-	cmd.Flags().StringVarP(&queue, "queue", "", "", "The cluster queue to use")
 	cmd.Flags().StringVarP(&namespace, "namespace", "n", "", "The namespace to use, if none is given")
 
 	cmd.Flags().StringVarP(&file, "file", "f", "", "The Kaiwo manifest file to apply")
@@ -220,7 +209,6 @@ func promptUserForConfig() (bool, error) {
 		return false, nil
 	}
 
-	queueValue := common.DefaultClusterQueueName
 	userEmail := ""
 
 	for {
@@ -231,10 +219,6 @@ func promptUserForConfig() (bool, error) {
 					Description("The user email to run your jobs and services with").
 					Placeholder("user@email.com").
 					Value(&userEmail),
-				huh.NewInput().
-					Title("Cluster queue").
-					Description("The cluster queue name to run your jobs and services in").
-					Value(&queueValue),
 			),
 		).WithAccessible(promptAccessible)
 
@@ -251,8 +235,7 @@ func promptUserForConfig() (bool, error) {
 	}
 
 	config := &cliutils.KaiwoCliConfig{
-		User:         userEmail,
-		ClusterQueue: queueValue,
+		User: userEmail,
 	}
 
 	dir := filepath.Dir(configPath)

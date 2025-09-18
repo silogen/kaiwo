@@ -28,11 +28,13 @@ const (
 	// WorkloadStatusDownloading indicates that the resource is currently running the download job
 	WorkloadStatusDownloading WorkloadStatus = "DOWNLOADING"
 
-	// WorkloadStatusPending indicates the resource is waiting for prerequisites (like Kueue admission) to complete.
+	// WorkloadStatusPending indicates the resource is waiting for pods to start.
 	WorkloadStatusPending WorkloadStatus = "PENDING"
 
-	// WorkloadStatusStarting indicates the Kaiwo workload has been admitted, and the underlying workload (Job, Deployment, RayService) is being created or started.
+	// WorkloadStatusStarting indicates the workload pods have been scheduled and started, but the workload is not yet fully ready
 	WorkloadStatusStarting WorkloadStatus = "STARTING"
+
+	// TODO add SCALING status
 
 	// WorkloadStatusRunning indicates the workload pods are running. For KaiwoJob, this means the job has started execution. For KaiwoService, pods are up but may not yet be fully ready/healthy.
 	WorkloadStatusRunning WorkloadStatus = "RUNNING"
@@ -181,17 +183,6 @@ type CommonMetaSpec struct {
 	// Dangerous, if when set to `true`, Kaiwo will *not* add the default `PodSecurityContext` (which normally sets `runAsUser: 1000`, `runAsGroup: 1000`, `fsGroup: 1000`) to the generated pods. Use this only if you need to run containers as root or a different specific user and understand the security implications.
 	// +kubebuilder:default=false
 	Dangerous bool `json:"dangerous,omitempty"`
-
-	// ClusterQueue specifies the name of the Kueue `ClusterQueue` that the workload should be submitted to for scheduling and resource management.
-	//
-	// This value is set as the `kueue.x-k8s.io/queue-name` label on the underlying resources.
-	//
-	// If omitted, it defaults to the value specified by the `DEFAULT_CLUSTER_QUEUE_NAME` environment variable in the Kaiwo controller (typically "kaiwo"), which is set during installation.
-	//
-	// Note! If the applied KaiwoQueueConfig includes no quota for the default queue, no workload will run that tries to fall back on it.
-	//
-	// The `kaiwo submit` CLI command can override this using the `--queue` flag or the `clusterQueue` field in the `kaiwoconfig.yaml` file.
-	ClusterQueue string `json:"clusterQueue,omitempty"`
 
 	// WorkloadPriorityClass specifies the name of Kueue `WorkloadPriorityClass` to be assigned to the job's pods. This influences the scheduling priority relative to other pods in the cluster.
 	WorkloadPriorityClass string `json:"priorityClass,omitempty"`
