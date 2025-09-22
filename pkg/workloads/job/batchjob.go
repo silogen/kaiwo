@@ -98,7 +98,8 @@ func (handler *BatchJobHandler) BuildDesired(ctx context.Context, clusterCtx com
 		return nil, baseutils.LogErrorf(logger, "failed to add entrypoint: %v", err)
 	}
 
-	jobSpec.Suspend = baseutils.Pointer(true)
+    // With Kueue removed, do not suspend Jobs; let them start once created
+    jobSpec.Suspend = baseutils.Pointer(false)
 
 	resourceConfig := common.CalculateResourceConfig(ctx, clusterCtx, handler.KaiwoJob, true)
 	common.UpdatePodSpec(config, handler.KaiwoJob, resourceConfig, &jobSpec.Template, false)
