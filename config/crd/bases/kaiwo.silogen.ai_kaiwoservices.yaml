@@ -26704,9 +26704,6 @@ spec:
                     - rayClusterConfig
                     type: object
                 type: object
-                x-kubernetes-validations:
-                - message: only one of 'ray' or 'deployment' may be set
-                  rule: '!(has(self.ray) && has(self.deployment))'
               replicas:
                 default: 1
                 description: Replicas specifies the number of replicas for the workload.
@@ -27346,6 +27343,9 @@ spec:
                   affect resource creation but serves as metadata.
                 type: string
             type: object
+            x-kubernetes-validations:
+            - message: only one of 'ray' or 'deployment' may be set
+              rule: '!(has(self.ray) && has(self.deployment))'
           status:
             description: Status reflects the most recently observed state of the KaiwoService,
               including its phase, start time, duration, and conditions.

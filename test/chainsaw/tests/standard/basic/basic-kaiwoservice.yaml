@@ -13,9 +13,6 @@ spec:
       memory: "100Mi"
   image: busybox:latest
   deployment:
-    spec:
-      template:
-        spec: {}
     entrypoint: |
       while true; do
         echo "Hello, world!"

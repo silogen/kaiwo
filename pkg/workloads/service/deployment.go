@@ -90,13 +90,13 @@ func (handler *DeploymentHandler) BuildDesired(ctx context.Context, clusterCtx c
 
 	var depSpec appsv1.DeploymentSpec
 
-	if svcSpec.Deployment == nil {
+	if svcSpec.Deployment.Spec == nil {
 		depSpec = GetDefaultDeploymentSpec(
 			config,
 			svcSpec.Dangerous,
 		)
 	} else {
-		depSpec = svcSpec.Deployment.Spec
+		depSpec = *svcSpec.Deployment.Spec
 	}
 
 	depSpec.Template.Spec.RestartPolicy = corev1.RestartPolicyAlways

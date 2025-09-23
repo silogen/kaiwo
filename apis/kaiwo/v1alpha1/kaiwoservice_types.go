@@ -25,6 +25,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// +kubebuilder:validation:XValidation:rule="!(has(self.ray) && has(self.deployment))",message="only one of 'ray' or 'deployment' may be set"
+
 // KaiwoServiceSpec defines the desired state of KaiwoService.
 type KaiwoServiceSpec struct {
 	CommonMetaSpec `json:",inline"`
@@ -47,8 +49,6 @@ type KaiwoServiceSpec struct {
 	Aim *KaiwoAimDeploymentSpec `json:"aim,omitempty"`
 }
 
-// +kubebuilder:validation:XValidation:rule="!(has(self.ray) && has(self.deployment))",message="only one of 'ray' or 'deployment' may be set"
-
 // KaiwoServiceRaySpec groups Ray-specific configuration for services
 type KaiwoServiceRaySpec struct {
 	// Spec is the RayService spec used to configure the Ray cluster and Serve.
@@ -62,7 +62,7 @@ type KaiwoServiceRaySpec struct {
 // KaiwoServiceDeploymentSpec groups Deployment-specific configuration for services
 type KaiwoServiceDeploymentSpec struct {
 	// Spec is the Kubernetes Deployment spec used to configure the service pods.
-	Spec appsv1.DeploymentSpec `json:"spec,omitempty"`
+	Spec *appsv1.DeploymentSpec `json:"spec,omitempty"`
 
 	// EntryPoint specifies the command or script executed in the primary container.
 	EntryPoint string `json:"entrypoint,omitempty"`
