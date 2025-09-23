@@ -15,6 +15,10 @@
 package v1alpha1
 
 import (
+	"strings"
+
+	corev1 "k8s.io/api/core/v1"
+
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,35 +29,78 @@ import (
 type KaiwoServiceSpec struct {
 	CommonMetaSpec `json:",inline"`
 
-	// EntryPoint specifies the command or script executed in a Deployment.
-	// Can also be defined inside Deployment struct as regular command in the form of string array.
-	//
-	// It is *not* used when `ray: true` (use `serveConfigV2` or the `rayService` spec instead for Ray entrypoints).
-	EntryPoint string `json:"entrypoint,omitempty"`
+	// Type selects the underlying workload implementation. Valid values: "deployment", "ray".
+	// +kubebuilder:validation:Enum=deployment;ray;aim
+	Type string `json:"type,omitempty"`
 
-	// Defines the applications and deployments to deploy, should be a YAML multi-line scalar string.
-	// Can also be defined inside RayService struct
+	// Ray contains Ray-specific configuration. The primary underlying RayService
+	// spec lives under `.ray.spec`, while additional Kaiwo-specific Ray options
+	// can be added as siblings (e.g., `serveConfigV2`).
+	Ray *KaiwoServiceRaySpec `json:"ray,omitempty"`
+
+	// Deployment contains Deployment-specific configuration. The primary
+	// underlying Deployment spec lives under `.deployment.spec`, while
+	// additional Kaiwo-specific options can be added as siblings (e.g., `entrypoint`).
+	Deployment *KaiwoServiceDeploymentSpec `json:"deployment,omitempty"`
+
+	// Aim contains the AIM (AMD Inference Microservice) configuration
+	Aim *KaiwoAimDeploymentSpec `json:"aim,omitempty"`
+}
+
+// +kubebuilder:validation:XValidation:rule="!(has(self.ray) && has(self.deployment))",message="only one of 'ray' or 'deployment' may be set"
+
+// KaiwoServiceRaySpec groups Ray-specific configuration for services
+type KaiwoServiceRaySpec struct {
+	// Spec is the RayService spec used to configure the Ray cluster and Serve.
+	Spec rayv1.RayServiceSpec `json:"spec,omitempty"`
+
+	// ServeConfigV2 allows providing the Ray Serve config as YAML string.
+	// If set, it overrides `spec.serveConfigV2`.
 	ServeConfigV2 string `json:"serveConfigV2,omitempty"`
+}
 
-	// RayService allows providing a full `rayv1.RayService` spec.
-	//
-	// If present (or `spec.ray` is `true`), Kaiwo creates a `RayService` (wrapped in an AppWrapper for Kueue integration) instead of a `Deployment`.
-	//
-	// Common fields are merged into the `RayClusterSpec` within this spec.
-	//
-	// Allows fine-grained control over the Ray cluster and Ray Serve configurations.
-	// +kubebuilder:pruning:PreserveUnknownFields
-	RayService *rayv1.RayService `json:"rayService,omitempty"`
+// KaiwoServiceDeploymentSpec groups Deployment-specific configuration for services
+type KaiwoServiceDeploymentSpec struct {
+	// Spec is the Kubernetes Deployment spec used to configure the service pods.
+	Spec appsv1.DeploymentSpec `json:"spec,omitempty"`
 
-	// Deployment allows providing a full `appsv1.Deployment` spec.
-	//
-	// If present and `spec.ray` is `false`, this is used as the base for the created `Deployment`.
-	//
-	// Common fields are merged into this spec.
-	//
-	// Allows fine-grained control over Kubernetes Deployment parameters (strategy, selectors, pod template, etc.).
-	// +kubebuilder:pruning:PreserveUnknownFields
-	Deployment *appsv1.Deployment `json:"deployment,omitempty"`
+	// EntryPoint specifies the command or script executed in the primary container.
+	EntryPoint string `json:"entrypoint,omitempty"`
+}
+
+type KaiwoAimDeploymentSpec struct {
+	// AimWorkloadId is a unique user-provided ID that identifies an instance of an AIM
+	AimWorkloadId string `json:"aimWorkloadId,omitempty"`
+
+	// Model contains the model-specific configuration
+	Model AimModelSpec `json:"model,omitempty"`
+
+	// Routing contains the routing-specific configuration
+	Routing AimRoutingSpec `json:"routing,omitempty"`
+}
+
+type AimModelSpec struct {
+	// Name refers to the AIM model name.
+	Name string `json:"name,omitempty"`
+
+	// Caching contains the model caching specifications
+	Caching AimModelCachingSpec `json:"caching,omitempty"`
+}
+
+type AimRoutingSpec struct {
+	// Enabled, if true, will create an HTTPRoute for the InferenceService.
+	Enabled bool `json:"enabled,omitempty"`
+}
+
+type AimModelCachingSpec struct {
+	// Enabled, if true, turns on model caching
+	Enabled bool `json:"enabled,omitempty"`
+
+	// StorageClass specifies the storage class to use for the model cache, if a model cache does not already exist. If this is omitted, the default storage class from `KaiwoConfig.spec.models.caching.storageClass` is used.
+	StorageClass string `json:"storageClass,omitempty"`
+
+	// Env lists the environmental variables required to download the model.
+	Env []corev1.EnvVar `json:"env,omitempty"`
 }
 
 // KaiwoServiceStatus defines the observed state of KaiwoService.
@@ -87,7 +134,14 @@ type KaiwoServiceList struct {
 }
 
 func (spec *KaiwoServiceSpec) IsRayService() bool {
-	return spec.RayService != nil || spec.Ray
+	t := strings.ToLower(spec.Type)
+	if t == "ray" {
+		return true
+	}
+	if t == "" && spec.Ray != nil {
+		return true
+	}
+	return false
 }
 
 func (svc *KaiwoService) GetKaiwoWorkloadObject() client.Object {

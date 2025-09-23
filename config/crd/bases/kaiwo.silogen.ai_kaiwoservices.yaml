@@ -55,6 +55,165 @@ spec:
               workload type (Deployment/RayService), configuration, resources, and
               common metadata.
             properties:
+              aim:
+                description: Aim contains the AIM (AMD Inference Microservice) configuration
+                properties:
+                  aimWorkloadId:
+                    description: AimWorkloadId is a unique user-provided ID that identifies
+                      an instance of an AIM
+                    type: string
+                  model:
+                    description: Model contains the model-specific configuration
+                    properties:
+                      caching:
+                        description: Caching contains the model caching specifications
+                        properties:
+                          enabled:
+                            description: Enabled, if true, turns on model caching
+                            type: boolean
+                          env:
+                            description: Env lists the environmental variables required
+                              to download the model.
+                            items:
+                              description: EnvVar represents an environment variable
+                                present in a Container.
+                              properties:
+                                name:
+                                  description: Name of the environment variable. Must
+                                    be a C_IDENTIFIER.
+                                  type: string
+                                value:
+                                  description: |-
+                                    Variable references $(VAR_NAME) are expanded
+                                    using the previously defined environment variables in the container and
+                                    any service environment variables. If a variable cannot be resolved,
+                                    the reference in the input string will be unchanged. Double $$ are reduced
+                                    to a single $, which allows for escaping the $(VAR_NAME) syntax: i.e.
+                                    "$$(VAR_NAME)" will produce the string literal "$(VAR_NAME)".
+                                    Escaped references will never be expanded, regardless of whether the variable
+                                    exists or not.
+                                    Defaults to "".
+                                  type: string
+                                valueFrom:
+                                  description: Source for the environment variable's
+                                    value. Cannot be used if value is not empty.
+                                  properties:
+                                    configMapKeyRef:
+                                      description: Selects a key of a ConfigMap.
+                                      properties:
+                                        key:
+                                          description: The key to select.
+                                          type: string
+                                        name:
+                                          default: ""
+                                          description: |-
+                                            Name of the referent.
+                                            This field is effectively required, but due to backwards compatibility is
+                                            allowed to be empty. Instances of this type with an empty value here are
+                                            almost certainly wrong.
+                                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                          type: string
+                                        optional:
+                                          description: Specify whether the ConfigMap
+                                            or its key must be defined
+                                          type: boolean
+                                      required:
+                                      - key
+                                      type: object
+                                      x-kubernetes-map-type: atomic
+                                    fieldRef:
+                                      description: |-
+                                        Selects a field of the pod: supports metadata.name, metadata.namespace, `metadata.labels['<KEY>']`, `metadata.annotations['<KEY>']`,
+                                        spec.nodeName, spec.serviceAccountName, status.hostIP, status.podIP, status.podIPs.
+                                      properties:
+                                        apiVersion:
+                                          description: Version of the schema the FieldPath
+                                            is written in terms of, defaults to "v1".
+                                          type: string
+                                        fieldPath:
+                                          description: Path of the field to select
+                                            in the specified API version.
+                                          type: string
+                                      required:
+                                      - fieldPath
+                                      type: object
+                                      x-kubernetes-map-type: atomic
+                                    resourceFieldRef:
+                                      description: |-
+                                        Selects a resource of the container: only resources limits and requests
+                                        (limits.cpu, limits.memory, limits.ephemeral-storage, requests.cpu, requests.memory and requests.ephemeral-storage) are currently supported.
+                                      properties:
+                                        containerName:
+                                          description: 'Container name: required for
+                                            volumes, optional for env vars'
+                                          type: string
+                                        divisor:
+                                          anyOf:
+                                          - type: integer
+                                          - type: string
+                                          description: Specifies the output format
+                                            of the exposed resources, defaults to
+                                            "1"
+                                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                          x-kubernetes-int-or-string: true
+                                        resource:
+                                          description: 'Required: resource to select'
+                                          type: string
+                                      required:
+                                      - resource
+                                      type: object
+                                      x-kubernetes-map-type: atomic
+                                    secretKeyRef:
+                                      description: Selects a key of a secret in the
+                                        pod's namespace
+                                      properties:
+                                        key:
+                                          description: The key of the secret to select
+                                            from.  Must be a valid secret key.
+                                          type: string
+                                        name:
+                                          default: ""
+                                          description: |-
+                                            Name of the referent.
+                                            This field is effectively required, but due to backwards compatibility is
+                                            allowed to be empty. Instances of this type with an empty value here are
+                                            almost certainly wrong.
+                                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                          type: string
+                                        optional:
+                                          description: Specify whether the Secret
+                                            or its key must be defined
+                                          type: boolean
+                                      required:
+                                      - key
+                                      type: object
+                                      x-kubernetes-map-type: atomic
+                                  type: object
+                              required:
+                              - name
+                              type: object
+                            type: array
+                          storageClass:
+                            description: StorageClass specifies the storage class
+                              to use for the model cache, if a model cache does not
+                              already exist. If this is omitted, the default storage
+                              class from `KaiwoConfig.spec.models.caching.storageClass`
+                              is used.
+                            type: string
+                        type: object
+                      name:
+                        description: Name refers to the AIM model name.
+                        type: string
+                    type: object
+                  routing:
+                    description: Routing contains the routing-specific configuration
+                    properties:
+                      enabled:
+                        description: Enabled, if true, will create an HTTPRoute for
+                          the InferenceService.
+                        type: boolean
+                    type: object
+                type: object
               clusterQueue:
                 description: |-
                   ClusterQueue specifies the name of the Kueue `ClusterQueue` that the workload should be submitted to for scheduling and resource management.
@@ -75,53 +234,17 @@ spec:
                 type: boolean
               deployment:
                 description: |-
-                  Deployment allows providing a full `appsv1.Deployment` spec.
-
-                  If present and `spec.ray` is `false`, this is used as the base for the created `Deployment`.
-
-                  Common fields are merged into this spec.
-
-                  Allows fine-grained control over Kubernetes Deployment parameters (strategy, selectors, pod template, etc.).
+                  Deployment contains Deployment-specific configuration. The primary
+                  underlying Deployment spec lives under `.deployment.spec`, while
+                  additional Kaiwo-specific options can be added as siblings (e.g., `entrypoint`).
                 properties:
-                  apiVersion:
-                    description: |-
-                      APIVersion defines the versioned schema of this representation of an object.
-                      Servers should convert recognized schemas to the latest internal value, and
-                      may reject unrecognized values.
-                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+                  entrypoint:
+                    description: EntryPoint specifies the command or script executed
+                      in the primary container.
                     type: string
-                  kind:
-                    description: |-
-                      Kind is a string value representing the REST resource this object represents.
-                      Servers may infer this from the endpoint the client submits requests to.
-                      Cannot be updated.
-                      In CamelCase.
-                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-                    type: string
-                  metadata:
-                    description: |-
-                      Standard object's metadata.
-                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
-                    properties:
-                      annotations:
-                        additionalProperties:
-                          type: string
-                        type: object
-                      finalizers:
-                        items:
-                          type: string
-                        type: array
-                      labels:
-                        additionalProperties:
-                          type: string
-                        type: object
-                      name:
-                        type: string
-                      namespace:
-                        type: string
-                    type: object
                   spec:
-                    description: Specification of the desired behavior of the Deployment.
+                    description: Spec is the Kubernetes Deployment spec used to configure
+                      the service pods.
                     properties:
                       minReadySeconds:
                         description: |-
@@ -1382,7 +1505,7 @@ spec:
                                         Cannot be updated.
                                       items:
                                         description: EnvFromSource represents the
-                                          source of a set of ConfigMaps
+                                          source of a set of ConfigMaps or Secrets
                                         properties:
                                           configMapRef:
                                             description: The ConfigMap to select from
@@ -1403,8 +1526,8 @@ spec:
                                             type: object
                                             x-kubernetes-map-type: atomic
                                           prefix:
-                                            description: An optional identifier to
-                                              prepend to each key in the ConfigMap.
+                                            description: Optional text to prepend
+                                              to the name of each environment variable.
                                               Must be a C_IDENTIFIER.
                                             type: string
                                           secretRef:
@@ -1677,6 +1800,12 @@ spec:
                                               - port
                                               type: object
                                           type: object
+                                        stopSignal:
+                                          description: |-
+                                            StopSignal defines which signal will be sent to a container when it is being stopped.
+                                            If not specified, the default is defined by the container runtime in use.
+                                            StopSignal can only be set for Pods with a non-empty .spec.os.name
+                                          type: string
                                       type: object
                                     livenessProbe:
                                       description: |-
@@ -2893,7 +3022,7 @@ spec:
                                         Cannot be updated.
                                       items:
                                         description: EnvFromSource represents the
-                                          source of a set of ConfigMaps
+                                          source of a set of ConfigMaps or Secrets
                                         properties:
                                           configMapRef:
                                             description: The ConfigMap to select from
@@ -2914,8 +3043,8 @@ spec:
                                             type: object
                                             x-kubernetes-map-type: atomic
                                           prefix:
-                                            description: An optional identifier to
-                                              prepend to each key in the ConfigMap.
+                                            description: Optional text to prepend
+                                              to the name of each environment variable.
                                               Must be a C_IDENTIFIER.
                                             type: string
                                           secretRef:
@@ -3185,6 +3314,12 @@ spec:
                                               - port
                                               type: object
                                           type: object
+                                        stopSignal:
+                                          description: |-
+                                            StopSignal defines which signal will be sent to a container when it is being stopped.
+                                            If not specified, the default is defined by the container runtime in use.
+                                            StopSignal can only be set for Pods with a non-empty .spec.os.name
+                                          type: string
                                       type: object
                                     livenessProbe:
                                       description: Probes are not allowed for ephemeral
@@ -4401,7 +4536,7 @@ spec:
                                         Cannot be updated.
                                       items:
                                         description: EnvFromSource represents the
-                                          source of a set of ConfigMaps
+                                          source of a set of ConfigMaps or Secrets
                                         properties:
                                           configMapRef:
                                             description: The ConfigMap to select from
@@ -4422,8 +4557,8 @@ spec:
                                             type: object
                                             x-kubernetes-map-type: atomic
                                           prefix:
-                                            description: An optional identifier to
-                                              prepend to each key in the ConfigMap.
+                                            description: Optional text to prepend
+                                              to the name of each environment variable.
                                               Must be a C_IDENTIFIER.
                                             type: string
                                           secretRef:
@@ -4696,6 +4831,12 @@ spec:
                                               - port
                                               type: object
                                           type: object
+                                        stopSignal:
+                                          description: |-
+                                            StopSignal defines which signal will be sent to a container when it is being stopped.
+                                            If not specified, the default is defined by the container runtime in use.
+                                            StopSignal can only be set for Pods with a non-empty .spec.os.name
+                                          type: string
                                       type: object
                                     livenessProbe:
                                       description: |-
@@ -6326,7 +6467,6 @@ spec:
                                         - Ignore: nodeAffinity/nodeSelector are ignored. All nodes are included in the calculations.
 
                                         If this value is nil, the behavior is equivalent to the Honor policy.
-                                        This is a beta-level feature default enabled by the NodeInclusionPolicyInPodTopologySpread feature flag.
                                       type: string
                                     nodeTaintsPolicy:
                                       description: |-
@@ -6337,7 +6477,6 @@ spec:
                                         - Ignore: node taints are ignored. All nodes are included.
 
                                         If this value is nil, the behavior is equivalent to the Ignore policy.
-                                        This is a beta-level feature default enabled by the NodeInclusionPolicyInPodTopologySpread feature flag.
                                       type: string
                                     topologyKey:
                                       description: |-
@@ -8167,99 +8306,11 @@ spec:
                     - selector
                     - template
                     type: object
-                  status:
-                    description: Most recently observed status of the Deployment.
-                    properties:
-                      availableReplicas:
-                        description: Total number of available pods (ready for at
-                          least minReadySeconds) targeted by this deployment.
-                        format: int32
-                        type: integer
-                      collisionCount:
-                        description: |-
-                          Count of hash collisions for the Deployment. The Deployment controller uses this
-                          field as a collision avoidance mechanism when it needs to create the name for the
-                          newest ReplicaSet.
-                        format: int32
-                        type: integer
-                      conditions:
-                        description: Represents the latest available observations
-                          of a deployment's current state.
-                        items:
-                          description: DeploymentCondition describes the state of
-                            a deployment at a certain point.
-                          properties:
-                            lastTransitionTime:
-                              description: Last time the condition transitioned from
-                                one status to another.
-                              format: date-time
-                              type: string
-                            lastUpdateTime:
-                              description: The last time this condition was updated.
-                              format: date-time
-                              type: string
-                            message:
-                              description: A human readable message indicating details
-                                about the transition.
-                              type: string
-                            reason:
-                              description: The reason for the condition's last transition.
-                              type: string
-                            status:
-                              description: Status of the condition, one of True, False,
-                                Unknown.
-                              type: string
-                            type:
-                              description: Type of deployment condition.
-                              type: string
-                          required:
-                          - status
-                          - type
-                          type: object
-                        type: array
-                        x-kubernetes-list-map-keys:
-                        - type
-                        x-kubernetes-list-type: map
-                      observedGeneration:
-                        description: The generation observed by the deployment controller.
-                        format: int64
-                        type: integer
-                      readyReplicas:
-                        description: readyReplicas is the number of pods targeted
-                          by this Deployment with a Ready Condition.
-                        format: int32
-                        type: integer
-                      replicas:
-                        description: Total number of non-terminated pods targeted
-                          by this deployment (their labels match the selector).
-                        format: int32
-                        type: integer
-                      unavailableReplicas:
-                        description: |-
-                          Total number of unavailable pods targeted by this deployment. This is the total number of
-                          pods that are still required for the deployment to have 100% available capacity. They may
-                          either be pods that are running but not yet available or pods that still have not been created.
-                        format: int32
-                        type: integer
-                      updatedReplicas:
-                        description: Total number of non-terminated pods targeted
-                          by this deployment that have the desired template spec.
-                        format: int32
-                        type: integer
-                    type: object
                 type: object
-                x-kubernetes-preserve-unknown-fields: true
               duration:
                 description: Duration specifies the maximum duration over which the
                   workload can run. This is useful for avoiding workloads running
                   indefinitely.
-                type: string
-              entrypoint:
-                description: |-
-                  EntryPoint specifies the command or script executed in a Deployment.
-                  Can also be defined inside Deployment struct as regular command in the form of string array.
-
-                  It is *not* used when `ray: true` (use `serveConfigV2` or the `rayService` spec instead for Ray entrypoints).
                 type: string
               env:
                 description: Env is a list of Kubernetes `EnvVar` structs. These environment
@@ -8457,59 +8508,19 @@ spec:
                   priority relative to other pods in the cluster.
                 type: string
               ray:
-                default: false
                 description: |-
-                  Ray determines whether the operator should use RayCluster for workload execution.
-                  If `true`, Kaiwo will create Ray-specific resources.
-                  If `false` (default), Kaiwo will create standard Kubernetes resources (BatchJob for `KaiwoJob`, Deployment for `KaiwoService`).
-                  This setting dictates which underlying spec (`job`/`rayJob` or `deployment`/`rayService`) is primarily used.
-                type: boolean
-              rayService:
-                description: |-
-                  RayService allows providing a full `rayv1.RayService` spec.
-
-                  If present (or `spec.ray` is `true`), Kaiwo creates a `RayService` (wrapped in an AppWrapper for Kueue integration) instead of a `Deployment`.
-
-                  Common fields are merged into the `RayClusterSpec` within this spec.
-
-                  Allows fine-grained control over the Ray cluster and Ray Serve configurations.
+                  Ray contains Ray-specific configuration. The primary underlying RayService
+                  spec lives under `.ray.spec`, while additional Kaiwo-specific Ray options
+                  can be added as siblings (e.g., `serveConfigV2`).
                 properties:
-                  apiVersion:
+                  serveConfigV2:
                     description: |-
-                      APIVersion defines the versioned schema of this representation of an object.
-                      Servers should convert recognized schemas to the latest internal value, and
-                      may reject unrecognized values.
-                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+                      ServeConfigV2 allows providing the Ray Serve config as YAML string.
+                      If set, it overrides `spec.serveConfigV2`.
                     type: string
-                  kind:
-                    description: |-
-                      Kind is a string value representing the REST resource this object represents.
-                      Servers may infer this from the endpoint the client submits requests to.
-                      Cannot be updated.
-                      In CamelCase.
-                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-                    type: string
-                  metadata:
-                    properties:
-                      annotations:
-                        additionalProperties:
-                          type: string
-                        type: object
-                      finalizers:
-                        items:
-                          type: string
-                        type: array
-                      labels:
-                        additionalProperties:
-                          type: string
-                        type: object
-                      name:
-                        type: string
-                      namespace:
-                        type: string
-                    type: object
                   spec:
-                    description: RayServiceSpec defines the desired state of RayService
+                    description: Spec is the RayService spec used to configure the
+                      Ray cluster and Serve.
                     properties:
                       deploymentUnhealthySecondThreshold:
                         description: 'Deprecated: This field is not used anymore.
@@ -8658,7 +8669,7 @@ spec:
                                   environment variables in the autoscaler container.
                                 items:
                                   description: EnvFromSource represents the source
-                                    of a set of ConfigMaps
+                                    of a set of ConfigMaps or Secrets
                                   properties:
                                     configMapRef:
                                       description: The ConfigMap to select from
@@ -8679,8 +8690,9 @@ spec:
                                       type: object
                                       x-kubernetes-map-type: atomic
                                     prefix:
-                                      description: An optional identifier to prepend
-                                        to each key in the ConfigMap. Must be a C_IDENTIFIER.
+                                      description: Optional text to prepend to the
+                                        name of each environment variable. Must be
+                                        a C_IDENTIFIER.
                                       type: string
                                     secretRef:
                                       description: The Secret to select from
@@ -8710,14 +8722,14 @@ spec:
                                 type: integer
                               image:
                                 description: Image optionally overrides the autoscaler's
-                                  container image. This override is for provided for
-                                  autoscaler testing and development.
+                                  container image. This override is provided for autoscaler
+                                  testing and development.
                                 type: string
                               imagePullPolicy:
                                 description: ImagePullPolicy optionally overrides
                                   the autoscaler container's image pull policy. This
-                                  override is for provided for autoscaler testing
-                                  and development.
+                                  override is provided for autoscaler testing and
+                                  development.
                                 type: string
                               resources:
                                 description: |-
@@ -8987,6 +8999,17 @@ spec:
                                 - Default
                                 - Aggressive
                                 - Conservative
+                                type: string
+                              version:
+                                description: |-
+                                  Version is the version of the Ray autoscaler.
+                                  Setting this to v1 will explicitly use autoscaler v1.
+                                  Setting this to v2 will explicitly use autoscaler v2.
+                                  If this isn't set, the Ray version determines the autoscaler version.
+                                  In Ray 2.47.0 and later, the default autoscaler version is v2. It's v1 before that.
+                                enum:
+                                - v1
+                                - v2
                                 type: string
                               volumeMounts:
                                 description: Optional list of volumeMounts.  This
@@ -9572,13 +9595,12 @@ spec:
                                         type: object
                                       trafficDistribution:
                                         description: |-
-                                          TrafficDistribution offers a way to express preferences for how traffic is
-                                          distributed to Service endpoints. Implementations can use this field as a
-                                          hint, but are not required to guarantee strict adherence. If the field is
-                                          not set, the implementation will apply its default routing strategy. If set
-                                          to "PreferClose", implementations should prioritize endpoints that are
-                                          topologically close (e.g., same zone).
-                                          This is a beta field and requires enabling ServiceTrafficDistribution feature.
+                                          TrafficDistribution offers a way to express preferences for how traffic
+                                          is distributed to Service endpoints. Implementations can use this field
+                                          as a hint, but are not required to guarantee strict adherence. If the
+                                          field is not set, the implementation will apply its default routing
+                                          strategy. If set to "PreferClose", implementations should prioritize
+                                          endpoints that are in the same zone.
                                         type: string
                                       type:
                                         description: |-
@@ -9754,7 +9776,7 @@ spec:
                                 type: string
                               template:
                                 description: Template is the exact pod template used
-                                  in K8s depoyments, statefulsets, etc.
+                                  in K8s deployments, statefulsets, etc.
                                 properties:
                                   metadata:
                                     description: |-
@@ -10927,6 +10949,7 @@ spec:
                                               items:
                                                 description: EnvFromSource represents
                                                   the source of a set of ConfigMaps
+                                                  or Secrets
                                                 properties:
                                                   configMapRef:
                                                     description: The ConfigMap to
@@ -10948,9 +10971,10 @@ spec:
                                                     type: object
                                                     x-kubernetes-map-type: atomic
                                                   prefix:
-                                                    description: An optional identifier
-                                                      to prepend to each key in the
-                                                      ConfigMap. Must be a C_IDENTIFIER.
+                                                    description: Optional text to
+                                                      prepend to the name of each
+                                                      environment variable. Must be
+                                                      a C_IDENTIFIER.
                                                     type: string
                                                   secretRef:
                                                     description: The Secret to select
@@ -11229,6 +11253,12 @@ spec:
                                                       - port
                                                       type: object
                                                   type: object
+                                                stopSignal:
+                                                  description: |-
+                                                    StopSignal defines which signal will be sent to a container when it is being stopped.
+                                                    If not specified, the default is defined by the container runtime in use.
+                                                    StopSignal can only be set for Pods with a non-empty .spec.os.name
+                                                  type: string
                                               type: object
                                             livenessProbe:
                                               description: |-
@@ -12470,6 +12500,7 @@ spec:
                                               items:
                                                 description: EnvFromSource represents
                                                   the source of a set of ConfigMaps
+                                                  or Secrets
                                                 properties:
                                                   configMapRef:
                                                     description: The ConfigMap to
@@ -12491,9 +12522,10 @@ spec:
                                                     type: object
                                                     x-kubernetes-map-type: atomic
                                                   prefix:
-                                                    description: An optional identifier
-                                                      to prepend to each key in the
-                                                      ConfigMap. Must be a C_IDENTIFIER.
+                                                    description: Optional text to
+                                                      prepend to the name of each
+                                                      environment variable. Must be
+                                                      a C_IDENTIFIER.
                                                     type: string
                                                   secretRef:
                                                     description: The Secret to select
@@ -12769,6 +12801,12 @@ spec:
                                                       - port
                                                       type: object
                                                   type: object
+                                                stopSignal:
+                                                  description: |-
+                                                    StopSignal defines which signal will be sent to a container when it is being stopped.
+                                                    If not specified, the default is defined by the container runtime in use.
+                                                    StopSignal can only be set for Pods with a non-empty .spec.os.name
+                                                  type: string
                                               type: object
                                             livenessProbe:
                                               description: Probes are not allowed
@@ -14012,6 +14050,7 @@ spec:
                                               items:
                                                 description: EnvFromSource represents
                                                   the source of a set of ConfigMaps
+                                                  or Secrets
                                                 properties:
                                                   configMapRef:
                                                     description: The ConfigMap to
@@ -14033,9 +14072,10 @@ spec:
                                                     type: object
                                                     x-kubernetes-map-type: atomic
                                                   prefix:
-                                                    description: An optional identifier
-                                                      to prepend to each key in the
-                                                      ConfigMap. Must be a C_IDENTIFIER.
+                                                    description: Optional text to
+                                                      prepend to the name of each
+                                                      environment variable. Must be
+                                                      a C_IDENTIFIER.
                                                     type: string
                                                   secretRef:
                                                     description: The Secret to select
@@ -14314,6 +14354,12 @@ spec:
                                                       - port
                                                       type: object
                                                   type: object
+                                                stopSignal:
+                                                  description: |-
+                                                    StopSignal defines which signal will be sent to a container when it is being stopped.
+                                                    If not specified, the default is defined by the container runtime in use.
+                                                    StopSignal can only be set for Pods with a non-empty .spec.os.name
+                                                  type: string
                                               type: object
                                             livenessProbe:
                                               description: |-
@@ -15965,7 +16011,6 @@ spec:
                                                 - Ignore: nodeAffinity/nodeSelector are ignored. All nodes are included in the calculations.
 
                                                 If this value is nil, the behavior is equivalent to the Honor policy.
-                                                This is a beta-level feature default enabled by the NodeInclusionPolicyInPodTopologySpread feature flag.
                                               type: string
                                             nodeTaintsPolicy:
                                               description: |-
@@ -15976,7 +16021,6 @@ spec:
                                                 - Ignore: node taints are ignored. All nodes are included.
 
                                                 If this value is nil, the behavior is equivalent to the Ignore policy.
-                                                This is a beta-level feature default enabled by the NodeInclusionPolicyInPodTopologySpread feature flag.
                                               type: string
                                             topologyKey:
                                               description: |-
@@ -17862,7 +17906,6 @@ spec:
                                     type: object
                                 type: object
                             required:
-                            - rayStartParams
                             - template
                             type: object
                           headServiceAnnotations:
@@ -19144,6 +19187,7 @@ spec:
                                                 items:
                                                   description: EnvFromSource represents
                                                     the source of a set of ConfigMaps
+                                                    or Secrets
                                                   properties:
                                                     configMapRef:
                                                       description: The ConfigMap to
@@ -19166,9 +19210,10 @@ spec:
                                                       type: object
                                                       x-kubernetes-map-type: atomic
                                                     prefix:
-                                                      description: An optional identifier
-                                                        to prepend to each key in
-                                                        the ConfigMap. Must be a C_IDENTIFIER.
+                                                      description: Optional text to
+                                                        prepend to the name of each
+                                                        environment variable. Must
+                                                        be a C_IDENTIFIER.
                                                       type: string
                                                     secretRef:
                                                       description: The Secret to select
@@ -19453,6 +19498,12 @@ spec:
                                                         - port
                                                         type: object
                                                     type: object
+                                                  stopSignal:
+                                                    description: |-
+                                                      StopSignal defines which signal will be sent to a container when it is being stopped.
+                                                      If not specified, the default is defined by the container runtime in use.
+                                                      StopSignal can only be set for Pods with a non-empty .spec.os.name
+                                                    type: string
                                                 type: object
                                               livenessProbe:
                                                 description: |-
@@ -20705,6 +20756,7 @@ spec:
                                                 items:
                                                   description: EnvFromSource represents
                                                     the source of a set of ConfigMaps
+                                                    or Secrets
                                                   properties:
                                                     configMapRef:
                                                       description: The ConfigMap to
@@ -20727,9 +20779,10 @@ spec:
                                                       type: object
                                                       x-kubernetes-map-type: atomic
                                                     prefix:
-                                                      description: An optional identifier
-                                                        to prepend to each key in
-                                                        the ConfigMap. Must be a C_IDENTIFIER.
+                                                      description: Optional text to
+                                                        prepend to the name of each
+                                                        environment variable. Must
+                                                        be a C_IDENTIFIER.
                                                       type: string
                                                     secretRef:
                                                       description: The Secret to select
@@ -21011,6 +21064,12 @@ spec:
                                                         - port
                                                         type: object
                                                     type: object
+                                                  stopSignal:
+                                                    description: |-
+                                                      StopSignal defines which signal will be sent to a container when it is being stopped.
+                                                      If not specified, the default is defined by the container runtime in use.
+                                                      StopSignal can only be set for Pods with a non-empty .spec.os.name
+                                                    type: string
                                                 type: object
                                               livenessProbe:
                                                 description: Probes are not allowed
@@ -22265,6 +22324,7 @@ spec:
                                                 items:
                                                   description: EnvFromSource represents
                                                     the source of a set of ConfigMaps
+                                                    or Secrets
                                                   properties:
                                                     configMapRef:
                                                       description: The ConfigMap to
@@ -22287,9 +22347,10 @@ spec:
                                                       type: object
                                                       x-kubernetes-map-type: atomic
                                                     prefix:
-                                                      description: An optional identifier
-                                                        to prepend to each key in
-                                                        the ConfigMap. Must be a C_IDENTIFIER.
+                                                      description: Optional text to
+                                                        prepend to the name of each
+                                                        environment variable. Must
+                                                        be a C_IDENTIFIER.
                                                       type: string
                                                     secretRef:
                                                       description: The Secret to select
@@ -22574,6 +22635,12 @@ spec:
                                                         - port
                                                         type: object
                                                     type: object
+                                                  stopSignal:
+                                                    description: |-
+                                                      StopSignal defines which signal will be sent to a container when it is being stopped.
+                                                      If not specified, the default is defined by the container runtime in use.
+                                                      StopSignal can only be set for Pods with a non-empty .spec.os.name
+                                                    type: string
                                                 type: object
                                               livenessProbe:
                                                 description: |-
@@ -24231,7 +24298,6 @@ spec:
                                                   - Ignore: nodeAffinity/nodeSelector are ignored. All nodes are included in the calculations.
 
                                                   If this value is nil, the behavior is equivalent to the Honor policy.
-                                                  This is a beta-level feature default enabled by the NodeInclusionPolicyInPodTopologySpread feature flag.
                                                 type: string
                                               nodeTaintsPolicy:
                                                 description: |-
@@ -24242,7 +24308,6 @@ spec:
                                                   - Ignore: node taints are ignored. All nodes are included.
 
                                                   If this value is nil, the behavior is equivalent to the Ignore policy.
-                                                  This is a beta-level feature default enabled by the NodeInclusionPolicyInPodTopologySpread feature flag.
                                                 type: string
                                               topologyKey:
                                                 description: |-
@@ -26149,7 +26214,6 @@ spec:
                               - groupName
                               - maxReplicas
                               - minReplicas
-                              - rayStartParams
                               - template
                               type: object
                             type: array
@@ -26457,13 +26521,12 @@ spec:
                                 type: object
                               trafficDistribution:
                                 description: |-
-                                  TrafficDistribution offers a way to express preferences for how traffic is
-                                  distributed to Service endpoints. Implementations can use this field as a
-                                  hint, but are not required to guarantee strict adherence. If the field is
-                                  not set, the implementation will apply its default routing strategy. If set
-                                  to "PreferClose", implementations should prioritize endpoints that are
-                                  topologically close (e.g., same zone).
-                                  This is a beta field and requires enabling ServiceTrafficDistribution feature.
+                                  TrafficDistribution offers a way to express preferences for how traffic
+                                  is distributed to Service endpoints. Implementations can use this field
+                                  as a hint, but are not required to guarantee strict adherence. If the
+                                  field is not set, the implementation will apply its default routing
+                                  strategy. If set to "PreferClose", implementations should prioritize
+                                  endpoints that are in the same zone.
                                 type: string
                               type:
                                 description: |-
@@ -26637,503 +26700,13 @@ spec:
                               `None`.
                             type: string
                         type: object
-                    type: object
-                  status:
-                    description: RayServiceStatuses defines the observed state of
-                      RayService
-                    properties:
-                      activeServiceStatus:
-                        properties:
-                          applicationStatuses:
-                            additionalProperties:
-                              properties:
-                                message:
-                                  type: string
-                                serveDeploymentStatuses:
-                                  additionalProperties:
-                                    description: ServeDeploymentStatus defines the
-                                      current state of a Serve deployment
-                                    properties:
-                                      message:
-                                        type: string
-                                      status:
-                                        type: string
-                                    type: object
-                                  type: object
-                                status:
-                                  type: string
-                              type: object
-                            description: 'Important: Run "make" to regenerate code
-                              after modifying this file'
-                            type: object
-                          rayClusterName:
-                            type: string
-                          rayClusterStatus:
-                            description: RayClusterStatus defines the observed state
-                              of RayCluster
-                            properties:
-                              availableWorkerReplicas:
-                                description: AvailableWorkerReplicas indicates how
-                                  many replicas are available in the cluster
-                                format: int32
-                                type: integer
-                              conditions:
-                                description: Represents the latest available observations
-                                  of a RayCluster's current state.
-                                items:
-                                  description: Condition contains details for one
-                                    aspect of the current state of this API Resource.
-                                  properties:
-                                    lastTransitionTime:
-                                      description: |-
-                                        lastTransitionTime is the last time the condition transitioned from one status to another.
-                                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
-                                      format: date-time
-                                      type: string
-                                    message:
-                                      description: |-
-                                        message is a human readable message indicating details about the transition.
-                                        This may be an empty string.
-                                      maxLength: 32768
-                                      type: string
-                                    observedGeneration:
-                                      description: |-
-                                        observedGeneration represents the .metadata.generation that the condition was set based upon.
-                                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
-                                        with respect to the current state of the instance.
-                                      format: int64
-                                      minimum: 0
-                                      type: integer
-                                    reason:
-                                      description: |-
-                                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
-                                        Producers of specific condition types may define expected values and meanings for this field,
-                                        and whether the values are considered a guaranteed API.
-                                        The value should be a CamelCase string.
-                                        This field may not be empty.
-                                      maxLength: 1024
-                                      minLength: 1
-                                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
-                                      type: string
-                                    status:
-                                      description: status of the condition, one of
-                                        True, False, Unknown.
-                                      enum:
-                                      - "True"
-                                      - "False"
-                                      - Unknown
-                                      type: string
-                                    type:
-                                      description: type of condition in CamelCase
-                                        or in foo.example.com/CamelCase.
-                                      maxLength: 316
-                                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
-                                      type: string
-                                  required:
-                                  - lastTransitionTime
-                                  - message
-                                  - reason
-                                  - status
-                                  - type
-                                  type: object
-                                type: array
-                                x-kubernetes-list-map-keys:
-                                - type
-                                x-kubernetes-list-type: map
-                              desiredCPU:
-                                anyOf:
-                                - type: integer
-                                - type: string
-                                description: DesiredCPU indicates total desired CPUs
-                                  for the cluster
-                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                                x-kubernetes-int-or-string: true
-                              desiredGPU:
-                                anyOf:
-                                - type: integer
-                                - type: string
-                                description: DesiredGPU indicates total desired GPUs
-                                  for the cluster
-                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                                x-kubernetes-int-or-string: true
-                              desiredMemory:
-                                anyOf:
-                                - type: integer
-                                - type: string
-                                description: DesiredMemory indicates total desired
-                                  memory for the cluster
-                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                                x-kubernetes-int-or-string: true
-                              desiredTPU:
-                                anyOf:
-                                - type: integer
-                                - type: string
-                                description: DesiredTPU indicates total desired TPUs
-                                  for the cluster
-                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                                x-kubernetes-int-or-string: true
-                              desiredWorkerReplicas:
-                                description: DesiredWorkerReplicas indicates overall
-                                  desired replicas claimed by the user at the cluster
-                                  level.
-                                format: int32
-                                type: integer
-                              endpoints:
-                                additionalProperties:
-                                  type: string
-                                description: Service Endpoints
-                                type: object
-                              head:
-                                description: Head info
-                                properties:
-                                  podIP:
-                                    type: string
-                                  podName:
-                                    type: string
-                                  serviceIP:
-                                    type: string
-                                  serviceName:
-                                    type: string
-                                type: object
-                              lastUpdateTime:
-                                description: LastUpdateTime indicates last update
-                                  timestamp for this cluster status.
-                                format: date-time
-                                nullable: true
-                                type: string
-                              maxWorkerReplicas:
-                                description: MaxWorkerReplicas indicates sum of maximum
-                                  replicas of each node group.
-                                format: int32
-                                type: integer
-                              minWorkerReplicas:
-                                description: MinWorkerReplicas indicates sum of minimum
-                                  replicas of each node group.
-                                format: int32
-                                type: integer
-                              observedGeneration:
-                                description: |-
-                                  observedGeneration is the most recent generation observed for this RayCluster. It corresponds to the
-                                  RayCluster's generation, which is updated on mutation by the API Server.
-                                format: int64
-                                type: integer
-                              readyWorkerReplicas:
-                                description: ReadyWorkerReplicas indicates how many
-                                  worker replicas are ready in the cluster
-                                format: int32
-                                type: integer
-                              reason:
-                                description: Reason provides more information about
-                                  current State
-                                type: string
-                              state:
-                                description: |-
-                                  INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-                                  Important: Run "make" to regenerate code after modifying this file
-                                  Status reflects the status of the cluster
-
-                                  Deprecated: the State field is replaced by the Conditions field.
-                                type: string
-                              stateTransitionTimes:
-                                additionalProperties:
-                                  format: date-time
-                                  type: string
-                                description: StateTransitionTimes indicates the time
-                                  of the last state transition for each state.
-                                type: object
-                            type: object
-                        type: object
-                      conditions:
-                        description: Represents the latest available observations
-                          of a RayService's current state.
-                        items:
-                          description: Condition contains details for one aspect of
-                            the current state of this API Resource.
-                          properties:
-                            lastTransitionTime:
-                              description: |-
-                                lastTransitionTime is the last time the condition transitioned from one status to another.
-                                This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
-                              format: date-time
-                              type: string
-                            message:
-                              description: |-
-                                message is a human readable message indicating details about the transition.
-                                This may be an empty string.
-                              maxLength: 32768
-                              type: string
-                            observedGeneration:
-                              description: |-
-                                observedGeneration represents the .metadata.generation that the condition was set based upon.
-                                For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
-                                with respect to the current state of the instance.
-                              format: int64
-                              minimum: 0
-                              type: integer
-                            reason:
-                              description: |-
-                                reason contains a programmatic identifier indicating the reason for the condition's last transition.
-                                Producers of specific condition types may define expected values and meanings for this field,
-                                and whether the values are considered a guaranteed API.
-                                The value should be a CamelCase string.
-                                This field may not be empty.
-                              maxLength: 1024
-                              minLength: 1
-                              pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
-                              type: string
-                            status:
-                              description: status of the condition, one of True, False,
-                                Unknown.
-                              enum:
-                              - "True"
-                              - "False"
-                              - Unknown
-                              type: string
-                            type:
-                              description: type of condition in CamelCase or in foo.example.com/CamelCase.
-                              maxLength: 316
-                              pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
-                              type: string
-                          required:
-                          - lastTransitionTime
-                          - message
-                          - reason
-                          - status
-                          - type
-                          type: object
-                        type: array
-                        x-kubernetes-list-map-keys:
-                        - type
-                        x-kubernetes-list-type: map
-                      lastUpdateTime:
-                        description: LastUpdateTime represents the timestamp when
-                          the RayService status was last updated.
-                        format: date-time
-                        type: string
-                      numServeEndpoints:
-                        description: |-
-                          NumServeEndpoints indicates the number of Ray Pods that are actively serving or have been selected by the serve service.
-                          Ray Pods without a proxy actor or those that are unhealthy will not be counted.
-                        format: int32
-                        type: integer
-                      observedGeneration:
-                        description: |-
-                          observedGeneration is the most recent generation observed for this RayService. It corresponds to the
-                          RayService's generation, which is updated on mutation by the API Server.
-                        format: int64
-                        type: integer
-                      pendingServiceStatus:
-                        description: Pending Service Status indicates a RayCluster
-                          will be created or is being created.
-                        properties:
-                          applicationStatuses:
-                            additionalProperties:
-                              properties:
-                                message:
-                                  type: string
-                                serveDeploymentStatuses:
-                                  additionalProperties:
-                                    description: ServeDeploymentStatus defines the
-                                      current state of a Serve deployment
-                                    properties:
-                                      message:
-                                        type: string
-                                      status:
-                                        type: string
-                                    type: object
-                                  type: object
-                                status:
-                                  type: string
-                              type: object
-                            description: 'Important: Run "make" to regenerate code
-                              after modifying this file'
-                            type: object
-                          rayClusterName:
-                            type: string
-                          rayClusterStatus:
-                            description: RayClusterStatus defines the observed state
-                              of RayCluster
-                            properties:
-                              availableWorkerReplicas:
-                                description: AvailableWorkerReplicas indicates how
-                                  many replicas are available in the cluster
-                                format: int32
-                                type: integer
-                              conditions:
-                                description: Represents the latest available observations
-                                  of a RayCluster's current state.
-                                items:
-                                  description: Condition contains details for one
-                                    aspect of the current state of this API Resource.
-                                  properties:
-                                    lastTransitionTime:
-                                      description: |-
-                                        lastTransitionTime is the last time the condition transitioned from one status to another.
-                                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
-                                      format: date-time
-                                      type: string
-                                    message:
-                                      description: |-
-                                        message is a human readable message indicating details about the transition.
-                                        This may be an empty string.
-                                      maxLength: 32768
-                                      type: string
-                                    observedGeneration:
-                                      description: |-
-                                        observedGeneration represents the .metadata.generation that the condition was set based upon.
-                                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
-                                        with respect to the current state of the instance.
-                                      format: int64
-                                      minimum: 0
-                                      type: integer
-                                    reason:
-                                      description: |-
-                                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
-                                        Producers of specific condition types may define expected values and meanings for this field,
-                                        and whether the values are considered a guaranteed API.
-                                        The value should be a CamelCase string.
-                                        This field may not be empty.
-                                      maxLength: 1024
-                                      minLength: 1
-                                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
-                                      type: string
-                                    status:
-                                      description: status of the condition, one of
-                                        True, False, Unknown.
-                                      enum:
-                                      - "True"
-                                      - "False"
-                                      - Unknown
-                                      type: string
-                                    type:
-                                      description: type of condition in CamelCase
-                                        or in foo.example.com/CamelCase.
-                                      maxLength: 316
-                                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
-                                      type: string
-                                  required:
-                                  - lastTransitionTime
-                                  - message
-                                  - reason
-                                  - status
-                                  - type
-                                  type: object
-                                type: array
-                                x-kubernetes-list-map-keys:
-                                - type
-                                x-kubernetes-list-type: map
-                              desiredCPU:
-                                anyOf:
-                                - type: integer
-                                - type: string
-                                description: DesiredCPU indicates total desired CPUs
-                                  for the cluster
-                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                                x-kubernetes-int-or-string: true
-                              desiredGPU:
-                                anyOf:
-                                - type: integer
-                                - type: string
-                                description: DesiredGPU indicates total desired GPUs
-                                  for the cluster
-                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                                x-kubernetes-int-or-string: true
-                              desiredMemory:
-                                anyOf:
-                                - type: integer
-                                - type: string
-                                description: DesiredMemory indicates total desired
-                                  memory for the cluster
-                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                                x-kubernetes-int-or-string: true
-                              desiredTPU:
-                                anyOf:
-                                - type: integer
-                                - type: string
-                                description: DesiredTPU indicates total desired TPUs
-                                  for the cluster
-                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                                x-kubernetes-int-or-string: true
-                              desiredWorkerReplicas:
-                                description: DesiredWorkerReplicas indicates overall
-                                  desired replicas claimed by the user at the cluster
-                                  level.
-                                format: int32
-                                type: integer
-                              endpoints:
-                                additionalProperties:
-                                  type: string
-                                description: Service Endpoints
-                                type: object
-                              head:
-                                description: Head info
-                                properties:
-                                  podIP:
-                                    type: string
-                                  podName:
-                                    type: string
-                                  serviceIP:
-                                    type: string
-                                  serviceName:
-                                    type: string
-                                type: object
-                              lastUpdateTime:
-                                description: LastUpdateTime indicates last update
-                                  timestamp for this cluster status.
-                                format: date-time
-                                nullable: true
-                                type: string
-                              maxWorkerReplicas:
-                                description: MaxWorkerReplicas indicates sum of maximum
-                                  replicas of each node group.
-                                format: int32
-                                type: integer
-                              minWorkerReplicas:
-                                description: MinWorkerReplicas indicates sum of minimum
-                                  replicas of each node group.
-                                format: int32
-                                type: integer
-                              observedGeneration:
-                                description: |-
-                                  observedGeneration is the most recent generation observed for this RayCluster. It corresponds to the
-                                  RayCluster's generation, which is updated on mutation by the API Server.
-                                format: int64
-                                type: integer
-                              readyWorkerReplicas:
-                                description: ReadyWorkerReplicas indicates how many
-                                  worker replicas are ready in the cluster
-                                format: int32
-                                type: integer
-                              reason:
-                                description: Reason provides more information about
-                                  current State
-                                type: string
-                              state:
-                                description: |-
-                                  INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-                                  Important: Run "make" to regenerate code after modifying this file
-                                  Status reflects the status of the cluster
-
-                                  Deprecated: the State field is replaced by the Conditions field.
-                                type: string
-                              stateTransitionTimes:
-                                additionalProperties:
-                                  format: date-time
-                                  type: string
-                                description: StateTransitionTimes indicates the time
-                                  of the last state transition for each state.
-                                type: object
-                            type: object
-                        type: object
-                      serviceStatus:
-                        description: |-
-                          Deprecated: `ServiceStatus` is deprecated - use `Conditions` instead. `Running` means the RayService is ready to
-                          serve requests. An empty `ServiceStatus` means the RayService is not ready to serve requests. The definition of
-                          `ServiceStatus` is equivalent to the `RayServiceReady` condition.
-                        type: string
+                    required:
+                    - rayClusterConfig
                     type: object
                 type: object
-                x-kubernetes-preserve-unknown-fields: true
+                x-kubernetes-validations:
+                - message: only one of 'ray' or 'deployment' may be set
+                  rule: '!(has(self.ray) && has(self.deployment))'
               replicas:
                 default: 1
                 description: Replicas specifies the number of replicas for the workload.
@@ -27248,11 +26821,6 @@ spec:
                       type: string
                   type: object
                 type: array
-              serveConfigV2:
-                description: |-
-                  Defines the applications and deployments to deploy, should be a YAML multi-line scalar string.
-                  Can also be defined inside RayService struct
-                type: string
               storage:
                 description: |-
                   Storage configures persistent storage using Kubernetes PersistentVolumeClaims (PVCs).
@@ -27757,6 +27325,14 @@ spec:
                 required:
                 - accessMode
                 type: object
+              type:
+                description: 'Type selects the underlying workload implementation.
+                  Valid values: "deployment", "ray".'
+                enum:
+                - deployment
+                - ray
+                - aim
+                type: string
               user:
                 description: |-
                   User specifies the owner or creator of the workload. It should typically be the user's email address. This value is primarily used for labeling (`kaiwo.silogen.ai/user`) the generated resources (like Pods, Jobs, Deployments) for identification and filtering (e.g., with `kaiwo list --user <email>`).

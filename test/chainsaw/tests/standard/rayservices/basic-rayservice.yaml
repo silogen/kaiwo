@@ -11,9 +11,10 @@ spec:
     limits:
       cpu: "1"
       memory: "2Gi"
-  ray: true
+  type: ray
   image: ghcr.io/silogen/ray-test:v0.3
-  serveConfigV2: |-
+  ray:
+    serveConfigV2: |
     applications:
     - name: llm
       route_prefix: /

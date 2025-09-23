@@ -12,14 +12,18 @@ spec:
       cpu: "1"
       memory: "1Gi"
   image: ghcr.io/silogen/ray-test:v0.3
-  entrypoint: |
-    echo "Setting up environment..."
-    pip install requests
-    echo "Installed random Python dependencies!"
-    ray start --head --port=6379
-    python /workload/app/ray_test_entrypoint.py \
-    --tasks 5 \
-    --delay 0.5
+  deployment:
+    spec:
+      template:
+        spec: {}
+    entrypoint: |
+      echo "Setting up environment..."
+      pip install requests
+      echo "Installed random Python dependencies!"
+      ray start --head --port=6379
+      python /workload/app/ray_test_entrypoint.py \
+      --tasks 5 \
+      --delay 0.5
   storage:
     storageEnabled: true
     data:

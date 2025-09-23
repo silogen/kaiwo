@@ -166,12 +166,8 @@ type CommonMetaSpec struct {
 	// SecretVolumes allows you to mount specific keys from Kubernetes Secrets as files into the workload containers.
 	SecretVolumes []SecretVolume `json:"secretVolumes,omitempty"`
 
-	// Ray determines whether the operator should use RayCluster for workload execution.
-	// If `true`, Kaiwo will create Ray-specific resources.
-	// If `false` (default), Kaiwo will create standard Kubernetes resources (BatchJob for `KaiwoJob`, Deployment for `KaiwoService`).
-	// This setting dictates which underlying spec (`job`/`rayJob` or `deployment`/`rayService`) is primarily used.
-	// +kubebuilder:default=false
-	Ray bool `json:"ray,omitempty"`
+	// NOTE: Ray selection for KaiwoService is now controlled via `.spec.type`.
+	// For KaiwoJob, a `ray` selector remains, but it is defined on the job spec itself.
 
 	// Storage configures persistent storage using Kubernetes PersistentVolumeClaims (PVCs).
 	//

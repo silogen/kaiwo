@@ -5,12 +5,6 @@ metadata:
 spec:
   user: test-user
   deployment:
-    apiVersion: apps/v1
-    kind: Deployment
-    metadata:
-      name: kaiwoservice-2
-      labels:
-        app: kaiwoservice-2
     spec:
       replicas: 1
       selector:

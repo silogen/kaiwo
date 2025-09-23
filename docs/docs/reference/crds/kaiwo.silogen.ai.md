@@ -18,6 +18,57 @@ Package v1alpha1 contains API Schema definitions for the kaiwo v1alpha1 API grou
 
 
 
+#### AimModelCachingSpec
+
+
+
+
+
+
+
+_Appears in:_
+- [AimModelSpec](#aimmodelspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | Enabled, if true, turns on model caching |  |  |
+| `storageClass` _string_ | StorageClass specifies the storage class to use for the model cache, if a model cache does not already exist. If this is omitted, the default storage class from `KaiwoConfig.spec.models.caching.storageClass` is used. |  |  |
+| `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env lists the environmental variables required to download the model. |  |  |
+
+
+#### AimModelSpec
+
+
+
+
+
+
+
+_Appears in:_
+- [KaiwoAimDeploymentSpec](#kaiwoaimdeploymentspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | Name refers to the AIM model name. |  |  |
+| `caching` _[AimModelCachingSpec](#aimmodelcachingspec)_ | Caching contains the model caching specifications |  |  |
+
+
+#### AimRoutingSpec
+
+
+
+
+
+
+
+_Appears in:_
+- [KaiwoAimDeploymentSpec](#kaiwoaimdeploymentspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | Enabled, if true, will create an HTTPRoute for the InferenceService. |  |  |
+
+
 #### AzureBlobStorageDownloadItem
 
 
@@ -133,7 +184,6 @@ _Appears in:_
 | `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets is a list of Kubernetes `LocalObjectReference` (containing just the secret `name`) referencing secrets needed to pull the container image(s). These are added to the `imagePullSecrets` field of the PodSpec for all generated pods. |  |  |
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env is a list of Kubernetes `EnvVar` structs. These environment variables are added to the primary workload container(s) in the generated pods. They are appended to any environment variables already defined in the underlying Job, Deployment, or Ray spec. |  |  |
 | `secretVolumes` _[SecretVolume](#secretvolume) array_ | SecretVolumes allows you to mount specific keys from Kubernetes Secrets as files into the workload containers. |  |  |
-| `ray` _boolean_ | Ray determines whether the operator should use RayCluster for workload execution.<br />If `true`, Kaiwo will create Ray-specific resources.<br />If `false` (default), Kaiwo will create standard Kubernetes resources (BatchJob for `KaiwoJob`, Deployment for `KaiwoService`).<br />This setting dictates which underlying spec (`job`/`rayJob` or `deployment`/`rayService`) is primarily used. | false |  |
 | `storage` _[StorageSpec](#storagespec)_ | Storage configures persistent storage using Kubernetes PersistentVolumeClaims (PVCs).<br />Enabling `storage.data.download` or `storage.huggingFace.preCacheRepos` will cause Kaiwo to create a temporary Kubernetes Job (the "download job") before starting the main workload. This job runs a container that performs the downloads into the respective PVCs. The main workload only starts after the download job completes successfully. |  |  |
 | `dangerous` _boolean_ | Dangerous, if when set to `true`, Kaiwo will *not* add the default `PodSecurityContext` (which normally sets `runAsUser: 1000`, `runAsGroup: 1000`, `fsGroup: 1000`) to the generated pods. Use this only if you need to run containers as root or a different specific user and understand the security implications. | false |  |
 | `clusterQueue` _string_ | ClusterQueue specifies the name of the Kueue `ClusterQueue` that the workload should be submitted to for scheduling and resource management.<br />This value is set as the `kueue.x-k8s.io/queue-name` label on the underlying resources.<br />If omitted, it defaults to the value specified by the `DEFAULT_CLUSTER_QUEUE_NAME` environment variable in the Kaiwo controller (typically "kaiwo"), which is set during installation.<br />Note! If the applied KaiwoQueueConfig includes no quota for the default queue, no workload will run that tries to fall back on it.<br />The `kaiwo submit` CLI command can override this using the `--queue` flag or the `clusterQueue` field in the `kaiwoconfig.yaml` file. |  |  |
@@ -258,6 +308,24 @@ _Appears in:_
 | `files` _string array_ | Files is an optional list of specific files to download from the repository. If omitted, the entire repository is downloaded. |  |  |
 
 
+#### KaiwoAimDeploymentSpec
+
+
+
+
+
+
+
+_Appears in:_
+- [KaiwoServiceSpec](#kaiwoservicespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `aimWorkloadId` _string_ | AimWorkloadId is a unique user-provided ID that identifies an instance of an AIM |  |  |
+| `model` _[AimModelSpec](#aimmodelspec)_ | Model contains the model-specific configuration |  |  |
+| `routing` _[AimRoutingSpec](#aimroutingspec)_ | Routing contains the routing-specific configuration |  |  |
+
+
 #### KaiwoJob
 
 
@@ -325,13 +393,13 @@ _Appears in:_
 | `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets is a list of Kubernetes `LocalObjectReference` (containing just the secret `name`) referencing secrets needed to pull the container image(s). These are added to the `imagePullSecrets` field of the PodSpec for all generated pods. |  |  |
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env is a list of Kubernetes `EnvVar` structs. These environment variables are added to the primary workload container(s) in the generated pods. They are appended to any environment variables already defined in the underlying Job, Deployment, or Ray spec. |  |  |
 | `secretVolumes` _[SecretVolume](#secretvolume) array_ | SecretVolumes allows you to mount specific keys from Kubernetes Secrets as files into the workload containers. |  |  |
-| `ray` _boolean_ | Ray determines whether the operator should use RayCluster for workload execution.<br />If `true`, Kaiwo will create Ray-specific resources.<br />If `false` (default), Kaiwo will create standard Kubernetes resources (BatchJob for `KaiwoJob`, Deployment for `KaiwoService`).<br />This setting dictates which underlying spec (`job`/`rayJob` or `deployment`/`rayService`) is primarily used. | false |  |
 | `storage` _[StorageSpec](#storagespec)_ | Storage configures persistent storage using Kubernetes PersistentVolumeClaims (PVCs).<br />Enabling `storage.data.download` or `storage.huggingFace.preCacheRepos` will cause Kaiwo to create a temporary Kubernetes Job (the "download job") before starting the main workload. This job runs a container that performs the downloads into the respective PVCs. The main workload only starts after the download job completes successfully. |  |  |
 | `dangerous` _boolean_ | Dangerous, if when set to `true`, Kaiwo will *not* add the default `PodSecurityContext` (which normally sets `runAsUser: 1000`, `runAsGroup: 1000`, `fsGroup: 1000`) to the generated pods. Use this only if you need to run containers as root or a different specific user and understand the security implications. | false |  |
 | `clusterQueue` _string_ | ClusterQueue specifies the name of the Kueue `ClusterQueue` that the workload should be submitted to for scheduling and resource management.<br />This value is set as the `kueue.x-k8s.io/queue-name` label on the underlying resources.<br />If omitted, it defaults to the value specified by the `DEFAULT_CLUSTER_QUEUE_NAME` environment variable in the Kaiwo controller (typically "kaiwo"), which is set during installation.<br />Note! If the applied KaiwoQueueConfig includes no quota for the default queue, no workload will run that tries to fall back on it.<br />The `kaiwo submit` CLI command can override this using the `--queue` flag or the `clusterQueue` field in the `kaiwoconfig.yaml` file. |  |  |
 | `priorityClass` _string_ | WorkloadPriorityClass specifies the name of Kueue `WorkloadPriorityClass` to be assigned to the job's pods. This influences the scheduling priority relative to other pods in the cluster. |  |  |
 | `entrypoint` _string_ | EntryPoint defines the command or script that the primary container in the job's pod(s) should execute.<br />It can be a multi-line string. Shell script shebangs (`#!/bin/bash`) are detected.<br />For standard Kubernetes Jobs (`ray: false`), this populates the `command` and `args` fields of the container spec (typically `["/bin/sh", "-c", "<entrypoint_script>"]`).<br />For RayJobs (`ray: true`), this populates the `rayJob.spec.entrypoint` field. For RayJobs, this must reference a Python script.<br />This overrides any default command specified in the container image or the underlying `job` or `rayJob` spec sections if they are also defined. |  |  |
 | `rayJob` _[RayJob](#rayjob)_ | RayJob defines the RayJob configuration.<br />If this field is present (or if `spec.ray` is `true`), Kaiwo will create a `RayJob` resource instead of a standard `batchv1.Job`.<br />Common fields like `image`, `resources`, `gpus`, `replicas`, etc., will be merged into this spec, potentially overriding values defined here unless explicitly configured otherwise.<br />This provides fine-grained control over the Ray cluster configuration (head/worker groups) and Ray job submission parameters. |  |  |
+| `ray` _boolean_ | Ray determines whether the operator should use RayJob for workload execution.<br />If `true`, Kaiwo will create Ray-specific resources.<br />If `false` (default), Kaiwo will create standard Kubernetes resources (batchv1.Job). | false |  |
 | `job` _[Job](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#job-v1-batch)_ | Job defines the Kubernetes Job configuration.<br />If this field is present and `spec.ray` is `false`, Kaiwo will use this as the base for the created `batchv1.Job`.<br />Common fields like `image`, `resources`, `gpus`, `entrypoint`, etc., will be merged into this spec, potentially overriding values defined here.<br />This provides fine-grained control over standard Kubernetes Job parameters like `backoffLimit`, `ttlSecondsAfterFinished`, pod template details, etc. |  |  |
 
 
@@ -452,6 +520,23 @@ _Appears in:_
 | `status` _[KaiwoServiceStatus](#kaiwoservicestatus)_ | Status reflects the most recently observed state of the KaiwoService, including its phase, start time, duration, and conditions. |  |  |
 
 
+#### KaiwoServiceDeploymentSpec
+
+
+
+KaiwoServiceDeploymentSpec groups Deployment-specific configuration for services
+
+
+
+_Appears in:_
+- [KaiwoServiceSpec](#kaiwoservicespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `spec` _[DeploymentSpec](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#deploymentspec-v1-apps)_ | Spec is the Kubernetes Deployment spec used to configure the service pods. |  |  |
+| `entrypoint` _string_ | EntryPoint specifies the command or script executed in the primary container. |  |  |
+
+
 #### KaiwoServiceList
 
 
@@ -468,6 +553,23 @@ KaiwoServiceList
 | `kind` _string_ | `KaiwoServiceList` | | |
 | `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
 | `items` _[KaiwoService](#kaiwoservice) array_ |  |  |  |
+
+
+#### KaiwoServiceRaySpec
+
+
+
+KaiwoServiceRaySpec groups Ray-specific configuration for services
+
+
+
+_Appears in:_
+- [KaiwoServiceSpec](#kaiwoservicespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `spec` _[RayServiceSpec](#rayservicespec)_ | Spec is the RayService spec used to configure the Ray cluster and Serve. |  |  |
+| `serveConfigV2` _string_ | ServeConfigV2 allows providing the Ray Serve config as YAML string.<br />If set, it overrides `spec.serveConfigV2`. |  |  |
 
 
 #### KaiwoServiceSpec
@@ -499,15 +601,14 @@ _Appears in:_
 | `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets is a list of Kubernetes `LocalObjectReference` (containing just the secret `name`) referencing secrets needed to pull the container image(s). These are added to the `imagePullSecrets` field of the PodSpec for all generated pods. |  |  |
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env is a list of Kubernetes `EnvVar` structs. These environment variables are added to the primary workload container(s) in the generated pods. They are appended to any environment variables already defined in the underlying Job, Deployment, or Ray spec. |  |  |
 | `secretVolumes` _[SecretVolume](#secretvolume) array_ | SecretVolumes allows you to mount specific keys from Kubernetes Secrets as files into the workload containers. |  |  |
-| `ray` _boolean_ | Ray determines whether the operator should use RayCluster for workload execution.<br />If `true`, Kaiwo will create Ray-specific resources.<br />If `false` (default), Kaiwo will create standard Kubernetes resources (BatchJob for `KaiwoJob`, Deployment for `KaiwoService`).<br />This setting dictates which underlying spec (`job`/`rayJob` or `deployment`/`rayService`) is primarily used. | false |  |
 | `storage` _[StorageSpec](#storagespec)_ | Storage configures persistent storage using Kubernetes PersistentVolumeClaims (PVCs).<br />Enabling `storage.data.download` or `storage.huggingFace.preCacheRepos` will cause Kaiwo to create a temporary Kubernetes Job (the "download job") before starting the main workload. This job runs a container that performs the downloads into the respective PVCs. The main workload only starts after the download job completes successfully. |  |  |
 | `dangerous` _boolean_ | Dangerous, if when set to `true`, Kaiwo will *not* add the default `PodSecurityContext` (which normally sets `runAsUser: 1000`, `runAsGroup: 1000`, `fsGroup: 1000`) to the generated pods. Use this only if you need to run containers as root or a different specific user and understand the security implications. | false |  |
 | `clusterQueue` _string_ | ClusterQueue specifies the name of the Kueue `ClusterQueue` that the workload should be submitted to for scheduling and resource management.<br />This value is set as the `kueue.x-k8s.io/queue-name` label on the underlying resources.<br />If omitted, it defaults to the value specified by the `DEFAULT_CLUSTER_QUEUE_NAME` environment variable in the Kaiwo controller (typically "kaiwo"), which is set during installation.<br />Note! If the applied KaiwoQueueConfig includes no quota for the default queue, no workload will run that tries to fall back on it.<br />The `kaiwo submit` CLI command can override this using the `--queue` flag or the `clusterQueue` field in the `kaiwoconfig.yaml` file. |  |  |
 | `priorityClass` _string_ | WorkloadPriorityClass specifies the name of Kueue `WorkloadPriorityClass` to be assigned to the job's pods. This influences the scheduling priority relative to other pods in the cluster. |  |  |
-| `entrypoint` _string_ | EntryPoint specifies the command or script executed in a Deployment.<br />Can also be defined inside Deployment struct as regular command in the form of string array.<br />It is *not* used when `ray: true` (use `serveConfigV2` or the `rayService` spec instead for Ray entrypoints). |  |  |
-| `serveConfigV2` _string_ | Defines the applications and deployments to deploy, should be a YAML multi-line scalar string.<br />Can also be defined inside RayService struct |  |  |
-| `rayService` _[RayService](#rayservice)_ | RayService allows providing a full `rayv1.RayService` spec.<br />If present (or `spec.ray` is `true`), Kaiwo creates a `RayService` (wrapped in an AppWrapper for Kueue integration) instead of a `Deployment`.<br />Common fields are merged into the `RayClusterSpec` within this spec.<br />Allows fine-grained control over the Ray cluster and Ray Serve configurations. |  |  |
-| `deployment` _[Deployment](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#deployment-v1-apps)_ | Deployment allows providing a full `appsv1.Deployment` spec.<br />If present and `spec.ray` is `false`, this is used as the base for the created `Deployment`.<br />Common fields are merged into this spec.<br />Allows fine-grained control over Kubernetes Deployment parameters (strategy, selectors, pod template, etc.). |  |  |
+| `type` _string_ | Type selects the underlying workload implementation. Valid values: "deployment", "ray". |  | Enum: [deployment ray aim] <br /> |
+| `ray` _[KaiwoServiceRaySpec](#kaiwoservicerayspec)_ | Ray contains Ray-specific configuration. The primary underlying RayService<br />spec lives under `.ray.spec`, while additional Kaiwo-specific Ray options<br />can be added as siblings (e.g., `serveConfigV2`). |  |  |
+| `deployment` _[KaiwoServiceDeploymentSpec](#kaiwoservicedeploymentspec)_ | Deployment contains Deployment-specific configuration. The primary<br />underlying Deployment spec lives under `.deployment.spec`, while<br />additional Kaiwo-specific options can be added as siblings (e.g., `entrypoint`). |  |  |
+| `aim` _[KaiwoAimDeploymentSpec](#kaiwoaimdeploymentspec)_ | Aim contains the AIM (AMD Inference Microservice) configuration |  |  |
 
 
 #### KaiwoServiceStatus

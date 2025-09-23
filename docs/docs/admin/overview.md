@@ -23,7 +23,7 @@ Kaiwo provides a layer on top of Kubernetes, Kueue, and Ray to streamline the ma
     *   Workloads (`KaiwoJob`/`KaiwoService`) are submitted to a specific `ClusterQueue` (via the `kueue.x-k8s.io/queue-name` label, derived from `spec.clusterQueue`).
 
 4.  **Ray Integration**:
-    *   If `spec.ray: true` is set in a `KaiwoJob` or `KaiwoService`, the operator creates `RayJob` or `RayService` resources instead of standard Kubernetes ones.
+    *   If `spec.ray: true` is set in a `KaiwoJob`, the operator creates a `RayJob` instead of a standard Kubernetes Job. If `spec.type: ray` is set in a `KaiwoService` (or `spec.ray` block is provided without `type`), the operator creates a `RayService` instead of a Deployment.
     *   This leverages Ray for distributed execution capabilities. Requires the KubeRay operator to be installed.
 
 5.  **Kaiwo CLI**:

@@ -39,7 +39,7 @@ spec:
       containers:
       - name: minio
         image: minio/minio
-        args: [ "server", "/data" ]
+        args: ["server", "/data"]
         resources:
           limits:
             cpu: "1"

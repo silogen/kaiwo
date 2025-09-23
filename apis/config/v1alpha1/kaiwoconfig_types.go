@@ -16,6 +16,7 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	v1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 // KaiwoConfigSpec defines the desired configuration for the Kaiwo operator's configuration.
@@ -58,6 +59,29 @@ type KaiwoConfigSpec struct {
 	// If nodes are added or removed, the operator will update the default clusterqueue to reflect the current state of the cluster.
 	// +kubebuilder:default=false
 	DynamicallyUpdateDefaultClusterQueue bool `json:"dynamicallyUpdateDefaultClusterQueue,omitempty"`
+
+	Aim KaiwoAimConfig `json:"aim,omitempty"`
+}
+
+type KaiwoAimConfig struct {
+	// Routing contains the global AIM routing configuration
+	Routing KaiwoAimRoutingConfig `json:"routing,omitempty"`
+
+	Caching KaiwoAimCachingConfig `json:"caching,omitempty"`
+}
+
+type KaiwoAimCachingConfig struct {
+	Models KaiwoAimModelCachingConfig `json:"models,omitempty"`
+}
+
+type KaiwoAimModelCachingConfig struct {
+	// DefaultStorageClassName is the name of the storage class that is used, if no others are provided
+	DefaultStorageClassName string `json:"defaultStorageClassName,omitempty"`
+}
+
+type KaiwoAimRoutingConfig struct {
+	// ParentRefs is used to tie the AIM-specific HTTPRoute to the Gateway instance
+	ParentRefs []v1.ParentReference `json:"parentRefs,omitempty"`
 }
 
 // KaiwoRayConfig contains the Ray-specific configuration that Kaiwo uses.

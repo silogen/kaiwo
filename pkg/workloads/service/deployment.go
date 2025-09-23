@@ -110,7 +110,12 @@ func (handler *DeploymentHandler) BuildDesired(ctx context.Context, clusterCtx c
 	}
 
 	if err := common.AddEntrypoint(
-		svcSpec.EntryPoint,
+		func() string {
+			if svcSpec.Deployment != nil {
+				return svcSpec.Deployment.EntryPoint
+			}
+			return ""
+		}(),
 		&depSpec.Template,
 	); err != nil {
 		return nil, baseutils.LogErrorf(logger, "failed to add entrypoint: %v", err)

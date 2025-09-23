@@ -47,6 +47,12 @@ type KaiwoJobSpec struct {
 	// +kubebuilder:pruning:PreserveUnknownFields
 	RayJob *rayv1.RayJob `json:"rayJob,omitempty"`
 
+	// Ray determines whether the operator should use RayJob for workload execution.
+	// If `true`, Kaiwo will create Ray-specific resources.
+	// If `false` (default), Kaiwo will create standard Kubernetes resources (batchv1.Job).
+	// +kubebuilder:default=false
+	Ray bool `json:"ray,omitempty"`
+
 	// Job defines the Kubernetes Job configuration.
 	//
 	// If this field is present and `spec.ray` is `false`, Kaiwo will use this as the base for the created `batchv1.Job`.

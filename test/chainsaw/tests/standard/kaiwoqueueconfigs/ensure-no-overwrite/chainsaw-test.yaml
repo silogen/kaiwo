@@ -92,8 +92,7 @@ spec:
               spec:
                 resourceGroups:
                 - ~.(flavors):
-                    (name == 'foobaz'): false   
+                    (name == 'foobaz'): false
     catch:
     - command:
         entrypoint: ls
-        

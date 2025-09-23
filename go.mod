@@ -27,6 +27,7 @@ require (
 	k8s.io/api v0.33.1
 	k8s.io/apimachinery v0.33.1
 	sigs.k8s.io/controller-runtime v0.21.0
+	sigs.k8s.io/gateway-api v1.1.0
 	sigs.k8s.io/kueue v0.12.3
 )
 
