@@ -32,12 +32,16 @@ type ModelCacheSpec struct {
 	StorageClassName string `json:"storageClassName,omitempty"`
 
 	// Size specifies the size of the cache volume
+	// +kubebuilder:validation:XValidation:rule="quantity(self.size) > quantity('0')",message="size must be greater than 0"
 	Size resource.Quantity `json:"size"`
 
 	// Env lists the environment variables required to download the model into the cache
+	// +listType=map
+	// +listMapKey=name
 	Env []corev1.EnvVar `json:"env,omitempty"`
 }
 
+// +kubebuilder:validation:Enum=Pending;Progressing;Available;Failed
 type ModelCacheStatusEnum string
 
 const (
@@ -59,11 +63,13 @@ type ModelCacheStatus struct {
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
 	// Conditions represent the latest available observations of the model cache's state
+	// +listType=map
+	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
 	// Status represents the current status of the model cache
 	// +kubebuilder:default=Pending
-	Status ModelCacheStatusEnum `json:"phase,omitempty"`
+	Status ModelCacheStatusEnum `json:"status,omitempty"`
 
 	// LastUsed represents the last time a model was deployed that used this cache
 	LastUsed *metav1.Time `json:"lastUsed,omitempty"`
@@ -115,6 +121,7 @@ const (
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:shortName=mc,categories=kaiwo;all
 // +kubebuilder:printcolumn:name="Cache Size",type=string,JSONPath=`.spec.size`
 // +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.status`
 // +kubebuilder:printcolumn:name="PVC",type=string,JSONPath=`.status.persistentVolumeClaim`

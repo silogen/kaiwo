@@ -15,13 +15,15 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // ClusterModelSpec defines the desired state of ClusterModel
 type ClusterModelSpec struct {
-	// Aim is the
-	Aim AimClusterModelSpec `json:"aim,omitempty"`
+	// Aim contains the AIM model configuration for this ClusterModel
+	// +kubebuilder:validation:Required
+	Aim AimClusterModelSpec `json:"aim"`
 }
 
 type AimClusterModelSpec struct {
@@ -33,20 +35,28 @@ type AimClusterModelSpec struct {
 	// +kubebuilder:validation:MinLength=1
 	Image string `json:"image"`
 
-	// ImagePullSecret is the name of the secret that is used to pull the Image, if required
-	ImagePullSecret string `json:"imagePullSecret,omitempty"`
+	// ImagePullSecret references the Secret used to pull the Image, if required
+	// Uses a namespaced Secret reference since this resource is cluster-scoped
+	ImagePullSecret *corev1.SecretReference `json:"imagePullSecret,omitempty"`
 }
 
 // ClusterModelStatus defines the observed state of ClusterModel
 type ClusterModelStatus struct {
+	// ObservedGeneration is the most recent generation observed by the controller
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
 	// Conditions represent the latest available observations of the cluster model's state
+	// +listType=map
+	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:scope=Cluster
-// +kubebuilder:printcolumn:name="Model Name",type=string,JSONPath=`.spec.name`
+// +kubebuilder:resource:scope=Cluster,shortName=clm;clmodel,categories=kaiwo;all
+// +kubebuilder:printcolumn:name="Model Name",type=string,JSONPath=`.spec.aim.name`
+// +kubebuilder:printcolumn:name="Image",type=string,JSONPath=`.spec.aim.image`
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // ClusterModel is the Schema for the clustermodels API
 type ClusterModel struct {
