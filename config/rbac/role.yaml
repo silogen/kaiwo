@@ -28,6 +28,8 @@ rules:
   - "kaiwojobs"
   - "kaiwoqueueconfigs"
   - "kaiwoservices"
+  - "clustermodels"
+  - "modelcaches"
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
 - apiGroups: ["config.kaiwo.silogen.ai"]
@@ -40,6 +42,8 @@ rules:
   - "kaiwojobs/status"
   - "kaiwoservices/status"
   - "kaiwoqueueconfigs/status"
+  - "clustermodels/status"
+  - "modelcaches/status"
   verbs: ["get", "update", "patch"]
 
 - apiGroups: ["batch"]
