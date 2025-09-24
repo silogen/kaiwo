@@ -9,9 +9,6 @@ spec:
   duration: 1s
   gpus: 1
   deployment:
-    spec:
-      template:
-        spec: {}
     entrypoint: sleep 60000
   resources:
     limits:

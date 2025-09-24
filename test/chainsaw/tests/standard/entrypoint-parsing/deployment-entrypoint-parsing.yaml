@@ -13,9 +13,6 @@ spec:
       memory: "1Gi"
   image: ghcr.io/silogen/ray-test:v0.3
   deployment:
-    spec:
-      template:
-        spec: {}
     entrypoint: |
       echo "Setting up environment..."
       pip install requests
