@@ -127,13 +127,13 @@ func (handler *RayServiceHandler) buildRayService(ctx context.Context, clusterCt
 
 	var rayServiceSpec rayv1.RayServiceSpec
 
-	if spec.Ray == nil {
+	if spec.Ray.Spec == nil {
 		rayServiceSpec = GetDefaultRayServiceSpec(
 			config,
 			spec.Dangerous,
 		)
 	} else {
-		rayServiceSpec = spec.Ray.Spec
+		rayServiceSpec = *spec.Ray.Spec
 	}
 
 	// Allow overriding ServeConfigV2 via spec.ray.serveConfigV2

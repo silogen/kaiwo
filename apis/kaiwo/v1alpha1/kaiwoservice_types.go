@@ -52,7 +52,7 @@ type KaiwoServiceSpec struct {
 // KaiwoServiceRaySpec groups Ray-specific configuration for services
 type KaiwoServiceRaySpec struct {
 	// Spec is the RayService spec used to configure the Ray cluster and Serve.
-	Spec rayv1.RayServiceSpec `json:"spec,omitempty"`
+	Spec *rayv1.RayServiceSpec `json:"spec,omitempty"`
 
 	// ServeConfigV2 allows providing the Ray Serve config as YAML string.
 	// If set, it overrides `spec.serveConfigV2`.
