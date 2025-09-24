@@ -37,7 +37,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `name` _string_ | Name is the identifying name of the AIM model |  | MinLength: 1 <br /> |
 | `image` _string_ | Image is the URI of the image that is used when deploying this AIM |  | MinLength: 1 <br /> |
-| `imagePullSecret` _string_ | ImagePullSecret is the name of the secret that is used to pull the Image, if required |  |  |
+| `imagePullSecret` _[SecretReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#secretreference-v1-core)_ | ImagePullSecret references the Secret used to pull the Image, if required<br />Uses a namespaced Secret reference since this resource is cluster-scoped |  |  |
 
 
 #### AzureBlobStorageDownloadItem
@@ -133,7 +133,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `aim` _[AimClusterModelSpec](#aimclustermodelspec)_ | Aim is the |  |  |
+| `aim` _[AimClusterModelSpec](#aimclustermodelspec)_ | Aim contains the AIM model configuration for this ClusterModel |  | Required: \{\} <br /> |
 
 
 #### ClusterModelStatus
@@ -149,6 +149,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
+| `observedGeneration` _integer_ | ObservedGeneration is the most recent generation observed by the controller |  |  |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest available observations of the cluster model's state |  |  |
 
 
@@ -694,7 +695,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `observedGeneration` _integer_ |  |  |  |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest available observations of the model cache's state |  |  |
-| `phase` _[ModelCacheStatusEnum](#modelcachestatusenum)_ | Status represents the current status of the model cache | Pending |  |
+| `status` _[ModelCacheStatusEnum](#modelcachestatusenum)_ | Status represents the current status of the model cache | Pending | Enum: [Pending Progressing Available Failed] <br /> |
 | `lastUsed` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | LastUsed represents the last time a model was deployed that used this cache |  |  |
 | `persistentVolumeClaim` _string_ | PersistentVolumeClaim represents the name of the created PVC |  |  |
 
@@ -705,7 +706,8 @@ _Underlying type:_ _string_
 
 
 
-
+_Validation:_
+- Enum: [Pending Progressing Available Failed]
 
 _Appears in:_
 - [ModelCacheStatus](#modelcachestatus)

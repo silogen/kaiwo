@@ -8,9 +8,14 @@ metadata:
 spec:
   group: kaiwo.silogen.ai
   names:
+    categories:
+    - kaiwo
+    - all
     kind: ModelCache
     listKind: ModelCacheList
     plural: modelcaches
+    shortNames:
+    - mc
     singular: modelcache
   scope: Namespaced
   versions:
@@ -171,6 +176,9 @@ spec:
                   - name
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               size:
                 anyOf:
                 - type: integer
@@ -178,6 +186,9 @@ spec:
                 description: Size specifies the size of the cache volume
                 pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                 x-kubernetes-int-or-string: true
+                x-kubernetes-validations:
+                - message: size must be greater than 0
+                  rule: quantity(self.size) > quantity('0')
               sourceUri:
                 description: |-
                   SourceURI is the source of the model to be downloaded. This is the only
@@ -256,6 +267,9 @@ spec:
                   - type
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
               lastUsed:
                 description: LastUsed represents the last time a model was deployed
                   that used this cache
@@ -268,9 +282,14 @@ spec:
                 description: PersistentVolumeClaim represents the name of the created
                   PVC
                 type: string
-              phase:
+              status:
                 default: Pending
                 description: Status represents the current status of the model cache
+                enum:
+                - Pending
+                - Progressing
+                - Available
+                - Failed
                 type: string
             type: object
         type: object
