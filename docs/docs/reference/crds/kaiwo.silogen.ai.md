@@ -9,13 +9,35 @@
 Package v1alpha1 contains API Schema definitions for the kaiwo v1alpha1 API group.
 
 ### Resource Types
+- [ClusterModel](#clustermodel)
+- [ClusterModelList](#clustermodellist)
 - [KaiwoJob](#kaiwojob)
 - [KaiwoJobList](#kaiwojoblist)
 - [KaiwoQueueConfig](#kaiwoqueueconfig)
 - [KaiwoQueueConfigList](#kaiwoqueueconfiglist)
 - [KaiwoService](#kaiwoservice)
 - [KaiwoServiceList](#kaiwoservicelist)
+- [ModelCache](#modelcache)
+- [ModelCacheList](#modelcachelist)
 
+
+
+#### AimClusterModelSpec
+
+
+
+
+
+
+
+_Appears in:_
+- [ClusterModelSpec](#clustermodelspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | Name is the identifying name of the AIM model |  | MinLength: 1 <br /> |
+| `image` _string_ | Image is the URI of the image that is used when deploying this AIM |  | MinLength: 1 <br /> |
+| `imagePullSecret` _string_ | ImagePullSecret is the name of the secret that is used to pull the Image, if required |  |  |
 
 
 #### AzureBlobStorageDownloadItem
@@ -58,6 +80,76 @@ _Appears in:_
 
 
 
+
+
+#### ClusterModel
+
+
+
+ClusterModel is the Schema for the clustermodels API
+
+
+
+_Appears in:_
+- [ClusterModelList](#clustermodellist)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `kaiwo.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `ClusterModel` | | |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `spec` _[ClusterModelSpec](#clustermodelspec)_ |  |  |  |
+| `status` _[ClusterModelStatus](#clustermodelstatus)_ |  |  |  |
+
+
+#### ClusterModelList
+
+
+
+ClusterModelList contains a list of ClusterModel
+
+
+
+
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `kaiwo.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `ClusterModelList` | | |
+| `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `items` _[ClusterModel](#clustermodel) array_ |  |  |  |
+
+
+#### ClusterModelSpec
+
+
+
+ClusterModelSpec defines the desired state of ClusterModel
+
+
+
+_Appears in:_
+- [ClusterModel](#clustermodel)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `aim` _[AimClusterModelSpec](#aimclustermodelspec)_ | Aim is the |  |  |
+
+
+#### ClusterModelStatus
+
+
+
+ClusterModelStatus defines the observed state of ClusterModel
+
+
+
+_Appears in:_
+- [ClusterModel](#clustermodel)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest available observations of the cluster model's state |  |  |
 
 
 #### ClusterQueue
@@ -528,6 +620,102 @@ _Appears in:_
 | `status` _[WorkloadStatus](#workloadstatus)_ | Status reflects the current high-level phase of the workload lifecycle (e.g., PENDING, STARTING, READY, FAILED). |  |  |
 | `duration` _integer_ | Duration indicates how long the service has been running since StartTime, in seconds. Calculated periodically while running. |  |  |
 | `observedGeneration` _integer_ | ObservedGeneration records the `.metadata.generation` of the workload resource that was last processed by the controller. |  |  |
+
+
+#### ModelCache
+
+
+
+ModelCache is the Schema for the modelcaches API
+
+
+
+_Appears in:_
+- [ModelCacheList](#modelcachelist)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `kaiwo.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `ModelCache` | | |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `spec` _[ModelCacheSpec](#modelcachespec)_ |  |  |  |
+| `status` _[ModelCacheStatus](#modelcachestatus)_ |  |  |  |
+
+
+#### ModelCacheList
+
+
+
+ModelCacheList contains a list of ModelCache
+
+
+
+
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `kaiwo.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `ModelCacheList` | | |
+| `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `items` _[ModelCache](#modelcache) array_ |  |  |  |
+
+
+#### ModelCacheSpec
+
+
+
+ModelCacheSpec defines the desired state of ModelCache
+
+
+
+_Appears in:_
+- [ModelCache](#modelcache)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `sourceUri` _string_ | SourceURI is the source of the model to be downloaded. This is the only<br />identifier |  | MinLength: 1 <br /> |
+| `storageClassName` _string_ | StorageClassName specifies the storage class for the cache volume |  |  |
+| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#quantity-resource-api)_ | Size specifies the size of the cache volume |  |  |
+| `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env lists the environment variables required to download the model into the cache |  |  |
+
+
+#### ModelCacheStatus
+
+
+
+ModelCacheStatus defines the observed state of ModelCache
+
+
+
+_Appears in:_
+- [ModelCache](#modelcache)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `observedGeneration` _integer_ |  |  |  |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest available observations of the model cache's state |  |  |
+| `phase` _[ModelCacheStatusEnum](#modelcachestatusenum)_ | Status represents the current status of the model cache | Pending |  |
+| `lastUsed` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | LastUsed represents the last time a model was deployed that used this cache |  |  |
+| `persistentVolumeClaim` _string_ | PersistentVolumeClaim represents the name of the created PVC |  |  |
+
+
+#### ModelCacheStatusEnum
+
+_Underlying type:_ _string_
+
+
+
+
+
+_Appears in:_
+- [ModelCacheStatus](#modelcachestatus)
+
+| Field | Description |
+| --- | --- |
+| `Pending` | ModelCacheStatusPending denotes that the model cache has not been created yet<br /> |
+| `Progressing` | ModelCacheStatusProgressing denotes that the model cache is currently being filled<br /> |
+| `Available` | ModelCacheStatusAvailable denotes that a model cache is filled and ready to be used<br /> |
+| `Failed` | ModelCacheStatusFailed denotes that the model cache has failed. A more detailed reason will be available in the conditions.<br /> |
 
 
 #### ObjectStorageDownloadSpec
