@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
@@ -72,13 +73,23 @@ func (r *ModelCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if !mc.DeletionTimestamp.IsZero() {
 		st := r.projectStatus(&mc, ob)
 		meta.SetStatusCondition(&st.Conditions, metav1.Condition{Type: kaiwo.ConditionReady, Status: metav1.ConditionFalse, Reason: "Finalizing", Message: "Resource is being deleted"})
+		before := mc.DeepCopy()
 		mc.Status = st
-		_ = r.patchStatus(ctx, &mc)
+		_ = r.Status().Patch(ctx, &mc, client.MergeFrom(before))
 		return ctrl.Result{}, nil
 	}
 
 	// Apply (ensure PVC and Job)
 	if err := r.apply(ctx, &mc, ob); err != nil {
+		// classify and project failure, then return error for backoff
+		reason, message, terminal := classifyApplyError(err)
+		ob.applyErrorReason = reason
+		ob.applyErrorMessage = message
+		ob.applyTerminal = terminal
+		st := r.projectStatus(&mc, ob)
+		before := mc.DeepCopy()
+		mc.Status = st
+		_ = r.Status().Patch(ctx, &mc, client.MergeFrom(before))
 		return ctrl.Result{}, fmt.Errorf("apply failed: %w", err)
 	}
 
@@ -90,8 +101,9 @@ func (r *ModelCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		newStatus.ObservedGeneration != mc.Status.ObservedGeneration
 
 	if changed {
+		before := mc.DeepCopy()
 		mc.Status = newStatus
-		if err := r.patchStatus(ctx, &mc); err != nil {
+		if err := r.Status().Patch(ctx, &mc, client.MergeFrom(before)); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to patch ModelCache status: %w", err)
 		}
 	}
@@ -114,6 +126,11 @@ type observation struct {
 	jobSucceeded        bool
 	jobFailed           bool
 	jobPendingOrRunning bool
+
+	// apply error projection
+	applyErrorReason  string
+	applyErrorMessage string
+	applyTerminal     bool
 }
 
 func (r *ModelCacheReconciler) observe(ctx context.Context, mc *kaiwo.ModelCache) (ob observation, err error) {
@@ -183,6 +200,21 @@ func (r *ModelCacheReconciler) apply(ctx context.Context, mc *kaiwo.ModelCache, 
 	return nil
 }
 
+// classifyApplyError inspects known immutable-field patterns to produce
+// a stable reason/message for status projection.
+func classifyApplyError(err error) (reason, message string, terminal bool) {
+	if err == nil {
+		return "", "", false
+	}
+	msg := err.Error()
+	lower := strings.ToLower(msg)
+	// Common immutability markers from API server validation
+	if strings.Contains(lower, "immutable") || strings.Contains(lower, "may not be changed") || strings.Contains(lower, "forbidden") && strings.Contains(lower, "immutable") {
+		return "StorageImmutable", msg, true
+	}
+	return "ApplyError", msg, false
+}
+
 func (r *ModelCacheReconciler) projectStatus(mc *kaiwo.ModelCache, ob observation) kaiwo.ModelCacheStatus {
 	status := mc.Status
 	status.PersistentVolumeClaim = r.pvcName(mc)
@@ -212,8 +244,8 @@ func (r *ModelCacheReconciler) projectStatus(mc *kaiwo.ModelCache, ob observatio
 	}
 
 	// Aggregate flags
-	failure := ob.storageLost || ob.jobFailed
-	ready := ob.storageReady && ob.jobSucceeded
+	failure := ob.storageLost || ob.jobFailed || ob.applyErrorReason != ""
+	ready := ob.storageReady && ob.jobSucceeded && ob.applyErrorReason == ""
 	progressing := !ready && !failure && (!ob.storageReady || ob.jobPendingOrRunning || (!ob.jobFound && ob.storageReady))
 
 	readyCond := metav1.Condition{Type: kaiwo.ConditionReady}
@@ -241,7 +273,10 @@ func (r *ModelCacheReconciler) projectStatus(mc *kaiwo.ModelCache, ob observatio
 
 	failureCond := metav1.Condition{Type: kaiwo.ConditionFailure}
 	failureCond.Status = boolToCondition(failure)
-	if ob.storageLost {
+	if ob.applyErrorReason != "" {
+		failureCond.Reason = ob.applyErrorReason
+		failureCond.Message = ob.applyErrorMessage
+	} else if ob.storageLost {
 		failureCond.Reason = kaiwo.ReasonPVCLost
 	} else if ob.jobFailed {
 		failureCond.Reason = kaiwo.ReasonDownloadFailed
@@ -252,7 +287,7 @@ func (r *ModelCacheReconciler) projectStatus(mc *kaiwo.ModelCache, ob observatio
 
 	// High-level enum
 	switch {
-	case failure:
+	case failure && ob.applyTerminal:
 		status.Status = kaiwo.ModelCacheStatusFailed
 	case ready:
 		status.Status = kaiwo.ModelCacheStatusAvailable
@@ -403,13 +438,6 @@ func (r *ModelCacheReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.Options{MaxConcurrentReconciles: 2}).
 		Named("modelcache").
 		Complete(r)
-}
-
-// patchStatus patches only the status subresource and sets ObservedGeneration
-func (r *ModelCacheReconciler) patchStatus(ctx context.Context, mc *kaiwo.ModelCache) error {
-	// MergeFrom patch on status only; ObservedGeneration is set in projectStatus
-	before := mc.DeepCopy()
-	return r.Status().Patch(ctx, mc, client.MergeFrom(before))
 }
 
 // mergeStringMap returns a new map with b merged into a
