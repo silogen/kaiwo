@@ -29,6 +29,7 @@ import (
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -55,6 +56,7 @@ type ModelCacheReconciler struct {
 // +kubebuilder:rbac:groups=kaiwo.silogen.ai,resources=modelcaches/finalizers,verbs=update
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=storage.k8s.io,resources=storageclasses,verbs=get;list;watch
 
 const (
 	downloadJobImage = "kserve/storage-initializer:v0.15.2"
@@ -155,18 +157,21 @@ func (r *ModelCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 // observation holds read-only snapshot of dependent resources and derived flags
 type observation struct {
-	pvcFound bool
-	pvc      corev1.PersistentVolumeClaim
-	jobFound bool
-	job      batchv1.Job
+	pvcFound        bool
+	pvc             corev1.PersistentVolumeClaim
+	storageClass    storagev1.StorageClass
+	storageClassFound bool
+	jobFound        bool
+	job             batchv1.Job
 
 	// derived
-	pvcBound            bool
-	storageReady        bool
-	storageLost         bool
-	jobSucceeded        bool
-	jobFailed           bool
-	jobPendingOrRunning bool
+	pvcBound                bool
+	waitForFirstConsumer    bool
+	storageReady            bool
+	storageLost             bool
+	jobSucceeded            bool
+	jobFailed               bool
+	jobPendingOrRunning     bool
 
 	// apply error projection
 	applyErrorReason  string
@@ -185,6 +190,21 @@ func (r *ModelCacheReconciler) observe(ctx context.Context, mc *kaiwo.ModelCache
 	} else {
 		ob.pvcFound = true
 		ob.pvcBound = ob.pvc.Status.Phase == corev1.ClaimBound
+
+		// Get StorageClass to check binding mode
+		if ob.pvc.Spec.StorageClassName != nil && *ob.pvc.Spec.StorageClassName != "" {
+			if err := r.Get(ctx, types.NamespacedName{Name: *ob.pvc.Spec.StorageClassName}, &ob.storageClass); err != nil {
+				if client.IgnoreNotFound(err) != nil {
+					return ob, fmt.Errorf("get storageclass: %w", err)
+				}
+				ob.storageClassFound = false
+			} else {
+				ob.storageClassFound = true
+				if ob.storageClass.VolumeBindingMode != nil {
+					ob.waitForFirstConsumer = *ob.storageClass.VolumeBindingMode == storagev1.VolumeBindingWaitForFirstConsumer
+				}
+			}
+		}
 	}
 
 	// Job
@@ -234,8 +254,9 @@ func (r *ModelCacheReconciler) apply(ctx context.Context, mc *kaiwo.ModelCache, 
 		return err
 	}
 
-	// Apply Job only when storage is ready and not already created
-	if ob.storageReady && !ob.jobFound {
+	// Apply Job when storage is ready OR when PVC is pending with WaitForFirstConsumer
+	canCreateJob := ob.storageReady || (ob.pvcFound && ob.pvc.Status.Phase == corev1.ClaimPending && ob.waitForFirstConsumer)
+	if canCreateJob && !ob.jobFound {
 		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			job := r.buildDownloadJob(mc, r.jobName(mc), r.pvcName(mc))
 			if err := ctrl.SetControllerReference(mc, job, r.Scheme); err != nil {
@@ -302,7 +323,8 @@ func (r *ModelCacheReconciler) projectStatus(mc *kaiwo.ModelCache, ob observatio
 	// Aggregate flags
 	failure := ob.storageLost || ob.jobFailed || ob.applyErrorReason != ""
 	ready := ob.storageReady && ob.jobSucceeded && ob.applyErrorReason == ""
-	progressing := !ready && !failure && (!ob.storageReady || ob.jobPendingOrRunning || (!ob.jobFound && ob.storageReady))
+	canCreateJob := ob.storageReady || (ob.pvcFound && ob.pvc.Status.Phase == corev1.ClaimPending && ob.waitForFirstConsumer)
+	progressing := !ready && !failure && (!ob.storageReady || ob.jobPendingOrRunning || (!ob.jobFound && canCreateJob))
 
 	readyCond := metav1.Condition{Type: kaiwo.ConditionReady}
 	if ready {
@@ -319,9 +341,9 @@ func (r *ModelCacheReconciler) projectStatus(mc *kaiwo.ModelCache, ob observatio
 
 	progressingCond := metav1.Condition{Type: kaiwo.ConditionProgressing}
 	progressingCond.Status = boolToCondition(progressing)
-	if !ob.storageReady {
+	if !ob.storageReady && !canCreateJob {
 		progressingCond.Reason = kaiwo.ReasonWaitingForPVC
-	} else if ob.jobPendingOrRunning || (!ob.jobFound && ob.storageReady) {
+	} else if ob.jobPendingOrRunning || (!ob.jobFound && canCreateJob) {
 		progressingCond.Reason = kaiwo.ReasonDownloading
 	} else {
 		progressingCond.Reason = kaiwo.ReasonRetryBackoff
