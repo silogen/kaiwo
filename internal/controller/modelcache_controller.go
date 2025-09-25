@@ -18,7 +18,10 @@ package controller
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"sort"
 	"strings"
 
 	"k8s.io/client-go/tools/record"
@@ -33,6 +36,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -61,7 +65,7 @@ const (
 )
 
 func (r *ModelCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
+	logger := log.FromContext(ctx).WithValues("modelcache", req.String())
 	// Fetch CR
 	var mc kaiwo.ModelCache
 	if err := r.Get(ctx, req.NamespacedName, &mc); err != nil {
@@ -101,28 +105,28 @@ func (r *ModelCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, fmt.Errorf("apply failed: %w", err)
 	}
 
-	// Emit events based on observed state prior to apply
+	// Emit events based on observed state prior to apply, gated by prior status
 	prevStorage := meta.FindStatusCondition(mc.Status.Conditions, kaiwo.ConditionStorageReady)
 	prevReady := meta.FindStatusCondition(mc.Status.Conditions, kaiwo.ConditionReady)
-	if !ob.pvcFound {
+	if !ob.pvcFound && (prevStorage == nil || prevStorage.Status != metav1.ConditionTrue) {
 		r.Recorder.Event(&mc, corev1.EventTypeNormal, "PVCEnsured", fmt.Sprintf("Ensured PVC %s", r.pvcName(&mc)))
-		logger.Info("PVC ensured (SSA)", "pvc", r.pvcName(&mc))
+		logger.V(1).Info("PVC ensured (SSA)", "pvc", r.pvcName(&mc))
 	}
 	if ob.storageReady && (prevStorage == nil || prevStorage.Status != metav1.ConditionTrue) {
 		r.Recorder.Event(&mc, corev1.EventTypeNormal, "PVCBound", fmt.Sprintf("PVC %s is Bound", r.pvcName(&mc)))
 		logger.Info("PVC bound", "pvc", r.pvcName(&mc))
 	}
-	if ob.storageReady && !ob.jobFound {
+	if ob.storageReady && !ob.jobFound && (prevReady == nil || prevReady.Status != metav1.ConditionTrue) {
 		r.Recorder.Event(&mc, corev1.EventTypeNormal, "DownloadJobEnsured", fmt.Sprintf("Ensured download Job %s", r.jobName(&mc)))
-		logger.Info("Download job ensured (SSA)", "job", r.jobName(&mc))
+		logger.V(1).Info("Download job ensured (SSA)", "job", r.jobName(&mc))
 	}
 	if ob.jobSucceeded && (prevReady == nil || prevReady.Status != metav1.ConditionTrue) {
-		r.Recorder.Event(&mc, corev1.EventTypeNormal, "DownloadJobCompleted", "Download job completed successfully")
-		logger.Info("Download job completed")
+		r.Recorder.Event(&mc, corev1.EventTypeNormal, "DownloadJobCompleted", fmt.Sprintf("Job %s completed successfully", r.jobName(&mc)))
+		logger.Info("Download job completed", "job", r.jobName(&mc))
 	}
-	if ob.jobFailed {
-		r.Recorder.Event(&mc, corev1.EventTypeWarning, "DownloadJobFailed", "Download job failed")
-		logger.Info("Download job failed")
+	if ob.jobFailed && (prevReady == nil || prevReady.Status != metav1.ConditionTrue) {
+		r.Recorder.Event(&mc, corev1.EventTypeWarning, "DownloadJobFailed", fmt.Sprintf("Job %s failed", r.jobName(&mc)))
+		logger.Info("Download job failed", "job", r.jobName(&mc))
 	}
 
 	// Status projection and patch
@@ -133,6 +137,15 @@ func (r *ModelCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		newStatus.ObservedGeneration != mc.Status.ObservedGeneration
 
 	if changed {
+		summary := summarizeConditionTransitions(mc.Status.Conditions, newStatus.Conditions)
+		if summary != "" {
+			evtType := corev1.EventTypeNormal
+			if cond := meta.FindStatusCondition(newStatus.Conditions, kaiwo.ConditionFailure); cond != nil && cond.Status == metav1.ConditionTrue {
+				evtType = corev1.EventTypeWarning
+			}
+			logger.Info("status transitioned", "changes", summary)
+			r.Recorder.Event(&mc, evtType, "StatusChanged", summary)
+		}
 		before := mc.DeepCopy()
 		mc.Status = newStatus
 		if err := r.Status().Patch(ctx, &mc, client.MergeFrom(before)); err != nil {
@@ -211,22 +224,51 @@ func (r *ModelCacheReconciler) observe(ctx context.Context, mc *kaiwo.ModelCache
 
 func (r *ModelCacheReconciler) apply(ctx context.Context, mc *kaiwo.ModelCache, ob observation) error {
 	// Server-Side Apply desired PVC on every reconcile
-	pvc := r.buildPVC(mc, r.pvcName(mc))
-	if err := ctrl.SetControllerReference(mc, pvc, r.Scheme); err != nil {
-		return fmt.Errorf("owner pvc: %w", err)
-	}
-	if err := r.Patch(ctx, pvc, client.Apply, client.FieldOwner("modelcache-controller")); err != nil {
-		return fmt.Errorf("apply pvc: %w", err)
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		pvc := r.buildPVC(mc, r.pvcName(mc))
+		if err := ctrl.SetControllerReference(mc, pvc, r.Scheme); err != nil {
+			return fmt.Errorf("owner pvc: %w", err)
+		}
+		if err := r.Patch(ctx, pvc, client.Apply, client.FieldOwner("modelcache-controller")); err != nil {
+			return fmt.Errorf("apply pvc: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 
 	// Apply Job only when storage is ready
 	if ob.storageReady {
-		job := r.buildDownloadJob(mc, r.jobName(mc), r.pvcName(mc))
-		if err := ctrl.SetControllerReference(mc, job, r.Scheme); err != nil {
-			return fmt.Errorf("owner job: %w", err)
+		desiredName := r.jobName(mc)
+		desiredHash := computeJobSpecHash(mc)
+
+		// If an existing job has a different spec-hash and is not active, delete to allow rerun
+		if ob.jobFound {
+			currentHash := ob.job.Labels["kaiwo.silogen.ai/spec-hash"]
+			if currentHash != desiredHash && ob.job.Status.Active == 0 {
+				if err := r.Delete(ctx, &ob.job); err != nil {
+					return fmt.Errorf("delete outdated job: %w", err)
+				}
+			}
 		}
-		if err := r.Patch(ctx, job, client.Apply, client.FieldOwner("modelcache-controller")); err != nil {
-			return fmt.Errorf("apply job: %w", err)
+
+		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			job := r.buildDownloadJob(mc, desiredName, r.pvcName(mc))
+			if job.Labels == nil {
+				job.Labels = map[string]string{}
+			}
+			job.Labels["kaiwo.silogen.ai/spec-hash"] = desiredHash
+			if err := ctrl.SetControllerReference(mc, job, r.Scheme); err != nil {
+				return fmt.Errorf("owner job: %w", err)
+			}
+			if err := r.Patch(ctx, job, client.Apply, client.FieldOwner("modelcache-controller")); err != nil {
+				return fmt.Errorf("apply job: %w", err)
+			}
+			return nil
+		})
+		if err != nil {
+			return err
 		}
 	}
 	return nil
@@ -242,7 +284,9 @@ func classifyApplyError(err error) (reason, message string, terminal bool) {
 	lower := strings.ToLower(msg)
 
 	// Common immutability markers from API server validation
-	if strings.Contains(lower, "immutable") || strings.Contains(lower, "may not be changed") || strings.Contains(lower, "forbidden") && strings.Contains(lower, "immutable") {
+	if strings.Contains(lower, "immutable") ||
+		strings.Contains(lower, "may not be changed") ||
+		(strings.Contains(lower, "forbidden") && strings.Contains(lower, "immutable")) {
 		return "StorageImmutable", msg, true
 	}
 	return "ApplyError", msg, false
@@ -484,4 +528,42 @@ func mergeStringMap(a, b map[string]string) map[string]string {
 		out[k] = v
 	}
 	return out
+}
+
+// summarizeConditionTransitions produces a compact, human-friendly diff of condition changes
+func summarizeConditionTransitions(oldC, newC []metav1.Condition) string {
+	idx := func(cs []metav1.Condition) map[string]metav1.Condition {
+		m := map[string]metav1.Condition{}
+		for _, c := range cs {
+			m[c.Type] = c
+		}
+		return m
+	}
+	o, n := idx(oldC), idx(newC)
+	var parts []string
+	for t, nc := range n {
+		oc, ok := o[t]
+		if !ok || oc.Status != nc.Status || oc.Reason != nc.Reason {
+			parts = append(parts, fmt.Sprintf("%s: %s→%s (%s)", t, string(oc.Status), string(nc.Status), nc.Reason))
+		}
+	}
+	return strings.Join(parts, "; ")
+}
+
+// computeJobSpecHash returns a stable hash of job-driving inputs
+func computeJobSpecHash(mc *kaiwo.ModelCache) string {
+	h := sha256.New()
+	// include source uri and envs to trigger reruns when changed
+	_, _ = h.Write([]byte(mc.Spec.SourceURI))
+	// sort env for stability
+	env := append([]corev1.EnvVar(nil), mc.Spec.Env...)
+	sort.Slice(env, func(i, j int) bool { return env[i].Name < env[j].Name })
+	for _, e := range env {
+		_, _ = h.Write([]byte("\x00"))
+		_, _ = h.Write([]byte(e.Name))
+		_, _ = h.Write([]byte("\x00"))
+		_, _ = h.Write([]byte(e.Value))
+		// ignore ValueFrom for now; could be added later by serializing refs
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
