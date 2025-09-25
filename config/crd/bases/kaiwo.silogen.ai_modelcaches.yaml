@@ -183,21 +183,21 @@ spec:
                 anyOf:
                 - type: integer
                 - type: string
-                description: Size specifies the size of the cache volume
+                description: |-
+                  Size specifies the size of the cache volume
+                  Note: quantity comparisons in CEL may not be supported on all clusters; omit CEL check to avoid CRD install failures.
                 pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                 x-kubernetes-int-or-string: true
-                x-kubernetes-validations:
-                - message: size must be greater than 0
-                  rule: quantity(self.size) > quantity('0')
               sourceUri:
                 description: |-
                   SourceURI is the source of the model to be downloaded. This is the only
                   identifier
+                  self here refers to the field value (string), so compare directly
                 minLength: 1
                 type: string
                 x-kubernetes-validations:
                 - message: sourceUri is immutable
-                  rule: self.sourceUri == oldSelf.sourceUri
+                  rule: self == oldSelf
               storageClassName:
                 description: StorageClassName specifies the storage class for the
                   cache volume
