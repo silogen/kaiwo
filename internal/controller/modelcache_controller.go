@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"strings"
 
+	"k8s.io/client-go/tools/record"
+
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
@@ -35,13 +37,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 // ModelCacheReconciler reconciles a ModelCache object
 type ModelCacheReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 // RBAC markers
@@ -57,6 +61,7 @@ const (
 )
 
 func (r *ModelCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
 	// Fetch CR
 	var mc kaiwo.ModelCache
 	if err := r.Get(ctx, req.NamespacedName, &mc); err != nil {
@@ -76,6 +81,7 @@ func (r *ModelCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		before := mc.DeepCopy()
 		mc.Status = st
 		_ = r.Status().Patch(ctx, &mc, client.MergeFrom(before))
+		logger.Info("finalizing ModelCache; skipping child mutations", "name", req.NamespacedName)
 		return ctrl.Result{}, nil
 	}
 
@@ -90,7 +96,33 @@ func (r *ModelCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		before := mc.DeepCopy()
 		mc.Status = st
 		_ = r.Status().Patch(ctx, &mc, client.MergeFrom(before))
+		r.Recorder.Event(&mc, corev1.EventTypeWarning, reason, message)
+		logger.Error(err, "apply failed", "reason", reason)
 		return ctrl.Result{}, fmt.Errorf("apply failed: %w", err)
+	}
+
+	// Emit events based on observed state prior to apply
+	prevStorage := meta.FindStatusCondition(mc.Status.Conditions, kaiwo.ConditionStorageReady)
+	prevReady := meta.FindStatusCondition(mc.Status.Conditions, kaiwo.ConditionReady)
+	if !ob.pvcFound {
+		r.Recorder.Event(&mc, corev1.EventTypeNormal, "PVCEnsured", fmt.Sprintf("Ensured PVC %s", r.pvcName(&mc)))
+		logger.Info("PVC ensured (SSA)", "pvc", r.pvcName(&mc))
+	}
+	if ob.storageReady && (prevStorage == nil || prevStorage.Status != metav1.ConditionTrue) {
+		r.Recorder.Event(&mc, corev1.EventTypeNormal, "PVCBound", fmt.Sprintf("PVC %s is Bound", r.pvcName(&mc)))
+		logger.Info("PVC bound", "pvc", r.pvcName(&mc))
+	}
+	if ob.storageReady && !ob.jobFound {
+		r.Recorder.Event(&mc, corev1.EventTypeNormal, "DownloadJobEnsured", fmt.Sprintf("Ensured download Job %s", r.jobName(&mc)))
+		logger.Info("Download job ensured (SSA)", "job", r.jobName(&mc))
+	}
+	if ob.jobSucceeded && (prevReady == nil || prevReady.Status != metav1.ConditionTrue) {
+		r.Recorder.Event(&mc, corev1.EventTypeNormal, "DownloadJobCompleted", "Download job completed successfully")
+		logger.Info("Download job completed")
+	}
+	if ob.jobFailed {
+		r.Recorder.Event(&mc, corev1.EventTypeWarning, "DownloadJobFailed", "Download job failed")
+		logger.Info("Download job failed")
 	}
 
 	// Status projection and patch
@@ -208,6 +240,7 @@ func classifyApplyError(err error) (reason, message string, terminal bool) {
 	}
 	msg := err.Error()
 	lower := strings.ToLower(msg)
+
 	// Common immutability markers from API server validation
 	if strings.Contains(lower, "immutable") || strings.Contains(lower, "may not be changed") || strings.Contains(lower, "forbidden") && strings.Contains(lower, "immutable") {
 		return "StorageImmutable", msg, true
@@ -431,6 +464,7 @@ func conditionsEqual(a, b []metav1.Condition) bool {
 }
 
 func (r *ModelCacheReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.Recorder = mgr.GetEventRecorderFor("modelcache-controller")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kaiwo.ModelCache{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Owns(&corev1.PersistentVolumeClaim{}).
