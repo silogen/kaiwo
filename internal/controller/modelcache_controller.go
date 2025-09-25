@@ -31,6 +31,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -157,21 +158,21 @@ func (r *ModelCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 // observation holds read-only snapshot of dependent resources and derived flags
 type observation struct {
-	pvcFound        bool
-	pvc             corev1.PersistentVolumeClaim
-	storageClass    storagev1.StorageClass
+	pvcFound          bool
+	pvc               corev1.PersistentVolumeClaim
+	storageClass      storagev1.StorageClass
 	storageClassFound bool
-	jobFound        bool
-	job             batchv1.Job
+	jobFound          bool
+	job               batchv1.Job
 
 	// derived
-	pvcBound                bool
-	waitForFirstConsumer    bool
-	storageReady            bool
-	storageLost             bool
-	jobSucceeded            bool
-	jobFailed               bool
-	jobPendingOrRunning     bool
+	pvcBound             bool
+	waitForFirstConsumer bool
+	storageReady         bool
+	storageLost          bool
+	jobSucceeded         bool
+	jobFailed            bool
+	jobPendingOrRunning  bool
 
 	// apply error projection
 	applyErrorReason  string
@@ -292,91 +293,132 @@ func classifyApplyError(err error) (reason, message string, terminal bool) {
 	return "ApplyError", msg, false
 }
 
-func (r *ModelCacheReconciler) projectStatus(mc *kaiwo.ModelCache, ob observation) kaiwo.ModelCacheStatus {
-	status := mc.Status
-	status.PersistentVolumeClaim = r.pvcName(mc)
-	status.ObservedGeneration = mc.GetGeneration()
+type stateFlags struct {
+	failure      bool
+	ready        bool
+	canCreateJob bool
+	progressing  bool
+}
 
-	// StorageReady
-	storageCond := metav1.Condition{Type: kaiwo.ConditionStorageReady}
-	switch {
-	case !ob.pvcFound:
-		storageCond.Status = metav1.ConditionFalse
-		storageCond.Reason = kaiwo.ReasonPVCPending
-		storageCond.Message = "PVC not created yet"
-	case ob.pvc.Status.Phase == corev1.ClaimBound:
-		storageCond.Status = metav1.ConditionTrue
-		storageCond.Reason = kaiwo.ReasonPVCBound
-	case ob.pvc.Status.Phase == corev1.ClaimPending:
-		storageCond.Status = metav1.ConditionFalse
-		storageCond.Reason = kaiwo.ReasonPVCProvisioning
-		storageCond.Message = "PVC is provisioning"
-	case ob.pvc.Status.Phase == corev1.ClaimLost:
-		storageCond.Status = metav1.ConditionFalse
-		storageCond.Reason = kaiwo.ReasonPVCLost
-		storageCond.Message = "PVC lost"
-	default:
-		storageCond.Status = metav1.ConditionUnknown
-		storageCond.Reason = string(ob.pvc.Status.Phase)
-	}
-
-	// Aggregate flags
+func (r *ModelCacheReconciler) calculateStateFlags(ob observation) stateFlags {
 	failure := ob.storageLost || ob.jobFailed || ob.applyErrorReason != ""
 	ready := ob.storageReady && ob.jobSucceeded && ob.applyErrorReason == ""
 	canCreateJob := ob.storageReady || (ob.pvcFound && ob.pvc.Status.Phase == corev1.ClaimPending && ob.waitForFirstConsumer)
 	progressing := !ready && !failure && (!ob.storageReady || ob.jobPendingOrRunning || (!ob.jobFound && canCreateJob))
 
-	readyCond := metav1.Condition{Type: kaiwo.ConditionReady}
-	if ready {
-		readyCond.Status = metav1.ConditionTrue
-		readyCond.Reason = kaiwo.ReasonWarm
+	return stateFlags{
+		failure:      failure,
+		ready:        ready,
+		canCreateJob: canCreateJob,
+		progressing:  progressing,
+	}
+}
+
+func (r *ModelCacheReconciler) projectStatus(mc *kaiwo.ModelCache, ob observation) kaiwo.ModelCacheStatus {
+	status := mc.Status
+	status.PersistentVolumeClaim = r.pvcName(mc)
+	status.ObservedGeneration = mc.GetGeneration()
+
+	stateFlags := r.calculateStateFlags(ob)
+
+	storageCond := r.buildStorageReadyCondition(ob)
+	readyCond := r.buildReadyCondition(stateFlags)
+	progressingCond := r.buildProgressingCondition(ob, stateFlags)
+	failureCond := r.buildFailureCondition(ob, stateFlags)
+
+	status.Conditions = mergeConditions(status.Conditions, []metav1.Condition{storageCond, readyCond, progressingCond, failureCond})
+	status.Status = r.determineOverallStatus(stateFlags, ob)
+
+	return status
+}
+
+func (r *ModelCacheReconciler) buildStorageReadyCondition(ob observation) metav1.Condition {
+	cond := metav1.Condition{Type: kaiwo.ConditionStorageReady}
+
+	switch {
+	case !ob.pvcFound:
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = kaiwo.ReasonPVCPending
+		cond.Message = "PVC not created yet"
+	case ob.pvc.Status.Phase == corev1.ClaimBound:
+		cond.Status = metav1.ConditionTrue
+		cond.Reason = kaiwo.ReasonPVCBound
+	case ob.pvc.Status.Phase == corev1.ClaimPending:
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = kaiwo.ReasonPVCProvisioning
+		cond.Message = "PVC is provisioning"
+	case ob.pvc.Status.Phase == corev1.ClaimLost:
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = kaiwo.ReasonPVCLost
+		cond.Message = "PVC lost"
+	default:
+		cond.Status = metav1.ConditionUnknown
+		cond.Reason = string(ob.pvc.Status.Phase)
+	}
+
+	return cond
+}
+
+func (r *ModelCacheReconciler) buildReadyCondition(sf stateFlags) metav1.Condition {
+	cond := metav1.Condition{Type: kaiwo.ConditionReady}
+	if sf.ready {
+		cond.Status = metav1.ConditionTrue
+		cond.Reason = kaiwo.ReasonWarm
 	} else {
-		readyCond.Status = metav1.ConditionFalse
-		if !ob.storageReady {
-			readyCond.Reason = kaiwo.ReasonWaitingForPVC
+		cond.Status = metav1.ConditionFalse
+		if !sf.canCreateJob {
+			cond.Reason = kaiwo.ReasonWaitingForPVC
 		} else {
-			readyCond.Reason = kaiwo.ReasonDownloading
+			cond.Reason = kaiwo.ReasonDownloading
 		}
 	}
 
-	progressingCond := metav1.Condition{Type: kaiwo.ConditionProgressing}
-	progressingCond.Status = boolToCondition(progressing)
-	if !ob.storageReady && !canCreateJob {
-		progressingCond.Reason = kaiwo.ReasonWaitingForPVC
-	} else if ob.jobPendingOrRunning || (!ob.jobFound && canCreateJob) {
-		progressingCond.Reason = kaiwo.ReasonDownloading
+	return cond
+}
+
+func (r *ModelCacheReconciler) buildProgressingCondition(ob observation, sf stateFlags) metav1.Condition {
+	cond := metav1.Condition{Type: kaiwo.ConditionProgressing}
+	cond.Status = boolToCondition(sf.progressing)
+
+	if !ob.storageReady && !sf.canCreateJob {
+		cond.Reason = kaiwo.ReasonWaitingForPVC
+	} else if ob.jobPendingOrRunning || (!ob.jobFound && sf.canCreateJob) {
+		cond.Reason = kaiwo.ReasonDownloading
 	} else {
-		progressingCond.Reason = kaiwo.ReasonRetryBackoff
+		cond.Reason = kaiwo.ReasonRetryBackoff
 	}
 
-    failureCond := metav1.Condition{Type: kaiwo.ConditionFailure}
-    failureCond.Status = boolToCondition(failure)
-    // Ensure Reason is always non-empty to satisfy schema
-    failureCond.Reason = "NoFailure"
-    if ob.applyErrorReason != "" {
-        failureCond.Reason = ob.applyErrorReason
-        failureCond.Message = ob.applyErrorMessage
-    } else if ob.storageLost {
-        failureCond.Reason = kaiwo.ReasonPVCLost
-    } else if ob.jobFailed {
-        failureCond.Reason = kaiwo.ReasonDownloadFailed
-    }
+	return cond
+}
 
-	// Merge
-	status.Conditions = mergeConditions(status.Conditions, []metav1.Condition{storageCond, readyCond, progressingCond, failureCond})
+func (r *ModelCacheReconciler) buildFailureCondition(ob observation, sf stateFlags) metav1.Condition {
+	cond := metav1.Condition{Type: kaiwo.ConditionFailure}
+	cond.Status = boolToCondition(sf.failure)
+	cond.Reason = "NoFailure" // Ensure Reason is always non-empty to satisfy schema
 
-	// High-level enum
+	if ob.applyErrorReason != "" {
+		cond.Reason = ob.applyErrorReason
+		cond.Message = ob.applyErrorMessage
+	} else if ob.storageLost {
+		cond.Reason = kaiwo.ReasonPVCLost
+	} else if ob.jobFailed {
+		cond.Reason = kaiwo.ReasonDownloadFailed
+	}
+
+	return cond
+}
+
+func (r *ModelCacheReconciler) determineOverallStatus(sf stateFlags, ob observation) kaiwo.ModelCacheStatusEnum {
 	switch {
-	case failure && ob.applyTerminal:
-		status.Status = kaiwo.ModelCacheStatusFailed
-	case ready:
-		status.Status = kaiwo.ModelCacheStatusAvailable
-	case progressing:
-		status.Status = kaiwo.ModelCacheStatusProgressing
+	case sf.failure && ob.applyTerminal:
+		return kaiwo.ModelCacheStatusFailed
+	case sf.ready:
+		return kaiwo.ModelCacheStatusAvailable
+	case sf.progressing:
+		return kaiwo.ModelCacheStatusProgressing
 	default:
-		status.Status = kaiwo.ModelCacheStatusPending
+		return kaiwo.ModelCacheStatusPending
 	}
-	return status
 }
 
 //func (r *ModelCacheReconciler) isProgressing(st kaiwo.ModelCacheStatus) bool {
@@ -428,15 +470,30 @@ func (r *ModelCacheReconciler) buildDownloadJob(mc *kaiwo.ModelCache, jobName st
 			}),
 		},
 		Spec: batchv1.JobSpec{
-			BackoffLimit: baseutils.Pointer(int32(0)),
+			BackoffLimit:            baseutils.Pointer(int32(0)),
+			TTLSecondsAfterFinished: baseutils.Pointer(int32(0)), // Cleanup immediately after completion
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					RestartPolicy: corev1.RestartPolicyNever,
+					SecurityContext: &corev1.PodSecurityContext{
+						RunAsUser:    baseutils.Pointer(int64(1000)), // kserve storage-initializer user
+						RunAsGroup:   baseutils.Pointer(int64(1000)),
+						FSGroup:      baseutils.Pointer(int64(1000)), // Ensures volume ownership matches user
+						RunAsNonRoot: baseutils.Pointer(true),
+					},
 					Volumes: []corev1.Volume{
 						{
 							Name: "cache",
 							VolumeSource: corev1.VolumeSource{
 								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: pvcName},
+							},
+						},
+						{
+							Name: "tmp",
+							VolumeSource: corev1.VolumeSource{
+								EmptyDir: &corev1.EmptyDirVolumeSource{
+									SizeLimit: baseutils.Pointer(resource.MustParse("500Mi")), // Small temp space for system operations
+								},
 							},
 						},
 					},
@@ -445,12 +502,17 @@ func (r *ModelCacheReconciler) buildDownloadJob(mc *kaiwo.ModelCache, jobName st
 							Name:            "model-download",
 							Image:           downloadJobImage,
 							ImagePullPolicy: corev1.PullIfNotPresent,
-							Env:             mc.Spec.Env,
+							Env: append(mc.Spec.Env, []corev1.EnvVar{
+								{Name: "HF_HOME", Value: mountPath + "/.hf"},
+							}...),
 							Args: []string{
 								mc.Spec.SourceURI,
 								mountPath,
 							},
-							VolumeMounts: []corev1.VolumeMount{{Name: "cache", MountPath: mountPath}},
+							VolumeMounts: []corev1.VolumeMount{
+								{Name: "cache", MountPath: mountPath},
+								{Name: "tmp", MountPath: "/tmp"},
+							},
 						},
 					},
 				},
