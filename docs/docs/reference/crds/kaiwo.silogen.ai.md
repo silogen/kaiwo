@@ -530,6 +530,103 @@ _Appears in:_
 | `observedGeneration` _integer_ | ObservedGeneration records the `.metadata.generation` of the workload resource that was last processed by the controller. |  |  |
 
 
+#### ModelCache
+
+
+
+ModelCache is the Schema for the modelcaches API
+
+
+
+_Appears in:_
+- [ModelCacheList](#modelcachelist)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `kaiwo.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `ModelCache` | | |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `spec` _[ModelCacheSpec](#modelcachespec)_ |  |  |  |
+| `status` _[ModelCacheStatus](#modelcachestatus)_ |  |  |  |
+
+
+#### ModelCacheList
+
+
+
+ModelCacheList contains a list of ModelCache
+
+
+
+
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `kaiwo.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `ModelCacheList` | | |
+| `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `items` _[ModelCache](#modelcache) array_ |  |  |  |
+
+
+#### ModelCacheSpec
+
+
+
+ModelCacheSpec defines the desired state of ModelCache
+
+
+
+_Appears in:_
+- [ModelCache](#modelcache)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `sourceUri` _string_ | SourceURI is the source of the model to be downloaded. This is the only<br />identifier<br />self here refers to the field value (string), so compare directly |  | MinLength: 1 <br /> |
+| `storageClassName` _string_ | StorageClassName specifies the storage class for the cache volume |  |  |
+| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#quantity-resource-api)_ | Size specifies the size of the cache volume<br />Note: quantity comparisons in CEL may not be supported on all clusters; omit CEL check to avoid CRD install failures. |  |  |
+| `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env lists the environment variables required to download the model into the cache |  |  |
+
+
+#### ModelCacheStatus
+
+
+
+ModelCacheStatus defines the observed state of ModelCache
+
+
+
+_Appears in:_
+- [ModelCache](#modelcache)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `observedGeneration` _integer_ |  |  |  |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest available observations of the model cache's state |  |  |
+| `status` _[ModelCacheStatusEnum](#modelcachestatusenum)_ | Status represents the current status of the model cache | Pending | Enum: [Pending Progressing Available Failed] <br /> |
+| `lastUsed` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | LastUsed represents the last time a model was deployed that used this cache |  |  |
+| `persistentVolumeClaim` _string_ | PersistentVolumeClaim represents the name of the created PVC |  |  |
+
+
+#### ModelCacheStatusEnum
+
+_Underlying type:_ _string_
+
+
+
+_Validation:_
+- Enum: [Pending Progressing Available Failed]
+
+_Appears in:_
+- [ModelCacheStatus](#modelcachestatus)
+
+| Field | Description |
+| --- | --- |
+| `Pending` | ModelCacheStatusPending denotes that the model cache has not been created yet<br /> |
+| `Progressing` | ModelCacheStatusProgressing denotes that the model cache is currently being filled<br /> |
+| `Available` | ModelCacheStatusAvailable denotes that a model cache is filled and ready to be used<br /> |
+| `Failed` | ModelCacheStatusFailed denotes that the model cache has failed. A more detailed reason will be available in the conditions.<br /> |
+
+
 #### ObjectStorageDownloadSpec
 
 
