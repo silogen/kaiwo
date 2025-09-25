@@ -410,7 +410,7 @@ func (r *ModelCacheReconciler) buildFailureCondition(ob observation, sf stateFla
 
 func (r *ModelCacheReconciler) determineOverallStatus(sf stateFlags, ob observation) kaiwo.ModelCacheStatusEnum {
 	switch {
-	case sf.failure && ob.applyTerminal:
+	case sf.failure && (ob.applyTerminal || ob.jobFailed):
 		return kaiwo.ModelCacheStatusFailed
 	case sf.ready:
 		return kaiwo.ModelCacheStatusAvailable
@@ -443,7 +443,7 @@ func (r *ModelCacheReconciler) buildPVC(mc *kaiwo.ModelCache, pvcName string) *c
 			}),
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
-			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany},
 			Resources: corev1.VolumeResourceRequirements{
 				Requests: corev1.ResourceList{
 					corev1.ResourceStorage: mc.Spec.Size,
@@ -471,7 +471,7 @@ func (r *ModelCacheReconciler) buildDownloadJob(mc *kaiwo.ModelCache, jobName st
 		},
 		Spec: batchv1.JobSpec{
 			BackoffLimit:            baseutils.Pointer(int32(0)),
-			TTLSecondsAfterFinished: baseutils.Pointer(int32(0)), // Cleanup immediately after completion
+			TTLSecondsAfterFinished: baseutils.Pointer(int32(30)), // Cleanup after 30s to allow status observation
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					RestartPolicy: corev1.RestartPolicyNever,
@@ -497,17 +497,37 @@ func (r *ModelCacheReconciler) buildDownloadJob(mc *kaiwo.ModelCache, jobName st
 							},
 						},
 					},
+					// TODO find out how to reduce the duplicate cache size during download
 					Containers: []corev1.Container{
 						{
 							Name:            "model-download",
 							Image:           downloadJobImage,
 							ImagePullPolicy: corev1.PullIfNotPresent,
+							SecurityContext: &corev1.SecurityContext{
+								RunAsUser:  baseutils.Pointer(int64(1000)),
+								RunAsGroup: baseutils.Pointer(int64(1000)),
+							},
 							Env: append(mc.Spec.Env, []corev1.EnvVar{
 								{Name: "HF_HOME", Value: mountPath + "/.hf"},
+								{Name: "UMASK", Value: "0022"}, // Create files with 644 permissions (readable by others)
 							}...),
+							Command: []string{"/bin/sh"},
 							Args: []string{
-								mc.Spec.SourceURI,
-								mountPath,
+								"-c",
+								fmt.Sprintf(`
+# Download the model
+python /storage-initializer/scripts/initializer-entrypoint %s %s
+
+# Clean up HF xet cache to save space (keeps only final model files)
+echo "Cleaning up HF cache to save space..."
+rm -rf %s/.hf/xet/*/chunk-cache 2>/dev/null || true
+rm -rf %s/.hf/xet/*/staging 2>/dev/null || true
+
+# Report final sizes
+echo "Final storage usage:"
+du -sh %s
+du -sh %s/.hf 2>/dev/null || true
+				`, mc.Spec.SourceURI, mountPath, mountPath, mountPath, mountPath, mountPath),
 							},
 							VolumeMounts: []corev1.VolumeMount{
 								{Name: "cache", MountPath: mountPath},
@@ -526,7 +546,7 @@ func (r *ModelCacheReconciler) pvcName(mc *kaiwo.ModelCache) string {
 }
 
 func (r *ModelCacheReconciler) jobName(mc *kaiwo.ModelCache) string {
-	return baseutils.FormatNameWithPostfix(mc.Name, "download")
+	return baseutils.FormatNameWithPostfix(mc.Name, "cache-download")
 }
 
 func boolToCondition(v bool) metav1.ConditionStatus {
@@ -618,6 +638,3 @@ func summarizeConditionTransitions(oldC, newC []metav1.Condition) string {
 	}
 	return strings.Join(parts, "; ")
 }
-
-// serializeEnv converts env vars into a simple name=value CSV string
-// (unused)
