@@ -674,9 +674,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `sourceUri` _string_ | SourceURI is the source of the model to be downloaded. This is the only<br />identifier |  | MinLength: 1 <br /> |
+| `sourceUri` _string_ | SourceURI is the source of the model to be downloaded. This is the only<br />identifier<br />self here refers to the field value (string), so compare directly |  | MinLength: 1 <br /> |
 | `storageClassName` _string_ | StorageClassName specifies the storage class for the cache volume |  |  |
-| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#quantity-resource-api)_ | Size specifies the size of the cache volume |  |  |
+| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#quantity-resource-api)_ | Size specifies the size of the cache volume<br />Note: quantity comparisons in CEL may not be supported on all clusters; omit CEL check to avoid CRD install failures. |  |  |
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env lists the environment variables required to download the model into the cache |  |  |
 
 
