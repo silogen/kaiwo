@@ -19,7 +19,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"time"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
@@ -34,7 +33,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
@@ -57,8 +56,6 @@ const (
 )
 
 func (r *ModelCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
 	// Fetch CR
 	var mc kaiwo.ModelCache
 	if err := r.Get(ctx, req.NamespacedName, &mc); err != nil {
@@ -69,6 +66,15 @@ func (r *ModelCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	ob, err := r.observe(ctx, &mc)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("observation failed: %w", err)
+	}
+
+	// Deletion guard: don't mutate children when deleting
+	if !mc.DeletionTimestamp.IsZero() {
+		st := r.projectStatus(&mc, ob)
+		meta.SetStatusCondition(&st.Conditions, metav1.Condition{Type: kaiwo.ConditionReady, Status: metav1.ConditionFalse, Reason: "Finalizing", Message: "Resource is being deleted"})
+		mc.Status = st
+		_ = r.patchStatus(ctx, &mc)
+		return ctrl.Result{}, nil
 	}
 
 	// Apply (ensure PVC and Job)
@@ -85,16 +91,12 @@ func (r *ModelCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	if changed {
 		mc.Status = newStatus
-		if err := r.Status().Update(ctx, &mc); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to update ModelCache status: %w", err)
+		if err := r.patchStatus(ctx, &mc); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to patch ModelCache status: %w", err)
 		}
 	}
 
-	// Requeue policy
-	if r.isProgressing(newStatus) && newStatus.Status != kaiwo.ModelCacheStatusFailed {
-		logger.V(1).Info("ModelCache progressing; requeueing", "name", req.NamespacedName)
-		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
-	}
+	// Rely on watch events instead of periodic requeue
 	return ctrl.Result{}, nil
 }
 
@@ -140,9 +142,12 @@ func (r *ModelCacheReconciler) observe(ctx context.Context, mc *kaiwo.ModelCache
 			if c.Type == batchv1.JobFailed && c.Status == corev1.ConditionTrue {
 				ob.jobFailed = true
 			}
-			if c.Type == batchv1.JobSuccessCriteriaMet && c.Status == corev1.ConditionTrue {
+			if c.Type == batchv1.JobComplete && c.Status == corev1.ConditionTrue {
 				ob.jobSucceeded = true
 			}
+		}
+		if ob.job.Status.Succeeded > 0 {
+			ob.jobSucceeded = true
 		}
 		if ob.job.Status.Active > 0 || baseutils.ValueOrDefault(ob.job.Status.Ready) > 0 {
 			ob.jobPendingOrRunning = true
@@ -156,25 +161,23 @@ func (r *ModelCacheReconciler) observe(ctx context.Context, mc *kaiwo.ModelCache
 }
 
 func (r *ModelCacheReconciler) apply(ctx context.Context, mc *kaiwo.ModelCache, ob observation) error {
-	// Ensure PVC
-	if !ob.pvcFound {
-		newPVC := r.buildPVC(mc, r.pvcName(mc))
-		if err := ctrl.SetControllerReference(mc, newPVC, r.Scheme); err != nil {
-			return fmt.Errorf("set owner on pvc: %w", err)
-		}
-		if err := r.Create(ctx, newPVC); err != nil {
-			return fmt.Errorf("create pvc: %w", err)
-		}
-		return nil
+	// Server-Side Apply desired PVC on every reconcile
+	pvc := r.buildPVC(mc, r.pvcName(mc))
+	if err := ctrl.SetControllerReference(mc, pvc, r.Scheme); err != nil {
+		return fmt.Errorf("owner pvc: %w", err)
 	}
-	// Ensure Job only when storage ready
-	if ob.storageReady && !ob.jobFound {
-		newJob := r.buildDownloadJob(mc, r.jobName(mc), r.pvcName(mc))
-		if err := ctrl.SetControllerReference(mc, newJob, r.Scheme); err != nil {
-			return fmt.Errorf("set owner on job: %w", err)
+	if err := r.Patch(ctx, pvc, client.Apply, client.FieldOwner("modelcache-controller")); err != nil {
+		return fmt.Errorf("apply pvc: %w", err)
+	}
+
+	// Apply Job only when storage is ready
+	if ob.storageReady {
+		job := r.buildDownloadJob(mc, r.jobName(mc), r.pvcName(mc))
+		if err := ctrl.SetControllerReference(mc, job, r.Scheme); err != nil {
+			return fmt.Errorf("owner job: %w", err)
 		}
-		if err := r.Create(ctx, newJob); err != nil {
-			return fmt.Errorf("create job: %w", err)
+		if err := r.Patch(ctx, job, client.Apply, client.FieldOwner("modelcache-controller")); err != nil {
+			return fmt.Errorf("apply job: %w", err)
 		}
 	}
 	return nil
@@ -261,10 +264,10 @@ func (r *ModelCacheReconciler) projectStatus(mc *kaiwo.ModelCache, ob observatio
 	return status
 }
 
-func (r *ModelCacheReconciler) isProgressing(st kaiwo.ModelCacheStatus) bool {
-	cond := meta.FindStatusCondition(st.Conditions, kaiwo.ConditionProgressing)
-	return cond != nil && cond.Status == metav1.ConditionTrue
-}
+//func (r *ModelCacheReconciler) isProgressing(st kaiwo.ModelCacheStatus) bool {
+//	cond := meta.FindStatusCondition(st.Conditions, kaiwo.ConditionProgressing)
+//	return cond != nil && cond.Status == metav1.ConditionTrue
+//}
 
 func (r *ModelCacheReconciler) buildPVC(mc *kaiwo.ModelCache, pvcName string) *corev1.PersistentVolumeClaim {
 	var sc *string
@@ -277,6 +280,10 @@ func (r *ModelCacheReconciler) buildPVC(mc *kaiwo.ModelCache, pvcName string) *c
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pvcName,
 			Namespace: mc.Namespace,
+			Labels: mergeStringMap(nil, map[string]string{
+				"app.kubernetes.io/managed-by": "modelcache-controller",
+				"kaiwo.silogen.ai/modelcache":  mc.Name,
+			}),
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
@@ -299,6 +306,10 @@ func (r *ModelCacheReconciler) buildDownloadJob(mc *kaiwo.ModelCache, jobName st
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jobName,
 			Namespace: mc.Namespace,
+			Labels: mergeStringMap(nil, map[string]string{
+				"app.kubernetes.io/managed-by": "modelcache-controller",
+				"kaiwo.silogen.ai/modelcache":  mc.Name,
+			}),
 		},
 		Spec: batchv1.JobSpec{
 			BackoffLimit: baseutils.Pointer(int32(0)),
@@ -386,10 +397,29 @@ func conditionsEqual(a, b []metav1.Condition) bool {
 
 func (r *ModelCacheReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
-		For(&kaiwo.ModelCache{}).
+		For(&kaiwo.ModelCache{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Owns(&corev1.PersistentVolumeClaim{}).
 		Owns(&batchv1.Job{}, builder.WithPredicates(JobStatusChangedPredicate())).
+		WithOptions(controller.Options{MaxConcurrentReconciles: 2}).
 		Named("modelcache").
 		Complete(r)
+}
+
+// patchStatus patches only the status subresource and sets ObservedGeneration
+func (r *ModelCacheReconciler) patchStatus(ctx context.Context, mc *kaiwo.ModelCache) error {
+	// MergeFrom patch on status only; ObservedGeneration is set in projectStatus
+	before := mc.DeepCopy()
+	return r.Status().Patch(ctx, mc, client.MergeFrom(before))
+}
+
+// mergeStringMap returns a new map with b merged into a
+func mergeStringMap(a, b map[string]string) map[string]string {
+	out := map[string]string{}
+	for k, v := range a {
+		out[k] = v
+	}
+	for k, v := range b {
+		out[k] = v
+	}
+	return out
 }
