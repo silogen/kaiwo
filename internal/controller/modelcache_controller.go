@@ -18,10 +18,7 @@ package controller
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"sort"
 	"strings"
 
 	"k8s.io/client-go/tools/record"
@@ -60,8 +57,7 @@ type ModelCacheReconciler struct {
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 
 const (
-	// Placeholder image for the download job; replace in a future iteration
-	downloadJobImage = "ghcr.io/example/model-downloader:latest"
+	downloadJobImage = "kserve/storage-initializer:v0.15.2"
 )
 
 func (r *ModelCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -238,27 +234,10 @@ func (r *ModelCacheReconciler) apply(ctx context.Context, mc *kaiwo.ModelCache, 
 		return err
 	}
 
-	// Apply Job only when storage is ready
-	if ob.storageReady {
-		desiredName := r.jobName(mc)
-		desiredHash := computeJobSpecHash(mc)
-
-		// If an existing job has a different spec-hash and is not active, delete to allow rerun
-		if ob.jobFound {
-			currentHash := ob.job.Labels["kaiwo.silogen.ai/spec-hash"]
-			if currentHash != desiredHash && ob.job.Status.Active == 0 {
-				if err := r.Delete(ctx, &ob.job); err != nil {
-					return fmt.Errorf("delete outdated job: %w", err)
-				}
-			}
-		}
-
+	// Apply Job only when storage is ready and not already created
+	if ob.storageReady && !ob.jobFound {
 		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			job := r.buildDownloadJob(mc, desiredName, r.pvcName(mc))
-			if job.Labels == nil {
-				job.Labels = map[string]string{}
-			}
-			job.Labels["kaiwo.silogen.ai/spec-hash"] = desiredHash
+			job := r.buildDownloadJob(mc, r.jobName(mc), r.pvcName(mc))
 			if err := ctrl.SetControllerReference(mc, job, r.Scheme); err != nil {
 				return fmt.Errorf("owner job: %w", err)
 			}
@@ -348,16 +327,18 @@ func (r *ModelCacheReconciler) projectStatus(mc *kaiwo.ModelCache, ob observatio
 		progressingCond.Reason = kaiwo.ReasonRetryBackoff
 	}
 
-	failureCond := metav1.Condition{Type: kaiwo.ConditionFailure}
-	failureCond.Status = boolToCondition(failure)
-	if ob.applyErrorReason != "" {
-		failureCond.Reason = ob.applyErrorReason
-		failureCond.Message = ob.applyErrorMessage
-	} else if ob.storageLost {
-		failureCond.Reason = kaiwo.ReasonPVCLost
-	} else if ob.jobFailed {
-		failureCond.Reason = kaiwo.ReasonDownloadFailed
-	}
+    failureCond := metav1.Condition{Type: kaiwo.ConditionFailure}
+    failureCond.Status = boolToCondition(failure)
+    // Ensure Reason is always non-empty to satisfy schema
+    failureCond.Reason = "NoFailure"
+    if ob.applyErrorReason != "" {
+        failureCond.Reason = ob.applyErrorReason
+        failureCond.Message = ob.applyErrorMessage
+    } else if ob.storageLost {
+        failureCond.Reason = kaiwo.ReasonPVCLost
+    } else if ob.jobFailed {
+        failureCond.Reason = kaiwo.ReasonDownloadFailed
+    }
 
 	// Merge
 	status.Conditions = mergeConditions(status.Conditions, []metav1.Condition{storageCond, readyCond, progressingCond, failureCond})
@@ -411,10 +392,11 @@ func (r *ModelCacheReconciler) buildPVC(mc *kaiwo.ModelCache, pvcName string) *c
 
 func (r *ModelCacheReconciler) buildDownloadJob(mc *kaiwo.ModelCache, jobName string, pvcName string) *batchv1.Job {
 	mountPath := "/cache"
-	sourceEnv := corev1.EnvVar{Name: "SOURCE_URI", Value: mc.Spec.SourceURI}
-	env := append([]corev1.EnvVar{sourceEnv}, mc.Spec.Env...)
 	return &batchv1.Job{
-		TypeMeta: metav1.TypeMeta{APIVersion: batchv1.SchemeGroupVersion.String(), Kind: "Job"},
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: batchv1.SchemeGroupVersion.String(),
+			Kind:       "Job",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jobName,
 			Namespace: mc.Namespace,
@@ -441,9 +423,12 @@ func (r *ModelCacheReconciler) buildDownloadJob(mc *kaiwo.ModelCache, jobName st
 							Name:            "model-download",
 							Image:           downloadJobImage,
 							ImagePullPolicy: corev1.PullIfNotPresent,
-							Env:             env,
-							Command:         []string{"/bin/sh", "-c", "echo Downloading $SOURCE_URI into /cache && sleep 1 && exit 0"},
-							VolumeMounts:    []corev1.VolumeMount{{Name: "cache", MountPath: mountPath}},
+							Env:             mc.Spec.Env,
+							Args: []string{
+								mc.Spec.SourceURI,
+								mountPath,
+							},
+							VolumeMounts: []corev1.VolumeMount{{Name: "cache", MountPath: mountPath}},
 						},
 					},
 				},
@@ -550,20 +535,5 @@ func summarizeConditionTransitions(oldC, newC []metav1.Condition) string {
 	return strings.Join(parts, "; ")
 }
 
-// computeJobSpecHash returns a stable hash of job-driving inputs
-func computeJobSpecHash(mc *kaiwo.ModelCache) string {
-	h := sha256.New()
-	// include source uri and envs to trigger reruns when changed
-	_, _ = h.Write([]byte(mc.Spec.SourceURI))
-	// sort env for stability
-	env := append([]corev1.EnvVar(nil), mc.Spec.Env...)
-	sort.Slice(env, func(i, j int) bool { return env[i].Name < env[j].Name })
-	for _, e := range env {
-		_, _ = h.Write([]byte("\x00"))
-		_, _ = h.Write([]byte(e.Name))
-		_, _ = h.Write([]byte("\x00"))
-		_, _ = h.Write([]byte(e.Value))
-		// ignore ValueFrom for now; could be added later by serializing refs
-	}
-	return hex.EncodeToString(h.Sum(nil))
-}
+// serializeEnv converts env vars into a simple name=value CSV string
+// (unused)

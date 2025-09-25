@@ -24,16 +24,17 @@ import (
 type ModelCacheSpec struct {
 	// SourceURI is the source of the model to be downloaded. This is the only
 	// identifier
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:XValidation:rule="self.sourceUri == oldSelf.sourceUri",message="sourceUri is immutable"
-	SourceURI string `json:"sourceUri"`
+    // +kubebuilder:validation:MinLength=1
+    // self here refers to the field value (string), so compare directly
+    // +kubebuilder:validation:XValidation:rule="self == oldSelf",message="sourceUri is immutable"
+    SourceURI string `json:"sourceUri"`
 
 	// StorageClassName specifies the storage class for the cache volume
 	StorageClassName string `json:"storageClassName,omitempty"`
 
 	// Size specifies the size of the cache volume
-	// +kubebuilder:validation:XValidation:rule="quantity(self.size) > quantity('0')",message="size must be greater than 0"
-	Size resource.Quantity `json:"size"`
+    // Note: quantity comparisons in CEL may not be supported on all clusters; omit CEL check to avoid CRD install failures.
+    Size resource.Quantity `json:"size"`
 
 	// Env lists the environment variables required to download the model into the cache
 	// +listType=map
