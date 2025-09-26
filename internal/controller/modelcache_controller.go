@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"strings"
 
+	inf "gopkg.in/inf.v0"
+
 	"k8s.io/client-go/tools/record"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
@@ -61,6 +63,10 @@ type ModelCacheReconciler struct {
 
 const (
 	downloadJobImage = "kserve/storage-initializer:v0.15.2"
+
+	// The amount of headroom given to the PVC
+	// FIXME Currently HF duplicates the cache, so doubling the storage for now
+	storageMultiplier float64 = 2.1
 )
 
 func (r *ModelCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -446,12 +452,19 @@ func (r *ModelCacheReconciler) buildPVC(mc *kaiwo.ModelCache, pvcName string) *c
 			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany},
 			Resources: corev1.VolumeResourceRequirements{
 				Requests: corev1.ResourceList{
-					corev1.ResourceStorage: mc.Spec.Size,
+					corev1.ResourceStorage: MultiplyQuantityByFloatExact(mc.Spec.Size, storageMultiplier),
 				},
 			},
 			StorageClassName: sc,
 		},
 	}
+}
+
+func MultiplyQuantityByFloatExact(q resource.Quantity, factor float64) resource.Quantity {
+	dec := q.AsDec()
+	factorDec := inf.NewDec(int64(factor*1e6), 6) // represent float as decimal
+	dec.Mul(dec, factorDec)
+	return *resource.NewDecimalQuantity(*dec, q.Format)
 }
 
 func (r *ModelCacheReconciler) buildDownloadJob(mc *kaiwo.ModelCache, jobName string, pvcName string) *batchv1.Job {
