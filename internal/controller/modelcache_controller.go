@@ -529,8 +529,8 @@ func (r *ModelCacheReconciler) buildDownloadJob(mc *kaiwo.ModelCache, jobName st
 								"-c",
 								fmt.Sprintf(`
 # Download the model
-python /storage-initializer/scripts/initializer-entrypoint %s %s
-
+python /storage-initializer/scripts/initializer-entrypoint %s %s &&
+(
 # Clean up HF xet cache to save space (keeps only final model files)
 echo "Cleaning up HF cache to save space..."
 rm -rf %s/.hf/xet/*/chunk-cache 2>/dev/null || true
@@ -540,6 +540,7 @@ rm -rf %s/.hf/xet/*/staging 2>/dev/null || true
 echo "Final storage usage:"
 du -sh %s
 du -sh %s/.hf 2>/dev/null || true
+)
 				`, mc.Spec.SourceURI, mountPath, mountPath, mountPath, mountPath, mountPath),
 							},
 							VolumeMounts: []corev1.VolumeMount{
