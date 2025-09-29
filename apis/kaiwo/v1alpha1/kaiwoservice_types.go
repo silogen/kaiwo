@@ -17,8 +17,6 @@ package v1alpha1
 import (
 	"strings"
 
-	corev1 "k8s.io/api/core/v1"
-
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -44,9 +42,6 @@ type KaiwoServiceSpec struct {
 	// underlying Deployment spec lives under `.deployment.spec`, while
 	// additional Kaiwo-specific options can be added as siblings (e.g., `entrypoint`).
 	Deployment *KaiwoServiceDeploymentSpec `json:"deployment,omitempty"`
-
-	// Aim contains the AIM (AMD Inference Microservice) configuration
-	Aim *KaiwoAimDeploymentSpec `json:"aim,omitempty"`
 }
 
 // KaiwoServiceRaySpec groups Ray-specific configuration for services
@@ -66,41 +61,6 @@ type KaiwoServiceDeploymentSpec struct {
 
 	// EntryPoint specifies the command or script executed in the primary container.
 	EntryPoint string `json:"entrypoint,omitempty"`
-}
-
-type KaiwoAimDeploymentSpec struct {
-	// AimWorkloadId is a unique user-provided ID that identifies an instance of an AIM
-	AimWorkloadId string `json:"aimWorkloadId,omitempty"`
-
-	// Model contains the model-specific configuration
-	Model AimModelSpec `json:"model,omitempty"`
-
-	// Routing contains the routing-specific configuration
-	Routing AimRoutingSpec `json:"routing,omitempty"`
-}
-
-type AimModelSpec struct {
-	// Name refers to the AIM model name.
-	Name string `json:"name,omitempty"`
-
-	// Caching contains the model caching specifications
-	Caching AimModelCachingSpec `json:"caching,omitempty"`
-}
-
-type AimRoutingSpec struct {
-	// Enabled, if true, will create an HTTPRoute for the InferenceService.
-	Enabled bool `json:"enabled,omitempty"`
-}
-
-type AimModelCachingSpec struct {
-	// Enabled, if true, turns on model caching
-	Enabled bool `json:"enabled,omitempty"`
-
-	// StorageClass specifies the storage class to use for the model cache, if a model cache does not already exist. If this is omitted, the default storage class from `KaiwoConfig.spec.models.caching.storageClass` is used.
-	StorageClass string `json:"storageClass,omitempty"`
-
-	// Env lists the environmental variables required to download the model.
-	Env []corev1.EnvVar `json:"env,omitempty"`
 }
 
 // KaiwoServiceStatus defines the observed state of KaiwoService.

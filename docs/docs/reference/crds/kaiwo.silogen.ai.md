@@ -18,57 +18,6 @@ Package v1alpha1 contains API Schema definitions for the kaiwo v1alpha1 API grou
 
 
 
-#### AimModelCachingSpec
-
-
-
-
-
-
-
-_Appears in:_
-- [AimModelSpec](#aimmodelspec)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `enabled` _boolean_ | Enabled, if true, turns on model caching |  |  |
-| `storageClass` _string_ | StorageClass specifies the storage class to use for the model cache, if a model cache does not already exist. If this is omitted, the default storage class from `KaiwoConfig.spec.models.caching.storageClass` is used. |  |  |
-| `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env lists the environmental variables required to download the model. |  |  |
-
-
-#### AimModelSpec
-
-
-
-
-
-
-
-_Appears in:_
-- [KaiwoAimDeploymentSpec](#kaiwoaimdeploymentspec)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `name` _string_ | Name refers to the AIM model name. |  |  |
-| `caching` _[AimModelCachingSpec](#aimmodelcachingspec)_ | Caching contains the model caching specifications |  |  |
-
-
-#### AimRoutingSpec
-
-
-
-
-
-
-
-_Appears in:_
-- [KaiwoAimDeploymentSpec](#kaiwoaimdeploymentspec)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `enabled` _boolean_ | Enabled, if true, will create an HTTPRoute for the InferenceService. |  |  |
-
-
 #### AzureBlobStorageDownloadItem
 
 
@@ -306,24 +255,6 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `repoId` _string_ | RepoID is the Hugging Face Hub repository ID (e.g., "meta-llama/Llama-2-7b-chat-hf"). |  |  |
 | `files` _string array_ | Files is an optional list of specific files to download from the repository. If omitted, the entire repository is downloaded. |  |  |
-
-
-#### KaiwoAimDeploymentSpec
-
-
-
-
-
-
-
-_Appears in:_
-- [KaiwoServiceSpec](#kaiwoservicespec)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `aimWorkloadId` _string_ | AimWorkloadId is a unique user-provided ID that identifies an instance of an AIM |  |  |
-| `model` _[AimModelSpec](#aimmodelspec)_ | Model contains the model-specific configuration |  |  |
-| `routing` _[AimRoutingSpec](#aimroutingspec)_ | Routing contains the routing-specific configuration |  |  |
 
 
 #### KaiwoJob
@@ -608,7 +539,6 @@ _Appears in:_
 | `type` _string_ | Type selects the underlying workload implementation. Valid values: "deployment", "ray". |  | Enum: [deployment ray aim] <br /> |
 | `ray` _[KaiwoServiceRaySpec](#kaiwoservicerayspec)_ | Ray contains Ray-specific configuration. The primary underlying RayService<br />spec lives under `.ray.spec`, while additional Kaiwo-specific Ray options<br />can be added as siblings (e.g., `serveConfigV2`). |  |  |
 | `deployment` _[KaiwoServiceDeploymentSpec](#kaiwoservicedeploymentspec)_ | Deployment contains Deployment-specific configuration. The primary<br />underlying Deployment spec lives under `.deployment.spec`, while<br />additional Kaiwo-specific options can be added as siblings (e.g., `entrypoint`). |  |  |
-| `aim` _[KaiwoAimDeploymentSpec](#kaiwoaimdeploymentspec)_ | Aim contains the AIM (AMD Inference Microservice) configuration |  |  |
 
 
 #### KaiwoServiceStatus

@@ -21,7 +21,7 @@ Kaiwo requires several core Kubernetes components to function correctly:
     *   **NVIDIA**: [NVIDIA GPU Operator](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/overview.html) + [GPU Feature Discovery](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/gpu-feature-discovery.html).
     *   Ensures GPU drivers are installed and nodes are correctly labeled with GPU information.
 3.  **Kueue**: Provides job queueing, fair sharing, and quota management. ([Docs](https://kueue.sigs.k8s.io/)).
-4.  **KubeRay Operator**: Required only if users will run Ray-based services (`spec.type: ray`). Manages Ray clusters. ([Docs](https://docs.ray.io/en/latest/cluster/kubernetes/index.html)).
+4.  **KubeRay Operator**: Required only if users will run Ray-based workloads. Manages Ray clusters. ([Docs](https://docs.ray.io/en/latest/cluster/kubernetes/index.html)).
 5.  **AppWrapper**: Used by Kueue to manage atomic scheduling of complex workloads, particularly Ray clusters/services. ([GitHub](https://github.com/project-codeflare/appwrapper)).
 6.  **Prometheus (Recommended)**: For monitoring the Kaiwo operator and cluster metrics.
 
