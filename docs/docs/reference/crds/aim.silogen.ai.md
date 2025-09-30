@@ -94,6 +94,24 @@ _Appears in:_
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest available observations of the model's state |  |  |
 
 
+#### AIMMetric
+
+_Underlying type:_ _string_
+
+AIMMetric enumerates the targeted service characteristic
+
+_Validation:_
+- Enum: [latency throughput]
+
+_Appears in:_
+- [AIMServiceTemplateSpec](#aimservicetemplatespec)
+
+| Field | Description |
+| --- | --- |
+| `latency` |  |
+| `throughput` |  |
+
+
 #### AIMNamespaceConfig
 
 
@@ -225,6 +243,16 @@ _Validation:_
 _Appears in:_
 - [AIMServiceTemplateSpec](#aimservicetemplatespec)
 
+| Field | Description |
+| --- | --- |
+| `auto` |  |
+| `fp4` |  |
+| `fp8` |  |
+| `fp16` |  |
+| `fp32` |  |
+| `bf16` |  |
+| `int4` |  |
+| `int8` |  |
 
 
 #### AIMS3Credential
@@ -404,12 +432,12 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `model` _string_ | Model is the canonical model name (exact string match), including version/revision.<br />Matches `spec.name` of an AIMClusterModel. Immutable.<br />Example: `meta/llama-3-8b:1.1+20240915` |  | MinLength: 1 <br /> |
-| `useCase` _[AIMUseCase](#aimusecase)_ | UseCase selects the optimization goal. Immutable.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
-| `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. Immutable.<br />- `bf16`<br />- `fp16`<br />- `fp8`<br />- `int8` |  | Enum: [bf16 fp16 fp8 int8] <br /> |
-| `gpusPerReplica` _integer_ | GpusPerReplica is the total number of GPUs for a single model replica. Immutable.<br />Example: `1`, `2` |  | Minimum: 1 <br /> |
-| `gpuModel` _string_ | GpuModel is the physical GPU card model targeted by this template (single value). Immutable.<br />Example: `MI300X`, `MI325X` |  | MinLength: 1 <br /> |
-| `tensorParallelism` _integer_ | TensorParallelism is the tensor parallel degree expected by the runtime. Immutable.<br />Example: `1` (no TP), `2` |  | Minimum: 1 <br /> |
-| `warmCache` _boolean_ | WarmCache requests immediate model cache warming in this namespace after profile discovery.<br />Defaults to `false`. Immutable.<br />When left `false`, services can still request caching via `AIMService.spec.cacheModel: true`. | false |  |
+| `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal. Immutable.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
+| `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. Immutable. | auto | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
+| `gpusPerReplica` _integer_ | GpusPerReplica is the total number of GPUs for a single model replica. Immutable. |  | Minimum: 1 <br /> |
+| `gpuModel` _string_ | GpuModel is the physical GPU card model targeted by this template. Immutable. |  | MinLength: 1 <br /> |
+| `tensorParallelism` _integer_ | TensorParallelism is the tensor parallel degree expected by the runtime. Immutable. |  | Minimum: 1 <br /> |
+| `warmCache` _boolean_ | WarmCache requests immediate model cache warming in this namespace after profile discovery.<br />Defaults to `false`.<br />When left `false`, services can still request caching via `AIMService.spec.cacheModel: true`. | false |  |
 
 
 #### AIMServiceTemplateStatus
@@ -448,24 +476,6 @@ _Appears in:_
 | `Progressing` | AIMTemplateStatusProgressing denotes that discovery and/or cache warm is in progress.<br /> |
 | `Available` | AIMTemplateStatusAvailable denotes that discovery succeeded and, if requested, caches are warmed.<br /> |
 | `Failed` | AIMTemplateStatusFailed denotes a terminal failure for discovery or warm operations.<br /> |
-
-
-#### AIMUseCase
-
-_Underlying type:_ _string_
-
-AIMUseCase enumerates the targeted service characteristic
-
-_Validation:_
-- Enum: [latency throughput]
-
-_Appears in:_
-- [AIMServiceTemplateSpec](#aimservicetemplatespec)
-
-| Field | Description |
-| --- | --- |
-| `latency` |  |
-| `throughput` |  |
 
 
 #### ModelCache

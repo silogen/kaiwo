@@ -19,18 +19,29 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// AIMUseCase enumerates the targeted service characteristic
+// AIMMetric enumerates the targeted service characteristic
 // +kubebuilder:validation:Enum=latency;throughput
-type AIMUseCase string
+type AIMMetric string
 
 const (
-	AIMUseCaseLatency    AIMUseCase = "latency"
-	AIMUseCaseThroughput AIMUseCase = "throughput"
+	AIMMetricLatency    AIMMetric = "latency"
+	AIMMetricThroughput AIMMetric = "throughput"
 )
 
 // AIMPrecision enumerates supported numeric precisions
 // +kubebuilder:validation:Enum=bf16;fp16;fp8;int8
 type AIMPrecision string
+
+const (
+	AIMPrecisionAuto AIMPrecision = "auto"
+	AIMPrecisionFP4  AIMPrecision = "fp4"
+	AIMPrecisionFP8  AIMPrecision = "fp8"
+	AIMPrecisionFP16 AIMPrecision = "fp16"
+	AIMPrecisionFP32 AIMPrecision = "fp32"
+	AIMPrecisionBF16 AIMPrecision = "bf16"
+	AIMPrecisionInt4 AIMPrecision = "int4"
+	AIMPrecisionInt8 AIMPrecision = "int8"
+)
 
 // AIMServiceTemplateSpec defines the desired state of AIMServiceTemplate.
 //
@@ -48,55 +59,42 @@ type AIMServiceTemplateSpec struct {
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="model is immutable"
 	Model string `json:"model"`
 
-	// UseCase selects the optimization goal. Immutable.
+	// Metric selects the optimization goal. Immutable.
 	//
 	// - `latency`: prioritize low end‑to‑end latency
 	// - `throughput`: prioritize sustained requests/second
 	//
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="useCase is immutable"
-	UseCase AIMUseCase `json:"useCase"`
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="metric is immutable"
+	// +kubebuilder:validation:Enum=latency;throughput
+	Metric AIMMetric `json:"metric"`
 
 	// Precision selects the numeric precision used by the runtime. Immutable.
-	//
-	// - `bf16`
-	// - `fp16`
-	// - `fp8`
-	// - `int8`
-	//
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="precision is immutable"
+	// +kubebuilder:default=auto
+	// +kubebuilder:validation:Enum=auto;fp4;fp8;fp16;fp32;bf16;int4;int8
 	Precision AIMPrecision `json:"precision"`
 
 	// GpusPerReplica is the total number of GPUs for a single model replica. Immutable.
-	//
-	// Example: `1`, `2`
-	//
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="gpusPerReplica is immutable"
 	GpusPerReplica int32 `json:"gpusPerReplica"`
 
-	// GpuModel is the physical GPU card model targeted by this template (single value). Immutable.
-	//
-	// Example: `MI300X`, `MI325X`
-	//
+	// GpuModel is the physical GPU card model targeted by this template. Immutable.
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="gpuModel is immutable"
 	GpuModel string `json:"gpuModel"`
 
 	// TensorParallelism is the tensor parallel degree expected by the runtime. Immutable.
-	//
-	// Example: `1` (no TP), `2`
-	//
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="tensorParallelism is immutable"
 	TensorParallelism int32 `json:"tensorParallelism"`
 
 	// WarmCache requests immediate model cache warming in this namespace after profile discovery.
-	// Defaults to `false`. Immutable.
+	// Defaults to `false`.
 	//
 	// When left `false`, services can still request caching via `AIMService.spec.cacheModel: true`.
 	//
 	// +kubebuilder:default=false
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="warmCache is immutable"
 	WarmCache bool `json:"warmCache,omitempty"`
 }
 
@@ -163,7 +161,7 @@ const (
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=aimst,categories=aim;all
 // +kubebuilder:printcolumn:name="Model",type=string,JSONPath=`.spec.model`
-// +kubebuilder:printcolumn:name="UseCase",type=string,JSONPath=`.spec.useCase`
+// +kubebuilder:printcolumn:name="Metric",type=string,JSONPath=`.spec.useCase`
 // +kubebuilder:printcolumn:name="Precision",type=string,JSONPath=`.spec.precision`
 // +kubebuilder:printcolumn:name="GPUs/replica",type=integer,JSONPath=`.spec.gpusPerReplica`
 // +kubebuilder:printcolumn:name="GPU",type=string,JSONPath=`.spec.gpuModel`
