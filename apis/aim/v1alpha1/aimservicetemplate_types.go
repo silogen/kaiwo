@@ -16,7 +16,6 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // AIMMetric enumerates the targeted service characteristic
@@ -112,6 +111,10 @@ type AIMServiceTemplateStatus struct {
 	// Values: `Pending`, `Progressing`, `Available`, `Failed`.
 	// +kubebuilder:default=Pending
 	Status AIMTemplateStatusEnum `json:"status,omitempty"`
+
+	// ModelSources list the models that this template requires to run. These are the models that will be
+	// cached, if this template is cached.
+	ModelSources []string `json:"modelSources,omitempty"`
 }
 
 // AIMTemplateStatusEnum defines coarse-grained states for a template.
@@ -179,64 +182,6 @@ type AIMServiceTemplateList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []AIMServiceTemplate `json:"items"`
-}
-
-// DeepCopy implementations (manual to avoid requiring code generation in this stub phase)
-
-func (in *AIMServiceTemplate) DeepCopyInto(out *AIMServiceTemplate) {
-	*out = *in
-	out.TypeMeta = in.TypeMeta
-	in.ObjectMeta.DeepCopyInto(&out.ObjectMeta)
-	out.Spec = in.Spec
-	if in.Status.Conditions != nil {
-		out.Status.Conditions = make([]metav1.Condition, len(in.Status.Conditions))
-		copy(out.Status.Conditions, in.Status.Conditions)
-	}
-	out.Status.ObservedGeneration = in.Status.ObservedGeneration
-}
-
-func (in *AIMServiceTemplate) DeepCopy() *AIMServiceTemplate {
-	if in == nil {
-		return nil
-	}
-	out := new(AIMServiceTemplate)
-	in.DeepCopyInto(out)
-	return out
-}
-
-func (in *AIMServiceTemplate) DeepCopyObject() runtime.Object {
-	if c := in.DeepCopy(); c != nil {
-		return c
-	}
-	return nil
-}
-
-func (in *AIMServiceTemplateList) DeepCopyInto(out *AIMServiceTemplateList) {
-	*out = *in
-	out.TypeMeta = in.TypeMeta
-	in.ListMeta.DeepCopyInto(&out.ListMeta)
-	if in.Items != nil {
-		out.Items = make([]AIMServiceTemplate, len(in.Items))
-		for i := range in.Items {
-			in.Items[i].DeepCopyInto(&out.Items[i])
-		}
-	}
-}
-
-func (in *AIMServiceTemplateList) DeepCopy() *AIMServiceTemplateList {
-	if in == nil {
-		return nil
-	}
-	out := new(AIMServiceTemplateList)
-	in.DeepCopyInto(out)
-	return out
-}
-
-func (in *AIMServiceTemplateList) DeepCopyObject() runtime.Object {
-	if c := in.DeepCopy(); c != nil {
-		return c
-	}
-	return nil
 }
 
 func init() {

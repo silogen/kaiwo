@@ -21,7 +21,7 @@ spec:
 
 ### AIMServiceTemplate
 
-An AIMServiceTemplate is a namespaced and versioned template that selects a runtime profile for a given AIMClusterModel. A template references exactly one model by its canonical name. It defines the use case (latency or throughput), precision (for example bf16 or fp16), GPUs per replica, a single target GPU model, and tensor parallelism. It may also request cache warming through `warmCache`. On creation, the operator inspects the image associated with the referenced model and selects the appropriate runtime profile.
+An AIMServiceTemplate is a namespaced and versioned template that selects a runtime profile for a given AIMClusterModel. A template references exactly one model by its canonical name. It defines the metric (latency or throughput), precision (for example bf16 or fp16), GPUs per replica, a single target GPU model, and tensor parallelism. It may also request cache warming through `warmCache`. On creation, the operator inspects the image associated with the referenced model and selects the appropriate runtime profile.
 
 **Observability**
 
@@ -122,7 +122,7 @@ Service status exposes a high‑level phase via `status.status` and detailed con
 ## Lifecycle
 
 1. Publish an AIMClusterModel with the canonical model name and image.
-2. Create an AIMServiceTemplate in the target namespace, referencing the AIMClusterModel by its canonical name and selecting use case, precision, GPUs per replica, GPU model, and tensor parallelism. Optionally set `warmCache: true` to warm immediately after discovery.
+2. Create an AIMServiceTemplate in the target namespace, referencing the AIMClusterModel by its canonical name and selecting metric, precision, GPUs per replica, GPU model, and tensor parallelism. Optionally set `warmCache: true` to warm immediately after discovery.
 3. If cache warming is enabled, caches are created and filled. Templates that resolve to the same source share the same ReadWriteMany cache.
 4. Deploy an AIMService referencing the model and the template. Optionally set `replicas`.
 5. If exposure and routing are enabled, the service is reachable through the namespace’s Gateway instance.
@@ -164,7 +164,7 @@ metadata:
   namespace: my-llm
 spec:
   model: meta/llama-3-8b:1.1+20240915
-  useCase: latency
+  metric: latency
   precision: bf16
   gpusPerReplica: 1
   gpuModel: MI300X
@@ -182,7 +182,7 @@ metadata:
   namespace: my-llm
 spec:
   model: qwen-ai/qwen2-7b:2.0+20240915
-  useCase: throughput
+  metric: throughput
   precision: bf16
   gpusPerReplica: 2
   gpuModel: MI325X
