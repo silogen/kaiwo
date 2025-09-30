@@ -166,6 +166,7 @@ _Appears in:_
 | `credentials` _[AIMNamespaceCredentials](#aimnamespacecredentials)_ | Credentials provide secret references used during model access and caching. |  |  |
 | `images` _[AIMNamespaceImageConfig](#aimnamespaceimageconfig)_ | Images configures image pull behavior for AIM images within this namespace. |  |  |
 | `routing` _[AIMNamespaceRoutingConfig](#aimnamespaceroutingconfig)_ | Routing controls automatic HTTPRoute creation for AIM services in this namespace.<br />When enabled (default), the operator creates one HTTPRoute per service using<br />path-based routing with the pattern `/<namespace>/<workload_id>/` and attaches<br />it to the referenced Gateway listener. |  |  |
+| `cacheStorageClassName` _string_ | CacheStorageClassName is the name of the storage class to use for cached models |  |  |
 
 
 #### AIMNamespaceCredentials
@@ -269,7 +270,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `endpointUrl` _string_ |  |  |  |
+| `endpointUrl` _string_ | EndpointURL (S3-compatible). If both Region and EndpointURL are set, EndpointURL wins. |  |  |
+| `region` _string_ | Region (AWS S3). If both Region and EndpointURL are set, EndpointURL wins. |  |  |
 | `accessKeyId` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#secretkeyselector-v1-core)_ |  |  |  |
 | `secretAccessKey` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#secretkeyselector-v1-core)_ |  |  |  |
 

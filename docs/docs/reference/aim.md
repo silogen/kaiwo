@@ -4,6 +4,10 @@ AIM provides a consistent way to deploy optimized LLM inference services on AMD 
 
 ## Concepts
 
+The following diagram shows the overall architecture and relationships between the resources.
+
+![AIM resource architecture](./aim.drawio.svg)
+
 ### AIMClusterModel
 
 An AIMClusterModel is a cluster‑scoped catalog entry that maps a canonical model name to a single AIM container image. Canonical model names include a version and revision, for example `meta/llama-3-8b:1.2.1`. The operator uses this mapping to prepare the runtime with KServe for that image. Note that if the image requires a authentication to download, you must set the image pull secret in the AIMNamespaceConfig in the correct namespace.

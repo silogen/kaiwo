@@ -23,7 +23,12 @@ import (
 // AIMS3Credential configures S3 credential references for a specific endpoint.
 // Provide an endpoint and secret references for authentication.
 type AIMS3Credential struct {
-	EndpointURL     string               `json:"endpointUrl,omitempty"`
+	// EndpointURL (S3-compatible). If both Region and EndpointURL are set, EndpointURL wins.
+	EndpointURL string `json:"endpointUrl,omitempty"`
+
+	// Region (AWS S3). If both Region and EndpointURL are set, EndpointURL wins.
+	Region string `json:"region,omitempty"`
+
 	AccessKeyID     v1.SecretKeySelector `json:"accessKeyId,omitempty"`
 	SecretAccessKey v1.SecretKeySelector `json:"secretAccessKey,omitempty"`
 }
@@ -83,6 +88,9 @@ type AIMNamespaceConfigSpec struct {
 	// path-based routing with the pattern `/<namespace>/<workload_id>/` and attaches
 	// it to the referenced Gateway listener.
 	Routing AIMNamespaceRoutingConfig `json:"routing,omitempty"`
+
+	// CacheStorageClassName is the name of the storage class to use for cached models
+	CacheStorageClassName string `json:"cacheStorageClassName,omitempty"`
 }
 
 // AIMNamespaceRoutingConfig controls automatic HTTPRoute provisioning in the namespace.
