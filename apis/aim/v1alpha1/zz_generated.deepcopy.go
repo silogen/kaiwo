@@ -206,10 +206,8 @@ func (in *AIMNamespaceCredentials) DeepCopyInto(out *AIMNamespaceCredentials) {
 	}
 	if in.S3 != nil {
 		in, out := &in.S3, &out.S3
-		*out = make([]AIMS3Credential, len(*in))
-		for i := range *in {
-			(*in)[i].DeepCopyInto(&(*out)[i])
-		}
+		*out = new(AIMS3Credential)
+		(*in).DeepCopyInto(*out)
 	}
 }
 

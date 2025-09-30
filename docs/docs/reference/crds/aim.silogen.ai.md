@@ -184,7 +184,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `huggingFaceToken` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#secretkeyselector-v1-core)_ | HuggingFaceToken is the token used to access Hugging Face repositories. |  |  |
-| `s3` _[AIMS3Credential](#aims3credential) array_ | S3 contains one or more S3 credential configurations. |  |  |
+| `s3` _[AIMS3Credential](#aims3credential)_ | S3 contains one or more S3 credential configurations. |  |  |
 
 
 #### AIMNamespaceImageConfig

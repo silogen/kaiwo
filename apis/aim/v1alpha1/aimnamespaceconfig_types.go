@@ -50,7 +50,7 @@ type AIMNamespaceCredentials struct {
 	// HuggingFaceToken is the token used to access Hugging Face repositories.
 	HuggingFaceToken *v1.SecretKeySelector `json:"huggingFaceToken,omitempty"`
 	// S3 contains one or more S3 credential configurations.
-	S3 []AIMS3Credential `json:"s3,omitempty"`
+	S3 *AIMS3Credential `json:"s3,omitempty"`
 	//// GCS contains one or more GCS credential configurations.
 	//GCS []AIMGCSCredential `json:"gcs,omitempty"`
 	//// AzureBlob contains one or more Azure Blob credential configurations.
