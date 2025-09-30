@@ -436,8 +436,7 @@ _Appears in:_
 | `model` _string_ | Model is the canonical model name (exact string match), including version/revision.<br />Matches `spec.name` of an AIMClusterModel. Immutable.<br />Example: `meta/llama-3-8b:1.1+20240915` |  | MinLength: 1 <br /> |
 | `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal. Immutable.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
 | `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. Immutable. | auto | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
-| `gpusPerReplica` _integer_ | GpusPerReplica is the total number of GPUs for a single model replica. Immutable. |  | Minimum: 1 <br /> |
-| `gpuModel` _string_ | GpuModel is the physical GPU card model targeted by this template. Immutable. |  | MinLength: 1 <br /> |
+| `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
 | `tensorParallelism` _integer_ | TensorParallelism is the tensor parallel degree expected by the runtime. Immutable. |  | Minimum: 1 <br /> |
 | `warmCache` _boolean_ | WarmCache requests immediate model cache warming in this namespace after profile discovery.<br />Defaults to `false`.<br />When left `false`, services can still request caching via `AIMService.spec.cacheModel: true`. | false |  |
 
@@ -478,7 +477,27 @@ _Appears in:_
 | `Pending` | AIMTemplateStatusPending denotes that the template has been created and discovery has not yet started.<br /> |
 | `Progressing` | AIMTemplateStatusProgressing denotes that discovery and/or cache warm is in progress.<br /> |
 | `Available` | AIMTemplateStatusAvailable denotes that discovery succeeded and, if requested, caches are warmed.<br /> |
+| `Degraded` | AIMTemplateStatusDegraded denotes that the template is non-functional for some reason, for example that the cluster doesn't have the resources specified.<br /> |
 | `Failed` | AIMTemplateStatusFailed denotes a terminal failure for discovery or warm operations.<br /> |
+
+
+#### AimGpuSelector
+
+
+
+
+
+
+
+_Appears in:_
+- [AIMServiceTemplateSpec](#aimservicetemplatespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `count` _integer_ | Count is the number of the GPU resources requested per replica |  | Minimum: 1 <br /> |
+| `model` _string_ | Model is the model name of the GPU that is supported by this template |  | MinLength: 1 <br /> |
+| `computePartitioning` _string_ | ComputePartitioning mode. | spx | Enum: [spx cpx] <br /> |
+| `memoryPartitioning` _string_ | ComputePartitioning mode |  | Enum: [nps1 nps4] <br /> |
 
 
 #### ModelCache

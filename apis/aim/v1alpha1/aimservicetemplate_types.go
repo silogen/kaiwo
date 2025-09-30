@@ -73,15 +73,8 @@ type AIMServiceTemplateSpec struct {
 	// +kubebuilder:validation:Enum=auto;fp4;fp8;fp16;fp32;bf16;int4;int8
 	Precision AIMPrecision `json:"precision"`
 
-	// GpusPerReplica is the total number of GPUs for a single model replica. Immutable.
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="gpusPerReplica is immutable"
-	GpusPerReplica int32 `json:"gpusPerReplica"`
-
-	// GpuModel is the physical GPU card model targeted by this template. Immutable.
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="gpuModel is immutable"
-	GpuModel string `json:"gpuModel"`
+	// AimGpuSelector contains the strategy to choose the resources to give each replica
+	GpuSelector AimGpuSelector `json:"gpuSelector"`
 
 	// TensorParallelism is the tensor parallel degree expected by the runtime. Immutable.
 	// +kubebuilder:validation:Minimum=1
@@ -95,6 +88,26 @@ type AIMServiceTemplateSpec struct {
 	//
 	// +kubebuilder:default=false
 	WarmCache bool `json:"warmCache,omitempty"`
+}
+
+type AimGpuSelector struct {
+	// Count is the number of the GPU resources requested per replica
+	// +kubebuilder:validation:Minimum=1
+	Count int32 `json:"count"`
+
+	// Model is the model name of the GPU that is supported by this template
+	// +kubebuilder:validation:MinLength=1
+	Model string `json:"model"`
+
+	// ComputePartitioning mode.
+	// +kubebuilder:default="spx"
+	// +kubebuilder:validation:Enum=spx;cpx
+	ComputePartitioning string `json:"computePartitioning,omitempty"`
+
+	// ComputePartitioning mode
+	// +kubebuilder:default:"nps1"
+	// +kubebuilder:validation:Enum=nps1;nps4
+	MemoryPartitioning string `json:"memoryPartitioning,omitempty"`
 }
 
 // AIMServiceTemplateStatus defines the observed state of AIMServiceTemplate.
@@ -128,6 +141,8 @@ const (
 	AIMTemplateStatusProgressing AIMTemplateStatusEnum = "Progressing"
 	// AIMTemplateStatusAvailable denotes that discovery succeeded and, if requested, caches are warmed.
 	AIMTemplateStatusAvailable AIMTemplateStatusEnum = "Available"
+	// AIMTemplateStatusDegraded denotes that the template is non-functional for some reason, for example that the cluster doesn't have the resources specified.
+	AIMTemplateStatusDegraded AIMTemplateStatusEnum = "Degraded"
 	// AIMTemplateStatusFailed denotes a terminal failure for discovery or warm operations.
 	AIMTemplateStatusFailed AIMTemplateStatusEnum = "Failed"
 )
