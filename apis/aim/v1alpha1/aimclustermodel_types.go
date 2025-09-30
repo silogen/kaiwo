@@ -18,14 +18,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ClusterModelSpec defines the desired state of ClusterModel
-type ClusterModelSpec struct {
-	// Aim contains the AIM model configuration for this ClusterModel
-	// +kubebuilder:validation:Required
-	Aim AimClusterModelSpec `json:"aim"`
-}
-
-type AimClusterModelSpec struct {
+// AIMClusterModelSpec defines the desired state of AIMClusterModel.
+type AIMClusterModelSpec struct {
 	// Name is the canonical model name (includes version/revision).
 	// Example: `meta/llama-3-8b:1.1+20240915`.
 	// +kubebuilder:validation:MinLength=1
@@ -37,12 +31,12 @@ type AimClusterModelSpec struct {
 	Image string `json:"image"`
 }
 
-// ClusterModelStatus defines the observed state of ClusterModel
-type ClusterModelStatus struct {
+// AIMClusterModelStatus defines the observed state of AIMClusterModel.
+type AIMClusterModelStatus struct {
 	// ObservedGeneration is the most recent generation observed by the controller
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
-	// Conditions represent the latest available observations of the cluster model's state
+	// Conditions represent the latest available observations of the model's state
 	// +listType=map
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
@@ -50,29 +44,27 @@ type ClusterModelStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:scope=Cluster,shortName=clm;clmodel,categories=kaiwo;all
-// +kubebuilder:printcolumn:name="Model Name",type=string,JSONPath=`.spec.aim.name`
-// +kubebuilder:printcolumn:name="Image",type=string,JSONPath=`.spec.aim.image`
+// +kubebuilder:resource:scope=Cluster,shortName=aimclm;aimclmodel,categories=kaiwo;all
+// +kubebuilder:printcolumn:name="Model Name",type=string,JSONPath=`.spec.name`
+// +kubebuilder:printcolumn:name="Image",type=string,JSONPath=`.spec.image`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
-
-// ClusterModel is the Schema for the clustermodels API
-type ClusterModel struct {
+// AIMClusterModel is the Schema for cluster-scoped AIM model catalog entries.
+type AIMClusterModel struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ClusterModelSpec   `json:"spec,omitempty"`
-	Status ClusterModelStatus `json:"status,omitempty"`
+	Spec   AIMClusterModelSpec   `json:"spec,omitempty"`
+	Status AIMClusterModelStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
-
-// ClusterModelList contains a list of ClusterModel
-type ClusterModelList struct {
+// AIMClusterModelList contains a list of AIMClusterModel.
+type AIMClusterModelList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []ClusterModel `json:"items"`
+	Items           []AIMClusterModel `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&ClusterModel{}, &ClusterModelList{})
+	SchemeBuilder.Register(&AIMClusterModel{}, &AIMClusterModelList{})
 }

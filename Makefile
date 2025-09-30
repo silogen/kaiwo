@@ -35,6 +35,7 @@ manifests: controller-gen
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd:maxDescLen=512,allowDangerousTypes=true,generateEmbeddedObjectMeta=true \
 		paths=./apis/kaiwo/v1alpha1/... \
 		paths=./apis/config/v1alpha1/... \
+		paths=./apis/aim/v1alpha1/... \
 		output:crd:artifacts:config=config/crd/bases
 
 .PHONY: generate
@@ -42,6 +43,7 @@ generate: controller-gen
 	@sed 's/^/\/\/ /' .copyright-template > .copyright-template.goheader
 	$(CONTROLLER_GEN) object:headerFile=".copyright-template.goheader" \
 		paths=./apis/kaiwo/v1alpha1/... \
+		paths=./apis/aim/v1alpha1/... \
 		paths=./apis/config/v1alpha1/...
 	@rm .copyright-template.goheader
 	
@@ -273,6 +275,8 @@ generate-crd-docs:
 
 	crd-ref-docs --source-path apis/config/v1alpha1/ --renderer=markdown --output-path=docs/docs/reference/crds/config.kaiwo.silogen.ai.md --config docs/crd-ref-cocs-config.yaml
 	#sed -i '1i---\nhide:\n  - navigation\n---\n' docs/docs/reference/crds/config.kaiwo.silogen.ai.md
+
+	crd-ref-docs --source-path apis/aim/v1alpha1/ --renderer=markdown --output-path=docs/docs/reference/crds/aim.silogen.ai.md --config docs/crd-ref-cocs-config.yaml
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary
