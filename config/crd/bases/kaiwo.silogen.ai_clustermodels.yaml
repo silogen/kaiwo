@@ -59,27 +59,15 @@ spec:
                 description: Aim contains the AIM model configuration for this ClusterModel
                 properties:
                   image:
-                    description: Image is the URI of the image that is used when deploying
-                      this AIM
+                    description: |-
+                      Image is the container image URI for this AIM model.
+                      This image is inspected by the operator to select runtime profiles used by templates.
                     minLength: 1
                     type: string
-                  imagePullSecret:
-                    description: |-
-                      ImagePullSecret references the Secret used to pull the Image, if required
-                      Uses a namespaced Secret reference since this resource is cluster-scoped
-                    properties:
-                      name:
-                        description: name is unique within a namespace to reference
-                          a secret resource.
-                        type: string
-                      namespace:
-                        description: namespace defines the space within which the
-                          secret name must be unique.
-                        type: string
-                    type: object
-                    x-kubernetes-map-type: atomic
                   name:
-                    description: Name is the identifying name of the AIM model
+                    description: |-
+                      Name is the canonical model name (includes version/revision).
+                      Example: `meta/llama-3-8b:1.1+20240915`.
                     minLength: 1
                     type: string
                 required:

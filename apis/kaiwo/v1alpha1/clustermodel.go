@@ -15,7 +15,6 @@
 package v1alpha1
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -27,17 +26,15 @@ type ClusterModelSpec struct {
 }
 
 type AimClusterModelSpec struct {
-	// Name is the identifying name of the AIM model
+	// Name is the canonical model name (includes version/revision).
+	// Example: `meta/llama-3-8b:1.1+20240915`.
 	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 
-	// Image is the URI of the image that is used when deploying this AIM
+	// Image is the container image URI for this AIM model.
+	// This image is inspected by the operator to select runtime profiles used by templates.
 	// +kubebuilder:validation:MinLength=1
 	Image string `json:"image"`
-
-	// ImagePullSecret references the Secret used to pull the Image, if required
-	// Uses a namespaced Secret reference since this resource is cluster-scoped
-	ImagePullSecret *corev1.SecretReference `json:"imagePullSecret,omitempty"`
 }
 
 // ClusterModelStatus defines the observed state of ClusterModel
