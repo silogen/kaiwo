@@ -26,6 +26,7 @@ type ModelCacheSpec struct {
 	// identifier
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="sourceUri is immutable"
+	// +kubebuilder:validation:Pattern=`^(hf|s3)://[^ \t\r\n]+$`
 	SourceURI string `json:"sourceUri"`
 
 	// StorageClassName specifies the storage class for the cache volume
