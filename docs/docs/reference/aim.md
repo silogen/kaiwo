@@ -25,7 +25,7 @@ spec:
 
 ### AIMServiceTemplate
 
-An AIMServiceTemplate is a namespaced and versioned template that selects a runtime profile for a given AIMClusterModel. A template references exactly one model by its canonical name. It defines the metric (`latency` or `throughput`), the numeric precision (for example `auto` [default], `bf16`, `fp16`, `fp8`, `fp32`, `fp4`, `int8`, `int4`), the GPU selector (`gpuSelector` with GPU `count`, target card `model`, and optional partitioning), and `tensorParallelism`. It may also request cache warming through `warmCache`. On creation, the operator inspects the image associated with the referenced model and selects the appropriate runtime profile.
+An AIMServiceTemplate is a namespaced and versioned template that selects a runtime profile for a given AIMClusterModel. A template references exactly one model by its canonical name. It defines the metric (`latency` or `throughput`), the numeric precision (for example `auto` [default], `bf16`, `fp16`, `fp8`, `fp32`, `fp4`, `int8`, `int4`) and the GPU selector (`gpuSelector` with GPU `count`, target card `model`, and optional partitioning). It may also request cache warming through `warmCache`. On creation, the operator inspects the image associated with the referenced model and selects the appropriate runtime profile.
 
 **Observability**
 
@@ -55,7 +55,6 @@ spec:
     model: MI300X
     computePartitioning: spx    # optional (default spx)
     memoryPartitioning: nps1    # optional (default nps1)
-  tensorParallelism: 1
   warmCache: true
 ```
 
@@ -148,7 +147,7 @@ Service status exposes a high‑level phase via `status.status` and detailed con
 ## Lifecycle
 
 1. Publish an AIMClusterModel with the canonical model name and image.
-2. Create an AIMServiceTemplate in the target namespace, referencing the AIMClusterModel by its canonical name and selecting metric, precision, GPUs per replica, GPU model, and tensor parallelism. Optionally set `warmCache: true` to warm immediately after discovery.
+2. Create an AIMServiceTemplate in the target namespace, referencing the AIMClusterModel by its canonical name and selecting metric, precision, GPUs per replica and GPU model. Optionally set `warmCache: true` to warm immediately after discovery.
 3. If cache warming is enabled, caches are created and filled. Templates that resolve to the same source share the same ReadWriteMany cache.
 4. Deploy an AIMService referencing the model and the template. Optionally set `replicas`.
 5. If exposure and routing are enabled, the service is reachable through the namespace’s Gateway instance.
@@ -195,7 +194,6 @@ spec:
   gpuSelector:
     count: 1
     model: MI300X
-  tensorParallelism: 1
   warmCache: true
 ```
 
@@ -214,7 +212,6 @@ spec:
   gpuSelector:
     count: 2
     model: MI325X
-  tensorParallelism: 2
   warmCache: false
 ```
 

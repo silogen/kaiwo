@@ -76,11 +76,6 @@ type AIMServiceTemplateSpec struct {
 	// AimGpuSelector contains the strategy to choose the resources to give each replica
 	GpuSelector AimGpuSelector `json:"gpuSelector"`
 
-	// TensorParallelism is the tensor parallel degree expected by the runtime. Immutable.
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="tensorParallelism is immutable"
-	TensorParallelism int32 `json:"tensorParallelism"`
-
 	// WarmCache requests immediate model cache warming in this namespace after profile discovery.
 	// Defaults to `false`.
 	//

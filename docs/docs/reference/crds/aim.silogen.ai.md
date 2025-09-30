@@ -437,7 +437,6 @@ _Appears in:_
 | `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal. Immutable.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
 | `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. Immutable. | auto | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
 | `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
-| `tensorParallelism` _integer_ | TensorParallelism is the tensor parallel degree expected by the runtime. Immutable. |  | Minimum: 1 <br /> |
 | `warmCache` _boolean_ | WarmCache requests immediate model cache warming in this namespace after profile discovery.<br />Defaults to `false`.<br />When left `false`, services can still request caching via `AIMService.spec.cacheModel: true`. | false |  |
 
 
