@@ -40,6 +40,4 @@ find config/static -name '*.yaml' -print0 | xargs -0 -n1 kubectl apply -f
 
 kubectl apply -f config/webhook_local_dev/webhooks.yaml
 
-#kubectl apply -f test/kaiwoconfig.yaml
-
 echo "You can now run debugger in your IDE"
