@@ -140,7 +140,10 @@ func (wr *Reconciler) observeOverallStatus(ctx context.Context) (v1alpha1.Worklo
 			return "", nil, fmt.Errorf("failed to observe storage status: %w", err)
 		}
 
-		conditions = append(conditions, storageConditions...)
+		// Use SetStatusCondition to avoid duplicates
+		for _, condition := range storageConditions {
+			meta.SetStatusCondition(&conditions, condition)
+		}
 
 		// Only enter DOWNLOADING status if there are actual downloads configured
 		hasDownloads := wr.WorkloadHandler.Workload.GetCommonSpec().Storage.HasDownloads()
@@ -172,7 +175,13 @@ func (wr *Reconciler) observeOverallStatus(ctx context.Context) (v1alpha1.Worklo
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to observe workload status: %w", err)
 	}
-	return workloadStatus, append(conditions, workloadConditions...), nil
+
+	// Use SetStatusCondition to avoid duplicates
+	for _, condition := range workloadConditions {
+		meta.SetStatusCondition(&conditions, condition)
+	}
+
+	return workloadStatus, conditions, nil
 }
 
 // handleStatusTransition handles a new status by emitting events and updating the status object

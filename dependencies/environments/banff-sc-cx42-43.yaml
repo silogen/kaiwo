@@ -1,0 +1,9 @@
+gpuType: amd
+nfs:
+  persistence:
+    enabled: true
+  storage:
+    # TODO: Change the values below for your own cluster
+    nodeName: banff-sc-cx42-38
+    hostPath: /mnt/nvme1/nfs
+    size: 500Gi

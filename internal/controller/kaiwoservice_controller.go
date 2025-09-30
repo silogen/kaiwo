@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/silogen/kaiwo/pkg/workloads/common"
@@ -27,6 +28,7 @@ import (
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -89,6 +91,9 @@ func (r *KaiwoServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		WithEventFilter(predicate.ResourceVersionChangedPredicate{}). // Catch status changes as well
 		For(&kaiwo.KaiwoService{}).
+		Owns(&batchv1.Job{},
+			builder.WithPredicates(JobStatusChangedPredicate()),
+		).
 		Owns(&appsv1.Deployment{}).
 		Owns(&rayv1.RayService{}).
 		Owns(&appwrapperv1beta2.AppWrapper{}).

@@ -17,6 +17,6 @@ spec:
     sleep 1
   storage:
     storageEnabled: true
-    storageClassName: "nfs-client"
+    storageClassName: "rwx-nfs"
     data:
       storageSize: "1Mi"

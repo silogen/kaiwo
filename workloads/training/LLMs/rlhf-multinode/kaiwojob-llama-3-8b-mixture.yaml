@@ -6,7 +6,7 @@ spec:
   user: test@amd.com
   gpus: 12
   ray: true
-  image: ghcr.io/silogen/rocm-ray:v0.8
+  image: ghcr.io/silogen/rocm-ray:6.3
   entrypoint: |
     python3 -m openrlhf.cli.train_ppo_ray \
     --ref_num_nodes 1 \
@@ -53,7 +53,7 @@ spec:
         key: hf-token
   storage:
     storageEnabled: true
-    storageClassName: multinode
+    storageClassName: rwx-nfs
     huggingFace:
       storageSize: "100Gi"
       mountPath: "/hf_cache" # Also sets the env var HF_HOME to this value in each container

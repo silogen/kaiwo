@@ -37,6 +37,12 @@ else
   echo "Skipping standard dependency installation"
 fi
 
+# Add topology labels for kueue
+kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 kaiwo/topology-rack=rack-a --overwrite
+kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 kaiwo/topology-block=block-a --overwrite
+kubectl label node "$TEST_NAME"-worker3 "$TEST_NAME"-worker4 kaiwo/topology-rack=rack-b --overwrite
+kubectl label node "$TEST_NAME"-worker3 "$TEST_NAME"-worker4 kaiwo/topology-block=block-b --overwrite
+
 # Add fake-gpu-operator
 kubectl create ns gpu-operator
 kubectl label ns gpu-operator pod-security.kubernetes.io/enforce=privileged 

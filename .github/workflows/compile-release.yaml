@@ -16,6 +16,8 @@ jobs:
       uses: actions/setup-go@v4
       with:
         go-version: '1.21'
+    - name: Set up Helm
+      uses: azure/setup-helm@v4.3.0
 
     - name: Extract version from tag
       shell: bash
@@ -55,6 +57,14 @@ jobs:
         make build-installer TAG=${{ env.VERSION }}
         cp dist/install.yaml install.yaml
 
+    - name: Package Helm chart
+      run: |
+        make helm-release TAG=${{ env.VERSION }} CHART_VERSION=${{ env.VERSION }}
+
+    - name: Push Helm chart to OCI registry
+      run: |
+        echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u $GITHUB_ACTOR --password-stdin
+        make helm-push-oci TAG=${{ env.VERSION }} CHART_VERSION=${{ env.VERSION }}
 
     - name: Upload install.yaml artifact
       uses: actions/upload-artifact@v4
@@ -62,6 +72,11 @@ jobs:
         name: install-yaml
         path: install.yaml
 
+    - name: Upload Helm chart artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: helm-chart
+        path: dist/kaiwo-operator-*.tgz
 
     - name: Create draft release and upload assets
       uses: softprops/action-gh-release@v2
@@ -70,9 +85,36 @@ jobs:
           builds/*
           workloads.zip
           install.yaml
+          dist/kaiwo-operator-*.tgz
         token: '${{ secrets.GITHUB_TOKEN }}'
         draft: true
         prerelease: true
+        body: |
+          ## Installation
+
+          ### Kubernetes Install (kubectl)
+          ```bash
+          kubectl apply -f https://github.com/${{ github.repository }}/releases/download/${{ env.VERSION }}/install.yaml --server-side
+          ```
+
+          ### Helm Install (from GitHub Releases)
+          ```bash
+          curl -L https://github.com/${{ github.repository }}/releases/download/${{ env.VERSION }}/kaiwo-operator-${{ env.VERSION }}.tgz -o kaiwo-operator.tgz
+          helm install kaiwo kaiwo-operator.tgz --namespace kaiwo-system --create-namespace
+          ```
+
+          ### Helm Install (from OCI Registry)
+          ```bash
+          helm install kaiwo oci://ghcr.io/${{ github.repository_owner }}/kaiwo-operator \
+            --version ${{ env.VERSION }} --namespace kaiwo-system --create-namespace
+          ```
+
+          ### Docker Images
+          - Operator: `ghcr.io/${{ github.repository_owner }}/kaiwo-operator:${{ env.VERSION }}`
+
+          ## What's Changed
+
+          *Fill in release notes...*
   # sync-to-cluster-forge:
   #   runs-on: ubuntu-latest
   #   needs: build

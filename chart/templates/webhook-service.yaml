@@ -1,0 +1,19 @@
+{{- if .Values.webhooks.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ printf "%s-webhook-service" .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kaiwo.labels" . | nindent 4 }}
+    control-plane: kaiwo-controller-manager
+spec:
+  ports:
+    - name: https
+      port: 443
+      targetPort: webhook-server   # matches containerPort name in the Deployment
+      protocol: TCP
+  selector:
+    {{- include "kaiwo.selectorLabels" . | nindent 4 }}
+    control-plane: kaiwo-controller-manager
+{{- end }}

@@ -18,6 +18,7 @@ import (
 	"context"
 	"strconv"
 	"strings"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -83,22 +84,29 @@ func GetNodeResources(ctx context.Context, c client.Client) []NodeResourceInfo {
 }
 
 func LabelNode(ctx context.Context, c client.Client, nodeName, key, value string) error {
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		var node corev1.Node
-		err := c.Get(ctx, client.ObjectKey{Name: nodeName}, &node)
-		if err != nil {
-			return err
-		}
+    cctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    defer cancel()
 
-		// Add or update the label
-		if node.Labels == nil {
-			node.Labels = make(map[string]string)
-		}
-		node.Labels[key] = value
+    return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+        var node corev1.Node
+        if err := c.Get(cctx, client.ObjectKey{Name: nodeName}, &node); err != nil {
+            return err
+        }
 
-		return c.Update(ctx, &node)
-	})
+        if node.Labels != nil && node.Labels[key] == value {
+            return nil
+        }
+
+        base := node.DeepCopy()
+        if node.Labels == nil {
+            node.Labels = make(map[string]string)
+        }
+        node.Labels[key] = value
+
+        return c.Patch(cctx, &node, client.MergeFrom(base))
+    })
 }
+
 
 func TaintNode(ctx context.Context, client client.Client, nodeName string, taint corev1.Taint) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {

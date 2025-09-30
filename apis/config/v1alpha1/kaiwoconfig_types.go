@@ -30,7 +30,7 @@ type KaiwoConfigSpec struct {
 
 	// Storage defines the storage-specific settings
 	// +kubebuilder:default={}
-	Storage KaiwoStorageConfig `json:"data,omitempty"`
+	Storage KaiwoStorageConfig `json:"storage,omitempty"`
 
 	// Nodes defines the node configuration settings
 	// +kubebuilder:default={}

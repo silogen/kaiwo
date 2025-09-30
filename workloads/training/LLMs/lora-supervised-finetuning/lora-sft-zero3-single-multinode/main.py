@@ -62,6 +62,7 @@ OPTIM_EPS = 1e-8
 NUM_WARMUP_STEPS = 10
 OPTIM_WEIGHT_DECAY = 0.0
 ATTENTION_LAYER_NAME = "self_attn"
+NUM_GPUS = int(os.getenv("NUM_GPUS"))
 
 
 def load_gsm8k_dataset():
@@ -413,14 +414,14 @@ def training_function(kwargs: dict):
     ):
         lr_scheduler = get_linear_schedule_with_warmup(
             optimizer=optimizer,
-            num_warmup_steps=NUM_WARMUP_STEPS * args.num_devices,
-            num_training_steps=total_training_steps * args.num_devices,
+            num_warmup_steps=NUM_WARMUP_STEPS * NUM_GPUS,
+            num_training_steps=total_training_steps * NUM_GPUS,
         )
     else:
         lr_scheduler = DummyScheduler(
             optimizer,
-            warmup_num_steps=NUM_WARMUP_STEPS * args.num_devices,
-            total_num_steps=total_training_steps * args.num_devices,
+            warmup_num_steps=NUM_WARMUP_STEPS * NUM_GPUS,
+            total_num_steps=total_training_steps * NUM_GPUS,
         )
 
     # Prepare everything
@@ -778,7 +779,7 @@ def main():
             ),
         ),
         scaling_config=train.ScalingConfig(
-            num_workers=args.num_devices,
+            num_workers=NUM_GPUS,
             use_gpu=True,
             resources_per_worker={"GPU": 1},
         ),

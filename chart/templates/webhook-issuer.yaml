@@ -1,0 +1,11 @@
+{{- if .Values.webhooks.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ printf "%s-selfsigned-issuer" .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kaiwo.labels" . | nindent 4 }}
+spec:
+  selfSigned: {}
+{{- end }}

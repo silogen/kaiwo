@@ -16,7 +16,7 @@ spec:
   entrypoint: cat /workload/s3/file01.html
   storage:
     storageEnabled: true
-    storageClassName: "nfs-client"
+    storageClassName: rwx-nfs
     data:
       storageSize: "1Gi"
       mountPath: "/workload"

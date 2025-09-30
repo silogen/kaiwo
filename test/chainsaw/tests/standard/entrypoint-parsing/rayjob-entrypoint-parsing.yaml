@@ -19,7 +19,7 @@ spec:
     --delay 0.5
   storage:
     storageEnabled: true
-    storageClassName: "nfs-client"
+    storageClassName: rwx-nfs
     data:
       storageSize: 10Mi
       mountPath: /workload
