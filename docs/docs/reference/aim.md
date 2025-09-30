@@ -25,11 +25,11 @@ spec:
 
 ### AIMServiceTemplate
 
-An AIMServiceTemplate is a namespaced and versioned template that selects a runtime profile for a given AIMClusterModel. A template references exactly one model by its canonical name. It defines the metric (latency or throughput), precision (for example bf16 or fp16), GPUs per replica, a single target GPU model, and tensor parallelism. It may also request cache warming through `warmCache`. On creation, the operator inspects the image associated with the referenced model and selects the appropriate runtime profile.
+An AIMServiceTemplate is a namespaced and versioned template that selects a runtime profile for a given AIMClusterModel. A template references exactly one model by its canonical name. It defines the metric (`latency` or `throughput`), the numeric precision (for example `auto` [default], `bf16`, `fp16`, `fp8`, `fp32`, `fp4`, `int8`, `int4`), the GPU selector (`gpuSelector` with GPU `count`, target card `model`, and optional partitioning), and `tensorParallelism`. It may also request cache warming through `warmCache`. On creation, the operator inspects the image associated with the referenced model and selects the appropriate runtime profile.
 
 **Observability**
 
-Template status includes a high‑level `status` field with values Pending, Progressing, Available, or Failed. Conditions provide detail:
+Template status includes a high‑level `status` field with values Pending, Progressing, Available, Degraded, or Failed. Conditions provide detail:
 
 - Discovered: runtime profiles and sources have been resolved for the model.
 - CacheWarm: requested caches are warmed in the namespace.
@@ -37,6 +37,27 @@ Template status includes a high‑level `status` field with values Pending, Prog
 - Progressing and Failure: processing state and terminal failure, respectively.
 
 - Common reasons include AwaitingDiscovery, ProfilesDiscovered, DiscoveryFailed, WarmRequested, Warming, Warm, and WarmFailed. Inspect with `kubectl describe aimservicetemplate <name>`.
+
+Example:
+
+```yaml
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMServiceTemplate
+metadata:
+  name: llama3-8b-mi300x-latency-v1
+  namespace: my-llm
+spec:
+  model: meta/llama-3-8b:1.1+20240915
+  metric: latency
+  precision: bf16
+  gpuSelector:
+    count: 1
+    model: MI300X
+    computePartitioning: spx    # optional (default spx)
+    memoryPartitioning: nps1    # optional (default nps1)
+  tensorParallelism: 1
+  warmCache: true
+```
 
 ### ModelCache
 
@@ -62,7 +83,7 @@ Cache status includes a coarse state (Pending, Progressing, Available, Failed) a
 
 ### AIMNamespaceConfig
 
-AIMNamespaceConfig is a namespaced configuration that carries credentials and routing settings. It references the ABC!!! instance to use for exposure and routing in the namespace. The operator can create or link the Gateway instance according to this configuration.
+AIMNamespaceConfig is a namespaced configuration that carries credentials and routing settings. It references the Gateway instance to use for exposure and routing in the namespace. The operator can create or link the Gateway instance according to this configuration.
 
 Example (admin‑managed Gateway, default route auto‑creation):
 ```yaml
@@ -102,7 +123,7 @@ This configuration is spec‑only and does not expose a status section. Use `kub
 
 ### AIMService
 
-Users deploy services by binding a model to a template through `AIMService`. The spec references the canonical model and a namespaced template, uses the namespace’s `AIMNamespaceConfig` (via `spec.configRef`, default `default`), and may override the number of replicas. If the template does not warm caches, a service can still request caching with `spec.cacheModel: true` (default). Deployments are implemented with KServe.
+Users deploy services by binding a model to a template through `AIMService`. The spec references the canonical model and a namespaced template. It also selects the namespace’s `AIMNamespaceConfig` via `spec.configRef` (default `default`) for routing and credentials, and may override the number of replicas. If the template does not warm caches, a service can still request caching with `spec.cacheModel: true` (default). Deployments are implemented with KServe.
 
 Example:
 
@@ -116,6 +137,7 @@ spec:
   model: meta/llama-3-8b:1.1+20240915
   templateRef: llama3-8b-mi300x-latency-v1
   cacheModel: true
+  configRef: default
   replicas: 2
 ```
 
@@ -170,8 +192,9 @@ spec:
   model: meta/llama-3-8b:1.1+20240915
   metric: latency
   precision: bf16
-  gpusPerReplica: 1
-  gpuModel: MI300X
+  gpuSelector:
+    count: 1
+    model: MI300X
   tensorParallelism: 1
   warmCache: true
 ```
@@ -188,8 +211,9 @@ spec:
   model: qwen-ai/qwen2-7b:2.0+20240915
   metric: throughput
   precision: bf16
-  gpusPerReplica: 2
-  gpuModel: MI325X
+  gpuSelector:
+    count: 2
+    model: MI325X
   tensorParallelism: 2
   warmCache: false
 ```
