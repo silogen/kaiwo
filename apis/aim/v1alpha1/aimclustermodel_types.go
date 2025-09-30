@@ -44,7 +44,7 @@ type AIMClusterModelStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:scope=Cluster,shortName=aimclm;aimclmodel,categories=kaiwo;all
+// +kubebuilder:resource:scope=Cluster,shortName=aimclm;aimclmodel,categories=aim;all
 // +kubebuilder:printcolumn:name="Model Name",type=string,JSONPath=`.spec.name`
 // +kubebuilder:printcolumn:name="Image",type=string,JSONPath=`.spec.image`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`

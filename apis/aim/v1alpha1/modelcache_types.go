@@ -25,14 +25,14 @@ type ModelCacheSpec struct {
 	// SourceURI is the source of the model to be downloaded. This is the only
 	// identifier
 	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:XValidation:rule="self.sourceUri == oldSelf.sourceUri",message="sourceUri is immutable"
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="sourceUri is immutable"
 	SourceURI string `json:"sourceUri"`
 
 	// StorageClassName specifies the storage class for the cache volume
 	StorageClassName string `json:"storageClassName,omitempty"`
 
 	// Size specifies the size of the cache volume
-	// +kubebuilder:validation:XValidation:rule="quantity(self.size) > quantity('0')",message="size must be greater than 0"
+	// +kubebuilder:validation:XValidation:rule="self > quantity('0')",message="size must be greater than 0"
 	Size resource.Quantity `json:"size"`
 
 	// Env lists the environment variables required to download the model into the cache
@@ -121,7 +121,7 @@ const (
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:shortName=mc,categories=kaiwo;all
+// +kubebuilder:resource:shortName=mc,categories=aim;all
 // +kubebuilder:printcolumn:name="Cache Size",type=string,JSONPath=`.spec.size`
 // +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.status`
 // +kubebuilder:printcolumn:name="PVC",type=string,JSONPath=`.status.persistentVolumeClaim`

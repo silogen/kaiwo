@@ -10,14 +10,13 @@ An AIMClusterModel is a cluster‑scoped catalog entry that maps a canonical mod
 
 Example:
 ```yaml
-apiVersion: kaiwo.silogen.ai/v1alpha1
+apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMClusterModel
 metadata:
   name: llama3-8b
 spec:
-  aim:
-    name: meta/llama-3-8b:1.2.1
-    image: ghcr.io/example/aim/llama3-8b:v1.1
+  name: meta/llama-3-8b:1.2.1
+  image: ghcr.io/example/aim/llama3-8b:v1.1
 ```
 
 ### AIMServiceTemplate
@@ -42,7 +41,7 @@ ModelCache represents a cache for a single source such as a Hugging Face reposit
 Example:
 
 ```yaml
-apiVersion: kaiwo.silogen.ai/v1alpha1
+apiVersion: aim.silogen.ai/v1alpha1
 kind: ModelCache
 metadata:
   name: llama3-8b-weights
@@ -59,35 +58,38 @@ Cache status includes a coarse state (Pending, Progressing, Available, Failed) a
 
 ### AIMNamespaceConfig
 
-AIMNamespaceConfig is a namespaced configuration that carries credentials (via Secret references) and routing settings. It references the KGateway instance to use for exposure and routing in the namespace. The operator can create or link the KGateway instance according to this configuration.
+AIMNamespaceConfig is a namespaced configuration that carries credentials and routing settings. It references the ABC!!! instance to use for exposure and routing in the namespace. The operator can create or link the Gateway instance according to this configuration.
 
-Example:
+Example (admin‑managed Gateway, default route auto‑creation):
 ```yaml
-apiVersion: config.kaiwo.silogen.ai/v1alpha1
+apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMNamespaceConfig
 metadata:
   name: default
   namespace: my-llm
 spec:
-  gateway:
-    name: kgw-default
-    namespace: gateway-system
   credentials:
     huggingFaceToken:
-      secretName: hf-creds
-      secretKey: token
+      name: hf-creds
+      key: token
     s3:
       - endpointUrl: https://s3.us-east-1.amazonaws.com
         accessKeyId:
-          secretName: s3-creds
-          secretKey: accessKeyId
+          name: s3-creds
+          key: accessKeyId
         secretAccessKey:
-          secretName: s3-creds
-          secretKey: secretAccessKey
+          name: s3-creds
+          key: secretAccessKey
   images:
     imagePullSecrets:
       - my-regcred
       - another-secret
+  routing:
+    gateway:
+      name: kgw-default
+      namespace: gateway-system
+      sectionName: http
+    autoCreateRoute: true
 ```
 
 **Observability**
@@ -96,12 +98,12 @@ This configuration is spec‑only and does not expose a status section. Use `kub
 
 ### AIMService
 
-Users deploy services by binding a model to a template through `AIMService`. The spec references the canonical model and a namespaced template and may override the number of replicas. If the template does not warm caches, a service can still request caching with `spec.cacheModel: true` (default). Deployments are implemented with KServe.
+Users deploy services by binding a model to a template through `AIMService`. The spec references the canonical model and a namespaced template, uses the namespace’s `AIMNamespaceConfig` (via `spec.configRef`, default `default`), and may override the number of replicas. If the template does not warm caches, a service can still request caching with `spec.cacheModel: true` (default). Deployments are implemented with KServe.
 
 Example:
 
 ```yaml
-apiVersion: kaiwo.silogen.ai/v1alpha1
+apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMService
 metadata:
   name: llama3-8b-svc
@@ -123,11 +125,11 @@ Service status exposes a high‑level phase via `status.status` and detailed con
 2. Create an AIMServiceTemplate in the target namespace, referencing the AIMClusterModel by its canonical name and selecting use case, precision, GPUs per replica, GPU model, and tensor parallelism. Optionally set `warmCache: true` to warm immediately after discovery.
 3. If cache warming is enabled, caches are created and filled. Templates that resolve to the same source share the same ReadWriteMany cache.
 4. Deploy an AIMService referencing the model and the template. Optionally set `replicas`.
-5. If exposure and routing are enabled, the service is reachable through the namespace’s KGateway instance.
+5. If exposure and routing are enabled, the service is reachable through the namespace’s Gateway instance.
 
 ## Exposure and Routing
 
-When exposure and routing are enabled, requests are routed through the KGateway instance configured for the namespace. The default path structure includes the namespace and a workload identifier: `/<namespace>/<workload_id>/`. For example:
+When exposure and routing are enabled, requests are routed through the Gateway instance configured for the namespace. The default path structure includes the namespace and a workload identifier: `/<namespace>/<workload_id>/`. For example:
 
 ```bash
 curl -s -X POST \
@@ -135,6 +137,10 @@ curl -s -X POST \
   -H "Content-Type: application/json" \
   -d '{"model": "meta/llama-3-8b", "messages": [{"role": "user", "content": "Hello"}]}'
 ```
+
+### Routing
+
+For each AIMService, the operator creates an HTTPRoute that attaches to the Gateway specified in the namespace’s AIMNamespaceConfig. Routes use path-based matching with the prefix `/<namespace>/<workload_id>/`, where `workload_id` is a unique identifier generated for the service. This enables stable, namespaced endpoints while keeping service-specific paths distinct.
 
 ## GPU Scheduling
 
@@ -151,7 +157,7 @@ ROCm 7 on worker nodes with the AMD GPU Operator installed, KServe available in 
 Latency‑optimized on MI300X:
 
 ```yaml
-apiVersion: kaiwo.silogen.ai/v1alpha1
+apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMServiceTemplate
 metadata:
   name: llama3-8b-mi300x-latency-v1
@@ -169,7 +175,7 @@ spec:
 Throughput‑optimized on MI325X:
 
 ```yaml
-apiVersion: kaiwo.silogen.ai/v1alpha1
+apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMServiceTemplate
 metadata:
   name: qwen2-7b-mi325x-throughput-v1
@@ -187,7 +193,7 @@ spec:
 ### AIMService example
 
 ```yaml
-apiVersion: kaiwo.silogen.ai/v1alpha1
+apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMService
 metadata:
   name: llama3-8b-svc

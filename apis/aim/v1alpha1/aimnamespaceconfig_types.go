@@ -17,32 +17,15 @@ package v1alpha1
 import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
 )
-
-// SecretValueReference references a key within a Kubernetes Secret.
-//
-// Example:
-//
-// ```yaml
-// secretName: hf-creds
-// secretKey: token
-// ```
-
-// GatewayRef identifies a KGateway instance the namespace should use for exposure and routing.
-// The operator can create or link to this instance according to policy.
-type GatewayRef struct {
-	// Name is the name of the gateway object.
-	Name string `json:"name,omitempty"`
-	// Namespace is the namespace where the gateway object resides.
-	Namespace string `json:"namespace,omitempty"`
-}
 
 // AIMS3Credential configures S3 credential references for a specific endpoint.
 // Provide an endpoint and secret references for authentication.
 type AIMS3Credential struct {
-	EndpointUrl     string             `json:"endpointUrl,omitempty"`
-	AccessKeyId     v1.SecretReference `json:"accessKeyId,omitempty"`
-	SecretAccessKey v1.SecretReference `json:"secretAccessKey,omitempty"`
+	EndpointURL     string               `json:"endpointUrl,omitempty"`
+	AccessKeyID     v1.SecretKeySelector `json:"accessKeyId,omitempty"`
+	SecretAccessKey v1.SecretKeySelector `json:"secretAccessKey,omitempty"`
 }
 
 //// AIMGCSCredential configures a GCS service account credential reference.
@@ -60,7 +43,7 @@ type AIMS3Credential struct {
 // One or more providers can be configured.
 type AIMNamespaceCredentials struct {
 	// HuggingFaceToken is the token used to access Hugging Face repositories.
-	HuggingFaceToken *v1.SecretReference `json:"huggingFaceToken,omitempty"`
+	HuggingFaceToken *v1.SecretKeySelector `json:"huggingFaceToken,omitempty"`
 	// S3 contains one or more S3 credential configurations.
 	S3 []AIMS3Credential `json:"s3,omitempty"`
 	//// GCS contains one or more GCS credential configurations.
@@ -88,42 +71,34 @@ type AIMNamespaceImageConfig struct {
 }
 
 // AIMNamespaceConfigSpec defines the desired configuration for an AIM-enabled namespace.
-//
-// - `gateway`: KGateway instance to use for exposure and routing
-// - `credentials`: secret references for model sources and caches (HF/S3/GCS/Azure)
-//
-// Example:
-//
-// ```yaml
-// gateway:
-//
-//	name: kgw-default
-//	namespace: gateway-system
-//
-// credentials:
-//
-//	huggingFaceToken:
-//	  secretName: hf-creds
-//	  secretKey: token
-//	s3:
-//	  - endpointUrl: https://s3.us-east-1.amazonaws.com
-//	    accessKeyId: { secretName: s3-creds, secretKey: accessKeyId }
-//	    secretAccessKey: { secretName: s3-creds, secretKey: secretAccessKey }
-//
-// ```
 type AIMNamespaceConfigSpec struct {
-	// Gateway references the KGateway instance to use for exposure and routing.
-	Gateway GatewayRef `json:"gateway,omitempty"`
 	// Credentials provide secret references used during model access and caching.
 	Credentials AIMNamespaceCredentials `json:"credentials,omitempty"`
 
 	// Images configures image pull behavior for AIM images within this namespace.
 	Images AIMNamespaceImageConfig `json:"images,omitempty"`
+
+	// Routing controls automatic HTTPRoute creation for AIM services in this namespace.
+	// When enabled (default), the operator creates one HTTPRoute per service using
+	// path-based routing with the pattern `/<namespace>/<workload_id>/` and attaches
+	// it to the referenced Gateway listener.
+	Routing AIMNamespaceRoutingConfig `json:"routing,omitempty"`
+}
+
+// AIMNamespaceRoutingConfig controls automatic HTTPRoute provisioning in the namespace.
+type AIMNamespaceRoutingConfig struct {
+	// Gateway references the Gateway listener to use for exposure and routing
+	// (mirrors HTTPRoute.parentRefs[*]).
+	Gateway gatewayapi.ParentReference `json:"gateway,omitempty"`
+
+	// AutoCreateRoute enables automatic HTTPRoute creation for AIM services.
+	// +kubebuilder:default=true
+	AutoCreateRoute bool `json:"autoCreateRoute,omitempty"`
 }
 
 // +kubebuilder:object:root=true
-// +kubebuilder:resource:scope=Namespaced,shortName=aimns,categories=kaiwo;all
-// +kubebuilder:printcolumn:name="Gateway",type=string,JSONPath=`.spec.gateway.name`
+// +kubebuilder:resource:scope=Namespaced,shortName=aimns,categories=aim;all
+// +kubebuilder:printcolumn:name="Gateway",type=string,JSONPath=`.spec.routing.gateway.name`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // AIMNamespaceConfig configures credentials and routing for a namespace.
 // It is namespaced and typically created by a tenant administrator.

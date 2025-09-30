@@ -34,35 +34,13 @@ type AIMPrecision string
 
 // AIMServiceTemplateSpec defines the desired state of AIMServiceTemplate.
 //
-// A namespaced, versioned, immutable template that selects a runtime profile
+// A namespaced and versioned template that selects a runtime profile
 // for a given AIM model (by canonical name). Templates are intentionally
 // narrow: they describe runtime selection knobs for the AIM container and do
 // not redefine the full Kubernetes deployment shape.
-//
-// Example:
-//
-// ```yaml
-// apiVersion: kaiwo.silogen.ai/v1alpha1
-// kind: AIMServiceTemplate
-// metadata:
-//
-//	name: llama3-8b-mi300x-latency-v1
-//	namespace: my-llm
-//
-// spec:
-//
-//	model: meta/llama-3-8b:1.1+20240915
-//	useCase: latency
-//	precision: bf16
-//	gpusPerReplica: 1
-//	gpuModel: MI300X
-//	tensorParallelism: 1
-//	warmCache: true
-//
-// ```
 type AIMServiceTemplateSpec struct {
 	// Model is the canonical model name (exact string match), including version/revision.
-	// Typically matches `spec.aim.name` of an AIMClusterModel. Immutable.
+	// Matches `spec.name` of an AIMClusterModel. Immutable.
 	//
 	// Example: `meta/llama-3-8b:1.1+20240915`
 	//
@@ -183,7 +161,7 @@ const (
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:shortName=aimst,categories=kaiwo;all
+// +kubebuilder:resource:shortName=aimst,categories=aim;all
 // +kubebuilder:printcolumn:name="Model",type=string,JSONPath=`.spec.model`
 // +kubebuilder:printcolumn:name="UseCase",type=string,JSONPath=`.spec.useCase`
 // +kubebuilder:printcolumn:name="Precision",type=string,JSONPath=`.spec.precision`

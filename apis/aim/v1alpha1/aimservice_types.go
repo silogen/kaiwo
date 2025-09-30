@@ -25,7 +25,7 @@ import (
 // number of replicas is overrideable here.
 type AIMServiceSpec struct {
 	// Model is the canonical model name (including version/revision) to deploy.
-	// Expected to match the `spec.aim.name` of an AIMClusterModel. Example:
+	// Expected to match the `spec.name` of an AIMClusterModel. Example:
 	// `meta/llama-3-8b:1.1+20240915`.
 	// +kubebuilder:validation:MinLength=1
 	Model string `json:"model"`
@@ -44,7 +44,14 @@ type AIMServiceSpec struct {
 
 	// Replicas overrides the number of replicas for this service.
 	// Other runtime settings remain governed by the template.
+	// +kubebuilder:default=1
 	Replicas *int32 `json:"replicas,omitempty"`
+
+	// ConfigRef selects the AIMNamespaceConfig (by name) to use for this service.
+	// The default value is "default". The referenced AIMNamespaceConfig must
+	// reside in the same namespace as the service.
+	// +kubebuilder:default=default
+	ConfigRef string `json:"configRef,omitempty"`
 }
 
 // AIMServiceStatus defines the observed state of AIMService.
@@ -57,14 +64,14 @@ type AIMServiceStatus struct {
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// Status represents the current high‑level status of the template lifecycle.
-	// Values: `Pending`, `Progressing`, `Available`, `Failed`.
+	// Status represents the current high‑level status of the service lifecycle.
+	// Values: `Pending`, `Starting`, `Running`, `Failed`, `Degraded`.
 	// +kubebuilder:default=Pending
 	Status AIMServiceStatusEnum `json:"status,omitempty"`
 }
 
 // AIMServiceStatusEnum defines coarse-grained states for a service.
-// +kubebuilder:validation:Enum=Pending;Starting;Running;Failed
+// +kubebuilder:validation:Enum=Pending;Starting;Running;Failed;Degraded
 type AIMServiceStatusEnum string
 
 const (
@@ -135,7 +142,7 @@ const (
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:shortName=aimsvc,categories=kaiwo;all
+// +kubebuilder:resource:shortName=aimsvc,categories=aim;all
 // +kubebuilder:printcolumn:name="Model",type=string,JSONPath=`.spec.model`
 // +kubebuilder:printcolumn:name="Template",type=string,JSONPath=`.spec.templateRef`
 // +kubebuilder:printcolumn:name="Replicas",type=integer,JSONPath=`.spec.replicas`
