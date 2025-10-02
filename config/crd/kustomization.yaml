@@ -6,6 +6,16 @@ resources:
 - bases/kaiwo.silogen.ai_kaiwoservices.yaml
 - bases/kaiwo.silogen.ai_kaiwoqueueconfigs.yaml
 - bases/config.kaiwo.silogen.ai_kaiwoconfigs.yaml
+- bases/config.kaiwo.silogen.ai_aimnamespaceconfigs.yaml
+- bases/aim.silogen.ai_aimimages.yaml
+- bases/aim.silogen.ai_aimclusterimages.yaml
+- bases/aim.silogen.ai_aimclusterconfigs.yaml
+- bases/aim.silogen.ai_aimclusterservicetemplates.yaml
+- bases/aim.silogen.ai_aimservicetemplates.yaml
+- bases/aim.silogen.ai_aimservices.yaml
+- bases/aim.silogen.ai_aimnamespaceconfigs.yaml
+- bases/aim.silogen.ai_aimtemplatecaches.yaml
+- bases/aim.silogen.ai_modelcaches.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches: null
