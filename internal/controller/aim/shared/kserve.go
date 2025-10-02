@@ -50,7 +50,6 @@ type ServingRuntimeSpec struct {
 	Namespace string
 	ModelID   string
 	Image     string
-	Metric    *aimv1alpha1.AIMMetric
 	OwnerRef  metav1.OwnerReference
 }
 

@@ -100,9 +100,9 @@ func (r *AIMClusterServiceTemplateReconciler) Reconcile(ctx context.Context, req
 
 // clusterTemplateObservation holds observed state
 type clusterTemplateObservation struct {
-	Runtime     *servingv1alpha1.ClusterServingRuntime
-	Job         *batchv1.Job
-	ImageExists bool
+	Runtime *servingv1alpha1.ClusterServingRuntime
+	Job     *batchv1.Job
+	Image   string // Container image from AIMClusterImage
 }
 
 // observe gathers current cluster state (read-only)
@@ -125,8 +125,12 @@ func (r *AIMClusterServiceTemplateReconciler) observe(ctx context.Context, templ
 	}
 	obs.Job = job
 
-	// TODO: Check if image exists in catalog (AIMClusterImage lookup)
-	obs.ImageExists = true
+	// Lookup image from AIMClusterImage catalog
+	image, err := shared.LookupImageForClusterTemplate(ctx, r.Client, template.Spec.ModelID)
+	if err != nil {
+		return nil, err
+	}
+	obs.Image = image
 
 	return obs, nil
 }
@@ -134,6 +138,11 @@ func (r *AIMClusterServiceTemplateReconciler) observe(ctx context.Context, templ
 // plan computes desired state (pure function)
 func (r *AIMClusterServiceTemplateReconciler) plan(_ context.Context, template *aimv1alpha1.AIMClusterServiceTemplate, obs *clusterTemplateObservation) ([]client.Object, error) {
 	var desired []client.Object
+
+	// If no image found, return empty desired state (will be handled in status projection)
+	if obs.Image == "" {
+		return desired, nil
+	}
 
 	// Owner reference for all created objects
 	ownerRef := metav1.OwnerReference{
@@ -149,7 +158,7 @@ func (r *AIMClusterServiceTemplateReconciler) plan(_ context.Context, template *
 	runtime := shared.BuildClusterServingRuntime(shared.ClusterServingRuntimeSpec{
 		Name:     template.Name,
 		ModelID:  template.Spec.ModelID,
-		Image:    "registry.example.com/aim/vllm:latest", // TODO: lookup from AIMClusterImage
+		Image:    obs.Image,
 		Metric:   template.Spec.Metric,
 		OwnerRef: ownerRef,
 	})
@@ -161,7 +170,7 @@ func (r *AIMClusterServiceTemplateReconciler) plan(_ context.Context, template *
 			TemplateName: template.Name,
 			Namespace:    operatorNamespace,
 			ModelID:      template.Spec.ModelID,
-			Image:        "registry.example.com/aim/vllm:latest", // TODO: lookup from AIMClusterImage
+			Image:        obs.Image,
 			Env:          nil,
 			OwnerRef:     ownerRef,
 		})
@@ -174,7 +183,7 @@ func (r *AIMClusterServiceTemplateReconciler) plan(_ context.Context, template *
 // projectStatus computes status from observation + errors (read-only)
 func (r *AIMClusterServiceTemplateReconciler) projectStatus(
 	ctx context.Context,
-	_ *aimv1alpha1.AIMClusterServiceTemplate,
+	template *aimv1alpha1.AIMClusterServiceTemplate,
 	obs *clusterTemplateObservation,
 	errs framework.ReconcileErrors,
 ) (framework.StatusUpdate, error) {
@@ -208,6 +217,31 @@ func (r *AIMClusterServiceTemplateReconciler) projectStatus(
 			metav1.ConditionFalse,
 			framework.ReasonFailed,
 			"Template is not ready due to errors",
+		))
+
+		return framework.StatusUpdate{
+			Conditions:  conditions,
+			StatusField: "Status",
+			StatusValue: status,
+		}, nil
+	}
+
+	// Check if image is missing
+	if obs.Image == "" {
+		status = aimv1alpha1.AIMTemplateStatusFailed
+
+		conditions = append(conditions, framework.NewCondition(
+			framework.ConditionTypeFailure,
+			metav1.ConditionTrue,
+			"ImageNotFound",
+			fmt.Sprintf("No AIMClusterImage found for modelId %q", template.Spec.ModelID),
+		))
+
+		conditions = append(conditions, framework.NewCondition(
+			framework.ConditionTypeReady,
+			metav1.ConditionFalse,
+			"ImageNotFound",
+			"Cannot proceed without image",
 		))
 
 		return framework.StatusUpdate{

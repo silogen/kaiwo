@@ -67,7 +67,7 @@ func BuildDiscoveryJob(spec DiscoveryJobSpec) *batchv1.Job {
 	jobName := fmt.Sprintf("discover-%s-%x", spec.TemplateName, hash[:4])
 
 	backoffLimit := int32(3)
-	ttlSeconds := int32(3600) // Clean up after 1 hour
+	ttlSeconds := int32(300) // Clean up after 5 minutes (enough time to fetch status)
 
 	job := &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
