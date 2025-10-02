@@ -290,6 +290,16 @@ type AIMClusterServiceTemplateList struct {
 	Items           []AIMClusterServiceTemplate `json:"items"`
 }
 
+// GetModelID returns the model ID from the template spec
+func (t *AIMServiceTemplate) GetModelID() string {
+	return t.Spec.ModelID
+}
+
+// GetModelID returns the model ID from the cluster template spec
+func (t *AIMClusterServiceTemplate) GetModelID() string {
+	return t.Spec.ModelID
+}
+
 func init() {
 	SchemeBuilder.Register(&AIMServiceTemplate{}, &AIMServiceTemplateList{}, &AIMClusterServiceTemplate{}, &AIMClusterServiceTemplateList{})
 }
