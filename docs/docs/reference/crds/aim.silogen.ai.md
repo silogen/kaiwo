@@ -130,8 +130,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `model` _string_ | Model is the canonical model name (exact string match), including version/revision.<br />Matches `spec.name` of an AIMImage. Immutable.<br />Example: `meta/llama-3-8b:1.1+20240915` |  | MinLength: 1 <br /> |
-| `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal. Immutable.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
-| `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. Immutable. | auto | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
+| `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
+| `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. |  | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
 | `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
 
 
@@ -184,6 +184,8 @@ _Validation:_
 
 _Appears in:_
 - [AIMClusterServiceTemplateSpec](#aimclusterservicetemplatespec)
+- [AIMRuntimeParameters](#aimruntimeparameters)
+- [AIMServiceOverrides](#aimserviceoverrides)
 - [AIMServiceTemplateSpec](#aimservicetemplatespec)
 - [AIMServiceTemplateSpecCommon](#aimservicetemplatespeccommon)
 
@@ -341,6 +343,8 @@ _Validation:_
 
 _Appears in:_
 - [AIMClusterServiceTemplateSpec](#aimclusterservicetemplatespec)
+- [AIMRuntimeParameters](#aimruntimeparameters)
+- [AIMServiceOverrides](#aimserviceoverrides)
 - [AIMServiceTemplateSpec](#aimservicetemplatespec)
 - [AIMServiceTemplateSpecCommon](#aimservicetemplatespeccommon)
 
@@ -354,6 +358,29 @@ _Appears in:_
 | `bf16` |  |
 | `int4` |  |
 | `int8` |  |
+
+
+#### AIMRuntimeParameters
+
+
+
+AIMRuntimeParameters contains the runtime configuration parameters shared
+across templates and services. Fields use pointers to allow optional usage
+in different contexts (required in templates, optional in service overrides).
+
+
+
+_Appears in:_
+- [AIMClusterServiceTemplateSpec](#aimclusterservicetemplatespec)
+- [AIMServiceOverrides](#aimserviceoverrides)
+- [AIMServiceTemplateSpec](#aimservicetemplatespec)
+- [AIMServiceTemplateSpecCommon](#aimservicetemplatespeccommon)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
+| `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. |  | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
+| `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
 
 
 #### AIMS3Credential
@@ -414,15 +441,36 @@ AIMServiceList contains a list of AIMService.
 | `items` _[AIMService](#aimservice) array_ |  |  |  |
 
 
+#### AIMServiceOverrides
+
+
+
+AIMServiceOverrides allows overriding template parameters at the service level.
+All fields are optional. When specified, they override the corresponding values
+from the referenced AIMServiceTemplate.
+
+
+
+_Appears in:_
+- [AIMServiceSpec](#aimservicespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
+| `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. |  | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
+| `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
+
+
 #### AIMServiceSpec
 
 
 
 AIMServiceSpec defines the desired state of AIMService.
 
-Binds a canonical model to an AIMServiceTemplate and configures replicas and
-caching behavior. The template governs the runtime selection knobs; only the
-number of replicas is overrideable here.
+Binds a canonical model to an AIMServiceTemplate and configures replicas,
+caching behavior, and optional overrides. The template governs the base
+runtime selection knobs, while the overrides field allows service-specific
+customization.
 
 
 
@@ -434,8 +482,9 @@ _Appears in:_
 | `model` _string_ | Model is the canonical model name (including version/revision) to deploy.<br />Expected to match the `spec.name` of an AIMImage. Example:<br />`meta/llama-3-8b:1.1+20240915`. |  | MinLength: 1 <br /> |
 | `templateRef` _string_ | TemplateRef is the name of the AIMServiceTemplate (same namespace) to use.<br />The template selects the runtime profile and GPU parameters. |  | MinLength: 1 <br /> |
 | `cacheModel` _boolean_ | CacheModel requests that model sources be cached when starting the service<br />if the template itself does not warm the cache. Defaults to `true`.<br />When `warmCache: false` on the template, this setting ensures caching is<br />performed before the service becomes ready. | true |  |
-| `replicas` _integer_ | Replicas overrides the number of replicas for this service.<br />Other runtime settings remain governed by the template. | 1 |  |
+| `replicas` _integer_ | Replicas overrides the number of replicas for this service.<br />Other runtime settings remain governed by the template unless overridden. | 1 |  |
 | `configRef` _string_ | ConfigRef selects the AIMNamespaceConfig (by name) to use for this service.<br />The default value is "default". The referenced AIMNamespaceConfig must<br />reside in the same namespace as the service. | default |  |
+| `overrides` _[AIMServiceOverrides](#aimserviceoverrides)_ | Overrides allows overriding specific template parameters for this service.<br />When specified, these values take precedence over the template values. |  |  |
 
 
 #### AIMServiceStatus
@@ -534,8 +583,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `model` _string_ | Model is the canonical model name (exact string match), including version/revision.<br />Matches `spec.name` of an AIMImage. Immutable.<br />Example: `meta/llama-3-8b:1.1+20240915` |  | MinLength: 1 <br /> |
-| `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal. Immutable.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
-| `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. Immutable. | auto | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
+| `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
+| `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. |  | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
 | `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
 | `caching` _[AIMCachingConfig](#aimcachingconfig)_ | Caching configures model caching behavior for this namespace-scoped template.<br />When enabled, models will be cached using the specified environment variables<br />during download. |  |  |
 
@@ -556,8 +605,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `model` _string_ | Model is the canonical model name (exact string match), including version/revision.<br />Matches `spec.name` of an AIMImage. Immutable.<br />Example: `meta/llama-3-8b:1.1+20240915` |  | MinLength: 1 <br /> |
-| `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal. Immutable.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
-| `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. Immutable. | auto | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
+| `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
+| `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. |  | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
 | `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
 
 
@@ -612,6 +661,8 @@ _Appears in:_
 
 _Appears in:_
 - [AIMClusterServiceTemplateSpec](#aimclusterservicetemplatespec)
+- [AIMRuntimeParameters](#aimruntimeparameters)
+- [AIMServiceOverrides](#aimserviceoverrides)
 - [AIMServiceTemplateSpec](#aimservicetemplatespec)
 - [AIMServiceTemplateSpecCommon](#aimservicetemplatespeccommon)
 

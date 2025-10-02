@@ -18,11 +18,19 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// AIMServiceOverrides allows overriding template parameters at the service level.
+// All fields are optional. When specified, they override the corresponding values
+// from the referenced AIMServiceTemplate.
+type AIMServiceOverrides struct {
+	AIMRuntimeParameters `json:",inline"`
+}
+
 // AIMServiceSpec defines the desired state of AIMService.
 //
-// Binds a canonical model to an AIMServiceTemplate and configures replicas and
-// caching behavior. The template governs the runtime selection knobs; only the
-// number of replicas is overrideable here.
+// Binds a canonical model to an AIMServiceTemplate and configures replicas,
+// caching behavior, and optional overrides. The template governs the base
+// runtime selection knobs, while the overrides field allows service-specific
+// customization.
 type AIMServiceSpec struct {
 	// Model is the canonical model name (including version/revision) to deploy.
 	// Expected to match the `spec.name` of an AIMImage. Example:
@@ -43,7 +51,7 @@ type AIMServiceSpec struct {
 	CacheModel bool `json:"cacheModel,omitempty"`
 
 	// Replicas overrides the number of replicas for this service.
-	// Other runtime settings remain governed by the template.
+	// Other runtime settings remain governed by the template unless overridden.
 	// +kubebuilder:default=1
 	Replicas *int32 `json:"replicas,omitempty"`
 
@@ -52,6 +60,11 @@ type AIMServiceSpec struct {
 	// reside in the same namespace as the service.
 	// +kubebuilder:default=default
 	ConfigRef string `json:"configRef,omitempty"`
+
+	// Overrides allows overriding specific template parameters for this service.
+	// When specified, these values take precedence over the template values.
+	// +optional
+	Overrides *AIMServiceOverrides `json:"overrides,omitempty"`
 }
 
 // AIMServiceStatus defines the observed state of AIMService.

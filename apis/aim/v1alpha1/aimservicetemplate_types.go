@@ -44,6 +44,29 @@ const (
 	AIMPrecisionInt8 AIMPrecision = "int8"
 )
 
+// AIMRuntimeParameters contains the runtime configuration parameters shared
+// across templates and services. Fields use pointers to allow optional usage
+// in different contexts (required in templates, optional in service overrides).
+type AIMRuntimeParameters struct {
+	// Metric selects the optimization goal.
+	//
+	// - `latency`: prioritize low end‑to‑end latency
+	// - `throughput`: prioritize sustained requests/second
+	//
+	// +optional
+	// +kubebuilder:validation:Enum=latency;throughput
+	Metric *AIMMetric `json:"metric,omitempty"`
+
+	// Precision selects the numeric precision used by the runtime.
+	// +optional
+	// +kubebuilder:validation:Enum=auto;fp4;fp8;fp16;fp32;bf16;int4;int8
+	Precision *AIMPrecision `json:"precision,omitempty"`
+
+	// AimGpuSelector contains the strategy to choose the resources to give each replica
+	// +optional
+	GpuSelector *AimGpuSelector `json:"gpuSelector,omitempty"`
+}
+
 // AIMServiceTemplateSpecCommon contains the shared fields for both cluster-scoped
 // and namespace-scoped service templates.
 type AIMServiceTemplateSpecCommon struct {
@@ -56,23 +79,7 @@ type AIMServiceTemplateSpecCommon struct {
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="model is immutable"
 	Model string `json:"model"`
 
-	// Metric selects the optimization goal. Immutable.
-	//
-	// - `latency`: prioritize low end‑to‑end latency
-	// - `throughput`: prioritize sustained requests/second
-	//
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="metric is immutable"
-	// +kubebuilder:validation:Enum=latency;throughput
-	Metric AIMMetric `json:"metric"`
-
-	// Precision selects the numeric precision used by the runtime. Immutable.
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="precision is immutable"
-	// +kubebuilder:default=auto
-	// +kubebuilder:validation:Enum=auto;fp4;fp8;fp16;fp32;bf16;int4;int8
-	Precision AIMPrecision `json:"precision"`
-
-	// AimGpuSelector contains the strategy to choose the resources to give each replica
-	GpuSelector AimGpuSelector `json:"gpuSelector"`
+	AIMRuntimeParameters `json:",inline"`
 }
 
 // AIMCachingConfig configures model caching behavior for namespace-scoped templates.
