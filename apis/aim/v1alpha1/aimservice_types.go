@@ -15,6 +15,7 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -32,11 +33,11 @@ type AIMServiceOverrides struct {
 // runtime selection knobs, while the overrides field allows service-specific
 // customization.
 type AIMServiceSpec struct {
-	// Model is the canonical model name (including version/revision) to deploy.
+	// AIMModelID is the canonical model name (including version/revision) to deploy.
 	// Expected to match the `spec.name` of an AIMImage. Example:
 	// `meta/llama-3-8b:1.1+20240915`.
 	// +kubebuilder:validation:MinLength=1
-	Model string `json:"model"`
+	AIMModelID string `json:"aimModelId"`
 
 	// TemplateRef is the name of the AIMServiceTemplate (same namespace) to use.
 	// The template selects the runtime profile and GPU parameters.
@@ -65,6 +66,17 @@ type AIMServiceSpec struct {
 	// When specified, these values take precedence over the template values.
 	// +optional
 	Overrides *AIMServiceOverrides `json:"overrides,omitempty"`
+
+	// Env specifies environment variables to use for authentication when downloading models.
+	// These variables are used for authentication with model registries (e.g., HuggingFace tokens).
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	Env []corev1.EnvVar `json:"env,omitempty"`
+
+	// ImagePullSecrets references secrets for pulling AIM container images.
+	// +optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 }
 
 // AIMServiceStatus defines the observed state of AIMService.

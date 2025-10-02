@@ -20,10 +20,10 @@ import (
 
 // AIMClusterModelSpec defines the desired state of AIMImage.
 type AIMClusterModelSpec struct {
-	// Name is the model name (includes version/revision).
+	// ModelID is the ID name (includes version/revision).
 	// Example: `meta/llama-3-8b:1.1+20240915`.
 	// +kubebuilder:validation:MinLength=1
-	Name string `json:"name"`
+	ModelID string `json:"modelId"`
 
 	// Image is the container image URI for this AIM model.
 	// This image is inspected by the operator to select runtime profiles used by templates.

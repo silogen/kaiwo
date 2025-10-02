@@ -54,7 +54,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | Name is the model name (includes version/revision).<br />Example: `meta/llama-3-8b:1.1+20240915`. |  | MinLength: 1 <br /> |
+| `modelId` _string_ | ModelID is the ID name (includes version/revision).<br />Example: `meta/llama-3-8b:1.1+20240915`. |  | MinLength: 1 <br /> |
 | `image` _string_ | Image is the container image URI for this AIM model.<br />This image is inspected by the operator to select runtime profiles used by templates. |  | MinLength: 1 <br /> |
 | `defaultServiceTemplate` _string_ | DefaultServiceTemplate is the name of the default service template to use, if an<br />AIMService is created without specifying a template name. |  |  |
 
@@ -479,12 +479,14 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `model` _string_ | Model is the canonical model name (including version/revision) to deploy.<br />Expected to match the `spec.name` of an AIMImage. Example:<br />`meta/llama-3-8b:1.1+20240915`. |  | MinLength: 1 <br /> |
+| `aimModelId` _string_ | AIMModelID is the canonical model name (including version/revision) to deploy.<br />Expected to match the `spec.name` of an AIMImage. Example:<br />`meta/llama-3-8b:1.1+20240915`. |  | MinLength: 1 <br /> |
 | `templateRef` _string_ | TemplateRef is the name of the AIMServiceTemplate (same namespace) to use.<br />The template selects the runtime profile and GPU parameters. |  | MinLength: 1 <br /> |
 | `cacheModel` _boolean_ | CacheModel requests that model sources be cached when starting the service<br />if the template itself does not warm the cache. Defaults to `true`.<br />When `warmCache: false` on the template, this setting ensures caching is<br />performed before the service becomes ready. | true |  |
 | `replicas` _integer_ | Replicas overrides the number of replicas for this service.<br />Other runtime settings remain governed by the template unless overridden. | 1 |  |
 | `configRef` _string_ | ConfigRef selects the AIMNamespaceConfig (by name) to use for this service.<br />The default value is "default". The referenced AIMNamespaceConfig must<br />reside in the same namespace as the service. | default |  |
 | `overrides` _[AIMServiceOverrides](#aimserviceoverrides)_ | Overrides allows overriding specific template parameters for this service.<br />When specified, these values take precedence over the template values. |  |  |
+| `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to use for authentication when downloading models.<br />These variables are used for authentication with model registries (e.g., HuggingFace tokens). |  |  |
+| `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets references secrets for pulling AIM container images. |  |  |
 
 
 #### AIMServiceStatus
@@ -587,6 +589,8 @@ _Appears in:_
 | `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. |  | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
 | `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
 | `caching` _[AIMCachingConfig](#aimcachingconfig)_ | Caching configures model caching behavior for this namespace-scoped template.<br />When enabled, models will be cached using the specified environment variables<br />during download. |  |  |
+| `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to use for authentication when downloading models.<br />These variables are used for authentication with model registries (e.g., HuggingFace tokens). |  |  |
+| `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets references secrets for pulling AIM container images. |  |  |
 
 
 #### AIMServiceTemplateSpecCommon
@@ -726,7 +730,8 @@ _Appears in:_
 | `sourceUri` _string_ | SourceURI is the source of the model to be downloaded. This is the only<br />identifier |  | MinLength: 1 <br />Pattern: `^(hf\|s3)://[^ \t\r\n]+$` <br /> |
 | `storageClassName` _string_ | StorageClassName specifies the storage class for the cache volume |  |  |
 | `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#quantity-resource-api)_ | Size specifies the size of the cache volume |  |  |
-| `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env lists the environment variables required to download the model into the cache |  |  |
+| `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env lists the environment variables to use for authentication when downloading models.<br />These variables are used for authentication with model registries (e.g., HuggingFace tokens). |  |  |
+| `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets references secrets for pulling AIM container images. |  |  |
 
 
 #### ModelCacheStatus

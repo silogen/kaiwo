@@ -36,10 +36,16 @@ type ModelCacheSpec struct {
 	// +kubebuilder:validation:XValidation:rule="self > quantity('0')",message="size must be greater than 0"
 	Size resource.Quantity `json:"size"`
 
-	// Env lists the environment variables required to download the model into the cache
+	// Env lists the environment variables to use for authentication when downloading models.
+	// These variables are used for authentication with model registries (e.g., HuggingFace tokens).
+	// +optional
 	// +listType=map
 	// +listMapKey=name
 	Env []corev1.EnvVar `json:"env,omitempty"`
+
+	// ImagePullSecrets references secrets for pulling AIM container images.
+	// +optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 }
 
 // +kubebuilder:validation:Enum=Pending;Progressing;Available;Failed

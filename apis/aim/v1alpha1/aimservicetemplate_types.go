@@ -110,6 +110,17 @@ type AIMServiceTemplateSpec struct {
 	// during download.
 	// +optional
 	Caching *AIMCachingConfig `json:"caching,omitempty"`
+
+	// Env specifies environment variables to use for authentication when downloading models.
+	// These variables are used for authentication with model registries (e.g., HuggingFace tokens).
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	Env []corev1.EnvVar `json:"env,omitempty"`
+
+	// ImagePullSecrets references secrets for pulling AIM container images.
+	// +optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 }
 
 // AIMClusterServiceTemplateSpec defines the desired state of AIMClusterServiceTemplate (cluster-scoped).
