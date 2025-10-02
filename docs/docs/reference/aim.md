@@ -15,11 +15,11 @@ AIM provides a consistent way to deploy optimized LLM inference services on AMD 
 **Scope quick reference**
 
 | Kind                        | Scope     | Purpose                                                                                                                          |
-| --------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| --------------------------- | --------- |----------------------------------------------------------------------------------------------------------------------------------|
 | `AIMImage`                  | Cluster   | Catalog entry: **modelId → container image**, with a **defaultServiceTemplate** name (advisory).                                 |
 | `AIMClusterServiceTemplate` | Cluster   | Cluster-wide runtime profile for one model (no caching field).                                                                   |
 | `AIMServiceTemplate`        | Namespace | Namespace runtime profile for one model; can enable caching via `spec.caching.enabled`.                                          |
-| `AIMTemplateCache`          | Namespace | Pre-warms caches for a named template (resolves ns first, then cluster).                                                         |
+| `AIMTemplateCache`          | Namespace | Pre-warms caches into a namespace for a named template (resolves namespace-scoped first, then cluster).                          |
 | `ModelCache`                | Namespace | Ensures a PVC exists and the **model sourceUri** is downloaded. Uniqueness by `spec.sourceUri` (immutable).                      |
 | `AIMClusterConfig`          | Cluster   | Routing and default cache storage configuration at cluster level.                                                                |
 | `AIMService`                | Namespace | A running inference service bound to `spec.aimModelId` + **`spec.templateRef`** (optional), with optional per-service overrides. |
