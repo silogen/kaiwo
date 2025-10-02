@@ -1,4 +1,4 @@
-# AMD Inference Microservices (AIM) — v1alpha1 Guide
+# AMD Inference Microservices (AIM) — Overview
 
 AIM provides a consistent way to deploy optimized LLM inference services on AMD GPUs using KServe. This document explains the resource model and the recommended workflows to install a model catalog, template the runtime, cache model artifacts, and deploy services.
 
@@ -24,7 +24,6 @@ AIM provides a consistent way to deploy optimized LLM inference services on AMD 
 | `AIMClusterConfig`          | Cluster   | Routing and default cache storage configuration at cluster level.                                                                |
 | `AIMService`                | Namespace | A running inference service bound to `spec.aimModelId` + **`spec.templateRef`** (optional), with optional per-service overrides. |
 
----
 
 ## Quickstart: install a catalog and run services
 
@@ -238,8 +237,6 @@ You can warm caches before deploying or scaling services:
 
 > **ModelCache** details: `spec.sourceUri` is immutable and the uniqueness key; the same source is reused across templates/services within the namespace. The PVC name appears in `status.persistentVolumeClaim`.
 
----
-
 ## Discovery & status (what the operator populates)
 
 * On **template create/update** (both namespace and cluster scoped), the operator runs a **dry-run** AIM container to determine required models:
@@ -255,8 +252,6 @@ You can warm caches before deploying or scaling services:
 * **TemplateCache**: `status.status` + conditions (`Resolved`, `CacheWarm`, `Ready`, `Progressing`, `Failure`) and `status.resolvedTemplateKind`.
 * **ModelCache**: `status.status` + conditions (`StorageReady`, `Progressing`, `Ready`, `Failure`), and `status.persistentVolumeClaim`.
 * **Service**: `status.status` (`Pending | Starting | Running | Failed | Degraded`) + conditions (`Resolved`, `CacheReady`, `RuntimeReady`, `RoutingReady`, `Ready`, `Progressing`, `Failure`).
-
----
 
 ## Cluster- vs namespace-scoped templates
 
@@ -320,8 +315,6 @@ spec:
 
 Then deploy a service with that template (or use overrides as shown earlier).
 
----
-
 ## Cluster configuration (routing & storage defaults)
 
 `AIMClusterConfig` configures **routing** and a default **cache storage class** at the cluster level.
@@ -341,8 +334,6 @@ spec:
 ```
 
 If routing is enabled, the operator creates one HTTPRoute per `AIMService` and attaches it to the configured Gateway. Paths typically include the namespace and an internal workload identifier.
-
----
 
 ## Monitoring & troubleshooting
 
