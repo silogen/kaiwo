@@ -13,8 +13,9 @@ spec:
       cpu: "100m"
       memory: "100Mi"
   image: busybox:latest
-  entrypoint: |
-    while true; do
-      echo "Hello, world!"
-      sleep 1
-    done
+  deployment:
+    entrypoint: |
+      while true; do
+        echo "Hello, world!"
+        sleep 1
+      done

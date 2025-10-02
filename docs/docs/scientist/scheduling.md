@@ -2,7 +2,7 @@
 
 #### `replicas`, `gpus`, `gpusPerReplica`, and `gpuVendor`
 
-These fields collectively control the number of workload instances and how GPUs are allocated across them. Their interaction depends on the workload type (Job/Service) and whether Ray is used (`ray: true`).
+These fields collectively control the number of workload instances and how GPUs are allocated across them. Their interaction depends on the workload type (Job/Service) and whether Ray is used (for jobs via `ray: true`, for services via `spec.type: ray` or a `spec.ray` block).
 
 **Purpose:**
 

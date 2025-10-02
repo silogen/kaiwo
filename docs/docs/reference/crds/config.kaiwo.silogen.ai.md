@@ -14,6 +14,71 @@ Package v1alpha1 contains API Schema definitions for the kaiwo configuration v1a
 
 
 
+#### KaiwoAimCachingConfig
+
+
+
+
+
+
+
+_Appears in:_
+- [KaiwoAimConfig](#kaiwoaimconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `models` _[KaiwoAimModelCachingConfig](#kaiwoaimmodelcachingconfig)_ |  |  |  |
+
+
+#### KaiwoAimConfig
+
+
+
+
+
+
+
+_Appears in:_
+- [KaiwoConfigSpec](#kaiwoconfigspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `routing` _[KaiwoAimRoutingConfig](#kaiwoaimroutingconfig)_ | Routing contains the global AIM routing configuration |  |  |
+| `caching` _[KaiwoAimCachingConfig](#kaiwoaimcachingconfig)_ |  |  |  |
+
+
+#### KaiwoAimModelCachingConfig
+
+
+
+
+
+
+
+_Appears in:_
+- [KaiwoAimCachingConfig](#kaiwoaimcachingconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `defaultStorageClassName` _string_ | DefaultStorageClassName is the name of the storage class that is used, if no others are provided |  |  |
+
+
+#### KaiwoAimRoutingConfig
+
+
+
+
+
+
+
+_Appears in:_
+- [KaiwoAimConfig](#kaiwoaimconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `parentRefs` _ParentReference array_ | ParentRefs is used to tie the AIM-specific HTTPRoute to the Gateway instance |  |  |
+
+
 #### KaiwoConfig
 
 
@@ -73,6 +138,7 @@ _Appears in:_
 | `defaultClusterQueueName` _string_ | DefaultClusterQueueName is the name of the default cluster queue that is used for workloads that don't explicitly specify a cluster queue. | kaiwo |  |
 | `defaultClusterQueueCohortName` _string_ | DefaultClusterQueueCohortName is the name of the default cohort that is used for the default cluster queue.<br />ClusterQueues in the same cohort can share resources. | kaiwo |  |
 | `dynamicallyUpdateDefaultClusterQueue` _boolean_ | DynamicallyUpdateDefaultClusterQueue defines whether the Kaiwo operator should dynamically update default "kaiwo" clusterqueue.<br />If set to true, the operator will make sure that the default clusterqueue is always up to date and reflects total resources available.<br />If nodes are added or removed, the operator will update the default clusterqueue to reflect the current state of the cluster. | false |  |
+| `aim` _[KaiwoAimConfig](#kaiwoaimconfig)_ |  |  |  |
 
 
 #### KaiwoNodeConfig

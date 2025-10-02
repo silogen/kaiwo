@@ -5,12 +5,6 @@ metadata:
 spec:
   user: test-user
   deployment:
-    apiVersion: apps/v1
-    kind: Deployment
-    metadata:
-      name: progress-deadline-test
-      labels:
-        app: progress-deadline-test
     spec:
       replicas: 1
       # Set a short progress deadline to force initial ProgressDeadlineExceeded

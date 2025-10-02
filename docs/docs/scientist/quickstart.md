@@ -348,24 +348,24 @@ metadata:
 spec:
   user: test@amd.com
   gpus: 4
-  ray: true
-  serveConfigV2: |
-    applications:
-    - name: llm
-      route_prefix: /
-      import_path: workloads.inference.LLMs.online-inference.vllm-online-single-multinode:deployment
-      runtime_env:
-          working_dir: "https://github.com/silogen/kaiwo/archive/b66c14303f3beadc08e11a89fd53d7f71b2a15cd.zip"
-      deployments:
-      - name: VLLMDeployment
-        autoscaling_config:
-          metrics_interval_s: 0.2
-          look_back_period_s: 2
-          downscale_delay_s: 600
-          upscale_delay_s: 30
-          target_num_ongoing_requests_per_replica: 20
-        graceful_shutdown_timeout_s: 5
-        max_concurrent_queries: 100
+  ray:
+    serveConfigV2: |
+      applications:
+      - name: llm
+        route_prefix: /
+        import_path: workloads.inference.LLMs.online-inference.vllm-online-single-multinode:deployment
+        runtime_env:
+            working_dir: "https://github.com/silogen/kaiwo/archive/b66c14303f3beadc08e11a89fd53d7f71b2a15cd.zip"
+        deployments:
+        - name: VLLMDeployment
+          autoscaling_config:
+            metrics_interval_s: 0.2
+            look_back_period_s: 2
+            downscale_delay_s: 600
+            upscale_delay_s: 30
+            target_num_ongoing_requests_per_replica: 20
+          graceful_shutdown_timeout_s: 5
+          max_concurrent_queries: 100
   env:
   - name: NCCL_P2P_DISABLE
     value: "1"
