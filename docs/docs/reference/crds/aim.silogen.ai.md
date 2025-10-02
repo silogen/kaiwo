@@ -19,6 +19,8 @@ Package v1alpha1 contains API Schema definitions for the AIM v1alpha1 API group.
 - [AIMServiceList](#aimservicelist)
 - [AIMServiceTemplate](#aimservicetemplate)
 - [AIMServiceTemplateList](#aimservicetemplatelist)
+- [AIMTemplateCache](#aimtemplatecache)
+- [AIMTemplateCacheList](#aimtemplatecachelist)
 - [ModelCache](#modelcache)
 - [ModelCacheList](#modelcachelist)
 
@@ -632,6 +634,101 @@ _Appears in:_
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest observations of template state. |  |  |
 | `status` _[AIMTemplateStatusEnum](#aimtemplatestatusenum)_ | Status represents the current high‑level status of the template lifecycle.<br />Values: `Pending`, `Progressing`, `Available`, `Failed`. | Pending | Enum: [Pending Progressing Available Failed] <br /> |
 | `modelSources` _[AIMModelSource](#aimmodelsource) array_ | ModelSources list the models that this template requires to run. These are the models that will be<br />cached, if this template is cached. |  |  |
+
+
+#### AIMTemplateCache
+
+
+
+AIMTemplateCache pre-warms model caches for a specified template.
+
+
+
+_Appears in:_
+- [AIMTemplateCacheList](#aimtemplatecachelist)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `AIMTemplateCache` | | |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `spec` _[AIMTemplateCacheSpec](#aimtemplatecachespec)_ |  |  |  |
+| `status` _[AIMTemplateCacheStatus](#aimtemplatecachestatus)_ |  |  |  |
+
+
+#### AIMTemplateCacheList
+
+
+
+AIMTemplateCacheList contains a list of AIMTemplateCache.
+
+
+
+
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `AIMTemplateCacheList` | | |
+| `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `items` _[AIMTemplateCache](#aimtemplatecache) array_ |  |  |  |
+
+
+#### AIMTemplateCacheSpec
+
+
+
+AIMTemplateCacheSpec defines the desired state of AIMTemplateCache
+
+
+
+_Appears in:_
+- [AIMTemplateCache](#aimtemplatecache)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `templateRef` _string_ | TemplateRef is the name of the AIMServiceTemplate or AIMClusterServiceTemplate to cache.<br />The controller will first look for a namespace-scoped AIMServiceTemplate in the same namespace.<br />If not found, it will look for a cluster-scoped AIMClusterServiceTemplate with the same name.<br />Namespace-scoped templates take priority over cluster-scoped templates. |  | MinLength: 1 <br /> |
+| `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to use for authentication when downloading models.<br />These variables are used for authentication with model registries (e.g., HuggingFace tokens). |  |  |
+| `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets references secrets for pulling AIM container images. |  |  |
+
+
+#### AIMTemplateCacheStatus
+
+
+
+AIMTemplateCacheStatus defines the observed state of AIMTemplateCache
+
+
+
+_Appears in:_
+- [AIMTemplateCache](#aimtemplatecache)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `observedGeneration` _integer_ | ObservedGeneration is the most recent generation observed by the controller. |  |  |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest observations of the template cache state. |  |  |
+| `status` _[AIMTemplateCacheStatusEnum](#aimtemplatecachestatusenum)_ | Status represents the current high-level status of the template cache. | Pending | Enum: [Pending Progressing Available Failed] <br /> |
+| `resolvedTemplateKind` _string_ | ResolvedTemplateKind indicates whether the template resolved to a namespace-scoped<br />AIMServiceTemplate or cluster-scoped AIMClusterServiceTemplate.<br />Values: "AIMServiceTemplate", "AIMClusterServiceTemplate" |  |  |
+
+
+#### AIMTemplateCacheStatusEnum
+
+_Underlying type:_ _string_
+
+AIMTemplateCacheStatusEnum defines the status of the template cache.
+
+_Validation:_
+- Enum: [Pending Progressing Available Failed]
+
+_Appears in:_
+- [AIMTemplateCacheStatus](#aimtemplatecachestatus)
+
+| Field | Description |
+| --- | --- |
+| `Pending` | AIMTemplateCacheStatusPending denotes that the template cache has been created but not yet processed.<br /> |
+| `Progressing` | AIMTemplateCacheStatusProgressing denotes that the template cache is being warmed.<br /> |
+| `Available` | AIMTemplateCacheStatusAvailable denotes that the template cache is ready and models are cached.<br /> |
+| `Failed` | AIMTemplateCacheStatusFailed denotes that the template cache operation has failed.<br /> |
 
 
 #### AIMTemplateStatusEnum
