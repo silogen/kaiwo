@@ -52,12 +52,13 @@ type DiscoveryResult struct {
 
 // DiscoveryJobSpec defines parameters for creating a discovery job
 type DiscoveryJobSpec struct {
-	TemplateName string
-	Namespace    string
-	ModelID      string
-	Image        string
-	Env          []corev1.EnvVar
-	OwnerRef     metav1.OwnerReference
+	TemplateName     string
+	Namespace        string
+	ModelID          string
+	Image            string
+	Env              []corev1.EnvVar
+	ImagePullSecrets []corev1.LocalObjectReference
+	OwnerRef         metav1.OwnerReference
 }
 
 // BuildDiscoveryJob creates a Job that runs model discovery dry-run
@@ -67,7 +68,7 @@ func BuildDiscoveryJob(spec DiscoveryJobSpec) *batchv1.Job {
 	jobName := fmt.Sprintf("discover-%s-%x", spec.TemplateName, hash[:4])
 
 	backoffLimit := int32(3)
-	ttlSeconds := int32(300) // Clean up after 5 minutes (enough time to fetch status)
+	ttlSeconds := int32(60) // Clean up after 1 minute (enough time to fetch status)
 
 	job := &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
@@ -90,7 +91,8 @@ func BuildDiscoveryJob(spec DiscoveryJobSpec) *batchv1.Job {
 			TTLSecondsAfterFinished: &ttlSeconds,
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
-					RestartPolicy: corev1.RestartPolicyNever,
+					RestartPolicy:    corev1.RestartPolicyNever,
+					ImagePullSecrets: spec.ImagePullSecrets,
 					Containers: []corev1.Container{
 						{
 							Name:  "discovery",

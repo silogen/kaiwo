@@ -29,6 +29,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -44,6 +45,9 @@ type ReconcileSpec struct {
 
 	// Object is the resource being reconciled (must be fetched and passed in)
 	Object client.Object
+
+	// Recorder is the event recorder for emitting Kubernetes events (optional)
+	Recorder record.EventRecorder
 
 	// FinalizerName is the finalizer to add/remove (optional)
 	FinalizerName string

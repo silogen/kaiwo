@@ -30,9 +30,11 @@ import (
 
 	servingv1alpha1 "github.com/kserve/kserve/pkg/apis/serving/v1alpha1"
 	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -45,20 +47,23 @@ import (
 const (
 	clusterTemplateFinalizerName = "aim.silogen.ai/cluster-template-finalizer"
 	clusterTemplateFieldOwner    = "aim-cluster-template-controller"
-	operatorNamespace            = "kaiwo-system" // Namespace where discovery jobs run for cluster templates
 )
 
 // AIMClusterServiceTemplateReconciler reconciles a AIMClusterServiceTemplate object
 type AIMClusterServiceTemplateReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclusterservicetemplates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclusterservicetemplates/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclusterservicetemplates/finalizers,verbs=update
+// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclusterconfigs,verbs=get;list;watch
+// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclusterimages,verbs=get;list;watch
 // +kubebuilder:rbac:groups=serving.kserve.io,resources=clusterservingruntimes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 func (r *AIMClusterServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -79,6 +84,7 @@ func (r *AIMClusterServiceTemplateReconciler) Reconcile(ctx context.Context, req
 		Client:        r.Client,
 		Scheme:        r.Scheme,
 		Object:        &template,
+		Recorder:      r.Recorder,
 		FinalizerName: clusterTemplateFinalizerName,
 		FieldOwner:    clusterTemplateFieldOwner,
 
@@ -100,13 +106,15 @@ func (r *AIMClusterServiceTemplateReconciler) Reconcile(ctx context.Context, req
 
 // clusterTemplateObservation holds observed state
 type clusterTemplateObservation struct {
-	Runtime *servingv1alpha1.ClusterServingRuntime
-	Job     *batchv1.Job
-	Image   string // Container image from AIMClusterImage
+	Runtime          *servingv1alpha1.ClusterServingRuntime
+	Job              *batchv1.Job
+	Image            string                        // Container image from AIMClusterImage
+	ImagePullSecrets []corev1.LocalObjectReference // Image pull secrets from AIMClusterConfig
 }
 
 // observe gathers current cluster state (read-only)
 func (r *AIMClusterServiceTemplateReconciler) observe(ctx context.Context, template *aimv1alpha1.AIMClusterServiceTemplate) (*clusterTemplateObservation, error) {
+	logger := log.FromContext(ctx)
 	obs := &clusterTemplateObservation{}
 
 	// Check if ClusterServingRuntime exists
@@ -119,7 +127,7 @@ func (r *AIMClusterServiceTemplateReconciler) observe(ctx context.Context, templ
 	}
 
 	// Check if discovery job exists
-	job, err := shared.GetDiscoveryJob(ctx, r.Client, operatorNamespace, template.Name)
+	job, err := shared.GetDiscoveryJob(ctx, r.Client, shared.OperatorNamespace, template.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get discovery job: %w", err)
 	}
@@ -131,6 +139,21 @@ func (r *AIMClusterServiceTemplateReconciler) observe(ctx context.Context, templ
 		return nil, err
 	}
 	obs.Image = image
+
+	// Fetch default AIMClusterConfig for image pull secrets
+	config, err := shared.GetDefaultClusterConfig(ctx, r.Client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get default AIMClusterConfig: %w", err)
+	}
+
+	if config != nil {
+		logger.Info("Using default AIMClusterConfig", "imagePullSecrets", len(config.Spec.ImagePullSecrets))
+		framework.EmitNormalEvent(r.Recorder, template, "ConfigFound", fmt.Sprintf("Using default AIMClusterConfig with %d image pull secrets", len(config.Spec.ImagePullSecrets)))
+		obs.ImagePullSecrets = config.Spec.ImagePullSecrets
+	} else {
+		logger.Info("Default AIMClusterConfig not found, proceeding without image pull secrets")
+		framework.EmitWarningEvent(r.Recorder, template, "ConfigNotFound", "Default AIMClusterConfig not found, discovery job may fail if images require authentication")
+	}
 
 	return obs, nil
 }
@@ -167,12 +190,13 @@ func (r *AIMClusterServiceTemplateReconciler) plan(_ context.Context, template *
 	// Include discovery job if not yet complete
 	if obs.Job == nil || !shared.IsJobComplete(obs.Job) {
 		job := shared.BuildDiscoveryJob(shared.DiscoveryJobSpec{
-			TemplateName: template.Name,
-			Namespace:    operatorNamespace,
-			ModelID:      template.Spec.ModelID,
-			Image:        obs.Image,
-			Env:          nil,
-			OwnerRef:     ownerRef,
+			TemplateName:     template.Name,
+			Namespace:        shared.OperatorNamespace,
+			ModelID:          template.Spec.ModelID,
+			Image:            obs.Image,
+			Env:              nil,
+			ImagePullSecrets: obs.ImagePullSecrets,
+			OwnerRef:         ownerRef,
 		})
 		desired = append(desired, job)
 	}
