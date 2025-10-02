@@ -70,20 +70,19 @@ type AIMRuntimeParameters struct {
 // AIMServiceTemplateSpecCommon contains the shared fields for both cluster-scoped
 // and namespace-scoped service templates.
 type AIMServiceTemplateSpecCommon struct {
-	// Model is the canonical model name (exact string match), including version/revision.
-	// Matches `spec.name` of an AIMImage. Immutable.
+	// ModelID is the AIM model ID. Matches `spec.name` of an AIMImage. Immutable.
 	//
 	// Example: `meta/llama-3-8b:1.1+20240915`
 	//
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="model is immutable"
-	Model string `json:"model"`
+	ModelID string `json:"modelId"`
 
 	AIMRuntimeParameters `json:",inline"`
 }
 
-// AIMCachingConfig configures model caching behavior for namespace-scoped templates.
-type AIMCachingConfig struct {
+// AIMTemplateCachingConfig configures model caching behavior for namespace-scoped templates.
+type AIMTemplateCachingConfig struct {
 	// Enabled controls whether caching is enabled for this template.
 	// Defaults to `false`.
 	// +kubebuilder:default=false
@@ -109,7 +108,7 @@ type AIMServiceTemplateSpec struct {
 	// When enabled, models will be cached using the specified environment variables
 	// during download.
 	// +optional
-	Caching *AIMCachingConfig `json:"caching,omitempty"`
+	Caching *AIMTemplateCachingConfig `json:"caching,omitempty"`
 
 	// Env specifies environment variables to use for authentication when downloading models.
 	// These variables are used for authentication with model registries (e.g., HuggingFace tokens).
@@ -175,6 +174,7 @@ type AIMServiceTemplateStatus struct {
 type AIMModelSource struct {
 	// SourceURI is the source where the model should be downloaded from
 	SourceURI string `json:"sourceUri"`
+
 	// Size is the amount of storage that the source expects
 	Size resource.Quantity `json:"size"`
 }

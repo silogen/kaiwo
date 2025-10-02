@@ -39,9 +39,8 @@ type AIMServiceSpec struct {
 	// +kubebuilder:validation:MinLength=1
 	AIMModelID string `json:"aimModelId"`
 
-	// TemplateRef is the name of the AIMServiceTemplate (same namespace) to use.
+	// TemplateRef is the name of the AIMServiceTemplate or AIMClusterServiceTemplate to use.
 	// The template selects the runtime profile and GPU parameters.
-	// +kubebuilder:validation:MinLength=1
 	TemplateRef string `json:"templateRef"`
 
 	// CacheModel requests that model sources be cached when starting the service
@@ -56,9 +55,7 @@ type AIMServiceSpec struct {
 	// +kubebuilder:default=1
 	Replicas *int32 `json:"replicas,omitempty"`
 
-	// ConfigRef selects the AIMNamespaceConfig (by name) to use for this service.
-	// The default value is "default". The referenced AIMNamespaceConfig must
-	// reside in the same namespace as the service.
+	// ConfigRef selects the cluster-scoped AIMClusterConfig (by name) to use for this service.
 	// +kubebuilder:default=default
 	ConfigRef string `json:"configRef,omitempty"`
 

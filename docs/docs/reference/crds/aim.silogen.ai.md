@@ -9,12 +9,12 @@
 Package v1alpha1 contains API Schema definitions for the AIM v1alpha1 API group.
 
 ### Resource Types
+- [AIMClusterConfig](#aimclusterconfig)
+- [AIMClusterConfigList](#aimclusterconfiglist)
 - [AIMClusterServiceTemplate](#aimclusterservicetemplate)
 - [AIMClusterServiceTemplateList](#aimclusterservicetemplatelist)
 - [AIMImage](#aimimage)
 - [AIMImageList](#aimimagelist)
-- [AIMNamespaceConfig](#aimnamespaceconfig)
-- [AIMNamespaceConfigList](#aimnamespaceconfiglist)
 - [AIMService](#aimservice)
 - [AIMServiceList](#aimservicelist)
 - [AIMServiceTemplate](#aimservicetemplate)
@@ -26,21 +26,43 @@ Package v1alpha1 contains API Schema definitions for the AIM v1alpha1 API group.
 
 
 
-#### AIMCachingConfig
+
+
+#### AIMClusterConfig
 
 
 
-AIMCachingConfig configures model caching behavior for namespace-scoped templates.
+AIMClusterConfig configures credentials and routing at a cluster level.
 
 
 
 _Appears in:_
-- [AIMServiceTemplateSpec](#aimservicetemplatespec)
+- [AIMClusterConfigList](#aimclusterconfiglist)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `enabled` _boolean_ | Enabled controls whether caching is enabled for this template.<br />Defaults to `false`. | false |  |
-| `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to use when downloading the model.<br />These variables are available to the model download process and can be used<br />to configure download behavior, authentication, proxies, etc. |  |  |
+| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `AIMClusterConfig` | | |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `spec` _[AIMConfigSpec](#aimconfigspec)_ |  |  |  |
+
+
+#### AIMClusterConfigList
+
+
+
+AIMClusterConfigList contains a list of AIMClusterConfig.
+
+
+
+
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `AIMClusterConfigList` | | |
+| `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `items` _[AIMClusterConfig](#aimclusterconfig) array_ |  |  |  |
 
 
 #### AIMClusterModelSpec
@@ -131,10 +153,27 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `model` _string_ | Model is the canonical model name (exact string match), including version/revision.<br />Matches `spec.name` of an AIMImage. Immutable.<br />Example: `meta/llama-3-8b:1.1+20240915` |  | MinLength: 1 <br /> |
+| `modelId` _string_ | ModelID is the AIM model ID. Matches `spec.name` of an AIMImage. Immutable.<br />Example: `meta/llama-3-8b:1.1+20240915` |  | MinLength: 1 <br /> |
 | `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
 | `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. |  | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
 | `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
+
+
+#### AIMConfigSpec
+
+
+
+AIMConfigSpec defines the desired configuration for an AIM-enabled namespace.
+
+
+
+_Appears in:_
+- [AIMClusterConfig](#aimclusterconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `routing` _[AIMRoutingConfig](#aimroutingconfig)_ | Routing controls automatic HTTPRoute creation for AIM services in this namespace.<br />When enabled (default), the operator creates one HTTPRoute per service using<br />path-based routing with the pattern `/<namespace>/<workload_id>/` and attaches<br />it to the referenced Gateway listener. |  |  |
+| `cacheStorageClassName` _string_ | CacheStorageClassName is the name of the storage class to use for cached models |  |  |
 
 
 #### AIMImage
@@ -214,126 +253,6 @@ _Appears in:_
 | `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#quantity-resource-api)_ | Size is the amount of storage that the source expects |  |  |
 
 
-#### AIMNamespaceConfig
-
-
-
-AIMNamespaceConfig configures credentials and routing for a namespace.
-It is namespaced and typically created by a tenant administrator.
-
-
-
-_Appears in:_
-- [AIMNamespaceConfigList](#aimnamespaceconfiglist)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
-| `kind` _string_ | `AIMNamespaceConfig` | | |
-| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
-| `spec` _[AIMNamespaceConfigSpec](#aimnamespaceconfigspec)_ |  |  |  |
-
-
-#### AIMNamespaceConfigList
-
-
-
-AIMNamespaceConfigList contains a list of AIMNamespaceConfig.
-
-
-
-
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
-| `kind` _string_ | `AIMNamespaceConfigList` | | |
-| `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
-| `items` _[AIMNamespaceConfig](#aimnamespaceconfig) array_ |  |  |  |
-
-
-#### AIMNamespaceConfigSpec
-
-
-
-AIMNamespaceConfigSpec defines the desired configuration for an AIM-enabled namespace.
-
-
-
-_Appears in:_
-- [AIMNamespaceConfig](#aimnamespaceconfig)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `credentials` _[AIMNamespaceCredentials](#aimnamespacecredentials)_ | Credentials provide secret references used during model access and caching. |  |  |
-| `images` _[AIMNamespaceImageConfig](#aimnamespaceimageconfig)_ | Images configures image pull behavior for AIM images within this namespace. |  |  |
-| `routing` _[AIMNamespaceRoutingConfig](#aimnamespaceroutingconfig)_ | Routing controls automatic HTTPRoute creation for AIM services in this namespace.<br />When enabled (default), the operator creates one HTTPRoute per service using<br />path-based routing with the pattern `/<namespace>/<workload_id>/` and attaches<br />it to the referenced Gateway listener. |  |  |
-| `cacheStorageClassName` _string_ | CacheStorageClassName is the name of the storage class to use for cached models |  |  |
-
-
-#### AIMNamespaceCredentials
-
-
-
-AIMNamespaceCredentials gathers optional credentials for model discovery and caching.
-One or more providers can be configured.
-
-
-
-_Appears in:_
-- [AIMNamespaceConfigSpec](#aimnamespaceconfigspec)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `huggingFaceToken` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#secretkeyselector-v1-core)_ | HuggingFaceToken is the token used to access Hugging Face repositories. |  |  |
-| `s3` _[AIMS3Credential](#aims3credential)_ | S3 contains one or more S3 credential configurations. |  |  |
-
-
-#### AIMNamespaceImageConfig
-
-
-
-AIMNamespaceImageConfig defines image pull configuration for AIM workloads in the namespace.
-
-Configure one or more image pull secrets to access private registries
-hosting AIM images referenced by AIMImage entries.
-
-Example:
-
-```yaml
-imagePullSecrets:
-  - my-regcred
-  - another-secret
-
-```
-
-
-
-_Appears in:_
-- [AIMNamespaceConfigSpec](#aimnamespaceconfigspec)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `imagePullSecrets` _string array_ | ImagePullSecrets is the list of Secret names to use for pulling AIM images. |  |  |
-
-
-#### AIMNamespaceRoutingConfig
-
-
-
-AIMNamespaceRoutingConfig controls automatic HTTPRoute provisioning in the namespace.
-
-
-
-_Appears in:_
-- [AIMNamespaceConfigSpec](#aimnamespaceconfigspec)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `gateway` _[ParentReference](#parentreference)_ | Gateway references the Gateway listener to use for exposure and routing<br />(mirrors HTTPRoute.parentRefs[*]). |  |  |
-| `autoCreateRoute` _boolean_ | AutoCreateRoute enables automatic HTTPRoute creation for AIM services. | true |  |
-
-
 #### AIMPrecision
 
 _Underlying type:_ _string_
@@ -362,6 +281,23 @@ _Appears in:_
 | `int8` |  |
 
 
+#### AIMRoutingConfig
+
+
+
+AIMRoutingConfig controls automatic HTTPRoute provisioning in the namespace.
+
+
+
+_Appears in:_
+- [AIMConfigSpec](#aimconfigspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `gateway` _[ParentReference](#parentreference)_ | Gateway references the Gateway listener to use for exposure and routing<br />(mirrors HTTPRoute.parentRefs[*]). |  |  |
+| `autoCreateRoute` _boolean_ | AutoCreateRoute enables automatic HTTPRoute creation for AIM services. | true |  |
+
+
 #### AIMRuntimeParameters
 
 
@@ -385,24 +321,6 @@ _Appears in:_
 | `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
 
 
-#### AIMS3Credential
-
-
-
-AIMS3Credential configures S3 credential references for a specific endpoint.
-Provide an endpoint and secret references for authentication.
-
-
-
-_Appears in:_
-- [AIMNamespaceCredentials](#aimnamespacecredentials)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `endpointUrl` _string_ | EndpointURL (S3-compatible). If both Region and EndpointURL are set, EndpointURL wins. |  |  |
-| `region` _string_ | Region (AWS S3). If both Region and EndpointURL are set, EndpointURL wins. |  |  |
-| `accessKeyId` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#secretkeyselector-v1-core)_ |  |  |  |
-| `secretAccessKey` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#secretkeyselector-v1-core)_ |  |  |  |
 
 
 #### AIMService
@@ -482,10 +400,10 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `aimModelId` _string_ | AIMModelID is the canonical model name (including version/revision) to deploy.<br />Expected to match the `spec.name` of an AIMImage. Example:<br />`meta/llama-3-8b:1.1+20240915`. |  | MinLength: 1 <br /> |
-| `templateRef` _string_ | TemplateRef is the name of the AIMServiceTemplate (same namespace) to use.<br />The template selects the runtime profile and GPU parameters. |  | MinLength: 1 <br /> |
+| `templateRef` _string_ | TemplateRef is the name of the AIMServiceTemplate or AIMClusterServiceTemplate to use.<br />The template selects the runtime profile and GPU parameters. |  |  |
 | `cacheModel` _boolean_ | CacheModel requests that model sources be cached when starting the service<br />if the template itself does not warm the cache. Defaults to `true`.<br />When `warmCache: false` on the template, this setting ensures caching is<br />performed before the service becomes ready. | true |  |
 | `replicas` _integer_ | Replicas overrides the number of replicas for this service.<br />Other runtime settings remain governed by the template unless overridden. | 1 |  |
-| `configRef` _string_ | ConfigRef selects the AIMNamespaceConfig (by name) to use for this service.<br />The default value is "default". The referenced AIMNamespaceConfig must<br />reside in the same namespace as the service. | default |  |
+| `configRef` _string_ | ConfigRef selects the cluster-scoped AIMClusterConfig (by name) to use for this service. | default |  |
 | `overrides` _[AIMServiceOverrides](#aimserviceoverrides)_ | Overrides allows overriding specific template parameters for this service.<br />When specified, these values take precedence over the template values. |  |  |
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to use for authentication when downloading models.<br />These variables are used for authentication with model registries (e.g., HuggingFace tokens). |  |  |
 | `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets references secrets for pulling AIM container images. |  |  |
@@ -586,11 +504,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `model` _string_ | Model is the canonical model name (exact string match), including version/revision.<br />Matches `spec.name` of an AIMImage. Immutable.<br />Example: `meta/llama-3-8b:1.1+20240915` |  | MinLength: 1 <br /> |
+| `modelId` _string_ | ModelID is the AIM model ID. Matches `spec.name` of an AIMImage. Immutable.<br />Example: `meta/llama-3-8b:1.1+20240915` |  | MinLength: 1 <br /> |
 | `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
 | `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. |  | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
 | `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
-| `caching` _[AIMCachingConfig](#aimcachingconfig)_ | Caching configures model caching behavior for this namespace-scoped template.<br />When enabled, models will be cached using the specified environment variables<br />during download. |  |  |
+| `caching` _[AIMTemplateCachingConfig](#aimtemplatecachingconfig)_ | Caching configures model caching behavior for this namespace-scoped template.<br />When enabled, models will be cached using the specified environment variables<br />during download. |  |  |
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to use for authentication when downloading models.<br />These variables are used for authentication with model registries (e.g., HuggingFace tokens). |  |  |
 | `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets references secrets for pulling AIM container images. |  |  |
 
@@ -610,7 +528,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `model` _string_ | Model is the canonical model name (exact string match), including version/revision.<br />Matches `spec.name` of an AIMImage. Immutable.<br />Example: `meta/llama-3-8b:1.1+20240915` |  | MinLength: 1 <br /> |
+| `modelId` _string_ | ModelID is the AIM model ID. Matches `spec.name` of an AIMImage. Immutable.<br />Example: `meta/llama-3-8b:1.1+20240915` |  | MinLength: 1 <br /> |
 | `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
 | `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. |  | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
 | `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
@@ -729,6 +647,23 @@ _Appears in:_
 | `Progressing` | AIMTemplateCacheStatusProgressing denotes that the template cache is being warmed.<br /> |
 | `Available` | AIMTemplateCacheStatusAvailable denotes that the template cache is ready and models are cached.<br /> |
 | `Failed` | AIMTemplateCacheStatusFailed denotes that the template cache operation has failed.<br /> |
+
+
+#### AIMTemplateCachingConfig
+
+
+
+AIMTemplateCachingConfig configures model caching behavior for namespace-scoped templates.
+
+
+
+_Appears in:_
+- [AIMServiceTemplateSpec](#aimservicetemplatespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | Enabled controls whether caching is enabled for this template.<br />Defaults to `false`. | false |  |
+| `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to use when downloading the model.<br />These variables are available to the model download process and can be used<br />to configure download behavior, authentication, proxies, etc. |  |  |
 
 
 #### AIMTemplateStatusEnum

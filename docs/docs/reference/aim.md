@@ -1,231 +1,349 @@
-# AMD Inference Microservices (AIM)
+# AMD Inference Microservices (AIM) — v1alpha1 Guide
 
-AIM provides a consistent way to deploy optimized LLM inference services on AMD GPUs using KServe and a vLLM-based runtime. This document describes the conceptual model, resource types, and the recommended workflow to publish, template, cache, and deploy AIM-based services. It targets both cluster administrators and ML engineers.
+AIM provides a consistent way to deploy optimized LLM inference services on AMD GPUs using KServe and a vLLM-based runtime. This document explains the resource model and the recommended workflows to **install a model catalog**, **template** the runtime, **cache** model artifacts, and **deploy** services.
 
-## Concepts
+> **Source of truth:** All naming and behavior in this guide follow the provided v1alpha1 CRDs.
 
-The following diagram shows the overall architecture and relationships between the resources.
+---
 
-![AIM resource architecture](./aim.drawio.svg)
+## Roles & scopes
 
-### AIMClusterModel
+| Role                               | Responsibilities                                                                                                                                                                              |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Cluster administrator**          | Publishes models as cluster-scoped catalog entries (`AIMImage`), may define cluster-wide templates (`AIMClusterServiceTemplate`), enables storage and KServe.                                 |
+| **Tenant administrator**           | Prepares each namespace using `AIMNamespaceConfig` (routing and cache storage defaults).                                                                                                      |
+| **Application user / ML engineer** | Creates namespace templates (`AIMServiceTemplate`), optionally pre-warms caches (`AIMTemplateCache`), deploys services (`AIMService`), and may create `ModelCache` directly for fine control. |
+| **Operator (controller)**          | Reconciles AIM resources: discovers model sources for templates, warms caches (`TemplateCache` → `ModelCache` → PVC), creates KServe artifacts and routes, and updates status/conditions.     |
 
-An AIMClusterModel is a cluster‑scoped catalog entry that maps a canonical model name to a single AIM container image. Canonical model names include a version and revision, for example `meta/llama-3-8b:1.2.1`. The operator uses this mapping to prepare the runtime with KServe for that image. Note that if the image requires a authentication to download, you must set the image pull secret in the AIMNamespaceConfig in the correct namespace.
+**Scope quick reference**
 
-Example:
-```yaml
-apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMClusterModel
-metadata:
-  name: llama3-8b
-spec:
-  name: meta/llama-3-8b:1.2.1
-  image: ghcr.io/example/aim/llama3-8b:v1.1
+| Kind                        | Scope     | Purpose                                                                                                                          |
+| --------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `AIMImage`                  | Cluster   | Catalog entry: **modelId → container image**, with a **defaultServiceTemplate** name (advisory).                                 |
+| `AIMClusterServiceTemplate` | Cluster   | Cluster-wide runtime profile for one model (no caching field).                                                                   |
+| `AIMServiceTemplate`        | Namespace | Namespace runtime profile for one model; can enable caching via `spec.caching.enabled`.                                          |
+| `AIMTemplateCache`          | Namespace | Pre-warms caches for a named template (resolves ns first, then cluster).                                                         |
+| `ModelCache`                | Namespace | Ensures a PVC exists and the **model sourceUri** is downloaded. Uniqueness by `spec.sourceUri` (immutable).                      |
+| `AIMNamespaceConfig`        | Namespace | Routing and default cache storage configuration for the namespace.                                                               |
+| `AIMService`                | Namespace | A running inference service bound to `spec.aimModelId` + **`spec.templateRef`** (required), with optional per-service overrides. |
+
+---
+
+## Quickstart: install a catalog and run services
+
+This section starts with the **simplest paths first**, then adds variations.
+
+### 1) Install a predefined catalog (images + cluster templates)
+
+In most environments you will consume a curated set of **AIMImage** objects (model IDs and images) and **AIMClusterServiceTemplate** objects from an **external repo** packaged with Kustomize.
+
+```bash
+# Example: install a predefined catalog bundle (models + cluster templates)
+kubectl apply -k https://example.org/aim-packs/catalogs/llama3
 ```
 
-### AIMServiceTemplate
+> These bundles typically include:
+>
+> * `AIMImage` entries with `spec.modelId`, `spec.image`, and a `spec.defaultServiceTemplate` name.
+> * Matching `AIMClusterServiceTemplate` objects for common runtime profiles (e.g., latency-optimized, throughput-optimized).
 
-An AIMServiceTemplate is a namespaced and versioned template that selects a runtime profile for a given AIMClusterModel. A template references exactly one model by its canonical name. It defines the metric (`latency` or `throughput`), the numeric precision (for example `auto` [default], `bf16`, `fp16`, `fp8`, `fp32`, `fp4`, `int8`, `int4`) and the GPU selector (`gpuSelector` with GPU `count`, target card `model`, and optional partitioning). It may also request cache warming through `warmCache`. On creation, the operator inspects the image associated with the referenced model and selects the appropriate runtime profile.
+### 2) Deploy services — common patterns
 
-**Observability**
+> **Important (CRD correctness):** In v1alpha1, `AIMService.spec.templateRef` is **required**. The “default template” concept comes from `AIMImage.spec.defaultServiceTemplate`; in practice, packs set `templateRef` to that default for you so you only edit the **model ID** or add **overrides**.
 
-Template status includes a high‑level `status` field with values Pending, Progressing, Available, Degraded, or Failed. Conditions provide detail:
+#### (a) Service with just the model ID (uses the pack’s default template)
 
-- Discovered: runtime profiles and sources have been resolved for the model.
-- CacheWarm: requested caches are warmed in the namespace.
-- Ready: the template is ready for use.
-- Progressing and Failure: processing state and terminal failure, respectively.
-
-- Common reasons include AwaitingDiscovery, ProfilesDiscovered, DiscoveryFailed, WarmRequested, Warming, Warm, and WarmFailed. Inspect with `kubectl describe aimservicetemplate <name>`.
-
-Example:
-
-```yaml
-apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMServiceTemplate
-metadata:
-  name: llama3-8b-mi300x-latency-v1
-  namespace: my-llm
-spec:
-  model: meta/llama-3-8b:1.1+20240915
-  metric: latency
-  precision: bf16
-  gpuSelector:
-    count: 1
-    model: MI300X
-    computePartitioning: spx    # optional (default spx)
-    memoryPartitioning: nps1    # optional (default nps1)
-  warmCache: true
-```
-
-### ModelCache
-
-ModelCache represents a cache for a single source such as a Hugging Face repository or an S3 bucket. Each cache is stored on a ReadWriteMany persistent volume and is indexed by its `sourceUri`, so templates that resolve to the same source share the same cache. Caches can be warmed through two paths: by setting `warmCache: true` on the template, or by creating an explicit ModelCache resource. When a template leaves `warmCache: false` (the default), an AIMService can still ensure caching is performed by setting `spec.cacheModel: true` (default is `true`).
-
-Example:
-
-```yaml
-apiVersion: aim.silogen.ai/v1alpha1
-kind: ModelCache
-metadata:
-  name: llama3-8b-weights
-  namespace: my-llm
-spec:
-  sourceUri: hf://meta-llama/Llama-3-8b-Instruct
-  size: 600Gi
-  storageClassName: rwx-sc
-```
-
-**Observability**
-
-Cache status includes a coarse state (Pending, Progressing, Available, Failed) and conditions that reflect storage and warm state. Key conditions are StorageReady, Progressing, Ready, and Failure. Representative reasons include PVCProvisioning, PVCBound, WaitingForPVC, Downloading, Warm, and DownloadFailed. Use `kubectl describe modelcache <name>` for details.
-
-### AIMNamespaceConfig
-
-AIMNamespaceConfig is a namespaced configuration that carries credentials and routing settings. It references the Gateway instance to use for exposure and routing in the namespace. The operator can create or link the Gateway instance according to this configuration.
-
-Example (admin‑managed Gateway, default route auto‑creation):
-```yaml
-apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMNamespaceConfig
-metadata:
-  name: default
-  namespace: my-llm
-spec:
-  credentials:
-    huggingFaceToken:
-      name: hf-creds
-      key: token
-    s3:
-      - endpointUrl: https://s3.us-east-1.amazonaws.com
-        accessKeyId:
-          name: s3-creds
-          key: accessKeyId
-        secretAccessKey:
-          name: s3-creds
-          key: secretAccessKey
-  images:
-    imagePullSecrets:
-      - my-regcred
-      - another-secret
-  routing:
-    gateway:
-      name: kgw-default
-      namespace: gateway-system
-      sectionName: http
-    autoCreateRoute: true
-```
-
-**Observability**
-
-This configuration is spec‑only and does not expose a status section. Use `kubectl describe aimnamespaceconfig <name>` to review the active spec and recent events emitted by the operator, including gateway linkage and credential validation.
-
-### AIMService
-
-Users deploy services by binding a model to a template through `AIMService`. The spec references the canonical model and a namespaced template. It also selects the namespace’s `AIMNamespaceConfig` via `spec.configRef` (default `default`) for routing and credentials, and may override the number of replicas. If the template does not warm caches, a service can still request caching with `spec.cacheModel: true` (default). Deployments are implemented with KServe.
-
-Example:
+Use a service manifest provided by the pack; it already fills `templateRef` with the image’s default template. You typically only change `spec.aimModelId`.
 
 ```yaml
 apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMService
 metadata:
-  name: llama3-8b-svc
-  namespace: my-llm
+  name: llama3-svc
+  namespace: team-a
 spec:
-  model: meta/llama-3-8b:1.1+20240915
-  templateRef: llama3-8b-mi300x-latency-v1
-  cacheModel: true
+  aimModelId: meta/llama-3-8b:1.1+20240915
+  templateRef: llama3-8b-latency-gpu1   # pre-wired by the pack to match the model’s default
+  cacheModel: true                      # on-demand caching (default true)
+  replicas: 1
   configRef: default
-  replicas: 2
 ```
 
-**Observability**
+#### (b) Service that explicitly selects a namespace template
 
-Service status exposes a high‑level phase via `status.status` and detailed conditions. Conditions include Resolved (model and template validated), CacheReady, RuntimeReady, RoutingReady, and Ready, as well as Progressing and Failure. Reasons indicate the current action or error, such as TemplateNotFound, ModelNotFound, Resolved, WaitingForCache, CacheWarming, CacheWarm, CreatingRuntime, RuntimeReady, ConfiguringRoute, or RouteReady. Inspect with `kubectl describe aimservice <name>`.
-
-## Lifecycle
-
-1. Publish an AIMClusterModel with the canonical model name and image.
-2. Create an AIMServiceTemplate in the target namespace, referencing the AIMClusterModel by its canonical name and selecting metric, precision, GPUs per replica and GPU model. Optionally set `warmCache: true` to warm immediately after discovery.
-3. If cache warming is enabled, caches are created and filled. Templates that resolve to the same source share the same ReadWriteMany cache.
-4. Deploy an AIMService referencing the model and the template. Optionally set `replicas`.
-5. If exposure and routing are enabled, the service is reachable through the namespace’s Gateway instance.
-
-## Exposure and Routing
-
-When exposure and routing are enabled, requests are routed through the Gateway instance configured for the namespace. The default path structure includes the namespace and a workload identifier: `/<namespace>/<workload_id>/`. For example:
-
-```bash
-curl -s -X POST \
-  "http://<gateway-host>/<namespace>/<workload_id>/v1/chat/completions" \
-  -H "Content-Type: application/json" \
-  -d '{"model": "meta/llama-3-8b", "messages": [{"role": "user", "content": "Hello"}]}'
-```
-
-### Routing
-
-For each AIMService, the operator creates an HTTPRoute that attaches to the Gateway specified in the namespace’s AIMNamespaceConfig. Routes use path-based matching with the prefix `/<namespace>/<workload_id>/`, where `workload_id` is a unique identifier generated for the service. This enables stable, namespaced endpoints while keeping service-specific paths distinct.
-
-## GPU Scheduling
-
-The controller places workloads on nodes that match the specified GPU model in the template. No user action is required.
-
-## Prerequisites and Limits
-
-ROCm 7 on worker nodes with the AMD GPU Operator installed, KServe available in the cluster, and a ReadWriteMany StorageClass for model caches. Configure namespace credentials via `AIMNamespaceConfig` when accessing private sources.
-
-## Examples
-
-### AIMServiceTemplate examples
-
-Latency‑optimized on MI300X:
+Create or reuse a **namespace** template, then reference it:
 
 ```yaml
 apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMServiceTemplate
 metadata:
-  name: llama3-8b-mi300x-latency-v1
-  namespace: my-llm
+  name: llama3-8b-fast
+  namespace: team-a
 spec:
   model: meta/llama-3-8b:1.1+20240915
   metric: latency
-  precision: bf16
+  precision: fp8
   gpuSelector:
     count: 1
     model: MI300X
-  warmCache: true
+  caching:
+    enabled: false
+---
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: llama3-fast-svc
+  namespace: team-a
+spec:
+  aimModelId: meta/llama-3-8b:1.1+20240915
+  templateRef: llama3-8b-fast
+  cacheModel: true
+  replicas: 2
+  configRef: default
 ```
 
-Throughput‑optimized on MI325X:
+#### (c) Service with **overrides** and **no custom template**
+
+You do **not** need to author a namespace template to tweak a few knobs. Keep `templateRef` pointing to a base (default) template and use `spec.overrides`. **Precedence** at runtime:
+
+```
+service overrides  >  template values
+```
+
+```yaml
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: llama3-override-svc
+  namespace: team-a
+spec:
+  aimModelId: meta/llama-3-8b:1.1+20240915
+  templateRef: llama3-8b-latency-gpu1   # base template (from catalog pack)
+  cacheModel: true
+  overrides:
+    precision: bf16
+    gpuSelector:
+      count: 2
+      model: MI300X
+  replicas: 2
+```
+
+#### (d) Service that **selects a template** and also **overrides** it
+
+```yaml
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: llama3-fast-bf16
+  namespace: team-a
+spec:
+  aimModelId: meta/llama-3-8b:1.1+20240915
+  templateRef: llama3-8b-fast            # ns template
+  cacheModel: true
+  overrides:
+    precision: bf16                      # wins over template.precision
+  replicas: 1
+```
+
+---
+
+## Caching: on-demand and pre-warming
+
+AIM supports two complementary paths.
+
+### On-demand caching (most users)
+
+If `AIMService.spec.cacheModel: true` (default), the operator:
+
+1. Resolves the template referenced by `templateRef`.
+2. Ensures an **AIMTemplateCache** exists in the service’s namespace for that template.
+3. For each model in **`template.status.modelSources[]`**:
+
+    * Ensures a **ModelCache** object exists (unique by `spec.sourceUri`).
+    * Ensures the PVC exists and downloads the model content (reused across services for the same source).
+
+You do **not** need to create `AIMTemplateCache` or `ModelCache` manually for this path.
+
+### Pre-warm a cache (for fast startup or CI/CD pipelines)
+
+You can warm caches before deploying or scaling services:
+
+* Enable caching at the **template** level:
+
+  ```yaml
+  apiVersion: aim.silogen.ai/v1alpha1
+  kind: AIMServiceTemplate
+  metadata:
+    name: llama3-8b-fast
+    namespace: team-a
+  spec:
+    model: meta/llama-3-8b:1.1+20240915
+    metric: latency
+    precision: fp8
+    gpuSelector:
+      count: 1
+      model: MI300X
+    caching:
+      enabled: true
+  ```
+
+  The operator creates the required `AIMTemplateCache`, which fans out to `ModelCache` + PVC.
+
+* Or create a **TemplateCache** directly (resolves an ns template first; falls back to a cluster template of the same name):
+
+  ```yaml
+  apiVersion: aim.silogen.ai/v1alpha1
+  kind: AIMTemplateCache
+  metadata:
+    name: warm-llama3-8b-fast
+    namespace: team-a
+  spec:
+    templateRef: llama3-8b-fast
+  ```
+
+> **ModelCache** details: `spec.sourceUri` is immutable and the uniqueness key; the same source is reused across templates/services within the namespace. The PVC name appears in `status.persistentVolumeClaim`.
+
+---
+
+## Discovery & status (what the operator populates)
+
+* On **template create/update** (both ns and cluster), the operator runs a **dry-run** AIM container to determine required models:
+
+    * **Namespace template**: job runs in the same namespace.
+    * **Cluster template**: job runs in the operator’s system namespace.
+* Discovered models are written to **`status.modelSources[]`** on the template as `{ sourceUri, size }`.
+
+**Key status fields**
+
+* **Templates**: `status.status` (`Pending | Progressing | Available | Degraded | Failed`) + conditions (`Discovered`, `CacheWarm`, `Ready`, `Progressing`, `Failure`).
+* **TemplateCache**: `status.status` + conditions (`Resolved`, `CacheWarm`, `Ready`, `Progressing`, `Failure`) and `status.resolvedTemplateKind`.
+* **ModelCache**: `status.status` + conditions (`StorageReady`, `Progressing`, `Ready`, `Failure`), and `status.persistentVolumeClaim`.
+* **Service**: `status.status` (`Pending | Starting | Running | Failed | Degraded`) + conditions (`Resolved`, `CacheReady`, `RuntimeReady`, `RoutingReady`, `Ready`, `Progressing`, `Failure`).
+
+---
+
+## Cluster- vs namespace-scoped templates
+
+* **AIMClusterServiceTemplate (cluster)**
+  Maintained by cluster admins for consistency. It does **not** carry a caching field. Discovery runs in the operator’s system namespace. Useful as a **reference profile** or baseline.
+
+* **AIMServiceTemplate (namespace)**
+  Owned by tenants/users. Can enable caching (`spec.caching.enabled`). Discovery runs in the same namespace. Recommended for day-to-day service deployment because `AIMService.spec.templateRef` must name a **namespace** template in v1alpha1.
+
+* **Cache warm resolution**
+  `AIMTemplateCache.spec.templateRef` resolves to a namespace template first; if none exists, it falls back to a cluster template with the same name.
+
+---
+
+## Defining your own models and templates
+
+### Define a model catalog entry (cluster admin)
+
+```yaml
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMImage
+metadata:
+  name: meta-llama-3-8b
+spec:
+  modelId: meta/llama-3-8b:1.1+20240915
+  image: registry.example.com/aim/llama3-8b:1.1
+  defaultServiceTemplate: llama3-8b-latency-gpu1
+```
+
+(Optional) provide a cluster template:
+
+```yaml
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterServiceTemplate
+metadata:
+  name: llama3-8b-latency-gpu1
+spec:
+  model: meta/llama-3-8b:1.1+20240915
+  metric: latency
+  precision: fp16
+  gpuSelector:
+    count: 1
+    model: MI300X
+```
+
+### Author a namespace template (user)
 
 ```yaml
 apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMServiceTemplate
 metadata:
-  name: qwen2-7b-mi325x-throughput-v1
-  namespace: my-llm
+  name: llama3-8b-mi325x-throughput
+  namespace: team-a
 spec:
-  model: qwen-ai/qwen2-7b:2.0+20240915
+  model: meta/llama-3-8b:1.1+20240915
   metric: throughput
   precision: bf16
   gpuSelector:
     count: 2
     model: MI325X
-  warmCache: false
+  caching:
+    enabled: false
 ```
 
-### AIMService example
+Then deploy a service with that template (or use overrides as shown earlier).
+
+---
+
+## Namespace configuration (routing & storage defaults)
+
+`AIMNamespaceConfig` configures **routing** and a default **cache storage class** for a namespace. (This guide intentionally omits secret/credential definitions in the namespace config.)
 
 ```yaml
 apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMService
+kind: AIMNamespaceConfig
 metadata:
-  name: llama3-8b-svc
-  namespace: my-llm
+  name: default
+  namespace: team-a
 spec:
-  model: meta/llama-3-8b:1.1+20240915
-  templateRef: llama3-8b-mi300x-latency-v1
-  cacheModel: true
-  replicas: 2
+  routing:
+    gateway:
+      name: public-gw
+      namespace: infra-gw
+    autoCreateRoute: true
+  cacheStorageClassName: fast-rwx
 ```
+
+If routing is enabled, the operator creates one HTTPRoute per `AIMService` and attaches it to the configured Gateway. Paths typically include the namespace and an internal workload identifier.
+
+---
+
+## Monitoring & troubleshooting
+
+```bash
+# Inspect discovery results on a template
+kubectl -n team-a get aimservicetemplate llama3-8b-fast -o yaml | yq '.status'
+
+# See which PVC backs a ModelCache
+kubectl -n team-a get modelcache llama3-weights -o jsonpath='{.status.persistentVolumeClaim}{"\n"}'
+
+# List TemplateCaches and resolved kinds
+kubectl -n team-a get aimtemplatecache
+```
+
+**Common issues**
+
+* **Template not found (service)** → `AIMService` condition `Resolved=False`, reason `TemplateNotFound`.
+* **Discovery failures (template)** → template condition `Failure` with reason `DiscoveryFailed`.
+* **Storage problems (ModelCache)** → `StorageReady=False` with reasons like `PVCPending`, `StorageClassMissing`, `InsufficientCapacity`.
+* **Download failures (ModelCache)** → condition `Failure`, reason `DownloadFailed`.
+* **Routing failures (service)** → reasons `RouteFailed`, `ConfiguringRoute`.
+
+---
+
+## Summary
+
+* Install a **catalog pack** (`AIMImage` + cluster templates) via `kubectl apply -k …`.
+* Deploy services using one of the four common patterns:
+
+    1. **Just the model ID** (pack pre-fills `templateRef` to the default).
+    2. **Explicit namespace template**.
+    3. **Overrides without a custom template** (still reference a base template).
+    4. **Template + overrides** (overrides win).
+* Let `cacheModel: true` handle **on-demand caching**, or pre-warm via `AIMServiceTemplate.spec.caching.enabled` or an explicit `AIMTemplateCache`.
+* Use namespace templates for day-to-day deployment; cluster templates serve as shared baselines.
+* Track progress via status/conditions on Template, TemplateCache, ModelCache, and Service.
