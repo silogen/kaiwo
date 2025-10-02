@@ -6,10 +6,11 @@ AIM provides a consistent way to deploy optimized LLM inference services on AMD 
 
 | Role                                 | Responsibilities                                                                                                                                                                             |
 |--------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Cluster administrator**            | Publishes models as cluster-scoped catalog entries (`AIMImage`) and cluster-wide templates (`AIMClusterServiceTemplate`), enables storage and other dependencies.                            |
+| **Model publisher**                  | Publishes models as cluster-scoped catalog entries (`AIMImage`) and cluster-wide templates (`AIMClusterServiceTemplate`), makes them available in a public or private repository.            |
+| **Cluster administrator**            | Installs cluster-scoped catalog entries (`AIMImage`) and cluster-wide templates (`AIMClusterServiceTemplate`), enables storage and other dependencies.                                       |
 | **Tenant administrator**             | Prepares namespaces and optional namespace-scoped `AIMServiceTemplate` resources.                                                                                                            |
 | **Application user / ML engineer**   | Creates namespace templates (`AIMServiceTemplate`), optionally pre-warms caches (`AIMTemplateCache`), deploys services (`AIMService`), and may create `ModelCache` directly for fine control. |
-| **Kubernetes operator (controller)** | Reconciles AIM resources: discovers model sources for templates, warms caches, creates KServe artifacts and routes, and updates status/conditions.     |
+| **Kubernetes operator (controller)** | Reconciles AIM resources: discovers model sources for templates, warms caches, creates KServe artifacts and routes, and updates status/conditions.                                           |
 
 **Scope quick reference**
 
