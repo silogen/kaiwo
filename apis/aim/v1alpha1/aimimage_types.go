@@ -1,16 +1,24 @@
-// Copyright 2025 Advanced Micro Devices, Inc.  All rights reserved.
+// MIT License
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Copyright (c) 2025 Advanced Micro Devices, Inc.
 //
-//       http://www.apache.org/licenses/LICENSE-2.0
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 package v1alpha1
 
@@ -18,8 +26,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// AIMClusterModelSpec defines the desired state of AIMImage.
-type AIMClusterModelSpec struct {
+// AIMImageSpec defines the desired state of AIMImage.
+type AIMImageSpec struct {
 	// ModelID is the ID name (includes version/revision).
 	// Example: `meta/llama-3-8b:1.1+20240915`.
 	// +kubebuilder:validation:MinLength=1
@@ -35,8 +43,8 @@ type AIMClusterModelSpec struct {
 	DefaultServiceTemplate string `json:"defaultServiceTemplate"`
 }
 
-// AIMClusterModelStatus defines the observed state of AIMImage.
-type AIMClusterModelStatus struct {
+// AIMImageStatus defines the observed state of AIMImage.
+type AIMImageStatus struct {
 	// ObservedGeneration is the most recent generation observed by the controller
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
@@ -48,17 +56,17 @@ type AIMClusterModelStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:scope=Cluster,shortName=aimclm;aimclmodel,categories=aim;all
+// +kubebuilder:resource:scope=Cluster,shortName=aimclimg,categories=aim;all
 // +kubebuilder:printcolumn:name="Model Name",type=string,JSONPath=`.spec.name`
 // +kubebuilder:printcolumn:name="Image",type=string,JSONPath=`.spec.image`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
-// AIMImage is the Schema for cluster-scoped AIM model catalog entries.
+// AIMImage is the Schema for cluster-scoped AIM image catalog entries.
 type AIMImage struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   AIMClusterModelSpec   `json:"spec,omitempty"`
-	Status AIMClusterModelStatus `json:"status,omitempty"`
+	Spec   AIMImageSpec `json:"spec,omitempty"`
+	Status AIMImageSpec `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true

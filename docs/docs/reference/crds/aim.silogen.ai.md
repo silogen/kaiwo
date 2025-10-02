@@ -47,41 +47,6 @@ _Appears in:_
 | `spec` _[AIMConfigSpec](#aimconfigspec)_ |  |  |  |
 
 
-#### AIMClusterModelSpec
-
-
-
-AIMClusterModelSpec defines the desired state of AIMImage.
-
-
-
-_Appears in:_
-- [AIMImage](#aimimage)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `modelId` _string_ | ModelID is the ID name (includes version/revision).<br />Example: `meta/llama-3-8b:1.1+20240915`. |  | MinLength: 1 <br /> |
-| `image` _string_ | Image is the container image URI for this AIM model.<br />This image is inspected by the operator to select runtime profiles used by templates. |  | MinLength: 1 <br /> |
-| `defaultServiceTemplate` _string_ | DefaultServiceTemplate is the name of the default service template to use, if an<br />AIMService is created without specifying a template name. |  |  |
-
-
-#### AIMClusterModelStatus
-
-
-
-AIMClusterModelStatus defines the observed state of AIMImage.
-
-
-
-_Appears in:_
-- [AIMImage](#aimimage)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `observedGeneration` _integer_ | ObservedGeneration is the most recent generation observed by the controller |  |  |
-| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest available observations of the model's state |  |  |
-
-
 #### AIMClusterServiceTemplate
 
 
@@ -181,7 +146,7 @@ _Appears in:_
 
 
 
-AIMImage is the Schema for cluster-scoped AIM model catalog entries.
+AIMImage is the Schema for cluster-scoped AIM image catalog entries.
 
 
 
@@ -193,8 +158,8 @@ _Appears in:_
 | `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
 | `kind` _string_ | `AIMImage` | | |
 | `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
-| `spec` _[AIMClusterModelSpec](#aimclustermodelspec)_ |  |  |  |
-| `status` _[AIMClusterModelStatus](#aimclustermodelstatus)_ |  |  |  |
+| `spec` _[AIMImageSpec](#aimimagespec)_ |  |  |  |
+| `status` _[AIMImageSpec](#aimimagespec)_ |  |  |  |
 
 
 #### AIMImageList
@@ -213,6 +178,26 @@ AIMImageList contains a list of AIMImage.
 | `kind` _string_ | `AIMImageList` | | |
 | `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
 | `items` _[AIMImage](#aimimage) array_ |  |  |  |
+
+
+#### AIMImageSpec
+
+
+
+AIMImageSpec defines the desired state of AIMImage.
+
+
+
+_Appears in:_
+- [AIMImage](#aimimage)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `modelId` _string_ | ModelID is the ID name (includes version/revision).<br />Example: `meta/llama-3-8b:1.1+20240915`. |  | MinLength: 1 <br /> |
+| `image` _string_ | Image is the container image URI for this AIM model.<br />This image is inspected by the operator to select runtime profiles used by templates. |  | MinLength: 1 <br /> |
+| `defaultServiceTemplate` _string_ | DefaultServiceTemplate is the name of the default service template to use, if an<br />AIMService is created without specifying a template name. |  |  |
+
+
 
 
 #### AIMMetric
