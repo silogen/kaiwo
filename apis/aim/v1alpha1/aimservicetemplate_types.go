@@ -15,6 +15,7 @@
 package v1alpha1
 
 import (
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -50,7 +51,7 @@ const (
 // not redefine the full Kubernetes deployment shape.
 type AIMServiceTemplateSpec struct {
 	// Model is the canonical model name (exact string match), including version/revision.
-	// Matches `spec.name` of an AIMClusterModel. Immutable.
+	// Matches `spec.name` of an AIMImage. Immutable.
 	//
 	// Example: `meta/llama-3-8b:1.1+20240915`
 	//
@@ -122,7 +123,14 @@ type AIMServiceTemplateStatus struct {
 
 	// ModelSources list the models that this template requires to run. These are the models that will be
 	// cached, if this template is cached.
-	ModelSources []string `json:"modelSources,omitempty"`
+	ModelSources []AIMModelSource `json:"modelSources,omitempty"`
+}
+
+type AIMModelSource struct {
+	// SourceURI is the source where the model should be downloaded from
+	SourceURI string `json:"sourceUri"`
+	// Size is the amount of storage that the source expects
+	Size resource.Quantity `json:"size"`
 }
 
 // AIMTemplateStatusEnum defines coarse-grained states for a template.

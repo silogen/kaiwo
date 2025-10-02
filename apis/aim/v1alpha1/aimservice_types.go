@@ -25,7 +25,7 @@ import (
 // number of replicas is overrideable here.
 type AIMServiceSpec struct {
 	// Model is the canonical model name (including version/revision) to deploy.
-	// Expected to match the `spec.name` of an AIMClusterModel. Example:
+	// Expected to match the `spec.name` of an AIMImage. Example:
 	// `meta/llama-3-8b:1.1+20240915`.
 	// +kubebuilder:validation:MinLength=1
 	Model string `json:"model"`

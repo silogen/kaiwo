@@ -60,7 +60,7 @@ type AIMNamespaceCredentials struct {
 // AIMNamespaceImageConfig defines image pull configuration for AIM workloads in the namespace.
 //
 // Configure one or more image pull secrets to access private registries
-// hosting AIM images referenced by AIMClusterModel entries.
+// hosting AIM images referenced by AIMImage entries.
 //
 // Example:
 //

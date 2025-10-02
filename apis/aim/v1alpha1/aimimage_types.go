@@ -18,9 +18,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// AIMClusterModelSpec defines the desired state of AIMClusterModel.
+// AIMClusterModelSpec defines the desired state of AIMImage.
 type AIMClusterModelSpec struct {
-	// Name is the canonical model name (includes version/revision).
+	// Name is the model name (includes version/revision).
 	// Example: `meta/llama-3-8b:1.1+20240915`.
 	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
@@ -29,9 +29,13 @@ type AIMClusterModelSpec struct {
 	// This image is inspected by the operator to select runtime profiles used by templates.
 	// +kubebuilder:validation:MinLength=1
 	Image string `json:"image"`
+
+	// DefaultServiceTemplate is the name of the default service template to use, if an
+	// AIMService is created without specifying a template name.
+	DefaultServiceTemplate string `json:"defaultServiceTemplate"`
 }
 
-// AIMClusterModelStatus defines the observed state of AIMClusterModel.
+// AIMClusterModelStatus defines the observed state of AIMImage.
 type AIMClusterModelStatus struct {
 	// ObservedGeneration is the most recent generation observed by the controller
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
@@ -48,8 +52,8 @@ type AIMClusterModelStatus struct {
 // +kubebuilder:printcolumn:name="Model Name",type=string,JSONPath=`.spec.name`
 // +kubebuilder:printcolumn:name="Image",type=string,JSONPath=`.spec.image`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
-// AIMClusterModel is the Schema for cluster-scoped AIM model catalog entries.
-type AIMClusterModel struct {
+// AIMImage is the Schema for cluster-scoped AIM model catalog entries.
+type AIMImage struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
@@ -58,13 +62,13 @@ type AIMClusterModel struct {
 }
 
 // +kubebuilder:object:root=true
-// AIMClusterModelList contains a list of AIMClusterModel.
-type AIMClusterModelList struct {
+// AIMImageList contains a list of AIMImage.
+type AIMImageList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []AIMClusterModel `json:"items"`
+	Items           []AIMImage `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&AIMClusterModel{}, &AIMClusterModelList{})
+	SchemeBuilder.Register(&AIMImage{}, &AIMImageList{})
 }
