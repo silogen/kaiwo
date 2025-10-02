@@ -196,6 +196,9 @@ spec:
                   cached, if this template is cached.
                 items:
                   properties:
+                    name:
+                      description: Name is the name of the model
+                      type: string
                     size:
                       anyOf:
                       - type: integer
@@ -217,6 +220,11 @@ spec:
                   by the controller.
                 format: int64
                 type: integer
+              profile:
+                description: |-
+                  Profile contains the full discovery result profile as a free-form JSON object.
+                  This includes metadata, engine args, environment variables, and model details.
+                x-kubernetes-preserve-unknown-fields: true
               status:
                 default: Pending
                 description: |-

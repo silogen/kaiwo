@@ -347,6 +347,7 @@ func (r *AIMServiceTemplateReconciler) projectStatus(
 
 	// Discovery succeeded
 	var modelSources []aimv1alpha1.AIMModelSource
+	var profile any
 	if obs.Job != nil && shared.IsJobSucceeded(obs.Job) {
 		status = aimv1alpha1.AIMTemplateStatusAvailable
 
@@ -372,9 +373,10 @@ func (r *AIMServiceTemplateReconciler) projectStatus(
 		))
 
 		// Parse discovery results
-		sources, err := shared.ParseDiscoveryLogs(ctx, r.Client, obs.Job)
+		discovery, err := shared.ParseDiscoveryLogs(ctx, r.Client, obs.Job)
 		if err == nil {
-			modelSources = sources
+			modelSources = discovery.ModelSources
+			profile = discovery.Profile
 		}
 
 		// TODO: Add CacheWarm condition when caching is enabled
@@ -411,9 +413,13 @@ func (r *AIMServiceTemplateReconciler) projectStatus(
 		StatusValue: status,
 	}
 
-	if len(modelSources) > 0 {
-		update.AdditionalFields = map[string]any{
-			"ModelSources": modelSources,
+	if len(modelSources) > 0 || profile != nil {
+		update.AdditionalFields = map[string]any{}
+		if len(modelSources) > 0 {
+			update.AdditionalFields["ModelSources"] = modelSources
+		}
+		if profile != nil {
+			update.AdditionalFields["Profile"] = profile
 		}
 	}
 

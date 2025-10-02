@@ -24,6 +24,7 @@ package v1alpha1
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -177,9 +178,20 @@ type AIMServiceTemplateStatus struct {
 	// ModelSources list the models that this template requires to run. These are the models that will be
 	// cached, if this template is cached.
 	ModelSources []AIMModelSource `json:"modelSources,omitempty"`
+
+	// Profile contains the full discovery result profile as a free-form JSON object.
+	// This includes metadata, engine args, environment variables, and model details.
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +kubebuilder:validation:Schemaless
+	Profile *apiextensionsv1.JSON `json:"profile,omitempty"`
 }
 
 type AIMModelSource struct {
+	// Name is the name of the model
+	// +optional
+	Name string `json:"name,omitempty"`
+
 	// SourceURI is the source where the model should be downloaded from
 	SourceURI string `json:"sourceUri"`
 

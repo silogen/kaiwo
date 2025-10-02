@@ -28,6 +28,7 @@ package v1alpha1
 
 import (
 	"k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
@@ -676,6 +677,11 @@ func (in *AIMServiceTemplateStatus) DeepCopyInto(out *AIMServiceTemplateStatus) 
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
+	}
+	if in.Profile != nil {
+		in, out := &in.Profile, &out.Profile
+		*out = new(apiextensionsv1.JSON)
+		(*in).DeepCopyInto(*out)
 	}
 }
 
