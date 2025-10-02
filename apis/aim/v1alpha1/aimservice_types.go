@@ -44,10 +44,10 @@ type AIMServiceSpec struct {
 	TemplateRef string `json:"templateRef"`
 
 	// CacheModel requests that model sources be cached when starting the service
-	// if the template itself does not warm the cache. Defaults to `true`.
+	// if the template itself does not warm the cache.
 	// When `warmCache: false` on the template, this setting ensures caching is
 	// performed before the service becomes ready.
-	// +kubebuilder:default=true
+	// +kubebuilder:default=false
 	CacheModel bool `json:"cacheModel,omitempty"`
 
 	// Replicas overrides the number of replicas for this service.

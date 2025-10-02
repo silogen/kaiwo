@@ -38,6 +38,9 @@ type AIMTemplateCacheSpec struct {
 	// ImagePullSecrets references secrets for pulling AIM container images.
 	// +optional
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
+	// StorageClassName is the name for the storage class to use for this cache
+	StorageClassName string `json:"storageClassName,omitempty"`
 }
 
 // AIMTemplateCacheStatusEnum defines the status of the template cache.

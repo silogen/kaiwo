@@ -15,23 +15,10 @@
 package v1alpha1
 
 import (
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
 )
-
-// AIMS3Credential configures S3 credential references for a specific endpoint.
-// Provide an endpoint and secret references for authentication.
-type AIMS3Credential struct {
-	// EndpointURL (S3-compatible). If both Region and EndpointURL are set, EndpointURL wins.
-	EndpointURL string `json:"endpointUrl,omitempty"`
-
-	// Region (AWS S3). If both Region and EndpointURL are set, EndpointURL wins.
-	Region string `json:"region,omitempty"`
-
-	AccessKeyID     v1.SecretKeySelector `json:"accessKeyId,omitempty"`
-	SecretAccessKey v1.SecretKeySelector `json:"secretAccessKey,omitempty"`
-}
 
 // AIMConfigSpec defines the desired configuration for an AIM-enabled namespace.
 type AIMConfigSpec struct {
@@ -43,6 +30,9 @@ type AIMConfigSpec struct {
 
 	// CacheStorageClassName is the name of the storage class to use for cached models
 	CacheStorageClassName string `json:"cacheStorageClassName,omitempty"`
+
+	// ImagePullSecrets are a list of secrets that will be merged with any existing ones when referencing the AIM containers
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 }
 
 // AIMRoutingConfig controls automatic HTTPRoute provisioning in the namespace.
@@ -62,7 +52,7 @@ type AIMCachingConfig struct {
 }
 
 // +kubebuilder:object:root=true
-// +kubebuilder:resource:scope=Cluster,shortName=aimns,categories=aim;all
+// +kubebuilder:resource:scope=Cluster,shortName=aimccfg,categories=aim;all
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // AIMClusterConfig configures credentials and routing at a cluster level.
 type AIMClusterConfig struct {
@@ -73,13 +63,13 @@ type AIMClusterConfig struct {
 }
 
 // +kubebuilder:object:root=true
-// AIMClusterConfigList contains a list of AIMClusterConfig.
-type AIMClusterConfigList struct {
+// AIMConfigList contains a list of AIMClusterConfig.
+type AIMConfigList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []AIMClusterConfig `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&AIMClusterConfig{}, &AIMClusterConfigList{})
+	SchemeBuilder.Register(&AIMClusterConfig{}, &AIMConfigList{})
 }

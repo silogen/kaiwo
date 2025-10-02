@@ -75,10 +75,10 @@ spec:
                 minLength: 1
                 type: string
               cacheModel:
-                default: true
+                default: false
                 description: |-
                   CacheModel requests that model sources be cached when starting the service
-                  if the template itself does not warm the cache. Defaults to `true`.
+                  if the template itself does not warm the cache.
                   When `warmCache: false` on the template, this setting ensures caching is
                   performed before the service becomes ready.
                 type: boolean

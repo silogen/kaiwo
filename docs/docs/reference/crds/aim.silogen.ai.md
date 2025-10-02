@@ -10,9 +10,9 @@ Package v1alpha1 contains API Schema definitions for the AIM v1alpha1 API group.
 
 ### Resource Types
 - [AIMClusterConfig](#aimclusterconfig)
-- [AIMClusterConfigList](#aimclusterconfiglist)
 - [AIMClusterServiceTemplate](#aimclusterservicetemplate)
 - [AIMClusterServiceTemplateList](#aimclusterservicetemplatelist)
+- [AIMConfigList](#aimconfiglist)
 - [AIMImage](#aimimage)
 - [AIMImageList](#aimimagelist)
 - [AIMService](#aimservice)
@@ -37,7 +37,7 @@ AIMClusterConfig configures credentials and routing at a cluster level.
 
 
 _Appears in:_
-- [AIMClusterConfigList](#aimclusterconfiglist)
+- [AIMConfigList](#aimconfiglist)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -45,24 +45,6 @@ _Appears in:_
 | `kind` _string_ | `AIMClusterConfig` | | |
 | `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
 | `spec` _[AIMConfigSpec](#aimconfigspec)_ |  |  |  |
-
-
-#### AIMClusterConfigList
-
-
-
-AIMClusterConfigList contains a list of AIMClusterConfig.
-
-
-
-
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
-| `kind` _string_ | `AIMClusterConfigList` | | |
-| `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
-| `items` _[AIMClusterConfig](#aimclusterconfig) array_ |  |  |  |
 
 
 #### AIMClusterModelSpec
@@ -159,6 +141,24 @@ _Appears in:_
 | `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
 
 
+#### AIMConfigList
+
+
+
+AIMConfigList contains a list of AIMClusterConfig.
+
+
+
+
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `AIMConfigList` | | |
+| `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `items` _[AIMClusterConfig](#aimclusterconfig) array_ |  |  |  |
+
+
 #### AIMConfigSpec
 
 
@@ -174,6 +174,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `routing` _[AIMRoutingConfig](#aimroutingconfig)_ | Routing controls automatic HTTPRoute creation for AIM services in this namespace.<br />When enabled (default), the operator creates one HTTPRoute per service using<br />path-based routing with the pattern `/<namespace>/<workload_id>/` and attaches<br />it to the referenced Gateway listener. |  |  |
 | `cacheStorageClassName` _string_ | CacheStorageClassName is the name of the storage class to use for cached models |  |  |
+| `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets are a list of secrets that will be merged with any existing ones when referencing the AIM containers |  |  |
 
 
 #### AIMImage
@@ -321,8 +322,6 @@ _Appears in:_
 | `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
 
 
-
-
 #### AIMService
 
 
@@ -401,7 +400,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `aimModelId` _string_ | AIMModelID is the canonical model name (including version/revision) to deploy.<br />Expected to match the `spec.name` of an AIMImage. Example:<br />`meta/llama-3-8b:1.1+20240915`. |  | MinLength: 1 <br /> |
 | `templateRef` _string_ | TemplateRef is the name of the AIMServiceTemplate or AIMClusterServiceTemplate to use.<br />The template selects the runtime profile and GPU parameters. |  |  |
-| `cacheModel` _boolean_ | CacheModel requests that model sources be cached when starting the service<br />if the template itself does not warm the cache. Defaults to `true`.<br />When `warmCache: false` on the template, this setting ensures caching is<br />performed before the service becomes ready. | true |  |
+| `cacheModel` _boolean_ | CacheModel requests that model sources be cached when starting the service<br />if the template itself does not warm the cache.<br />When `warmCache: false` on the template, this setting ensures caching is<br />performed before the service becomes ready. | false |  |
 | `replicas` _integer_ | Replicas overrides the number of replicas for this service.<br />Other runtime settings remain governed by the template unless overridden. | 1 |  |
 | `configRef` _string_ | ConfigRef selects the cluster-scoped AIMClusterConfig (by name) to use for this service. | default |  |
 | `overrides` _[AIMServiceOverrides](#aimserviceoverrides)_ | Overrides allows overriding specific template parameters for this service.<br />When specified, these values take precedence over the template values. |  |  |
@@ -608,6 +607,7 @@ _Appears in:_
 | `templateRef` _string_ | TemplateRef is the name of the AIMServiceTemplate or AIMClusterServiceTemplate to cache.<br />The controller will first look for a namespace-scoped AIMServiceTemplate in the same namespace.<br />If not found, it will look for a cluster-scoped AIMClusterServiceTemplate with the same name.<br />Namespace-scoped templates take priority over cluster-scoped templates. |  | MinLength: 1 <br /> |
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to use for authentication when downloading models.<br />These variables are used for authentication with model registries (e.g., HuggingFace tokens). |  |  |
 | `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets references secrets for pulling AIM container images. |  |  |
+| `storageClassName` _string_ | StorageClassName is the name for the storage class to use for this cache |  |  |
 
 
 #### AIMTemplateCacheStatus

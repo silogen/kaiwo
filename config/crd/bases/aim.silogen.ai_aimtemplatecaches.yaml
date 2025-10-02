@@ -200,6 +200,10 @@ spec:
                   type: object
                   x-kubernetes-map-type: atomic
                 type: array
+              storageClassName:
+                description: StorageClassName is the name for the storage class to
+                  use for this cache
+                type: string
               templateRef:
                 description: |-
                   TemplateRef is the name of the AIMServiceTemplate or AIMClusterServiceTemplate to cache.
