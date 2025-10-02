@@ -1,17 +1,25 @@
 /*
-Copyright 2025 Advanced Micro Devices, Inc.  All rights reserved.
+MIT License
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+Copyright (c) 2025 Advanced Micro Devices, Inc.
 
-      http://www.apache.org/licenses/LICENSE-2.0
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 */
 
 package controller
@@ -25,7 +33,7 @@ import (
 
 	"k8s.io/client-go/tools/record"
 
-	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
+	aim "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 
@@ -54,9 +62,9 @@ type ModelCacheReconciler struct {
 }
 
 // RBAC markers
-// +kubebuilder:rbac:groups=kaiwo.silogen.ai,resources=modelcaches,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=kaiwo.silogen.ai,resources=modelcaches/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=kaiwo.silogen.ai,resources=modelcaches/finalizers,verbs=update
+// +kubebuilder:rbac:groups=aim.silogen.ai,resources=modelcaches,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=aim.silogen.ai,resources=modelcaches/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=aim.silogen.ai,resources=modelcaches/finalizers,verbs=update
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=storage.k8s.io,resources=storageclasses,verbs=get;list;watch
@@ -72,7 +80,7 @@ const (
 func (r *ModelCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx).WithValues("modelcache", req.String())
 	// Fetch CR
-	var mc kaiwo.ModelCache
+	var mc aim.ModelCache
 	if err := r.Get(ctx, req.NamespacedName, &mc); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -86,7 +94,7 @@ func (r *ModelCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// Deletion guard: don't mutate children when deleting
 	if !mc.DeletionTimestamp.IsZero() {
 		st := r.projectStatus(&mc, ob)
-		meta.SetStatusCondition(&st.Conditions, metav1.Condition{Type: kaiwo.ConditionReady, Status: metav1.ConditionFalse, Reason: "Finalizing", Message: "Resource is being deleted"})
+		meta.SetStatusCondition(&st.Conditions, metav1.Condition{Type: aim.ConditionReady, Status: metav1.ConditionFalse, Reason: "Finalizing", Message: "Resource is being deleted"})
 		before := mc.DeepCopy()
 		mc.Status = st
 		_ = r.Status().Patch(ctx, &mc, client.MergeFrom(before))
@@ -111,8 +119,8 @@ func (r *ModelCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// Emit events based on observed state prior to apply, gated by prior status
-	prevStorage := meta.FindStatusCondition(mc.Status.Conditions, kaiwo.ConditionStorageReady)
-	prevReady := meta.FindStatusCondition(mc.Status.Conditions, kaiwo.ConditionReady)
+	prevStorage := meta.FindStatusCondition(mc.Status.Conditions, aim.ConditionStorageReady)
+	prevReady := meta.FindStatusCondition(mc.Status.Conditions, aim.ConditionReady)
 	if !ob.pvcFound && (prevStorage == nil || prevStorage.Status != metav1.ConditionTrue) {
 		r.Recorder.Event(&mc, corev1.EventTypeNormal, "PVCEnsured", fmt.Sprintf("Ensured PVC %s", r.pvcName(&mc)))
 		logger.V(1).Info("PVC ensured (SSA)", "pvc", r.pvcName(&mc))
@@ -145,7 +153,7 @@ func (r *ModelCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		summary := summarizeConditionTransitions(mc.Status.Conditions, newStatus.Conditions)
 		if summary != "" {
 			evtType := corev1.EventTypeNormal
-			if cond := meta.FindStatusCondition(newStatus.Conditions, kaiwo.ConditionFailure); cond != nil && cond.Status == metav1.ConditionTrue {
+			if cond := meta.FindStatusCondition(newStatus.Conditions, aim.ConditionFailure); cond != nil && cond.Status == metav1.ConditionTrue {
 				evtType = corev1.EventTypeWarning
 			}
 			logger.Info("status transitioned", "changes", summary)
@@ -186,7 +194,7 @@ type observation struct {
 	applyTerminal     bool
 }
 
-func (r *ModelCacheReconciler) observe(ctx context.Context, mc *kaiwo.ModelCache) (ob observation, err error) {
+func (r *ModelCacheReconciler) observe(ctx context.Context, mc *aim.ModelCache) (ob observation, err error) {
 	// PVC
 	pvcName := r.pvcName(mc)
 	if err := r.Get(ctx, types.NamespacedName{Namespace: mc.Namespace, Name: pvcName}, &ob.pvc); err != nil {
@@ -245,7 +253,7 @@ func (r *ModelCacheReconciler) observe(ctx context.Context, mc *kaiwo.ModelCache
 	return ob, nil
 }
 
-func (r *ModelCacheReconciler) apply(ctx context.Context, mc *kaiwo.ModelCache, ob observation) error {
+func (r *ModelCacheReconciler) apply(ctx context.Context, mc *aim.ModelCache, ob observation) error {
 	// Server-Side Apply desired PVC on every reconcile
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		pvc := r.buildPVC(mc, r.pvcName(mc))
@@ -320,7 +328,7 @@ func (r *ModelCacheReconciler) calculateStateFlags(ob observation) stateFlags {
 	}
 }
 
-func (r *ModelCacheReconciler) projectStatus(mc *kaiwo.ModelCache, ob observation) kaiwo.ModelCacheStatus {
+func (r *ModelCacheReconciler) projectStatus(mc *aim.ModelCache, ob observation) aim.ModelCacheStatus {
 	status := mc.Status
 	status.PersistentVolumeClaim = r.pvcName(mc)
 	status.ObservedGeneration = mc.GetGeneration()
@@ -339,23 +347,23 @@ func (r *ModelCacheReconciler) projectStatus(mc *kaiwo.ModelCache, ob observatio
 }
 
 func (r *ModelCacheReconciler) buildStorageReadyCondition(ob observation) metav1.Condition {
-	cond := metav1.Condition{Type: kaiwo.ConditionStorageReady}
+	cond := metav1.Condition{Type: aim.ConditionStorageReady}
 
 	switch {
 	case !ob.pvcFound:
 		cond.Status = metav1.ConditionFalse
-		cond.Reason = kaiwo.ReasonPVCPending
+		cond.Reason = aim.ReasonPVCPending
 		cond.Message = "PVC not created yet"
 	case ob.pvc.Status.Phase == corev1.ClaimBound:
 		cond.Status = metav1.ConditionTrue
-		cond.Reason = kaiwo.ReasonPVCBound
+		cond.Reason = aim.ReasonPVCBound
 	case ob.pvc.Status.Phase == corev1.ClaimPending:
 		cond.Status = metav1.ConditionFalse
-		cond.Reason = kaiwo.ReasonPVCProvisioning
+		cond.Reason = aim.ReasonPVCProvisioning
 		cond.Message = "PVC is provisioning"
 	case ob.pvc.Status.Phase == corev1.ClaimLost:
 		cond.Status = metav1.ConditionFalse
-		cond.Reason = kaiwo.ReasonPVCLost
+		cond.Reason = aim.ReasonPVCLost
 		cond.Message = "PVC lost"
 	default:
 		cond.Status = metav1.ConditionUnknown
@@ -366,16 +374,16 @@ func (r *ModelCacheReconciler) buildStorageReadyCondition(ob observation) metav1
 }
 
 func (r *ModelCacheReconciler) buildReadyCondition(sf stateFlags) metav1.Condition {
-	cond := metav1.Condition{Type: kaiwo.ConditionReady}
+	cond := metav1.Condition{Type: aim.ConditionReady}
 	if sf.ready {
 		cond.Status = metav1.ConditionTrue
-		cond.Reason = kaiwo.ReasonWarm
+		cond.Reason = aim.ReasonWarm
 	} else {
 		cond.Status = metav1.ConditionFalse
 		if !sf.canCreateJob {
-			cond.Reason = kaiwo.ReasonWaitingForPVC
+			cond.Reason = aim.ReasonWaitingForPVC
 		} else {
-			cond.Reason = kaiwo.ReasonDownloading
+			cond.Reason = aim.ReasonDownloading
 		}
 	}
 
@@ -383,22 +391,22 @@ func (r *ModelCacheReconciler) buildReadyCondition(sf stateFlags) metav1.Conditi
 }
 
 func (r *ModelCacheReconciler) buildProgressingCondition(ob observation, sf stateFlags) metav1.Condition {
-	cond := metav1.Condition{Type: kaiwo.ConditionProgressing}
+	cond := metav1.Condition{Type: aim.ConditionProgressing}
 	cond.Status = boolToCondition(sf.progressing)
 
 	if !ob.storageReady && !sf.canCreateJob {
-		cond.Reason = kaiwo.ReasonWaitingForPVC
+		cond.Reason = aim.ReasonWaitingForPVC
 	} else if ob.jobPendingOrRunning || (!ob.jobFound && sf.canCreateJob) {
-		cond.Reason = kaiwo.ReasonDownloading
+		cond.Reason = aim.ReasonDownloading
 	} else {
-		cond.Reason = kaiwo.ReasonRetryBackoff
+		cond.Reason = aim.ReasonRetryBackoff
 	}
 
 	return cond
 }
 
 func (r *ModelCacheReconciler) buildFailureCondition(ob observation, sf stateFlags) metav1.Condition {
-	cond := metav1.Condition{Type: kaiwo.ConditionFailure}
+	cond := metav1.Condition{Type: aim.ConditionFailure}
 	cond.Status = boolToCondition(sf.failure)
 	cond.Reason = "NoFailure" // Ensure Reason is always non-empty to satisfy schema
 
@@ -406,33 +414,33 @@ func (r *ModelCacheReconciler) buildFailureCondition(ob observation, sf stateFla
 		cond.Reason = ob.applyErrorReason
 		cond.Message = ob.applyErrorMessage
 	} else if ob.storageLost {
-		cond.Reason = kaiwo.ReasonPVCLost
+		cond.Reason = aim.ReasonPVCLost
 	} else if ob.jobFailed {
-		cond.Reason = kaiwo.ReasonDownloadFailed
+		cond.Reason = aim.ReasonDownloadFailed
 	}
 
 	return cond
 }
 
-func (r *ModelCacheReconciler) determineOverallStatus(sf stateFlags, ob observation) kaiwo.ModelCacheStatusEnum {
+func (r *ModelCacheReconciler) determineOverallStatus(sf stateFlags, ob observation) aim.ModelCacheStatusEnum {
 	switch {
 	case sf.failure && (ob.applyTerminal || ob.jobFailed):
-		return kaiwo.ModelCacheStatusFailed
+		return aim.ModelCacheStatusFailed
 	case sf.ready:
-		return kaiwo.ModelCacheStatusAvailable
+		return aim.ModelCacheStatusAvailable
 	case sf.progressing:
-		return kaiwo.ModelCacheStatusProgressing
+		return aim.ModelCacheStatusProgressing
 	default:
-		return kaiwo.ModelCacheStatusPending
+		return aim.ModelCacheStatusPending
 	}
 }
 
-//func (r *ModelCacheReconciler) isProgressing(st kaiwo.ModelCacheStatus) bool {
-//	cond := meta.FindStatusCondition(st.Conditions, kaiwo.ConditionProgressing)
+//func (r *ModelCacheReconciler) isProgressing(st aim.ModelCacheStatus) bool {
+//	cond := meta.FindStatusCondition(st.Conditions, aim.ConditionProgressing)
 //	return cond != nil && cond.Status == metav1.ConditionTrue
 //}
 
-func (r *ModelCacheReconciler) buildPVC(mc *kaiwo.ModelCache, pvcName string) *corev1.PersistentVolumeClaim {
+func (r *ModelCacheReconciler) buildPVC(mc *aim.ModelCache, pvcName string) *corev1.PersistentVolumeClaim {
 	var sc *string
 	if mc.Spec.StorageClassName != "" {
 		v := mc.Spec.StorageClassName
@@ -445,7 +453,7 @@ func (r *ModelCacheReconciler) buildPVC(mc *kaiwo.ModelCache, pvcName string) *c
 			Namespace: mc.Namespace,
 			Labels: mergeStringMap(nil, map[string]string{
 				"app.kubernetes.io/managed-by": "modelcache-controller",
-				"kaiwo.silogen.ai/modelcache":  mc.Name,
+				"aim.silogen.ai/modelcache":    mc.Name,
 			}),
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
@@ -467,7 +475,7 @@ func MultiplyQuantityByFloatExact(q resource.Quantity, factor float64) resource.
 	return *resource.NewDecimalQuantity(*dec, q.Format)
 }
 
-func (r *ModelCacheReconciler) buildDownloadJob(mc *kaiwo.ModelCache, jobName string, pvcName string) *batchv1.Job {
+func (r *ModelCacheReconciler) buildDownloadJob(mc *aim.ModelCache, jobName string, pvcName string) *batchv1.Job {
 	mountPath := "/cache"
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
@@ -479,7 +487,7 @@ func (r *ModelCacheReconciler) buildDownloadJob(mc *kaiwo.ModelCache, jobName st
 			Namespace: mc.Namespace,
 			Labels: mergeStringMap(nil, map[string]string{
 				"app.kubernetes.io/managed-by": "modelcache-controller",
-				"kaiwo.silogen.ai/modelcache":  mc.Name,
+				"aim.silogen.ai/modelcache":    mc.Name,
 			}),
 		},
 		Spec: batchv1.JobSpec{
@@ -555,11 +563,11 @@ du -sh %s/.hf 2>/dev/null || true
 	}
 }
 
-func (r *ModelCacheReconciler) pvcName(mc *kaiwo.ModelCache) string {
+func (r *ModelCacheReconciler) pvcName(mc *aim.ModelCache) string {
 	return baseutils.FormatNameWithPostfix(mc.Name, "cache")
 }
 
-func (r *ModelCacheReconciler) jobName(mc *kaiwo.ModelCache) string {
+func (r *ModelCacheReconciler) jobName(mc *aim.ModelCache) string {
 	return baseutils.FormatNameWithPostfix(mc.Name, "cache-download")
 }
 
@@ -613,7 +621,7 @@ func conditionsEqual(a, b []metav1.Condition) bool {
 func (r *ModelCacheReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Recorder = mgr.GetEventRecorderFor("modelcache-controller")
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&kaiwo.ModelCache{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		For(&aim.ModelCache{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Owns(&corev1.PersistentVolumeClaim{}).
 		Owns(&batchv1.Job{}, builder.WithPredicates(JobStatusChangedPredicate())).
 		WithOptions(controller.Options{MaxConcurrentReconciles: 2}).
