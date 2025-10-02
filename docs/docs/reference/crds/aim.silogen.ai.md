@@ -10,6 +10,8 @@ Package v1alpha1 contains API Schema definitions for the AIM v1alpha1 API group.
 
 ### Resource Types
 - [AIMClusterConfig](#aimclusterconfig)
+- [AIMClusterImage](#aimclusterimage)
+- [AIMClusterImageList](#aimclusterimagelist)
 - [AIMClusterServiceTemplate](#aimclusterservicetemplate)
 - [AIMClusterServiceTemplateList](#aimclusterservicetemplatelist)
 - [AIMConfigList](#aimconfiglist)
@@ -45,6 +47,44 @@ _Appears in:_
 | `kind` _string_ | `AIMClusterConfig` | | |
 | `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
 | `spec` _[AIMConfigSpec](#aimconfigspec)_ |  |  |  |
+
+
+#### AIMClusterImage
+
+
+
+AIMClusterImage is the Schema for cluster-scoped AIM image catalog entries.
+
+
+
+_Appears in:_
+- [AIMClusterImageList](#aimclusterimagelist)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `AIMClusterImage` | | |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `spec` _[AIMImageSpec](#aimimagespec)_ |  |  |  |
+| `status` _[AIMImageStatus](#aimimagestatus)_ |  |  |  |
+
+
+#### AIMClusterImageList
+
+
+
+AIMClusterImageList contains a list of AIMClusterImage.
+
+
+
+
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `AIMClusterImageList` | | |
+| `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `items` _[AIMClusterImage](#aimclusterimage) array_ |  |  |  |
 
 
 #### AIMClusterServiceTemplate
@@ -146,7 +186,7 @@ _Appears in:_
 
 
 
-AIMImage is the Schema for cluster-scoped AIM image catalog entries.
+AIMImage is the Schema for namespace-scoped AIM image catalog entries.
 
 
 
@@ -159,7 +199,7 @@ _Appears in:_
 | `kind` _string_ | `AIMImage` | | |
 | `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
 | `spec` _[AIMImageSpec](#aimimagespec)_ |  |  |  |
-| `status` _[AIMImageSpec](#aimimagespec)_ |  |  |  |
+| `status` _[AIMImageStatus](#aimimagestatus)_ |  |  |  |
 
 
 #### AIMImageList
@@ -189,6 +229,7 @@ AIMImageSpec defines the desired state of AIMImage.
 
 
 _Appears in:_
+- [AIMClusterImage](#aimclusterimage)
 - [AIMImage](#aimimage)
 
 | Field | Description | Default | Validation |
@@ -198,6 +239,22 @@ _Appears in:_
 | `defaultServiceTemplate` _string_ | DefaultServiceTemplate is the name of the default service template to use, if an<br />AIMService is created without specifying a template name. |  |  |
 
 
+#### AIMImageStatus
+
+
+
+AIMImageStatus defines the observed state of AIMImage.
+
+
+
+_Appears in:_
+- [AIMClusterImage](#aimclusterimage)
+- [AIMImage](#aimimage)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `observedGeneration` _integer_ | ObservedGeneration is the most recent generation observed by the controller |  |  |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest available observations of the model's state |  |  |
 
 
 #### AIMMetric

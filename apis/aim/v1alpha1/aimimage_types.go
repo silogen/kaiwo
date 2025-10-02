@@ -57,16 +57,39 @@ type AIMImageStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster,shortName=aimclimg,categories=aim;all
-// +kubebuilder:printcolumn:name="Model Name",type=string,JSONPath=`.spec.name`
+// +kubebuilder:printcolumn:name="Model ID",type=string,JSONPath=`.spec.modelId`
 // +kubebuilder:printcolumn:name="Image",type=string,JSONPath=`.spec.image`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
-// AIMImage is the Schema for cluster-scoped AIM image catalog entries.
+// AIMClusterImage is the Schema for cluster-scoped AIM image catalog entries.
+type AIMClusterImage struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   AIMImageSpec   `json:"spec,omitempty"`
+	Status AIMImageStatus `json:"status,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+// AIMClusterImageList contains a list of AIMClusterImage.
+type AIMClusterImageList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []AIMClusterImage `json:"items"`
+}
+
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:shortName=aimimg,categories=aim;all
+// +kubebuilder:printcolumn:name="Model ID",type=string,JSONPath=`.spec.modelId`
+// +kubebuilder:printcolumn:name="Image",type=string,JSONPath=`.spec.image`
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
+// AIMImage is the Schema for namespace-scoped AIM image catalog entries.
 type AIMImage struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   AIMImageSpec `json:"spec,omitempty"`
-	Status AIMImageSpec `json:"status,omitempty"`
+	Spec   AIMImageSpec   `json:"spec,omitempty"`
+	Status AIMImageStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -78,5 +101,5 @@ type AIMImageList struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&AIMImage{}, &AIMImageList{})
+	SchemeBuilder.Register(&AIMClusterImage{}, &AIMClusterImageList{}, &AIMImage{}, &AIMImageList{})
 }

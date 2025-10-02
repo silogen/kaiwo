@@ -4,20 +4,20 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.1
-  name: aimimages.aim.silogen.ai
+  name: aimclusterimages.aim.silogen.ai
 spec:
   group: aim.silogen.ai
   names:
     categories:
     - aim
     - all
-    kind: AIMImage
-    listKind: AIMImageList
-    plural: aimimages
+    kind: AIMClusterImage
+    listKind: AIMClusterImageList
+    plural: aimclusterimages
     shortNames:
-    - aimimg
-    singular: aimimage
-  scope: Namespaced
+    - aimclimg
+    singular: aimclusterimage
+  scope: Cluster
   versions:
   - additionalPrinterColumns:
     - jsonPath: .spec.modelId
@@ -32,7 +32,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: AIMImage is the Schema for namespace-scoped AIM image catalog
+        description: AIMClusterImage is the Schema for cluster-scoped AIM image catalog
           entries.
         properties:
           apiVersion:
