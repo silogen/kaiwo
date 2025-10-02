@@ -1,0 +1,160 @@
+/*
+MIT License
+
+Copyright (c) 2025 Advanced Micro Devices, Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
+package shared
+
+import (
+	"context"
+
+	servingv1alpha1 "github.com/kserve/kserve/pkg/apis/serving/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
+)
+
+// ClusterServingRuntimeSpec defines parameters for creating a ClusterServingRuntime
+type ClusterServingRuntimeSpec struct {
+	Name     string
+	ModelID  string
+	Image    string
+	Metric   *aimv1alpha1.AIMMetric
+	OwnerRef metav1.OwnerReference
+}
+
+// ServingRuntimeSpec defines parameters for creating a ServingRuntime
+type ServingRuntimeSpec struct {
+	Name      string
+	Namespace string
+	ModelID   string
+	Image     string
+	Metric    *aimv1alpha1.AIMMetric
+	OwnerRef  metav1.OwnerReference
+}
+
+// BuildClusterServingRuntime creates a KServe ClusterServingRuntime for a cluster-scoped template
+func BuildClusterServingRuntime(spec ClusterServingRuntimeSpec) *servingv1alpha1.ClusterServingRuntime {
+	runtime := &servingv1alpha1.ClusterServingRuntime{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: servingv1alpha1.SchemeGroupVersion.String(),
+			Kind:       "ClusterServingRuntime",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: spec.Name,
+			Labels: map[string]string{
+				"app.kubernetes.io/name":       "aim-runtime",
+				"app.kubernetes.io/component":  "serving-runtime",
+				"app.kubernetes.io/managed-by": "aim-controller",
+				"aim.silogen.ai/model-id":      spec.ModelID,
+			},
+			OwnerReferences: []metav1.OwnerReference{spec.OwnerRef},
+		},
+		Spec: servingv1alpha1.ServingRuntimeSpec{
+			SupportedModelFormats: []servingv1alpha1.SupportedModelFormat{
+				{
+					Name:    "aim",
+					Version: ptr("1"),
+				},
+			},
+			ServingRuntimePodSpec: servingv1alpha1.ServingRuntimePodSpec{
+				Containers: []corev1.Container{
+					{
+						Name:  "kserve-container",
+						Image: spec.Image,
+						Args: []string{
+							"--model-id", spec.ModelID,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	return runtime
+}
+
+// BuildServingRuntime creates a KServe ServingRuntime for a namespace-scoped template
+func BuildServingRuntime(spec ServingRuntimeSpec) *servingv1alpha1.ServingRuntime {
+	runtime := &servingv1alpha1.ServingRuntime{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: servingv1alpha1.SchemeGroupVersion.String(),
+			Kind:       "ServingRuntime",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      spec.Name,
+			Namespace: spec.Namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/name":       "aim-runtime",
+				"app.kubernetes.io/component":  "serving-runtime",
+				"app.kubernetes.io/managed-by": "aim-controller",
+				"aim.silogen.ai/model-id":      spec.ModelID,
+			},
+			OwnerReferences: []metav1.OwnerReference{spec.OwnerRef},
+		},
+		Spec: servingv1alpha1.ServingRuntimeSpec{
+			SupportedModelFormats: []servingv1alpha1.SupportedModelFormat{
+				{
+					Name:    "aim",
+					Version: ptr("1"),
+				},
+			},
+			ServingRuntimePodSpec: servingv1alpha1.ServingRuntimePodSpec{
+				Containers: []corev1.Container{
+					{
+						Name:  "kserve-container",
+						Image: spec.Image,
+						Args: []string{
+							"--model-id", spec.ModelID,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	return runtime
+}
+
+// GetClusterServingRuntime fetches a ClusterServingRuntime by name
+func GetClusterServingRuntime(ctx context.Context, k8sClient client.Client, name string) (*servingv1alpha1.ClusterServingRuntime, error) {
+	runtime := &servingv1alpha1.ClusterServingRuntime{}
+	if err := k8sClient.Get(ctx, client.ObjectKey{Name: name}, runtime); err != nil {
+		return nil, err
+	}
+	return runtime, nil
+}
+
+// GetServingRuntime fetches a ServingRuntime by namespace and name
+func GetServingRuntime(ctx context.Context, k8sClient client.Client, namespace, name string) (*servingv1alpha1.ServingRuntime, error) {
+	runtime := &servingv1alpha1.ServingRuntime{}
+	if err := k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, runtime); err != nil {
+		return nil, err
+	}
+	return runtime, nil
+}
+
+func ptr[T any](v T) *T {
+	return &v
+}
