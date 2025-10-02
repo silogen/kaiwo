@@ -15,6 +15,7 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -43,13 +44,9 @@ const (
 	AIMPrecisionInt8 AIMPrecision = "int8"
 )
 
-// AIMServiceTemplateSpec defines the desired state of AIMServiceTemplate.
-//
-// A namespaced and versioned template that selects a runtime profile
-// for a given AIM model (by canonical name). Templates are intentionally
-// narrow: they describe runtime selection knobs for the AIM container and do
-// not redefine the full Kubernetes deployment shape.
-type AIMServiceTemplateSpec struct {
+// AIMServiceTemplateSpecCommon contains the shared fields for both cluster-scoped
+// and namespace-scoped service templates.
+type AIMServiceTemplateSpecCommon struct {
 	// Model is the canonical model name (exact string match), including version/revision.
 	// Matches `spec.name` of an AIMImage. Immutable.
 	//
@@ -76,14 +73,43 @@ type AIMServiceTemplateSpec struct {
 
 	// AimGpuSelector contains the strategy to choose the resources to give each replica
 	GpuSelector AimGpuSelector `json:"gpuSelector"`
+}
 
-	// WarmCache requests immediate model cache warming in this namespace after profile discovery.
+// AIMCachingConfig configures model caching behavior for namespace-scoped templates.
+type AIMCachingConfig struct {
+	// Enabled controls whether caching is enabled for this template.
 	// Defaults to `false`.
-	//
-	// When left `false`, services can still request caching via `AIMService.spec.cacheModel: true`.
-	//
 	// +kubebuilder:default=false
-	WarmCache bool `json:"warmCache,omitempty"`
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Env specifies environment variables to use when downloading the model.
+	// These variables are available to the model download process and can be used
+	// to configure download behavior, authentication, proxies, etc.
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
+}
+
+// AIMServiceTemplateSpec defines the desired state of AIMServiceTemplate (namespace-scoped).
+//
+// A namespaced and versioned template that selects a runtime profile
+// for a given AIM model (by canonical name). Templates are intentionally
+// narrow: they describe runtime selection knobs for the AIM container and do
+// not redefine the full Kubernetes deployment shape.
+type AIMServiceTemplateSpec struct {
+	AIMServiceTemplateSpecCommon `json:",inline"`
+
+	// Caching configures model caching behavior for this namespace-scoped template.
+	// When enabled, models will be cached using the specified environment variables
+	// during download.
+	// +optional
+	Caching *AIMCachingConfig `json:"caching,omitempty"`
+}
+
+// AIMClusterServiceTemplateSpec defines the desired state of AIMClusterServiceTemplate (cluster-scoped).
+//
+// A cluster-scoped template that selects a runtime profile for a given AIM model.
+type AIMClusterServiceTemplateSpec struct {
+	AIMServiceTemplateSpecCommon `json:",inline"`
 }
 
 type AimGpuSelector struct {
@@ -95,15 +121,17 @@ type AimGpuSelector struct {
 	// +kubebuilder:validation:MinLength=1
 	Model string `json:"model"`
 
-	// ComputePartitioning mode.
-	// +kubebuilder:default="spx"
-	// +kubebuilder:validation:Enum=spx;cpx
-	ComputePartitioning string `json:"computePartitioning,omitempty"`
+	// TODO re-enable partitioning once it is supported
 
-	// ComputePartitioning mode
-	// +kubebuilder:default:"nps1"
-	// +kubebuilder:validation:Enum=nps1;nps4
-	MemoryPartitioning string `json:"memoryPartitioning,omitempty"`
+	//// ComputePartitioning mode.
+	//// +kubebuilder:default="spx"
+	//// +kubebuilder:validation:Enum=spx;cpx
+	//ComputePartitioning string `json:"computePartitioning,omitempty"`
+	//
+	//// ComputePartitioning mode
+	//// +kubebuilder:default:"nps1"
+	//// +kubebuilder:validation:Enum=nps1;nps4
+	//MemoryPartitioning string `json:"memoryPartitioning,omitempty"`
 }
 
 // AIMServiceTemplateStatus defines the observed state of AIMServiceTemplate.
@@ -186,7 +214,6 @@ const (
 // +kubebuilder:printcolumn:name="Precision",type=string,JSONPath=`.spec.precision`
 // +kubebuilder:printcolumn:name="GPUs/replica",type=integer,JSONPath=`.spec.gpusPerReplica`
 // +kubebuilder:printcolumn:name="GPU",type=string,JSONPath=`.spec.gpuModel`
-// +kubebuilder:printcolumn:name="TP",type=integer,JSONPath=`.spec.tensorParallelism`
 type AIMServiceTemplate struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -202,6 +229,29 @@ type AIMServiceTemplateList struct {
 	Items           []AIMServiceTemplate `json:"items"`
 }
 
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster,shortName=aimclst,categories=aim;all
+// +kubebuilder:printcolumn:name="Model",type=string,JSONPath=`.spec.model`
+// +kubebuilder:printcolumn:name="Metric",type=string,JSONPath=`.spec.useCase`
+// +kubebuilder:printcolumn:name="Precision",type=string,JSONPath=`.spec.precision`
+// +kubebuilder:printcolumn:name="GPUs/replica",type=integer,JSONPath=`.spec.gpusPerReplica`
+// +kubebuilder:printcolumn:name="GPU",type=string,JSONPath=`.spec.gpuModel`
+type AIMClusterServiceTemplate struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   AIMClusterServiceTemplateSpec `json:"spec,omitempty"`
+	Status AIMServiceTemplateStatus      `json:"status,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+type AIMClusterServiceTemplateList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []AIMClusterServiceTemplate `json:"items"`
+}
+
 func init() {
-	SchemeBuilder.Register(&AIMServiceTemplate{}, &AIMServiceTemplateList{})
+	SchemeBuilder.Register(&AIMServiceTemplate{}, &AIMServiceTemplateList{}, &AIMClusterServiceTemplate{}, &AIMClusterServiceTemplateList{})
 }

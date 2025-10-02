@@ -9,6 +9,8 @@
 Package v1alpha1 contains API Schema definitions for the AIM v1alpha1 API group.
 
 ### Resource Types
+- [AIMClusterServiceTemplate](#aimclusterservicetemplate)
+- [AIMClusterServiceTemplateList](#aimclusterservicetemplatelist)
 - [AIMImage](#aimimage)
 - [AIMImageList](#aimimagelist)
 - [AIMNamespaceConfig](#aimnamespaceconfig)
@@ -20,6 +22,23 @@ Package v1alpha1 contains API Schema definitions for the AIM v1alpha1 API group.
 - [ModelCache](#modelcache)
 - [ModelCacheList](#modelcachelist)
 
+
+
+#### AIMCachingConfig
+
+
+
+AIMCachingConfig configures model caching behavior for namespace-scoped templates.
+
+
+
+_Appears in:_
+- [AIMServiceTemplateSpec](#aimservicetemplatespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | Enabled controls whether caching is enabled for this template.<br />Defaults to `false`. | false |  |
+| `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to use when downloading the model.<br />These variables are available to the model download process and can be used<br />to configure download behavior, authentication, proxies, etc. |  |  |
 
 
 #### AIMClusterModelSpec
@@ -55,6 +74,65 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `observedGeneration` _integer_ | ObservedGeneration is the most recent generation observed by the controller |  |  |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest available observations of the model's state |  |  |
+
+
+#### AIMClusterServiceTemplate
+
+
+
+
+
+
+
+_Appears in:_
+- [AIMClusterServiceTemplateList](#aimclusterservicetemplatelist)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `AIMClusterServiceTemplate` | | |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `spec` _[AIMClusterServiceTemplateSpec](#aimclusterservicetemplatespec)_ |  |  |  |
+| `status` _[AIMServiceTemplateStatus](#aimservicetemplatestatus)_ |  |  |  |
+
+
+#### AIMClusterServiceTemplateList
+
+
+
+
+
+
+
+
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `AIMClusterServiceTemplateList` | | |
+| `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `items` _[AIMClusterServiceTemplate](#aimclusterservicetemplate) array_ |  |  |  |
+
+
+#### AIMClusterServiceTemplateSpec
+
+
+
+AIMClusterServiceTemplateSpec defines the desired state of AIMClusterServiceTemplate (cluster-scoped).
+
+A cluster-scoped template that selects a runtime profile for a given AIM model.
+
+
+
+_Appears in:_
+- [AIMClusterServiceTemplate](#aimclusterservicetemplate)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `model` _string_ | Model is the canonical model name (exact string match), including version/revision.<br />Matches `spec.name` of an AIMImage. Immutable.<br />Example: `meta/llama-3-8b:1.1+20240915` |  | MinLength: 1 <br /> |
+| `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal. Immutable.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
+| `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. Immutable. | auto | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
+| `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
 
 
 #### AIMImage
@@ -105,7 +183,9 @@ _Validation:_
 - Enum: [latency throughput]
 
 _Appears in:_
+- [AIMClusterServiceTemplateSpec](#aimclusterservicetemplatespec)
 - [AIMServiceTemplateSpec](#aimservicetemplatespec)
+- [AIMServiceTemplateSpecCommon](#aimservicetemplatespeccommon)
 
 | Field | Description |
 | --- | --- |
@@ -260,7 +340,9 @@ _Validation:_
 - Enum: [bf16 fp16 fp8 int8]
 
 _Appears in:_
+- [AIMClusterServiceTemplateSpec](#aimclusterservicetemplatespec)
 - [AIMServiceTemplateSpec](#aimservicetemplatespec)
+- [AIMServiceTemplateSpecCommon](#aimservicetemplatespeccommon)
 
 | Field | Description |
 | --- | --- |
@@ -437,7 +519,7 @@ _Appears in:_
 
 
 
-AIMServiceTemplateSpec defines the desired state of AIMServiceTemplate.
+AIMServiceTemplateSpec defines the desired state of AIMServiceTemplate (namespace-scoped).
 
 A namespaced and versioned template that selects a runtime profile
 for a given AIM model (by canonical name). Templates are intentionally
@@ -455,7 +537,28 @@ _Appears in:_
 | `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal. Immutable.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
 | `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. Immutable. | auto | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
 | `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
-| `warmCache` _boolean_ | WarmCache requests immediate model cache warming in this namespace after profile discovery.<br />Defaults to `false`.<br />When left `false`, services can still request caching via `AIMService.spec.cacheModel: true`. | false |  |
+| `caching` _[AIMCachingConfig](#aimcachingconfig)_ | Caching configures model caching behavior for this namespace-scoped template.<br />When enabled, models will be cached using the specified environment variables<br />during download. |  |  |
+
+
+#### AIMServiceTemplateSpecCommon
+
+
+
+AIMServiceTemplateSpecCommon contains the shared fields for both cluster-scoped
+and namespace-scoped service templates.
+
+
+
+_Appears in:_
+- [AIMClusterServiceTemplateSpec](#aimclusterservicetemplatespec)
+- [AIMServiceTemplateSpec](#aimservicetemplatespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `model` _string_ | Model is the canonical model name (exact string match), including version/revision.<br />Matches `spec.name` of an AIMImage. Immutable.<br />Example: `meta/llama-3-8b:1.1+20240915` |  | MinLength: 1 <br /> |
+| `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal. Immutable.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
+| `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. Immutable. | auto | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
+| `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
 
 
 #### AIMServiceTemplateStatus
@@ -467,6 +570,7 @@ AIMServiceTemplateStatus defines the observed state of AIMServiceTemplate.
 
 
 _Appears in:_
+- [AIMClusterServiceTemplate](#aimclusterservicetemplate)
 - [AIMServiceTemplate](#aimservicetemplate)
 
 | Field | Description | Default | Validation |
@@ -507,14 +611,14 @@ _Appears in:_
 
 
 _Appears in:_
+- [AIMClusterServiceTemplateSpec](#aimclusterservicetemplatespec)
 - [AIMServiceTemplateSpec](#aimservicetemplatespec)
+- [AIMServiceTemplateSpecCommon](#aimservicetemplatespeccommon)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `count` _integer_ | Count is the number of the GPU resources requested per replica |  | Minimum: 1 <br /> |
 | `model` _string_ | Model is the model name of the GPU that is supported by this template |  | MinLength: 1 <br /> |
-| `computePartitioning` _string_ | ComputePartitioning mode. | spx | Enum: [spx cpx] <br /> |
-| `memoryPartitioning` _string_ | ComputePartitioning mode |  | Enum: [nps1 nps4] <br /> |
 
 
 #### ModelCache
