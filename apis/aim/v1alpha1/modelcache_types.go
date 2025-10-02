@@ -41,7 +41,6 @@ type ModelCacheSpec struct {
 	StorageClassName string `json:"storageClassName,omitempty"`
 
 	// Size specifies the size of the cache volume
-	// +kubebuilder:validation:XValidation:rule="self > quantity('0')",message="size must be greater than 0"
 	Size resource.Quantity `json:"size"`
 
 	// Env lists the environment variables to use for authentication when downloading models.

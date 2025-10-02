@@ -207,9 +207,6 @@ spec:
                 description: Size specifies the size of the cache volume
                 pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                 x-kubernetes-int-or-string: true
-                x-kubernetes-validations:
-                - message: size must be greater than 0
-                  rule: self > quantity('0')
               sourceUri:
                 description: |-
                   SourceURI is the source of the model to be downloaded. This is the only
