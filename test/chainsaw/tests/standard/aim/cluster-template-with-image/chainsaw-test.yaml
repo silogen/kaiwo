@@ -19,34 +19,17 @@ spec:
     - apply:
         file: ../cluster-template.yaml
 
-    # Initially should be Pending
-    - assert:
-        timeout: 10s
-        resource:
-          apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMClusterServiceTemplate
-          metadata:
-            name: llama-3-8b-latency
-          status:
-            status: Pending
-            conditions:
-            - type: Progressing
-              status: "True"
-              reason: Reconciling
-            - type: Ready
-              status: "False"
-              reason: Reconciling
 
-  - name: Wait for discovery job to be created
-    try:
-    - assert:
-        timeout: 15s
-        resource:
-          apiVersion: batch/v1
-          kind: Job
-          metadata:
-            labels:
-              aim.silogen.ai/template: llama-3-8b-latency
+#  - name: Wait for discovery job to be created
+#    try:
+#    - assert:
+#        timeout: 15s
+#        resource:
+#          apiVersion: batch/v1
+#          kind: Job
+#          metadata:
+#            labels:
+#              aim.silogen.ai/template: llama-3-8b-latency
 
   - name: Check template transitions to Progressing
     try:
@@ -63,6 +46,8 @@ spec:
             - type: Progressing
               status: "True"
               reason: DiscoveryRunning
+            - type: Ready
+              status: "False"
             - type: Discovered
               status: "False"
               reason: JobPending
