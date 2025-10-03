@@ -1,4 +1,4 @@
-apiVersion: kaiwo.silogen.ai/v1alpha1
+apiVersion: aim.silogen.ai/v1alpha1
 kind: ModelCache
 metadata:
   name: test

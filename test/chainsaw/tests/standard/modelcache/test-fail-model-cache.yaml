@@ -1,0 +1,8 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: ModelCache
+metadata:
+  name: test-nonexistent
+spec:
+  sourceUri: hf://ThisModelDoesntExist
+  size: 1Gi
+  storageClassName: rwx-nfs
