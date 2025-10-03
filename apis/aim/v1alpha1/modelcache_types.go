@@ -50,6 +50,10 @@ type ModelCacheSpec struct {
 	// +listMapKey=name
 	Env []corev1.EnvVar `json:"env,omitempty"`
 
+	// ModelDownloadImage is the image used to download the model
+	// +kubebuilder:default="kserve/storage-initializer:v0.15.2"
+	ModelDownloadImage string `json:"modelDownloadImage"`
+
 	// ImagePullSecrets references secrets for pulling AIM container images.
 	// +optional
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
