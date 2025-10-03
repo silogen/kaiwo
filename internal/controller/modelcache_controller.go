@@ -477,6 +477,7 @@ func MultiplyQuantityByFloatExact(q resource.Quantity, factor float64) resource.
 
 func (r *ModelCacheReconciler) buildDownloadJob(mc *aim.ModelCache, jobName string, pvcName string) *batchv1.Job {
 	mountPath := "/cache"
+	println(mc.Spec.ModelDownloadImage)
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: batchv1.SchemeGroupVersion.String(),
@@ -502,6 +503,7 @@ func (r *ModelCacheReconciler) buildDownloadJob(mc *aim.ModelCache, jobName stri
 						FSGroup:      baseutils.Pointer(int64(1000)), // Ensures volume ownership matches user
 						RunAsNonRoot: baseutils.Pointer(true),
 					},
+					ImagePullSecrets: mc.Spec.ImagePullSecrets,
 					Volumes: []corev1.Volume{
 						{
 							Name: "cache",
@@ -522,7 +524,7 @@ func (r *ModelCacheReconciler) buildDownloadJob(mc *aim.ModelCache, jobName stri
 					Containers: []corev1.Container{
 						{
 							Name:            "model-download",
-							Image:           downloadJobImage,
+							Image:           mc.Spec.ModelDownloadImage,
 							ImagePullPolicy: corev1.PullIfNotPresent,
 							SecurityContext: &corev1.SecurityContext{
 								RunAsUser:  baseutils.Pointer(int64(1000)),
