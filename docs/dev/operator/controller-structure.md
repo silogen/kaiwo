@@ -114,57 +114,51 @@ This design handles concurrent modifications (conflict errors), avoids unnecessa
 
 When implementing `ProjectFn`, follow these patterns:
 
-**Handle nil observations**: If observe failed, the observation may be nil or partially populated. Status projection must handle this gracefully. The function modifies the resource's status directly and returns only an error:
+**Handle nil observations**: If observe failed, the observation may be nil or partially populated. Status projection must handle this gracefully:
 
 ```go
-func (r *MyReconciler) projectStatus(ctx context.Context, resource *myv1.Resource, obs *myObservation, errs framework.ReconcileErrors) error {
-    resourceStatus := resource.GetStatus()
-
+func (r *MyReconciler) projectStatus(ctx context.Context, resource *myv1.Resource, obs *myObservation, errs framework.ReconcileErrors) (framework.StatusUpdate, error) {
     if errs.ObserveErr != nil {
-        resourceStatus.Status = myv1.StatusFailed
-        meta.SetStatusCondition(&resourceStatus.Conditions, metav1.Condition{
-            Type:    "Ready",
-            Status:  metav1.ConditionFalse,
-            Reason:  "ObservationFailed",
-            Message: errs.ObserveErr.Error(),
-        })
-        return nil
+        return framework.StatusUpdate{
+            Conditions: []metav1.Condition{{
+                Type:    "Ready",
+                Status:  metav1.ConditionFalse,
+                Reason:  "ObservationFailed",
+                Message: errs.ObserveErr.Error(),
+            }},
+            StatusField: "Status",
+            StatusValue: myv1.StatusFailed,
+        }, nil
     }
 
     // Now safe to use obs fields
-    if obs == nil || obs.SomeField == nil {
+    if obs.SomeField == nil {
         // Handle missing data
     }
-    return nil
 }
 ```
 
-**Return early for unchanged status**: If the current status already reflects the desired state (especially for `Available` resources), return early without modifying status:
+**Return early for unchanged status**: If the current status already reflects the desired state (especially for `Available` resources), return an empty update:
 
 ```go
 if currentStatus == aimv1alpha1.AIMTemplateStatusAvailable {
     // Template already available, no status changes needed
-    return nil
+    return framework.StatusUpdate{}, nil
 }
 ```
 
-**Update additional status fields**: Beyond conditions and the status enum, you can update arbitrary status fields by modifying them directly:
+**Use additional fields for complex status**: Beyond conditions and the status enum, you can update arbitrary status fields:
 
 ```go
-resourceStatus.Status = status
-for _, cond := range conditions {
-    meta.SetStatusCondition(&resourceStatus.Conditions, cond)
+return framework.StatusUpdate{
+    Conditions: conditions,
+    StatusField: "Status",
+    StatusValue: status,
+    AdditionalFields: map[string]any{
+        "ModelSources": modelSources,
+        "Profile":      profile,
+    },
 }
-
-// Set additional fields directly
-if len(modelSources) > 0 {
-    resourceStatus.ModelSources = modelSources
-}
-if profile != nil {
-    resourceStatus.Profile = profile
-}
-
-return nil
 ```
 
 ## Error Handling
@@ -184,11 +178,10 @@ When observe fails, the framework short-circuits to status projection without ca
 
 ### Status Projection with Errors
 
-Your `ProjectFn` should inspect `errs` and set conditions accordingly by modifying the status directly:
+Your `ProjectFn` should inspect `errs` and set conditions accordingly:
 
 ```go
-func (r *MyReconciler) projectStatus(ctx context.Context, resource *myv1.Resource, obs *myObservation, errs framework.ReconcileErrors) error {
-    resourceStatus := resource.GetStatus()
+func (r *MyReconciler) projectStatus(ctx context.Context, resource *myv1.Resource, obs *myObservation, errs framework.ReconcileErrors) (framework.StatusUpdate, error) {
     var conditions []metav1.Condition
     var status myv1.ResourceStatus
 
@@ -214,17 +207,15 @@ func (r *MyReconciler) projectStatus(ctx context.Context, resource *myv1.Resourc
             })
         }
 
-        // Update status directly
-        resourceStatus.Status = status
-        for _, cond := range conditions {
-            meta.SetStatusCondition(&resourceStatus.Conditions, cond)
-        }
-        return nil
+        return framework.StatusUpdate{
+            Conditions:  conditions,
+            StatusField: "Status",
+            StatusValue: status,
+        }, nil
     }
 
     // No errors, proceed with normal status projection based on observation
     // ...
-    return nil
 }
 ```
 
@@ -362,37 +353,35 @@ When observe fails, observation may be nil. Status projection must handle this g
 
 **Bad**:
 ```go
-func (r *MyReconciler) projectStatus(ctx context.Context, resource *myv1.Resource, obs *myObservation, errs framework.ReconcileErrors) error {
+func (r *MyReconciler) projectStatus(ctx context.Context, resource *myv1.Resource, obs *myObservation, errs framework.ReconcileErrors) (framework.StatusUpdate, error) {
     // Bad: obs might be nil if observe failed
     if obs.Job == nil {
         // Panic if obs is nil!
     }
-    return nil
 }
 ```
 
 **Good**:
 ```go
-func (r *MyReconciler) projectStatus(ctx context.Context, resource *myv1.Resource, obs *myObservation, errs framework.ReconcileErrors) error {
-    resourceStatus := resource.GetStatus()
-
+func (r *MyReconciler) projectStatus(ctx context.Context, resource *myv1.Resource, obs *myObservation, errs framework.ReconcileErrors) (framework.StatusUpdate, error) {
     // Good: check for observe errors first
     if errs.ObserveErr != nil {
-        resourceStatus.Status = myv1.StatusFailed
-        meta.SetStatusCondition(&resourceStatus.Conditions, metav1.Condition{
-            Type:    "Ready",
-            Status:  metav1.ConditionFalse,
-            Reason:  "ObservationFailed",
-            Message: errs.ObserveErr.Error(),
-        })
-        return nil
+        return framework.StatusUpdate{
+            Conditions: []metav1.Condition{{
+                Type:    "Ready",
+                Status:  metav1.ConditionFalse,
+                Reason:  "ObservationFailed",
+                Message: errs.ObserveErr.Error(),
+            }},
+            StatusField: "Status",
+            StatusValue: myv1.StatusFailed,
+        }, nil
     }
 
     // Now safe to access obs fields (though still should check for nil on individual fields)
-    if obs == nil || obs.Job == nil {
+    if obs.Job == nil {
         // Handle missing job
     }
-    return nil
 }
 ```
 
@@ -447,7 +436,7 @@ PlanFn: func(ctx context.Context, obs any) ([]client.Object, error) {
     return r.plan(ctx, &template, obs.(*newObservation))  // Updated
 },
 
-ProjectFn: func(ctx context.Context, obs any, errs framework.ReconcileErrors) error {
+ProjectFn: func(ctx context.Context, obs any, errs framework.ReconcileErrors) (framework.StatusUpdate, error) {
     return r.projectStatus(ctx, &template, obs.(*newObservation), errs)  // Updated
 },
 ```
