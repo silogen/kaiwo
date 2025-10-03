@@ -31,70 +31,81 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // PatchStatus patches the status subresource with conditions and fields from StatusUpdate.
 // Sets ObservedGeneration to match metadata.generation.
+// Uses retry logic to handle conflicts when the object is modified between read and update.
 func PatchStatus(ctx context.Context, k8sClient client.Client, obj client.Object, update StatusUpdate) error {
-	// Get status via reflection
-	statusValue := reflect.ValueOf(obj).Elem().FieldByName("Status")
-	if !statusValue.IsValid() {
-		return fmt.Errorf("object %T has no Status field", obj)
-	}
-
-	// Clone the original status to detect changes
-	originalStatus := reflect.New(statusValue.Type()).Elem()
-	originalStatus.Set(statusValue)
-
-	// Set conditions (merge with existing)
-	conditionsField := statusValue.FieldByName("Conditions")
-	if conditionsField.IsValid() && conditionsField.CanSet() {
-		existingConditions, ok := conditionsField.Interface().([]metav1.Condition)
-		if !ok {
-			return fmt.Errorf("conditions field is not []metav1.Condition")
+	// Retry on conflicts with exponential backoff
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		// Fetch the latest version of the object to avoid conflicts
+		key := client.ObjectKeyFromObject(obj)
+		if err := k8sClient.Get(ctx, key, obj); err != nil {
+			return err
 		}
 
-		for _, condition := range update.Conditions {
-			meta.SetStatusCondition(&existingConditions, condition)
+		// Get status via reflection
+		statusValue := reflect.ValueOf(obj).Elem().FieldByName("Status")
+		if !statusValue.IsValid() {
+			return fmt.Errorf("object %T has no Status field", obj)
 		}
 
-		conditionsField.Set(reflect.ValueOf(existingConditions))
-	}
+		// Clone the original status to detect changes
+		originalStatus := reflect.New(statusValue.Type()).Elem()
+		originalStatus.Set(statusValue)
 
-	// Set ObservedGeneration
-	observedGenField := statusValue.FieldByName("ObservedGeneration")
-	if observedGenField.IsValid() && observedGenField.CanSet() {
-		observedGenField.SetInt(obj.GetGeneration())
-	}
+		// Set conditions (merge with existing)
+		conditionsField := statusValue.FieldByName("Conditions")
+		if conditionsField.IsValid() && conditionsField.CanSet() {
+			existingConditions, ok := conditionsField.Interface().([]metav1.Condition)
+			if !ok {
+				return fmt.Errorf("conditions field is not []metav1.Condition")
+			}
 
-	// Set status field (e.g., "Status" with value "Available")
-	if update.StatusField != "" {
-		statusEnumField := statusValue.FieldByName(update.StatusField)
-		if statusEnumField.IsValid() && statusEnumField.CanSet() {
-			statusEnumField.Set(reflect.ValueOf(update.StatusValue))
+			for _, condition := range update.Conditions {
+				meta.SetStatusCondition(&existingConditions, condition)
+			}
+
+			conditionsField.Set(reflect.ValueOf(existingConditions))
 		}
-	}
 
-	// Set additional fields
-	for fieldName, fieldValue := range update.AdditionalFields {
-		field := statusValue.FieldByName(fieldName)
-		if field.IsValid() && field.CanSet() {
-			field.Set(reflect.ValueOf(fieldValue))
+		// Set ObservedGeneration
+		observedGenField := statusValue.FieldByName("ObservedGeneration")
+		if observedGenField.IsValid() && observedGenField.CanSet() {
+			observedGenField.SetInt(obj.GetGeneration())
 		}
-	}
 
-	// Only update if status actually changed (ignoring condition LastTransitionTime)
-	if statusUnchanged(originalStatus.Interface(), statusValue.Interface()) {
+		// Set status field (e.g., "Status" with value "Available")
+		if update.StatusField != "" {
+			statusEnumField := statusValue.FieldByName(update.StatusField)
+			if statusEnumField.IsValid() && statusEnumField.CanSet() {
+				statusEnumField.Set(reflect.ValueOf(update.StatusValue))
+			}
+		}
+
+		// Set additional fields
+		for fieldName, fieldValue := range update.AdditionalFields {
+			field := statusValue.FieldByName(fieldName)
+			if field.IsValid() && field.CanSet() {
+				field.Set(reflect.ValueOf(fieldValue))
+			}
+		}
+
+		// Only update if status actually changed (ignoring condition LastTransitionTime)
+		if statusUnchanged(originalStatus.Interface(), statusValue.Interface()) {
+			return nil
+		}
+
+		// Patch status subresource
+		if err := k8sClient.Status().Update(ctx, obj); err != nil {
+			return fmt.Errorf("failed to update status: %w", err)
+		}
+
 		return nil
-	}
-
-	// Patch status subresource
-	if err := k8sClient.Status().Update(ctx, obj); err != nil {
-		return fmt.Errorf("failed to update status: %w", err)
-	}
-
-	return nil
+	})
 }
 
 // statusUnchanged checks if two status values are semantically equal, ignoring condition timestamps
