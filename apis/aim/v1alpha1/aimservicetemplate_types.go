@@ -297,9 +297,19 @@ func (t *AIMServiceTemplate) GetModelID() string {
 	return t.Spec.ModelID
 }
 
+// GetStatus returns a pointer to the template status
+func (t *AIMServiceTemplate) GetStatus() *AIMServiceTemplateStatus {
+	return &t.Status
+}
+
 // GetModelID returns the model ID from the cluster template spec
 func (t *AIMClusterServiceTemplate) GetModelID() string {
 	return t.Spec.ModelID
+}
+
+// GetStatus returns a pointer to the cluster template status
+func (t *AIMClusterServiceTemplate) GetStatus() *AIMServiceTemplateStatus {
+	return &t.Status
 }
 
 func init() {

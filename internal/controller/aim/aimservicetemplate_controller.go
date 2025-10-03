@@ -96,7 +96,7 @@ func (r *AIMServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.R
 			return r.plan(ctx, &template, obs.(*namespaceTemplateObservation))
 		},
 
-		ProjectFn: func(ctx context.Context, obs any, errs framework.ReconcileErrors) (framework.StatusUpdate, error) {
+		ProjectFn: func(ctx context.Context, obs any, errs framework.ReconcileErrors) error {
 			return r.projectStatus(ctx, &template, obs.(*namespaceTemplateObservation), errs)
 		},
 
@@ -212,15 +212,15 @@ func (r *AIMServiceTemplateReconciler) plan(_ context.Context, template *aimv1al
 	return desired, nil
 }
 
-// projectStatus computes status from observation + errors (read-only)
+// projectStatus computes status from observation + errors (modifies template.Status directly)
 func (r *AIMServiceTemplateReconciler) projectStatus(
 	ctx context.Context,
 	template *aimv1alpha1.AIMServiceTemplate,
 	obs *namespaceTemplateObservation,
 	errs framework.ReconcileErrors,
-) (framework.StatusUpdate, error) {
+) error {
 	imageNotFoundMsg := fmt.Sprintf("No AIMImage or AIMClusterImage found for modelId %q", template.Spec.ModelID)
-	return shared.ProjectTemplateStatus(ctx, r.Client, template, &obs.TemplateObservation, errs, imageNotFoundMsg, template.Status.Status)
+	return shared.ProjectTemplateStatus(ctx, r.Client, template, &obs.TemplateObservation, errs, imageNotFoundMsg)
 }
 
 func (r *AIMServiceTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {

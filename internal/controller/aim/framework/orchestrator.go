@@ -77,12 +77,12 @@ func Reconcile(ctx context.Context, spec ReconcileSpec) (ctrl.Result, error) {
 	// Step 4: Short-circuit on observation failure
 	if observeErr != nil {
 		logger.Error(observeErr, "Observation failed")
-		statusUpdate, projErr := spec.ProjectFn(ctx, obs, errs)
-		if projErr != nil {
+		originalStatus := cloneStatus(obj)
+		if projErr := spec.ProjectFn(ctx, obs, errs); projErr != nil {
 			logger.Error(projErr, "Status projection failed after observe error")
 			// Still try to patch with error info
 		}
-		if err := PatchStatus(ctx, spec.Client, obj, statusUpdate); err != nil {
+		if err := PatchStatus(ctx, spec.Client, obj, originalStatus); err != nil {
 			logger.Error(err, "Failed to patch status after observe error")
 		}
 		return ctrl.Result{}, observeErr
@@ -114,14 +114,14 @@ func Reconcile(ctx context.Context, spec ReconcileSpec) (ctrl.Result, error) {
 	}
 
 	// Step 7: Project status from observation + errors
-	statusUpdate, projErr := spec.ProjectFn(ctx, obs, errs)
-	if projErr != nil {
+	originalStatus := cloneStatus(obj)
+	if projErr := spec.ProjectFn(ctx, obs, errs); projErr != nil {
 		logger.Error(projErr, "Status projection failed")
 		return ctrl.Result{}, projErr
 	}
 
 	// Step 8: Patch status once
-	if err := PatchStatus(ctx, spec.Client, obj, statusUpdate); err != nil {
+	if err := PatchStatus(ctx, spec.Client, obj, originalStatus); err != nil {
 		logger.Error(err, "Failed to patch status")
 		return ctrl.Result{}, err
 	}
@@ -157,11 +157,11 @@ func handleDeletion(ctx context.Context, spec ReconcileSpec, errs *ReconcileErro
 		if finalizeErr != nil {
 			logger.Error(finalizeErr, "Finalization failed")
 			// Project status with error
-			statusUpdate, projErr := spec.ProjectFn(ctx, obs, *errs)
-			if projErr != nil {
+			originalStatus := cloneStatus(obj)
+			if projErr := spec.ProjectFn(ctx, obs, *errs); projErr != nil {
 				logger.Error(projErr, "Status projection failed during finalization")
 			}
-			if err := PatchStatus(ctx, spec.Client, obj, statusUpdate); err != nil {
+			if err := PatchStatus(ctx, spec.Client, obj, originalStatus); err != nil {
 				logger.Error(err, "Failed to patch status during finalization")
 			}
 			return ctrl.Result{}, finalizeErr
@@ -178,11 +178,11 @@ func handleDeletion(ctx context.Context, spec ReconcileSpec, errs *ReconcileErro
 	}
 
 	// Project final status
-	statusUpdate, projErr := spec.ProjectFn(ctx, obs, *errs)
-	if projErr != nil {
+	originalStatus := cloneStatus(obj)
+	if projErr := spec.ProjectFn(ctx, obs, *errs); projErr != nil {
 		logger.Error(projErr, "Status projection failed after finalization")
 	}
-	if err := PatchStatus(ctx, spec.Client, obj, statusUpdate); err != nil {
+	if err := PatchStatus(ctx, spec.Client, obj, originalStatus); err != nil {
 		logger.Error(err, "Failed to patch final status")
 	}
 

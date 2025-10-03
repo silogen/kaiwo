@@ -30,6 +30,8 @@ import (
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -49,17 +51,25 @@ type TemplateSpec interface {
 	GetModelID() string
 }
 
+// TemplateWithStatus extends TemplateSpec with status access
+type TemplateWithStatus interface {
+	TemplateSpec
+	GetStatus() *aimv1alpha1.AIMServiceTemplateStatus
+}
+
 // ProjectTemplateStatus computes status from observation and errors.
 // This is shared between cluster and namespace-scoped template controllers.
+// Modifies templateStatus directly.
 func ProjectTemplateStatus(
 	ctx context.Context,
 	k8sClient client.Client,
-	templateSpec TemplateSpec,
+	template TemplateWithStatus,
 	obs *TemplateObservation,
 	errs framework.ReconcileErrors,
 	imageNotFoundMessage string,
-	currentStatus aimv1alpha1.AIMTemplateStatusEnum,
-) (framework.StatusUpdate, error) {
+) error {
+	templateStatus := template.GetStatus()
+	currentStatus := templateStatus.Status
 	var conditions []metav1.Condition
 	var status aimv1alpha1.AIMTemplateStatusEnum
 
@@ -92,11 +102,12 @@ func ProjectTemplateStatus(
 			"Template is not ready due to errors",
 		))
 
-		return framework.StatusUpdate{
-			Conditions:  conditions,
-			StatusField: "Status",
-			StatusValue: status,
-		}, nil
+		// Set status and conditions
+		templateStatus.Status = status
+		for _, cond := range conditions {
+			meta.SetStatusCondition(&templateStatus.Conditions, cond)
+		}
+		return nil
 	}
 
 	// Check if image is missing
@@ -117,11 +128,12 @@ func ProjectTemplateStatus(
 			"Cannot proceed without image",
 		))
 
-		return framework.StatusUpdate{
-			Conditions:  conditions,
-			StatusField: "Status",
-			StatusValue: status,
-		}, nil
+		// Set status and conditions
+		templateStatus.Status = status
+		for _, cond := range conditions {
+			meta.SetStatusCondition(&templateStatus.Conditions, cond)
+		}
+		return nil
 	}
 
 	// Progressing condition: True while job is running
@@ -149,11 +161,12 @@ func ProjectTemplateStatus(
 			"Template is not ready yet",
 		))
 
-		return framework.StatusUpdate{
-			Conditions:  conditions,
-			StatusField: "Status",
-			StatusValue: status,
-		}, nil
+		// Set status and conditions
+		templateStatus.Status = status
+		for _, cond := range conditions {
+			meta.SetStatusCondition(&templateStatus.Conditions, cond)
+		}
+		return nil
 	}
 
 	// Discovery failed
@@ -181,16 +194,17 @@ func ProjectTemplateStatus(
 			"Template is not ready",
 		))
 
-		return framework.StatusUpdate{
-			Conditions:  conditions,
-			StatusField: "Status",
-			StatusValue: status,
-		}, nil
+		// Set status and conditions
+		templateStatus.Status = status
+		for _, cond := range conditions {
+			meta.SetStatusCondition(&templateStatus.Conditions, cond)
+		}
+		return nil
 	}
 
 	// Discovery succeeded
 	var modelSources []aimv1alpha1.AIMModelSource
-	var profile any
+	var profile *apiextensionsv1.JSON
 	if obs.Job != nil && IsJobSucceeded(obs.Job) {
 		status = aimv1alpha1.AIMTemplateStatusAvailable
 
@@ -224,9 +238,9 @@ func ProjectTemplateStatus(
 	} else {
 		// Check if template is already Available (job lookup was skipped to prevent re-running discovery)
 		if currentStatus == aimv1alpha1.AIMTemplateStatusAvailable {
-			// Template is already Available, return empty update to avoid status changes
+			// Template is already Available, return without status changes
 			// This prevents resetting to Pending when job lookup is skipped for Available templates
-			return framework.StatusUpdate{}, nil
+			return nil
 		}
 
 		// No job yet (initial state)
@@ -247,21 +261,19 @@ func ProjectTemplateStatus(
 		))
 	}
 
-	update := framework.StatusUpdate{
-		Conditions:  conditions,
-		StatusField: "Status",
-		StatusValue: status,
+	// Update status fields directly
+	templateStatus.Status = status
+	for _, cond := range conditions {
+		meta.SetStatusCondition(&templateStatus.Conditions, cond)
 	}
 
-	if len(modelSources) > 0 || profile != nil {
-		update.AdditionalFields = map[string]any{}
-		if len(modelSources) > 0 {
-			update.AdditionalFields["ModelSources"] = modelSources
-		}
-		if profile != nil {
-			update.AdditionalFields["Profile"] = profile
-		}
+	// Set additional fields
+	if len(modelSources) > 0 {
+		templateStatus.ModelSources = modelSources
+	}
+	if profile != nil {
+		templateStatus.Profile = profile
 	}
 
-	return update, nil
+	return nil
 }
