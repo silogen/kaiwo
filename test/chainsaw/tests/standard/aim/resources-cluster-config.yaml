@@ -1,0 +1,8 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterConfig
+metadata:
+  name: default
+spec:
+  imagePullSecrets:
+  - name: test-registry-secret
+  cacheStorageClassName: standard

@@ -1,0 +1,71 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: discovery-results
+spec:
+  description: Test that discovery results populate modelSources and profile correctly
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create cluster image and config
+    try:
+    - apply:
+        file: ../resources-cluster-image.yaml
+    - apply:
+        file: ../resources-cluster-config.yaml
+
+  - name: Create cluster template
+    try:
+    - apply:
+        file: ../cluster-template.yaml
+
+  - name: Wait for template to become Available
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: llama-3-8b-latency
+          status:
+            status: Available
+
+  - name: Verify modelSources are populated
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: llama-3-8b-latency
+          status:
+            modelSources:
+            - name: amd/Llama-3.1-8B-Instruct-FP8-KV
+              sourceUri: hf://amd/Llama-3.1-8B-Instruct-FP8-KV
+              (size != null): true
+
+  - name: Verify profile is populated with expected fields
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: llama-3-8b-latency
+          status:
+            profile:
+              model: meta-llama/Llama-3.1-8B-Instruct
+              quantized_model: amd/Llama-3.1-8B-Instruct-FP8-KV
+              metadata:
+                engine: vllm
+                gpu: MI300X
+                precision: fp8
+                gpu_count: 1
+                metric: latency
+              (engine_args != null): true
+              (env_vars != null): true
+              models:
+              - name: amd/Llama-3.1-8B-Instruct-FP8-KV
+                source: hf://amd/Llama-3.1-8B-Instruct-FP8-KV
+                size_gb: 8.47
