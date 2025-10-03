@@ -27,6 +27,7 @@ package framework
 import (
 	"context"
 	"fmt"
+	"time"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -60,7 +61,7 @@ func Reconcile(ctx context.Context, spec ReconcileSpec) (ctrl.Result, error) {
 				}
 				logger.Info("Added finalizer", "finalizer", spec.FinalizerName)
 				// Requeue to continue reconciliation
-				return ctrl.Result{Requeue: true}, nil
+				return ctrl.Result{RequeueAfter: time.Millisecond}, nil
 			}
 		}
 	}
