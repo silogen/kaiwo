@@ -27,7 +27,6 @@ package framework
 import (
 	"context"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -63,9 +62,9 @@ type ReconcileSpec struct {
 	// Returns slice of objects to apply via SSA.
 	PlanFn func(ctx context.Context, obs any) (desired []client.Object, err error)
 
-	// ProjectFn computes status from observation + reconcile errors (read-only).
-	// Returns status update to patch.
-	ProjectFn func(ctx context.Context, obs any, errs ReconcileErrors) (StatusUpdate, error)
+	// ProjectFn computes status from observation + reconcile errors.
+	// Modifies Object.Status directly. Framework patches if changed.
+	ProjectFn func(ctx context.Context, obs any, errs ReconcileErrors) error
 
 	// FinalizeFn performs external cleanup during deletion (optional).
 	// Should only interact with external systems, not owned children.
@@ -83,21 +82,6 @@ type ReconcileErrors struct {
 // HasError returns true if any error is set
 func (e ReconcileErrors) HasError() bool {
 	return e.ObserveErr != nil || e.PlanErr != nil || e.ApplyErr != nil || e.FinalizeErr != nil
-}
-
-// StatusUpdate defines what to patch to .status subresource
-type StatusUpdate struct {
-	// Conditions to set (will be merged with existing)
-	Conditions []metav1.Condition
-
-	// StatusField is the high-level status enum field name
-	StatusField string
-
-	// StatusValue is the value to set for the status field
-	StatusValue any
-
-	// AdditionalFields are extra fields to update on status
-	AdditionalFields map[string]any
 }
 
 // ApplyConfig configures the SSA apply operation

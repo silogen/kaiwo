@@ -309,9 +309,19 @@ func (t *AIMServiceTemplate) GetStatus() *AIMServiceTemplateStatus {
 	return &t.Status
 }
 
+// GetStatus returns a pointer to the template status
+func (t *AIMServiceTemplate) GetStatus() *AIMServiceTemplateStatus {
+	return &t.Status
+}
+
 // GetModelID returns the model ID from the cluster template spec
 func (t *AIMClusterServiceTemplate) GetModelName() string {
 	return t.Spec.AIMImageName
+}
+
+// GetStatus returns a pointer to the cluster template status
+func (t *AIMClusterServiceTemplate) GetStatus() *AIMServiceTemplateStatus {
+	return &t.Status
 }
 
 // GetStatus returns a pointer to the cluster template status
