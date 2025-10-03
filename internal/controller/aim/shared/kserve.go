@@ -26,6 +26,8 @@ package shared
 
 import (
 	"context"
+	"regexp"
+	"strings"
 
 	servingv1alpha1 "github.com/kserve/kserve/pkg/apis/serving/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -34,6 +36,31 @@ import (
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 )
+
+var labelValueRegex = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
+
+// sanitizeLabelValue converts a string to a valid Kubernetes label value.
+// Valid label values must:
+// - Be empty or consist of alphanumeric characters, '-', '_' or '.'
+// - Start and end with an alphanumeric character
+// - Be at most 63 characters
+func sanitizeLabelValue(s string) string {
+	// Replace invalid characters with underscores
+	sanitized := labelValueRegex.ReplaceAllString(s, "_")
+
+	// Trim leading and trailing non-alphanumeric characters
+	sanitized = strings.TrimLeft(sanitized, "_.-")
+	sanitized = strings.TrimRight(sanitized, "_.-")
+
+	// Truncate to 63 characters
+	if len(sanitized) > 63 {
+		sanitized = sanitized[:63]
+		// Trim trailing non-alphanumeric after truncation
+		sanitized = strings.TrimRight(sanitized, "_.-")
+	}
+
+	return sanitized
+}
 
 // ClusterServingRuntimeSpec defines parameters for creating a ClusterServingRuntime
 type ClusterServingRuntimeSpec struct {
@@ -66,7 +93,7 @@ func BuildClusterServingRuntime(spec ClusterServingRuntimeSpec) *servingv1alpha1
 				"app.kubernetes.io/name":       "aim-runtime",
 				"app.kubernetes.io/component":  "serving-runtime",
 				"app.kubernetes.io/managed-by": "aim-controller",
-				"aim.silogen.ai/model-id":      spec.ModelID,
+				"aim.silogen.ai/model-id":      sanitizeLabelValue(spec.ModelID),
 			},
 			OwnerReferences: []metav1.OwnerReference{spec.OwnerRef},
 		},
@@ -108,7 +135,7 @@ func BuildServingRuntime(spec ServingRuntimeSpec) *servingv1alpha1.ServingRuntim
 				"app.kubernetes.io/name":       "aim-runtime",
 				"app.kubernetes.io/component":  "serving-runtime",
 				"app.kubernetes.io/managed-by": "aim-controller",
-				"aim.silogen.ai/model-id":      spec.ModelID,
+				"aim.silogen.ai/model-id":      sanitizeLabelValue(spec.ModelID),
 			},
 			OwnerReferences: []metav1.OwnerReference{spec.OwnerRef},
 		},

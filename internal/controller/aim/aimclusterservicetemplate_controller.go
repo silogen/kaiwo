@@ -209,7 +209,11 @@ func (r *AIMClusterServiceTemplateReconciler) projectStatus(
 	errs framework.ReconcileErrors,
 ) (framework.StatusUpdate, error) {
 	imageNotFoundMsg := fmt.Sprintf("No AIMClusterImage found for modelId %q", template.Spec.ModelID)
-	return shared.ProjectTemplateStatus(ctx, r.Client, template, &obs.TemplateObservation, errs, imageNotFoundMsg)
+	var templateObs *shared.TemplateObservation
+	if obs != nil {
+		templateObs = &obs.TemplateObservation
+	}
+	return shared.ProjectTemplateStatus(ctx, r.Client, template, templateObs, errs, imageNotFoundMsg)
 }
 
 func (r *AIMClusterServiceTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {

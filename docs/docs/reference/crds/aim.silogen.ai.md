@@ -10,11 +10,11 @@ Package v1alpha1 contains API Schema definitions for the AIM v1alpha1 API group.
 
 ### Resource Types
 - [AIMClusterConfig](#aimclusterconfig)
+- [AIMClusterConfigList](#aimclusterconfiglist)
 - [AIMClusterImage](#aimclusterimage)
 - [AIMClusterImageList](#aimclusterimagelist)
 - [AIMClusterServiceTemplate](#aimclusterservicetemplate)
 - [AIMClusterServiceTemplateList](#aimclusterservicetemplatelist)
-- [AIMConfigList](#aimconfiglist)
 - [AIMImage](#aimimage)
 - [AIMImageList](#aimimagelist)
 - [AIMService](#aimservice)
@@ -39,7 +39,7 @@ AIMClusterConfig configures credentials and routing at a cluster level.
 
 
 _Appears in:_
-- [AIMConfigList](#aimconfiglist)
+- [AIMClusterConfigList](#aimclusterconfiglist)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -47,6 +47,24 @@ _Appears in:_
 | `kind` _string_ | `AIMClusterConfig` | | |
 | `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
 | `spec` _[AIMConfigSpec](#aimconfigspec)_ |  |  |  |
+
+
+#### AIMClusterConfigList
+
+
+
+AIMClusterConfigList contains a list of AIMClusterConfig.
+
+
+
+
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `AIMClusterConfigList` | | |
+| `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `items` _[AIMClusterConfig](#aimclusterconfig) array_ |  |  |  |
 
 
 #### AIMClusterImage
@@ -144,24 +162,6 @@ _Appears in:_
 | `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
 | `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. |  | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
 | `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
-
-
-#### AIMConfigList
-
-
-
-AIMConfigList contains a list of AIMClusterConfig.
-
-
-
-
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
-| `kind` _string_ | `AIMConfigList` | | |
-| `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
-| `items` _[AIMClusterConfig](#aimclusterconfig) array_ |  |  |  |
 
 
 #### AIMConfigSpec
