@@ -203,3 +203,7 @@ func GetServingRuntime(ctx context.Context, k8sClient client.Client, namespace, 
 	}
 	return runtime, nil
 }
+
+func ptr[T any](v T) *T {
+	return &v
+}
