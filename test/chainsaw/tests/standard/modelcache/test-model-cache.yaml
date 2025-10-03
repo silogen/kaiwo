@@ -1,0 +1,8 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: ModelCache
+metadata:
+  name: test
+spec:
+  sourceUri: hf://Qwen/Qwen2.5-0.5B
+  size: 1Gi
+  storageClassName: rwx-nfs

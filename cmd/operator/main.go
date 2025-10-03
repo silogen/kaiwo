@@ -44,6 +44,7 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	aim "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 	configapi "github.com/silogen/kaiwo/apis/config/v1alpha1"
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
@@ -92,6 +93,7 @@ func init() {
 
 	utilruntime.Must(kaiwo.AddToScheme(scheme))
 	utilruntime.Must(configapi.AddToScheme(scheme))
+	utilruntime.Must(aim.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 
 	utilruntime.Must(kueuev1beta1.AddToScheme(scheme))
@@ -297,6 +299,13 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "KaiwoJob")
+		os.Exit(1)
+	}
+	if err = (&controller.ModelCacheReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ModelCache")
 		os.Exit(1)
 	}
 	if err = (&controller.KaiwoServiceReconciler{
