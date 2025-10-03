@@ -45,7 +45,7 @@ import (
 // 7. Project Status (from observation + errors)
 // 8. Patch Status once
 // 9. Return with appropriate requeue policy
-func Reconcile(ctx context.Context, spec ReconcileSpec) (ctrl.Result, error) {
+func Reconcile[T ObjectWithStatus[S], S any](ctx context.Context, spec ReconcileSpec[T, S]) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 	obj := spec.Object
 
@@ -142,7 +142,7 @@ func Reconcile(ctx context.Context, spec ReconcileSpec) (ctrl.Result, error) {
 }
 
 // handleDeletion processes deletion path: finalize → remove finalizer → patch status
-func handleDeletion(ctx context.Context, spec ReconcileSpec, errs *ReconcileErrors) (ctrl.Result, error) {
+func handleDeletion[T ObjectWithStatus[S], S any](ctx context.Context, spec ReconcileSpec[T, S], errs *ReconcileErrors) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 	obj := spec.Object
 
