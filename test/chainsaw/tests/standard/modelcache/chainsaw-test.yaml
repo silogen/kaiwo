@@ -7,20 +7,21 @@ spec:
   steps:
   - try:
     - script:
-        content: kubectl apply -f test-model-cache.yaml
+        content: echo
+    - apply:
+        file: test-model-cache.yaml
+    - apply:
+        file: test-fail-model-cache.yaml
     - script:
-        content: kubectl get pvc test-cache -o json
+        content: kubectl get pvc -n $NAMESPACE test-cache -o json
         check:
           (contains(json_parse($stdout).status.phase, 'Bound')): true
     - script:
-        content: kubectl apply -f test-fail-model-cache.yaml
-    - script:
-        content:  kubectl wait --for=condition=Ready mc/test
+        content:  kubectl wait --timeout=120s -n $NAMESPACE --for=condition=Ready mc/test
         check:
           (contains($stdout, 'condition met')): true
     - script:
-        timeout: 30s
-        content:  kubectl wait --for=condition=Ready mc/test-nonexistent
+        content:  kubectl wait --timeout=10s -n $NAMESPACE --for=condition=Failed mc/test-nonexistent
         check:
-          (contains($stdout, 'condition met')): false
+          (contains($stdout, 'condition met')): true
     
