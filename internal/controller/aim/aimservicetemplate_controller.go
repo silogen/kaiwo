@@ -124,12 +124,15 @@ func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *ai
 		obs.Runtime = runtime
 	}
 
-	// Check if discovery job exists (in same namespace)
-	job, err := shared.GetDiscoveryJob(ctx, r.Client, template.Namespace, template.Name)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get discovery job: %w", err)
+	// Only check for discovery job if template is not already Available
+	// This prevents unnecessary job lookups and creation attempts after TTL cleanup
+	if template.Status.Status != aimv1alpha1.AIMTemplateStatusAvailable {
+		job, err := shared.GetDiscoveryJob(ctx, r.Client, template.Namespace, template.Name)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get discovery job: %w", err)
+		}
+		obs.Job = job
 	}
-	obs.Job = job
 
 	// Lookup image from AIMImage (namespace-scoped) first, then AIMClusterImage (cluster-scoped)
 	image, err := shared.LookupImageForNamespaceTemplate(ctx, r.Client, template.Namespace, template.Spec.ModelID)
@@ -185,18 +188,22 @@ func (r *AIMServiceTemplateReconciler) plan(_ context.Context, template *aimv1al
 	})
 	desired = append(desired, runtime)
 
-	// Include discovery job if not yet complete
-	if obs.Job == nil || !shared.IsJobComplete(obs.Job) {
-		job := shared.BuildDiscoveryJob(shared.DiscoveryJobSpec{
-			TemplateName:     template.Name,
-			Namespace:        template.Namespace,
-			ModelID:          template.Spec.ModelID,
-			Image:            obs.Image,
-			Env:              template.Spec.Env,
-			ImagePullSecrets: obs.ImagePullSecrets,
-			OwnerRef:         ownerRef,
-		})
-		desired = append(desired, job)
+	// Include discovery job only if:
+	// 1. Template is not already Available (gate to prevent re-running after TTL expires)
+	// 2. Job doesn't exist or is not yet complete
+	if template.Status.Status != aimv1alpha1.AIMTemplateStatusAvailable {
+		if obs.Job == nil || !shared.IsJobComplete(obs.Job) {
+			job := shared.BuildDiscoveryJob(shared.DiscoveryJobSpec{
+				TemplateName:     template.Name,
+				Namespace:        template.Namespace,
+				ModelID:          template.Spec.ModelID,
+				Image:            obs.Image,
+				Env:              template.Spec.Env,
+				ImagePullSecrets: obs.ImagePullSecrets,
+				OwnerRef:         ownerRef,
+			})
+			desired = append(desired, job)
+		}
 	}
 
 	// TODO: If caching.enabled, create AIMTemplateCache object
@@ -213,7 +220,7 @@ func (r *AIMServiceTemplateReconciler) projectStatus(
 	errs framework.ReconcileErrors,
 ) (framework.StatusUpdate, error) {
 	imageNotFoundMsg := fmt.Sprintf("No AIMImage or AIMClusterImage found for modelId %q", template.Spec.ModelID)
-	return shared.ProjectTemplateStatus(ctx, r.Client, template, &obs.TemplateObservation, errs, imageNotFoundMsg)
+	return shared.ProjectTemplateStatus(ctx, r.Client, template, &obs.TemplateObservation, errs, imageNotFoundMsg, template.Status.Status)
 }
 
 func (r *AIMServiceTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {

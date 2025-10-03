@@ -247,11 +247,12 @@ const (
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=aimst,categories=aim;all
-// +kubebuilder:printcolumn:name="Model",type=string,JSONPath=`.spec.model`
-// +kubebuilder:printcolumn:name="Metric",type=string,JSONPath=`.spec.useCase`
+// +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.status`
+// +kubebuilder:printcolumn:name="Model",type=string,JSONPath=`.spec.modelId`
+// +kubebuilder:printcolumn:name="Metric",type=string,JSONPath=`.spec.metric`
 // +kubebuilder:printcolumn:name="Precision",type=string,JSONPath=`.spec.precision`
-// +kubebuilder:printcolumn:name="GPUs/replica",type=integer,JSONPath=`.spec.gpusPerReplica`
-// +kubebuilder:printcolumn:name="GPU",type=string,JSONPath=`.spec.gpuModel`
+// +kubebuilder:printcolumn:name="GPUs/replica",type=integer,JSONPath=`.spec.gpuSelector.count`
+// +kubebuilder:printcolumn:name="GPU",type=string,JSONPath=`.spec.gpuSelector.model`
 type AIMServiceTemplate struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

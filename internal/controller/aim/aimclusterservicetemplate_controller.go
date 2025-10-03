@@ -123,12 +123,15 @@ func (r *AIMClusterServiceTemplateReconciler) observe(ctx context.Context, templ
 		obs.Runtime = runtime
 	}
 
-	// Check if discovery job exists
-	job, err := shared.GetDiscoveryJob(ctx, r.Client, shared.OperatorNamespace, template.Name)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get discovery job: %w", err)
+	// Only check for discovery job if template is not already Available
+	// This prevents unnecessary job lookups and creation attempts after TTL cleanup
+	if template.Status.Status != aimv1alpha1.AIMTemplateStatusAvailable {
+		job, err := shared.GetDiscoveryJob(ctx, r.Client, shared.OperatorNamespace, template.Name)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get discovery job: %w", err)
+		}
+		obs.Job = job
 	}
-	obs.Job = job
 
 	// Lookup image from AIMClusterImage catalog
 	image, err := shared.LookupImageForClusterTemplate(ctx, r.Client, template.Spec.ModelID)
@@ -184,18 +187,22 @@ func (r *AIMClusterServiceTemplateReconciler) plan(_ context.Context, template *
 	})
 	desired = append(desired, runtime)
 
-	// Include discovery job if not yet complete
-	if obs.Job == nil || !shared.IsJobComplete(obs.Job) {
-		job := shared.BuildDiscoveryJob(shared.DiscoveryJobSpec{
-			TemplateName:     template.Name,
-			Namespace:        shared.OperatorNamespace,
-			ModelID:          template.Spec.ModelID,
-			Image:            obs.Image,
-			Env:              nil,
-			ImagePullSecrets: obs.ImagePullSecrets,
-			OwnerRef:         ownerRef,
-		})
-		desired = append(desired, job)
+	// Include discovery job only if:
+	// 1. Template is not already Available (gate to prevent re-running after TTL expires)
+	// 2. Job doesn't exist or is not yet complete
+	if template.Status.Status != aimv1alpha1.AIMTemplateStatusAvailable {
+		if obs.Job == nil || !shared.IsJobComplete(obs.Job) {
+			job := shared.BuildDiscoveryJob(shared.DiscoveryJobSpec{
+				TemplateName:     template.Name,
+				Namespace:        shared.OperatorNamespace,
+				ModelID:          template.Spec.ModelID,
+				Image:            obs.Image,
+				Env:              nil,
+				ImagePullSecrets: obs.ImagePullSecrets,
+				OwnerRef:         ownerRef,
+			})
+			desired = append(desired, job)
+		}
 	}
 
 	return desired, nil
@@ -213,7 +220,7 @@ func (r *AIMClusterServiceTemplateReconciler) projectStatus(
 	if obs != nil {
 		templateObs = &obs.TemplateObservation
 	}
-	return shared.ProjectTemplateStatus(ctx, r.Client, template, templateObs, errs, imageNotFoundMsg)
+	return shared.ProjectTemplateStatus(ctx, r.Client, template, templateObs, errs, imageNotFoundMsg, template.Status.Status)
 }
 
 func (r *AIMClusterServiceTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {

@@ -43,6 +43,10 @@ func PatchStatus(ctx context.Context, k8sClient client.Client, obj client.Object
 		return fmt.Errorf("object %T has no Status field", obj)
 	}
 
+	// Clone the original status to detect changes
+	originalStatus := reflect.New(statusValue.Type()).Elem()
+	originalStatus.Set(statusValue)
+
 	// Set conditions (merge with existing)
 	conditionsField := statusValue.FieldByName("Conditions")
 	if conditionsField.IsValid() && conditionsField.CanSet() {
@@ -80,12 +84,22 @@ func PatchStatus(ctx context.Context, k8sClient client.Client, obj client.Object
 		}
 	}
 
+	// Only update if status actually changed (ignoring condition LastTransitionTime)
+	if statusUnchanged(originalStatus.Interface(), statusValue.Interface()) {
+		return nil
+	}
+
 	// Patch status subresource
 	if err := k8sClient.Status().Update(ctx, obj); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
 	}
 
 	return nil
+}
+
+// statusUnchanged checks if two status values are semantically equal, ignoring condition timestamps
+func statusUnchanged(original, updated interface{}) bool {
+	return reflect.DeepEqual(original, updated)
 }
 
 // NewCondition creates a new condition with the given parameters

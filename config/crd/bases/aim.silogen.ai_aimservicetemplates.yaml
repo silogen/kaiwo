@@ -20,19 +20,22 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.model
+    - jsonPath: .status.status
+      name: Status
+      type: string
+    - jsonPath: .spec.modelId
       name: Model
       type: string
-    - jsonPath: .spec.useCase
+    - jsonPath: .spec.metric
       name: Metric
       type: string
     - jsonPath: .spec.precision
       name: Precision
       type: string
-    - jsonPath: .spec.gpusPerReplica
+    - jsonPath: .spec.gpuSelector.count
       name: GPUs/replica
       type: integer
-    - jsonPath: .spec.gpuModel
+    - jsonPath: .spec.gpuSelector.model
       name: GPU
       type: string
     name: v1alpha1

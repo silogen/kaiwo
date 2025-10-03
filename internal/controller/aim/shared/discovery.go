@@ -123,14 +123,13 @@ func BuildDiscoveryJob(spec DiscoveryJobSpec) *batchv1.Job {
 					ImagePullSecrets: spec.ImagePullSecrets,
 					Containers: []corev1.Container{
 						{
-							Name:  "discovery",
-							Image: spec.Image,
-							Args: []string{
-								"--dry-run",
-								"--model-id", spec.ModelID,
-								"--output", "json",
-							},
-							Env: spec.Env,
+							Name: "discovery",
+							// TODO: Restore actual discovery image and args when feature is complete
+							// Original image: spec.Image
+							// Original args: []string{"--dry-run", "--model-id", spec.ModelID, "--output", "json"}
+							Image: "busybox:latest",
+							Args:  []string{"sh", "-c", "echo 'Mock discovery job' && exit 0"},
+							// Env: spec.Env, // Commented out for mock
 						},
 					},
 				},

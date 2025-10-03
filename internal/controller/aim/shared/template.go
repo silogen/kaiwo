@@ -58,6 +58,7 @@ func ProjectTemplateStatus(
 	obs *TemplateObservation,
 	errs framework.ReconcileErrors,
 	imageNotFoundMessage string,
+	currentStatus aimv1alpha1.AIMTemplateStatusEnum,
 ) (framework.StatusUpdate, error) {
 	var conditions []metav1.Condition
 	var status aimv1alpha1.AIMTemplateStatusEnum
@@ -221,6 +222,13 @@ func ProjectTemplateStatus(
 			profile = discovery.Profile
 		}
 	} else {
+		// Check if template is already Available (job lookup was skipped to prevent re-running discovery)
+		if currentStatus == aimv1alpha1.AIMTemplateStatusAvailable {
+			// Template is already Available, return empty update to avoid status changes
+			// This prevents resetting to Pending when job lookup is skipped for Available templates
+			return framework.StatusUpdate{}, nil
+		}
+
 		// No job yet (initial state)
 		status = aimv1alpha1.AIMTemplateStatusPending
 
