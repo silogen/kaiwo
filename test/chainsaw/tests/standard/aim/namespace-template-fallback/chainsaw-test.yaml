@@ -1,0 +1,64 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: namespace-template-fallback
+spec:
+  description: Test that namespace template falls back to cluster image when namespace image doesn't exist
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create only cluster image (no namespace image)
+    try:
+    - apply:
+        file: ../resources-cluster-image.yaml
+    - apply:
+        file: ../resources-cluster-config.yaml
+
+  - name: Create namespace template
+    try:
+    - apply:
+        file: ../namespace-template.yaml
+
+  - name: Wait for discovery job to be created
+    try:
+    - assert:
+        timeout: 15s
+        resource:
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            labels:
+              aim.silogen.ai/template: llama-3-8b-throughput
+
+  - name: Check that job uses cluster-scoped image (fallback)
+    try:
+    - assert:
+        timeout: 10s
+        resource:
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            labels:
+              aim.silogen.ai/template: llama-3-8b-throughput
+          spec:
+            template:
+              spec:
+                containers:
+                - name: discovery
+                  image: ghcr.io/amd/vllm:latest
+
+  - name: Wait for template to become Available
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMServiceTemplate
+          metadata:
+            name: llama-3-8b-throughput
+          status:
+            status: Available
+            conditions:
+            - type: Ready
+              status: "True"
+              reason: Available

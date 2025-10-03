@@ -33,3 +33,31 @@ releases:
       - storageClass:
           create: true
           name: rwx-nfs
+
+  - name: kserve-crd
+    namespace: kserve-system
+    chart: oci://ghcr.io/kserve/charts/kserve-crd
+    version: v0.15.2
+    createNamespace: true
+    wait: true
+    timeout: 600
+
+  - name: kserve
+    namespace: kserve-system
+    chart: oci://ghcr.io/kserve/charts/kserve
+    version: v0.15.2
+    createNamespace: false
+    wait: true
+    timeout: 600
+    needs:
+      - kserve-system/kserve-crd
+    values:
+      - kserve:
+          controller:
+            deploymentMode: RawDeployment
+            gateway:
+              ingressGateway:
+                enableGatewayApi: true
+                kserveGateway: aim-system/kserve-ingress-gateway
+          localmodel:
+            enabled: false

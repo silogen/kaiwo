@@ -1,0 +1,52 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: config-image-pull-secrets
+spec:
+  description: Test that AIMClusterConfig image pull secrets are added to discovery jobs
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create cluster image and config with image pull secrets
+    try:
+    - apply:
+        file: ../resources-cluster-image.yaml
+    - apply:
+        file: ../resources-cluster-config.yaml
+
+  - name: Create cluster template
+    try:
+    - apply:
+        file: ../cluster-template.yaml
+
+  - name: Wait for discovery job and verify it has image pull secrets
+    try:
+    - assert:
+        timeout: 15s
+        resource:
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            labels:
+              aim.silogen.ai/template: llama-3-8b-latency
+          spec:
+            template:
+              spec:
+                imagePullSecrets:
+                - name: test-registry-secret
+
+  - name: Verify events were created for config
+    try:
+    - assert:
+        timeout: 10s
+        resource:
+          apiVersion: v1
+          kind: Event
+          metadata:
+            (name != null): true
+          involvedObject:
+            apiVersion: aim.silogen.ai/v1alpha1
+            kind: AIMClusterServiceTemplate
+            name: llama-3-8b-latency
+          reason: ConfigFound
+          type: Normal

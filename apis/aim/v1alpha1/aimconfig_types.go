@@ -71,13 +71,13 @@ type AIMClusterConfig struct {
 }
 
 // +kubebuilder:object:root=true
-// AIMConfigList contains a list of AIMClusterConfig.
-type AIMConfigList struct {
+// AIMClusterConfigList contains a list of AIMClusterConfig.
+type AIMClusterConfigList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []AIMClusterConfig `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&AIMClusterConfig{}, &AIMConfigList{})
+	SchemeBuilder.Register(&AIMClusterConfig{}, &AIMClusterConfigList{})
 }

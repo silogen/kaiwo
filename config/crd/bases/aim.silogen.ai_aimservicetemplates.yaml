@@ -20,19 +20,22 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.model
+    - jsonPath: .status.status
+      name: Status
+      type: string
+    - jsonPath: .spec.modelId
       name: Model
       type: string
-    - jsonPath: .spec.useCase
+    - jsonPath: .spec.metric
       name: Metric
       type: string
     - jsonPath: .spec.precision
       name: Precision
       type: string
-    - jsonPath: .spec.gpusPerReplica
+    - jsonPath: .spec.gpuSelector.count
       name: GPUs/replica
       type: integer
-    - jsonPath: .spec.gpuModel
+    - jsonPath: .spec.gpuSelector.model
       name: GPU
       type: string
     name: v1alpha1
@@ -478,6 +481,9 @@ spec:
                   cached, if this template is cached.
                 items:
                   properties:
+                    name:
+                      description: Name is the name of the model
+                      type: string
                     size:
                       anyOf:
                       - type: integer
@@ -499,6 +505,11 @@ spec:
                   by the controller.
                 format: int64
                 type: integer
+              profile:
+                description: |-
+                  Profile contains the full discovery result profile as a free-form JSON object.
+                  This includes metadata, engine args, environment variables, and model details.
+                x-kubernetes-preserve-unknown-fields: true
               status:
                 default: Pending
                 description: |-

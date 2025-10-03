@@ -43,11 +43,13 @@ nav:
   - "Resource monitoring": "admin/resource-monitoring.md"
   - "Authentication & Authorization": "admin/auth.md"
   - "Troubleshooting": "admin/troubleshooting.md"
+- "AIM":
+  - "Overview": "reference/aim.md"
+  - "Concepts":
+      - "Images and Service Templates": "aim/images-and-templates.md"
+  - "Reference":
+      - "API": "reference/crds/aim.silogen.ai.md"
 - "Reference":
-  - "AIM":
-    - "Overview": "reference/aim.md"
-    - "API": "reference/crds/aim.silogen.ai.md"
-  - "Kaiwo":
-    - "Kaiwo API": "reference/crds/kaiwo.silogen.ai.md"
-    - "Kaiwo Configuration API": "reference/crds/config.kaiwo.silogen.ai.md"
+  - "Kaiwo API": "reference/crds/kaiwo.silogen.ai.md"
+  - "Kaiwo Configuration API": "reference/crds/config.kaiwo.silogen.ai.md"
 
