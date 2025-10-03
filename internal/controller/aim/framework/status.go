@@ -37,7 +37,16 @@ import (
 // PatchStatus patches the status subresource if it changed from originalStatus.
 // Sets ObservedGeneration to match metadata.generation.
 // Uses retry logic to handle conflicts when the object is modified between read and update.
-func PatchStatus(ctx context.Context, k8sClient client.Client, obj client.Object, originalStatus any) error {
+//
+// This function uses generics to provide type-safe status access. The only reflection
+// used is for setting ObservedGeneration, which is unavoidable without adding methods
+// to every status type.
+func PatchStatus[T ObjectWithStatus[S], S any](
+	ctx context.Context,
+	k8sClient client.Client,
+	obj T,
+	originalStatus S,
+) error {
 	// Retry on conflicts with exponential backoff
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		// Fetch the latest version of the object to avoid conflicts
@@ -46,20 +55,17 @@ func PatchStatus(ctx context.Context, k8sClient client.Client, obj client.Object
 			return err
 		}
 
-		// Get status via reflection
-		statusValue := reflect.ValueOf(obj).Elem().FieldByName("Status")
-		if !statusValue.IsValid() {
-			return fmt.Errorf("object %T has no Status field", obj)
-		}
+		status := obj.GetStatus()
 
-		// Set ObservedGeneration
+		// Set ObservedGeneration using reflection (unavoidable without adding methods to every status type)
+		statusValue := reflect.ValueOf(status).Elem()
 		observedGenField := statusValue.FieldByName("ObservedGeneration")
 		if observedGenField.IsValid() && observedGenField.CanSet() {
 			observedGenField.SetInt(obj.GetGeneration())
 		}
 
 		// Compare with original status to detect changes
-		if statusUnchanged(originalStatus, statusValue.Interface()) {
+		if reflect.DeepEqual(originalStatus, *status) {
 			return nil
 		}
 
@@ -72,22 +78,13 @@ func PatchStatus(ctx context.Context, k8sClient client.Client, obj client.Object
 	})
 }
 
-// cloneStatus creates a deep copy of the status field
-func cloneStatus(obj client.Object) any {
-	statusValue := reflect.ValueOf(obj).Elem().FieldByName("Status")
-	if !statusValue.IsValid() {
-		return nil
-	}
-
-	// Create a new instance and copy the value
-	clone := reflect.New(statusValue.Type()).Elem()
-	clone.Set(statusValue)
-	return clone.Interface()
-}
-
-// statusUnchanged checks if two status values are semantically equal, ignoring condition timestamps
-func statusUnchanged(original, updated interface{}) bool {
-	return reflect.DeepEqual(original, updated)
+// cloneStatus creates a deep copy of the status field using the typed accessor
+func cloneStatus[T ObjectWithStatus[S], S any](obj T) S {
+	status := obj.GetStatus()
+	// Deep copy using reflection (necessary for complex status objects with slices/maps)
+	clone := reflect.New(reflect.TypeOf(*status)).Elem()
+	clone.Set(reflect.ValueOf(*status))
+	return clone.Interface().(S)
 }
 
 // NewCondition creates a new condition with the given parameters

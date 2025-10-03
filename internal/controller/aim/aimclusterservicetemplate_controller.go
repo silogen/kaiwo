@@ -79,7 +79,7 @@ func (r *AIMClusterServiceTemplateReconciler) Reconcile(ctx context.Context, req
 	logger.Info("Reconciling AIMClusterServiceTemplate", "name", template.Name)
 
 	// Use framework orchestrator with closures
-	return framework.Reconcile(ctx, framework.ReconcileSpec{
+	return framework.Reconcile(ctx, framework.ReconcileSpec[*aimv1alpha1.AIMClusterServiceTemplate, aimv1alpha1.AIMServiceTemplateStatus]{
 		Client:        r.Client,
 		Scheme:        r.Scheme,
 		Object:        &template,

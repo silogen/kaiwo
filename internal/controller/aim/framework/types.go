@@ -33,9 +33,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// ObjectWithStatus is a generic constraint for objects that have a typed status accessor.
+// This allows type-safe status access without reflection (except for ObservedGeneration).
+type ObjectWithStatus[S any] interface {
+	client.Object
+	GetStatus() *S
+}
+
 // ReconcileSpec defines the callback-based reconciliation specification.
 // Controllers provide closures that capture their specific types and logic.
-type ReconcileSpec struct {
+//
+// Type parameters:
+//   - T: The object type being reconciled (must implement ObjectWithStatus[S])
+//   - S: The status type of the object
+type ReconcileSpec[T ObjectWithStatus[S], S any] struct {
 	// Client is the Kubernetes client for API operations
 	Client client.Client
 
@@ -43,7 +54,7 @@ type ReconcileSpec struct {
 	Scheme *runtime.Scheme
 
 	// Object is the resource being reconciled (must be fetched and passed in)
-	Object client.Object
+	Object T
 
 	// Recorder is the event recorder for emitting Kubernetes events (optional)
 	Recorder record.EventRecorder
