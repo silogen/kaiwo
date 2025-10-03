@@ -1,0 +1,75 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: namespace-template-priority
+spec:
+  description: Test that namespace template prioritizes namespace image over cluster image
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create both cluster and namespace images for the same modelId
+    try:
+    - apply:
+        file: ../resources-cluster-image.yaml
+    - apply:
+        file: ../resources-namespace-image.yaml
+    - apply:
+        file: ../resources-cluster-config.yaml
+
+  - name: Create namespace template
+    try:
+    - apply:
+        file: ../namespace-template.yaml
+
+  - name: Wait for discovery job to be created
+    try:
+    - assert:
+        timeout: 15s
+        resource:
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            labels:
+              aim.silogen.ai/template: llama-3-8b-throughput
+
+  - name: Check that job uses namespace-scoped image
+    try:
+    - assert:
+        timeout: 10s
+        resource:
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            labels:
+              aim.silogen.ai/template: llama-3-8b-throughput
+          spec:
+            template:
+              spec:
+                containers:
+                - name: discovery
+                  image: ghcr.io/amd/vllm:namespace-version
+
+  - name: Wait for template to become Available
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMServiceTemplate
+          metadata:
+            name: llama-3-8b-throughput
+          status:
+            status: Available
+            conditions:
+            - type: Ready
+              status: "True"
+              reason: Available
+
+  - name: Verify ServingRuntime was created in the namespace
+    try:
+    - assert:
+        resource:
+          apiVersion: serving.kserve.io/v1alpha1
+          kind: ServingRuntime
+          metadata:
+            name: llama-3-8b-throughput

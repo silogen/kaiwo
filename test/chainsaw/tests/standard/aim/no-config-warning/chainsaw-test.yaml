@@ -1,0 +1,60 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: no-config-warning
+spec:
+  description: Test that missing AIMClusterConfig emits a warning event
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create cluster image without config
+    try:
+    - apply:
+        file: ../resources-cluster-image.yaml
+
+  - name: Create cluster template
+    try:
+    - apply:
+        file: ../cluster-template.yaml
+
+  - name: Wait for discovery job (should still be created)
+    try:
+    - assert:
+        timeout: 15s
+        resource:
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            labels:
+              aim.silogen.ai/template: llama-3-8b-latency
+
+  - name: Verify job has no image pull secrets (config not found)
+    try:
+    - assert:
+        timeout: 10s
+        resource:
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            labels:
+              aim.silogen.ai/template: llama-3-8b-latency
+          spec:
+            template:
+              spec:
+                (imagePullSecrets == null || len(imagePullSecrets) == 0): true
+
+  - name: Verify warning event for missing config
+    try:
+    - assert:
+        timeout: 10s
+        resource:
+          apiVersion: v1
+          kind: Event
+          metadata:
+            (name != null): true
+          involvedObject:
+            apiVersion: aim.silogen.ai/v1alpha1
+            kind: AIMClusterServiceTemplate
+            name: llama-3-8b-latency
+          reason: ConfigNotFound
+          type: Warning
