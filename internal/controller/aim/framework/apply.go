@@ -32,6 +32,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
 // ApplyDesiredState applies the desired set of objects via Server-Side Apply (SSA).
@@ -64,7 +66,7 @@ func ApplyDesiredState(
 		gvk := obj.GetObjectKind().GroupVersionKind()
 		key := client.ObjectKeyFromObject(obj)
 
-		logger.V(1).Info("Applying object",
+		baseutils.Debug(logger, "Applying object",
 			"gvk", gvk.String(),
 			"namespace", key.Namespace,
 			"name", key.Name,
@@ -79,12 +81,6 @@ func ApplyDesiredState(
 		); err != nil {
 			return fmt.Errorf("failed to apply %s %s: %w", gvk.Kind, key.Name, err)
 		}
-
-		logger.Info("Applied object",
-			"gvk", gvk.String(),
-			"namespace", key.Namespace,
-			"name", key.Name,
-		)
 	}
 
 	// TODO: Implement pruning if config.EnablePruning is true
