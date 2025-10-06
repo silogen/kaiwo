@@ -27,7 +27,7 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
-            name: llama-3-8b-latency-discovery
+            name: llama-3-8b-latency-discovery-cluster
           status:
             status: Available
 
@@ -38,7 +38,7 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
-            name: llama-3-8b-latency-discovery
+            name: llama-3-8b-latency-discovery-cluster
           status:
             modelSources:
             - name: amd/Llama-3.1-8B-Instruct-FP8-KV
@@ -52,7 +52,7 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
-            name: llama-3-8b-latency-discovery
+            name: llama-3-8b-latency-discovery-cluster
           status:
             profile:
               model: meta-llama/Llama-3.1-8B-Instruct
@@ -69,3 +69,17 @@ spec:
               - name: amd/Llama-3.1-8B-Instruct-FP8-KV
                 source: hf://amd/Llama-3.1-8B-Instruct-FP8-KV
                 size_gb: 8.47
+
+  - name: Verify the cluster serving runtime was created
+    try:
+    - assert:
+        resource:
+          apiVersion: serving.kserve.io/v1alpha1
+          kind: ClusterServingRuntime
+          metadata:
+            name: llama-3-8b-latency-discovery-cluster
+          spec:
+            containers:
+            - image: busybox:latest
+            supportedModelFormats:
+            - name: aim
