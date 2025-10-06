@@ -215,7 +215,7 @@ func (r *AIMClusterServiceTemplateReconciler) projectStatus(
 	obs *clusterTemplateObservation,
 	errs framework.ReconcileErrors,
 ) error {
-	imageNotFoundMsg := fmt.Sprintf("No AIMClusterImage found for modelId %q", template.Spec.AIMImageName)
+	imageNotFoundMsg := fmt.Sprintf("No AIMClusterImage found for image name %q", template.Spec.AIMImageName)
 	var templateObs *shared.TemplateObservation
 	if obs != nil {
 		templateObs = &obs.TemplateObservation

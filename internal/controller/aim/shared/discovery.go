@@ -127,7 +127,7 @@ func BuildDiscoveryJob(spec DiscoveryJobSpec) *batchv1.Job {
 							// TODO: Restore actual discovery image and args when feature is complete
 							// Original image: spec.Image
 							// Original args: []string{"--dry-run", "--model-id", spec.AIMImageName, "--output", "json"}
-							Image: "busybox:latest",
+							Image: spec.Image,
 							Args:  []string{"sh", "-c", "echo 'Mock discovery job' && exit 0"},
 							// Env: spec.Env, // Commented out for mock
 						},

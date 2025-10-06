@@ -44,8 +44,8 @@ import (
 )
 
 const (
-	namespaceTemplateFinalizerName = "aim.silogen.ai/namespace-template-finalizer"
-	namespaceTemplateFieldOwner    = "aim-namespace-template-controller"
+	// namespaceTemplateFinalizerName = "aim.silogen.ai/namespace-template-finalizer"
+	namespaceTemplateFieldOwner = "aim-namespace-template-controller"
 )
 
 // AIMServiceTemplateReconciler reconciles a AIMServiceTemplate object
@@ -81,12 +81,12 @@ func (r *AIMServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	// Use framework orchestrator with closures
 	return framework.Reconcile(ctx, framework.ReconcileSpec[*aimv1alpha1.AIMServiceTemplate, aimv1alpha1.AIMServiceTemplateStatus]{
-		Client:        r.Client,
-		Scheme:        r.Scheme,
-		Object:        &template,
-		Recorder:      r.Recorder,
-		FinalizerName: namespaceTemplateFinalizerName,
-		FieldOwner:    namespaceTemplateFieldOwner,
+		Client:   r.Client,
+		Scheme:   r.Scheme,
+		Object:   &template,
+		Recorder: r.Recorder,
+		// FinalizerName: namespaceTemplateFinalizerName,
+		FieldOwner: namespaceTemplateFieldOwner,
 
 		ObserveFn: func(ctx context.Context) (any, error) {
 			return r.observe(ctx, &template)
@@ -219,7 +219,7 @@ func (r *AIMServiceTemplateReconciler) projectStatus(
 	obs *namespaceTemplateObservation,
 	errs framework.ReconcileErrors,
 ) error {
-	imageNotFoundMsg := fmt.Sprintf("No AIMImage or AIMClusterImage found for modelId %q", template.Spec.AIMImageName)
+	imageNotFoundMsg := fmt.Sprintf("No AIMImage or AIMClusterImage found for image name %q", template.Spec.AIMImageName)
 	return shared.ProjectTemplateStatus(ctx, r.Client, template, &obs.TemplateObservation, errs, imageNotFoundMsg)
 }
 
