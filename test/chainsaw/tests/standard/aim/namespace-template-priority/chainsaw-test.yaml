@@ -10,9 +10,9 @@ spec:
   - name: Create both cluster and namespace images for the same modelId
     try:
     - apply:
-        file: ../resources-cluster-image.yaml
+        file: cluster-image.yaml
     - apply:
-        file: ../resources-namespace-image.yaml
+        file: namespace-image.yaml
     - apply:
         file: ../resources-cluster-config.yaml
 

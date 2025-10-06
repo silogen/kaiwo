@@ -10,14 +10,14 @@ spec:
   - name: Create cluster image and config
     try:
     - apply:
-        file: ../resources-cluster-image.yaml
+        file: cluster-image.yaml
     - apply:
         file: ../resources-cluster-config.yaml
 
   - name: Create cluster template
     try:
     - apply:
-        file: ../cluster-template.yaml
+        file: cluster-template.yaml
 
   - name: Wait for template to become Available
     try:
@@ -27,7 +27,7 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
-            name: llama-3-8b-latency
+            name: llama-3-8b-latency-discovery
           status:
             status: Available
 
@@ -38,7 +38,7 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
-            name: llama-3-8b-latency
+            name: llama-3-8b-latency-discovery
           status:
             modelSources:
             - name: amd/Llama-3.1-8B-Instruct-FP8-KV
@@ -52,7 +52,7 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
-            name: llama-3-8b-latency
+            name: llama-3-8b-latency-discovery
           status:
             profile:
               model: meta-llama/Llama-3.1-8B-Instruct

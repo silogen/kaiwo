@@ -10,7 +10,7 @@ spec:
   - name: Create only cluster image (no namespace image)
     try:
     - apply:
-        file: ../resources-cluster-image.yaml
+        file: cluster-image.yaml
     - apply:
         file: ../resources-cluster-config.yaml
 
