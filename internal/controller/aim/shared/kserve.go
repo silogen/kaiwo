@@ -34,6 +34,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
+
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 )
 
@@ -44,6 +46,7 @@ var labelValueRegex = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
 // - Be empty or consist of alphanumeric characters, '-', '_' or '.'
 // - Start and end with an alphanumeric character
 // - Be at most 63 characters
+// Returns "unknown" if the sanitized value is empty.
 func sanitizeLabelValue(s string) string {
 	// Replace invalid characters with underscores
 	sanitized := labelValueRegex.ReplaceAllString(s, "_")
@@ -57,6 +60,11 @@ func sanitizeLabelValue(s string) string {
 		sanitized = sanitized[:63]
 		// Trim trailing non-alphanumeric after truncation
 		sanitized = strings.TrimRight(sanitized, "_.-")
+	}
+
+	// Return "unknown" if fully sanitized string is empty
+	if sanitized == "" {
+		return "unknown"
 	}
 
 	return sanitized
@@ -101,7 +109,7 @@ func BuildClusterServingRuntime(spec ClusterServingRuntimeSpec) *servingv1alpha1
 			SupportedModelFormats: []servingv1alpha1.SupportedModelFormat{
 				{
 					Name:    "aim",
-					Version: ptr("1"),
+					Version: baseutils.Pointer("1"),
 				},
 			},
 			ServingRuntimePodSpec: servingv1alpha1.ServingRuntimePodSpec{
@@ -143,7 +151,7 @@ func BuildServingRuntime(spec ServingRuntimeSpec) *servingv1alpha1.ServingRuntim
 			SupportedModelFormats: []servingv1alpha1.SupportedModelFormat{
 				{
 					Name:    "aim",
-					Version: ptr("1"),
+					Version: baseutils.Pointer("1"),
 				},
 			},
 			ServingRuntimePodSpec: servingv1alpha1.ServingRuntimePodSpec{
@@ -179,8 +187,4 @@ func GetServingRuntime(ctx context.Context, k8sClient client.Client, namespace, 
 		return nil, err
 	}
 	return runtime, nil
-}
-
-func ptr[T any](v T) *T {
-	return &v
 }

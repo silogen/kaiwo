@@ -33,6 +33,7 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
@@ -54,15 +55,17 @@ type TemplateSpec interface {
 // TemplateWithStatus extends TemplateSpec with status access
 type TemplateWithStatus interface {
 	TemplateSpec
+	client.Object
 	GetStatus() *aimv1alpha1.AIMServiceTemplateStatus
 }
 
 // ProjectTemplateStatus computes status from observation and errors.
 // This is shared between cluster and namespace-scoped template controllers.
-// Modifies templateStatus directly.
+// Modifies templateStatus directly and emits events for discovery phase changes.
 func ProjectTemplateStatus(
 	ctx context.Context,
 	k8sClient client.Client,
+	recorder record.EventRecorder,
 	template TemplateWithStatus,
 	obs *TemplateObservation,
 	errs framework.ReconcileErrors,
@@ -140,6 +143,11 @@ func ProjectTemplateStatus(
 	if obs.Job != nil && !IsJobComplete(obs.Job) {
 		status = aimv1alpha1.AIMTemplateStatusProgressing
 
+		// Emit event if transitioning from Pending to Progressing
+		if currentStatus == aimv1alpha1.AIMTemplateStatusPending {
+			framework.EmitNormalEvent(recorder, template, "DiscoveryStarted", "Discovery job is running")
+		}
+
 		conditions = append(conditions, framework.NewCondition(
 			framework.ConditionTypeProgressing,
 			metav1.ConditionTrue,
@@ -172,6 +180,11 @@ func ProjectTemplateStatus(
 	// Discovery failed
 	if obs.Job != nil && IsJobFailed(obs.Job) {
 		status = aimv1alpha1.AIMTemplateStatusFailed
+
+		// Emit event if transitioning from Progressing to Failed
+		if currentStatus == aimv1alpha1.AIMTemplateStatusProgressing {
+			framework.EmitWarningEvent(recorder, template, "DiscoveryFailed", "Discovery job failed")
+		}
 
 		conditions = append(conditions, framework.NewCondition(
 			framework.ConditionTypeFailure,
@@ -207,6 +220,11 @@ func ProjectTemplateStatus(
 	var profile *apiextensionsv1.JSON
 	if obs.Job != nil && IsJobSucceeded(obs.Job) {
 		status = aimv1alpha1.AIMTemplateStatusAvailable
+
+		// Emit event if transitioning from Progressing to Available
+		if currentStatus == aimv1alpha1.AIMTemplateStatusProgressing {
+			framework.EmitNormalEvent(recorder, template, "DiscoverySucceeded", "Model sources discovered successfully")
+		}
 
 		conditions = append(conditions, framework.NewCondition(
 			framework.ConditionTypeDiscovered,

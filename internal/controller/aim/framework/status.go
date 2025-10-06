@@ -26,6 +26,7 @@ package framework
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 
@@ -85,13 +86,25 @@ func PatchStatus[T ObjectWithStatus[S], S any](
 	})
 }
 
-// cloneStatus creates a deep copy of the status field using the typed accessor
+// cloneStatus creates a deep copy of the status field using the typed accessor.
+// Uses generated DeepCopy methods when available, otherwise falls back to JSON round-trip.
 func cloneStatus[T ObjectWithStatus[S], S any](obj T) S {
 	status := obj.GetStatus()
-	// Deep copy using reflection (necessary for complex status objects with slices/maps)
-	clone := reflect.New(reflect.TypeOf(*status)).Elem()
-	clone.Set(reflect.ValueOf(*status))
-	return clone.Interface().(S)
+
+	// Try to use generated DeepCopy method if available
+	type deepCopier interface {
+		DeepCopy() *S
+	}
+	if dc, ok := any(status).(deepCopier); ok {
+		return *dc.DeepCopy()
+	}
+
+	// Fallback: JSON round-trip for deep copy
+	// This is slower but safe for all types with slices/maps
+	b, _ := json.Marshal(status)
+	var clone S
+	_ = json.Unmarshal(b, &clone)
+	return clone
 }
 
 // NewCondition creates a new condition with the given parameters

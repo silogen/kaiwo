@@ -29,6 +29,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -140,7 +141,8 @@ func BuildDiscoveryJob(spec DiscoveryJobSpec) *batchv1.Job {
 	return job
 }
 
-// GetDiscoveryJob fetches the discovery job for a template
+// GetDiscoveryJob fetches the discovery job for a template.
+// Returns the newest job (by CreationTimestamp) if multiple exist.
 func GetDiscoveryJob(ctx context.Context, k8sClient client.Client, namespace, templateName string) (*batchv1.Job, error) {
 	var jobList batchv1.JobList
 	if err := k8sClient.List(ctx, &jobList, client.InNamespace(namespace), client.MatchingLabels{
@@ -153,7 +155,12 @@ func GetDiscoveryJob(ctx context.Context, k8sClient client.Client, namespace, te
 		return nil, nil
 	}
 
-	// Return the most recent job
+	// Sort by CreationTimestamp descending (newest first)
+	sort.Slice(jobList.Items, func(i, j int) bool {
+		return jobList.Items[i].CreationTimestamp.After(jobList.Items[j].CreationTimestamp.Time)
+	})
+
+	// Return the newest job
 	return &jobList.Items[0], nil
 }
 

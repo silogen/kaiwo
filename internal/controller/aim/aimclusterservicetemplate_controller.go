@@ -38,6 +38,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
+
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 	"github.com/silogen/kaiwo/internal/controller/aim/framework"
 	"github.com/silogen/kaiwo/internal/controller/aim/shared"
@@ -92,11 +94,27 @@ func (r *AIMClusterServiceTemplateReconciler) Reconcile(ctx context.Context, req
 		},
 
 		PlanFn: func(ctx context.Context, obs any) ([]client.Object, error) {
-			return r.plan(ctx, &template, obs.(*clusterTemplateObservation))
+			var o *clusterTemplateObservation
+			if obs != nil {
+				var ok bool
+				o, ok = obs.(*clusterTemplateObservation)
+				if !ok {
+					return nil, fmt.Errorf("unexpected observation type %T", obs)
+				}
+			}
+			return r.plan(ctx, &template, o)
 		},
 
 		ProjectFn: func(ctx context.Context, obs any, errs framework.ReconcileErrors) error {
-			return r.projectStatus(ctx, &template, obs.(*clusterTemplateObservation), errs)
+			var o *clusterTemplateObservation
+			if obs != nil {
+				var ok bool
+				o, ok = obs.(*clusterTemplateObservation)
+				if !ok {
+					return fmt.Errorf("unexpected observation type %T", obs)
+				}
+			}
+			return r.projectStatus(ctx, &template, o, errs)
 		},
 
 		FinalizeFn: nil, // No external cleanup needed
@@ -162,8 +180,8 @@ func (r *AIMClusterServiceTemplateReconciler) observe(ctx context.Context, templ
 func (r *AIMClusterServiceTemplateReconciler) plan(_ context.Context, template *aimv1alpha1.AIMClusterServiceTemplate, obs *clusterTemplateObservation) ([]client.Object, error) {
 	var desired []client.Object
 
-	// If no image found, return empty desired state (will be handled in status projection)
-	if obs.Image == "" {
+	// If observation is nil or no image found, return empty desired state
+	if obs == nil || obs.Image == "" {
 		return desired, nil
 	}
 
@@ -173,8 +191,8 @@ func (r *AIMClusterServiceTemplateReconciler) plan(_ context.Context, template *
 		Kind:               template.Kind,
 		Name:               template.Name,
 		UID:                template.UID,
-		Controller:         ptr(true),
-		BlockOwnerDeletion: ptr(true),
+		Controller:         baseutils.Pointer(true),
+		BlockOwnerDeletion: baseutils.Pointer(true),
 	}
 
 	// Always include ClusterServingRuntime in desired state
@@ -220,17 +238,14 @@ func (r *AIMClusterServiceTemplateReconciler) projectStatus(
 	if obs != nil {
 		templateObs = &obs.TemplateObservation
 	}
-	return shared.ProjectTemplateStatus(ctx, r.Client, template, templateObs, errs, imageNotFoundMsg)
+	return shared.ProjectTemplateStatus(ctx, r.Client, r.Recorder, template, templateObs, errs, imageNotFoundMsg)
 }
 
 func (r *AIMClusterServiceTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&aimv1alpha1.AIMClusterServiceTemplate{}).
 		Owns(&batchv1.Job{}).
+		Owns(&servingv1alpha1.ClusterServingRuntime{}).
 		Named("aim-cluster-template").
 		Complete(r)
-}
-
-func ptr[T any](v T) *T {
-	return &v
 }

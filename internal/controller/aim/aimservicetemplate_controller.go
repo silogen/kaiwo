@@ -38,6 +38,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
+
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 	"github.com/silogen/kaiwo/internal/controller/aim/framework"
 	"github.com/silogen/kaiwo/internal/controller/aim/shared"
@@ -93,11 +95,27 @@ func (r *AIMServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.R
 		},
 
 		PlanFn: func(ctx context.Context, obs any) ([]client.Object, error) {
-			return r.plan(ctx, &template, obs.(*namespaceTemplateObservation))
+			var o *namespaceTemplateObservation
+			if obs != nil {
+				var ok bool
+				o, ok = obs.(*namespaceTemplateObservation)
+				if !ok {
+					return nil, fmt.Errorf("unexpected observation type %T", obs)
+				}
+			}
+			return r.plan(ctx, &template, o)
 		},
 
 		ProjectFn: func(ctx context.Context, obs any, errs framework.ReconcileErrors) error {
-			return r.projectStatus(ctx, &template, obs.(*namespaceTemplateObservation), errs)
+			var o *namespaceTemplateObservation
+			if obs != nil {
+				var ok bool
+				o, ok = obs.(*namespaceTemplateObservation)
+				if !ok {
+					return fmt.Errorf("unexpected observation type %T", obs)
+				}
+			}
+			return r.projectStatus(ctx, &template, o, errs)
 		},
 
 		FinalizeFn: nil, // No external cleanup needed
@@ -163,8 +181,8 @@ func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *ai
 func (r *AIMServiceTemplateReconciler) plan(_ context.Context, template *aimv1alpha1.AIMServiceTemplate, obs *namespaceTemplateObservation) ([]client.Object, error) {
 	var desired []client.Object
 
-	// If no image found, return empty desired state (will be handled in status projection)
-	if obs.Image == "" {
+	// If observation is nil or no image found, return empty desired state
+	if obs == nil || obs.Image == "" {
 		return desired, nil
 	}
 
@@ -174,8 +192,8 @@ func (r *AIMServiceTemplateReconciler) plan(_ context.Context, template *aimv1al
 		Kind:               template.Kind,
 		Name:               template.Name,
 		UID:                template.UID,
-		Controller:         ptr(true),
-		BlockOwnerDeletion: ptr(true),
+		Controller:         baseutils.Pointer(true),
+		BlockOwnerDeletion: baseutils.Pointer(true),
 	}
 
 	// Always include ServingRuntime in desired state
@@ -220,13 +238,18 @@ func (r *AIMServiceTemplateReconciler) projectStatus(
 	errs framework.ReconcileErrors,
 ) error {
 	imageNotFoundMsg := fmt.Sprintf("No AIMImage or AIMClusterImage found for image name %q", template.Spec.AIMImageName)
-	return shared.ProjectTemplateStatus(ctx, r.Client, template, &obs.TemplateObservation, errs, imageNotFoundMsg)
+	var templateObs *shared.TemplateObservation
+	if obs != nil {
+		templateObs = &obs.TemplateObservation
+	}
+	return shared.ProjectTemplateStatus(ctx, r.Client, r.Recorder, template, templateObs, errs, imageNotFoundMsg)
 }
 
 func (r *AIMServiceTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&aimv1alpha1.AIMServiceTemplate{}).
 		Owns(&batchv1.Job{}).
+		Owns(&servingv1alpha1.ServingRuntime{}).
 		Named("aim-namespace-template").
 		Complete(r)
 }
