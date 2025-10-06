@@ -70,8 +70,6 @@ type ModelCacheReconciler struct {
 // +kubebuilder:rbac:groups=storage.k8s.io,resources=storageclasses,verbs=get;list;watch
 
 const (
-	downloadJobImage = "kserve/storage-initializer:v0.15.2"
-
 	// The amount of headroom given to the PVC
 	// FIXME Currently HF duplicates the cache, so doubling the storage for now
 	storageMultiplier float64 = 2.1
