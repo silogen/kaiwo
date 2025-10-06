@@ -25,25 +25,34 @@ SOFTWARE.
 package aim
 
 import (
+	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 // SetupWithManager registers all AIM controllers with the manager
 func SetupWithManager(mgr ctrl.Manager) error {
+	// Create kubernetes clientset for pod log access
+	clientset, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		return err
+	}
+
 	// Setup AIMClusterServiceTemplate controller
 	if err := (&AIMClusterServiceTemplateReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("aim-cluster-template-controller"),
+		Client:    mgr.GetClient(),
+		Scheme:    mgr.GetScheme(),
+		Recorder:  mgr.GetEventRecorderFor("aim-cluster-template-controller"),
+		Clientset: clientset,
 	}).SetupWithManager(mgr); err != nil {
 		return err
 	}
 
 	// Setup AIMServiceTemplate controller
 	if err := (&AIMServiceTemplateReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("aim-namespace-template-controller"),
+		Client:    mgr.GetClient(),
+		Scheme:    mgr.GetScheme(),
+		Recorder:  mgr.GetEventRecorderFor("aim-namespace-template-controller"),
+		Clientset: clientset,
 	}).SetupWithManager(mgr); err != nil {
 		return err
 	}

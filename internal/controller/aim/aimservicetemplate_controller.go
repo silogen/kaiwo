@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -53,8 +54,9 @@ const (
 // AIMServiceTemplateReconciler reconciles a AIMServiceTemplate object
 type AIMServiceTemplateReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Scheme    *runtime.Scheme
+	Recorder  record.EventRecorder
+	Clientset kubernetes.Interface
 }
 
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimservicetemplates,verbs=get;list;watch;create;update;patch;delete
@@ -242,7 +244,7 @@ func (r *AIMServiceTemplateReconciler) projectStatus(
 	if obs != nil {
 		templateObs = &obs.TemplateObservation
 	}
-	return shared.ProjectTemplateStatus(ctx, r.Client, r.Recorder, template, templateObs, errs, imageNotFoundMsg)
+	return shared.ProjectTemplateStatus(ctx, r.Client, r.Clientset, r.Recorder, template, templateObs, errs, imageNotFoundMsg)
 }
 
 func (r *AIMServiceTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {

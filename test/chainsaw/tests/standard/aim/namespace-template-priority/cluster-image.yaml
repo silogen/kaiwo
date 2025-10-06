@@ -1,7 +1,7 @@
 apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMClusterImage
 metadata:
-  name: llama-3-8b-throughput-template-priority
+  name: llama-3-8b-cluster-priority
 spec:
   image: busybox:latest-aim-cluster
-  defaultServiceTemplate: llama-3-8b-throughput
+  defaultServiceTemplate: llama-3-8b-latency-priority

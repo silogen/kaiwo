@@ -26,6 +26,7 @@ package shared
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -33,6 +34,7 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -65,6 +67,7 @@ type TemplateWithStatus interface {
 func ProjectTemplateStatus(
 	ctx context.Context,
 	k8sClient client.Client,
+	clientset kubernetes.Interface,
 	recorder record.EventRecorder,
 	template TemplateWithStatus,
 	obs *TemplateObservation,
@@ -81,12 +84,34 @@ func ProjectTemplateStatus(
 		status = aimv1alpha1.AIMTemplateStatusFailed
 
 		if errs.ObserveErr != nil {
-			conditions = append(conditions, framework.NewCondition(
-				framework.ConditionTypeFailure,
-				metav1.ConditionTrue,
-				framework.ReasonFailed,
-				fmt.Sprintf("Observation failed: %v", errs.ObserveErr),
-			))
+			// Check if the error is specifically ErrImageNotFound
+			if errors.Is(errs.ObserveErr, ErrImageNotFound) {
+				conditions = append(conditions, framework.NewCondition(
+					framework.ConditionTypeFailure,
+					metav1.ConditionTrue,
+					"ImageNotFound",
+					imageNotFoundMessage,
+				))
+				conditions = append(conditions, framework.NewCondition(
+					framework.ConditionTypeReady,
+					metav1.ConditionFalse,
+					"ImageNotFound",
+					"Cannot proceed without image",
+				))
+			} else {
+				conditions = append(conditions, framework.NewCondition(
+					framework.ConditionTypeFailure,
+					metav1.ConditionTrue,
+					framework.ReasonFailed,
+					fmt.Sprintf("Observation failed: %v", errs.ObserveErr),
+				))
+				conditions = append(conditions, framework.NewCondition(
+					framework.ConditionTypeReady,
+					metav1.ConditionFalse,
+					framework.ReasonFailed,
+					"Template is not ready due to errors",
+				))
+			}
 		}
 
 		if errs.ApplyErr != nil {
@@ -96,14 +121,13 @@ func ProjectTemplateStatus(
 				framework.ReasonFailed,
 				fmt.Sprintf("Apply failed: %v", errs.ApplyErr),
 			))
+			conditions = append(conditions, framework.NewCondition(
+				framework.ConditionTypeReady,
+				metav1.ConditionFalse,
+				framework.ReasonFailed,
+				"Template is not ready due to errors",
+			))
 		}
-
-		conditions = append(conditions, framework.NewCondition(
-			framework.ConditionTypeReady,
-			metav1.ConditionFalse,
-			framework.ReasonFailed,
-			"Template is not ready due to errors",
-		))
 
 		// Set status and conditions
 		templateStatus.Status = status
@@ -248,7 +272,7 @@ func ProjectTemplateStatus(
 		))
 
 		// Parse discovery results
-		discovery, err := ParseDiscoveryLogs(ctx, k8sClient, obs.Job)
+		discovery, err := ParseDiscoveryLogs(ctx, k8sClient, clientset, obs.Job)
 		if err == nil {
 			modelSources = discovery.ModelSources
 			profile = discovery.Profile

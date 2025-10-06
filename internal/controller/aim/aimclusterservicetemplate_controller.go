@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -53,8 +54,9 @@ const (
 // AIMClusterServiceTemplateReconciler reconciles a AIMClusterServiceTemplate object
 type AIMClusterServiceTemplateReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Scheme    *runtime.Scheme
+	Recorder  record.EventRecorder
+	Clientset kubernetes.Interface
 }
 
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclusterservicetemplates,verbs=get;list;watch;create;update;patch;delete
@@ -196,14 +198,14 @@ func (r *AIMClusterServiceTemplateReconciler) plan(_ context.Context, template *
 	}
 
 	// Always include ClusterServingRuntime in desired state
-	runtime := shared.BuildClusterServingRuntime(shared.ClusterServingRuntimeSpec{
+	clusterServingRuntime := shared.BuildClusterServingRuntime(shared.ClusterServingRuntimeSpec{
 		Name:     template.Name,
 		ModelID:  template.Spec.AIMImageName,
 		Image:    obs.Image,
 		Metric:   template.Spec.Metric,
 		OwnerRef: ownerRef,
 	})
-	desired = append(desired, runtime)
+	desired = append(desired, clusterServingRuntime)
 
 	// Include discovery job only if:
 	// 1. Template is not already Available (gate to prevent re-running after TTL expires)
@@ -216,6 +218,7 @@ func (r *AIMClusterServiceTemplateReconciler) plan(_ context.Context, template *
 				ModelID:          template.Spec.AIMImageName,
 				Image:            obs.Image,
 				Env:              nil,
+				TemplateSpec:     template.Spec.AIMServiceTemplateSpecCommon,
 				ImagePullSecrets: obs.ImagePullSecrets,
 				OwnerRef:         ownerRef,
 			})
@@ -238,7 +241,7 @@ func (r *AIMClusterServiceTemplateReconciler) projectStatus(
 	if obs != nil {
 		templateObs = &obs.TemplateObservation
 	}
-	return shared.ProjectTemplateStatus(ctx, r.Client, r.Recorder, template, templateObs, errs, imageNotFoundMsg)
+	return shared.ProjectTemplateStatus(ctx, r.Client, r.Clientset, r.Recorder, template, templateObs, errs, imageNotFoundMsg)
 }
 
 func (r *AIMClusterServiceTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {

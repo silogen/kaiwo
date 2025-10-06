@@ -29,13 +29,16 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io"
 	"sort"
+	"strconv"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
@@ -82,6 +85,7 @@ type ParsedDiscovery struct {
 // DiscoveryJobSpec defines parameters for creating a discovery job
 type DiscoveryJobSpec struct {
 	TemplateName     string
+	TemplateSpec     aimv1alpha1.AIMServiceTemplateSpecCommon
 	Namespace        string
 	ModelID          string
 	Image            string
@@ -98,6 +102,40 @@ func BuildDiscoveryJob(spec DiscoveryJobSpec) *batchv1.Job {
 
 	backoffLimit := int32(3)
 	ttlSeconds := int32(60) // Clean up after 1 minute (enough time to fetch status)
+
+	// Add AIM environmental variables
+
+	var env []corev1.EnvVar
+	env = append(env, spec.Env...)
+
+	if spec.TemplateSpec.Metric != nil {
+		env = append(env, corev1.EnvVar{
+			Name:  "AIM_METRIC",
+			Value: string(*spec.TemplateSpec.Metric),
+		})
+	}
+
+	if spec.TemplateSpec.Precision != nil {
+		env = append(env, corev1.EnvVar{
+			Name:  "AIM_PRECISION",
+			Value: string(*spec.TemplateSpec.Precision),
+		})
+	}
+
+	if spec.TemplateSpec.GpuSelector != nil {
+		if spec.TemplateSpec.GpuSelector.Model != "" {
+			env = append(env, corev1.EnvVar{
+				Name:  "AIM_GPU_MODEL",
+				Value: spec.TemplateSpec.GpuSelector.Model,
+			})
+		}
+		if spec.TemplateSpec.GpuSelector.Count > 0 {
+			env = append(env, corev1.EnvVar{
+				Name:  "AIM_GPU_COUNT",
+				Value: strconv.Itoa(int(spec.TemplateSpec.GpuSelector.Count)),
+			})
+		}
+	}
 
 	job := &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
@@ -124,13 +162,13 @@ func BuildDiscoveryJob(spec DiscoveryJobSpec) *batchv1.Job {
 					ImagePullSecrets: spec.ImagePullSecrets,
 					Containers: []corev1.Container{
 						{
-							Name: "discovery",
-							// TODO: Restore actual discovery image and args when feature is complete
-							// Original image: spec.Image
-							// Original args: []string{"--dry-run", "--model-id", spec.AIMImageName, "--output", "json"}
+							Name:  "discovery",
 							Image: spec.Image,
-							Args:  []string{"sh", "-c", "echo 'Mock discovery job' && exit 0"},
-							// Env: spec.Env, // Commented out for mock
+							Args: []string{
+								"dry-run",
+								"--format=json",
+							},
+							Env: env,
 						},
 					},
 				},
@@ -213,57 +251,63 @@ func IsJobFailed(job *batchv1.Job) bool {
 }
 
 // ParseDiscoveryLogs parses the discovery job output to extract model sources and profile.
-// For now, this returns mocked data. In production, this would read pod logs.
-func ParseDiscoveryLogs(ctx context.Context, k8sClient client.Client, job *batchv1.Job) (*ParsedDiscovery, error) {
-	// TODO: In production, fetch pod logs and parse JSON output
-	// For now, return mocked discovery result
-
+// Reads pod logs from the completed job and parses the JSON output.
+func ParseDiscoveryLogs(ctx context.Context, k8sClient client.Client, clientset kubernetes.Interface, job *batchv1.Job) (*ParsedDiscovery, error) {
 	if !IsJobSucceeded(job) {
 		return nil, fmt.Errorf("job has not succeeded yet")
 	}
 
-	// Mocked result matching the expected format
-	mockedResult := DiscoveryResult{
-		Filename: "vllm-mi300x-fp8-tp1-latency.yaml",
-		Profile: Profile{
-			Model:          "meta-llama/Llama-3.1-8B-Instruct",
-			QuantizedModel: "amd/Llama-3.1-8B-Instruct-FP8-KV",
-			Metadata: ProfileMetadata{
-				Engine:    "vllm",
-				GPU:       "MI300X",
-				Precision: "fp8",
-				GPUCount:  1,
-				Metric:    "latency",
-			},
-			EngineArgs: map[string]any{
-				"gpu-memory-utilization":       0.95,
-				"distributed_executor_backend": "mp",
-				"no-enable-chunked-prefill":    nil,
-				"tensor-parallel-size":         1,
-			},
-			EnvVars: map[string]string{
-				"VLLM_DO_NOT_TRACK":           "1",
-				"VLLM_USE_V1":                 "0",
-				"VLLM_USE_TRITON_FLASH_ATTN":  "0",
-				"HIP_FORCE_DEV_KERNARG":       "1",
-				"NCCL_MIN_NCHANNELS":          "112",
-				"TORCH_BLAS_PREFER_HIPBLASLT": "1",
-				"PYTORCH_TUNABLEOP_ENABLED":   "1",
-				"PYTORCH_TUNABLEOP_VERBOSE":   "1",
-				"PYTORCH_TUNABLEOP_TUNING":    "0",
-			},
-			Models: []ProfileModel{
-				{
-					Name:   "amd/Llama-3.1-8B-Instruct-FP8-KV",
-					Source: "hf://amd/Llama-3.1-8B-Instruct-FP8-KV",
-					SizeGB: 8.47,
-				},
-			},
-		},
+	// List pods for this job
+	var podList corev1.PodList
+	if err := k8sClient.List(ctx, &podList, client.InNamespace(job.Namespace), client.MatchingLabels{
+		"job-name": job.Name,
+	}); err != nil {
+		return nil, fmt.Errorf("failed to list pods for job: %w", err)
+	}
+
+	if len(podList.Items) == 0 {
+		return nil, fmt.Errorf("no pods found for job %s", job.Name)
+	}
+
+	// Find a successful pod
+	var successfulPod *corev1.Pod
+	for i := range podList.Items {
+		pod := &podList.Items[i]
+		if pod.Status.Phase == corev1.PodSucceeded {
+			successfulPod = pod
+			break
+		}
+	}
+
+	if successfulPod == nil {
+		return nil, fmt.Errorf("no successful pod found for job %s", job.Name)
+	}
+
+	// Get pod logs
+	req := clientset.CoreV1().Pods(successfulPod.Namespace).GetLogs(successfulPod.Name, &corev1.PodLogOptions{
+		Container: "discovery",
+	})
+
+	logs, err := req.Stream(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get pod logs: %w", err)
+	}
+	defer func() { _ = logs.Close() }()
+
+	// Read logs
+	logBytes, err := io.ReadAll(logs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read pod logs: %w", err)
+	}
+
+	// Parse JSON output
+	var result DiscoveryResult
+	if err := json.Unmarshal(logBytes, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse discovery JSON output: %w", err)
 	}
 
 	// Convert profile to JSON
-	profileBytes, err := json.Marshal(mockedResult.Profile)
+	profileBytes, err := json.Marshal(result.Profile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal profile: %w", err)
 	}
@@ -272,7 +316,7 @@ func ParseDiscoveryLogs(ctx context.Context, k8sClient client.Client, job *batch
 
 	// Extract model sources from profile
 	var modelSources []aimv1alpha1.AIMModelSource
-	for _, model := range mockedResult.Profile.Models {
+	for _, model := range result.Profile.Models {
 		// Convert GB to bytes for resource.Quantity
 		sizeBytes := int64(model.SizeGB * 1024 * 1024 * 1024)
 		size := resource.NewQuantity(sizeBytes, resource.BinarySI)
@@ -288,36 +332,4 @@ func ParseDiscoveryLogs(ctx context.Context, k8sClient client.Client, job *batch
 		ModelSources: modelSources,
 		Profile:      profileJSON,
 	}, nil
-}
-
-// MockDiscoveryLogsFromTemplate creates mocked discovery output based on template
-func MockDiscoveryLogsFromTemplate(modelID string) string {
-	result := DiscoveryResult{
-		Filename: "mock-profile.yaml",
-		Profile: Profile{
-			Model:          modelID,
-			QuantizedModel: modelID,
-			Metadata: ProfileMetadata{
-				Engine:    "vllm",
-				GPU:       "MI300X",
-				Precision: "fp16",
-				GPUCount:  1,
-				Metric:    "latency",
-			},
-			EngineArgs: map[string]any{
-				"gpu-memory-utilization": 0.9,
-			},
-			EnvVars: map[string]string{},
-			Models: []ProfileModel{
-				{
-					Name:   modelID,
-					Source: fmt.Sprintf("hf://%s", modelID),
-					SizeGB: 16,
-				},
-			},
-		},
-	}
-
-	data, _ := json.Marshal(result)
-	return string(data)
 }
