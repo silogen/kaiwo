@@ -28,6 +28,8 @@ import (
 	"context"
 	"fmt"
 
+	framework2 "github.com/silogen/kaiwo/internal/controller/framework"
+
 	servingv1alpha1 "github.com/kserve/kserve/pkg/apis/serving/v1alpha1"
 	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -42,7 +44,6 @@ import (
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
-	"github.com/silogen/kaiwo/internal/controller/aim/framework"
 	"github.com/silogen/kaiwo/internal/controller/aim/shared"
 )
 
@@ -84,7 +85,7 @@ func (r *AIMServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.R
 	logger.Info("Reconciling AIMServiceTemplate", "name", template.Name, "namespace", template.Namespace)
 
 	// Use framework orchestrator with closures
-	return framework.Reconcile(ctx, framework.ReconcileSpec[*aimv1alpha1.AIMServiceTemplate, aimv1alpha1.AIMServiceTemplateStatus]{
+	return framework2.Reconcile(ctx, framework2.ReconcileSpec[*aimv1alpha1.AIMServiceTemplate, aimv1alpha1.AIMServiceTemplateStatus]{
 		Client:   r.Client,
 		Scheme:   r.Scheme,
 		Object:   &template,
@@ -108,7 +109,7 @@ func (r *AIMServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.R
 			return r.plan(ctx, &template, o)
 		},
 
-		ProjectFn: func(ctx context.Context, obs any, errs framework.ReconcileErrors) error {
+		ProjectFn: func(ctx context.Context, obs any, errs framework2.ReconcileErrors) error {
 			var o *namespaceTemplateObservation
 			if obs != nil {
 				var ok bool
@@ -169,11 +170,11 @@ func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *ai
 
 	if config != nil {
 		logger.Info("Using default AIMClusterConfig", "imagePullSecrets", len(config.Spec.ImagePullSecrets))
-		framework.EmitNormalEvent(r.Recorder, template, "ConfigFound", fmt.Sprintf("Using default AIMClusterConfig with %d image pull secrets", len(config.Spec.ImagePullSecrets)))
+		framework2.EmitNormalEvent(r.Recorder, template, "ConfigFound", fmt.Sprintf("Using default AIMClusterConfig with %d image pull secrets", len(config.Spec.ImagePullSecrets)))
 		obs.ImagePullSecrets = config.Spec.ImagePullSecrets
 	} else {
 		logger.Info("Default AIMClusterConfig not found, proceeding without image pull secrets")
-		framework.EmitWarningEvent(r.Recorder, template, "ConfigNotFound", "Default AIMClusterConfig not found, discovery job may fail if images require authentication")
+		framework2.EmitWarningEvent(r.Recorder, template, "ConfigNotFound", "Default AIMClusterConfig not found, discovery job may fail if images require authentication")
 	}
 
 	return obs, nil
@@ -237,7 +238,7 @@ func (r *AIMServiceTemplateReconciler) projectStatus(
 	ctx context.Context,
 	template *aimv1alpha1.AIMServiceTemplate,
 	obs *namespaceTemplateObservation,
-	errs framework.ReconcileErrors,
+	errs framework2.ReconcileErrors,
 ) error {
 	imageNotFoundMsg := fmt.Sprintf("No AIMImage or AIMClusterImage found for image name %q", template.Spec.AIMImageName)
 	var templateObs *shared.TemplateObservation
