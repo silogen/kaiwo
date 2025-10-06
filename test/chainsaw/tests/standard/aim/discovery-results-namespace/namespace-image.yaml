@@ -1,0 +1,7 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMImage
+metadata:
+  name: llama-3-8b-namespace-discovery
+spec:
+  image: busybox:latest
+  defaultServiceTemplate: llama-3-8b-latency-discovery-namespace
