@@ -3,5 +3,5 @@ kind: AIMImage
 metadata:
   name: llama-3-8b-namespace-discovery
 spec:
-  image: busybox:latest
+  image: ghcr.io/silogen/aim:0.4.0-meta-llama-llama-3.1-8b-instruct-v20251006
   defaultServiceTemplate: llama-3-8b-latency-discovery-namespace
