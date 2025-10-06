@@ -10,14 +10,14 @@ spec:
   - name: Create cluster image and config
     try:
     - apply:
-        file: ../resources-cluster-image.yaml
+        file: cluster-image.yaml
     - apply:
         file: ../resources-cluster-config.yaml
 
   - name: Create cluster template
     try:
     - apply:
-        file: ../cluster-template.yaml
+        file: cluster-template.yaml
 
   - name: Check template transitions to Progressing
     try:
@@ -26,7 +26,7 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
-            name: llama-3-8b-latency
+            name: llama-3-8b-latency-with-image
           status:
             status: Progressing
             (conditions[?type == 'Discovered']):
@@ -45,7 +45,7 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
-            name: llama-3-8b-latency
+            name: llama-3-8b-latency-with-image
           status:
             status: Available
             (conditions[?type == 'Discovered']):
@@ -64,7 +64,7 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
-            name: llama-3-8b-latency
+            name: llama-3-8b-latency-with-image
           status:
             (modelSources != null): true
             (length(modelSources) > `0`): true
@@ -77,4 +77,4 @@ spec:
           apiVersion: serving.kserve.io/v1alpha1
           kind: ClusterServingRuntime
           metadata:
-            name: llama-3-8b-latency
+            name: llama-3-8b-latency-with-image

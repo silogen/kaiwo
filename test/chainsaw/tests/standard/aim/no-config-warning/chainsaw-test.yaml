@@ -10,12 +10,12 @@ spec:
   - name: Create cluster image without config
     try:
     - apply:
-        file: ../resources-cluster-image.yaml
+        file: cluster-image.yaml
 
   - name: Create cluster template
     try:
     - apply:
-        file: ../cluster-template.yaml
+        file: cluster-template.yaml
 
   - name: Wait for discovery job (should still be created)
     try:
@@ -26,7 +26,7 @@ spec:
           kind: Job
           metadata:
             labels:
-              aim.silogen.ai/template: llama-3-8b-latency
+              aim.silogen.ai/template: llama-3-8b-latency-no-config
 
   - name: Verify job has no image pull secrets (config not found)
     try:
@@ -37,7 +37,7 @@ spec:
           kind: Job
           metadata:
             labels:
-              aim.silogen.ai/template: llama-3-8b-latency
+              aim.silogen.ai/template: llama-3-8b-latency-no-config
           spec:
             template:
               spec:
@@ -55,6 +55,6 @@ spec:
           involvedObject:
             apiVersion: aim.silogen.ai/v1alpha1
             kind: AIMClusterServiceTemplate
-            name: llama-3-8b-latency
+            name: llama-3-8b-latency-no-config
           reason: ConfigNotFound
           type: Warning

@@ -10,14 +10,14 @@ spec:
   - name: Create cluster image and config with image pull secrets
     try:
     - apply:
-        file: ../resources-cluster-image.yaml
+        file: cluster-image.yaml
     - apply:
         file: ../resources-cluster-config.yaml
 
   - name: Create cluster template
     try:
     - apply:
-        file: ../cluster-template.yaml
+        file: cluster-template.yaml
 
   - name: Wait for discovery job and verify it has image pull secrets
     try:
@@ -28,7 +28,7 @@ spec:
           kind: Job
           metadata:
             labels:
-              aim.silogen.ai/template: llama-3-8b-latency
+              aim.silogen.ai/template: llama-3-8b-latency-pull-secrets
           spec:
             template:
               spec:
@@ -47,6 +47,6 @@ spec:
           involvedObject:
             apiVersion: aim.silogen.ai/v1alpha1
             kind: AIMClusterServiceTemplate
-            name: llama-3-8b-latency
+            name: llama-3-8b-latency-pull-secrets
           reason: ConfigFound
           type: Normal
