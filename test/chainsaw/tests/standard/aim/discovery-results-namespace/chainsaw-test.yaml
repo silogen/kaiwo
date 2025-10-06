@@ -1,23 +1,21 @@
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
-  name: discovery-results-cluster
+  name: discovery-results-namespace
 spec:
   description: Test that discovery results populate modelSources and profile correctly
   timeouts:
     assert: 60s
   steps:
-  - name: Create cluster image and config
+  - name: Create namespace image and config
     try:
     - apply:
-        file: cluster-image.yaml
-    - apply:
-        file: ../resources-cluster-config.yaml
+        file: namespace-image.yaml
 
   - name: Create cluster template
     try:
     - apply:
-        file: cluster-template.yaml
+        file: namespace-template.yaml
 
   - name: Wait for template to become Available
     try:
@@ -25,9 +23,9 @@ spec:
         timeout: 30s
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMClusterServiceTemplate
+          kind: AIMServiceTemplate
           metadata:
-            name: llama-3-8b-latency-discovery-cluster
+            name: llama-3-8b-latency-discovery-namespace
           status:
             status: Available
 
@@ -36,9 +34,9 @@ spec:
     - assert:
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMClusterServiceTemplate
+          kind: AIMServiceTemplate
           metadata:
-            name: llama-3-8b-latency-discovery-cluster
+            name: llama-3-8b-latency-discovery-namespace
           status:
             modelSources:
             - name: amd/Llama-3.1-8B-Instruct-FP8-KV
@@ -50,9 +48,9 @@ spec:
     - assert:
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMClusterServiceTemplate
+          kind: AIMServiceTemplate
           metadata:
-            name: llama-3-8b-latency-discovery-cluster
+            name: llama-3-8b-latency-discovery-namespace
           status:
             profile:
               model: meta-llama/Llama-3.1-8B-Instruct
@@ -70,14 +68,14 @@ spec:
                 source: hf://amd/Llama-3.1-8B-Instruct-FP8-KV
                 size_gb: 8.47
 
-  - name: Verify the cluster serving runtime was created
+  - name: Verify the serving runtime was created
     try:
     - assert:
         resource:
           apiVersion: serving.kserve.io/v1alpha1
-          kind: ClusterServingRuntime
+          kind: ServingRuntime
           metadata:
-            name: llama-3-8b-latency-discovery-cluster
+            name: llama-3-8b-latency-discovery-namespace
           spec:
             containers:
             - image: busybox:latest

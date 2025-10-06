@@ -1,0 +1,10 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMServiceTemplate
+metadata:
+  name: llama-3-8b-latency-discovery-namespace
+spec:
+  aimImageName: llama-3-8b-namespace-discovery
+  metric: latency
+  gpuSelector:
+    count: 1
+    model: MI300X
