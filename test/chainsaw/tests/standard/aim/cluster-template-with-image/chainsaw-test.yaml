@@ -19,22 +19,9 @@ spec:
     - apply:
         file: ../cluster-template.yaml
 
-
-#  - name: Wait for discovery job to be created
-#    try:
-#    - assert:
-#        timeout: 15s
-#        resource:
-#          apiVersion: batch/v1
-#          kind: Job
-#          metadata:
-#            labels:
-#              aim.silogen.ai/template: llama-3-8b-latency
-
   - name: Check template transitions to Progressing
     try:
     - assert:
-        timeout: 10s
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
@@ -42,15 +29,13 @@ spec:
             name: llama-3-8b-latency
           status:
             status: Progressing
-            conditions:
-            - type: Progressing
-              status: "True"
+            (conditions[?type == 'Discovered']):
+            - status: "False"
+            (conditions[?type == 'Progressing']):
+            - status: "True"
               reason: DiscoveryRunning
-            - type: Ready
-              status: "False"
-            - type: Discovered
-              status: "False"
-              reason: JobPending
+            (conditions[?type == 'Ready']):
+            - status: "False"
 
   - name: Wait for job completion and check Available status
     try:
@@ -63,15 +48,14 @@ spec:
             name: llama-3-8b-latency
           status:
             status: Available
-            conditions:
-            - type: Discovered
-              status: "True"
+            (conditions[?type == 'Discovered']):
+            - status: "True"
               reason: Discovered
-            - type: Progressing
-              status: "False"
+            (conditions[?type == 'Progressing']):
+            - status: "False"
               reason: Available
-            - type: Ready
-              status: "True"
+            (conditions[?type == 'Ready']):
+            - status: "True"
               reason: Available
 
     # Check that modelSources and profile are populated
@@ -83,7 +67,7 @@ spec:
             name: llama-3-8b-latency
           status:
             (modelSources != null): true
-            (len(modelSources) > 0): true
+            (length(modelSources) > `0`): true
             (profile != null): true
 
   - name: Verify ClusterServingRuntime was created

@@ -47,6 +47,10 @@ func PatchStatus[T ObjectWithStatus[S], S any](
 	obj T,
 	originalStatus S,
 ) error {
+	// Capture desired status before entering retry loop
+	// This preserves modifications made by ProjectFn across retries
+	desiredStatus := cloneStatus(obj)
+
 	// Retry on conflicts with exponential backoff
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		// Fetch the latest version of the object to avoid conflicts
@@ -56,6 +60,9 @@ func PatchStatus[T ObjectWithStatus[S], S any](
 		}
 
 		status := obj.GetStatus()
+
+		// Re-apply desired status to the freshly-fetched object
+		*status = desiredStatus
 
 		// Set ObservedGeneration using reflection (unavoidable without adding methods to every status type)
 		statusValue := reflect.ValueOf(status).Elem()
