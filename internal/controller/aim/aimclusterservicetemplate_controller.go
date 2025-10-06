@@ -44,8 +44,8 @@ import (
 )
 
 const (
-	clusterTemplateFinalizerName = "aim.silogen.ai/cluster-template-finalizer"
-	clusterTemplateFieldOwner    = "aim-cluster-template-controller"
+	// clusterTemplateFinalizerName = "aim.silogen.ai/cluster-template-finalizer"
+	clusterTemplateFieldOwner = "aim-cluster-template-controller"
 )
 
 // AIMClusterServiceTemplateReconciler reconciles a AIMClusterServiceTemplate object
@@ -80,12 +80,12 @@ func (r *AIMClusterServiceTemplateReconciler) Reconcile(ctx context.Context, req
 
 	// Use framework orchestrator with closures
 	return framework.Reconcile(ctx, framework.ReconcileSpec[*aimv1alpha1.AIMClusterServiceTemplate, aimv1alpha1.AIMServiceTemplateStatus]{
-		Client:        r.Client,
-		Scheme:        r.Scheme,
-		Object:        &template,
-		Recorder:      r.Recorder,
-		FinalizerName: clusterTemplateFinalizerName,
-		FieldOwner:    clusterTemplateFieldOwner,
+		Client:   r.Client,
+		Scheme:   r.Scheme,
+		Object:   &template,
+		Recorder: r.Recorder,
+		// FinalizerName: clusterTemplateFinalizerName,
+		FieldOwner: clusterTemplateFieldOwner,
 
 		ObserveFn: func(ctx context.Context) (any, error) {
 			return r.observe(ctx, &template)
