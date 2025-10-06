@@ -28,6 +28,8 @@ import (
 	"context"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/api/errors"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
@@ -35,17 +37,16 @@ import (
 
 // LookupImageForClusterTemplate looks up the container image for a cluster-scoped template.
 // It searches only in AIMClusterImage resources.
-func LookupImageForClusterTemplate(ctx context.Context, k8sClient client.Client, modelID string) (string, error) {
-	var imageList aimv1alpha1.AIMClusterImageList
-	if err := k8sClient.List(ctx, &imageList); err != nil {
-		return "", fmt.Errorf("failed to list AIMClusterImages: %w", err)
+func LookupImageForClusterTemplate(ctx context.Context, k8sClient client.Client, modelName string) (string, error) {
+	clusterImage := &aimv1alpha1.AIMClusterImage{}
+
+	if err := k8sClient.Get(ctx, client.ObjectKey{Name: modelName}, clusterImage); err == nil {
+		return clusterImage.Spec.Image, nil
+	} else if !errors.IsNotFound(err) {
+		return "", fmt.Errorf("failed to lookup AIMClusterImage: %w", err)
 	}
 
-	for _, img := range imageList.Items {
-		if img.Spec.ModelID == modelID {
-			return img.Spec.Image, nil
-		}
-	}
+	// TODO Handle propagating the error that no image was found, so that it can be distinguished from other errors, and ends up in the condition
 
 	return "", nil
 }
@@ -53,30 +54,16 @@ func LookupImageForClusterTemplate(ctx context.Context, k8sClient client.Client,
 // LookupImageForNamespaceTemplate looks up the container image for a namespace-scoped template.
 // It searches AIMImage resources in the specified namespace first, then falls back to
 // cluster-scoped AIMClusterImage resources.
-func LookupImageForNamespaceTemplate(ctx context.Context, k8sClient client.Client, namespace, modelID string) (string, error) {
+func LookupImageForNamespaceTemplate(ctx context.Context, k8sClient client.Client, namespace, modelName string) (string, error) {
 	// Try namespace-scoped AIMImage first
-	var nsImageList aimv1alpha1.AIMImageList
-	if err := k8sClient.List(ctx, &nsImageList, client.InNamespace(namespace)); err != nil {
-		return "", fmt.Errorf("failed to list AIMImages: %w", err)
+	nsImage := &aimv1alpha1.AIMImage{}
+
+	if err := k8sClient.Get(ctx, client.ObjectKey{Name: modelName, Namespace: namespace}, nsImage); err == nil {
+		return nsImage.Spec.Image, nil
+	} else if !errors.IsNotFound(err) {
+		return "", fmt.Errorf("failed to lookup AIMImage: %w", err)
 	}
 
-	for _, img := range nsImageList.Items {
-		if img.Spec.ModelID == modelID {
-			return img.Spec.Image, nil
-		}
-	}
-
-	// Fall back to cluster-scoped AIMClusterImage if not found
-	var clusterImageList aimv1alpha1.AIMClusterImageList
-	if err := k8sClient.List(ctx, &clusterImageList); err != nil {
-		return "", fmt.Errorf("failed to list AIMClusterImages: %w", err)
-	}
-
-	for _, img := range clusterImageList.Items {
-		if img.Spec.ModelID == modelID {
-			return img.Spec.Image, nil
-		}
-	}
-
-	return "", nil
+	// Fall back to cluster-scoped namespace
+	return LookupImageForClusterTemplate(ctx, k8sClient, modelName)
 }

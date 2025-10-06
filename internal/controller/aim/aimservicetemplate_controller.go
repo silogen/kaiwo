@@ -135,7 +135,7 @@ func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *ai
 	}
 
 	// Lookup image from AIMImage (namespace-scoped) first, then AIMClusterImage (cluster-scoped)
-	image, err := shared.LookupImageForNamespaceTemplate(ctx, r.Client, template.Namespace, template.Spec.ModelID)
+	image, err := shared.LookupImageForNamespaceTemplate(ctx, r.Client, template.Namespace, template.Spec.AIMImageName)
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +182,7 @@ func (r *AIMServiceTemplateReconciler) plan(_ context.Context, template *aimv1al
 	runtime := shared.BuildServingRuntime(shared.ServingRuntimeSpec{
 		Name:      template.Name,
 		Namespace: template.Namespace,
-		ModelID:   template.Spec.ModelID,
+		ModelID:   template.Spec.AIMImageName,
 		Image:     obs.Image,
 		OwnerRef:  ownerRef,
 	})
@@ -196,7 +196,7 @@ func (r *AIMServiceTemplateReconciler) plan(_ context.Context, template *aimv1al
 			job := shared.BuildDiscoveryJob(shared.DiscoveryJobSpec{
 				TemplateName:     template.Name,
 				Namespace:        template.Namespace,
-				ModelID:          template.Spec.ModelID,
+				ModelID:          template.Spec.AIMImageName,
 				Image:            obs.Image,
 				Env:              template.Spec.Env,
 				ImagePullSecrets: obs.ImagePullSecrets,
@@ -219,7 +219,7 @@ func (r *AIMServiceTemplateReconciler) projectStatus(
 	obs *namespaceTemplateObservation,
 	errs framework.ReconcileErrors,
 ) error {
-	imageNotFoundMsg := fmt.Sprintf("No AIMImage or AIMClusterImage found for modelId %q", template.Spec.ModelID)
+	imageNotFoundMsg := fmt.Sprintf("No AIMImage or AIMClusterImage found for modelId %q", template.Spec.AIMImageName)
 	return shared.ProjectTemplateStatus(ctx, r.Client, template, &obs.TemplateObservation, errs, imageNotFoundMsg)
 }
 

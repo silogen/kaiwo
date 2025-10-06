@@ -67,11 +67,11 @@ spec:
               runtime selection knobs, while the overrides field allows service-specific
               customization.
             properties:
-              aimModelId:
+              aimImageName:
                 description: |-
-                  AIMModelID is the canonical model name (including version/revision) to deploy.
-                  Expected to match the `spec.name` of an AIMImage. Example:
-                  `meta/llama-3-8b:1.1+20240915`.
+                  AIMImageName is the canonical model name (including version/revision) to deploy.
+                  Expected to match the `spec.metadata.name` of an AIMImage. Example:
+                  `meta-llama-3-8b-1-1-20240915`.
                 minLength: 1
                 type: string
               cacheModel:
@@ -301,7 +301,7 @@ spec:
                   The template selects the runtime profile and GPU parameters.
                 type: string
             required:
-            - aimModelId
+            - aimImageName
             - templateRef
             type: object
           status:

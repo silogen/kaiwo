@@ -68,6 +68,16 @@ spec:
               narrow: they describe runtime selection knobs for the AIM container and do
               not redefine the full Kubernetes deployment shape.
             properties:
+              aimImageName:
+                description: |-
+                  AIMImageName is the AIM image name. Matches `metadata.name` of an AIMImage. Immutable.
+
+                  Example: `meta/llama-3-8b:1.1+20240915`
+                minLength: 1
+                type: string
+                x-kubernetes-validations:
+                - message: image name is immutable
+                  rule: self == oldSelf
               caching:
                 description: |-
                   Caching configures model caching behavior for this namespace-scoped template.
@@ -380,16 +390,6 @@ spec:
                   - `latency`: prioritize low end‑to‑end latency
                   - `throughput`: prioritize sustained requests/second
                 type: string
-              modelId:
-                description: |-
-                  ModelID is the AIM model ID. Matches `spec.name` of an AIMImage. Immutable.
-
-                  Example: `meta/llama-3-8b:1.1+20240915`
-                minLength: 1
-                type: string
-                x-kubernetes-validations:
-                - message: model is immutable
-                  rule: self == oldSelf
               precision:
                 allOf:
                 - enum:
@@ -409,7 +409,7 @@ spec:
                 description: Precision selects the numeric precision used by the runtime.
                 type: string
             required:
-            - modelId
+            - aimImageName
             type: object
           status:
             description: AIMServiceTemplateStatus defines the observed state of AIMServiceTemplate.

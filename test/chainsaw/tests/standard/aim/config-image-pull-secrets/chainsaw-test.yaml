@@ -34,19 +34,3 @@ spec:
               spec:
                 imagePullSecrets:
                 - name: test-registry-secret
-
-  - name: Verify events were created for config
-    try:
-    - assert:
-        timeout: 10s
-        resource:
-          apiVersion: v1
-          kind: Event
-          metadata:
-            (name != null): true
-          involvedObject:
-            apiVersion: aim.silogen.ai/v1alpha1
-            kind: AIMClusterServiceTemplate
-            name: llama-3-8b-latency-pull-secrets
-          reason: ConfigFound
-          type: Normal

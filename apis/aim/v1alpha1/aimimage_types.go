@@ -28,11 +28,6 @@ import (
 
 // AIMImageSpec defines the desired state of AIMImage.
 type AIMImageSpec struct {
-	// ModelID is the ID name (includes version/revision).
-	// Example: `meta/llama-3-8b:1.1+20240915`.
-	// +kubebuilder:validation:MinLength=1
-	ModelID string `json:"modelId"`
-
 	// Image is the container image URI for this AIM model.
 	// This image is inspected by the operator to select runtime profiles used by templates.
 	// +kubebuilder:validation:MinLength=1

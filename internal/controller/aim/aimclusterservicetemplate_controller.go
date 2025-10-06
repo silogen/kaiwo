@@ -115,12 +115,12 @@ func (r *AIMClusterServiceTemplateReconciler) observe(ctx context.Context, templ
 	obs := &clusterTemplateObservation{}
 
 	// Check if ClusterServingRuntime exists
-	runtime, err := shared.GetClusterServingRuntime(ctx, r.Client, template.Name)
+	clusterServingRuntime, err := shared.GetClusterServingRuntime(ctx, r.Client, template.Name)
 	if err != nil && !errors.IsNotFound(err) {
 		return nil, fmt.Errorf("failed to get ClusterServingRuntime: %w", err)
 	}
 	if err == nil {
-		obs.Runtime = runtime
+		obs.Runtime = clusterServingRuntime
 	}
 
 	// Only check for discovery job if template is not already Available
@@ -134,7 +134,7 @@ func (r *AIMClusterServiceTemplateReconciler) observe(ctx context.Context, templ
 	}
 
 	// Lookup image from AIMClusterImage catalog
-	image, err := shared.LookupImageForClusterTemplate(ctx, r.Client, template.Spec.ModelID)
+	image, err := shared.LookupImageForClusterTemplate(ctx, r.Client, template.Spec.AIMImageName)
 	if err != nil {
 		return nil, err
 	}
@@ -180,7 +180,7 @@ func (r *AIMClusterServiceTemplateReconciler) plan(_ context.Context, template *
 	// Always include ClusterServingRuntime in desired state
 	runtime := shared.BuildClusterServingRuntime(shared.ClusterServingRuntimeSpec{
 		Name:     template.Name,
-		ModelID:  template.Spec.ModelID,
+		ModelID:  template.Spec.AIMImageName,
 		Image:    obs.Image,
 		Metric:   template.Spec.Metric,
 		OwnerRef: ownerRef,
@@ -195,7 +195,7 @@ func (r *AIMClusterServiceTemplateReconciler) plan(_ context.Context, template *
 			job := shared.BuildDiscoveryJob(shared.DiscoveryJobSpec{
 				TemplateName:     template.Name,
 				Namespace:        shared.OperatorNamespace,
-				ModelID:          template.Spec.ModelID,
+				ModelID:          template.Spec.AIMImageName,
 				Image:            obs.Image,
 				Env:              nil,
 				ImagePullSecrets: obs.ImagePullSecrets,
@@ -215,7 +215,7 @@ func (r *AIMClusterServiceTemplateReconciler) projectStatus(
 	obs *clusterTemplateObservation,
 	errs framework.ReconcileErrors,
 ) error {
-	imageNotFoundMsg := fmt.Sprintf("No AIMClusterImage found for modelId %q", template.Spec.ModelID)
+	imageNotFoundMsg := fmt.Sprintf("No AIMClusterImage found for modelId %q", template.Spec.AIMImageName)
 	var templateObs *shared.TemplateObservation
 	if obs != nil {
 		templateObs = &obs.TemplateObservation

@@ -48,7 +48,7 @@ type TemplateObservation struct {
 
 // TemplateSpec provides the common template specification
 type TemplateSpec interface {
-	GetModelID() string
+	GetModelName() string
 }
 
 // TemplateWithStatus extends TemplateSpec with status access

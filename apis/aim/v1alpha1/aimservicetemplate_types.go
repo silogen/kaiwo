@@ -79,13 +79,13 @@ type AIMRuntimeParameters struct {
 // AIMServiceTemplateSpecCommon contains the shared fields for both cluster-scoped
 // and namespace-scoped service templates.
 type AIMServiceTemplateSpecCommon struct {
-	// ModelID is the AIM model ID. Matches `spec.name` of an AIMImage. Immutable.
+	// AIMImageName is the AIM image name. Matches `metadata.name` of an AIMImage. Immutable.
 	//
 	// Example: `meta/llama-3-8b:1.1+20240915`
 	//
 	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="model is immutable"
-	ModelID string `json:"modelId"`
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="image name is immutable"
+	AIMImageName string `json:"aimImageName"`
 
 	AIMRuntimeParameters `json:",inline"`
 }
@@ -293,8 +293,8 @@ type AIMClusterServiceTemplateList struct {
 }
 
 // GetModelID returns the model ID from the template spec
-func (t *AIMServiceTemplate) GetModelID() string {
-	return t.Spec.ModelID
+func (t *AIMServiceTemplate) GetModelName() string {
+	return t.Spec.AIMImageName
 }
 
 // GetStatus returns a pointer to the template status
@@ -303,8 +303,8 @@ func (t *AIMServiceTemplate) GetStatus() *AIMServiceTemplateStatus {
 }
 
 // GetModelID returns the model ID from the cluster template spec
-func (t *AIMClusterServiceTemplate) GetModelID() string {
-	return t.Spec.ModelID
+func (t *AIMClusterServiceTemplate) GetModelName() string {
+	return t.Spec.AIMImageName
 }
 
 // GetStatus returns a pointer to the cluster template status
