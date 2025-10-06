@@ -189,3 +189,45 @@ func handleDeletion[T ObjectWithStatus[S], S any](ctx context.Context, spec Reco
 
 	return ctrl.Result{}, nil
 }
+
+// ReconcileWithoutStatus implements the observe → plan → apply pattern for
+// controllers that maintain derived resources but don't need status updates.
+//
+// High-level flow:
+// 1. Observe (read-only)
+// 2. Short-circuit on observation failure
+// 3. Plan (pure function)
+// 4. Apply (SSA with deterministic ordering)
+// 5. Return with appropriate requeue policy
+func ReconcileWithoutStatus(ctx context.Context, spec ReconcileWithoutStatusSpec) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
+	// Step 1: Observe current state
+	obs, observeErr := spec.ObserveFn(ctx)
+	if observeErr != nil {
+		logger.Error(observeErr, "Observation failed")
+		return ctrl.Result{}, observeErr
+	}
+
+	// Step 2: Plan desired state
+	desired, planErr := spec.PlanFn(ctx, obs)
+	if planErr != nil {
+		logger.Error(planErr, "Planning failed")
+		return ctrl.Result{}, planErr
+	}
+
+	// Step 3: Apply desired state
+	if len(desired) > 0 {
+		applyConfig := ApplyConfig{
+			FieldOwner:      spec.FieldOwner,
+			EnablePruning:   false,
+			InventoryLabels: nil,
+		}
+		if applyErr := ApplyDesiredState(ctx, spec.Client, spec.Scheme, desired, applyConfig); applyErr != nil {
+			logger.Error(applyErr, "Apply failed")
+			return ctrl.Result{}, applyErr
+		}
+	}
+
+	return ctrl.Result{}, nil
+}

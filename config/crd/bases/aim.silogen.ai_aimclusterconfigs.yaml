@@ -54,6 +54,20 @@ spec:
                 description: CacheStorageClassName is the name of the storage class
                   to use for cached models
                 type: string
+              caching:
+                description: Caching controls image caching behavior for AIM base
+                  images
+                properties:
+                  cacheAimImageBase:
+                    default: false
+                    description: CacheAimImageBase enables caching of AIM base images
+                      on all nodes via a DaemonSet
+                    type: boolean
+                  storageClassName:
+                    description: StorageClassName is the name of the storage class
+                      to use for cached models
+                    type: string
+                type: object
               imagePullSecrets:
                 description: ImagePullSecrets are a list of secrets that will be merged
                   with any existing ones when referencing the AIM containers

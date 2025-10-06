@@ -1,2 +1,5 @@
 vcluster: true
 gpuType: none
+nfs:
+  persistence:
+    enabled: false

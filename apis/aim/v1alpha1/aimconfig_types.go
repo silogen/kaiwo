@@ -41,6 +41,9 @@ type AIMConfigSpec struct {
 
 	// ImagePullSecrets are a list of secrets that will be merged with any existing ones when referencing the AIM containers
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
+	// Caching controls image caching behavior for AIM base images
+	Caching AIMCachingConfig `json:"caching,omitempty"`
 }
 
 // AIMRoutingConfig controls automatic HTTPRoute provisioning in the namespace.
@@ -57,6 +60,10 @@ type AIMRoutingConfig struct {
 type AIMCachingConfig struct {
 	// StorageClassName is the name of the storage class to use for cached models
 	StorageClassName string `json:"storageClassName,omitempty"`
+
+	// CacheAimImageBase enables caching of AIM base images on all nodes via a DaemonSet
+	// +kubebuilder:default=false
+	CacheAimImageBase bool `json:"cacheAimImageBase,omitempty"`
 }
 
 // +kubebuilder:object:root=true

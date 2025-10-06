@@ -46,8 +46,9 @@ import (
 
 // DiscoveryResult represents the output from a discovery job
 type DiscoveryResult struct {
-	Filename string  `json:"filename"`
-	Profile  Profile `json:"profile"`
+	Filename string         `json:"filename"`
+	Profile  Profile        `json:"profile"`
+	Models   []ProfileModel `json:"models"`
 }
 
 // Profile represents the discovered runtime profile
@@ -57,7 +58,6 @@ type Profile struct {
 	Metadata       ProfileMetadata   `json:"metadata"`
 	EngineArgs     map[string]any    `json:"engine_args"`
 	EnvVars        map[string]string `json:"env_vars"`
-	Models         []ProfileModel    `json:"models"`
 }
 
 // ProfileMetadata contains metadata about the runtime profile
@@ -300,11 +300,52 @@ func ParseDiscoveryLogs(ctx context.Context, k8sClient client.Client, clientset 
 		return nil, fmt.Errorf("failed to read pod logs: %w", err)
 	}
 
-	// Parse JSON output
-	var result DiscoveryResult
-	if err := json.Unmarshal(logBytes, &result); err != nil {
-		return nil, fmt.Errorf("failed to parse discovery JSON output: %w", err)
+	// Log the raw output for debugging
+	fmt.Printf("Discovery job output (raw): %s\n", string(logBytes))
+
+	// Parse JSON array output
+	var results []DiscoveryResult
+	if err := json.Unmarshal(logBytes, &results); err != nil {
+		// Try extracting the last valid JSON array from mixed stdout/stderr
+		// The JSON array may appear multiple times in the logs - take the last instance
+		lastStartIdx := -1
+		lastEndIdx := -1
+
+		// Find the last occurrence of '[' that starts a valid JSON array
+		for i := len(logBytes) - 1; i >= 0; i-- {
+			if logBytes[i] == ']' && lastEndIdx == -1 {
+				lastEndIdx = i
+			}
+			if logBytes[i] == '[' && lastEndIdx != -1 {
+				// Try parsing from this '[' to the found ']'
+				testBytes := logBytes[i : lastEndIdx+1]
+				var testResults []DiscoveryResult
+				if json.Unmarshal(testBytes, &testResults) == nil && len(testResults) > 0 {
+					// Valid JSON array found
+					lastStartIdx = i
+					break
+				}
+			}
+		}
+
+		if lastStartIdx == -1 || lastEndIdx == -1 {
+			return nil, fmt.Errorf("failed to parse discovery JSON and no valid JSON array found in logs: %w", err)
+		}
+
+		jsonBytes := logBytes[lastStartIdx : lastEndIdx+1]
+		fmt.Printf("Extracted JSON array from mixed output (last instance): %s\n", string(jsonBytes))
+
+		if err := json.Unmarshal(jsonBytes, &results); err != nil {
+			return nil, fmt.Errorf("failed to parse extracted JSON array: %w", err)
+		}
 	}
+
+	if len(results) == 0 {
+		return nil, fmt.Errorf("discovery output contains empty array")
+	}
+
+	// Use the first result
+	result := results[0]
 
 	// Convert profile to JSON
 	profileBytes, err := json.Marshal(result.Profile)
@@ -314,9 +355,9 @@ func ParseDiscoveryLogs(ctx context.Context, k8sClient client.Client, clientset 
 
 	profileJSON := &apiextensionsv1.JSON{Raw: profileBytes}
 
-	// Extract model sources from profile
+	// Extract model sources from result
 	var modelSources []aimv1alpha1.AIMModelSource
-	for _, model := range result.Profile.Models {
+	for _, model := range result.Models {
 		// Convert GB to bytes for resource.Quantity
 		sizeBytes := int64(model.SizeGB * 1024 * 1024 * 1024)
 		size := resource.NewQuantity(sizeBytes, resource.BinarySI)

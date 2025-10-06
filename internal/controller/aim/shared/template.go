@@ -29,7 +29,7 @@ import (
 	"errors"
 	"fmt"
 
-	framework2 "github.com/silogen/kaiwo/internal/controller/framework"
+	framework "github.com/silogen/kaiwo/internal/controller/framework"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -72,7 +72,7 @@ func ProjectTemplateStatus(
 	recorder record.EventRecorder,
 	template TemplateWithStatus,
 	obs *TemplateObservation,
-	errs framework2.ReconcileErrors,
+	errs framework.ReconcileErrors,
 	imageNotFoundMessage string,
 ) error {
 	templateStatus := template.GetStatus()
@@ -87,45 +87,45 @@ func ProjectTemplateStatus(
 		if errs.ObserveErr != nil {
 			// Check if the error is specifically ErrImageNotFound
 			if errors.Is(errs.ObserveErr, ErrImageNotFound) {
-				conditions = append(conditions, framework2.NewCondition(
-					framework2.ConditionTypeFailure,
+				conditions = append(conditions, framework.NewCondition(
+					framework.ConditionTypeFailure,
 					metav1.ConditionTrue,
 					"ImageNotFound",
 					imageNotFoundMessage,
 				))
-				conditions = append(conditions, framework2.NewCondition(
-					framework2.ConditionTypeReady,
+				conditions = append(conditions, framework.NewCondition(
+					framework.ConditionTypeReady,
 					metav1.ConditionFalse,
 					"ImageNotFound",
 					"Cannot proceed without image",
 				))
 			} else {
-				conditions = append(conditions, framework2.NewCondition(
-					framework2.ConditionTypeFailure,
+				conditions = append(conditions, framework.NewCondition(
+					framework.ConditionTypeFailure,
 					metav1.ConditionTrue,
-					framework2.ReasonFailed,
+					framework.ReasonFailed,
 					fmt.Sprintf("Observation failed: %v", errs.ObserveErr),
 				))
-				conditions = append(conditions, framework2.NewCondition(
-					framework2.ConditionTypeReady,
+				conditions = append(conditions, framework.NewCondition(
+					framework.ConditionTypeReady,
 					metav1.ConditionFalse,
-					framework2.ReasonFailed,
+					framework.ReasonFailed,
 					"Template is not ready due to errors",
 				))
 			}
 		}
 
 		if errs.ApplyErr != nil {
-			conditions = append(conditions, framework2.NewCondition(
-				framework2.ConditionTypeFailure,
+			conditions = append(conditions, framework.NewCondition(
+				framework.ConditionTypeFailure,
 				metav1.ConditionTrue,
-				framework2.ReasonFailed,
+				framework.ReasonFailed,
 				fmt.Sprintf("Apply failed: %v", errs.ApplyErr),
 			))
-			conditions = append(conditions, framework2.NewCondition(
-				framework2.ConditionTypeReady,
+			conditions = append(conditions, framework.NewCondition(
+				framework.ConditionTypeReady,
 				metav1.ConditionFalse,
-				framework2.ReasonFailed,
+				framework.ReasonFailed,
 				"Template is not ready due to errors",
 			))
 		}
@@ -142,15 +142,15 @@ func ProjectTemplateStatus(
 	if obs.Image == "" {
 		status = aimv1alpha1.AIMTemplateStatusFailed
 
-		conditions = append(conditions, framework2.NewCondition(
-			framework2.ConditionTypeFailure,
+		conditions = append(conditions, framework.NewCondition(
+			framework.ConditionTypeFailure,
 			metav1.ConditionTrue,
 			"ImageNotFound",
 			imageNotFoundMessage,
 		))
 
-		conditions = append(conditions, framework2.NewCondition(
-			framework2.ConditionTypeReady,
+		conditions = append(conditions, framework.NewCondition(
+			framework.ConditionTypeReady,
 			metav1.ConditionFalse,
 			"ImageNotFound",
 			"Cannot proceed without image",
@@ -170,27 +170,27 @@ func ProjectTemplateStatus(
 
 		// Emit event if transitioning from Pending to Progressing
 		if currentStatus == aimv1alpha1.AIMTemplateStatusPending {
-			framework2.EmitNormalEvent(recorder, template, "DiscoveryStarted", "Discovery job is running")
+			framework.EmitNormalEvent(recorder, template, "DiscoveryStarted", "Discovery job is running")
 		}
 
-		conditions = append(conditions, framework2.NewCondition(
-			framework2.ConditionTypeProgressing,
+		conditions = append(conditions, framework.NewCondition(
+			framework.ConditionTypeProgressing,
 			metav1.ConditionTrue,
-			framework2.ReasonDiscoveryRunning,
+			framework.ReasonDiscoveryRunning,
 			"Discovery job is running",
 		))
 
-		conditions = append(conditions, framework2.NewCondition(
-			framework2.ConditionTypeDiscovered,
+		conditions = append(conditions, framework.NewCondition(
+			framework.ConditionTypeDiscovered,
 			metav1.ConditionFalse,
-			framework2.ReasonJobPending,
+			framework.ReasonJobPending,
 			"Discovery job has not completed",
 		))
 
-		conditions = append(conditions, framework2.NewCondition(
-			framework2.ConditionTypeReady,
+		conditions = append(conditions, framework.NewCondition(
+			framework.ConditionTypeReady,
 			metav1.ConditionFalse,
-			framework2.ReasonReconciling,
+			framework.ReasonReconciling,
 			"Template is not ready yet",
 		))
 
@@ -208,27 +208,27 @@ func ProjectTemplateStatus(
 
 		// Emit event if transitioning from Progressing to Failed
 		if currentStatus == aimv1alpha1.AIMTemplateStatusProgressing {
-			framework2.EmitWarningEvent(recorder, template, "DiscoveryFailed", "Discovery job failed")
+			framework.EmitWarningEvent(recorder, template, "DiscoveryFailed", "Discovery job failed")
 		}
 
-		conditions = append(conditions, framework2.NewCondition(
-			framework2.ConditionTypeFailure,
+		conditions = append(conditions, framework.NewCondition(
+			framework.ConditionTypeFailure,
 			metav1.ConditionTrue,
-			framework2.ReasonJobFailed,
+			framework.ReasonJobFailed,
 			"Discovery job failed",
 		))
 
-		conditions = append(conditions, framework2.NewCondition(
-			framework2.ConditionTypeDiscovered,
+		conditions = append(conditions, framework.NewCondition(
+			framework.ConditionTypeDiscovered,
 			metav1.ConditionFalse,
-			framework2.ReasonDiscoveryFailed,
+			framework.ReasonDiscoveryFailed,
 			"Discovery failed",
 		))
 
-		conditions = append(conditions, framework2.NewCondition(
-			framework2.ConditionTypeReady,
+		conditions = append(conditions, framework.NewCondition(
+			framework.ConditionTypeReady,
 			metav1.ConditionFalse,
-			framework2.ReasonFailed,
+			framework.ReasonFailed,
 			"Template is not ready",
 		))
 
@@ -248,33 +248,54 @@ func ProjectTemplateStatus(
 
 		// Emit event if transitioning from Progressing to Available
 		if currentStatus == aimv1alpha1.AIMTemplateStatusProgressing {
-			framework2.EmitNormalEvent(recorder, template, "DiscoverySucceeded", "Model sources discovered successfully")
+			framework.EmitNormalEvent(recorder, template, "DiscoverySucceeded", "Model sources discovered successfully")
 		}
 
-		conditions = append(conditions, framework2.NewCondition(
-			framework2.ConditionTypeDiscovered,
+		conditions = append(conditions, framework.NewCondition(
+			framework.ConditionTypeDiscovered,
 			metav1.ConditionTrue,
-			framework2.ReasonDiscovered,
+			framework.ReasonDiscovered,
 			"Model sources discovered",
 		))
 
-		conditions = append(conditions, framework2.NewCondition(
-			framework2.ConditionTypeProgressing,
+		conditions = append(conditions, framework.NewCondition(
+			framework.ConditionTypeProgressing,
 			metav1.ConditionFalse,
-			framework2.ReasonAvailable,
+			framework.ReasonAvailable,
 			"Discovery complete",
 		))
 
-		conditions = append(conditions, framework2.NewCondition(
-			framework2.ConditionTypeReady,
+		conditions = append(conditions, framework.NewCondition(
+			framework.ConditionTypeReady,
 			metav1.ConditionTrue,
-			framework2.ReasonAvailable,
+			framework.ReasonAvailable,
 			"Template is ready",
 		))
 
 		// Parse discovery results
 		discovery, err := ParseDiscoveryLogs(ctx, k8sClient, clientset, obs.Job)
-		if err == nil {
+		if err != nil {
+			// Discovery job succeeded but parsing failed
+			status = aimv1alpha1.AIMTemplateStatusFailed
+
+			framework.EmitWarningEvent(recorder, template, "DiscoveryParseFailed",
+				fmt.Sprintf("Failed to parse discovery output: %v", err))
+
+			conditions = []metav1.Condition{
+				framework.NewCondition(
+					framework.ConditionTypeFailure,
+					metav1.ConditionTrue,
+					"DiscoveryParseFailed",
+					fmt.Sprintf("Failed to parse discovery output: %v", err),
+				),
+				framework.NewCondition(
+					framework.ConditionTypeReady,
+					metav1.ConditionFalse,
+					"DiscoveryParseFailed",
+					"Template is not ready",
+				),
+			}
+		} else {
 			modelSources = discovery.ModelSources
 			profile = discovery.Profile
 		}
@@ -289,17 +310,17 @@ func ProjectTemplateStatus(
 		// No job yet (initial state)
 		status = aimv1alpha1.AIMTemplateStatusPending
 
-		conditions = append(conditions, framework2.NewCondition(
-			framework2.ConditionTypeProgressing,
+		conditions = append(conditions, framework.NewCondition(
+			framework.ConditionTypeProgressing,
 			metav1.ConditionTrue,
-			framework2.ReasonReconciling,
+			framework.ReasonReconciling,
 			"Initiating discovery",
 		))
 
-		conditions = append(conditions, framework2.NewCondition(
-			framework2.ConditionTypeReady,
+		conditions = append(conditions, framework.NewCondition(
+			framework.ConditionTypeReady,
 			metav1.ConditionFalse,
-			framework2.ReasonReconciling,
+			framework.ReasonReconciling,
 			"Template is not ready",
 		))
 	}
