@@ -112,3 +112,24 @@ type ReconcileResult struct {
 	Result ctrl.Result
 	Error  error
 }
+
+// ReconcileWithoutStatusSpec defines the reconciliation specification for
+// controllers that don't need status updates (e.g., derived resource controllers).
+type ReconcileWithoutStatusSpec struct {
+	// Client is the Kubernetes client for API operations
+	Client client.Client
+
+	// Scheme is the runtime scheme for GVK resolution
+	Scheme *runtime.Scheme
+
+	// FieldOwner is the field manager name for SSA (required)
+	FieldOwner string
+
+	// ObserveFn gathers current cluster state (read-only).
+	// Returns typed observation data and any errors encountered.
+	ObserveFn func(ctx context.Context) (observation any, err error)
+
+	// PlanFn computes desired state from observation (pure function).
+	// Returns slice of objects to apply via SSA.
+	PlanFn func(ctx context.Context, obs any) (desired []client.Object, err error)
+}
