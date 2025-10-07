@@ -31,20 +31,6 @@ spec:
           status:
             status: Available
 
-  - name: Verify modelSources are populated
-    try:
-    - assert:
-        resource:
-          apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMClusterServiceTemplate
-          metadata:
-            name: llama-3-8b-latency-discovery-cluster
-          status:
-            modelSources:
-            - name: amd/Llama-3.1-8B-Instruct-FP8-KV
-              sourceUri: hf://amd/Llama-3.1-8B-Instruct-FP8-KV
-              (size != null): true
-
   - name: Verify profile is populated with expected fields
     try:
     - assert:
@@ -63,12 +49,24 @@ spec:
                 precision: fp8
                 gpu_count: 1
                 metric: latency
-              (engine_args != null): true
-              (env_vars != null): true
-              models:
-              - name: amd/Llama-3.1-8B-Instruct-FP8-KV
-                source: hf://amd/Llama-3.1-8B-Instruct-FP8-KV
-                size_gb: 8.47
+              engine_args:
+                distributed_executor_backend: mp
+                gpu-memory-utilization: 0.95
+                tensor-parallel-size: 1
+              env_vars:
+                HIP_FORCE_DEV_KERNARG: "1"
+                NCCL_MIN_NCHANNELS: "112"
+                PYTORCH_TUNABLEOP_ENABLED: "1"
+                PYTORCH_TUNABLEOP_TUNING: "0"
+                PYTORCH_TUNABLEOP_VERBOSE: "1"
+                TORCH_BLAS_PREFER_HIPBLASLT: "1"
+                VLLM_DO_NOT_TRACK: "1"
+                VLLM_USE_TRITON_FLASH_ATTN: "0"
+                VLLM_USE_V1: "0"
+            modelSources:
+            - name: amd/Llama-3.1-8B-Instruct-FP8-KV
+              sourceUri: hf://amd/Llama-3.1-8B-Instruct-FP8-KV
+              size: "9094593249"
 
   - name: Verify the cluster serving runtime was created
     try:
@@ -80,6 +78,6 @@ spec:
             name: llama-3-8b-latency-discovery-cluster
           spec:
             containers:
-            - image: busybox:latest
+            - image: ghcr.io/silogen/aim:0.4.0-meta-llama-llama-3.1-8b-instruct-v20251006
             supportedModelFormats:
             - name: aim
