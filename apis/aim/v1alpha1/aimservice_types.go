@@ -63,9 +63,9 @@ type AIMServiceSpec struct {
 	// +kubebuilder:default=1
 	Replicas *int32 `json:"replicas,omitempty"`
 
-	// ConfigRef selects the cluster-scoped AIMClusterConfig (by name) to use for this service.
+	// ConfigName references the AIMClusterConfig (by name) to use for this service.
 	// +kubebuilder:default=default
-	ConfigRef string `json:"configRef,omitempty"`
+	ConfigName string `json:"configName,omitempty"`
 
 	// Overrides allows overriding specific template parameters for this service.
 	// When specified, these values take precedence over the template values.

@@ -47,6 +47,7 @@ nav:
   - "Overview": "reference/aim.md"
   - "Concepts":
       - "Images and Service Templates": "aim/images-and-templates.md"
+      - "Configuration": "aim/config.md"
   - "Reference":
       - "API": "reference/crds/aim.silogen.ai.md"
 - "Reference":

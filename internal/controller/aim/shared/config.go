@@ -33,18 +33,34 @@ import (
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 )
 
-// GetDefaultClusterConfig fetches the "default" AIMClusterConfig.
-// Returns nil if not found (without error), error only on API failures.
-func GetDefaultClusterConfig(ctx context.Context, k8sClient client.Client) (*aimv1alpha1.AIMClusterConfig, error) {
+// GetClusterConfig fetches an AIMClusterConfig by name.
+// Returns (config, notFound, error) where:
+//   - config: the fetched config (nil if not found or error)
+//   - notFound: true if the config was not found (vs. API error)
+//   - error: non-nil only on API failures
+func GetClusterConfig(ctx context.Context, k8sClient client.Client, configName string) (*aimv1alpha1.AIMClusterConfig, bool, error) {
+	// Default to "default" if empty
+	if configName == "" {
+		configName = DefaultConfigName
+	}
+
 	var config aimv1alpha1.AIMClusterConfig
-	key := client.ObjectKey{Name: DefaultConfigName}
+	key := client.ObjectKey{Name: configName}
 
 	if err := k8sClient.Get(ctx, key, &config); err != nil {
 		if errors.IsNotFound(err) {
-			return nil, nil
+			return nil, true, nil
 		}
-		return nil, err
+		return nil, false, err
 	}
 
-	return &config, nil
+	return &config, false, nil
+}
+
+// GetDefaultClusterConfig fetches the "default" AIMClusterConfig.
+// Returns nil if not found (without error), error only on API failures.
+// This is a convenience wrapper around GetClusterConfig.
+func GetDefaultClusterConfig(ctx context.Context, k8sClient client.Client) (*aimv1alpha1.AIMClusterConfig, error) {
+	config, _, err := GetClusterConfig(ctx, k8sClient, DefaultConfigName)
+	return config, err
 }

@@ -59,6 +59,16 @@ spec:
 
 When templates or services reference a model ID, the operator looks up the corresponding image from the catalog. For namespace-scoped lookups, the operator checks for an `AIMImage` in the same namespace first, then falls back to cluster-scoped `AIMClusterImage` resources. This lookup determines which container image to use for discovery jobs and runtime deployments.
 
+### Base Image Caching
+
+AIM container images consist of a base layer containing the AIM runtime and a model-specific layer containing the model weights. To speed up discovery and service startup, the operator can pre-pull these base images onto all cluster nodes through a DaemonSet.
+
+When base image caching is enabled via `AIMClusterConfig` (by setting `caching.cacheAimImageBase: true`), the operator monitors all `AIMImage` and `AIMClusterImage` resources in the cluster. It extracts the base image references from the full container image URIs and maintains a DaemonSet that ensures these base images are present on every node. For example, from an image like `ghcr.io/silogen/aim:0.4.0-meta-llama-llama-3.1-8b-instruct`, the operator extracts the base image `ghcr.io/silogen/aim-base:0.4.0`.
+
+This pre-caching significantly reduces the time required for template discovery jobs to start, since the base image layers are already present locally. Similarly, when services deploy, they don't need to wait for base image downloads. The caching is cluster-wide and automatic—adding or updating image resources triggers the DaemonSet to update accordingly.
+
+Base image caching is configured through `AIMClusterConfig` rather than per-image, as it represents a cluster-level optimization decision. See the [Configuration](config.md) documentation for details on enabling and configuring base image caching.
+
 ## Service Templates
 
 Service Templates define runtime configurations for models, specifying parameters like optimization goals, numeric precision, and GPU requirements. Beyond configuration, templates serve a critical function as a discovery cache: when a template is created, the operator runs a discovery process that determines which model artifacts must be downloaded, storing this information in the template's status. Services and caching mechanisms reuse this discovered information, avoiding repeated discovery operations.

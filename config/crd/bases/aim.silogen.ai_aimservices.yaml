@@ -82,10 +82,10 @@ spec:
                   When `warmCache: false` on the template, this setting ensures caching is
                   performed before the service becomes ready.
                 type: boolean
-              configRef:
+              configName:
                 default: default
-                description: ConfigRef selects the cluster-scoped AIMClusterConfig
-                  (by name) to use for this service.
+                description: ConfigName references the AIMClusterConfig (by name)
+                  to use for this service.
                 type: string
               env:
                 description: |-

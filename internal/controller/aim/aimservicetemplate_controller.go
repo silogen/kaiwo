@@ -162,19 +162,33 @@ func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *ai
 	}
 	obs.Image = image
 
-	// Fetch default AIMClusterConfig for image pull secrets
-	config, err := shared.GetDefaultClusterConfig(ctx, r.Client)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get default AIMClusterConfig: %w", err)
+	// Fetch AIMClusterConfig using configName from spec
+	configName := template.Spec.ConfigName
+	if configName == "" {
+		configName = shared.DefaultConfigName
 	}
 
-	if config != nil {
-		logger.Info("Using default AIMClusterConfig", "imagePullSecrets", len(config.Spec.ImagePullSecrets))
-		framework2.EmitNormalEvent(r.Recorder, template, "ConfigFound", fmt.Sprintf("Using default AIMClusterConfig with %d image pull secrets", len(config.Spec.ImagePullSecrets)))
-		obs.ImagePullSecrets = config.Spec.ImagePullSecrets
+	config, notFound, err := shared.GetClusterConfig(ctx, r.Client, configName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get AIMClusterConfig %q: %w", configName, err)
+	}
+
+	if notFound {
+		// Distinguish between default (lenient) and explicit (strict)
+		if configName != shared.DefaultConfigName {
+			// User explicitly referenced a config that doesn't exist - FAIL
+			return nil, fmt.Errorf("AIMClusterConfig %q not found", configName)
+		}
+		// Default config not found - WARN but continue
+		logger.Info("Default AIMClusterConfig not found, proceeding without it")
+		framework2.EmitWarningEvent(r.Recorder, template, "DefaultConfigNotFound",
+			"Default AIMClusterConfig not found, proceeding with defaults. Discovery job may fail if images require authentication")
 	} else {
-		logger.Info("Default AIMClusterConfig not found, proceeding without image pull secrets")
-		framework2.EmitWarningEvent(r.Recorder, template, "ConfigNotFound", "Default AIMClusterConfig not found, discovery job may fail if images require authentication")
+		logger.Info("Using AIMClusterConfig", "configName", configName, "imagePullSecrets", len(config.Spec.ImagePullSecrets))
+		framework2.EmitNormalEvent(r.Recorder, template, "ConfigFound",
+			fmt.Sprintf("Using AIMClusterConfig %q with %d image pull secrets", configName, len(config.Spec.ImagePullSecrets)))
+		obs.ImagePullSecrets = config.Spec.ImagePullSecrets
+		obs.Config = config
 	}
 
 	return obs, nil

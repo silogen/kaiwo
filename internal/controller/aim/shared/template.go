@@ -48,6 +48,7 @@ type TemplateObservation struct {
 	Job              *batchv1.Job
 	Image            string
 	ImagePullSecrets []corev1.LocalObjectReference
+	Config           *aimv1alpha1.AIMClusterConfig
 }
 
 // TemplateSpec provides the common template specification
