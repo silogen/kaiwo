@@ -11,8 +11,8 @@ spec:
     try:
     - apply:
         file: cluster-image.yaml
-    - apply:
-        file: ../resources-cluster-config.yaml
+#    - apply:
+#        file: ../resources-cluster-config.yaml
 
   - name: Create cluster template
     try:
