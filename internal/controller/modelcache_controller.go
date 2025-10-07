@@ -529,6 +529,7 @@ func (r *ModelCacheReconciler) buildDownloadJob(mc *aim.ModelCache, jobName stri
 								RunAsGroup: baseutils.Pointer(int64(1000)),
 							},
 							Env: append(mc.Spec.Env, []corev1.EnvVar{
+								{Name: "HF_HUB_DISABLE_XET", Value: "1"},
 								{Name: "HF_HOME", Value: mountPath + "/.hf"},
 								{Name: "UMASK", Value: "0022"}, // Create files with 644 permissions (readable by others)
 							}...),
