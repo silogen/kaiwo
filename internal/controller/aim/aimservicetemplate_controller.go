@@ -222,6 +222,7 @@ func (r *AIMServiceTemplateReconciler) plan(_ context.Context, template *aimv1al
 				Env:              template.Spec.Env,
 				ImagePullSecrets: obs.ImagePullSecrets,
 				OwnerRef:         ownerRef,
+				TemplateSpec:     template.Spec.AIMServiceTemplateSpecCommon,
 			})
 			desired = append(desired, job)
 		}

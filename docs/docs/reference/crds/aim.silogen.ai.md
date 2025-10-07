@@ -28,6 +28,21 @@ Package v1alpha1 contains API Schema definitions for the AIM v1alpha1 API group.
 
 
 
+#### AIMCachingConfig
+
+
+
+
+
+
+
+_Appears in:_
+- [AIMConfigSpec](#aimconfigspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `storageClassName` _string_ | StorageClassName is the name of the storage class to use for cached models |  |  |
+| `cacheAimImageBase` _boolean_ | CacheAimImageBase enables caching of AIM base images on all nodes via a DaemonSet | false |  |
 
 
 #### AIMClusterConfig
@@ -180,6 +195,7 @@ _Appears in:_
 | `routing` _[AIMRoutingConfig](#aimroutingconfig)_ | Routing controls automatic HTTPRoute creation for AIM services in this namespace.<br />When enabled (default), the operator creates one HTTPRoute per service using<br />path-based routing with the pattern `/<namespace>/<workload_id>/` and attaches<br />it to the referenced Gateway listener. |  |  |
 | `cacheStorageClassName` _string_ | CacheStorageClassName is the name of the storage class to use for cached models |  |  |
 | `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets are a list of secrets that will be merged with any existing ones when referencing the AIM containers |  |  |
+| `caching` _[AIMCachingConfig](#aimcachingconfig)_ | Caching controls image caching behavior for AIM base images |  |  |
 
 
 #### AIMImage

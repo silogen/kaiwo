@@ -300,9 +300,6 @@ func ParseDiscoveryLogs(ctx context.Context, k8sClient client.Client, clientset 
 		return nil, fmt.Errorf("failed to read pod logs: %w", err)
 	}
 
-	// Log the raw output for debugging
-	fmt.Printf("Discovery job output (raw): %s\n", string(logBytes))
-
 	// Parse JSON array output
 	var results []DiscoveryResult
 	if err := json.Unmarshal(logBytes, &results); err != nil {
@@ -333,7 +330,6 @@ func ParseDiscoveryLogs(ctx context.Context, k8sClient client.Client, clientset 
 		}
 
 		jsonBytes := logBytes[lastStartIdx : lastEndIdx+1]
-		fmt.Printf("Extracted JSON array from mixed output (last instance): %s\n", string(jsonBytes))
 
 		if err := json.Unmarshal(jsonBytes, &results); err != nil {
 			return nil, fmt.Errorf("failed to parse extracted JSON array: %w", err)
