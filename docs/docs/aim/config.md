@@ -29,18 +29,15 @@ Discovery jobs and inference pods automatically receive these image pull secrets
 
 ### Caching Configuration
 
-The `caching` object controls how AIM manages model artifacts and base images:
+The `caching` object controls how AIM manages model artifacts
 
 ```yaml
 spec:
   caching:
     storageClassName: fast-ssd
-    cacheAimImageBase: true
 ```
 
 The `storageClassName` field specifies which storage class to use for model caches. This affects both explicit `AIMTemplateCache` resources and automatic caching triggered by namespace templates with `caching.enabled: true`.
-
-The `cacheAimImageBase` field, when set to `true`, instructs the operator to create a DaemonSet that pre-pulls AIM base images onto all nodes. This speeds up initial discovery and service startup by ensuring base images are already present locally. Base images are extracted from the full AIM container images referenced by `AIMImage` and `AIMClusterImage` resources.
 
 ### Routing Configuration
 
