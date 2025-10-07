@@ -10,11 +10,11 @@ Package v1alpha1 contains API Schema definitions for the AIM v1alpha1 API group.
 
 ### Resource Types
 - [AIMClusterConfig](#aimclusterconfig)
+- [AIMClusterConfigList](#aimclusterconfiglist)
 - [AIMClusterImage](#aimclusterimage)
 - [AIMClusterImageList](#aimclusterimagelist)
 - [AIMClusterServiceTemplate](#aimclusterservicetemplate)
 - [AIMClusterServiceTemplateList](#aimclusterservicetemplatelist)
-- [AIMConfigList](#aimconfiglist)
 - [AIMImage](#aimimage)
 - [AIMImageList](#aimimagelist)
 - [AIMService](#aimservice)
@@ -39,7 +39,7 @@ AIMClusterConfig configures credentials and routing at a cluster level.
 
 
 _Appears in:_
-- [AIMConfigList](#aimconfiglist)
+- [AIMClusterConfigList](#aimclusterconfiglist)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -47,6 +47,24 @@ _Appears in:_
 | `kind` _string_ | `AIMClusterConfig` | | |
 | `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
 | `spec` _[AIMConfigSpec](#aimconfigspec)_ |  |  |  |
+
+
+#### AIMClusterConfigList
+
+
+
+AIMClusterConfigList contains a list of AIMClusterConfig.
+
+
+
+
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `AIMClusterConfigList` | | |
+| `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `items` _[AIMClusterConfig](#aimclusterconfig) array_ |  |  |  |
 
 
 #### AIMClusterImage
@@ -140,28 +158,10 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `modelId` _string_ | ModelID is the AIM model ID. Matches `spec.name` of an AIMImage. Immutable.<br />Example: `meta/llama-3-8b:1.1+20240915` |  | MinLength: 1 <br /> |
+| `aimImageName` _string_ | AIMImageName is the AIM image name. Matches `metadata.name` of an AIMImage. Immutable.<br />Example: `meta/llama-3-8b:1.1+20240915` |  | MinLength: 1 <br /> |
 | `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
 | `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. |  | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
 | `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
-
-
-#### AIMConfigList
-
-
-
-AIMConfigList contains a list of AIMClusterConfig.
-
-
-
-
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
-| `kind` _string_ | `AIMConfigList` | | |
-| `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
-| `items` _[AIMClusterConfig](#aimclusterconfig) array_ |  |  |  |
 
 
 #### AIMConfigSpec
@@ -234,7 +234,6 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `modelId` _string_ | ModelID is the ID name (includes version/revision).<br />Example: `meta/llama-3-8b:1.1+20240915`. |  | MinLength: 1 <br /> |
 | `image` _string_ | Image is the container image URI for this AIM model.<br />This image is inspected by the operator to select runtime profiles used by templates. |  | MinLength: 1 <br /> |
 | `defaultServiceTemplate` _string_ | DefaultServiceTemplate is the name of the default service template to use, if an<br />AIMService is created without specifying a template name. |  |  |
 
@@ -292,6 +291,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
+| `name` _string_ | Name is the name of the model |  |  |
 | `sourceUri` _string_ | SourceURI is the source where the model should be downloaded from |  |  |
 | `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#quantity-resource-api)_ | Size is the amount of storage that the source expects |  |  |
 
@@ -440,7 +440,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `aimModelId` _string_ | AIMModelID is the canonical model name (including version/revision) to deploy.<br />Expected to match the `spec.name` of an AIMImage. Example:<br />`meta/llama-3-8b:1.1+20240915`. |  | MinLength: 1 <br /> |
+| `aimImageName` _string_ | AIMImageName is the canonical model name (including version/revision) to deploy.<br />Expected to match the `spec.metadata.name` of an AIMImage. Example:<br />`meta-llama-3-8b-1-1-20240915`. |  | MinLength: 1 <br /> |
 | `templateRef` _string_ | TemplateRef is the name of the AIMServiceTemplate or AIMClusterServiceTemplate to use.<br />The template selects the runtime profile and GPU parameters. |  |  |
 | `cacheModel` _boolean_ | CacheModel requests that model sources be cached when starting the service<br />if the template itself does not warm the cache.<br />When `warmCache: false` on the template, this setting ensures caching is<br />performed before the service becomes ready. | false |  |
 | `replicas` _integer_ | Replicas overrides the number of replicas for this service.<br />Other runtime settings remain governed by the template unless overridden. | 1 |  |
@@ -545,7 +545,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `modelId` _string_ | ModelID is the AIM model ID. Matches `spec.name` of an AIMImage. Immutable.<br />Example: `meta/llama-3-8b:1.1+20240915` |  | MinLength: 1 <br /> |
+| `aimImageName` _string_ | AIMImageName is the AIM image name. Matches `metadata.name` of an AIMImage. Immutable.<br />Example: `meta/llama-3-8b:1.1+20240915` |  | MinLength: 1 <br /> |
 | `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
 | `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. |  | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
 | `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
@@ -569,7 +569,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `modelId` _string_ | ModelID is the AIM model ID. Matches `spec.name` of an AIMImage. Immutable.<br />Example: `meta/llama-3-8b:1.1+20240915` |  | MinLength: 1 <br /> |
+| `aimImageName` _string_ | AIMImageName is the AIM image name. Matches `metadata.name` of an AIMImage. Immutable.<br />Example: `meta/llama-3-8b:1.1+20240915` |  | MinLength: 1 <br /> |
 | `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
 | `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. |  | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
 | `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
@@ -593,6 +593,7 @@ _Appears in:_
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest observations of template state. |  |  |
 | `status` _[AIMTemplateStatusEnum](#aimtemplatestatusenum)_ | Status represents the current high‑level status of the template lifecycle.<br />Values: `Pending`, `Progressing`, `Available`, `Failed`. | Pending | Enum: [Pending Progressing Available Failed] <br /> |
 | `modelSources` _[AIMModelSource](#aimmodelsource) array_ | ModelSources list the models that this template requires to run. These are the models that will be<br />cached, if this template is cached. |  |  |
+| `profile` _[JSON](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#json-v1-apiextensions-k8s-io)_ | Profile contains the full discovery result profile as a free-form JSON object.<br />This includes metadata, engine args, environment variables, and model details. |  | Schemaless: \{\} <br /> |
 
 
 #### AIMTemplateCache

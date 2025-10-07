@@ -66,16 +66,9 @@ spec:
                   This image is inspected by the operator to select runtime profiles used by templates.
                 minLength: 1
                 type: string
-              modelId:
-                description: |-
-                  ModelID is the ID name (includes version/revision).
-                  Example: `meta/llama-3-8b:1.1+20240915`.
-                minLength: 1
-                type: string
             required:
             - defaultServiceTemplate
             - image
-            - modelId
             type: object
           status:
             description: AIMImageStatus defines the observed state of AIMImage.
