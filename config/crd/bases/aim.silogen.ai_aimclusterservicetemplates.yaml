@@ -75,6 +75,11 @@ spec:
                 x-kubernetes-validations:
                 - message: image name is immutable
                   rule: self == oldSelf
+              configName:
+                default: default
+                description: ConfigName references the AIMClusterConfig (by name)
+                  to use for this template.
+                type: string
               gpuSelector:
                 description: AimGpuSelector contains the strategy to choose the resources
                   to give each replica
