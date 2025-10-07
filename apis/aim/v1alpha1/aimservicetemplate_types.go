@@ -88,6 +88,10 @@ type AIMServiceTemplateSpecCommon struct {
 	AIMImageName string `json:"aimImageName"`
 
 	AIMRuntimeParameters `json:",inline"`
+
+	// ConfigName references the AIMClusterConfig (by name) to use for this template.
+	// +kubebuilder:default=default
+	ConfigName string `json:"configName,omitempty"`
 }
 
 // AIMTemplateCachingConfig configures model caching behavior for namespace-scoped templates.

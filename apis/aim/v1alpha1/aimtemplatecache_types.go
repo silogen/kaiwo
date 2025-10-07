@@ -49,6 +49,10 @@ type AIMTemplateCacheSpec struct {
 
 	// StorageClassName is the name for the storage class to use for this cache
 	StorageClassName string `json:"storageClassName,omitempty"`
+
+	// ConfigName references the AIMClusterConfig (by name) to use for this template cache.
+	// +kubebuilder:default=default
+	ConfigName string `json:"configName,omitempty"`
 }
 
 // AIMTemplateCacheStatusEnum defines the status of the template cache.

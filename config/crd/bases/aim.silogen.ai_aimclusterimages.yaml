@@ -55,6 +55,11 @@ spec:
           spec:
             description: AIMImageSpec defines the desired state of AIMImage.
             properties:
+              configName:
+                default: default
+                description: ConfigName references the AIMClusterConfig (by name)
+                  to use for this image.
+                type: string
               defaultServiceTemplate:
                 description: |-
                   DefaultServiceTemplate is the name of the default service template to use, if an

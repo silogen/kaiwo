@@ -36,6 +36,10 @@ type AIMImageSpec struct {
 	// DefaultServiceTemplate is the name of the default service template to use, if an
 	// AIMService is created without specifying a template name.
 	DefaultServiceTemplate string `json:"defaultServiceTemplate"`
+
+	// ConfigName references the AIMClusterConfig (by name) to use for this image.
+	// +kubebuilder:default=default
+	ConfigName string `json:"configName,omitempty"`
 }
 
 // AIMImageStatus defines the observed state of AIMImage.
