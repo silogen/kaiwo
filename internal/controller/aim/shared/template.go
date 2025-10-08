@@ -28,17 +28,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
-	framework "github.com/silogen/kaiwo/internal/controller/framework"
+	"github.com/silogen/kaiwo/internal/controller/framework"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 )
@@ -61,6 +65,166 @@ type TemplateWithStatus interface {
 	TemplateSpec
 	client.Object
 	GetStatus() *aimv1alpha1.AIMServiceTemplateStatus
+}
+
+// RuntimeObservation combines TemplateObservation with a controller-specific runtime object.
+type RuntimeObservation[R client.Object] struct {
+	Runtime R
+	TemplateObservation
+}
+
+// TemplateObservationOptions configures ObserveTemplate behaviour.
+type TemplateObservationOptions[R client.Object] struct {
+	GetRuntime                   func(ctx context.Context) (R, error)
+	ShouldCheckDiscoveryJob      bool
+	GetDiscoveryJob              func(ctx context.Context) (*batchv1.Job, error)
+	LookupImage                  func(ctx context.Context) (string, error)
+	ResolveRuntimeConfig         func(ctx context.Context) (*RuntimeConfigResolution, error)
+	OnDefaultRuntimeConfigAbsent func()
+	OnRuntimeConfigResolved      func(resolution *RuntimeConfigResolution)
+}
+
+// ObserveTemplate gathers runtime, discovery job, image, and runtime config information with common error handling.
+func ObserveTemplate[R client.Object](ctx context.Context, opts TemplateObservationOptions[R]) (*RuntimeObservation[R], error) {
+	obs := &RuntimeObservation[R]{}
+
+	if opts.GetRuntime != nil {
+		runtime, err := opts.GetRuntime(ctx)
+		if err != nil {
+			if !apierrors.IsNotFound(err) {
+				return nil, err
+			}
+		} else {
+			obs.Runtime = runtime
+		}
+	}
+
+	if opts.ShouldCheckDiscoveryJob && opts.GetDiscoveryJob != nil {
+		job, err := opts.GetDiscoveryJob(ctx)
+		if err != nil {
+			return nil, err
+		}
+		obs.Job = job
+	}
+
+	if opts.LookupImage != nil {
+		image, err := opts.LookupImage(ctx)
+		if err != nil {
+			return nil, err
+		}
+		obs.Image = image
+	}
+
+	if opts.ResolveRuntimeConfig != nil {
+		resolution, err := opts.ResolveRuntimeConfig(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if resolution != nil {
+			obs.RuntimeConfig = resolution
+			obs.ImagePullSecrets = CopyPullSecrets(resolution.EffectiveSpec.ImagePullSecrets)
+			if opts.OnRuntimeConfigResolved != nil {
+				opts.OnRuntimeConfigResolved(resolution)
+			}
+		} else if opts.OnDefaultRuntimeConfigAbsent != nil {
+			opts.OnDefaultRuntimeConfigAbsent()
+		}
+	}
+
+	return obs, nil
+}
+
+// TemplatePlanContext provides metadata needed during plan generation.
+type TemplatePlanContext struct {
+	Template    metav1.Object
+	APIVersion  string
+	Kind        string
+	Status      aimv1alpha1.AIMTemplateStatusEnum
+	Observation *TemplateObservation
+}
+
+// TemplatePlanInput supplies builders with convenient access to observation data.
+type TemplatePlanInput struct {
+	Observation       *TemplateObservation
+	RuntimeConfigSpec aimv1alpha1.AIMRuntimeConfigSpec
+	OwnerReference    metav1.OwnerReference
+}
+
+// TemplatePlanBuilders specifies how to render runtime and discovery job objects.
+type TemplatePlanBuilders struct {
+	BuildRuntime      func(input TemplatePlanInput) client.Object
+	BuildDiscoveryJob func(input TemplatePlanInput) client.Object
+}
+
+// PlanTemplateResources produces desired objects based on the observation and controller-provided builders.
+func PlanTemplateResources(ctx TemplatePlanContext, builders TemplatePlanBuilders) []client.Object {
+	if ctx.Observation == nil || ctx.Observation.Image == "" {
+		return nil
+	}
+
+	runtimeConfigSpec := aimv1alpha1.AIMRuntimeConfigSpec{}
+	if ctx.Observation.RuntimeConfig != nil {
+		runtimeConfigSpec = ctx.Observation.RuntimeConfig.EffectiveSpec
+	}
+
+	ownerRef := metav1.OwnerReference{
+		APIVersion:         ctx.APIVersion,
+		Kind:               ctx.Kind,
+		Name:               ctx.Template.GetName(),
+		UID:                ctx.Template.GetUID(),
+		Controller:         baseutils.Pointer(true),
+		BlockOwnerDeletion: baseutils.Pointer(true),
+	}
+
+	input := TemplatePlanInput{
+		Observation:       ctx.Observation,
+		RuntimeConfigSpec: runtimeConfigSpec,
+		OwnerReference:    ownerRef,
+	}
+
+	var desired []client.Object
+
+	if builders.BuildRuntime != nil {
+		if runtime := builders.BuildRuntime(input); runtime != nil {
+			desired = append(desired, runtime)
+		}
+	}
+
+	if ctx.Status != aimv1alpha1.AIMTemplateStatusAvailable &&
+		builders.BuildDiscoveryJob != nil &&
+		(ctx.Observation.Job == nil || !IsJobComplete(ctx.Observation.Job)) {
+		if job := builders.BuildDiscoveryJob(input); job != nil {
+			desired = append(desired, job)
+		}
+	}
+
+	return desired
+}
+
+// FormatRuntimeConfigSources renders a human-readable list of runtime config sources for logging/events.
+func FormatRuntimeConfigSources(resolution *RuntimeConfigResolution, namespaceLabel string) []string {
+	if resolution == nil {
+		return nil
+	}
+
+	var sources []string
+	if resolution.NamespaceConfig != nil {
+		ns := namespaceLabel
+		if ns == "" {
+			ns = resolution.Namespace
+		}
+		sources = append(sources, fmt.Sprintf("namespace/%s", ns))
+	}
+	if resolution.ClusterConfig != nil {
+		sources = append(sources, "cluster")
+	}
+	return sources
+}
+
+// JoinRuntimeConfigSources joins runtime config sources for concise logging.
+func JoinRuntimeConfigSources(resolution *RuntimeConfigResolution, namespaceLabel string) string {
+	sources := FormatRuntimeConfigSources(resolution, namespaceLabel)
+	return strings.Join(sources, ", ")
 }
 
 // ProjectTemplateStatus computes status from observation and errors.

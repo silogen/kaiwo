@@ -27,14 +27,12 @@ package aim
 import (
 	"context"
 	"fmt"
-	"strings"
 
-	framework2 "github.com/silogen/kaiwo/internal/controller/framework"
+	"github.com/silogen/kaiwo/internal/controller/framework"
 
 	servingv1alpha1 "github.com/kserve/kserve/pkg/apis/serving/v1alpha1"
 	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -44,8 +42,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	baseutils "github.com/silogen/kaiwo/pkg/utils"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 	"github.com/silogen/kaiwo/internal/controller/aim/shared"
@@ -90,7 +86,7 @@ func (r *AIMClusterServiceTemplateReconciler) Reconcile(ctx context.Context, req
 	logger.Info("Reconciling AIMClusterServiceTemplate", "name", template.Name)
 
 	// Use framework orchestrator with closures
-	return framework2.Reconcile(ctx, framework2.ReconcileSpec[*aimv1alpha1.AIMClusterServiceTemplate, aimv1alpha1.AIMServiceTemplateStatus]{
+	return framework.Reconcile(ctx, framework.ReconcileSpec[*aimv1alpha1.AIMClusterServiceTemplate, aimv1alpha1.AIMServiceTemplateStatus]{
 		Client:   r.Client,
 		Scheme:   r.Scheme,
 		Object:   &template,
@@ -114,7 +110,7 @@ func (r *AIMClusterServiceTemplateReconciler) Reconcile(ctx context.Context, req
 			return r.plan(ctx, &template, o)
 		},
 
-		ProjectFn: func(ctx context.Context, obs any, errs framework2.ReconcileErrors) error {
+		ProjectFn: func(ctx context.Context, obs any, errs framework.ReconcileErrors) error {
 			var o *clusterTemplateObservation
 			if obs != nil {
 				var ok bool
@@ -131,10 +127,7 @@ func (r *AIMClusterServiceTemplateReconciler) Reconcile(ctx context.Context, req
 }
 
 // clusterTemplateObservation holds observed state
-type clusterTemplateObservation struct {
-	Runtime *servingv1alpha1.ClusterServingRuntime
-	shared.TemplateObservation
-}
+type clusterTemplateObservation = shared.RuntimeObservation[*servingv1alpha1.ClusterServingRuntime]
 
 func requestsFromClusterTemplates(templates []aimv1alpha1.AIMClusterServiceTemplate) []reconcile.Request {
 	if len(templates) == 0 {
@@ -150,131 +143,90 @@ func requestsFromClusterTemplates(templates []aimv1alpha1.AIMClusterServiceTempl
 // observe gathers current cluster state (read-only)
 func (r *AIMClusterServiceTemplateReconciler) observe(ctx context.Context, template *aimv1alpha1.AIMClusterServiceTemplate) (*clusterTemplateObservation, error) {
 	logger := log.FromContext(ctx)
-	obs := &clusterTemplateObservation{}
-
-	// Check if ClusterServingRuntime exists
-	clusterServingRuntime, err := shared.GetClusterServingRuntime(ctx, r.Client, template.Name)
-	if err != nil && !errors.IsNotFound(err) {
-		return nil, fmt.Errorf("failed to get ClusterServingRuntime: %w", err)
-	}
-	if err == nil {
-		obs.Runtime = clusterServingRuntime
-	}
-
-	// Only check for discovery job if template is not already Available
-	// This prevents unnecessary job lookups and creation attempts after TTL cleanup
 	operatorNamespace := shared.GetOperatorNamespace()
-
-	if template.Status.Status != aimv1alpha1.AIMTemplateStatusAvailable {
-		job, err := shared.GetDiscoveryJob(ctx, r.Client, operatorNamespace, template.Name)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get discovery job: %w", err)
-		}
-		obs.Job = job
-	}
-
-	// Lookup image from AIMClusterImage catalog
-	image, err := shared.LookupImageForClusterTemplate(ctx, r.Client, template.Spec.AIMImageName)
-	if err != nil {
-		return nil, err
-	}
-	obs.Image = image
-
-	// Resolve runtime configuration scoped to the operator namespace
-	configName := template.Spec.RuntimeConfigName
-	resolution, err := shared.ResolveRuntimeConfig(ctx, r.Client, operatorNamespace, configName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve AIMRuntimeConfig %q: %w", configName, err)
-	}
-
-	if resolution != nil {
-		obs.RuntimeConfig = resolution
-		obs.ImagePullSecrets = shared.CopyPullSecrets(resolution.EffectiveSpec.ImagePullSecrets)
-
-		switch {
-		case resolution.NamespaceConfig == nil && resolution.ClusterConfig == nil && resolution.Name == shared.DefaultRuntimeConfigName:
+	return shared.ObserveTemplate(ctx, shared.TemplateObservationOptions[*servingv1alpha1.ClusterServingRuntime]{
+		GetRuntime: func(ctx context.Context) (*servingv1alpha1.ClusterServingRuntime, error) {
+			runtime, err := shared.GetClusterServingRuntime(ctx, r.Client, template.Name)
+			if err != nil && !errors.IsNotFound(err) {
+				return nil, fmt.Errorf("failed to get ClusterServingRuntime: %w", err)
+			}
+			return runtime, err
+		},
+		ShouldCheckDiscoveryJob: template.Status.Status != aimv1alpha1.AIMTemplateStatusAvailable,
+		GetDiscoveryJob: func(ctx context.Context) (*batchv1.Job, error) {
+			job, err := shared.GetDiscoveryJob(ctx, r.Client, operatorNamespace, template.Name)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get discovery job: %w", err)
+			}
+			return job, nil
+		},
+		LookupImage: func(ctx context.Context) (string, error) {
+			return shared.LookupImageForClusterTemplate(ctx, r.Client, template.Spec.AIMImageName)
+		},
+		ResolveRuntimeConfig: func(ctx context.Context) (*shared.RuntimeConfigResolution, error) {
+			resolution, err := shared.ResolveRuntimeConfig(ctx, r.Client, operatorNamespace, template.Spec.RuntimeConfigName)
+			if err != nil {
+				return nil, fmt.Errorf("failed to resolve AIMRuntimeConfig %q: %w", template.Spec.RuntimeConfigName, err)
+			}
+			return resolution, nil
+		},
+		OnDefaultRuntimeConfigAbsent: func() {
 			logger.Info("Default AIMRuntimeConfig not found for cluster template, proceeding without overrides")
-			framework2.EmitWarningEvent(r.Recorder, template, "DefaultRuntimeConfigNotFound",
+			framework.EmitWarningEvent(r.Recorder, template, "DefaultRuntimeConfigNotFound",
 				"Default AIMRuntimeConfig not found, proceeding with controller defaults.")
-		default:
-			var sources []string
-			if resolution.NamespaceConfig != nil {
-				sources = append(sources, fmt.Sprintf("namespace/%s", operatorNamespace))
-			}
-			if resolution.ClusterConfig != nil {
-				sources = append(sources, "cluster")
-			}
-
+		},
+		OnRuntimeConfigResolved: func(resolution *shared.RuntimeConfigResolution) {
 			logger.Info("Resolved AIMRuntimeConfig",
 				"name", resolution.Name,
-				"sources", strings.Join(sources, ","),
+				"sources", shared.JoinRuntimeConfigSources(resolution, operatorNamespace),
 				"imagePullSecrets", len(resolution.EffectiveSpec.ImagePullSecrets))
 
-			framework2.EmitNormalEvent(r.Recorder, template, "RuntimeConfigResolved",
-				fmt.Sprintf("Using AIMRuntimeConfig %q from %s", resolution.Name, strings.Join(sources, ", ")))
-		}
-	}
-
-	return obs, nil
+			framework.EmitNormalEvent(r.Recorder, template, "RuntimeConfigResolved",
+				fmt.Sprintf("Using AIMRuntimeConfig %q from %s", resolution.Name, shared.JoinRuntimeConfigSources(resolution, operatorNamespace)))
+		},
+	})
 }
 
 // plan computes desired state (pure function)
 func (r *AIMClusterServiceTemplateReconciler) plan(_ context.Context, template *aimv1alpha1.AIMClusterServiceTemplate, obs *clusterTemplateObservation) ([]client.Object, error) {
-	var desired []client.Object
-
-	// If observation is nil or no image found, return empty desired state
-	if obs == nil || obs.Image == "" {
-		return desired, nil
+	var observation *shared.TemplateObservation
+	if obs != nil {
+		observation = &obs.TemplateObservation
 	}
 
 	operatorNamespace := shared.GetOperatorNamespace()
 
-	var runtimeConfigSpec aimv1alpha1.AIMRuntimeConfigSpec
-	if obs.RuntimeConfig != nil {
-		runtimeConfigSpec = obs.RuntimeConfig.EffectiveSpec
-	}
-
-	// Owner reference for all created objects
-	ownerRef := metav1.OwnerReference{
-		APIVersion:         template.APIVersion,
-		Kind:               template.Kind,
-		Name:               template.Name,
-		UID:                template.UID,
-		Controller:         baseutils.Pointer(true),
-		BlockOwnerDeletion: baseutils.Pointer(true),
-	}
-
-	// Always include ClusterServingRuntime in desired state
-	clusterServingRuntime := shared.BuildClusterServingRuntime(shared.ClusterServingRuntimeSpec{
-		Name:             template.Name,
-		ModelID:          template.Spec.AIMImageName,
-		Image:            obs.Image,
-		Metric:           template.Spec.Metric,
-		OwnerRef:         ownerRef,
-		ServiceAccount:   runtimeConfigSpec.ServiceAccountName,
-		ImagePullSecrets: obs.ImagePullSecrets,
-	})
-	desired = append(desired, clusterServingRuntime)
-
-	// Include discovery job only if:
-	// 1. Template is not already Available (gate to prevent re-running after TTL expires)
-	// 2. Job doesn't exist or is not yet complete
-	if template.Status.Status != aimv1alpha1.AIMTemplateStatusAvailable {
-		if obs.Job == nil || !shared.IsJobComplete(obs.Job) {
-			job := shared.BuildDiscoveryJob(shared.DiscoveryJobSpec{
+	desired := shared.PlanTemplateResources(shared.TemplatePlanContext{
+		Template:    template,
+		APIVersion:  template.APIVersion,
+		Kind:        template.Kind,
+		Status:      template.Status.Status,
+		Observation: observation,
+	}, shared.TemplatePlanBuilders{
+		BuildRuntime: func(input shared.TemplatePlanInput) client.Object {
+			return shared.BuildClusterServingRuntime(shared.ClusterServingRuntimeSpec{
+				Name:             template.Name,
+				ModelID:          template.Spec.AIMImageName,
+				Image:            input.Observation.Image,
+				Metric:           template.Spec.Metric,
+				OwnerRef:         input.OwnerReference,
+				ServiceAccount:   input.RuntimeConfigSpec.ServiceAccountName,
+				ImagePullSecrets: input.Observation.ImagePullSecrets,
+			})
+		},
+		BuildDiscoveryJob: func(input shared.TemplatePlanInput) client.Object {
+			return shared.BuildDiscoveryJob(shared.DiscoveryJobSpec{
 				TemplateName:     template.Name,
 				Namespace:        operatorNamespace,
 				ModelID:          template.Spec.AIMImageName,
-				Image:            obs.Image,
-				Env:              nil,
+				Image:            input.Observation.Image,
 				TemplateSpec:     template.Spec.AIMServiceTemplateSpecCommon,
-				ImagePullSecrets: obs.ImagePullSecrets,
-				ServiceAccount:   runtimeConfigSpec.ServiceAccountName,
-				OwnerRef:         ownerRef,
+				ImagePullSecrets: input.Observation.ImagePullSecrets,
+				ServiceAccount:   input.RuntimeConfigSpec.ServiceAccountName,
+				OwnerRef:         input.OwnerReference,
 			})
-			desired = append(desired, job)
-		}
-	}
+		},
+	})
 
 	return desired, nil
 }
@@ -284,7 +236,7 @@ func (r *AIMClusterServiceTemplateReconciler) projectStatus(
 	ctx context.Context,
 	template *aimv1alpha1.AIMClusterServiceTemplate,
 	obs *clusterTemplateObservation,
-	errs framework2.ReconcileErrors,
+	errs framework.ReconcileErrors,
 ) error {
 	imageNotFoundMsg := fmt.Sprintf("No AIMClusterImage found for image name %q", template.Spec.AIMImageName)
 	var templateObs *shared.TemplateObservation
