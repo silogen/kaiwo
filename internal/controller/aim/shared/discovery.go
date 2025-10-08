@@ -147,10 +147,10 @@ func BuildDiscoveryJob(spec DiscoveryJobSpec) *batchv1.Job {
 			Name:      jobName,
 			Namespace: spec.Namespace,
 			Labels: map[string]string{
-				"app.kubernetes.io/name":       "aim-discovery",
-				"app.kubernetes.io/component":  "discovery-job",
-				"app.kubernetes.io/managed-by": "aim-controller",
-				"aim.silogen.ai/template":      spec.TemplateName,
+				"app.kubernetes.io/name":       LabelValueDiscoveryName,
+				"app.kubernetes.io/component":  LabelValueDiscoveryComponent,
+				"app.kubernetes.io/managed-by": LabelValueManagedBy,
+				LabelKeyTemplate:               spec.TemplateName,
 			},
 			OwnerReferences: []metav1.OwnerReference{spec.OwnerRef},
 		},
@@ -186,7 +186,7 @@ func BuildDiscoveryJob(spec DiscoveryJobSpec) *batchv1.Job {
 func GetDiscoveryJob(ctx context.Context, k8sClient client.Client, namespace, templateName string) (*batchv1.Job, error) {
 	var jobList batchv1.JobList
 	if err := k8sClient.List(ctx, &jobList, client.InNamespace(namespace), client.MatchingLabels{
-		"aim.silogen.ai/template": templateName,
+		LabelKeyTemplate: templateName,
 	}); err != nil {
 		return nil, err
 	}

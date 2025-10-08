@@ -170,12 +170,14 @@ func (r *AIMClusterServiceTemplateReconciler) observe(ctx context.Context, templ
 			}
 			return resolution, nil
 		},
-		OnDefaultRuntimeConfigAbsent: func() {
-			logger.Info("Default AIMRuntimeConfig not found for cluster template, proceeding without overrides")
-			framework.EmitWarningEvent(r.Recorder, template, "DefaultRuntimeConfigNotFound",
-				"Default AIMRuntimeConfig not found, proceeding with controller defaults.")
-		},
 		OnRuntimeConfigResolved: func(resolution *shared.RuntimeConfigResolution) {
+			if resolution.NamespaceConfig == nil && resolution.ClusterConfig == nil && resolution.Name == shared.DefaultRuntimeConfigName {
+				logger.Info("Default AIMRuntimeConfig not found for cluster template, proceeding without overrides")
+				framework.EmitWarningEvent(r.Recorder, template, "DefaultRuntimeConfigNotFound",
+					"Default AIMRuntimeConfig not found, proceeding with controller defaults.")
+				return
+			}
+
 			logger.Info("Resolved AIMRuntimeConfig",
 				"name", resolution.Name,
 				"sources", shared.JoinRuntimeConfigSources(resolution, operatorNamespace),

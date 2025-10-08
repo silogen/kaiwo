@@ -35,6 +35,20 @@ const (
 
 	// DefaultRuntimeConfigName is the name of the default AIM runtime config
 	DefaultRuntimeConfigName = "default"
+
+	// AimLabelDomain is the base domain used for AIM-specific labels.
+	AimLabelDomain = "aim.silogen.ai"
+
+	// AIM label keys.
+	LabelKeyTemplate = AimLabelDomain + "/template"
+	LabelKeyModelID  = AimLabelDomain + "/model-id"
+
+	// AIM label values.
+	LabelValueRuntimeName        = "aim-runtime"
+	LabelValueRuntimeComponent   = "serving-runtime"
+	LabelValueManagedBy          = "aim-controller"
+	LabelValueDiscoveryName      = "aim-discovery"
+	LabelValueDiscoveryComponent = "discovery-job"
 )
 
 var (

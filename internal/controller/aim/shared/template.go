@@ -75,13 +75,12 @@ type RuntimeObservation[R client.Object] struct {
 
 // TemplateObservationOptions configures ObserveTemplate behaviour.
 type TemplateObservationOptions[R client.Object] struct {
-	GetRuntime                   func(ctx context.Context) (R, error)
-	ShouldCheckDiscoveryJob      bool
-	GetDiscoveryJob              func(ctx context.Context) (*batchv1.Job, error)
-	LookupImage                  func(ctx context.Context) (string, error)
-	ResolveRuntimeConfig         func(ctx context.Context) (*RuntimeConfigResolution, error)
-	OnDefaultRuntimeConfigAbsent func()
-	OnRuntimeConfigResolved      func(resolution *RuntimeConfigResolution)
+	GetRuntime              func(ctx context.Context) (R, error)
+	ShouldCheckDiscoveryJob bool
+	GetDiscoveryJob         func(ctx context.Context) (*batchv1.Job, error)
+	LookupImage             func(ctx context.Context) (string, error)
+	ResolveRuntimeConfig    func(ctx context.Context) (*RuntimeConfigResolution, error)
+	OnRuntimeConfigResolved func(resolution *RuntimeConfigResolution)
 }
 
 // ObserveTemplate gathers runtime, discovery job, image, and runtime config information with common error handling.
@@ -126,8 +125,6 @@ func ObserveTemplate[R client.Object](ctx context.Context, opts TemplateObservat
 			if opts.OnRuntimeConfigResolved != nil {
 				opts.OnRuntimeConfigResolved(resolution)
 			}
-		} else if opts.OnDefaultRuntimeConfigAbsent != nil {
-			opts.OnDefaultRuntimeConfigAbsent()
 		}
 	}
 
