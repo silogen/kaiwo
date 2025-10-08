@@ -57,29 +57,5 @@ func SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
-	// Setup AIMImage controller
-	if err := (&AIMImageReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		return err
-	}
-
-	// Setup AIMClusterImage controller
-	if err := (&AIMClusterImageReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		return err
-	}
-
-	// Setup AIMBaseImageCache controller
-	if err := (&AIMBaseImageCacheReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		return err
-	}
-
 	return nil
 }
