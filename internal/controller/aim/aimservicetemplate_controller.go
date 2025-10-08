@@ -27,6 +27,7 @@ package aim
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	framework2 "github.com/silogen/kaiwo/internal/controller/framework"
 
@@ -35,11 +36,14 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 
@@ -49,7 +53,8 @@ import (
 
 const (
 	// namespaceTemplateFinalizerName = "aim.silogen.ai/namespace-template-finalizer"
-	namespaceTemplateFieldOwner = "aim-namespace-template-controller"
+	namespaceTemplateFieldOwner            = "aim-namespace-template-controller"
+	namespaceTemplateRuntimeConfigIndexKey = ".spec.runtimeConfigName"
 )
 
 // AIMServiceTemplateReconciler reconciles a AIMServiceTemplate object
@@ -63,7 +68,8 @@ type AIMServiceTemplateReconciler struct {
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimservicetemplates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimservicetemplates/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimservicetemplates/finalizers,verbs=update
-// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclusterconfigs,verbs=get;list;watch
+// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclusterruntimeconfigs,verbs=get;list;watch
+// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimruntimeconfigs,verbs=get;list;watch
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclusterimages,verbs=get;list;watch
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimimages,verbs=get;list;watch
 // +kubebuilder:rbac:groups=serving.kserve.io,resources=servingruntimes,verbs=get;list;watch;create;update;patch;delete
@@ -131,6 +137,22 @@ type namespaceTemplateObservation struct {
 	shared.TemplateObservation
 }
 
+func requestsFromNamespaceTemplates(templates []aimv1alpha1.AIMServiceTemplate) []reconcile.Request {
+	if len(templates) == 0 {
+		return nil
+	}
+	requests := make([]reconcile.Request, 0, len(templates))
+	for _, tpl := range templates {
+		requests = append(requests, reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Namespace: tpl.Namespace,
+				Name:      tpl.Name,
+			},
+		})
+	}
+	return requests
+}
+
 // observe gathers current cluster state (read-only)
 func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *aimv1alpha1.AIMServiceTemplate) (*namespaceTemplateObservation, error) {
 	logger := log.FromContext(ctx)
@@ -162,33 +184,39 @@ func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *ai
 	}
 	obs.Image = image
 
-	// Fetch AIMClusterConfig using configName from spec
-	configName := template.Spec.ConfigName
-	if configName == "" {
-		configName = shared.DefaultConfigName
-	}
-
-	config, notFound, err := shared.GetClusterConfig(ctx, r.Client, configName)
+	// Resolve runtime configuration
+	configName := template.Spec.RuntimeConfigName
+	resolution, err := shared.ResolveRuntimeConfig(ctx, r.Client, template.Namespace, configName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get AIMClusterConfig %q: %w", configName, err)
+		return nil, fmt.Errorf("failed to resolve AIMRuntimeConfig %q: %w", configName, err)
 	}
 
-	if notFound {
-		// Distinguish between default (lenient) and explicit (strict)
-		if configName != shared.DefaultConfigName {
-			// User explicitly referenced a config that doesn't exist - FAIL
-			return nil, fmt.Errorf("AIMClusterConfig %q not found", configName)
+	if resolution != nil {
+		obs.RuntimeConfig = resolution
+		obs.ImagePullSecrets = shared.CopyPullSecrets(resolution.EffectiveSpec.ImagePullSecrets)
+
+		switch {
+		case resolution.NamespaceConfig == nil && resolution.ClusterConfig == nil && resolution.Name == shared.DefaultRuntimeConfigName:
+			logger.Info("Default AIMRuntimeConfig not found, proceeding without overrides")
+			framework2.EmitWarningEvent(r.Recorder, template, "DefaultRuntimeConfigNotFound",
+				"Default AIMRuntimeConfig not found, proceeding with controller defaults.")
+		default:
+			var sources []string
+			if resolution.NamespaceConfig != nil {
+				sources = append(sources, fmt.Sprintf("namespace/%s", resolution.Namespace))
+			}
+			if resolution.ClusterConfig != nil {
+				sources = append(sources, "cluster")
+			}
+
+			logger.Info("Resolved AIMRuntimeConfig",
+				"name", resolution.Name,
+				"sources", strings.Join(sources, ","),
+				"imagePullSecrets", len(resolution.EffectiveSpec.ImagePullSecrets))
+
+			framework2.EmitNormalEvent(r.Recorder, template, "RuntimeConfigResolved",
+				fmt.Sprintf("Using AIMRuntimeConfig %q from %s", resolution.Name, strings.Join(sources, ", ")))
 		}
-		// Default config not found - WARN but continue
-		logger.Info("Default AIMClusterConfig not found, proceeding without it")
-		framework2.EmitWarningEvent(r.Recorder, template, "DefaultConfigNotFound",
-			"Default AIMClusterConfig not found, proceeding with defaults. Discovery job may fail if images require authentication")
-	} else {
-		logger.Info("Using AIMClusterConfig", "configName", configName, "imagePullSecrets", len(config.Spec.ImagePullSecrets))
-		framework2.EmitNormalEvent(r.Recorder, template, "ConfigFound",
-			fmt.Sprintf("Using AIMClusterConfig %q with %d image pull secrets", configName, len(config.Spec.ImagePullSecrets)))
-		obs.ImagePullSecrets = config.Spec.ImagePullSecrets
-		obs.Config = config
 	}
 
 	return obs, nil
@@ -203,6 +231,11 @@ func (r *AIMServiceTemplateReconciler) plan(_ context.Context, template *aimv1al
 		return desired, nil
 	}
 
+	var runtimeConfigSpec aimv1alpha1.AIMRuntimeConfigSpec
+	if obs.RuntimeConfig != nil {
+		runtimeConfigSpec = obs.RuntimeConfig.EffectiveSpec
+	}
+
 	// Owner reference for all created objects
 	ownerRef := metav1.OwnerReference{
 		APIVersion:         template.APIVersion,
@@ -215,11 +248,13 @@ func (r *AIMServiceTemplateReconciler) plan(_ context.Context, template *aimv1al
 
 	// Always include ServingRuntime in desired state
 	runtime := shared.BuildServingRuntime(shared.ServingRuntimeSpec{
-		Name:      template.Name,
-		Namespace: template.Namespace,
-		ModelID:   template.Spec.AIMImageName,
-		Image:     obs.Image,
-		OwnerRef:  ownerRef,
+		Name:             template.Name,
+		Namespace:        template.Namespace,
+		ModelID:          template.Spec.AIMImageName,
+		Image:            obs.Image,
+		OwnerRef:         ownerRef,
+		ServiceAccount:   runtimeConfigSpec.ServiceAccountName,
+		ImagePullSecrets: obs.ImagePullSecrets,
 	})
 	desired = append(desired, runtime)
 
@@ -235,6 +270,7 @@ func (r *AIMServiceTemplateReconciler) plan(_ context.Context, template *aimv1al
 				Image:            obs.Image,
 				Env:              template.Spec.Env,
 				ImagePullSecrets: obs.ImagePullSecrets,
+				ServiceAccount:   runtimeConfigSpec.ServiceAccountName,
 				OwnerRef:         ownerRef,
 				TemplateSpec:     template.Spec.AIMServiceTemplateSpecCommon,
 			})
@@ -264,10 +300,65 @@ func (r *AIMServiceTemplateReconciler) projectStatus(
 }
 
 func (r *AIMServiceTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	ctx := context.Background()
+
+	if err := mgr.GetFieldIndexer().IndexField(ctx, &aimv1alpha1.AIMServiceTemplate{}, namespaceTemplateRuntimeConfigIndexKey, func(obj client.Object) []string {
+		template, ok := obj.(*aimv1alpha1.AIMServiceTemplate)
+		if !ok {
+			return nil
+		}
+		return []string{shared.NormalizeRuntimeConfigName(template.Spec.RuntimeConfigName)}
+	}); err != nil {
+		return err
+	}
+
+	runtimeConfigHandler := handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+		runtimeConfig, ok := obj.(*aimv1alpha1.AIMRuntimeConfig)
+		if !ok {
+			return nil
+		}
+
+		var templates aimv1alpha1.AIMServiceTemplateList
+		if err := r.List(ctx, &templates,
+			client.InNamespace(runtimeConfig.Namespace),
+			client.MatchingFields{
+				namespaceTemplateRuntimeConfigIndexKey: shared.NormalizeRuntimeConfigName(runtimeConfig.Name),
+			},
+		); err != nil {
+			ctrl.LoggerFrom(ctx).Error(err, "failed to list AIMServiceTemplate for AIMRuntimeConfig",
+				"runtimeConfig", runtimeConfig.Name, "namespace", runtimeConfig.Namespace)
+			return nil
+		}
+
+		return requestsFromNamespaceTemplates(templates.Items)
+	})
+
+	clusterRuntimeConfigHandler := handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+		clusterConfig, ok := obj.(*aimv1alpha1.AIMClusterRuntimeConfig)
+		if !ok {
+			return nil
+		}
+
+		var templates aimv1alpha1.AIMServiceTemplateList
+		if err := r.List(ctx, &templates,
+			client.MatchingFields{
+				namespaceTemplateRuntimeConfigIndexKey: shared.NormalizeRuntimeConfigName(clusterConfig.Name),
+			},
+		); err != nil {
+			ctrl.LoggerFrom(ctx).Error(err, "failed to list AIMServiceTemplate for AIMClusterRuntimeConfig",
+				"runtimeConfig", clusterConfig.Name)
+			return nil
+		}
+
+		return requestsFromNamespaceTemplates(templates.Items)
+	})
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&aimv1alpha1.AIMServiceTemplate{}).
 		Owns(&batchv1.Job{}).
 		Owns(&servingv1alpha1.ServingRuntime{}).
+		Watches(&aimv1alpha1.AIMRuntimeConfig{}, runtimeConfigHandler).
+		Watches(&aimv1alpha1.AIMClusterRuntimeConfig{}, clusterRuntimeConfigHandler).
 		Named("aim-namespace-template").
 		Complete(r)
 }

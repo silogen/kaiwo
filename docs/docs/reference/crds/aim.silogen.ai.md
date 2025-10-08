@@ -9,14 +9,18 @@
 Package v1alpha1 contains API Schema definitions for the AIM v1alpha1 API group.
 
 ### Resource Types
-- [AIMClusterConfig](#aimclusterconfig)
-- [AIMClusterConfigList](#aimclusterconfiglist)
+- [AIMBaseImageCache](#aimbaseimagecache)
+- [AIMBaseImageCacheList](#aimbaseimagecachelist)
 - [AIMClusterImage](#aimclusterimage)
 - [AIMClusterImageList](#aimclusterimagelist)
+- [AIMClusterRuntimeConfig](#aimclusterruntimeconfig)
+- [AIMClusterRuntimeConfigList](#aimclusterruntimeconfiglist)
 - [AIMClusterServiceTemplate](#aimclusterservicetemplate)
 - [AIMClusterServiceTemplateList](#aimclusterservicetemplatelist)
 - [AIMImage](#aimimage)
 - [AIMImageList](#aimimagelist)
+- [AIMRuntimeConfig](#aimruntimeconfig)
+- [AIMRuntimeConfigList](#aimruntimeconfiglist)
 - [AIMService](#aimservice)
 - [AIMServiceList](#aimservicelist)
 - [AIMServiceTemplate](#aimservicetemplate)
@@ -28,47 +32,31 @@ Package v1alpha1 contains API Schema definitions for the AIM v1alpha1 API group.
 
 
 
-#### AIMCachingConfig
+#### AIMBaseImageCache
 
 
 
-
-
-
-
-_Appears in:_
-- [AIMConfigSpec](#aimconfigspec)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `storageClassName` _string_ | StorageClassName is the name of the storage class to use for cached models |  |  |
-| `cacheAimImageBase` _boolean_ | CacheAimImageBase enables caching of AIM base images on all nodes via a DaemonSet | false |  |
-
-
-#### AIMClusterConfig
-
-
-
-AIMClusterConfig configures credentials and routing at a cluster level.
+AIMBaseImageCache defines a DaemonSet-backed cache for a base container image.
 
 
 
 _Appears in:_
-- [AIMClusterConfigList](#aimclusterconfiglist)
+- [AIMBaseImageCacheList](#aimbaseimagecachelist)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
-| `kind` _string_ | `AIMClusterConfig` | | |
+| `kind` _string_ | `AIMBaseImageCache` | | |
 | `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
-| `spec` _[AIMConfigSpec](#aimconfigspec)_ |  |  |  |
+| `spec` _[AIMBaseImageCacheSpec](#aimbaseimagecachespec)_ |  |  |  |
+| `status` _[AIMBaseImageCacheStatus](#aimbaseimagecachestatus)_ |  |  |  |
 
 
-#### AIMClusterConfigList
+#### AIMBaseImageCacheList
 
 
 
-AIMClusterConfigList contains a list of AIMClusterConfig.
+AIMBaseImageCacheList contains a list of AIMBaseImageCache.
 
 
 
@@ -77,9 +65,70 @@ AIMClusterConfigList contains a list of AIMClusterConfig.
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
-| `kind` _string_ | `AIMClusterConfigList` | | |
+| `kind` _string_ | `AIMBaseImageCacheList` | | |
 | `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
-| `items` _[AIMClusterConfig](#aimclusterconfig) array_ |  |  |  |
+| `items` _[AIMBaseImageCache](#aimbaseimagecache) array_ |  |  |  |
+
+
+#### AIMBaseImageCacheReference
+
+
+
+AIMBaseImageCacheReference captures a consumer referencing the cache.
+
+
+
+_Appears in:_
+- [AIMBaseImageCacheStatus](#aimbaseimagecachestatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `kind` _string_ |  |  |  |
+| `name` _string_ |  |  |  |
+| `namespace` _string_ |  |  |  |
+| `uid` _[UID](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#uid-types-pkg)_ |  |  |  |
+
+
+#### AIMBaseImageCacheSpec
+
+
+
+AIMBaseImageCacheSpec defines desired caching behaviour for a base image digest.
+
+
+
+_Appears in:_
+- [AIMBaseImageCache](#aimbaseimagecache)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `image` _string_ | Image is the base container image (ideally pinned by digest) that should be cached cluster-wide. |  | MinLength: 1 <br /> |
+| `serviceAccountName` _string_ | ServiceAccountName specifies the service account used by the caching DaemonSet. |  |  |
+| `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets contains registry pull secrets attached to the caching pods. |  |  |
+| `nodeSelector` _object (keys:string, values:string)_ | NodeSelector restricts the nodes where caching pods are scheduled. |  |  |
+| `parallelismLimit` _integer_ | ParallelismLimit controls the maximum number of concurrent node pulls. | 5 | Minimum: 1 <br /> |
+
+
+#### AIMBaseImageCacheStatus
+
+
+
+AIMBaseImageCacheStatus reflects the observed state of the cache.
+
+
+
+_Appears in:_
+- [AIMBaseImageCache](#aimbaseimagecache)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `observedGeneration` _integer_ | ObservedGeneration is the last processed generation. |  |  |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions provides high-level cache readiness and error states. |  |  |
+| `nodesTotal` _integer_ | NodesTotal tracks how many nodes are targeted by the cache. |  |  |
+| `nodesCached` _integer_ | NodesCached tracks how many nodes currently have the base image cached. |  |  |
+| `nodesFailed` _integer_ | NodesFailed tracks nodes where caching failed. |  |  |
+| `refCount` _integer_ | RefCount summarises the number of active references. |  |  |
+| `refs` _[AIMBaseImageCacheReference](#aimbaseimagecachereference) array_ | Refs enumerates resources currently referencing this cache. |  |  |
 
 
 #### AIMClusterImage
@@ -118,6 +167,61 @@ AIMClusterImageList contains a list of AIMClusterImage.
 | `kind` _string_ | `AIMClusterImageList` | | |
 | `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
 | `items` _[AIMClusterImage](#aimclusterimage) array_ |  |  |  |
+
+
+#### AIMClusterRuntimeConfig
+
+
+
+AIMClusterRuntimeConfig defines cluster-scoped runtime defaults for AIM resources.
+
+
+
+_Appears in:_
+- [AIMClusterRuntimeConfigList](#aimclusterruntimeconfiglist)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `AIMClusterRuntimeConfig` | | |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `spec` _[AIMClusterRuntimeConfigSpec](#aimclusterruntimeconfigspec)_ |  |  |  |
+| `status` _[AIMRuntimeConfigStatus](#aimruntimeconfigstatus)_ |  |  |  |
+
+
+#### AIMClusterRuntimeConfigList
+
+
+
+AIMClusterRuntimeConfigList contains a list of AIMClusterRuntimeConfig.
+
+
+
+
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `AIMClusterRuntimeConfigList` | | |
+| `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `items` _[AIMClusterRuntimeConfig](#aimclusterruntimeconfig) array_ |  |  |  |
+
+
+#### AIMClusterRuntimeConfigSpec
+
+
+
+AIMClusterRuntimeConfigSpec defines cluster-wide defaults for AIM resources.
+
+
+
+_Appears in:_
+- [AIMClusterRuntimeConfig](#aimclusterruntimeconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `defaultStorageClassName` _string_ | DefaultStorageClassName is the storage class used for model caches when one is not<br />specified directly on the consumer resource. |  |  |
+| `cacheBaseImages` _boolean_ | CacheBaseImages enables caching of AIM base container images on cluster nodes. | false |  |
 
 
 #### AIMClusterServiceTemplate
@@ -177,26 +281,28 @@ _Appears in:_
 | `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
 | `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. |  | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
 | `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
-| `configName` _string_ | ConfigName references the AIMClusterConfig (by name) to use for this template. | default |  |
+| `runtimeConfigName` _string_ | RuntimeConfigName references the AIM runtime configuration (by name) to use for this template. | default |  |
 
 
-#### AIMConfigSpec
+#### AIMEffectiveRuntimeConfig
 
 
 
-AIMConfigSpec defines the desired configuration for an AIM-enabled namespace.
+AIMEffectiveRuntimeConfig surfaces the resolved configuration applied to a consumer.
 
 
 
 _Appears in:_
-- [AIMClusterConfig](#aimclusterconfig)
+- [AIMImageStatus](#aimimagestatus)
+- [AIMServiceStatus](#aimservicestatus)
+- [AIMServiceTemplateStatus](#aimservicetemplatestatus)
+- [AIMTemplateCacheStatus](#aimtemplatecachestatus)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `routing` _[AIMRoutingConfig](#aimroutingconfig)_ | Routing controls automatic HTTPRoute creation for AIM services in this namespace.<br />When enabled (default), the operator creates one HTTPRoute per service using<br />path-based routing with the pattern `/<namespace>/<workload_id>/` and attaches<br />it to the referenced Gateway listener. |  |  |
-| `cacheStorageClassName` _string_ | CacheStorageClassName is the name of the storage class to use for cached models |  |  |
-| `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets are a list of secrets that will be merged with any existing ones when referencing the AIM containers |  |  |
-| `caching` _[AIMCachingConfig](#aimcachingconfig)_ | Caching controls image caching behavior for AIM base images |  |  |
+| `namespaceRef` _[AIMRuntimeConfigReference](#aimruntimeconfigreference)_ | NamespaceRef points at the namespace-scoped runtime config, if present. |  |  |
+| `clusterRef` _[AIMRuntimeConfigReference](#aimruntimeconfigreference)_ | ClusterRef points at the cluster-scoped runtime config, if present. |  |  |
+| `hash` _string_ | Hash is a stable hash of the merged configuration used for change detection. |  |  |
 
 
 #### AIMImage
@@ -253,7 +359,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `image` _string_ | Image is the container image URI for this AIM model.<br />This image is inspected by the operator to select runtime profiles used by templates. |  | MinLength: 1 <br /> |
 | `defaultServiceTemplate` _string_ | DefaultServiceTemplate is the name of the default service template to use, if an<br />AIMService is created without specifying a template name. |  |  |
-| `configName` _string_ | ConfigName references the AIMClusterConfig (by name) to use for this image. | default |  |
+| `runtimeConfigName` _string_ | RuntimeConfigName references the AIM runtime configuration (by name) to use for this image. | default |  |
 
 
 #### AIMImageStatus
@@ -272,6 +378,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `observedGeneration` _integer_ | ObservedGeneration is the most recent generation observed by the controller |  |  |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest available observations of the model's state |  |  |
+| `effectiveRuntimeConfig` _[AIMEffectiveRuntimeConfig](#aimeffectiveruntimeconfig)_ | EffectiveRuntimeConfig surfaces the resolved runtime configuration used while reconciling the image. |  |  |
 
 
 #### AIMMetric
@@ -342,21 +449,133 @@ _Appears in:_
 | `int8` |  |
 
 
-#### AIMRoutingConfig
+#### AIMRuntimeConfig
 
 
 
-AIMRoutingConfig controls automatic HTTPRoute provisioning in the namespace.
+AIMRuntimeConfig defines namespace-scoped runtime overrides for AIM resources.
 
 
 
 _Appears in:_
-- [AIMConfigSpec](#aimconfigspec)
+- [AIMRuntimeConfigList](#aimruntimeconfiglist)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `gateway` _[ParentReference](#parentreference)_ | Gateway references the Gateway listener to use for exposure and routing<br />(mirrors HTTPRoute.parentRefs[*]). |  |  |
-| `autoCreateRoute` _boolean_ | AutoCreateRoute enables automatic HTTPRoute creation for AIM services. | true |  |
+| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `AIMRuntimeConfig` | | |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `spec` _[AIMRuntimeConfigSpec](#aimruntimeconfigspec)_ |  |  |  |
+| `status` _[AIMRuntimeConfigStatus](#aimruntimeconfigstatus)_ |  |  |  |
+
+
+#### AIMRuntimeConfigCommon
+
+
+
+AIMRuntimeConfigCommon captures configuration fields shared across cluster and namespace scopes.
+
+
+
+_Appears in:_
+- [AIMClusterRuntimeConfigSpec](#aimclusterruntimeconfigspec)
+- [AIMRuntimeConfigSpec](#aimruntimeconfigspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `defaultStorageClassName` _string_ | DefaultStorageClassName is the storage class used for model caches when one is not<br />specified directly on the consumer resource. |  |  |
+| `cacheBaseImages` _boolean_ | CacheBaseImages enables caching of AIM base container images on cluster nodes. | false |  |
+
+
+#### AIMRuntimeConfigCredentials
+
+
+
+AIMRuntimeConfigCredentials captures namespace-scoped authentication knobs.
+
+
+
+_Appears in:_
+- [AIMRuntimeConfigSpec](#aimruntimeconfigspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `serviceAccountName` _string_ | ServiceAccountName is the service account used for discovery jobs, cache warmers,<br />and any other workloads spawned by the operator on behalf of this runtime config. |  |  |
+| `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets are merged with controller defaults when creating pods that need<br />to pull model or runtime images. |  |  |
+
+
+#### AIMRuntimeConfigList
+
+
+
+AIMRuntimeConfigList contains a list of AIMRuntimeConfig.
+
+
+
+
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `AIMRuntimeConfigList` | | |
+| `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `items` _[AIMRuntimeConfig](#aimruntimeconfig) array_ |  |  |  |
+
+
+#### AIMRuntimeConfigReference
+
+
+
+AIMRuntimeConfigReference records the source runtime config used during resolution.
+
+
+
+_Appears in:_
+- [AIMEffectiveRuntimeConfig](#aimeffectiveruntimeconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | Name is the metadata.name of the runtime config. |  |  |
+| `namespace` _string_ | Namespace is only set for namespace-scoped runtime configs. |  |  |
+| `uid` _[UID](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#uid-types-pkg)_ | UID is included to detect stale references. |  |  |
+| `kind` _string_ | Kind is either "AIMRuntimeConfig" or "AIMClusterRuntimeConfig". |  |  |
+
+
+#### AIMRuntimeConfigSpec
+
+
+
+AIMRuntimeConfigSpec defines namespace-scoped overrides for AIM resources.
+
+
+
+_Appears in:_
+- [AIMRuntimeConfig](#aimruntimeconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `defaultStorageClassName` _string_ | DefaultStorageClassName is the storage class used for model caches when one is not<br />specified directly on the consumer resource. |  |  |
+| `cacheBaseImages` _boolean_ | CacheBaseImages enables caching of AIM base container images on cluster nodes. | false |  |
+| `serviceAccountName` _string_ | ServiceAccountName is the service account used for discovery jobs, cache warmers,<br />and any other workloads spawned by the operator on behalf of this runtime config. |  |  |
+| `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets are merged with controller defaults when creating pods that need<br />to pull model or runtime images. |  |  |
+
+
+#### AIMRuntimeConfigStatus
+
+
+
+AIMRuntimeConfigStatus records the resolved config reference surfaced to consumers.
+
+
+
+_Appears in:_
+- [AIMClusterRuntimeConfig](#aimclusterruntimeconfig)
+- [AIMRuntimeConfig](#aimruntimeconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `observedGeneration` _integer_ | ObservedGeneration is the last reconciled generation. |  |  |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions communicate reconciliation progress. |  |  |
 
 
 #### AIMRuntimeParameters
@@ -462,7 +681,7 @@ _Appears in:_
 | `templateRef` _string_ | TemplateRef is the name of the AIMServiceTemplate or AIMClusterServiceTemplate to use.<br />The template selects the runtime profile and GPU parameters. |  |  |
 | `cacheModel` _boolean_ | CacheModel requests that model sources be cached when starting the service<br />if the template itself does not warm the cache.<br />When `warmCache: false` on the template, this setting ensures caching is<br />performed before the service becomes ready. | false |  |
 | `replicas` _integer_ | Replicas overrides the number of replicas for this service.<br />Other runtime settings remain governed by the template unless overridden. | 1 |  |
-| `configName` _string_ | ConfigName references the AIMClusterConfig (by name) to use for this service. | default |  |
+| `runtimeConfigName` _string_ | RuntimeConfigName references the AIM runtime configuration (by name) to use for this service. | default |  |
 | `overrides` _[AIMServiceOverrides](#aimserviceoverrides)_ | Overrides allows overriding specific template parameters for this service.<br />When specified, these values take precedence over the template values. |  |  |
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to use for authentication when downloading models.<br />These variables are used for authentication with model registries (e.g., HuggingFace tokens). |  |  |
 | `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets references secrets for pulling AIM container images. |  |  |
@@ -483,6 +702,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `observedGeneration` _integer_ | ObservedGeneration is the most recent generation observed by the controller. |  |  |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest observations of template state. |  |  |
+| `effectiveRuntimeConfig` _[AIMEffectiveRuntimeConfig](#aimeffectiveruntimeconfig)_ | EffectiveRuntimeConfig surfaces the runtime configuration applied to this service. |  |  |
 | `status` _[AIMServiceStatusEnum](#aimservicestatusenum)_ | Status represents the current high‑level status of the service lifecycle.<br />Values: `Pending`, `Starting`, `Running`, `Failed`, `Degraded`. | Pending | Enum: [Pending Starting Running Failed Degraded] <br /> |
 
 
@@ -567,7 +787,7 @@ _Appears in:_
 | `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
 | `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. |  | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
 | `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
-| `configName` _string_ | ConfigName references the AIMClusterConfig (by name) to use for this template. | default |  |
+| `runtimeConfigName` _string_ | RuntimeConfigName references the AIM runtime configuration (by name) to use for this template. | default |  |
 | `caching` _[AIMTemplateCachingConfig](#aimtemplatecachingconfig)_ | Caching configures model caching behavior for this namespace-scoped template.<br />When enabled, models will be cached using the specified environment variables<br />during download. |  |  |
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to use for authentication when downloading models.<br />These variables are used for authentication with model registries (e.g., HuggingFace tokens). |  |  |
 | `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets references secrets for pulling AIM container images. |  |  |
@@ -592,7 +812,7 @@ _Appears in:_
 | `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
 | `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. |  | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
 | `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
-| `configName` _string_ | ConfigName references the AIMClusterConfig (by name) to use for this template. | default |  |
+| `runtimeConfigName` _string_ | RuntimeConfigName references the AIM runtime configuration (by name) to use for this template. | default |  |
 
 
 #### AIMServiceTemplateStatus
@@ -611,6 +831,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `observedGeneration` _integer_ | ObservedGeneration is the most recent generation observed by the controller. |  |  |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest observations of template state. |  |  |
+| `effectiveRuntimeConfig` _[AIMEffectiveRuntimeConfig](#aimeffectiveruntimeconfig)_ | EffectiveRuntimeConfig surfaces the merged runtime configuration applied to this template. |  |  |
 | `status` _[AIMTemplateStatusEnum](#aimtemplatestatusenum)_ | Status represents the current high‑level status of the template lifecycle.<br />Values: `Pending`, `Progressing`, `Available`, `Failed`. | Pending | Enum: [Pending Progressing Available Failed] <br /> |
 | `modelSources` _[AIMModelSource](#aimmodelsource) array_ | ModelSources list the models that this template requires to run. These are the models that will be<br />cached, if this template is cached. |  |  |
 | `profile` _[JSON](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#json-v1-apiextensions-k8s-io)_ | Profile contains the full discovery result profile as a free-form JSON object.<br />This includes metadata, engine args, environment variables, and model details. |  | Schemaless: \{\} <br /> |
@@ -671,7 +892,7 @@ _Appears in:_
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to use for authentication when downloading models.<br />These variables are used for authentication with model registries (e.g., HuggingFace tokens). |  |  |
 | `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets references secrets for pulling AIM container images. |  |  |
 | `storageClassName` _string_ | StorageClassName is the name for the storage class to use for this cache |  |  |
-| `configName` _string_ | ConfigName references the AIMClusterConfig (by name) to use for this template cache. | default |  |
+| `runtimeConfigName` _string_ | RuntimeConfigName references the AIM runtime configuration (by name) to use for this template cache. | default |  |
 
 
 #### AIMTemplateCacheStatus
@@ -689,6 +910,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `observedGeneration` _integer_ | ObservedGeneration is the most recent generation observed by the controller. |  |  |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest observations of the template cache state. |  |  |
+| `effectiveRuntimeConfig` _[AIMEffectiveRuntimeConfig](#aimeffectiveruntimeconfig)_ | EffectiveRuntimeConfig surfaces the runtime config references used to warm the cache. |  |  |
 | `status` _[AIMTemplateCacheStatusEnum](#aimtemplatecachestatusenum)_ | Status represents the current high-level status of the template cache. | Pending | Enum: [Pending Progressing Available Failed] <br /> |
 | `resolvedTemplateKind` _string_ | ResolvedTemplateKind indicates whether the template resolved to a namespace-scoped<br />AIMServiceTemplate or cluster-scoped AIMClusterServiceTemplate.<br />Values: "AIMServiceTemplate", "AIMClusterServiceTemplate" |  |  |
 

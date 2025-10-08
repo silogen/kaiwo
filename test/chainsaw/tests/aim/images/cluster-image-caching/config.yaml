@@ -1,0 +1,6 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterRuntimeConfig
+metadata:
+  name: image-caching
+spec:
+  cacheBaseImages: true

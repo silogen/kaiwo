@@ -91,6 +91,7 @@ type DiscoveryJobSpec struct {
 	Image            string
 	Env              []corev1.EnvVar
 	ImagePullSecrets []corev1.LocalObjectReference
+	ServiceAccount   string
 	OwnerRef         metav1.OwnerReference
 }
 
@@ -158,8 +159,9 @@ func BuildDiscoveryJob(spec DiscoveryJobSpec) *batchv1.Job {
 			TTLSecondsAfterFinished: &ttlSeconds,
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
-					RestartPolicy:    corev1.RestartPolicyNever,
-					ImagePullSecrets: spec.ImagePullSecrets,
+					RestartPolicy:      corev1.RestartPolicyNever,
+					ImagePullSecrets:   spec.ImagePullSecrets,
+					ServiceAccountName: spec.ServiceAccount,
 					Containers: []corev1.Container{
 						{
 							Name:  "discovery",

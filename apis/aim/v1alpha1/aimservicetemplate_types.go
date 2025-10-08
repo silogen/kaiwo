@@ -89,9 +89,9 @@ type AIMServiceTemplateSpecCommon struct {
 
 	AIMRuntimeParameters `json:",inline"`
 
-	// ConfigName references the AIMClusterConfig (by name) to use for this template.
+	// RuntimeConfigName references the AIM runtime configuration (by name) to use for this template.
 	// +kubebuilder:default=default
-	ConfigName string `json:"configName,omitempty"`
+	RuntimeConfigName string `json:"runtimeConfigName,omitempty"`
 }
 
 // AIMTemplateCachingConfig configures model caching behavior for namespace-scoped templates.
@@ -173,6 +173,9 @@ type AIMServiceTemplateStatus struct {
 	// +listType=map
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// EffectiveRuntimeConfig surfaces the merged runtime configuration applied to this template.
+	EffectiveRuntimeConfig *AIMEffectiveRuntimeConfig `json:"effectiveRuntimeConfig,omitempty"`
 
 	// Status represents the current high‑level status of the template lifecycle.
 	// Values: `Pending`, `Progressing`, `Available`, `Failed`.

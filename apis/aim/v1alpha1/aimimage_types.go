@@ -26,6 +26,20 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	// AIMImageConditionRuntimeResolved captures whether runtime config resolution succeeded.
+	AIMImageConditionRuntimeResolved = "RuntimeResolved"
+
+	// AIMImageReasonRuntimeResolved indicates resolution succeeded.
+	AIMImageReasonRuntimeResolved = "RuntimeResolved"
+
+	// AIMImageReasonRuntimeConfigMissing is set when the referenced runtime config cannot be found.
+	AIMImageReasonRuntimeConfigMissing = "RuntimeConfigMissing"
+
+	// AIMImageReasonDefaultRuntimeConfigMissing indicates the implicit default runtime config was not found.
+	AIMImageReasonDefaultRuntimeConfigMissing = "DefaultRuntimeConfigMissing"
+)
+
 // AIMImageSpec defines the desired state of AIMImage.
 type AIMImageSpec struct {
 	// Image is the container image URI for this AIM model.
@@ -37,9 +51,9 @@ type AIMImageSpec struct {
 	// AIMService is created without specifying a template name.
 	DefaultServiceTemplate string `json:"defaultServiceTemplate"`
 
-	// ConfigName references the AIMClusterConfig (by name) to use for this image.
+	// RuntimeConfigName references the AIM runtime configuration (by name) to use for this image.
 	// +kubebuilder:default=default
-	ConfigName string `json:"configName,omitempty"`
+	RuntimeConfigName string `json:"runtimeConfigName,omitempty"`
 }
 
 // AIMImageStatus defines the observed state of AIMImage.
@@ -51,6 +65,9 @@ type AIMImageStatus struct {
 	// +listType=map
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// EffectiveRuntimeConfig surfaces the resolved runtime configuration used while reconciling the image.
+	EffectiveRuntimeConfig *AIMEffectiveRuntimeConfig `json:"effectiveRuntimeConfig,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -97,6 +114,16 @@ type AIMImageList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []AIMImage `json:"items"`
+}
+
+// GetStatus returns a pointer to the AIMImage status.
+func (img *AIMImage) GetStatus() *AIMImageStatus {
+	return &img.Status
+}
+
+// GetStatus returns a pointer to the AIMClusterImage status.
+func (img *AIMClusterImage) GetStatus() *AIMImageStatus {
+	return &img.Status
 }
 
 func init() {

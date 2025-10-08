@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: aim-prepuller
+  namespace: kaiwo-system
+spec:
+  selector:
+    matchLabels:
+      app: image-prepuller
+  template:
+    metadata:
+      labels:
+        app: image-prepuller
+    spec:
+      tolerations:
+        # run on control-plane nodes too, in case tests schedule there
+      - key: "node-role.kubernetes.io/control-plane"
+        operator: "Exists"
+        effect: "NoSchedule"
+      - key: "node-role.kubernetes.io/master"
+        operator: "Exists"
+        effect: "NoSchedule"
+      priorityClassName: system-cluster-critical
+      imagePullSecrets:
+      - name: ghcr-pull-secret
+      initContainers:
+      - name: pull-ray-test
+        image: ghcr.io/silogen/aim:0.4.0-meta-llama-llama-3.1-8b-instruct-v20251006
+        command: ["sh", "-c", "echo warmed"]
+      containers:
+      - name: hold
+        image: registry.k8s.io/pause:3.9
+        resources:
+          requests: {cpu: "5m", memory: "8Mi"}

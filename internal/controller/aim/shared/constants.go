@@ -24,10 +24,33 @@ SOFTWARE.
 
 package shared
 
-const (
-	// OperatorNamespace is the namespace where the AIM operator runs
-	OperatorNamespace = "kaiwo-system"
-
-	// DefaultConfigName is the name of the default AIMClusterConfig
-	DefaultConfigName = "default"
+import (
+	"os"
+	"sync"
 )
+
+const (
+	// operatorNamespaceEnvVar is the environment variable the operator uses to determine its namespace.
+	operatorNamespaceEnvVar = "AIM_OPERATOR_NAMESPACE"
+
+	// DefaultRuntimeConfigName is the name of the default AIM runtime config
+	DefaultRuntimeConfigName = "default"
+)
+
+var (
+	operatorNamespaceOnce sync.Once
+	operatorNamespace     string
+)
+
+// GetOperatorNamespace returns the namespace where the AIM operator runs.
+// It reads the AIM_OPERATOR_NAMESPACE environment variable; if unset, it defaults to "kaiwo-system".
+func GetOperatorNamespace() string {
+	operatorNamespaceOnce.Do(func() {
+		if ns := os.Getenv(operatorNamespaceEnvVar); ns != "" {
+			operatorNamespace = ns
+			return
+		}
+		operatorNamespace = "kaiwo-system"
+	})
+	return operatorNamespace
+}

@@ -63,9 +63,9 @@ type AIMServiceSpec struct {
 	// +kubebuilder:default=1
 	Replicas *int32 `json:"replicas,omitempty"`
 
-	// ConfigName references the AIMClusterConfig (by name) to use for this service.
+	// RuntimeConfigName references the AIM runtime configuration (by name) to use for this service.
 	// +kubebuilder:default=default
-	ConfigName string `json:"configName,omitempty"`
+	RuntimeConfigName string `json:"runtimeConfigName,omitempty"`
 
 	// Overrides allows overriding specific template parameters for this service.
 	// When specified, these values take precedence over the template values.
@@ -93,6 +93,9 @@ type AIMServiceStatus struct {
 	// +listType=map
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// EffectiveRuntimeConfig surfaces the runtime configuration applied to this service.
+	EffectiveRuntimeConfig *AIMEffectiveRuntimeConfig `json:"effectiveRuntimeConfig,omitempty"`
 
 	// Status represents the current high‑level status of the service lifecycle.
 	// Values: `Pending`, `Starting`, `Running`, `Failed`, `Degraded`.

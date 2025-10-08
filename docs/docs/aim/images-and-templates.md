@@ -18,13 +18,11 @@ AIM provides two image resource types to accommodate different organizational ne
 
 ### Anatomy of an Image
 
-An AIM Image consists of three essential fields that define the model catalog entry:
+An AIM Image uses its `metadata.name` as the canonical model identifier. The spec contains:
 
-The `modelId` field contains the logical identifier for the model, typically following a versioned naming convention such as `meta-llama/Llama-3.1-8B-Instruct`. This identifier is referenced by templates and services to specify which model they want to use, decoupling the logical model reference from the physical container image.
-
-The `image` field specifies the container image URI that implements this model. This is the actual container that will be deployed when services use this model. The operator inspects this image during template discovery to determine runtime requirements and model sources.
-
-The `defaultServiceTemplate` field names a recommended template to use with this model. When services specify only a model ID without an explicit template reference, they use this default template. This field is advisory—services can always specify a different template explicitly.
+- **`image`**: the container image URI that implements this model. The operator inspects the image during discovery to determine runtime requirements and model sources.
+- **`defaultServiceTemplate`**: an optional hint pointing to the template that should be used when services do not specify one.
+- **`runtimeConfigName`**: the runtime configuration that supplies registry credentials or storage defaults. When omitted, the operator resolves the `default` runtime config.
 
 ### Examples
 
@@ -34,11 +32,11 @@ Here is a cluster-scoped image that makes a Llama 3.1 8B model available across 
 apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMClusterImage
 metadata:
-  name: llama-3-8b-instruct
+  name: meta-llama-3-8b-instruct
 spec:
-  modelId: meta-llama/Llama-3.1-8B-Instruct
   image: ghcr.io/example/llama-3.1-8b-instruct:v1.2.0
   defaultServiceTemplate: llama-3-8b-latency
+  runtimeConfigName: platform-default
 ```
 
 Namespace-scoped images follow the same structure but include a namespace and allow teams to override cluster defaults:
@@ -47,12 +45,12 @@ Namespace-scoped images follow the same structure but include a namespace and al
 apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMImage
 metadata:
-  name: llama-3-8b-instruct-dev
+  name: meta-llama-3-8b-instruct-dev
   namespace: ml-team
 spec:
-  modelId: meta-llama/Llama-3.1-8B-Instruct
   image: ghcr.io/ml-team/llama-3.1-8b-instruct:dev-latest
   defaultServiceTemplate: llama-3-8b-experimental
+  runtimeConfigName: ml-team
 ```
 
 ### Behind the Scenes
@@ -63,11 +61,11 @@ When templates or services reference a model ID, the operator looks up the corre
 
 AIM container images consist of a base layer containing the AIM runtime and a model-specific layer containing the model weights. To speed up discovery and service startup, the operator can pre-pull these base images onto all cluster nodes through a DaemonSet.
 
-When base image caching is enabled via `AIMClusterConfig` (by setting `caching.cacheAimImageBase: true`), the operator monitors all `AIMImage` and `AIMClusterImage` resources in the cluster. It extracts the base image references from the full container image URIs and maintains a DaemonSet that ensures these base images are present on every node. For example, from an image like `ghcr.io/silogen/aim:0.4.0-meta-llama-llama-3.1-8b-instruct`, the operator extracts the base image `ghcr.io/silogen/aim-base:0.4.0`.
+When the effective runtime configuration sets `cacheBaseImages: true`, the operator monitors all `AIMImage` and `AIMClusterImage` resources in the cluster. It extracts the base image reference from each model image and manages `AIMBaseImageCache` objects that pre-pull those base layers onto nodes. For example, from an image like `ghcr.io/silogen/aim:0.4.0-meta-llama-llama-3.1-8b-instruct`, the operator extracts the base image `ghcr.io/silogen/aim-base:0.4.0` and keeps it warm across the fleet.
 
-This pre-caching significantly reduces the time required for template discovery jobs to start, since the base image layers are already present locally. Similarly, when services deploy, they don't need to wait for base image downloads. The caching is cluster-wide and automatic—adding or updating image resources triggers the DaemonSet to update accordingly.
+This pre-caching significantly reduces the time required for template discovery jobs to start, since the base image layers are already present locally. Similarly, when services deploy, they avoid waiting for large base downloads. The caching is cluster-wide and automatic—adding or updating image resources updates the corresponding `AIMBaseImageCache`.
 
-Base image caching is configured through `AIMClusterConfig` rather than per-image, as it represents a cluster-level optimization decision. See the [Configuration](config.md) documentation for details on enabling and configuring base image caching.
+Cluster administrators typically enable caching in an `AIMClusterRuntimeConfig` and provide registry credentials via an `AIMRuntimeConfig` that lives in the operator namespace. See the [runtime configuration guide](config.md) for details on enabling and configuring base image caching.
 
 ## Service Templates
 
@@ -93,7 +91,7 @@ The decision between cluster and namespace templates often follows this pattern:
 
 Templates contain both common fields shared between cluster and namespace scopes, and namespace-specific fields that control caching and authentication.
 
-The `modelId` field identifies which model this template configures, matching a model ID from the image catalog. This field is immutable after creation to maintain consistency with discovered model sources.
+The `aimImageName` field identifies which image catalog entry this template configures. This field is immutable after creation to maintain consistency with discovered model sources.
 
 The `metric` field selects the optimization goal for the runtime. Setting this to `latency` optimizes for low end-to-end latency in interactive scenarios, while `throughput` optimizes for sustained requests per second in batch processing workloads. This choice influences how the runtime allocates resources and schedules work.
 
@@ -125,7 +123,8 @@ kind: AIMClusterServiceTemplate
 metadata:
   name: llama-3-8b-latency
 spec:
-  modelId: meta-llama/Llama-3.1-8B-Instruct
+  aimImageName: meta-llama-3-8b-instruct
+  runtimeConfigName: platform-default
   metric: latency
   precision: fp16
   gpuSelector:
@@ -142,7 +141,8 @@ metadata:
   name: llama-3-8b-throughput
   namespace: ml-research
 spec:
-  modelId: meta-llama/Llama-3.1-8B-Instruct
+  aimImageName: meta-llama-3-8b-instruct-dev
+  runtimeConfigName: ml-research
   metric: throughput
   precision: fp8
   gpuSelector:

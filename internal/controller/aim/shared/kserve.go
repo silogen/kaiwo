@@ -72,20 +72,24 @@ func sanitizeLabelValue(s string) string {
 
 // ClusterServingRuntimeSpec defines parameters for creating a ClusterServingRuntime
 type ClusterServingRuntimeSpec struct {
-	Name     string
-	ModelID  string
-	Image    string
-	Metric   *aimv1alpha1.AIMMetric
-	OwnerRef metav1.OwnerReference
+	Name             string
+	ModelID          string
+	Image            string
+	Metric           *aimv1alpha1.AIMMetric
+	OwnerRef         metav1.OwnerReference
+	ServiceAccount   string
+	ImagePullSecrets []corev1.LocalObjectReference
 }
 
 // ServingRuntimeSpec defines parameters for creating a ServingRuntime
 type ServingRuntimeSpec struct {
-	Name      string
-	Namespace string
-	ModelID   string
-	Image     string
-	OwnerRef  metav1.OwnerReference
+	Name             string
+	Namespace        string
+	ModelID          string
+	Image            string
+	OwnerRef         metav1.OwnerReference
+	ServiceAccount   string
+	ImagePullSecrets []corev1.LocalObjectReference
 }
 
 // BuildClusterServingRuntime creates a KServe ClusterServingRuntime for a cluster-scoped template
@@ -113,6 +117,7 @@ func BuildClusterServingRuntime(spec ClusterServingRuntimeSpec) *servingv1alpha1
 				},
 			},
 			ServingRuntimePodSpec: servingv1alpha1.ServingRuntimePodSpec{
+				ImagePullSecrets: CopyPullSecrets(spec.ImagePullSecrets),
 				Containers: []corev1.Container{
 					{
 						Name:  "kserve-container",
@@ -155,6 +160,7 @@ func BuildServingRuntime(spec ServingRuntimeSpec) *servingv1alpha1.ServingRuntim
 				},
 			},
 			ServingRuntimePodSpec: servingv1alpha1.ServingRuntimePodSpec{
+				ImagePullSecrets: CopyPullSecrets(spec.ImagePullSecrets),
 				Containers: []corev1.Container{
 					{
 						Name:  "kserve-container",
@@ -169,6 +175,15 @@ func BuildServingRuntime(spec ServingRuntimeSpec) *servingv1alpha1.ServingRuntim
 	}
 
 	return runtime
+}
+
+func CopyPullSecrets(in []corev1.LocalObjectReference) []corev1.LocalObjectReference {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]corev1.LocalObjectReference, len(in))
+	copy(out, in)
+	return out
 }
 
 // GetClusterServingRuntime fetches a ClusterServingRuntime by name

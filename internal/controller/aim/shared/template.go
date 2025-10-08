@@ -48,7 +48,7 @@ type TemplateObservation struct {
 	Job              *batchv1.Job
 	Image            string
 	ImagePullSecrets []corev1.LocalObjectReference
-	Config           *aimv1alpha1.AIMClusterConfig
+	RuntimeConfig    *RuntimeConfigResolution
 }
 
 // TemplateSpec provides the common template specification
@@ -80,6 +80,11 @@ func ProjectTemplateStatus(
 	currentStatus := templateStatus.Status
 	var conditions []metav1.Condition
 	var status aimv1alpha1.AIMTemplateStatusEnum
+	templateStatus.EffectiveRuntimeConfig = nil
+
+	if obs != nil && obs.RuntimeConfig != nil {
+		templateStatus.EffectiveRuntimeConfig = obs.RuntimeConfig.EffectiveStatus
+	}
 
 	// Handle errors first
 	if errs.HasError() {

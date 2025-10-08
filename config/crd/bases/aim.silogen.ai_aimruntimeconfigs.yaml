@@ -4,36 +4,36 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.1
-  name: aimclusterimages.aim.silogen.ai
+  name: aimruntimeconfigs.aim.silogen.ai
 spec:
   group: aim.silogen.ai
   names:
     categories:
     - aim
     - all
-    kind: AIMClusterImage
-    listKind: AIMClusterImageList
-    plural: aimclusterimages
+    kind: AIMRuntimeConfig
+    listKind: AIMRuntimeConfigList
+    plural: aimruntimeconfigs
     shortNames:
-    - aimclimg
-    singular: aimclusterimage
-  scope: Cluster
+    - aimrcfg
+    singular: aimruntimeconfig
+  scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.modelId
-      name: Model ID
+    - jsonPath: .spec.serviceAccountName
+      name: ServiceAccount
       type: string
-    - jsonPath: .spec.image
-      name: Image
-      type: string
+    - jsonPath: .spec.cacheBaseImages
+      name: CacheBaseImages
+      type: boolean
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: AIMClusterImage is the Schema for cluster-scoped AIM image catalog
-          entries.
+        description: AIMRuntimeConfig defines namespace-scoped runtime overrides for
+          AIM resources.
         properties:
           apiVersion:
             description: |-
@@ -53,34 +53,52 @@ spec:
           metadata:
             type: object
           spec:
-            description: AIMImageSpec defines the desired state of AIMImage.
+            description: AIMRuntimeConfigSpec defines namespace-scoped overrides for
+              AIM resources.
             properties:
-              defaultServiceTemplate:
+              cacheBaseImages:
+                default: false
+                description: CacheBaseImages enables caching of AIM base container
+                  images on cluster nodes.
+                type: boolean
+              defaultStorageClassName:
                 description: |-
-                  DefaultServiceTemplate is the name of the default service template to use, if an
-                  AIMService is created without specifying a template name.
+                  DefaultStorageClassName is the storage class used for model caches when one is not
+                  specified directly on the consumer resource.
                 type: string
-              image:
+              imagePullSecrets:
                 description: |-
-                  Image is the container image URI for this AIM model.
-                  This image is inspected by the operator to select runtime profiles used by templates.
-                minLength: 1
+                  ImagePullSecrets are merged with controller defaults when creating pods that need
+                  to pull model or runtime images.
+                items:
+                  description: |-
+                    LocalObjectReference contains enough information to let you locate the
+                    referenced object inside the same namespace.
+                  properties:
+                    name:
+                      default: ""
+                      description: |-
+                        Name of the referent.
+                        This field is effectively required, but due to backwards compatibility is
+                        allowed to be empty. Instances of this type with an empty value here are
+                        almost certainly wrong.
+                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                      type: string
+                  type: object
+                  x-kubernetes-map-type: atomic
+                type: array
+              serviceAccountName:
+                description: |-
+                  ServiceAccountName is the service account used for discovery jobs, cache warmers,
+                  and any other workloads spawned by the operator on behalf of this runtime config.
                 type: string
-              runtimeConfigName:
-                default: default
-                description: RuntimeConfigName references the AIM runtime configuration
-                  (by name) to use for this image.
-                type: string
-            required:
-            - defaultServiceTemplate
-            - image
             type: object
           status:
-            description: AIMImageStatus defines the observed state of AIMImage.
+            description: AIMRuntimeConfigStatus records the resolved config reference
+              surfaced to consumers.
             properties:
               conditions:
-                description: Conditions represent the latest available observations
-                  of the model's state
+                description: Conditions communicate reconciliation progress.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -139,65 +157,12 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
-              effectiveRuntimeConfig:
-                description: EffectiveRuntimeConfig surfaces the resolved runtime
-                  configuration used while reconciling the image.
-                properties:
-                  clusterRef:
-                    description: ClusterRef points at the cluster-scoped runtime config,
-                      if present.
-                    properties:
-                      kind:
-                        description: Kind is either "AIMRuntimeConfig" or "AIMClusterRuntimeConfig".
-                        type: string
-                      name:
-                        description: Name is the metadata.name of the runtime config.
-                        type: string
-                      namespace:
-                        description: Namespace is only set for namespace-scoped runtime
-                          configs.
-                        type: string
-                      uid:
-                        description: UID is included to detect stale references.
-                        type: string
-                    required:
-                    - kind
-                    - name
-                    type: object
-                  hash:
-                    description: Hash is a stable hash of the merged configuration
-                      used for change detection.
-                    type: string
-                  namespaceRef:
-                    description: NamespaceRef points at the namespace-scoped runtime
-                      config, if present.
-                    properties:
-                      kind:
-                        description: Kind is either "AIMRuntimeConfig" or "AIMClusterRuntimeConfig".
-                        type: string
-                      name:
-                        description: Name is the metadata.name of the runtime config.
-                        type: string
-                      namespace:
-                        description: Namespace is only set for namespace-scoped runtime
-                          configs.
-                        type: string
-                      uid:
-                        description: UID is included to detect stale references.
-                        type: string
-                    required:
-                    - kind
-                    - name
-                    type: object
-                type: object
               observedGeneration:
-                description: ObservedGeneration is the most recent generation observed
-                  by the controller
+                description: ObservedGeneration is the last reconciled generation.
                 format: int64
                 type: integer
             type: object
         type: object
     served: true
     storage: true
-    subresources:
-      status: {}
+    subresources: {}

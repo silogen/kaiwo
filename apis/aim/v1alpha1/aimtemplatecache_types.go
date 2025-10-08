@@ -50,9 +50,9 @@ type AIMTemplateCacheSpec struct {
 	// StorageClassName is the name for the storage class to use for this cache
 	StorageClassName string `json:"storageClassName,omitempty"`
 
-	// ConfigName references the AIMClusterConfig (by name) to use for this template cache.
+	// RuntimeConfigName references the AIM runtime configuration (by name) to use for this template cache.
 	// +kubebuilder:default=default
-	ConfigName string `json:"configName,omitempty"`
+	RuntimeConfigName string `json:"runtimeConfigName,omitempty"`
 }
 
 // AIMTemplateCacheStatusEnum defines the status of the template cache.
@@ -79,6 +79,9 @@ type AIMTemplateCacheStatus struct {
 	// +listType=map
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// EffectiveRuntimeConfig surfaces the runtime config references used to warm the cache.
+	EffectiveRuntimeConfig *AIMEffectiveRuntimeConfig `json:"effectiveRuntimeConfig,omitempty"`
 
 	// Status represents the current high-level status of the template cache.
 	// +kubebuilder:default=Pending
