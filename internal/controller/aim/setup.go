@@ -57,5 +57,14 @@ func SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
+	// Setup AIMService controller
+	if err := (&AIMServiceReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("aim-service-controller"),
+	}).SetupWithManager(mgr); err != nil {
+		return err
+	}
+
 	return nil
 }

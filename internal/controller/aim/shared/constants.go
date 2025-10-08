@@ -49,6 +49,8 @@ const (
 	LabelValueManagedBy          = "aim-controller"
 	LabelValueDiscoveryName      = "aim-discovery"
 	LabelValueDiscoveryComponent = "discovery-job"
+	LabelValueServiceName        = "aim-service"
+	LabelValueServiceComponent   = "inference-service"
 )
 
 var (

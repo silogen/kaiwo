@@ -198,6 +198,11 @@ type AIMServiceList struct {
 	Items           []AIMService `json:"items"`
 }
 
+// GetStatus returns a pointer to the AIMService status.
+func (svc *AIMService) GetStatus() *AIMServiceStatus {
+	return &svc.Status
+}
+
 func init() {
 	SchemeBuilder.Register(&AIMService{}, &AIMServiceList{})
 }

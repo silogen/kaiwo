@@ -30,6 +30,7 @@ import (
 	"strings"
 
 	servingv1alpha1 "github.com/kserve/kserve/pkg/apis/serving/v1alpha1"
+	servingv1beta1 "github.com/kserve/kserve/pkg/apis/serving/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -184,6 +185,78 @@ func CopyPullSecrets(in []corev1.LocalObjectReference) []corev1.LocalObjectRefer
 	out := make([]corev1.LocalObjectReference, len(in))
 	copy(out, in)
 	return out
+}
+
+// CopyEnvVars returns a deep-copy of environment variables.
+func CopyEnvVars(in []corev1.EnvVar) []corev1.EnvVar {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]corev1.EnvVar, len(in))
+	copy(out, in)
+	return out
+}
+
+// InferenceServiceSpec defines parameters for creating an InferenceService bound to an AIM template runtime.
+type InferenceServiceSpec struct {
+	Name             string
+	Namespace        string
+	TemplateName     string
+	ModelID          string
+	RuntimeName      string
+	OwnerRef         metav1.OwnerReference
+	ImagePullSecrets []corev1.LocalObjectReference
+	Env              []corev1.EnvVar
+	Replicas         *int32
+}
+
+// BuildInferenceService constructs a KServe InferenceService referencing a ServingRuntime or ClusterServingRuntime.
+func BuildInferenceService(spec InferenceServiceSpec) *servingv1beta1.InferenceService {
+	inferenceService := &servingv1beta1.InferenceService{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: servingv1beta1.SchemeGroupVersion.String(),
+			Kind:       "InferenceService",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      spec.Name,
+			Namespace: spec.Namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/name":       LabelValueServiceName,
+				"app.kubernetes.io/component":  LabelValueServiceComponent,
+				"app.kubernetes.io/managed-by": LabelValueManagedBy,
+				LabelKeyTemplate:               spec.TemplateName,
+				LabelKeyModelID:                sanitizeLabelValue(spec.ModelID),
+			},
+			OwnerReferences: []metav1.OwnerReference{spec.OwnerRef},
+		},
+		Spec: servingv1beta1.InferenceServiceSpec{
+			Predictor: servingv1beta1.PredictorSpec{
+				ComponentExtensionSpec: servingv1beta1.ComponentExtensionSpec{},
+				PodSpec: servingv1beta1.PodSpec{
+					ImagePullSecrets: CopyPullSecrets(spec.ImagePullSecrets),
+				},
+				Model: &servingv1beta1.ModelSpec{
+					ModelFormat: servingv1beta1.ModelFormat{
+						Name:    "aim",
+						Version: baseutils.Pointer("1"),
+					},
+					Runtime: baseutils.Pointer(spec.RuntimeName),
+					PredictorExtensionSpec: servingv1beta1.PredictorExtensionSpec{
+						Container: corev1.Container{
+							Env: CopyEnvVars(spec.Env),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if spec.Replicas != nil {
+		inferenceService.Spec.Predictor.MinReplicas = spec.Replicas
+		inferenceService.Spec.Predictor.MaxReplicas = *spec.Replicas
+	}
+
+	return inferenceService
 }
 
 // GetClusterServingRuntime fetches a ClusterServingRuntime by name
