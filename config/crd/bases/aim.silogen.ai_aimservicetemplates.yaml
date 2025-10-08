@@ -214,11 +214,6 @@ spec:
                       type: object
                     type: array
                 type: object
-              configName:
-                default: default
-                description: ConfigName references the AIMClusterConfig (by name)
-                  to use for this template.
-                type: string
               env:
                 description: |-
                   Env specifies environment variables to use for authentication when downloading models.

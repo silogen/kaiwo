@@ -61,11 +61,11 @@ When templates or services reference a model ID, the operator looks up the corre
 
 AIM container images consist of a base layer containing the AIM runtime and a model-specific layer containing the model weights. To speed up discovery and service startup, the operator can pre-pull these base images onto all cluster nodes through a DaemonSet.
 
-When base image caching is enabled via `AIMClusterConfig` (by setting `caching.cacheAimImageBase: true`), the operator monitors all `AIMImage` and `AIMClusterImage` resources in the cluster. It extracts the base image references from the full container image URIs and maintains a DaemonSet that ensures these base images are present on every node. For example, from an image like `ghcr.io/silogen/aim:0.4.0-meta-llama-llama-3.1-8b-instruct`, the operator extracts the base image `ghcr.io/silogen/aim-base:0.4.0`.
+When the effective runtime configuration sets `cacheBaseImages: true`, the operator monitors all `AIMImage` and `AIMClusterImage` resources in the cluster. It extracts the base image reference from each model image and manages `AIMBaseImageCache` objects that pre-pull those base layers onto nodes. For example, from an image like `ghcr.io/silogen/aim:0.4.0-meta-llama-llama-3.1-8b-instruct`, the operator extracts the base image `ghcr.io/silogen/aim-base:0.4.0` and keeps it warm across the fleet.
 
-This pre-caching significantly reduces the time required for template discovery jobs to start, since the base image layers are already present locally. Similarly, when services deploy, they don't need to wait for base image downloads. The caching is cluster-wide and automatic—adding or updating image resources triggers the DaemonSet to update accordingly.
+This pre-caching significantly reduces the time required for template discovery jobs to start, since the base image layers are already present locally. Similarly, when services deploy, they avoid waiting for large base downloads. The caching is cluster-wide and automatic—adding or updating image resources updates the corresponding `AIMBaseImageCache`.
 
-Base image caching is configured through `AIMClusterConfig` rather than per-image, as it represents a cluster-level optimization decision. See the [Configuration](config.md) documentation for details on enabling and configuring base image caching.
+Cluster administrators typically enable caching in an `AIMClusterRuntimeConfig` and provide registry credentials via an `AIMRuntimeConfig` that lives in the operator namespace. See the [runtime configuration guide](config.md) for details on enabling and configuring base image caching.
 
 ## Service Templates
 

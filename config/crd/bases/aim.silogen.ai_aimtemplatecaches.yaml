@@ -57,11 +57,6 @@ spec:
           spec:
             description: AIMTemplateCacheSpec defines the desired state of AIMTemplateCache
             properties:
-              configName:
-                default: default
-                description: ConfigName references the AIMClusterConfig (by name)
-                  to use for this template cache.
-                type: string
               env:
                 description: |-
                   Env specifies environment variables to use for authentication when downloading models.
