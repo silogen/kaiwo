@@ -56,11 +56,6 @@ spec:
             description: AIMRuntimeConfigSpec defines namespace-scoped overrides for
               AIM resources.
             properties:
-              cacheBaseImages:
-                default: false
-                description: CacheBaseImages enables caching of AIM base container
-                  images on cluster nodes.
-                type: boolean
               defaultStorageClassName:
                 description: |-
                   DefaultStorageClassName is the storage class used for model caches when one is not

@@ -27,15 +27,13 @@ metadata:
   name: default
 spec:
   defaultStorageClassName: fast-nvme
-  cacheBaseImages: true
 ```
 
 | Field | Purpose |
 | ----- | ------- |
 | `defaultStorageClassName` | Storage class used for on-demand model caches when a workload does not specify one. |
-| `cacheBaseImages` | Enables global base-image caching. The operator creates/updates `AIMBaseImageCache` records so large base images are pre-pulled onto nodes. |
 
-Cluster configs never carry secrets. They model cluster-wide policy knobs such as storage defaults and whether base images should be cached.
+Cluster configs never carry secrets. They model cluster-wide policy knobs such as storage defaults.
 
 ## Namespace runtime configuration
 
@@ -57,8 +55,7 @@ spec:
 | Field | Purpose |
 | ----- | ------- |
 | `defaultStorageClassName` | Namespace override for cache storage class. |
-| `cacheBaseImages` | Namespace-level opt in/out for base image caching when the cluster config enables it. |
-| `serviceAccountName` | ServiceAccount used by discovery jobs, cache warmers, and other supporting pods. |
+| `serviceAccountName` | ServiceAccount used by discovery jobs and other supporting pods. |
 | `imagePullSecrets` | Additional registry credentials appended to the pod spec. Namespace entries override any duplicates from the cluster config. |
 
 ## Referencing runtime configs from workloads
@@ -104,14 +101,8 @@ status:
 
 - **Missing explicit config**: reconciliation fails and the workload reports `ConfigResolved=False` (or an equivalent failure condition) until the config appears.
 - **Missing default config**: the controller emits `DefaultRuntimeConfigNotFound` and continues without overrides. Workloads that rely on private registries will fail later unless a namespace config supplies credentials.
-- **Auth expectations**: base-image caching, discovery, and other cluster-scoped operations run in the operator namespace and use the ServiceAccount/imagePullSecrets provided by the resolved runtime config. Namespaced configs should therefore include any required credentials.
-
-## Base image caching
-
-When `cacheBaseImages` is enabled via the effective runtime config, the operator provisions `AIMBaseImageCache` resources keyed by the base image digest. These records manage a DaemonSet that pre-pulls large runtime images onto nodes and maintain reference counts so caches are garbage-collected when no workloads depend on them.
-
-Cluster administrators typically enable caching in the cluster runtime config and provide the necessary credentials through an `AIMRuntimeConfig` created in the operator namespace.
+- **Auth expectations**: discovery and other cluster-scoped operations run in the operator namespace and use the ServiceAccount/imagePullSecrets provided by the resolved runtime config. Namespaced configs should therefore include any required credentials.
 
 ## Operator namespace
 
-The AIM controllers determine the operator namespace from the `AIM_OPERATOR_NAMESPACE` environment variable (default: `kaiwo-system`). Cluster-scoped workflows such as cluster templates or base-image caching run auxiliary pods in this namespace and resolve namespaced runtime configs there.
+The AIM controllers determine the operator namespace from the `AIM_OPERATOR_NAMESPACE` environment variable (default: `kaiwo-system`). Cluster-scoped workflows such as cluster templates run auxiliary pods in this namespace and resolve namespaced runtime configs there.

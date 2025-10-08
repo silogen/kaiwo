@@ -9,8 +9,6 @@
 Package v1alpha1 contains API Schema definitions for the AIM v1alpha1 API group.
 
 ### Resource Types
-- [AIMBaseImageCache](#aimbaseimagecache)
-- [AIMBaseImageCacheList](#aimbaseimagecachelist)
 - [AIMClusterImage](#aimclusterimage)
 - [AIMClusterImageList](#aimclusterimagelist)
 - [AIMClusterRuntimeConfig](#aimclusterruntimeconfig)
@@ -30,105 +28,6 @@ Package v1alpha1 contains API Schema definitions for the AIM v1alpha1 API group.
 - [ModelCache](#modelcache)
 - [ModelCacheList](#modelcachelist)
 
-
-
-#### AIMBaseImageCache
-
-
-
-AIMBaseImageCache defines a DaemonSet-backed cache for a base container image.
-
-
-
-_Appears in:_
-- [AIMBaseImageCacheList](#aimbaseimagecachelist)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
-| `kind` _string_ | `AIMBaseImageCache` | | |
-| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
-| `spec` _[AIMBaseImageCacheSpec](#aimbaseimagecachespec)_ |  |  |  |
-| `status` _[AIMBaseImageCacheStatus](#aimbaseimagecachestatus)_ |  |  |  |
-
-
-#### AIMBaseImageCacheList
-
-
-
-AIMBaseImageCacheList contains a list of AIMBaseImageCache.
-
-
-
-
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
-| `kind` _string_ | `AIMBaseImageCacheList` | | |
-| `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
-| `items` _[AIMBaseImageCache](#aimbaseimagecache) array_ |  |  |  |
-
-
-#### AIMBaseImageCacheReference
-
-
-
-AIMBaseImageCacheReference captures a consumer referencing the cache.
-
-
-
-_Appears in:_
-- [AIMBaseImageCacheStatus](#aimbaseimagecachestatus)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `kind` _string_ |  |  |  |
-| `name` _string_ |  |  |  |
-| `namespace` _string_ |  |  |  |
-| `uid` _[UID](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#uid-types-pkg)_ |  |  |  |
-
-
-#### AIMBaseImageCacheSpec
-
-
-
-AIMBaseImageCacheSpec defines desired caching behaviour for a base image digest.
-
-
-
-_Appears in:_
-- [AIMBaseImageCache](#aimbaseimagecache)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `image` _string_ | Image is the base container image (ideally pinned by digest) that should be cached cluster-wide. |  | MinLength: 1 <br /> |
-| `serviceAccountName` _string_ | ServiceAccountName specifies the service account used by the caching DaemonSet. |  |  |
-| `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets contains registry pull secrets attached to the caching pods. |  |  |
-| `nodeSelector` _object (keys:string, values:string)_ | NodeSelector restricts the nodes where caching pods are scheduled. |  |  |
-| `parallelismLimit` _integer_ | ParallelismLimit controls the maximum number of concurrent node pulls. | 5 | Minimum: 1 <br /> |
-
-
-#### AIMBaseImageCacheStatus
-
-
-
-AIMBaseImageCacheStatus reflects the observed state of the cache.
-
-
-
-_Appears in:_
-- [AIMBaseImageCache](#aimbaseimagecache)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `observedGeneration` _integer_ | ObservedGeneration is the last processed generation. |  |  |
-| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions provides high-level cache readiness and error states. |  |  |
-| `nodesTotal` _integer_ | NodesTotal tracks how many nodes are targeted by the cache. |  |  |
-| `nodesCached` _integer_ | NodesCached tracks how many nodes currently have the base image cached. |  |  |
-| `nodesFailed` _integer_ | NodesFailed tracks nodes where caching failed. |  |  |
-| `refCount` _integer_ | RefCount summarises the number of active references. |  |  |
-| `refs` _[AIMBaseImageCacheReference](#aimbaseimagecachereference) array_ | Refs enumerates resources currently referencing this cache. |  |  |
 
 
 #### AIMClusterImage
@@ -221,7 +120,6 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `defaultStorageClassName` _string_ | DefaultStorageClassName is the storage class used for model caches when one is not<br />specified directly on the consumer resource. |  |  |
-| `cacheBaseImages` _boolean_ | CacheBaseImages enables caching of AIM base container images on cluster nodes. | false |  |
 
 
 #### AIMClusterServiceTemplate
@@ -484,7 +382,6 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `defaultStorageClassName` _string_ | DefaultStorageClassName is the storage class used for model caches when one is not<br />specified directly on the consumer resource. |  |  |
-| `cacheBaseImages` _boolean_ | CacheBaseImages enables caching of AIM base container images on cluster nodes. | false |  |
 
 
 #### AIMRuntimeConfigCredentials
@@ -555,7 +452,6 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `defaultStorageClassName` _string_ | DefaultStorageClassName is the storage class used for model caches when one is not<br />specified directly on the consumer resource. |  |  |
-| `cacheBaseImages` _boolean_ | CacheBaseImages enables caching of AIM base container images on cluster nodes. | false |  |
 | `serviceAccountName` _string_ | ServiceAccountName is the service account used for discovery jobs, cache warmers,<br />and any other workloads spawned by the operator on behalf of this runtime config. |  |  |
 | `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets are merged with controller defaults when creating pods that need<br />to pull model or runtime images. |  |  |
 
