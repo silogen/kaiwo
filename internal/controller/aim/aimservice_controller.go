@@ -31,6 +31,7 @@ import (
 	"github.com/silogen/kaiwo/internal/controller/framework"
 
 	servingv1beta1 "github.com/kserve/kserve/pkg/apis/serving/v1beta1"
+	"github.com/kserve/kserve/pkg/constants"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -42,6 +43,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 	"github.com/silogen/kaiwo/internal/controller/aim/shared"
@@ -74,6 +76,8 @@ type AIMServiceReconciler struct {
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclusterservicetemplates,verbs=get;list;watch
 // +kubebuilder:rbac:groups=serving.kserve.io,resources=inferenceservices,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=serving.kserve.io,resources=inferenceservices/status,verbs=get
+// +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes/status,verbs=get
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 func (r *AIMServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -131,6 +135,7 @@ type aimServiceObservation struct {
 	ShouldCreateTemplate   bool
 	EffectiveRuntimeConfig *aimv1alpha1.AIMEffectiveRuntimeConfig
 	InferenceService       *servingv1beta1.InferenceService
+	HTTPRoute              *gatewayapiv1.HTTPRoute
 }
 
 func (o *aimServiceObservation) templateFound() bool {
@@ -203,6 +208,19 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 		obs.InferenceService = &inferenceService
 	}
 
+	routingEnabled := service.Spec.Routing != nil && service.Spec.Routing.Enabled
+	if routingEnabled {
+		routeName := shared.InferenceServiceRouteName(service.Name)
+		var route gatewayapiv1.HTTPRoute
+		if err := r.Get(ctx, types.NamespacedName{Name: routeName, Namespace: service.Namespace}, &route); err != nil {
+			if !apierrors.IsNotFound(err) {
+				return nil, fmt.Errorf("failed to get HTTPRoute %s/%s: %w", service.Namespace, routeName, err)
+			}
+		} else {
+			obs.HTTPRoute = &route
+		}
+	}
+
 	// If neither namespace nor cluster template was found, mark for creation.
 	if !obs.templateFound() {
 		obs.ShouldCreateTemplate = true
@@ -235,6 +253,7 @@ func (r *AIMServiceReconciler) plan(_ context.Context, service *aimv1alpha1.AIMS
 
 	// Only create/update the InferenceService once the template is available.
 	if obs.TemplateAvailable {
+		routePath := routePathPrefix(service)
 		inferenceService := shared.BuildInferenceService(shared.InferenceServiceSpec{
 			Name:             service.Name,
 			Namespace:        service.Namespace,
@@ -247,19 +266,68 @@ func (r *AIMServiceReconciler) plan(_ context.Context, service *aimv1alpha1.AIMS
 			Replicas:         service.Spec.Replicas,
 		})
 		desired = append(desired, inferenceService)
+
+		if service.Spec.Routing != nil && service.Spec.Routing.Enabled {
+			if service.Spec.Routing.GatewayRef != nil {
+				parentCopy := service.Spec.Routing.GatewayRef.DeepCopy()
+				route := shared.BuildInferenceServiceHTTPRoute(shared.InferenceServiceRouteSpec{
+					Name:             shared.InferenceServiceRouteName(service.Name),
+					Namespace:        service.Namespace,
+					OwnerRef:         ownerRef,
+					ParentRef:        parentCopy,
+					BackendNamespace: service.Namespace,
+					BackendService:   constants.PredictorServiceName(service.Name),
+					PathPrefix:       routePath,
+					TemplateName:     obs.TemplateName,
+					ModelID:          service.Spec.AIMImageName,
+				})
+				desired = append(desired, route)
+			}
+		}
 	}
 
 	return desired, nil
 }
 
+func evaluateHTTPRouteStatus(route *gatewayapiv1.HTTPRoute) (bool, string, string) {
+	if route == nil {
+		return false, aimv1alpha1.AIMServiceReasonConfiguringRoute, "HTTPRoute not found"
+	}
+	status := route.Status
+	if len(status.Parents) == 0 {
+		return false, aimv1alpha1.AIMServiceReasonConfiguringRoute, "HTTPRoute has no parent status"
+	}
+	for _, parent := range status.Parents {
+		for _, condition := range parent.Conditions {
+			if condition.Status == metav1.ConditionFalse {
+				reason := condition.Reason
+				if reason == "" {
+					reason = aimv1alpha1.AIMServiceReasonRouteFailed
+				}
+				message := condition.Message
+				if message == "" {
+					message = "Gateway reported HTTPRoute condition false"
+				}
+				return false, reason, message
+			}
+		}
+	}
+	return true, aimv1alpha1.AIMServiceReasonRouteReady, "HTTPRoute is ready"
+}
+
+func routePathPrefix(service *aimv1alpha1.AIMService) string {
+	return fmt.Sprintf("/%s/%s", service.Namespace, string(service.UID))
+}
+
 func (r *AIMServiceReconciler) projectStatus(
-	ctx context.Context,
+	_ context.Context,
 	service *aimv1alpha1.AIMService,
 	obs *aimServiceObservation,
 	errs framework.ReconcileErrors,
 ) error {
 	status := &service.Status
 	status.EffectiveRuntimeConfig = nil
+	status.Routing = nil
 
 	if obs != nil && obs.EffectiveRuntimeConfig != nil {
 		status.EffectiveRuntimeConfig = obs.EffectiveRuntimeConfig.DeepCopy()
@@ -283,6 +351,40 @@ func (r *AIMServiceReconciler) projectStatus(
 		setCondition(aimv1alpha1.AIMServiceConditionCacheReady, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonCacheWarm, "Caching not requested")
 	} else {
 		setCondition(aimv1alpha1.AIMServiceConditionCacheReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonWaitingForCache, "Waiting for cache warm-up")
+	}
+
+	routingEnabled := service.Spec.Routing != nil && service.Spec.Routing.Enabled
+	routingReady := true
+	if !routingEnabled {
+		setCondition(aimv1alpha1.AIMServiceConditionRoutingReady, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonRouteReady, "Routing disabled")
+	} else {
+		status.Routing = &aimv1alpha1.AIMServiceRoutingStatus{
+			Path: routePathPrefix(service),
+		}
+		routingReady = false
+		switch {
+		case service.Spec.Routing.GatewayRef == nil:
+			setCondition(aimv1alpha1.AIMServiceConditionRoutingReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonRouteFailed,
+				"routing.gatewayRef must be specified when routing is enabled")
+			status.Status = aimv1alpha1.AIMServiceStatusFailed
+			setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonRouteFailed,
+				"Routing gateway reference is missing")
+		case obs == nil || obs.HTTPRoute == nil:
+			setCondition(aimv1alpha1.AIMServiceConditionRoutingReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonConfiguringRoute,
+				"Waiting for HTTPRoute to be created")
+		default:
+			ready, reason, message := evaluateHTTPRouteStatus(obs.HTTPRoute)
+			routingReady = ready
+			conditionStatus := metav1.ConditionFalse
+			if ready {
+				conditionStatus = metav1.ConditionTrue
+			}
+			setCondition(aimv1alpha1.AIMServiceConditionRoutingReady, conditionStatus, reason, message)
+			if !ready && reason == aimv1alpha1.AIMServiceReasonRouteFailed {
+				status.Status = aimv1alpha1.AIMServiceStatusDegraded
+				setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, reason, message)
+			}
+		}
 	}
 
 	if errs.HasError() {
@@ -309,7 +411,9 @@ func (r *AIMServiceReconciler) projectStatus(
 	}
 
 	// Clear failure condition when reconciliation succeeds.
-	setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonResolved, "No active failures")
+	if !routingEnabled || routingReady {
+		setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonResolved, "No active failures")
+	}
 
 	if obs == nil || !obs.templateFound() {
 		status.Status = aimv1alpha1.AIMServiceStatusPending
@@ -340,7 +444,9 @@ func (r *AIMServiceReconciler) projectStatus(
 	}
 
 	if obs.InferenceService == nil {
-		status.Status = aimv1alpha1.AIMServiceStatusStarting
+		if status.Status != aimv1alpha1.AIMServiceStatusFailed {
+			status.Status = aimv1alpha1.AIMServiceStatusStarting
+		}
 		setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonCreatingRuntime,
 			"Waiting for InferenceService creation")
 		setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonCreatingRuntime,
@@ -350,7 +456,7 @@ func (r *AIMServiceReconciler) projectStatus(
 		return nil
 	}
 
-	if obs.InferenceService.Status.IsReady() {
+	if obs.InferenceService.Status.IsReady() && routingReady {
 		status.Status = aimv1alpha1.AIMServiceStatusRunning
 		setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonRuntimeReady,
 			"InferenceService is ready")
@@ -361,7 +467,9 @@ func (r *AIMServiceReconciler) projectStatus(
 		return nil
 	}
 
-	status.Status = aimv1alpha1.AIMServiceStatusStarting
+	if status.Status != aimv1alpha1.AIMServiceStatusFailed && status.Status != aimv1alpha1.AIMServiceStatusDegraded {
+		status.Status = aimv1alpha1.AIMServiceStatusStarting
+	}
 	reason := aimv1alpha1.AIMServiceReasonCreatingRuntime
 	message := "Waiting for InferenceService to become ready"
 	if obs.InferenceService.Status.ModelStatus.LastFailureInfo != nil {
@@ -369,6 +477,10 @@ func (r *AIMServiceReconciler) projectStatus(
 		message = obs.InferenceService.Status.ModelStatus.LastFailureInfo.Message
 		status.Status = aimv1alpha1.AIMServiceStatusDegraded
 		setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, reason, message)
+	}
+	if routingEnabled && !routingReady && reason == aimv1alpha1.AIMServiceReasonCreatingRuntime {
+		reason = aimv1alpha1.AIMServiceReasonConfiguringRoute
+		message = "Waiting for HTTPRoute to become ready"
 	}
 
 	setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, reason, message)
@@ -433,6 +545,7 @@ func (r *AIMServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&aimv1alpha1.AIMService{}).
 		Owns(&servingv1beta1.InferenceService{}).
 		Owns(&aimv1alpha1.AIMServiceTemplate{}).
+		Owns(&gatewayapiv1.HTTPRoute{}).
 		Watches(&aimv1alpha1.AIMServiceTemplate{}, templateHandler).
 		Watches(&aimv1alpha1.AIMClusterServiceTemplate{}, clusterTemplateHandler).
 		Named("aim-service").
