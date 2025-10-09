@@ -25,6 +25,7 @@ package v1alpha1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 // AIMServiceOverrides allows overriding template parameters at the service level.
@@ -82,6 +83,10 @@ type AIMServiceSpec struct {
 	// ImagePullSecrets references secrets for pulling AIM container images.
 	// +optional
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
+	// Routing enables HTTP routing through Gateway API for this service.
+	// +optional
+	Routing *AIMServiceRouting `json:"routing,omitempty"`
 }
 
 // AIMServiceStatus defines the observed state of AIMService.
@@ -101,6 +106,10 @@ type AIMServiceStatus struct {
 	// Values: `Pending`, `Starting`, `Running`, `Failed`, `Degraded`.
 	// +kubebuilder:default=Pending
 	Status AIMServiceStatusEnum `json:"status,omitempty"`
+
+	// Routing surfaces information about the configured HTTP routing, when enabled.
+	// +optional
+	Routing *AIMServiceRoutingStatus `json:"routing,omitempty"`
 }
 
 // AIMServiceStatusEnum defines coarse-grained states for a service.
@@ -196,6 +205,26 @@ type AIMServiceList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []AIMService `json:"items"`
+}
+
+// AIMServiceRouting configures optional HTTP routing for the service.
+type AIMServiceRouting struct {
+	// Enabled toggles HTTP routing management.
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled,omitempty"`
+
+	// GatewayRef identifies the Gateway parent that should receive the HTTPRoute.
+	// When omitted while routing is enabled, reconciliation will report a failure.
+	// +optional
+	GatewayRef *gatewayapiv1.ParentReference `json:"gatewayRef,omitempty"`
+}
+
+// AIMServiceRoutingStatus captures observed routing details.
+type AIMServiceRoutingStatus struct {
+	// Path is the HTTP path prefix used when routing is enabled.
+	// Example: `/tenant/svc-uuid`.
+	// +optional
+	Path string `json:"path,omitempty"`
 }
 
 // GetStatus returns a pointer to the AIMService status.

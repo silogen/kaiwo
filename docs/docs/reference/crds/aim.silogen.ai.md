@@ -555,6 +555,39 @@ _Appears in:_
 | `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
 
 
+#### AIMServiceRouting
+
+
+
+AIMServiceRouting configures optional HTTP routing for the service.
+
+
+
+_Appears in:_
+- [AIMServiceSpec](#aimservicespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | Enabled toggles HTTP routing management. | false |  |
+| `gatewayRef` _[ParentReference](#parentreference)_ | GatewayRef identifies the Gateway parent that should receive the HTTPRoute.<br />When omitted while routing is enabled, reconciliation will report a failure. |  |  |
+
+
+#### AIMServiceRoutingStatus
+
+
+
+AIMServiceRoutingStatus captures observed routing details.
+
+
+
+_Appears in:_
+- [AIMServiceStatus](#aimservicestatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `path` _string_ | Path is the HTTP path prefix used when routing is enabled.<br />Example: `/tenant/svc-uuid`. |  |  |
+
+
 #### AIMServiceSpec
 
 
@@ -581,6 +614,7 @@ _Appears in:_
 | `overrides` _[AIMServiceOverrides](#aimserviceoverrides)_ | Overrides allows overriding specific template parameters for this service.<br />When specified, these values take precedence over the template values. |  |  |
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to use for authentication when downloading models.<br />These variables are used for authentication with model registries (e.g., HuggingFace tokens). |  |  |
 | `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets references secrets for pulling AIM container images. |  |  |
+| `routing` _[AIMServiceRouting](#aimservicerouting)_ | Routing enables HTTP routing through Gateway API for this service. |  |  |
 
 
 #### AIMServiceStatus
@@ -600,6 +634,7 @@ _Appears in:_
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest observations of template state. |  |  |
 | `effectiveRuntimeConfig` _[AIMEffectiveRuntimeConfig](#aimeffectiveruntimeconfig)_ | EffectiveRuntimeConfig surfaces the runtime configuration applied to this service. |  |  |
 | `status` _[AIMServiceStatusEnum](#aimservicestatusenum)_ | Status represents the current high‑level status of the service lifecycle.<br />Values: `Pending`, `Starting`, `Running`, `Failed`, `Degraded`. | Pending | Enum: [Pending Starting Running Failed Degraded] <br /> |
+| `routing` _[AIMServiceRoutingStatus](#aimserviceroutingstatus)_ | Routing surfaces information about the configured HTTP routing, when enabled. |  |  |
 
 
 #### AIMServiceStatusEnum
