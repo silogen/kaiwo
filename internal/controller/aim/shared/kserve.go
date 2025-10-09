@@ -80,6 +80,7 @@ type ClusterServingRuntimeSpec struct {
 	OwnerRef         metav1.OwnerReference
 	ServiceAccount   string
 	ImagePullSecrets []corev1.LocalObjectReference
+	EngineArgs       []string
 }
 
 // ServingRuntimeSpec defines parameters for creating a ServingRuntime
@@ -91,6 +92,7 @@ type ServingRuntimeSpec struct {
 	OwnerRef         metav1.OwnerReference
 	ServiceAccount   string
 	ImagePullSecrets []corev1.LocalObjectReference
+	EngineArgs       []string
 }
 
 // BuildClusterServingRuntime creates a KServe ClusterServingRuntime for a cluster-scoped template
@@ -123,9 +125,9 @@ func BuildClusterServingRuntime(spec ClusterServingRuntimeSpec) *servingv1alpha1
 					{
 						Name:  "kserve-container",
 						Image: spec.Image,
-						Args: []string{
+						Args: append([]string{
 							"--model-id", spec.ModelID,
-						},
+						}, spec.EngineArgs...),
 					},
 				},
 			},
@@ -166,9 +168,9 @@ func BuildServingRuntime(spec ServingRuntimeSpec) *servingv1alpha1.ServingRuntim
 					{
 						Name:  "kserve-container",
 						Image: spec.Image,
-						Args: []string{
+						Args: append([]string{
 							"--model-id", spec.ModelID,
-						},
+						}, spec.EngineArgs...),
 					},
 				},
 			},
@@ -208,6 +210,7 @@ type InferenceServiceSpec struct {
 	ImagePullSecrets []corev1.LocalObjectReference
 	Env              []corev1.EnvVar
 	Replicas         *int32
+	StorageURI       string
 }
 
 // BuildInferenceService constructs a KServe InferenceService referencing a ServingRuntime or ClusterServingRuntime.
@@ -254,6 +257,10 @@ func BuildInferenceService(spec InferenceServiceSpec) *servingv1beta1.InferenceS
 	if spec.Replicas != nil {
 		inferenceService.Spec.Predictor.MinReplicas = spec.Replicas
 		inferenceService.Spec.Predictor.MaxReplicas = *spec.Replicas
+	}
+
+	if spec.StorageURI != "" {
+		inferenceService.Spec.Predictor.Model.StorageURI = baseutils.Pointer(spec.StorageURI)
 	}
 
 	return inferenceService

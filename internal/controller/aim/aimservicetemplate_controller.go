@@ -201,6 +201,8 @@ func (r *AIMServiceTemplateReconciler) plan(_ context.Context, template *aimv1al
 		observation = &obs.TemplateObservation
 	}
 
+	engineArgs := shared.ExtractEngineArgs(template.Status.Profile)
+
 	desired := shared.PlanTemplateResources(shared.TemplatePlanContext{
 		Template:    template,
 		APIVersion:  template.APIVersion,
@@ -217,6 +219,7 @@ func (r *AIMServiceTemplateReconciler) plan(_ context.Context, template *aimv1al
 				OwnerRef:         input.OwnerReference,
 				ServiceAccount:   input.RuntimeConfigSpec.ServiceAccountName,
 				ImagePullSecrets: input.Observation.ImagePullSecrets,
+				EngineArgs:       engineArgs,
 			})
 		},
 		BuildDiscoveryJob: func(input shared.TemplatePlanInput) client.Object {

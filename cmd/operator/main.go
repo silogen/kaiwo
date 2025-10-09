@@ -107,9 +107,7 @@ func init() {
 	utilruntime.Must(appwrapperv1beta2.AddToScheme(scheme))
 	utilruntime.Must(servingv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(servingv1beta1.AddToScheme(scheme))
-	if err := gatewayapiv1.Install(scheme); err != nil {
-		panic(err)
-	}
+	utilruntime.Must(gatewayapiv1.Install(scheme))
 }
 
 func setupFormattedLogOutput() logr.Logger {
