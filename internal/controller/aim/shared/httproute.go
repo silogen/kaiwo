@@ -32,20 +32,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-)
 
-// InferenceServiceRouteSpec describes the HTTPRoute that fronts an InferenceService.
-type InferenceServiceRouteSpec struct {
-	Name             string
-	Namespace        string
-	OwnerRef         metav1.OwnerReference
-	ParentRef        *gatewayapiv1.ParentReference
-	BackendNamespace string
-	BackendService   string
-	PathPrefix       string
-	TemplateName     string
-	ModelID          string
-}
+	aimstate "github.com/silogen/kaiwo/internal/controller/aim/state"
+)
 
 // InferenceServiceRouteName returns the canonical HTTPRoute name for an InferenceService.
 func InferenceServiceRouteName(serviceName string) string {
@@ -53,29 +42,29 @@ func InferenceServiceRouteName(serviceName string) string {
 }
 
 // BuildInferenceServiceHTTPRoute creates an HTTPRoute that exposes the predictor service via the provided gateway parent.
-func BuildInferenceServiceHTTPRoute(spec InferenceServiceRouteSpec) *gatewayapiv1.HTTPRoute {
+func BuildInferenceServiceHTTPRoute(serviceState aimstate.ServiceState, ownerRef metav1.OwnerReference) *gatewayapiv1.HTTPRoute {
 	route := &gatewayapiv1.HTTPRoute{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: gatewayapiv1.GroupVersion.String(),
 			Kind:       "HTTPRoute",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      spec.Name,
-			Namespace: spec.Namespace,
+			Name:      InferenceServiceRouteName(serviceState.Name),
+			Namespace: serviceState.Namespace,
 			Labels: map[string]string{
 				"app.kubernetes.io/name":       LabelValueServiceName,
 				"app.kubernetes.io/component":  LabelValueServiceComponent,
 				"app.kubernetes.io/managed-by": LabelValueManagedBy,
-				LabelKeyTemplate:               spec.TemplateName,
-				LabelKeyModelID:                sanitizeLabelValue(spec.ModelID),
+				LabelKeyTemplate:               serviceState.Template.Name,
+				LabelKeyModelID:                sanitizeLabelValue(serviceState.ModelID),
 			},
-			OwnerReferences: []metav1.OwnerReference{spec.OwnerRef},
+			OwnerReferences: []metav1.OwnerReference{ownerRef},
 		},
 		Spec: gatewayapiv1.HTTPRouteSpec{},
 	}
 
-	if spec.ParentRef != nil {
-		parent := spec.ParentRef.DeepCopy()
+	if serviceState.Routing.GatewayRef != nil {
+		parent := serviceState.Routing.GatewayRef.DeepCopy()
 		if parent.Group == nil || *parent.Group == "" {
 			parent.Group = ptr.To(gatewayapiv1.Group(gatewayapiv1.GroupVersion.Group))
 		}
@@ -83,13 +72,13 @@ func BuildInferenceServiceHTTPRoute(spec InferenceServiceRouteSpec) *gatewayapiv
 			parent.Kind = ptr.To(gatewayapiv1.Kind(constants.GatewayKind))
 		}
 		if parent.Namespace == nil || *parent.Namespace == "" {
-			ns := gatewayapiv1.Namespace(spec.Namespace)
+			ns := gatewayapiv1.Namespace(serviceState.Namespace)
 			parent.Namespace = &ns
 		}
 		route.Spec.ParentRefs = []gatewayapiv1.ParentReference{*parent}
 	}
 
-	pathPrefix := spec.PathPrefix
+	pathPrefix := serviceState.Routing.PathPrefix
 	if !strings.HasPrefix(pathPrefix, "/") {
 		pathPrefix = "/" + pathPrefix
 	}
@@ -100,8 +89,8 @@ func BuildInferenceServiceHTTPRoute(spec InferenceServiceRouteSpec) *gatewayapiv
 		BackendRef: gatewayapiv1.BackendRef{
 			BackendObjectReference: gatewayapiv1.BackendObjectReference{
 				Kind:      ptr.To(gatewayapiv1.Kind(constants.ServiceKind)),
-				Name:      gatewayapiv1.ObjectName(spec.BackendService),
-				Namespace: (*gatewayapiv1.Namespace)(&spec.BackendNamespace),
+				Name:      gatewayapiv1.ObjectName(constants.PredictorServiceName(serviceState.Name)),
+				Namespace: (*gatewayapiv1.Namespace)(&serviceState.Namespace),
 				Port:      &port,
 			},
 		},
