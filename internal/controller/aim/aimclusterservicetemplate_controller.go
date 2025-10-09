@@ -197,6 +197,7 @@ func (r *AIMClusterServiceTemplateReconciler) plan(_ context.Context, template *
 	}
 
 	operatorNamespace := shared.GetOperatorNamespace()
+	engineArgs := shared.ExtractEngineArgs(template.Status.Profile)
 
 	desired := shared.PlanTemplateResources(shared.TemplatePlanContext{
 		Template:    template,
@@ -214,6 +215,7 @@ func (r *AIMClusterServiceTemplateReconciler) plan(_ context.Context, template *
 				OwnerRef:         input.OwnerReference,
 				ServiceAccount:   input.RuntimeConfigSpec.ServiceAccountName,
 				ImagePullSecrets: input.Observation.ImagePullSecrets,
+				EngineArgs:       engineArgs,
 			})
 		},
 		BuildDiscoveryJob: func(input shared.TemplatePlanInput) client.Object {

@@ -136,6 +136,7 @@ type aimServiceObservation struct {
 	EffectiveRuntimeConfig *aimv1alpha1.AIMEffectiveRuntimeConfig
 	InferenceService       *servingv1beta1.InferenceService
 	HTTPRoute              *gatewayapiv1.HTTPRoute
+	TemplateStatus         *aimv1alpha1.AIMServiceTemplateStatus
 }
 
 func (o *aimServiceObservation) templateFound() bool {
@@ -170,6 +171,7 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 			if namespaceTemplate.Status.EffectiveRuntimeConfig != nil {
 				obs.EffectiveRuntimeConfig = namespaceTemplate.Status.EffectiveRuntimeConfig.DeepCopy()
 			}
+			obs.TemplateStatus = namespaceTemplate.Status.DeepCopy()
 		case apierrors.IsNotFound(err):
 			// Fall through to cluster lookup.
 		default:
@@ -188,6 +190,7 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 			if clusterTemplate.Status.EffectiveRuntimeConfig != nil {
 				obs.EffectiveRuntimeConfig = clusterTemplate.Status.EffectiveRuntimeConfig.DeepCopy()
 			}
+			obs.TemplateStatus = clusterTemplate.Status.DeepCopy()
 		case apierrors.IsNotFound(err):
 			obs.ShouldCreateTemplate = true
 		default:
@@ -254,6 +257,10 @@ func (r *AIMServiceReconciler) plan(_ context.Context, service *aimv1alpha1.AIMS
 	// Only create/update the InferenceService once the template is available.
 	if obs.TemplateAvailable {
 		routePath := routePathPrefix(service)
+		storageURI := ""
+		if obs.TemplateStatus != nil {
+			storageURI = shared.ExtractPrimaryModelURI(obs.TemplateStatus.ModelSources)
+		}
 		inferenceService := shared.BuildInferenceService(shared.InferenceServiceSpec{
 			Name:             service.Name,
 			Namespace:        service.Namespace,
@@ -264,6 +271,7 @@ func (r *AIMServiceReconciler) plan(_ context.Context, service *aimv1alpha1.AIMS
 			ImagePullSecrets: service.Spec.ImagePullSecrets,
 			Env:              service.Spec.Env,
 			Replicas:         service.Spec.Replicas,
+			StorageURI:       storageURI,
 		})
 		desired = append(desired, inferenceService)
 
