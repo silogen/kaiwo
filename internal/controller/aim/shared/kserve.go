@@ -180,6 +180,75 @@ func BuildServingRuntime(spec ServingRuntimeSpec) *servingv1alpha1.ServingRuntim
 	return runtime
 }
 
+// BuildClusterServingRuntimeFromState constructs a ClusterServingRuntime from a TemplateState snapshot.
+func BuildClusterServingRuntimeFromState(state TemplateState, ownerRef metav1.OwnerReference) *servingv1alpha1.ClusterServingRuntime {
+	spec := ClusterServingRuntimeSpec{
+		Name:             state.Name,
+		ModelID:          state.SpecCommon.AIMImageName,
+		Image:            state.Image,
+		Metric:           state.SpecCommon.Metric,
+		OwnerRef:         ownerRef,
+		ServiceAccount:   state.ServiceAccountName(),
+		ImagePullSecrets: state.ImagePullSecrets,
+		EngineArgs:       state.EngineArgs,
+	}
+	return BuildClusterServingRuntime(spec)
+}
+
+// BuildServingRuntimeFromState constructs a namespaced ServingRuntime from a TemplateState snapshot.
+func BuildServingRuntimeFromState(state TemplateState, ownerRef metav1.OwnerReference) *servingv1alpha1.ServingRuntime {
+	spec := ServingRuntimeSpec{
+		Name:             state.Name,
+		Namespace:        state.Namespace,
+		ModelID:          state.SpecCommon.AIMImageName,
+		Image:            state.Image,
+		OwnerRef:         ownerRef,
+		ServiceAccount:   state.ServiceAccountName(),
+		ImagePullSecrets: state.ImagePullSecrets,
+		EngineArgs:       state.EngineArgs,
+	}
+	return BuildServingRuntime(spec)
+}
+
+// InferenceServiceParams captures service-specific data required to build an InferenceService.
+type InferenceServiceParams struct {
+	ServiceName      string
+	ServiceNamespace string
+	OwnerRef         metav1.OwnerReference
+	RuntimeName      string
+	Env              []corev1.EnvVar
+	Replicas         *int32
+	ImagePullSecrets []corev1.LocalObjectReference
+	ModelID          string
+}
+
+// BuildInferenceServiceFromState constructs an InferenceService using a TemplateState and service parameters.
+func BuildInferenceServiceFromState(state TemplateState, params InferenceServiceParams) *servingv1beta1.InferenceService {
+	modelID := params.ModelID
+	if modelID == "" {
+		modelID = state.SpecCommon.AIMImageName
+	}
+
+	runtimeName := params.RuntimeName
+	if runtimeName == "" {
+		runtimeName = state.Name
+	}
+
+	spec := InferenceServiceSpec{
+		Name:             params.ServiceName,
+		Namespace:        params.ServiceNamespace,
+		TemplateName:     state.Name,
+		ModelID:          modelID,
+		RuntimeName:      runtimeName,
+		OwnerRef:         params.OwnerRef,
+		ImagePullSecrets: params.ImagePullSecrets,
+		Env:              params.Env,
+		Replicas:         params.Replicas,
+		StorageURI:       state.StorageURI(),
+	}
+	return BuildInferenceService(spec)
+}
+
 func CopyPullSecrets(in []corev1.LocalObjectReference) []corev1.LocalObjectReference {
 	if len(in) == 0 {
 		return nil

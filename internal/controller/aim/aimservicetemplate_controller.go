@@ -200,8 +200,6 @@ func (r *AIMServiceTemplateReconciler) plan(_ context.Context, template *aimv1al
 		observation = &obs.TemplateObservation
 	}
 
-	engineArgs := shared.ExtractEngineArgs(template.Status.Profile)
-
 	desired := shared.PlanTemplateResources(shared.TemplatePlanContext{
 		Template:    template,
 		APIVersion:  template.APIVersion,
@@ -210,16 +208,15 @@ func (r *AIMServiceTemplateReconciler) plan(_ context.Context, template *aimv1al
 		Observation: observation,
 	}, shared.TemplatePlanBuilders{
 		BuildRuntime: func(input shared.TemplatePlanInput) client.Object {
-			return shared.BuildServingRuntime(shared.ServingRuntimeSpec{
-				Name:             template.Name,
-				Namespace:        template.Namespace,
-				ModelID:          template.Spec.AIMImageName,
-				Image:            input.Observation.Image,
-				OwnerRef:         input.OwnerReference,
-				ServiceAccount:   input.RuntimeConfigSpec.ServiceAccountName,
-				ImagePullSecrets: input.Observation.ImagePullSecrets,
-				EngineArgs:       engineArgs,
-			})
+			state := shared.NewTemplateState(
+				template.Name,
+				template.Namespace,
+				template.Spec.AIMServiceTemplateSpecCommon,
+				input.Observation,
+				input.RuntimeConfigSpec,
+				template.Status.DeepCopy(),
+			)
+			return shared.BuildServingRuntimeFromState(state, input.OwnerReference)
 		},
 		BuildDiscoveryJob: func(input shared.TemplatePlanInput) client.Object {
 			return shared.BuildDiscoveryJob(shared.DiscoveryJobSpec{
