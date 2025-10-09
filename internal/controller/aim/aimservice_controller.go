@@ -319,6 +319,50 @@ func routePathPrefix(service *aimv1alpha1.AIMService) string {
 	return fmt.Sprintf("/%s/%s", service.Namespace, string(service.UID))
 }
 
+func evaluateRoutingStatus(
+	service *aimv1alpha1.AIMService,
+	obs *aimServiceObservation,
+	status *aimv1alpha1.AIMServiceStatus,
+	setCondition func(conditionType string, conditionStatus metav1.ConditionStatus, reason, message string),
+) (enabled bool, ready bool) {
+	routingEnabled := service.Spec.Routing != nil && service.Spec.Routing.Enabled
+	if !routingEnabled {
+		setCondition(aimv1alpha1.AIMServiceConditionRoutingReady, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonRouteReady, "Routing disabled")
+		return false, true
+	}
+
+	status.Routing = &aimv1alpha1.AIMServiceRoutingStatus{
+		Path: routePathPrefix(service),
+	}
+
+	if service.Spec.Routing.GatewayRef == nil {
+		setCondition(aimv1alpha1.AIMServiceConditionRoutingReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonRouteFailed,
+			"routing.gatewayRef must be specified when routing is enabled")
+		status.Status = aimv1alpha1.AIMServiceStatusFailed
+		setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonRouteFailed,
+			"Routing gateway reference is missing")
+		return true, false
+	}
+
+	if obs == nil || obs.HTTPRoute == nil {
+		setCondition(aimv1alpha1.AIMServiceConditionRoutingReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonConfiguringRoute,
+			"Waiting for HTTPRoute to be created")
+		return true, false
+	}
+
+	ready, reason, message := evaluateHTTPRouteStatus(obs.HTTPRoute)
+	conditionStatus := metav1.ConditionFalse
+	if ready {
+		conditionStatus = metav1.ConditionTrue
+	}
+	setCondition(aimv1alpha1.AIMServiceConditionRoutingReady, conditionStatus, reason, message)
+	if !ready && reason == aimv1alpha1.AIMServiceReasonRouteFailed {
+		status.Status = aimv1alpha1.AIMServiceStatusDegraded
+		setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, reason, message)
+	}
+	return true, ready
+}
+
 func (r *AIMServiceReconciler) projectStatus(
 	_ context.Context,
 	service *aimv1alpha1.AIMService,
@@ -353,39 +397,7 @@ func (r *AIMServiceReconciler) projectStatus(
 		setCondition(aimv1alpha1.AIMServiceConditionCacheReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonWaitingForCache, "Waiting for cache warm-up")
 	}
 
-	routingEnabled := service.Spec.Routing != nil && service.Spec.Routing.Enabled
-	routingReady := true
-	if !routingEnabled {
-		setCondition(aimv1alpha1.AIMServiceConditionRoutingReady, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonRouteReady, "Routing disabled")
-	} else {
-		status.Routing = &aimv1alpha1.AIMServiceRoutingStatus{
-			Path: routePathPrefix(service),
-		}
-		routingReady = false
-		switch {
-		case service.Spec.Routing.GatewayRef == nil:
-			setCondition(aimv1alpha1.AIMServiceConditionRoutingReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonRouteFailed,
-				"routing.gatewayRef must be specified when routing is enabled")
-			status.Status = aimv1alpha1.AIMServiceStatusFailed
-			setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonRouteFailed,
-				"Routing gateway reference is missing")
-		case obs == nil || obs.HTTPRoute == nil:
-			setCondition(aimv1alpha1.AIMServiceConditionRoutingReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonConfiguringRoute,
-				"Waiting for HTTPRoute to be created")
-		default:
-			ready, reason, message := evaluateHTTPRouteStatus(obs.HTTPRoute)
-			routingReady = ready
-			conditionStatus := metav1.ConditionFalse
-			if ready {
-				conditionStatus = metav1.ConditionTrue
-			}
-			setCondition(aimv1alpha1.AIMServiceConditionRoutingReady, conditionStatus, reason, message)
-			if !ready && reason == aimv1alpha1.AIMServiceReasonRouteFailed {
-				status.Status = aimv1alpha1.AIMServiceStatusDegraded
-				setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, reason, message)
-			}
-		}
-	}
+	routingEnabled, routingReady := evaluateRoutingStatus(service, obs, status, setCondition)
 
 	if errs.HasError() {
 		status.Status = aimv1alpha1.AIMServiceStatusFailed
