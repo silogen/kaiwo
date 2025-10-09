@@ -31,7 +31,6 @@ import (
 	"github.com/silogen/kaiwo/internal/controller/framework"
 
 	servingv1beta1 "github.com/kserve/kserve/pkg/apis/serving/v1beta1"
-	"github.com/kserve/kserve/pkg/constants"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -47,6 +46,7 @@ import (
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 	"github.com/silogen/kaiwo/internal/controller/aim/shared"
+	aimstate "github.com/silogen/kaiwo/internal/controller/aim/state"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
@@ -263,42 +263,23 @@ func (r *AIMServiceReconciler) plan(_ context.Context, service *aimv1alpha1.AIMS
 	// Only create/update the InferenceService once the template is available.
 	if obs.TemplateAvailable {
 		routePath := routePathPrefix(service)
-		templateState := shared.NewTemplateState(
-			obs.TemplateName,
-			obs.TemplateNamespace,
-			obs.TemplateSpecCommon,
-			nil,
-			aimv1alpha1.AIMRuntimeConfigSpec{},
-			obs.TemplateStatus,
-		)
-		inferenceService := shared.BuildInferenceServiceFromState(templateState, shared.InferenceServiceParams{
-			ServiceName:      service.Name,
-			ServiceNamespace: service.Namespace,
-			OwnerRef:         ownerRef,
-			RuntimeName:      obs.runtimeName(),
-			Env:              service.Spec.Env,
-			Replicas:         service.Spec.Replicas,
-			ImagePullSecrets: service.Spec.ImagePullSecrets,
-			ModelID:          service.Spec.AIMImageName,
+		templateState := aimstate.NewTemplateState(aimstate.TemplateState{
+			Name:              obs.TemplateName,
+			Namespace:         obs.TemplateNamespace,
+			SpecCommon:        obs.TemplateSpecCommon,
+			RuntimeConfigSpec: aimv1alpha1.AIMRuntimeConfigSpec{},
+			Status:            obs.TemplateStatus,
 		})
+		serviceState := aimstate.NewServiceState(service, templateState, aimstate.ServiceStateOptions{
+			RuntimeName: obs.runtimeName(),
+			RoutePath:   routePath,
+		})
+		inferenceService := shared.BuildInferenceService(serviceState, ownerRef)
 		desired = append(desired, inferenceService)
 
-		if service.Spec.Routing != nil && service.Spec.Routing.Enabled {
-			if service.Spec.Routing.GatewayRef != nil {
-				parentCopy := service.Spec.Routing.GatewayRef.DeepCopy()
-				route := shared.BuildInferenceServiceHTTPRoute(shared.InferenceServiceRouteSpec{
-					Name:             shared.InferenceServiceRouteName(service.Name),
-					Namespace:        service.Namespace,
-					OwnerRef:         ownerRef,
-					ParentRef:        parentCopy,
-					BackendNamespace: service.Namespace,
-					BackendService:   constants.PredictorServiceName(service.Name),
-					PathPrefix:       routePath,
-					TemplateName:     obs.TemplateName,
-					ModelID:          service.Spec.AIMImageName,
-				})
-				desired = append(desired, route)
-			}
+		if serviceState.Routing.Enabled && serviceState.Routing.GatewayRef != nil {
+			route := shared.BuildInferenceServiceHTTPRoute(serviceState, ownerRef)
+			desired = append(desired, route)
 		}
 	}
 

@@ -45,6 +45,7 @@ import (
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 	"github.com/silogen/kaiwo/internal/controller/aim/shared"
+	aimstate "github.com/silogen/kaiwo/internal/controller/aim/state"
 )
 
 const (
@@ -209,15 +210,19 @@ func (r *AIMServiceTemplateReconciler) plan(_ context.Context, template *aimv1al
 		Observation: observation,
 	}, shared.TemplatePlanBuilders{
 		BuildRuntime: func(input shared.TemplatePlanInput) client.Object {
-			state := shared.NewTemplateState(
-				template.Name,
-				template.Namespace,
-				template.Spec.AIMServiceTemplateSpecCommon,
-				input.Observation,
-				input.RuntimeConfigSpec,
-				template.Status.DeepCopy(),
-			)
-			return shared.BuildServingRuntimeFromState(state, input.OwnerReference)
+			base := aimstate.TemplateState{
+				Name:              template.Name,
+				Namespace:         template.Namespace,
+				SpecCommon:        template.Spec.AIMServiceTemplateSpecCommon,
+				RuntimeConfigSpec: input.RuntimeConfigSpec,
+				Status:            template.Status.DeepCopy(),
+			}
+			if input.Observation != nil {
+				base.Image = input.Observation.Image
+				base.ImagePullSecrets = input.Observation.ImagePullSecrets
+			}
+			templateState := aimstate.NewTemplateState(base)
+			return shared.BuildServingRuntime(templateState, input.OwnerReference)
 		},
 		BuildDiscoveryJob: func(input shared.TemplatePlanInput) client.Object {
 			return shared.BuildDiscoveryJob(shared.DiscoveryJobSpec{

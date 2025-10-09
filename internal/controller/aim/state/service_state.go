@@ -1,0 +1,109 @@
+// MIT License
+//
+// Copyright (c) 2025 Advanced Micro Devices, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+package state
+
+import (
+	corev1 "k8s.io/api/core/v1"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
+)
+
+// ServiceState captures the resolved desired state for an AIMService across vendors.
+type ServiceState struct {
+	Name             string
+	Namespace        string
+	RuntimeName      string
+	ModelID          string
+	Env              []corev1.EnvVar
+	Replicas         *int32
+	ImagePullSecrets []corev1.LocalObjectReference
+	Template         TemplateState
+	StorageURI       string
+	Routing          ServiceRoutingState
+}
+
+// ServiceRoutingState carries routing configuration resolved for the service.
+type ServiceRoutingState struct {
+	Enabled    bool
+	PathPrefix string
+	GatewayRef *gatewayapiv1.ParentReference
+}
+
+// ServiceStateOptions exposes optional overrides when constructing the service view.
+type ServiceStateOptions struct {
+	RuntimeName string
+	RoutePath   string
+}
+
+// NewServiceState projects the AIMService and template data into a vendor-neutral structure.
+func NewServiceState(service *aimv1alpha1.AIMService, template TemplateState, opts ServiceStateOptions) ServiceState {
+	state := ServiceState{
+		Name:             service.Name,
+		Namespace:        service.Namespace,
+		RuntimeName:      opts.RuntimeName,
+		ModelID:          service.Spec.AIMImageName,
+		Env:              copyEnvVars(service.Spec.Env),
+		ImagePullSecrets: copyPullSecrets(service.Spec.ImagePullSecrets),
+		Template:         template,
+		StorageURI:       template.StorageURI(),
+	}
+
+	if state.RuntimeName == "" {
+		state.RuntimeName = template.Name
+	}
+
+	if state.ModelID == "" {
+		state.ModelID = template.SpecCommon.AIMImageName
+	}
+
+	if service.Spec.Replicas != nil {
+		replicas := *service.Spec.Replicas
+		state.Replicas = &replicas
+	}
+
+	if service.Spec.Routing != nil && service.Spec.Routing.Enabled {
+		routing := ServiceRoutingState{
+			Enabled:    true,
+			PathPrefix: opts.RoutePath,
+		}
+		if routing.PathPrefix == "" {
+			routing.PathPrefix = "/"
+		}
+		if service.Spec.Routing.GatewayRef != nil {
+			routing.GatewayRef = service.Spec.Routing.GatewayRef.DeepCopy()
+		}
+		state.Routing = routing
+	}
+
+	return state
+}
+
+func copyEnvVars(in []corev1.EnvVar) []corev1.EnvVar {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]corev1.EnvVar, len(in))
+	copy(out, in)
+	return out
+}

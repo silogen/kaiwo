@@ -35,9 +35,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	aimstate "github.com/silogen/kaiwo/internal/controller/aim/state"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-
-	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 )
 
 var labelValueRegex = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
@@ -71,46 +70,22 @@ func sanitizeLabelValue(s string) string {
 	return sanitized
 }
 
-// ClusterServingRuntimeSpec defines parameters for creating a ClusterServingRuntime
-type ClusterServingRuntimeSpec struct {
-	Name             string
-	ModelID          string
-	Image            string
-	Metric           *aimv1alpha1.AIMMetric
-	OwnerRef         metav1.OwnerReference
-	ServiceAccount   string
-	ImagePullSecrets []corev1.LocalObjectReference
-	EngineArgs       []string
-}
-
-// ServingRuntimeSpec defines parameters for creating a ServingRuntime
-type ServingRuntimeSpec struct {
-	Name             string
-	Namespace        string
-	ModelID          string
-	Image            string
-	OwnerRef         metav1.OwnerReference
-	ServiceAccount   string
-	ImagePullSecrets []corev1.LocalObjectReference
-	EngineArgs       []string
-}
-
-// BuildClusterServingRuntime creates a KServe ClusterServingRuntime for a cluster-scoped template
-func BuildClusterServingRuntime(spec ClusterServingRuntimeSpec) *servingv1alpha1.ClusterServingRuntime {
+// BuildClusterServingRuntime creates a KServe ClusterServingRuntime for a cluster-scoped template.
+func BuildClusterServingRuntime(template aimstate.TemplateState, ownerRef metav1.OwnerReference) *servingv1alpha1.ClusterServingRuntime {
 	runtime := &servingv1alpha1.ClusterServingRuntime{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: servingv1alpha1.SchemeGroupVersion.String(),
 			Kind:       "ClusterServingRuntime",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: spec.Name,
+			Name: template.Name,
 			Labels: map[string]string{
 				"app.kubernetes.io/name":       LabelValueRuntimeName,
 				"app.kubernetes.io/component":  LabelValueRuntimeComponent,
 				"app.kubernetes.io/managed-by": LabelValueManagedBy,
-				LabelKeyModelID:                sanitizeLabelValue(spec.ModelID),
+				LabelKeyModelID:                sanitizeLabelValue(template.SpecCommon.AIMImageName),
 			},
-			OwnerReferences: []metav1.OwnerReference{spec.OwnerRef},
+			OwnerReferences: []metav1.OwnerReference{ownerRef},
 		},
 		Spec: servingv1alpha1.ServingRuntimeSpec{
 			SupportedModelFormats: []servingv1alpha1.SupportedModelFormat{
@@ -120,14 +95,18 @@ func BuildClusterServingRuntime(spec ClusterServingRuntimeSpec) *servingv1alpha1
 				},
 			},
 			ServingRuntimePodSpec: servingv1alpha1.ServingRuntimePodSpec{
-				ImagePullSecrets: CopyPullSecrets(spec.ImagePullSecrets),
+				ImagePullSecrets: CopyPullSecrets(template.ImagePullSecrets),
 				Containers: []corev1.Container{
 					{
 						Name:  "kserve-container",
-						Image: spec.Image,
-						Args: append([]string{
-							"--model-id", spec.ModelID,
-						}, spec.EngineArgs...),
+						Image: template.Image,
+						Env: []corev1.EnvVar{
+							{
+								Name:  "AIM_MODEL_ID",
+								Value: template.SpecCommon.AIMImageName,
+							},
+						},
+						Args: append([]string{}, template.EngineArgs...),
 					},
 				},
 			},
@@ -137,23 +116,23 @@ func BuildClusterServingRuntime(spec ClusterServingRuntimeSpec) *servingv1alpha1
 	return runtime
 }
 
-// BuildServingRuntime creates a KServe ServingRuntime for a namespace-scoped template
-func BuildServingRuntime(spec ServingRuntimeSpec) *servingv1alpha1.ServingRuntime {
+// BuildServingRuntime creates a KServe ServingRuntime for a namespace-scoped template.
+func BuildServingRuntime(template aimstate.TemplateState, ownerRef metav1.OwnerReference) *servingv1alpha1.ServingRuntime {
 	runtime := &servingv1alpha1.ServingRuntime{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: servingv1alpha1.SchemeGroupVersion.String(),
 			Kind:       "ServingRuntime",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      spec.Name,
-			Namespace: spec.Namespace,
+			Name:      template.Name,
+			Namespace: template.Namespace,
 			Labels: map[string]string{
 				"app.kubernetes.io/name":       LabelValueRuntimeName,
 				"app.kubernetes.io/component":  LabelValueRuntimeComponent,
 				"app.kubernetes.io/managed-by": LabelValueManagedBy,
-				LabelKeyModelID:                sanitizeLabelValue(spec.ModelID),
+				LabelKeyModelID:                sanitizeLabelValue(template.SpecCommon.AIMImageName),
 			},
-			OwnerReferences: []metav1.OwnerReference{spec.OwnerRef},
+			OwnerReferences: []metav1.OwnerReference{ownerRef},
 		},
 		Spec: servingv1alpha1.ServingRuntimeSpec{
 			SupportedModelFormats: []servingv1alpha1.SupportedModelFormat{
@@ -163,14 +142,18 @@ func BuildServingRuntime(spec ServingRuntimeSpec) *servingv1alpha1.ServingRuntim
 				},
 			},
 			ServingRuntimePodSpec: servingv1alpha1.ServingRuntimePodSpec{
-				ImagePullSecrets: CopyPullSecrets(spec.ImagePullSecrets),
+				ImagePullSecrets: CopyPullSecrets(template.ImagePullSecrets),
 				Containers: []corev1.Container{
 					{
 						Name:  "kserve-container",
-						Image: spec.Image,
-						Args: append([]string{
-							"--model-id", spec.ModelID,
-						}, spec.EngineArgs...),
+						Image: template.Image,
+						Env: []corev1.EnvVar{
+							{
+								Name:  "AIM_MODEL_ID",
+								Value: template.SpecCommon.AIMImageName,
+							},
+						},
+						Args: append([]string{}, template.EngineArgs...),
 					},
 				},
 			},
@@ -178,75 +161,6 @@ func BuildServingRuntime(spec ServingRuntimeSpec) *servingv1alpha1.ServingRuntim
 	}
 
 	return runtime
-}
-
-// BuildClusterServingRuntimeFromState constructs a ClusterServingRuntime from a TemplateState snapshot.
-func BuildClusterServingRuntimeFromState(state TemplateState, ownerRef metav1.OwnerReference) *servingv1alpha1.ClusterServingRuntime {
-	spec := ClusterServingRuntimeSpec{
-		Name:             state.Name,
-		ModelID:          state.SpecCommon.AIMImageName,
-		Image:            state.Image,
-		Metric:           state.SpecCommon.Metric,
-		OwnerRef:         ownerRef,
-		ServiceAccount:   state.ServiceAccountName(),
-		ImagePullSecrets: state.ImagePullSecrets,
-		EngineArgs:       state.EngineArgs,
-	}
-	return BuildClusterServingRuntime(spec)
-}
-
-// BuildServingRuntimeFromState constructs a namespaced ServingRuntime from a TemplateState snapshot.
-func BuildServingRuntimeFromState(state TemplateState, ownerRef metav1.OwnerReference) *servingv1alpha1.ServingRuntime {
-	spec := ServingRuntimeSpec{
-		Name:             state.Name,
-		Namespace:        state.Namespace,
-		ModelID:          state.SpecCommon.AIMImageName,
-		Image:            state.Image,
-		OwnerRef:         ownerRef,
-		ServiceAccount:   state.ServiceAccountName(),
-		ImagePullSecrets: state.ImagePullSecrets,
-		EngineArgs:       state.EngineArgs,
-	}
-	return BuildServingRuntime(spec)
-}
-
-// InferenceServiceParams captures service-specific data required to build an InferenceService.
-type InferenceServiceParams struct {
-	ServiceName      string
-	ServiceNamespace string
-	OwnerRef         metav1.OwnerReference
-	RuntimeName      string
-	Env              []corev1.EnvVar
-	Replicas         *int32
-	ImagePullSecrets []corev1.LocalObjectReference
-	ModelID          string
-}
-
-// BuildInferenceServiceFromState constructs an InferenceService using a TemplateState and service parameters.
-func BuildInferenceServiceFromState(state TemplateState, params InferenceServiceParams) *servingv1beta1.InferenceService {
-	modelID := params.ModelID
-	if modelID == "" {
-		modelID = state.SpecCommon.AIMImageName
-	}
-
-	runtimeName := params.RuntimeName
-	if runtimeName == "" {
-		runtimeName = state.Name
-	}
-
-	spec := InferenceServiceSpec{
-		Name:             params.ServiceName,
-		Namespace:        params.ServiceNamespace,
-		TemplateName:     state.Name,
-		ModelID:          modelID,
-		RuntimeName:      runtimeName,
-		OwnerRef:         params.OwnerRef,
-		ImagePullSecrets: params.ImagePullSecrets,
-		Env:              params.Env,
-		Replicas:         params.Replicas,
-		StorageURI:       state.StorageURI(),
-	}
-	return BuildInferenceService(spec)
 }
 
 func CopyPullSecrets(in []corev1.LocalObjectReference) []corev1.LocalObjectReference {
@@ -268,54 +182,40 @@ func CopyEnvVars(in []corev1.EnvVar) []corev1.EnvVar {
 	return out
 }
 
-// InferenceServiceSpec defines parameters for creating an InferenceService bound to an AIM template runtime.
-type InferenceServiceSpec struct {
-	Name             string
-	Namespace        string
-	TemplateName     string
-	ModelID          string
-	RuntimeName      string
-	OwnerRef         metav1.OwnerReference
-	ImagePullSecrets []corev1.LocalObjectReference
-	Env              []corev1.EnvVar
-	Replicas         *int32
-	StorageURI       string
-}
-
 // BuildInferenceService constructs a KServe InferenceService referencing a ServingRuntime or ClusterServingRuntime.
-func BuildInferenceService(spec InferenceServiceSpec) *servingv1beta1.InferenceService {
+func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.OwnerReference) *servingv1beta1.InferenceService {
 	inferenceService := &servingv1beta1.InferenceService{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: servingv1beta1.SchemeGroupVersion.String(),
 			Kind:       "InferenceService",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      spec.Name,
-			Namespace: spec.Namespace,
+			Name:      serviceState.Name,
+			Namespace: serviceState.Namespace,
 			Labels: map[string]string{
 				"app.kubernetes.io/name":       LabelValueServiceName,
 				"app.kubernetes.io/component":  LabelValueServiceComponent,
 				"app.kubernetes.io/managed-by": LabelValueManagedBy,
-				LabelKeyTemplate:               spec.TemplateName,
-				LabelKeyModelID:                sanitizeLabelValue(spec.ModelID),
+				LabelKeyTemplate:               serviceState.Template.Name,
+				LabelKeyModelID:                sanitizeLabelValue(serviceState.ModelID),
 			},
-			OwnerReferences: []metav1.OwnerReference{spec.OwnerRef},
+			OwnerReferences: []metav1.OwnerReference{ownerRef},
 		},
 		Spec: servingv1beta1.InferenceServiceSpec{
 			Predictor: servingv1beta1.PredictorSpec{
 				ComponentExtensionSpec: servingv1beta1.ComponentExtensionSpec{},
 				PodSpec: servingv1beta1.PodSpec{
-					ImagePullSecrets: CopyPullSecrets(spec.ImagePullSecrets),
+					ImagePullSecrets: CopyPullSecrets(serviceState.ImagePullSecrets),
 				},
 				Model: &servingv1beta1.ModelSpec{
 					ModelFormat: servingv1beta1.ModelFormat{
 						Name:    "aim",
 						Version: baseutils.Pointer("1"),
 					},
-					Runtime: baseutils.Pointer(spec.RuntimeName),
+					Runtime: baseutils.Pointer(serviceState.RuntimeName),
 					PredictorExtensionSpec: servingv1beta1.PredictorExtensionSpec{
 						Container: corev1.Container{
-							Env: CopyEnvVars(spec.Env),
+							Env: CopyEnvVars(serviceState.Env),
 						},
 					},
 				},
@@ -323,13 +223,13 @@ func BuildInferenceService(spec InferenceServiceSpec) *servingv1beta1.InferenceS
 		},
 	}
 
-	if spec.Replicas != nil {
-		inferenceService.Spec.Predictor.MinReplicas = spec.Replicas
-		inferenceService.Spec.Predictor.MaxReplicas = *spec.Replicas
+	if serviceState.Replicas != nil {
+		inferenceService.Spec.Predictor.MinReplicas = serviceState.Replicas
+		inferenceService.Spec.Predictor.MaxReplicas = *serviceState.Replicas
 	}
 
-	if spec.StorageURI != "" {
-		inferenceService.Spec.Predictor.Model.StorageURI = baseutils.Pointer(spec.StorageURI)
+	if serviceState.StorageURI != "" {
+		inferenceService.Spec.Predictor.Model.StorageURI = baseutils.Pointer(serviceState.StorageURI)
 	}
 
 	return inferenceService

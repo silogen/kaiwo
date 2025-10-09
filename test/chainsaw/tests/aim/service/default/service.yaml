@@ -1,0 +1,9 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test
+spec:
+  aimImageName: llama-3-8b-cluster-with-image
+  templateRef: llama-3-8b-latency-with-image
+#  routing:
+#    enabled: true
