@@ -1,0 +1,79 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: namespace-isolation
+spec:
+  description: Test that namespace-scoped resources take precedence over cluster-scoped
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create cluster resources
+    try:
+    - apply:
+        file: cluster-image.yaml
+    - apply:
+        file: cluster-template.yaml
+
+  - name: Create namespace resources
+    try:
+    - apply:
+        file: namespace-image.yaml
+    - apply:
+        file: namespace-template.yaml
+
+  - name: Wait for templates to become Available
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: llama-3-8b-latency-isolation
+          status:
+            status: Available
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMServiceTemplate
+          metadata:
+            name: llama-3-8b-throughput-isolation
+          status:
+            status: Available
+
+  - name: Create AIMService
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify namespace template is used
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-service
+          status:
+            (conditions[?type == 'Resolved']):
+            - status: "True"
+
+  - name: Verify ServingRuntime references namespace template (not cluster)
+    try:
+    - assert:
+        resource:
+          apiVersion: serving.kserve.io/v1alpha1
+          kind: ServingRuntime
+          metadata:
+            name: llama-3-8b-throughput-isolation
+
+  - name: Verify ClusterServingRuntime is NOT created
+    try:
+    - error:
+        resource:
+          apiVersion: serving.kserve.io/v1alpha1
+          kind: ClusterServingRuntime
+          metadata:
+            name: llama-3-8b-latency-isolation

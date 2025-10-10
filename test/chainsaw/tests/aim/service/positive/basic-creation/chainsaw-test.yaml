@@ -1,0 +1,71 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: basic-creation
+spec:
+  description: Test that AIMService creates InferenceService successfully
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create cluster image and template
+    try:
+    - apply:
+        file: cluster-image.yaml
+    - apply:
+        file: cluster-template.yaml
+
+  - name: Wait for template to become Available
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: llama-3-8b-latency-basic-creation
+          status:
+            status: Available
+
+  - name: Create AIMService
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service status progression
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-service
+          status:
+            (conditions[?type == 'Resolved']):
+            - status: "True"
+              reason: Resolved
+
+  - name: Verify InferenceService was created
+    try:
+    - assert:
+        resource:
+          apiVersion: serving.kserve.io/v1beta1
+          kind: InferenceService
+          metadata:
+            name: test-service
+            (ownerReferences[?kind == 'AIMService']):
+            - name: test-service
+
+  - name: Verify service becomes Running
+    try:
+    - assert:
+        timeout: 45s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-service
+          status:
+            status: Running
+            (conditions[?type == 'Ready']):
+            - status: "True"

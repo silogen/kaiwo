@@ -1,0 +1,11 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMServiceTemplate
+metadata:
+  name: llama-3-8b-latency-ns-priority-namespace
+spec:
+  aimImageName: llama-3-8b-ns-priority
+  metric: latency
+  precision: fp8
+  gpuSelector:
+    count: 1
+    model: MI300X

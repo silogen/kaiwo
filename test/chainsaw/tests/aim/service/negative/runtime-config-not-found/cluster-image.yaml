@@ -1,0 +1,7 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterImage
+metadata:
+  name: llama-3-8b-config-missing
+spec:
+  image: ghcr.io/silogen/aim:0.4.0-meta-llama-llama-3.1-8b-instruct-v20251006
+  defaultServiceTemplate: llama-3-8b-latency-config-missing

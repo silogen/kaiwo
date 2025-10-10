@@ -1,0 +1,13 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-service
+spec:
+  aimImageName: llama-3-8b-routing-no-gateway
+  templateRef: llama-3-8b-latency-routing-no-gateway
+  replicas: 1
+  routing:
+    enabled: true
+    gatewayRef:
+      name: non-existent-gateway
+      namespace: non-existent-namespace

@@ -1,0 +1,13 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-service
+spec:
+  aimImageName: llama-3-8b-env-vars
+  templateRef: llama-3-8b-latency-env-vars
+  replicas: 1
+  env:
+  - name: HF_TOKEN
+    value: "test-token-123"
+  - name: CUSTOM_VAR
+    value: "custom-value"

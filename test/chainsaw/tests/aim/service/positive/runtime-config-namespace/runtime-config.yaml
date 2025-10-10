@@ -1,0 +1,8 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMRuntimeConfig
+metadata:
+  name: test-runtime-config
+spec:
+  serviceAccountName: test-service-account
+  imagePullSecrets:
+  - name: test-pull-secret

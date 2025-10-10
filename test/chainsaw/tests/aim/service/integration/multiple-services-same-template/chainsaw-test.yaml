@@ -1,0 +1,78 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: multiple-services-same-template
+spec:
+  description: Test that multiple services can share the same template
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create prerequisites
+    try:
+    - apply:
+        file: cluster-image.yaml
+    - apply:
+        file: cluster-template.yaml
+
+  - name: Wait for template to become Available
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: llama-3-8b-latency-multi-same
+          status:
+            status: Available
+
+  - name: Create both services
+    try:
+    - apply:
+        file: service1.yaml
+    - apply:
+        file: service2.yaml
+
+  - name: Verify both services resolve
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: service-one
+          status:
+            (conditions[?type == 'Resolved']):
+            - status: "True"
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: service-two
+          status:
+            (conditions[?type == 'Resolved']):
+            - status: "True"
+
+  - name: Verify separate InferenceServices created
+    try:
+    - assert:
+        resource:
+          apiVersion: serving.kserve.io/v1beta1
+          kind: InferenceService
+          metadata:
+            name: service-one
+          spec:
+            predictor:
+              (minReplicas == `1`): true
+    - assert:
+        resource:
+          apiVersion: serving.kserve.io/v1beta1
+          kind: InferenceService
+          metadata:
+            name: service-two
+          spec:
+            predictor:
+              (minReplicas == `2`): true

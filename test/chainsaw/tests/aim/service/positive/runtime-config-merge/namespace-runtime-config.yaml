@@ -1,0 +1,9 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMRuntimeConfig
+metadata:
+  name: merge-config
+spec:
+  defaultStorageClassName: fast-storage
+  serviceAccountName: namespace-sa
+  imagePullSecrets:
+  - name: namespace-secret

@@ -1,0 +1,11 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterServiceTemplate
+metadata:
+  name: llama-3-8b-latency-ips-merge
+spec:
+  aimImageName: llama-3-8b-ips-merge
+  metric: latency
+  runtimeConfigName: merge-ips-config
+  gpuSelector:
+    count: 1
+    model: MI300X

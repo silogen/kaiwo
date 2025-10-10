@@ -1,0 +1,15 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-service
+spec:
+  aimImageName: llama-3-8b-full-stack
+  templateRef: llama-3-8b-latency-full-stack
+  replicas: 1
+  routing:
+    enabled: true
+    gatewayRef:
+      name: kserve-ingress-gateway
+      namespace: kgateway-system
+    annotations:
+      test.example.com/integration: "full-stack"

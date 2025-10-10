@@ -1,0 +1,6 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterRuntimeConfig
+metadata:
+  name: cluster-runtime-config
+spec:
+  defaultStorageClassName: fast-storage

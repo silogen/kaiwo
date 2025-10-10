@@ -1,0 +1,44 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: image-not-found
+spec:
+  description: Test that service fails when AIMImage does not exist
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create template without image
+    try:
+    - apply:
+        file: cluster-template.yaml
+
+  - name: Verify template fails with ImageNotFound
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: llama-3-8b-latency-image-missing
+          status:
+            status: Failed
+            (conditions[?type == 'Ready']):
+            - status: "False"
+
+  - name: Create AIMService
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service fails
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-service
+          status:
+            (status == 'Failed' || status == 'Pending'): true

@@ -1,0 +1,12 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-service
+spec:
+  aimImageName: llama-3-8b-ips-merge
+  templateRef: llama-3-8b-latency-ips-merge
+  runtimeConfigName: merge-ips-config
+  replicas: 1
+  imagePullSecrets:
+  - name: service-secret
+  - name: shared-secret

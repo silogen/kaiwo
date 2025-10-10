@@ -1,0 +1,17 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-service
+spec:
+  aimImageName: llama-3-8b-invalid-annotations
+  templateRef: llama-3-8b-latency-invalid-annotations
+  replicas: 1
+  routing:
+    enabled: true
+    gatewayRef:
+      name: kserve-ingress-gateway
+      namespace: kgateway-system
+    annotations:
+      "valid/annotation": "value"
+      "invalid..key": "should-still-work"
+      "": "empty-key-not-allowed"

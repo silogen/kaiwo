@@ -1,0 +1,8 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMRuntimeConfig
+metadata:
+  name: merge-ips-config
+spec:
+  imagePullSecrets:
+  - name: config-secret
+  - name: shared-secret

@@ -1,0 +1,10 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-service
+spec:
+  aimImageName: llama-3-8b-routing-disabled
+  templateRef: llama-3-8b-latency-routing-disabled
+  replicas: 1
+  routing:
+    enabled: false

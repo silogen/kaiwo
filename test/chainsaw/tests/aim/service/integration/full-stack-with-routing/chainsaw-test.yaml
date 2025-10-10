@@ -1,0 +1,81 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: full-stack-with-routing
+spec:
+  description: Test complete stack with template, service, InferenceService, and HTTPRoute
+  timeouts:
+    assert: 120s
+  steps:
+  - name: Create prerequisites
+    try:
+    - apply:
+        file: cluster-image.yaml
+    - apply:
+        file: cluster-template.yaml
+
+  - name: Wait for template to become Available
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: llama-3-8b-latency-full-stack
+          status:
+            status: Available
+
+  - name: Create AIMService with routing
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify complete stack is created
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-service
+          status:
+            (conditions[?type == 'Resolved']):
+            - status: "True"
+            (routing != null): true
+            (routing.path != ''): true
+    - assert:
+        resource:
+          apiVersion: serving.kserve.io/v1beta1
+          kind: InferenceService
+          metadata:
+            name: test-service
+    - assert:
+        resource:
+          apiVersion: gateway.networking.k8s.io/v1
+          kind: HTTPRoute
+          metadata:
+            name: test-service
+            annotations:
+              test.example.com/integration: "full-stack"
+          spec:
+            (parentRefs[?name == 'kserve-ingress-gateway']):
+            - name: kserve-ingress-gateway
+              namespace: kgateway-system
+
+  - name: Verify service becomes Running
+    try:
+    - assert:
+        timeout: 60s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-service
+          status:
+            status: Running
+            (conditions[?type == 'Ready']):
+            - status: "True"
+            (conditions[?type == 'RuntimeReady']):
+            - status: "True"

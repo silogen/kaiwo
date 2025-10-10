@@ -1,0 +1,10 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterServiceTemplate
+metadata:
+  name: llama-3-8b-latency-gateway-wait
+spec:
+  aimImageName: llama-3-8b-gateway-wait
+  metric: latency
+  gpuSelector:
+    count: 1
+    model: MI300X
