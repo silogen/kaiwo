@@ -2,7 +2,7 @@
 
 This document explains AIM Images and Service Templates, the foundational resources that define what container images to use for models and how to configure their runtime behavior. Understanding these resources is essential for both administrators who manage cluster-wide catalogs and ML engineers who deploy inference services.
 
-Images serve as a catalog that maps model identifiers to container images, providing version control for model deployments. Templates define runtime configurations and act as a discovery cache—once created, the operator inspects the container to determine which model artifacts are required, storing this information for reuse by services and caching mechanisms. Together, these resources enable consistent, reproducible deployments across your cluster.
+Images serve as a catalog that maps model identifiers to container images, providing version control for model deployments. Templates define runtime configurations and act as a discovery cache. Once created, the operator inspects the container to determine which model artifacts are required, storing this information for reuse by services and caching mechanisms. Together, these resources enable consistent, reproducible deployments across your cluster.
 
 ## AIM Images
 

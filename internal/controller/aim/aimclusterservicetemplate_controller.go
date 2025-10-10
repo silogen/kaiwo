@@ -28,7 +28,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/silogen/kaiwo/internal/controller/framework"
+	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 
 	servingv1alpha1 "github.com/kserve/kserve/pkg/apis/serving/v1alpha1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -86,7 +86,7 @@ func (r *AIMClusterServiceTemplateReconciler) Reconcile(ctx context.Context, req
 	logger.Info("Reconciling AIMClusterServiceTemplate", "name", template.Name)
 
 	// Use framework orchestrator with closures
-	return framework.Reconcile(ctx, framework.ReconcileSpec[*aimv1alpha1.AIMClusterServiceTemplate, aimv1alpha1.AIMServiceTemplateStatus]{
+	return controllerutils.Reconcile(ctx, controllerutils.ReconcileSpec[*aimv1alpha1.AIMClusterServiceTemplate, aimv1alpha1.AIMServiceTemplateStatus]{
 		Client:   r.Client,
 		Scheme:   r.Scheme,
 		Object:   &template,
@@ -110,7 +110,7 @@ func (r *AIMClusterServiceTemplateReconciler) Reconcile(ctx context.Context, req
 			return r.plan(ctx, &template, o)
 		},
 
-		ProjectFn: func(ctx context.Context, obs any, errs framework.ReconcileErrors) error {
+		ProjectFn: func(ctx context.Context, obs any, errs controllerutils.ReconcileErrors) error {
 			var o *clusterTemplateObservation
 			if obs != nil {
 				var ok bool
@@ -173,7 +173,7 @@ func (r *AIMClusterServiceTemplateReconciler) observe(ctx context.Context, templ
 		OnRuntimeConfigResolved: func(resolution *shared.RuntimeConfigResolution) {
 			if resolution.NamespaceConfig == nil && resolution.ClusterConfig == nil && resolution.Name == shared.DefaultRuntimeConfigName {
 				logger.Info("Default AIMRuntimeConfig not found for cluster template, proceeding without overrides")
-				framework.EmitWarningEvent(r.Recorder, template, "DefaultRuntimeConfigNotFound",
+				controllerutils.EmitWarningEvent(r.Recorder, template, "DefaultRuntimeConfigNotFound",
 					"Default AIMRuntimeConfig not found, proceeding with controller defaults.")
 				return
 			}
@@ -183,7 +183,7 @@ func (r *AIMClusterServiceTemplateReconciler) observe(ctx context.Context, templ
 				"sources", shared.JoinRuntimeConfigSources(resolution, operatorNamespace),
 				"imagePullSecrets", len(resolution.EffectiveSpec.ImagePullSecrets))
 
-			framework.EmitNormalEvent(r.Recorder, template, "RuntimeConfigResolved",
+			controllerutils.EmitNormalEvent(r.Recorder, template, "RuntimeConfigResolved",
 				fmt.Sprintf("Using AIMRuntimeConfig %q from %s", resolution.Name, shared.JoinRuntimeConfigSources(resolution, operatorNamespace)))
 		},
 	})
@@ -238,7 +238,7 @@ func (r *AIMClusterServiceTemplateReconciler) projectStatus(
 	ctx context.Context,
 	template *aimv1alpha1.AIMClusterServiceTemplate,
 	obs *clusterTemplateObservation,
-	errs framework.ReconcileErrors,
+	errs controllerutils.ReconcileErrors,
 ) error {
 	imageNotFoundMsg := fmt.Sprintf("No AIMClusterImage found for image name %q", template.Spec.AIMImageName)
 	var templateObs *shared.TemplateObservation

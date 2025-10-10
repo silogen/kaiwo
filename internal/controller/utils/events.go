@@ -22,24 +22,32 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package framework
+package controllerutils
 
 import (
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-// HasFinalizer checks if the object has the specified finalizer
-func HasFinalizer(obj client.Object, finalizer string) bool {
-	return controllerutil.ContainsFinalizer(obj, finalizer)
+// Event type constants
+const (
+	EventTypeNormal  = "Normal"
+	EventTypeWarning = "Warning"
+)
+
+// EmitEvent emits a Kubernetes event if a recorder is available
+func EmitEvent(recorder record.EventRecorder, obj client.Object, eventType, reason, message string) {
+	if recorder != nil {
+		recorder.Event(obj, eventType, reason, message)
+	}
 }
 
-// AddFinalizer adds the specified finalizer to the object
-func AddFinalizer(obj client.Object, finalizer string) {
-	controllerutil.AddFinalizer(obj, finalizer)
+// EmitNormalEvent emits a Normal type event
+func EmitNormalEvent(recorder record.EventRecorder, obj client.Object, reason, message string) {
+	EmitEvent(recorder, obj, EventTypeNormal, reason, message)
 }
 
-// RemoveFinalizer removes the specified finalizer from the object
-func RemoveFinalizer(obj client.Object, finalizer string) {
-	controllerutil.RemoveFinalizer(obj, finalizer)
+// EmitWarningEvent emits a Warning type event
+func EmitWarningEvent(recorder record.EventRecorder, obj client.Object, reason, message string) {
+	EmitEvent(recorder, obj, EventTypeWarning, reason, message)
 }
