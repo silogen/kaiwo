@@ -39,7 +39,7 @@ type ServiceState struct {
 	Replicas         *int32
 	ImagePullSecrets []corev1.LocalObjectReference
 	Template         TemplateState
-	StorageURI       string
+	ModelSource      *aimv1alpha1.AIMModelSource
 	Routing          ServiceRoutingState
 }
 
@@ -58,15 +58,18 @@ type ServiceStateOptions struct {
 
 // NewServiceState projects the AIMService and template data into a vendor-neutral structure.
 func NewServiceState(service *aimv1alpha1.AIMService, template TemplateState, opts ServiceStateOptions) ServiceState {
+	// TODO handle caching
+	// TODO handle if model source is nil
+
 	state := ServiceState{
 		Name:             service.Name,
 		Namespace:        service.Namespace,
 		RuntimeName:      opts.RuntimeName,
-		ModelID:          service.Spec.AIMImageName,
+		ModelID:          template.ModelSource.Name,
 		Env:              copyEnvVars(service.Spec.Env),
 		ImagePullSecrets: copyPullSecrets(service.Spec.ImagePullSecrets),
 		Template:         template,
-		StorageURI:       template.StorageURI(),
+		ModelSource:      template.ModelSource,
 	}
 
 	if state.RuntimeName == "" {

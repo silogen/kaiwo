@@ -44,42 +44,81 @@ import (
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 )
 
-// DiscoveryResult represents the output from a discovery job
-type DiscoveryResult struct {
-	Filename string         `json:"filename"`
-	Profile  Profile        `json:"profile"`
-	Models   []ProfileModel `json:"models"`
+// discoveryResult represents the raw output from a discovery job.
+// This is an internal type used only for parsing the JSON output.
+type discoveryResult struct {
+	Filename string                 `json:"filename"`
+	Profile  discoveryProfileResult `json:"profile"`
+	Models   []discoveryModelResult `json:"models"`
 }
 
-// Profile represents the discovered runtime profile
-type Profile struct {
+// discoveryProfileResult is the raw profile format from discovery job output
+type discoveryProfileResult struct {
 	Model          string            `json:"model"`
 	QuantizedModel string            `json:"quantized_model"`
-	Metadata       ProfileMetadata   `json:"metadata"`
+	Metadata       profileMetadata   `json:"metadata"`
 	EngineArgs     map[string]any    `json:"engine_args"`
 	EnvVars        map[string]string `json:"env_vars"`
 }
 
-// ProfileMetadata contains metadata about the runtime profile
-type ProfileMetadata struct {
+// profileMetadata is the raw metadata format from discovery job output
+type profileMetadata struct {
 	Engine    string `json:"engine"`
 	GPU       string `json:"gpu"`
 	Precision string `json:"precision"`
-	GPUCount  int    `json:"gpu_count"`
+	GPUCount  int32  `json:"gpu_count"`
 	Metric    string `json:"metric"`
 }
 
-// ProfileModel represents a model in the profile
-type ProfileModel struct {
+// discoveryModelResult represents a model in the raw discovery output
+type discoveryModelResult struct {
 	Name   string  `json:"name"`
 	Source string  `json:"source"`
 	SizeGB float64 `json:"size_gb"`
 }
 
+// convertToAIMProfile converts the raw discovery profile to AIMProfile API type
+func convertToAIMProfile(raw discoveryProfileResult) (*aimv1alpha1.AIMProfile, error) {
+	// Marshal engine args to JSON
+	engineArgsBytes, err := json.Marshal(raw.EngineArgs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal engine args: %w", err)
+	}
+
+	return &aimv1alpha1.AIMProfile{
+		EngineArgs: &apiextensionsv1.JSON{Raw: engineArgsBytes},
+		EnvVars:    raw.EnvVars,
+		Metadata: aimv1alpha1.AIMProfileMetadata{
+			Engine:    raw.Metadata.Engine,
+			GPU:       raw.Metadata.GPU,
+			GPUCount:  raw.Metadata.GPUCount,
+			Metric:    aimv1alpha1.AIMMetric(raw.Metadata.Metric),
+			Precision: aimv1alpha1.AIMPrecision(raw.Metadata.Precision),
+		},
+	}, nil
+}
+
+// convertToAIMModelSources converts raw discovery models to AIMModelSource API types
+func convertToAIMModelSources(models []discoveryModelResult) []aimv1alpha1.AIMModelSource {
+	var modelSources []aimv1alpha1.AIMModelSource
+	for _, model := range models {
+		// Convert GB to bytes for resource.Quantity
+		sizeBytes := int64(model.SizeGB * 1024 * 1024 * 1024)
+		size := resource.NewQuantity(sizeBytes, resource.BinarySI)
+
+		modelSources = append(modelSources, aimv1alpha1.AIMModelSource{
+			Name:      model.Name,
+			SourceURI: model.Source,
+			Size:      *size,
+		})
+	}
+	return modelSources
+}
+
 // ParsedDiscovery holds the parsed discovery result
 type ParsedDiscovery struct {
 	ModelSources []aimv1alpha1.AIMModelSource
-	Profile      *apiextensionsv1.JSON
+	Profile      *aimv1alpha1.AIMProfile
 }
 
 // DiscoveryJobSpec defines parameters for creating a discovery job
@@ -303,7 +342,7 @@ func ParseDiscoveryLogs(ctx context.Context, k8sClient client.Client, clientset 
 	}
 
 	// Parse JSON array output
-	var results []DiscoveryResult
+	var results []discoveryResult
 	if err := json.Unmarshal(logBytes, &results); err != nil {
 		// Try extracting the last valid JSON array from mixed stdout/stderr
 		// The JSON array may appear multiple times in the logs - take the last instance
@@ -318,7 +357,7 @@ func ParseDiscoveryLogs(ctx context.Context, k8sClient client.Client, clientset 
 			if logBytes[i] == '[' && lastEndIdx != -1 {
 				// Try parsing from this '[' to the found ']'
 				testBytes := logBytes[i : lastEndIdx+1]
-				var testResults []DiscoveryResult
+				var testResults []discoveryResult
 				if json.Unmarshal(testBytes, &testResults) == nil && len(testResults) > 0 {
 					// Valid JSON array found
 					lastStartIdx = i
@@ -345,30 +384,17 @@ func ParseDiscoveryLogs(ctx context.Context, k8sClient client.Client, clientset 
 	// Use the first result
 	result := results[0]
 
-	// Convert profile to JSON
-	profileBytes, err := json.Marshal(result.Profile)
+	// Convert raw discovery profile to AIMProfile
+	profile, err := convertToAIMProfile(result.Profile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal profile: %w", err)
+		return nil, fmt.Errorf("failed to convert profile: %w", err)
 	}
 
-	profileJSON := &apiextensionsv1.JSON{Raw: profileBytes}
-
-	// Extract model sources from result
-	var modelSources []aimv1alpha1.AIMModelSource
-	for _, model := range result.Models {
-		// Convert GB to bytes for resource.Quantity
-		sizeBytes := int64(model.SizeGB * 1024 * 1024 * 1024)
-		size := resource.NewQuantity(sizeBytes, resource.BinarySI)
-
-		modelSources = append(modelSources, aimv1alpha1.AIMModelSource{
-			Name:      model.Name,
-			SourceURI: model.Source,
-			Size:      *size,
-		})
-	}
+	// Convert raw models to AIMModelSource
+	modelSources := convertToAIMModelSources(result.Models)
 
 	return &ParsedDiscovery{
 		ModelSources: modelSources,
-		Profile:      profileJSON,
+		Profile:      profile,
 	}, nil
 }
