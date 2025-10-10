@@ -18,6 +18,7 @@ HELMFILE_ABS="${SCRIPT_DIR}/helmfile.yaml.gotmpl"
 ENV_FILE_ABS="${SCRIPT_DIR}/environments/${ENVIRONMENT}.yaml"
 KUSTOMIZE_CLIENT="${SCRIPT_DIR}/kustomization-client-side"
 KUSTOMIZE_SERVER="${SCRIPT_DIR}/kustomization-server-side/overlays/environments/${ENVIRONMENT}"
+POST_HELM="${SCRIPT_DIR}/post-helm"
 
 # Validate inputs
 [[ -f "$HELMFILE_ABS" ]] || { echo "Error: Helmfile not found: $HELMFILE_ABS"; exit 1; }
@@ -89,22 +90,28 @@ case "$ACTION" in
     echo "3. Installing Helm charts..."
     safe_helmfile sync
 
+    echo "4. Applying post-Helm Kustomize resources..."
+    safe_kubectl_apply_k "$POST_HELM"
+
     echo "Deployment complete for environment: $ENVIRONMENT"
     ;;
 
   down)
     echo "Tearing down environment: $ENVIRONMENT (reverse order, ignore missing)"
 
-    echo "1. Uninstalling Helm charts..."
+    echo "1. Deleting post-Helm Kustomize resources..."
+    safe_kubectl_delete_k "$POST_HELM"
+
+    echo "2. Uninstalling Helm charts..."
     safe_helmfile destroy
 
-    echo "2. Deleting server-side Kustomize resources..."
+    echo "3. Deleting server-side Kustomize resources..."
     safe_kubectl_delete_k "$KUSTOMIZE_SERVER"
 
     echo "Waiting briefly to ensure dependent resources finalize..."
     sleep 5
 
-    echo "3. Deleting client-side Kustomize resources..."
+    echo "4. Deleting client-side Kustomize resources..."
     safe_kubectl_delete_k "$KUSTOMIZE_CLIENT"
 
     echo "Teardown complete for environment: $ENVIRONMENT"
