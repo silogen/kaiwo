@@ -29,6 +29,8 @@ import (
 	"regexp"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/api/resource"
+
 	servingv1alpha1 "github.com/kserve/kserve/pkg/apis/serving/v1alpha1"
 	servingv1beta1 "github.com/kserve/kserve/pkg/apis/serving/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -77,40 +79,8 @@ func BuildClusterServingRuntime(template aimstate.TemplateState, ownerRef metav1
 			APIVersion: servingv1alpha1.SchemeGroupVersion.String(),
 			Kind:       "ClusterServingRuntime",
 		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: template.Name,
-			Labels: map[string]string{
-				"app.kubernetes.io/name":       LabelValueRuntimeName,
-				"app.kubernetes.io/component":  LabelValueRuntimeComponent,
-				"app.kubernetes.io/managed-by": LabelValueManagedBy,
-				LabelKeyModelID:                sanitizeLabelValue(template.SpecCommon.AIMImageName),
-			},
-			OwnerReferences: []metav1.OwnerReference{ownerRef},
-		},
-		Spec: servingv1alpha1.ServingRuntimeSpec{
-			SupportedModelFormats: []servingv1alpha1.SupportedModelFormat{
-				{
-					Name:    "aim",
-					Version: baseutils.Pointer("1"),
-				},
-			},
-			ServingRuntimePodSpec: servingv1alpha1.ServingRuntimePodSpec{
-				ImagePullSecrets: CopyPullSecrets(template.ImagePullSecrets),
-				Containers: []corev1.Container{
-					{
-						Name:  "kserve-container",
-						Image: template.Image,
-						Env: []corev1.EnvVar{
-							{
-								Name:  "AIM_MODEL_ID",
-								Value: template.SpecCommon.AIMImageName,
-							},
-						},
-						Args: append([]string{}, template.EngineArgs...),
-					},
-				},
-			},
-		},
+		ObjectMeta: buildServingRuntimeObjectMeta(template, ownerRef, nil),
+		Spec:       buildServingRuntimeSpec(template),
 	}
 
 	return runtime
@@ -123,44 +93,65 @@ func BuildServingRuntime(template aimstate.TemplateState, ownerRef metav1.OwnerR
 			APIVersion: servingv1alpha1.SchemeGroupVersion.String(),
 			Kind:       "ServingRuntime",
 		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      template.Name,
-			Namespace: template.Namespace,
-			Labels: map[string]string{
-				"app.kubernetes.io/name":       LabelValueRuntimeName,
-				"app.kubernetes.io/component":  LabelValueRuntimeComponent,
-				"app.kubernetes.io/managed-by": LabelValueManagedBy,
-				LabelKeyModelID:                sanitizeLabelValue(template.SpecCommon.AIMImageName),
-			},
-			OwnerReferences: []metav1.OwnerReference{ownerRef},
+		ObjectMeta: buildServingRuntimeObjectMeta(template, ownerRef, &template.Namespace),
+		Spec:       buildServingRuntimeSpec(template),
+	}
+
+	return runtime
+}
+
+func buildServingRuntimeObjectMeta(template aimstate.TemplateState, ownerRef metav1.OwnerReference, namespace *string) metav1.ObjectMeta {
+	meta := metav1.ObjectMeta{
+		Name: template.Name,
+		Labels: map[string]string{
+			"app.kubernetes.io/name":       LabelValueRuntimeName,
+			"app.kubernetes.io/component":  LabelValueRuntimeComponent,
+			"app.kubernetes.io/managed-by": LabelValueManagedBy,
+			LabelKeyModelID:                sanitizeLabelValue(template.SpecCommon.AIMImageName),
 		},
-		Spec: servingv1alpha1.ServingRuntimeSpec{
-			SupportedModelFormats: []servingv1alpha1.SupportedModelFormat{
-				{
-					Name:    "aim",
-					Version: baseutils.Pointer("1"),
-				},
+		OwnerReferences: []metav1.OwnerReference{ownerRef},
+	}
+
+	if namespace != nil {
+		meta.Namespace = *namespace
+	}
+
+	return meta
+}
+
+func buildServingRuntimeSpec(template aimstate.TemplateState) servingv1alpha1.ServingRuntimeSpec {
+	return servingv1alpha1.ServingRuntimeSpec{
+		SupportedModelFormats: []servingv1alpha1.SupportedModelFormat{
+			{
+				Name:    "aim",
+				Version: baseutils.Pointer("1"),
 			},
-			ServingRuntimePodSpec: servingv1alpha1.ServingRuntimePodSpec{
-				ImagePullSecrets: CopyPullSecrets(template.ImagePullSecrets),
-				Containers: []corev1.Container{
-					{
-						Name:  "kserve-container",
-						Image: template.Image,
-						Env: []corev1.EnvVar{
-							{
-								Name:  "AIM_MODEL_ID",
-								Value: template.SpecCommon.AIMImageName,
-							},
+		},
+		ServingRuntimePodSpec: servingv1alpha1.ServingRuntimePodSpec{
+			ImagePullSecrets: CopyPullSecrets(template.ImagePullSecrets),
+			Containers: []corev1.Container{
+				{
+					Name:  "kserve-container",
+					Image: template.Image,
+					Env: []corev1.EnvVar{
+						{
+							Name:  "AIM_MODEL_ID",
+							Value: template.ModelSource.Name,
 						},
-						Args: append([]string{}, template.EngineArgs...),
+						{
+							Name:  "VLLM_ENABLE_METRICS",
+							Value: "true",
+						},
+					},
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							"amd.com/gpu": *resource.NewQuantity(int64(template.Status.Profile.Metadata.GPUCount), resource.DecimalSI),
+						},
 					},
 				},
 			},
 		},
 	}
-
-	return runtime
 }
 
 func CopyPullSecrets(in []corev1.LocalObjectReference) []corev1.LocalObjectReference {
@@ -228,8 +219,8 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 		inferenceService.Spec.Predictor.MaxReplicas = *serviceState.Replicas
 	}
 
-	if serviceState.StorageURI != "" {
-		inferenceService.Spec.Predictor.Model.StorageURI = baseutils.Pointer(serviceState.StorageURI)
+	if serviceState.ModelSource != nil {
+		inferenceService.Spec.Predictor.Model.StorageURI = baseutils.Pointer(serviceState.ModelSource.SourceURI)
 	}
 
 	return inferenceService

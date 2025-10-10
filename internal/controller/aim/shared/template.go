@@ -34,7 +34,6 @@ import (
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -409,7 +408,7 @@ func ProjectTemplateStatus(
 
 	// Discovery succeeded
 	var modelSources []aimv1alpha1.AIMModelSource
-	var profile *apiextensionsv1.JSON
+	var profile *aimv1alpha1.AIMProfile
 	if obs.Job != nil && IsJobSucceeded(obs.Job) {
 		status = aimv1alpha1.AIMTemplateStatusAvailable
 
@@ -503,7 +502,7 @@ func ProjectTemplateStatus(
 		templateStatus.ModelSources = modelSources
 	}
 	if profile != nil {
-		templateStatus.Profile = profile
+		templateStatus.Profile = *profile
 	}
 
 	return nil

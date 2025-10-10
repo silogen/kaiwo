@@ -188,10 +188,25 @@ type AIMServiceTemplateStatus struct {
 
 	// Profile contains the full discovery result profile as a free-form JSON object.
 	// This includes metadata, engine args, environment variables, and model details.
-	// +optional
+	Profile AIMProfile `json:"profile,omitempty"`
+}
+
+type AIMProfile struct {
 	// +kubebuilder:pruning:PreserveUnknownFields
 	// +kubebuilder:validation:Schemaless
-	Profile *apiextensionsv1.JSON `json:"profile,omitempty"`
+	EngineArgs *apiextensionsv1.JSON `json:"engine_args,omitempty"`
+
+	EnvVars map[string]string `json:"env_vars,omitempty"`
+
+	Metadata AIMProfileMetadata `json:"metadata,omitempty"`
+}
+
+type AIMProfileMetadata struct {
+	Engine    string       `json:"engine,omitempty"`
+	GPU       string       `json:"gpu,omitempty"`
+	GPUCount  int32        `json:"gpu_count,omitempty"`
+	Metric    AIMMetric    `json:"metric,omitempty"`
+	Precision AIMPrecision `json:"precision,omitempty"`
 }
 
 type AIMModelSource struct {

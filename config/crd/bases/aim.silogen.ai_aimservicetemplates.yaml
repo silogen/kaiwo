@@ -565,7 +565,38 @@ spec:
                 description: |-
                   Profile contains the full discovery result profile as a free-form JSON object.
                   This includes metadata, engine args, environment variables, and model details.
-                x-kubernetes-preserve-unknown-fields: true
+                properties:
+                  engine_args:
+                    x-kubernetes-preserve-unknown-fields: true
+                  env_vars:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  metadata:
+                    properties:
+                      engine:
+                        type: string
+                      gpu:
+                        type: string
+                      gpu_count:
+                        format: int32
+                        type: integer
+                      metric:
+                        description: AIMMetric enumerates the targeted service characteristic
+                        enum:
+                        - latency
+                        - throughput
+                        type: string
+                      precision:
+                        description: AIMPrecision enumerates supported numeric precisions
+                        enum:
+                        - bf16
+                        - fp16
+                        - fp8
+                        - int8
+                        type: string
+                    type: object
+                type: object
               status:
                 default: Pending
                 description: |-
