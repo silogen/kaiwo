@@ -1,0 +1,8 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMRuntimeConfig
+metadata:
+  name: ($runtimeConfigName || 'test-runtime-config')
+spec:
+  serviceAccountName: ($serviceAccountName)
+  imagePullSecrets: ($imagePullSecrets)
+  defaultStorageClassName: ($defaultStorageClassName)

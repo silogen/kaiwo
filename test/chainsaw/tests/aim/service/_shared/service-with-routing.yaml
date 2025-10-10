@@ -1,0 +1,15 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: ($serviceName || 'test-service')
+spec:
+  aimImageName: llama-3-8b-($testName)
+  templateRef: ($templateRef || join('-', ['llama-3-8b', $metric || 'latency', $testName]))
+  replicas: ($replicas || `1`)
+  runtimeConfigName: ($runtimeConfigName)
+  env: ($env)
+  imagePullSecrets: ($imagePullSecrets)
+  routing:
+    enabled: ($routingEnabled || true)
+    gatewayRef: ($gatewayRef || `{"name": "kserve-ingress-gateway", "namespace": "kgateway-system"}`)
+    annotations: ($routingAnnotations)
