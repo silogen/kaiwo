@@ -1,0 +1,7 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMRuntimeConfig
+metadata:
+  name: ips-config
+spec:
+  imagePullSecrets:
+  - name: config-pull-secret

@@ -1,0 +1,8 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: service-one
+spec:
+  aimImageName: llama-3-8b-multi-same
+  templateRef: llama-3-8b-latency-multi-same
+  replicas: 1

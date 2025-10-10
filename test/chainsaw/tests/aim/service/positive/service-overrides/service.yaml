@@ -1,0 +1,10 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-service
+spec:
+  aimImageName: llama-3-8b-overrides
+  templateRef: llama-3-8b-latency-overrides
+  replicas: 1
+  overrides:
+    precision: fp8

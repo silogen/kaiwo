@@ -1,0 +1,10 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-service
+spec:
+  aimImageName: llama-3-8b-routing-no-ref
+  templateRef: llama-3-8b-latency-routing-no-ref
+  replicas: 1
+  routing:
+    enabled: true

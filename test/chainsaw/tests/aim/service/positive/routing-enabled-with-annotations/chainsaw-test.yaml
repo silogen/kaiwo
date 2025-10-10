@@ -1,0 +1,65 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: routing-enabled-with-annotations
+spec:
+  description: Test HTTPRoute created with custom annotations when routing enabled
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create prerequisites
+    try:
+    - apply:
+        file: cluster-image.yaml
+    - apply:
+        file: cluster-template.yaml
+
+  - name: Wait for template to become Available
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: llama-3-8b-latency-routing-annotations
+          status:
+            status: Available
+
+  - name: Create AIMService with routing enabled
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service resolves and routing is configured
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-service
+          status:
+            (conditions[?type == 'Resolved']):
+            - status: "True"
+            (routing != null): true
+            (routing.path != ''): true
+
+  - name: Verify HTTPRoute was created with annotations
+    try:
+    - assert:
+        resource:
+          apiVersion: gateway.networking.k8s.io/v1
+          kind: HTTPRoute
+          metadata:
+            name: test-service
+            (ownerReferences[?kind == 'AIMService']):
+            - name: test-service
+            annotations:
+              auth.example.com/groups: "admin,developer"
+              custom.example.com/policy: "strict"
+          spec:
+            (parentRefs[?name == 'kserve-ingress-gateway']):
+            - name: kserve-ingress-gateway
+              namespace: kgateway-system

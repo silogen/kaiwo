@@ -1,0 +1,67 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: runtime-config-namespace
+spec:
+  description: Test ServiceAccountName and imagePullSecrets from namespace runtime config
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create prerequisites
+    try:
+    - apply:
+        file: service-account.yaml
+    - apply:
+        file: secret.yaml
+    - apply:
+        file: runtime-config.yaml
+    - apply:
+        file: cluster-image.yaml
+    - apply:
+        file: cluster-template.yaml
+
+  - name: Wait for template to become Available
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: llama-3-8b-latency-runtime-ns
+          status:
+            status: Available
+
+  - name: Create AIMService
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service resolves with runtime config
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-service
+          status:
+            (conditions[?type == 'Resolved']):
+            - status: "True"
+            (effectiveRuntimeConfig != null): true
+
+  - name: Verify InferenceService has serviceAccountName and imagePullSecrets
+    try:
+    - assert:
+        resource:
+          apiVersion: serving.kserve.io/v1beta1
+          kind: InferenceService
+          metadata:
+            name: test-service
+          spec:
+            predictor:
+              podSpec:
+                serviceAccountName: test-service-account
+                (imagePullSecrets[?name == 'test-pull-secret']):
+                - name: test-pull-secret

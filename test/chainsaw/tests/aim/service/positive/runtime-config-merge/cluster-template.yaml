@@ -1,0 +1,11 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterServiceTemplate
+metadata:
+  name: llama-3-8b-latency-runtime-merge
+spec:
+  aimImageName: llama-3-8b-runtime-merge
+  metric: latency
+  runtimeConfigName: merge-config
+  gpuSelector:
+    count: 1
+    model: MI300X

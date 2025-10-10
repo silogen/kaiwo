@@ -1,0 +1,8 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: latency-service
+spec:
+  aimImageName: llama-3-8b-multi-diff
+  templateRef: llama-3-8b-latency-multi-diff
+  replicas: 1

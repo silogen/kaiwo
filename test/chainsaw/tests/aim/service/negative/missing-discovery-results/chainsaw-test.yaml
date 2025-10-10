@@ -1,0 +1,47 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: missing-discovery-results
+spec:
+  description: Test that template without discovery results remains in Progressing state
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create prerequisites
+    try:
+    - apply:
+        file: cluster-image.yaml
+    - apply:
+        file: cluster-template.yaml
+
+  - name: Verify template is Progressing (discovery running)
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: llama-3-8b-latency-no-discovery
+          status:
+            status: Progressing
+            (conditions[?type == 'Progressing']):
+            - status: "True"
+              reason: DiscoveryRunning
+
+  - name: Create AIMService
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service waits for template discovery
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-service
+          status:
+            (status == 'Pending' || status == 'Starting'): true

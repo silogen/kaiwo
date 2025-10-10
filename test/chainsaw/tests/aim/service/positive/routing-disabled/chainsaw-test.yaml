@@ -1,0 +1,63 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: routing-disabled
+spec:
+  description: Test that no HTTPRoute is created when routing.enabled=false
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create prerequisites
+    try:
+    - apply:
+        file: cluster-image.yaml
+    - apply:
+        file: cluster-template.yaml
+
+  - name: Wait for template to become Available
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: llama-3-8b-latency-routing-disabled
+          status:
+            status: Available
+
+  - name: Create AIMService with routing disabled
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service resolves
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-service
+          status:
+            (conditions[?type == 'Resolved']):
+            - status: "True"
+
+  - name: Verify InferenceService was created
+    try:
+    - assert:
+        resource:
+          apiVersion: serving.kserve.io/v1beta1
+          kind: InferenceService
+          metadata:
+            name: test-service
+
+  - name: Verify no HTTPRoute was created
+    try:
+    - error:
+        resource:
+          apiVersion: gateway.networking.k8s.io/v1
+          kind: HTTPRoute
+          metadata:
+            name: test-service

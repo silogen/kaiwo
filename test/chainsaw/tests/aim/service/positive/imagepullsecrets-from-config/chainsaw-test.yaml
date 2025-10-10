@@ -1,0 +1,51 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: imagepullsecrets-from-config
+spec:
+  description: Test imagePullSecrets from runtime config propagate to InferenceService
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create prerequisites
+    try:
+    - apply:
+        file: secret.yaml
+    - apply:
+        file: runtime-config.yaml
+    - apply:
+        file: cluster-image.yaml
+    - apply:
+        file: cluster-template.yaml
+
+  - name: Wait for template to become Available
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: llama-3-8b-latency-ips-config
+          status:
+            status: Available
+
+  - name: Create AIMService
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify InferenceService has imagePullSecrets from config
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: serving.kserve.io/v1beta1
+          kind: InferenceService
+          metadata:
+            name: test-service
+          spec:
+            predictor:
+              podSpec:
+                (imagePullSecrets[?name == 'config-pull-secret']):
+                - name: config-pull-secret

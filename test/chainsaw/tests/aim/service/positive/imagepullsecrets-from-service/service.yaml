@@ -1,0 +1,10 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-service
+spec:
+  aimImageName: llama-3-8b-ips-service
+  templateRef: llama-3-8b-latency-ips-service
+  replicas: 1
+  imagePullSecrets:
+  - name: service-pull-secret

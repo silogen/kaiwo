@@ -1,0 +1,13 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-service
+spec:
+  aimImageName: llama-3-8b-gateway-wait
+  templateRef: llama-3-8b-latency-gateway-wait
+  replicas: 1
+  routing:
+    enabled: true
+    gatewayRef:
+      name: kserve-ingress-gateway
+      namespace: kgateway-system

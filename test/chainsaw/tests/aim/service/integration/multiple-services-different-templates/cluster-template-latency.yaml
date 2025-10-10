@@ -1,0 +1,11 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterServiceTemplate
+metadata:
+  name: llama-3-8b-latency-multi-diff
+spec:
+  aimImageName: llama-3-8b-multi-diff
+  metric: latency
+  precision: fp16
+  gpuSelector:
+    count: 1
+    model: MI300X

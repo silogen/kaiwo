@@ -1,0 +1,55 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: conflicting-imagepullsecrets
+spec:
+  description: Test that imagePullSecrets from multiple sources merge correctly (deduplicated)
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create prerequisites
+    try:
+    - apply:
+        file: secrets.yaml
+    - apply:
+        file: runtime-config.yaml
+    - apply:
+        file: cluster-image.yaml
+    - apply:
+        file: cluster-template.yaml
+
+  - name: Wait for template to become Available
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: llama-3-8b-latency-ips-merge
+          status:
+            status: Available
+
+  - name: Create AIMService with overlapping imagePullSecrets
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify InferenceService has merged imagePullSecrets
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: serving.kserve.io/v1beta1
+          kind: InferenceService
+          metadata:
+            name: test-service
+          spec:
+            predictor:
+              podSpec:
+                (imagePullSecrets[?name == 'config-secret']):
+                - name: config-secret
+                (imagePullSecrets[?name == 'service-secret']):
+                - name: service-secret
+                (imagePullSecrets[?name == 'shared-secret']):
+                - name: shared-secret

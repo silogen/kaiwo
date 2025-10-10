@@ -1,0 +1,10 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterServiceTemplate
+metadata:
+  name: llama-3-8b-latency-routing-disabled
+spec:
+  aimImageName: llama-3-8b-routing-disabled
+  metric: latency
+  gpuSelector:
+    count: 1
+    model: MI300X

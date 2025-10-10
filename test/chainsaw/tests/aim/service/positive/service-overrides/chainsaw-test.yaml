@@ -1,0 +1,46 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: service-overrides
+spec:
+  description: Test that service-level overrides take precedence over template values
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create prerequisites
+    try:
+    - apply:
+        file: cluster-image.yaml
+    - apply:
+        file: cluster-template.yaml
+
+  - name: Wait for template to become Available
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: llama-3-8b-latency-overrides
+          status:
+            status: Available
+            (profile.metadata.precision == 'fp16'): true
+
+  - name: Create AIMService with precision override
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service resolves
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-service
+          status:
+            (conditions[?type == 'Resolved']):
+            - status: "True"

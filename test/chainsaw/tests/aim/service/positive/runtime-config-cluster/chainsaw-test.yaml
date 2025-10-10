@@ -1,0 +1,52 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: runtime-config-cluster
+spec:
+  description: Test cluster-scoped runtime config settings
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create prerequisites
+    try:
+    - apply:
+        file: cluster-runtime-config.yaml
+    - apply:
+        file: cluster-image.yaml
+    - apply:
+        file: cluster-template.yaml
+
+  - name: Wait for template to become Available
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: llama-3-8b-latency-runtime-cluster
+          status:
+            status: Available
+            (effectiveRuntimeConfig != null): true
+            (effectiveRuntimeConfig.clusterRef != null): true
+
+  - name: Create AIMService
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service resolves with cluster runtime config
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-service
+          status:
+            (conditions[?type == 'Resolved']):
+            - status: "True"
+            (effectiveRuntimeConfig != null): true
+            (effectiveRuntimeConfig.clusterRef != null): true
+            (effectiveRuntimeConfig.clusterRef.name == 'cluster-runtime-config'): true
