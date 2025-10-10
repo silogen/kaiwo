@@ -294,6 +294,11 @@ spec:
                 description: Routing enables HTTP routing through Gateway API for
                   this service.
                 properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    description: Annotations to add to the HTTPRoute resource.
+                    type: object
                   enabled:
                     default: false
                     description: Enabled toggles HTTP routing management.

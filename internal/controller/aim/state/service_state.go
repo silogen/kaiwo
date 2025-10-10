@@ -45,9 +45,10 @@ type ServiceState struct {
 
 // ServiceRoutingState carries routing configuration resolved for the service.
 type ServiceRoutingState struct {
-	Enabled    bool
-	PathPrefix string
-	GatewayRef *gatewayapiv1.ParentReference
+	Enabled     bool
+	PathPrefix  string
+	GatewayRef  *gatewayapiv1.ParentReference
+	Annotations map[string]string
 }
 
 // ServiceStateOptions exposes optional overrides when constructing the service view.
@@ -95,6 +96,12 @@ func NewServiceState(service *aimv1alpha1.AIMService, template TemplateState, op
 		}
 		if service.Spec.Routing.GatewayRef != nil {
 			routing.GatewayRef = service.Spec.Routing.GatewayRef.DeepCopy()
+		}
+		if len(service.Spec.Routing.Annotations) > 0 {
+			routing.Annotations = make(map[string]string, len(service.Spec.Routing.Annotations))
+			for k, v := range service.Spec.Routing.Annotations {
+				routing.Annotations[k] = v
+			}
 		}
 		state.Routing = routing
 	}

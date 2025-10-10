@@ -43,6 +43,13 @@ func InferenceServiceRouteName(serviceName string) string {
 
 // BuildInferenceServiceHTTPRoute creates an HTTPRoute that exposes the predictor service via the provided gateway parent.
 func BuildInferenceServiceHTTPRoute(serviceState aimstate.ServiceState, ownerRef metav1.OwnerReference) *gatewayapiv1.HTTPRoute {
+	annotations := make(map[string]string)
+	if len(serviceState.Routing.Annotations) > 0 {
+		for k, v := range serviceState.Routing.Annotations {
+			annotations[k] = v
+		}
+	}
+
 	route := &gatewayapiv1.HTTPRoute{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: gatewayapiv1.GroupVersion.String(),
@@ -58,6 +65,7 @@ func BuildInferenceServiceHTTPRoute(serviceState aimstate.ServiceState, ownerRef
 				LabelKeyTemplate:               serviceState.Template.Name,
 				LabelKeyModelID:                sanitizeLabelValue(serviceState.ModelID),
 			},
+			Annotations:     annotations,
 			OwnerReferences: []metav1.OwnerReference{ownerRef},
 		},
 		Spec: gatewayapiv1.HTTPRouteSpec{},

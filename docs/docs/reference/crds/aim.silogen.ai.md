@@ -610,6 +610,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | Enabled toggles HTTP routing management. | false |  |
 | `gatewayRef` _[ParentReference](#parentreference)_ | GatewayRef identifies the Gateway parent that should receive the HTTPRoute.<br />When omitted while routing is enabled, reconciliation will report a failure. |  |  |
+| `annotations` _object (keys:string, values:string)_ | Annotations to add to the HTTPRoute resource. |  |  |
 
 
 #### AIMServiceRoutingStatus
