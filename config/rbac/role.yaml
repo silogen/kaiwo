@@ -32,10 +32,49 @@ rules:
   - "modelcaches"
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
+- apiGroups: ["aim.silogen.ai"]
+  resources:
+  - "aimimages"
+  - "aimclusterimages"
+  - "aimruntimeconfigs"
+  - "aimclusterruntimeconfigs"
+  - "aimservicetemplates"
+  - "aimclusterservicetemplates"
+  - "aimtemplatecaches"
+  - "aimservices"
+  - "modelcaches"
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
 - apiGroups: ["config.kaiwo.silogen.ai"]
   resources:
   - "kaiwoconfigs"
+  - "aimnamespaceconfigs"
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+- apiGroups: ["serving.kserve.io"]
+  resources:
+  - "clusterservingruntimes"
+  - "servingruntimes"
+  - "inferenceservices"
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+- apiGroups: ["aim.silogen.ai"]
+  resources:
+  - "aimimages/status"
+  - "aimclusterimages/status"
+  - "aimservicetemplates/status"
+  - "aimclusterservicetemplates/status"
+  - "aimtemplatecaches/status"
+  - "aimservices/status"
+  - "modelcaches/status"
+  verbs: ["get", "update", "patch"]
+
+- apiGroups: ["serving.kserve.io"]
+  resources:
+  - "clusterservingruntimes/status"
+  - "servingruntimes/status"
+  - "inferenceservices/status"
+  verbs: ["get", "update", "patch"]
 
 - apiGroups: ["kaiwo.silogen.ai"]
   resources:

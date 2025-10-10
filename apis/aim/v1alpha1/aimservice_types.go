@@ -41,11 +41,11 @@ type AIMServiceOverrides struct {
 // runtime selection knobs, while the overrides field allows service-specific
 // customization.
 type AIMServiceSpec struct {
-	// AIMModelID is the canonical model name (including version/revision) to deploy.
-	// Expected to match the `spec.name` of an AIMImage. Example:
-	// `meta/llama-3-8b:1.1+20240915`.
+	// AIMImageName is the canonical model name (including version/revision) to deploy.
+	// Expected to match the `spec.metadata.name` of an AIMImage. Example:
+	// `meta-llama-3-8b-1-1-20240915`.
 	// +kubebuilder:validation:MinLength=1
-	AIMModelID string `json:"aimModelId"`
+	AIMImageName string `json:"aimImageName"`
 
 	// TemplateRef is the name of the AIMServiceTemplate or AIMClusterServiceTemplate to use.
 	// The template selects the runtime profile and GPU parameters.
@@ -63,9 +63,9 @@ type AIMServiceSpec struct {
 	// +kubebuilder:default=1
 	Replicas *int32 `json:"replicas,omitempty"`
 
-	// ConfigRef selects the cluster-scoped AIMClusterConfig (by name) to use for this service.
+	// RuntimeConfigName references the AIM runtime configuration (by name) to use for this service.
 	// +kubebuilder:default=default
-	ConfigRef string `json:"configRef,omitempty"`
+	RuntimeConfigName string `json:"runtimeConfigName,omitempty"`
 
 	// Overrides allows overriding specific template parameters for this service.
 	// When specified, these values take precedence over the template values.
@@ -93,6 +93,9 @@ type AIMServiceStatus struct {
 	// +listType=map
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// EffectiveRuntimeConfig surfaces the runtime configuration applied to this service.
+	EffectiveRuntimeConfig *AIMEffectiveRuntimeConfig `json:"effectiveRuntimeConfig,omitempty"`
 
 	// Status represents the current high‑level status of the service lifecycle.
 	// Values: `Pending`, `Starting`, `Running`, `Failed`, `Degraded`.

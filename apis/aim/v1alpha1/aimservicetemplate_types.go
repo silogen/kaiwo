@@ -24,6 +24,7 @@ package v1alpha1
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -78,15 +79,19 @@ type AIMRuntimeParameters struct {
 // AIMServiceTemplateSpecCommon contains the shared fields for both cluster-scoped
 // and namespace-scoped service templates.
 type AIMServiceTemplateSpecCommon struct {
-	// ModelID is the AIM model ID. Matches `spec.name` of an AIMImage. Immutable.
+	// AIMImageName is the AIM image name. Matches `metadata.name` of an AIMImage. Immutable.
 	//
 	// Example: `meta/llama-3-8b:1.1+20240915`
 	//
 	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="model is immutable"
-	ModelID string `json:"modelId"`
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="image name is immutable"
+	AIMImageName string `json:"aimImageName"`
 
 	AIMRuntimeParameters `json:",inline"`
+
+	// RuntimeConfigName references the AIM runtime configuration (by name) to use for this template.
+	// +kubebuilder:default=default
+	RuntimeConfigName string `json:"runtimeConfigName,omitempty"`
 }
 
 // AIMTemplateCachingConfig configures model caching behavior for namespace-scoped templates.
@@ -169,6 +174,9 @@ type AIMServiceTemplateStatus struct {
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
+	// EffectiveRuntimeConfig surfaces the merged runtime configuration applied to this template.
+	EffectiveRuntimeConfig *AIMEffectiveRuntimeConfig `json:"effectiveRuntimeConfig,omitempty"`
+
 	// Status represents the current high‑level status of the template lifecycle.
 	// Values: `Pending`, `Progressing`, `Available`, `Failed`.
 	// +kubebuilder:default=Pending
@@ -177,9 +185,20 @@ type AIMServiceTemplateStatus struct {
 	// ModelSources list the models that this template requires to run. These are the models that will be
 	// cached, if this template is cached.
 	ModelSources []AIMModelSource `json:"modelSources,omitempty"`
+
+	// Profile contains the full discovery result profile as a free-form JSON object.
+	// This includes metadata, engine args, environment variables, and model details.
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +kubebuilder:validation:Schemaless
+	Profile *apiextensionsv1.JSON `json:"profile,omitempty"`
 }
 
 type AIMModelSource struct {
+	// Name is the name of the model
+	// +optional
+	Name string `json:"name,omitempty"`
+
 	// SourceURI is the source where the model should be downloaded from
 	SourceURI string `json:"sourceUri"`
 
@@ -235,11 +254,12 @@ const (
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=aimst,categories=aim;all
-// +kubebuilder:printcolumn:name="Model",type=string,JSONPath=`.spec.model`
-// +kubebuilder:printcolumn:name="Metric",type=string,JSONPath=`.spec.useCase`
+// +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.status`
+// +kubebuilder:printcolumn:name="Model",type=string,JSONPath=`.spec.modelId`
+// +kubebuilder:printcolumn:name="Metric",type=string,JSONPath=`.spec.metric`
 // +kubebuilder:printcolumn:name="Precision",type=string,JSONPath=`.spec.precision`
-// +kubebuilder:printcolumn:name="GPUs/replica",type=integer,JSONPath=`.spec.gpusPerReplica`
-// +kubebuilder:printcolumn:name="GPU",type=string,JSONPath=`.spec.gpuModel`
+// +kubebuilder:printcolumn:name="GPUs/replica",type=integer,JSONPath=`.spec.gpuSelector.count`
+// +kubebuilder:printcolumn:name="GPU",type=string,JSONPath=`.spec.gpuSelector.model`
 type AIMServiceTemplate struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -258,11 +278,12 @@ type AIMServiceTemplateList struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster,shortName=aimclst,categories=aim;all
-// +kubebuilder:printcolumn:name="Model",type=string,JSONPath=`.spec.model`
-// +kubebuilder:printcolumn:name="Metric",type=string,JSONPath=`.spec.useCase`
+// +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.status`
+// +kubebuilder:printcolumn:name="Model",type=string,JSONPath=`.spec.modelId`
+// +kubebuilder:printcolumn:name="Metric",type=string,JSONPath=`.spec.metric`
 // +kubebuilder:printcolumn:name="Precision",type=string,JSONPath=`.spec.precision`
-// +kubebuilder:printcolumn:name="GPUs/replica",type=integer,JSONPath=`.spec.gpusPerReplica`
-// +kubebuilder:printcolumn:name="GPU",type=string,JSONPath=`.spec.gpuModel`
+// +kubebuilder:printcolumn:name="GPUs/replica",type=integer,JSONPath=`.spec.gpuSelector.count`
+// +kubebuilder:printcolumn:name="GPU",type=string,JSONPath=`.spec.gpuSelector.model`
 type AIMClusterServiceTemplate struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -276,6 +297,26 @@ type AIMClusterServiceTemplateList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []AIMClusterServiceTemplate `json:"items"`
+}
+
+// GetModelID returns the model ID from the template spec
+func (t *AIMServiceTemplate) GetModelName() string {
+	return t.Spec.AIMImageName
+}
+
+// GetStatus returns a pointer to the template status
+func (t *AIMServiceTemplate) GetStatus() *AIMServiceTemplateStatus {
+	return &t.Status
+}
+
+// GetModelID returns the model ID from the cluster template spec
+func (t *AIMClusterServiceTemplate) GetModelName() string {
+	return t.Spec.AIMImageName
+}
+
+// GetStatus returns a pointer to the cluster template status
+func (t *AIMClusterServiceTemplate) GetStatus() *AIMServiceTemplateStatus {
+	return &t.Status
 }
 
 func init() {

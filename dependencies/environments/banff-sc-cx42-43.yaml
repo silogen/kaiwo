@@ -7,3 +7,5 @@ nfs:
     nodeName: banff-sc-cx42-38
     hostPath: /mnt/nvme1/nfs
     size: 500Gi
+
+vcluster: false

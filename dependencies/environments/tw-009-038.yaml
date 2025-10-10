@@ -2,3 +2,4 @@ gpuType: amd
 nfs:
   persistence:
     enabled: false
+vcluster: false
