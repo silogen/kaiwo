@@ -111,6 +111,7 @@ func BuildInferenceServiceHTTPRoute(serviceState aimstate.ServiceState, ownerRef
 					Type: gatewayapiv1.HTTPRouteFilterURLRewrite,
 					URLRewrite: &gatewayapiv1.HTTPURLRewriteFilter{
 						Path: &gatewayapiv1.HTTPPathModifier{
+							Type:               gatewayapiv1.PrefixMatchHTTPPathModifier,
 							ReplacePrefixMatch: ptr.To("/"),
 						},
 					},
