@@ -31,16 +31,17 @@ import (
 
 // ServiceState captures the resolved desired state for an AIMService across vendors.
 type ServiceState struct {
-	Name             string
-	Namespace        string
-	RuntimeName      string
-	ModelID          string
-	Env              []corev1.EnvVar
-	Replicas         *int32
-	ImagePullSecrets []corev1.LocalObjectReference
-	Template         TemplateState
-	ModelSource      *aimv1alpha1.AIMModelSource
-	Routing          ServiceRoutingState
+	Name               string
+	Namespace          string
+	RuntimeName        string
+	ModelID            string
+	Env                []corev1.EnvVar
+	Replicas           *int32
+	ImagePullSecrets   []corev1.LocalObjectReference
+	ServiceAccountName string
+	Template           TemplateState
+	ModelSource        *aimv1alpha1.AIMModelSource
+	Routing            ServiceRoutingState
 }
 
 // ServiceRoutingState carries routing configuration resolved for the service.
@@ -63,14 +64,15 @@ func NewServiceState(service *aimv1alpha1.AIMService, template TemplateState, op
 	// TODO handle if model source is nil
 
 	state := ServiceState{
-		Name:             service.Name,
-		Namespace:        service.Namespace,
-		RuntimeName:      opts.RuntimeName,
-		ModelID:          template.ModelSource.Name,
-		Env:              copyEnvVars(service.Spec.Env),
-		ImagePullSecrets: copyPullSecrets(service.Spec.ImagePullSecrets),
-		Template:         template,
-		ModelSource:      template.ModelSource,
+		Name:               service.Name,
+		Namespace:          service.Namespace,
+		RuntimeName:        opts.RuntimeName,
+		ModelID:            template.ModelSource.Name,
+		Env:                copyEnvVars(service.Spec.Env),
+		ImagePullSecrets:   copyPullSecrets(service.Spec.ImagePullSecrets),
+		ServiceAccountName: template.ServiceAccountName(),
+		Template:           template,
+		ModelSource:        template.ModelSource,
 	}
 
 	if state.RuntimeName == "" {
