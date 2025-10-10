@@ -224,7 +224,8 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 			Predictor: servingv1beta1.PredictorSpec{
 				ComponentExtensionSpec: servingv1beta1.ComponentExtensionSpec{},
 				PodSpec: servingv1beta1.PodSpec{
-					ImagePullSecrets: CopyPullSecrets(serviceState.ImagePullSecrets),
+					ImagePullSecrets:   CopyPullSecrets(serviceState.ImagePullSecrets),
+					ServiceAccountName: serviceState.ServiceAccountName,
 				},
 				Model: &servingv1beta1.ModelSpec{
 					ModelFormat: servingv1beta1.ModelFormat{
