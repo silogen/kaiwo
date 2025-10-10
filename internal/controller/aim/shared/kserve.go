@@ -120,6 +120,7 @@ func buildServingRuntimeObjectMeta(template aimstate.TemplateState, ownerRef met
 }
 
 func buildServingRuntimeSpec(template aimstate.TemplateState) servingv1alpha1.ServingRuntimeSpec {
+	dshmSizeLimit := resource.MustParse("8Gi")
 	return servingv1alpha1.ServingRuntimeSpec{
 		SupportedModelFormats: []servingv1alpha1.SupportedModelFormat{
 			{
@@ -146,6 +147,33 @@ func buildServingRuntimeSpec(template aimstate.TemplateState) servingv1alpha1.Se
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
 							"amd.com/gpu": *resource.NewQuantity(int64(template.Status.Profile.Metadata.GPUCount), resource.DecimalSI),
+						},
+						Limits: corev1.ResourceList{
+							"amd.com/gpu": *resource.NewQuantity(int64(template.Status.Profile.Metadata.GPUCount), resource.DecimalSI),
+						},
+					},
+					Ports: []corev1.ContainerPort{
+						{
+							ContainerPort: 8000,
+							Name:          "http",
+							Protocol:      corev1.ProtocolTCP,
+						},
+					},
+					VolumeMounts: []corev1.VolumeMount{
+						{
+							Name:      "dshm",
+							MountPath: "/dev/shm",
+						},
+					},
+				},
+			},
+			Volumes: []corev1.Volume{
+				{
+					Name: "dshm",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{
+							Medium:    corev1.StorageMediumMemory,
+							SizeLimit: &dshmSizeLimit,
 						},
 					},
 				},
