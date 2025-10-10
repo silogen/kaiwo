@@ -217,6 +217,10 @@ type AIMServiceRouting struct {
 	// When omitted while routing is enabled, reconciliation will report a failure.
 	// +optional
 	GatewayRef *gatewayapiv1.ParentReference `json:"gatewayRef,omitempty"`
+
+	// Annotations to add to the HTTPRoute resource.
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
 // AIMServiceRoutingStatus captures observed routing details.
