@@ -172,9 +172,10 @@ const (
 	AIMServiceReasonCacheFailed     = "CacheFailed"
 
 	// Runtime
-	AIMServiceReasonCreatingRuntime = "CreatingRuntime"
-	AIMServiceReasonRuntimeReady    = "RuntimeReady"
-	AIMServiceReasonRuntimeFailed   = "RuntimeFailed"
+	AIMServiceReasonCreatingRuntime      = "CreatingRuntime"
+	AIMServiceReasonRuntimeReady         = "RuntimeReady"
+	AIMServiceReasonRuntimeFailed        = "RuntimeFailed"
+	AIMServiceReasonRuntimeConfigMissing = "RuntimeConfigMissing"
 
 	// Routing
 	AIMServiceReasonConfiguringRoute = "ConfiguringRoute"

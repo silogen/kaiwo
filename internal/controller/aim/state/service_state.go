@@ -75,6 +75,10 @@ func NewServiceState(service *aimv1alpha1.AIMService, template TemplateState, op
 		ModelSource:        template.ModelSource,
 	}
 
+	if len(template.RuntimeConfigSpec.ImagePullSecrets) > 0 {
+		state.ImagePullSecrets = mergePullSecretRefs(state.ImagePullSecrets, template.RuntimeConfigSpec.ImagePullSecrets)
+	}
+
 	if state.RuntimeName == "" {
 		state.RuntimeName = template.Name
 	}
@@ -118,4 +122,27 @@ func copyEnvVars(in []corev1.EnvVar) []corev1.EnvVar {
 	out := make([]corev1.EnvVar, len(in))
 	copy(out, in)
 	return out
+}
+
+func mergePullSecretRefs(base []corev1.LocalObjectReference, extras []corev1.LocalObjectReference) []corev1.LocalObjectReference {
+	if len(extras) == 0 {
+		return base
+	}
+	if len(base) == 0 {
+		return copyPullSecrets(extras)
+	}
+
+	index := make(map[string]struct{}, len(base))
+	for _, secret := range base {
+		index[secret.Name] = struct{}{}
+	}
+
+	for _, secret := range extras {
+		if _, exists := index[secret.Name]; exists {
+			continue
+		}
+		base = append(base, secret)
+	}
+
+	return base
 }

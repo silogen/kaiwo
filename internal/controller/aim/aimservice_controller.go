@@ -26,6 +26,7 @@ package aim
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/silogen/kaiwo/internal/controller/framework"
@@ -133,7 +134,9 @@ type aimServiceObservation struct {
 	TemplateAvailable      bool
 	TemplateOwnedByService bool
 	ShouldCreateTemplate   bool
+	RuntimeConfigSpec      aimv1alpha1.AIMRuntimeConfigSpec
 	EffectiveRuntimeConfig *aimv1alpha1.AIMEffectiveRuntimeConfig
+	RuntimeConfigErr       error
 	InferenceService       *servingv1beta1.InferenceService
 	HTTPRoute              *gatewayapiv1.HTTPRoute
 	TemplateStatus         *aimv1alpha1.AIMServiceTemplateStatus
@@ -175,6 +178,20 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 			}
 			obs.TemplateStatus = namespaceTemplate.Status.DeepCopy()
 			obs.TemplateSpecCommon = namespaceTemplate.Spec.AIMServiceTemplateSpecCommon
+			runtimeConfigName := runtimeConfigNameForService(service, obs.TemplateSpecCommon)
+			obs.TemplateSpecCommon.RuntimeConfigName = runtimeConfigName
+			if resolution, resolveErr := shared.ResolveRuntimeConfig(ctx, r.Client, service.Namespace, runtimeConfigName); resolveErr != nil {
+				if errors.Is(resolveErr, shared.ErrRuntimeConfigNotFound) {
+					obs.RuntimeConfigErr = fmt.Errorf("AIMRuntimeConfig %q not found in namespace %q", runtimeConfigName, service.Namespace)
+				} else {
+					return nil, fmt.Errorf("failed to resolve AIMRuntimeConfig %q in namespace %q: %w", runtimeConfigName, service.Namespace, resolveErr)
+				}
+			} else {
+				obs.RuntimeConfigSpec = resolution.EffectiveSpec
+				if resolution.EffectiveStatus != nil {
+					obs.EffectiveRuntimeConfig = resolution.EffectiveStatus
+				}
+			}
 			obs.TemplateNamespace = namespaceTemplate.Namespace
 		case apierrors.IsNotFound(err):
 			// Fall through to cluster lookup.
@@ -196,6 +213,18 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 			}
 			obs.TemplateStatus = clusterTemplate.Status.DeepCopy()
 			obs.TemplateSpecCommon = clusterTemplate.Spec.AIMServiceTemplateSpecCommon
+			runtimeConfigName := runtimeConfigNameForService(service, obs.TemplateSpecCommon)
+			obs.TemplateSpecCommon.RuntimeConfigName = runtimeConfigName
+			if resolution, resolveErr := shared.ResolveRuntimeConfig(ctx, r.Client, service.Namespace, runtimeConfigName); resolveErr == nil {
+				obs.RuntimeConfigSpec = resolution.EffectiveSpec
+				if resolution.EffectiveStatus != nil {
+					obs.EffectiveRuntimeConfig = resolution.EffectiveStatus
+				}
+			} else if errors.Is(resolveErr, shared.ErrRuntimeConfigNotFound) {
+				obs.RuntimeConfigErr = fmt.Errorf("AIMRuntimeConfig %q not found in namespace %q", runtimeConfigName, service.Namespace)
+			} else {
+				return nil, fmt.Errorf("failed to resolve AIMRuntimeConfig %q in namespace %q: %w", runtimeConfigName, service.Namespace, resolveErr)
+			}
 			obs.TemplateNamespace = ""
 		case apierrors.IsNotFound(err):
 			obs.ShouldCreateTemplate = true
@@ -261,13 +290,13 @@ func (r *AIMServiceReconciler) plan(_ context.Context, service *aimv1alpha1.AIMS
 	}
 
 	// Only create/update the InferenceService once the template is available.
-	if obs.TemplateAvailable {
+	if obs.TemplateAvailable && obs.RuntimeConfigErr == nil {
 		routePath := routePathPrefix(service)
 		templateState := aimstate.NewTemplateState(aimstate.TemplateState{
 			Name:              obs.TemplateName,
 			Namespace:         obs.TemplateNamespace,
 			SpecCommon:        obs.TemplateSpecCommon,
-			RuntimeConfigSpec: aimv1alpha1.AIMRuntimeConfigSpec{},
+			RuntimeConfigSpec: obs.RuntimeConfigSpec,
 			Status:            obs.TemplateStatus,
 		})
 		serviceState := aimstate.NewServiceState(service, templateState, aimstate.ServiceStateOptions{
@@ -396,26 +425,7 @@ func (r *AIMServiceReconciler) projectStatus(
 
 	routingEnabled, routingReady := evaluateRoutingStatus(service, obs, status, setCondition)
 
-	if errs.HasError() {
-		status.Status = aimv1alpha1.AIMServiceStatusFailed
-
-		reason := aimv1alpha1.AIMServiceReasonValidationFailed
-		message := "Reconciliation failed"
-		switch {
-		case errs.ObserveErr != nil:
-			message = fmt.Sprintf("Observation failed: %v", errs.ObserveErr)
-		case errs.PlanErr != nil:
-			message = fmt.Sprintf("Planning failed: %v", errs.PlanErr)
-		case errs.ApplyErr != nil:
-			reason = aimv1alpha1.AIMServiceReasonRuntimeFailed
-			message = fmt.Sprintf("Apply failed: %v", errs.ApplyErr)
-		}
-
-		setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, reason, message)
-		setCondition(aimv1alpha1.AIMServiceConditionResolved, metav1.ConditionFalse, reason, "Template resolution pending due to reconciliation failure")
-		setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, reason, message)
-		setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionFalse, reason, "Reconciliation halted due to failure")
-		setCondition(aimv1alpha1.AIMServiceConditionReady, metav1.ConditionFalse, reason, message)
+	if r.handleReconcileErrors(status, setCondition, errs) {
 		return nil
 	}
 
@@ -437,41 +447,15 @@ func (r *AIMServiceReconciler) projectStatus(
 	setCondition(aimv1alpha1.AIMServiceConditionResolved, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonResolved,
 		fmt.Sprintf("Resolved template %q", obs.TemplateName))
 
-	// Check if template is degraded
-	if obs.TemplateStatus != nil && obs.TemplateStatus.Status == aimv1alpha1.AIMTemplateStatusDegraded {
-		status.Status = aimv1alpha1.AIMServiceStatusDegraded
-		templateReason := "TemplateDegraded"
-		templateMessage := fmt.Sprintf("Template %q is degraded", obs.TemplateName)
-
-		// Extract failure reason from template conditions if available
-		for _, cond := range obs.TemplateStatus.Conditions {
-			if cond.Type == "Failure" && cond.Status == metav1.ConditionTrue {
-				templateMessage = fmt.Sprintf("Template %q is degraded: %s", obs.TemplateName, cond.Message)
-				if cond.Reason != "" {
-					templateReason = cond.Reason
-				}
-				break
-			}
-		}
-
-		setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, templateReason, templateMessage)
-		setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, templateReason,
-			fmt.Sprintf("Cannot create InferenceService: %s", templateMessage))
-		setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionFalse, templateReason,
-			"Service is degraded due to template issues")
-		setCondition(aimv1alpha1.AIMServiceConditionReady, metav1.ConditionFalse, templateReason,
-			"Service cannot be ready due to degraded template")
+	if handleRuntimeConfigMissing(status, obs, setCondition) {
 		return nil
 	}
 
-	if !obs.TemplateAvailable {
-		status.Status = aimv1alpha1.AIMServiceStatusStarting
-		setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonCreatingRuntime,
-			fmt.Sprintf("Template %q is not yet Available", obs.TemplateName))
-		setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonCreatingRuntime,
-			"Waiting for template discovery to complete")
-		setCondition(aimv1alpha1.AIMServiceConditionReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonCreatingRuntime,
-			"Template is not available")
+	if handleTemplateDegraded(status, obs, setCondition) {
+		return nil
+	}
+
+	if handleTemplateNotAvailable(status, obs, setCondition) {
 		return nil
 	}
 
@@ -524,6 +508,108 @@ func (r *AIMServiceReconciler) projectStatus(
 	setCondition(aimv1alpha1.AIMServiceConditionReady, metav1.ConditionFalse, reason, message)
 
 	return nil
+}
+
+func (r *AIMServiceReconciler) handleReconcileErrors(
+	status *aimv1alpha1.AIMServiceStatus,
+	setCondition func(conditionType string, conditionStatus metav1.ConditionStatus, reason, message string),
+	errs framework.ReconcileErrors,
+) bool {
+	if !errs.HasError() {
+		return false
+	}
+
+	status.Status = aimv1alpha1.AIMServiceStatusFailed
+
+	reason := aimv1alpha1.AIMServiceReasonValidationFailed
+	message := "Reconciliation failed"
+	switch {
+	case errs.ObserveErr != nil:
+		message = fmt.Sprintf("Observation failed: %v", errs.ObserveErr)
+	case errs.PlanErr != nil:
+		message = fmt.Sprintf("Planning failed: %v", errs.PlanErr)
+	case errs.ApplyErr != nil:
+		reason = aimv1alpha1.AIMServiceReasonRuntimeFailed
+		message = fmt.Sprintf("Apply failed: %v", errs.ApplyErr)
+	}
+
+	setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, reason, message)
+	setCondition(aimv1alpha1.AIMServiceConditionResolved, metav1.ConditionFalse, reason, "Template resolution pending due to reconciliation failure")
+	setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, reason, message)
+	setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionFalse, reason, "Reconciliation halted due to failure")
+	setCondition(aimv1alpha1.AIMServiceConditionReady, metav1.ConditionFalse, reason, message)
+	return true
+}
+
+func handleRuntimeConfigMissing(
+	status *aimv1alpha1.AIMServiceStatus,
+	obs *aimServiceObservation,
+	setCondition func(conditionType string, conditionStatus metav1.ConditionStatus, reason, message string),
+) bool {
+	if obs.RuntimeConfigErr == nil {
+		return false
+	}
+
+	status.Status = aimv1alpha1.AIMServiceStatusDegraded
+	message := obs.RuntimeConfigErr.Error()
+	reason := aimv1alpha1.AIMServiceReasonRuntimeConfigMissing
+	setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, reason, message)
+	setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, reason, "Cannot configure runtime without AIMRuntimeConfig")
+	setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionFalse, reason, "Runtime configuration is missing")
+	setCondition(aimv1alpha1.AIMServiceConditionReady, metav1.ConditionFalse, reason, message)
+	return true
+}
+
+func handleTemplateDegraded(
+	status *aimv1alpha1.AIMServiceStatus,
+	obs *aimServiceObservation,
+	setCondition func(conditionType string, conditionStatus metav1.ConditionStatus, reason, message string),
+) bool {
+	if obs.TemplateStatus == nil || obs.TemplateStatus.Status != aimv1alpha1.AIMTemplateStatusDegraded {
+		return false
+	}
+
+	status.Status = aimv1alpha1.AIMServiceStatusDegraded
+	templateReason := "TemplateDegraded"
+	templateMessage := fmt.Sprintf("Template %q is degraded", obs.TemplateName)
+
+	for _, cond := range obs.TemplateStatus.Conditions {
+		if cond.Type == "Failure" && cond.Status == metav1.ConditionTrue {
+			templateMessage = fmt.Sprintf("Template %q is degraded: %s", obs.TemplateName, cond.Message)
+			if cond.Reason != "" {
+				templateReason = cond.Reason
+			}
+			break
+		}
+	}
+
+	setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, templateReason, templateMessage)
+	setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, templateReason,
+		fmt.Sprintf("Cannot create InferenceService: %s", templateMessage))
+	setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionFalse, templateReason,
+		"Service is degraded due to template issues")
+	setCondition(aimv1alpha1.AIMServiceConditionReady, metav1.ConditionFalse, templateReason,
+		"Service cannot be ready due to degraded template")
+	return true
+}
+
+func handleTemplateNotAvailable(
+	status *aimv1alpha1.AIMServiceStatus,
+	obs *aimServiceObservation,
+	setCondition func(conditionType string, conditionStatus metav1.ConditionStatus, reason, message string),
+) bool {
+	if obs.TemplateAvailable {
+		return false
+	}
+
+	status.Status = aimv1alpha1.AIMServiceStatusStarting
+	setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonCreatingRuntime,
+		fmt.Sprintf("Template %q is not yet Available", obs.TemplateName))
+	setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonCreatingRuntime,
+		"Waiting for template discovery to complete")
+	setCondition(aimv1alpha1.AIMServiceConditionReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonCreatingRuntime,
+		"Template is not available")
+	return true
 }
 
 func (r *AIMServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -638,6 +724,14 @@ func hasOwnerReference(refs []metav1.OwnerReference, uid types.UID) bool {
 		}
 	}
 	return false
+}
+
+func runtimeConfigNameForService(service *aimv1alpha1.AIMService, templateSpec aimv1alpha1.AIMServiceTemplateSpecCommon) string {
+	name := service.Spec.RuntimeConfigName
+	if name == "" {
+		name = templateSpec.RuntimeConfigName
+	}
+	return shared.NormalizeRuntimeConfigName(name)
 }
 
 func requestsForServices(services []aimv1alpha1.AIMService) []reconcile.Request {

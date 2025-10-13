@@ -29,7 +29,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
+	stderrors "errors"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -56,6 +56,9 @@ type RuntimeConfigResolution struct {
 	EffectiveSpec   aimv1alpha1.AIMRuntimeConfigSpec
 	EffectiveStatus *aimv1alpha1.AIMEffectiveRuntimeConfig
 }
+
+// ErrRuntimeConfigNotFound indicates that neither namespace nor cluster runtime config could be located.
+var ErrRuntimeConfigNotFound = stderrors.New("runtime config not found")
 
 // ResolveRuntimeConfig merges namespace and cluster runtime configs with namespace precedence.
 // When configName is empty, the default runtime config name is used.
@@ -92,7 +95,7 @@ func ResolveRuntimeConfig(ctx context.Context, k8sClient client.Client, namespac
 	}
 
 	if resolution.NamespaceConfig == nil && resolution.ClusterConfig == nil && name != DefaultRuntimeConfigName {
-		return nil, fmt.Errorf("runtime config %q not found", name)
+		return nil, errors.Wrapf(ErrRuntimeConfigNotFound, "runtime config %q not found", name)
 	}
 
 	resolution.EffectiveSpec = mergeRuntimeConfigs(resolution.ClusterConfig, resolution.NamespaceConfig)

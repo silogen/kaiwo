@@ -28,6 +28,8 @@ import (
 	"context"
 	"fmt"
 
+	pkgerrors "github.com/pkg/errors"
+
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 
 	servingv1alpha1 "github.com/kserve/kserve/pkg/apis/serving/v1alpha1"
@@ -167,6 +169,12 @@ func (r *AIMClusterServiceTemplateReconciler) observe(ctx context.Context, templ
 		ResolveRuntimeConfig: func(ctx context.Context) (*shared.RuntimeConfigResolution, error) {
 			resolution, err := shared.ResolveRuntimeConfig(ctx, r.Client, operatorNamespace, template.Spec.RuntimeConfigName)
 			if err != nil {
+				if pkgerrors.Cause(err) == shared.ErrRuntimeConfigNotFound {
+					logger.Info("Namespace AIMRuntimeConfig not found for cluster template, proceeding without overrides",
+						"name", template.Spec.RuntimeConfigName,
+						"operatorNamespace", operatorNamespace)
+					return nil, nil
+				}
 				return nil, fmt.Errorf("failed to resolve AIMRuntimeConfig %q: %w", template.Spec.RuntimeConfigName, err)
 			}
 			return resolution, nil

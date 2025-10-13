@@ -42,4 +42,4 @@ spec:
             name: test-service
           spec:
             predictor:
-              (minReplicas == `3`): true
+              minReplicas: 3

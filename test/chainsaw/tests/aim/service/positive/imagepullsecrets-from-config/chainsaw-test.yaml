@@ -46,6 +46,5 @@ spec:
             name: test-service
           spec:
             predictor:
-              podSpec:
-                (imagePullSecrets[?name == 'config-pull-secret']):
-                - name: config-pull-secret
+              (imagePullSecrets[?name == 'config-pull-secret']):
+              - name: config-pull-secret
