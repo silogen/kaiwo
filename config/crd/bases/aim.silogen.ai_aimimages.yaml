@@ -66,16 +66,14 @@ spec:
                   This image is inspected by the operator to select runtime profiles used by templates.
                 minLength: 1
                 type: string
-              modelId:
-                description: |-
-                  ModelID is the ID name (includes version/revision).
-                  Example: `meta/llama-3-8b:1.1+20240915`.
-                minLength: 1
+              runtimeConfigName:
+                default: default
+                description: RuntimeConfigName references the AIM runtime configuration
+                  (by name) to use for this image.
                 type: string
             required:
             - defaultServiceTemplate
             - image
-            - modelId
             type: object
           status:
             description: AIMImageStatus defines the observed state of AIMImage.
@@ -141,6 +139,57 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              effectiveRuntimeConfig:
+                description: EffectiveRuntimeConfig surfaces the resolved runtime
+                  configuration used while reconciling the image.
+                properties:
+                  clusterRef:
+                    description: ClusterRef points at the cluster-scoped runtime config,
+                      if present.
+                    properties:
+                      kind:
+                        description: Kind is either "AIMRuntimeConfig" or "AIMClusterRuntimeConfig".
+                        type: string
+                      name:
+                        description: Name is the metadata.name of the runtime config.
+                        type: string
+                      namespace:
+                        description: Namespace is only set for namespace-scoped runtime
+                          configs.
+                        type: string
+                      uid:
+                        description: UID is included to detect stale references.
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    type: object
+                  hash:
+                    description: Hash is a stable hash of the merged configuration
+                      used for change detection.
+                    type: string
+                  namespaceRef:
+                    description: NamespaceRef points at the namespace-scoped runtime
+                      config, if present.
+                    properties:
+                      kind:
+                        description: Kind is either "AIMRuntimeConfig" or "AIMClusterRuntimeConfig".
+                        type: string
+                      name:
+                        description: Name is the metadata.name of the runtime config.
+                        type: string
+                      namespace:
+                        description: Namespace is only set for namespace-scoped runtime
+                          configs.
+                        type: string
+                      uid:
+                        description: UID is included to detect stale references.
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    type: object
+                type: object
               observedGeneration:
                 description: ObservedGeneration is the most recent generation observed
                   by the controller
