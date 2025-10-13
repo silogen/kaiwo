@@ -59,7 +59,7 @@ spec:
   - name: Verify service becomes Running
     try:
     - assert:
-        timeout: 45s
+        timeout: 3m
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMService

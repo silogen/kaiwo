@@ -42,9 +42,9 @@ spec:
             name: test-service
           spec:
             predictor:
-              (containers[0].env[?name == 'HF_TOKEN']):
+              (model.env[?name == 'HF_TOKEN']):
               - name: HF_TOKEN
                 value: "test-token-123"
-              (containers[0].env[?name == 'CUSTOM_VAR']):
+              (model.env[?name == 'CUSTOM_VAR']):
               - name: CUSTOM_VAR
                 value: "custom-value"
