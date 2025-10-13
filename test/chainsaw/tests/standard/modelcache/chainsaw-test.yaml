@@ -21,7 +21,7 @@ spec:
         check:
           (contains($stdout, 'condition met')): true
     - script:
-        content:  kubectl wait --timeout=10s -n $NAMESPACE --for=condition=Failed mc/test-nonexistent
+        content:  kubectl wait --timeout=10s -n $NAMESPACE --for=condition=Failure mc/test-nonexistent
         check:
           (contains($stdout, 'condition met')): true
     
