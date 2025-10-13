@@ -253,6 +253,8 @@ func ProjectTemplateStatus(
 		if errs.ObserveErr != nil {
 			// Check if the error is specifically ErrImageNotFound
 			if errors.Is(errs.ObserveErr, ErrImageNotFound) {
+				// Set status to Degraded for image not found errors
+				status = aimv1alpha1.AIMTemplateStatusDegraded
 				conditions = append(conditions, controllerutils.NewCondition(
 					controllerutils.ConditionTypeFailure,
 					metav1.ConditionTrue,
@@ -306,7 +308,7 @@ func ProjectTemplateStatus(
 
 	// Check if image is missing
 	if obs.Image == "" {
-		status = aimv1alpha1.AIMTemplateStatusFailed
+		status = aimv1alpha1.AIMTemplateStatusDegraded
 
 		conditions = append(conditions, controllerutils.NewCondition(
 			controllerutils.ConditionTypeFailure,

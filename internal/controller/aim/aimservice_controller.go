@@ -437,6 +437,33 @@ func (r *AIMServiceReconciler) projectStatus(
 	setCondition(aimv1alpha1.AIMServiceConditionResolved, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonResolved,
 		fmt.Sprintf("Resolved template %q", obs.TemplateName))
 
+	// Check if template is degraded
+	if obs.TemplateStatus != nil && obs.TemplateStatus.Status == aimv1alpha1.AIMTemplateStatusDegraded {
+		status.Status = aimv1alpha1.AIMServiceStatusDegraded
+		templateReason := "TemplateDegraded"
+		templateMessage := fmt.Sprintf("Template %q is degraded", obs.TemplateName)
+
+		// Extract failure reason from template conditions if available
+		for _, cond := range obs.TemplateStatus.Conditions {
+			if cond.Type == "Failure" && cond.Status == metav1.ConditionTrue {
+				templateMessage = fmt.Sprintf("Template %q is degraded: %s", obs.TemplateName, cond.Message)
+				if cond.Reason != "" {
+					templateReason = cond.Reason
+				}
+				break
+			}
+		}
+
+		setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, templateReason, templateMessage)
+		setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, templateReason,
+			fmt.Sprintf("Cannot create InferenceService: %s", templateMessage))
+		setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionFalse, templateReason,
+			"Service is degraded due to template issues")
+		setCondition(aimv1alpha1.AIMServiceConditionReady, metav1.ConditionFalse, templateReason,
+			"Service cannot be ready due to degraded template")
+		return nil
+	}
+
 	if !obs.TemplateAvailable {
 		status.Status = aimv1alpha1.AIMServiceStatusStarting
 		setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonCreatingRuntime,
