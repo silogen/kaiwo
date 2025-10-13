@@ -20,19 +20,22 @@ spec:
   scope: Cluster
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.model
+    - jsonPath: .status.status
+      name: Status
+      type: string
+    - jsonPath: .spec.modelId
       name: Model
       type: string
-    - jsonPath: .spec.useCase
+    - jsonPath: .spec.metric
       name: Metric
       type: string
     - jsonPath: .spec.precision
       name: Precision
       type: string
-    - jsonPath: .spec.gpusPerReplica
+    - jsonPath: .spec.gpuSelector.count
       name: GPUs/replica
       type: integer
-    - jsonPath: .spec.gpuModel
+    - jsonPath: .spec.gpuSelector.model
       name: GPU
       type: string
     name: v1alpha1
@@ -62,6 +65,16 @@ spec:
 
               A cluster-scoped template that selects a runtime profile for a given AIM model.
             properties:
+              aimImageName:
+                description: |-
+                  AIMImageName is the AIM image name. Matches `metadata.name` of an AIMImage. Immutable.
+
+                  Example: `meta/llama-3-8b:1.1+20240915`
+                minLength: 1
+                type: string
+                x-kubernetes-validations:
+                - message: image name is immutable
+                  rule: self == oldSelf
               gpuSelector:
                 description: AimGpuSelector contains the strategy to choose the resources
                   to give each replica
@@ -95,16 +108,6 @@ spec:
                   - `latency`: prioritize low end‑to‑end latency
                   - `throughput`: prioritize sustained requests/second
                 type: string
-              modelId:
-                description: |-
-                  ModelID is the AIM model ID. Matches `spec.name` of an AIMImage. Immutable.
-
-                  Example: `meta/llama-3-8b:1.1+20240915`
-                minLength: 1
-                type: string
-                x-kubernetes-validations:
-                - message: model is immutable
-                  rule: self == oldSelf
               precision:
                 allOf:
                 - enum:
@@ -123,8 +126,13 @@ spec:
                   - int8
                 description: Precision selects the numeric precision used by the runtime.
                 type: string
+              runtimeConfigName:
+                default: default
+                description: RuntimeConfigName references the AIM runtime configuration
+                  (by name) to use for this template.
+                type: string
             required:
-            - modelId
+            - aimImageName
             type: object
           status:
             description: AIMServiceTemplateStatus defines the observed state of AIMServiceTemplate.
@@ -190,12 +198,66 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              effectiveRuntimeConfig:
+                description: EffectiveRuntimeConfig surfaces the merged runtime configuration
+                  applied to this template.
+                properties:
+                  clusterRef:
+                    description: ClusterRef points at the cluster-scoped runtime config,
+                      if present.
+                    properties:
+                      kind:
+                        description: Kind is either "AIMRuntimeConfig" or "AIMClusterRuntimeConfig".
+                        type: string
+                      name:
+                        description: Name is the metadata.name of the runtime config.
+                        type: string
+                      namespace:
+                        description: Namespace is only set for namespace-scoped runtime
+                          configs.
+                        type: string
+                      uid:
+                        description: UID is included to detect stale references.
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    type: object
+                  hash:
+                    description: Hash is a stable hash of the merged configuration
+                      used for change detection.
+                    type: string
+                  namespaceRef:
+                    description: NamespaceRef points at the namespace-scoped runtime
+                      config, if present.
+                    properties:
+                      kind:
+                        description: Kind is either "AIMRuntimeConfig" or "AIMClusterRuntimeConfig".
+                        type: string
+                      name:
+                        description: Name is the metadata.name of the runtime config.
+                        type: string
+                      namespace:
+                        description: Namespace is only set for namespace-scoped runtime
+                          configs.
+                        type: string
+                      uid:
+                        description: UID is included to detect stale references.
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    type: object
+                type: object
               modelSources:
                 description: |-
                   ModelSources list the models that this template requires to run. These are the models that will be
                   cached, if this template is cached.
                 items:
                   properties:
+                    name:
+                      description: Name is the name of the model
+                      type: string
                     size:
                       anyOf:
                       - type: integer
@@ -217,6 +279,11 @@ spec:
                   by the controller.
                 format: int64
                 type: integer
+              profile:
+                description: |-
+                  Profile contains the full discovery result profile as a free-form JSON object.
+                  This includes metadata, engine args, environment variables, and model details.
+                x-kubernetes-preserve-unknown-fields: true
               status:
                 default: Pending
                 description: |-

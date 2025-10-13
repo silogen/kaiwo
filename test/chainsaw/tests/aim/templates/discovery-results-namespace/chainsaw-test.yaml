@@ -1,0 +1,81 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: discovery-results-namespace
+spec:
+  description: Test that discovery results populate modelSources and profile correctly
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create namespace image and config
+    try:
+    - apply:
+        file: namespace-image.yaml
+
+  - name: Create cluster template
+    try:
+    - apply:
+        file: namespace-template.yaml
+
+  - name: Wait for template to become Available
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMServiceTemplate
+          metadata:
+            name: llama-3-8b-latency-discovery-namespace
+          status:
+            status: Available
+
+  - name: Verify profile is populated with expected fields
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMServiceTemplate
+          metadata:
+            name: llama-3-8b-latency-discovery-namespace
+          status:
+            profile:
+              model: meta-llama/Llama-3.1-8B-Instruct
+              quantized_model: amd/Llama-3.1-8B-Instruct-FP8-KV
+              metadata:
+                engine: vllm
+                gpu: MI300X
+                precision: fp8
+                gpu_count: 1
+                metric: latency
+              engine_args:
+                distributed_executor_backend: mp
+                gpu-memory-utilization: 0.95
+                tensor-parallel-size: 1
+              env_vars:
+                HIP_FORCE_DEV_KERNARG: "1"
+                NCCL_MIN_NCHANNELS: "112"
+                PYTORCH_TUNABLEOP_ENABLED: "1"
+                PYTORCH_TUNABLEOP_TUNING: "0"
+                PYTORCH_TUNABLEOP_VERBOSE: "1"
+                TORCH_BLAS_PREFER_HIPBLASLT: "1"
+                VLLM_DO_NOT_TRACK: "1"
+                VLLM_USE_TRITON_FLASH_ATTN: "0"
+                VLLM_USE_V1: "0"
+            modelSources:
+            - name: amd/Llama-3.1-8B-Instruct-FP8-KV
+              sourceUri: hf://amd/Llama-3.1-8B-Instruct-FP8-KV
+              size: "9094593249"
+
+  - name: Verify the serving runtime was created
+    try:
+    - assert:
+        resource:
+          apiVersion: serving.kserve.io/v1alpha1
+          kind: ServingRuntime
+          metadata:
+            name: llama-3-8b-latency-discovery-namespace
+          spec:
+            containers:
+            - image: ghcr.io/silogen/aim:0.4.0-meta-llama-llama-3.1-8b-instruct-v20251006
+            supportedModelFormats:
+            - name: aim

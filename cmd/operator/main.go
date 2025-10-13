@@ -72,10 +72,14 @@ import (
 
 	// +kubebuilder:scaffold:imports
 
+	servingv1alpha1 "github.com/kserve/kserve/pkg/apis/serving/v1alpha1"
 	appwrapperv1beta2 "github.com/project-codeflare/appwrapper/api/v1beta2"
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	kueuev1alpha1 "sigs.k8s.io/kueue/apis/kueue/v1alpha1"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
+
+	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
+	aimcontroller "github.com/silogen/kaiwo/internal/controller/aim"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
@@ -92,12 +96,14 @@ func init() {
 
 	utilruntime.Must(kaiwo.AddToScheme(scheme))
 	utilruntime.Must(configapi.AddToScheme(scheme))
+	utilruntime.Must(aimv1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 
 	utilruntime.Must(kueuev1beta1.AddToScheme(scheme))
 	utilruntime.Must(kueuev1alpha1.AddToScheme(scheme))
 	utilruntime.Must(rayv1.AddToScheme(scheme))
 	utilruntime.Must(appwrapperv1beta2.AddToScheme(scheme))
+	utilruntime.Must(servingv1alpha1.AddToScheme(scheme))
 }
 
 func setupFormattedLogOutput() logr.Logger {
@@ -311,6 +317,12 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "KaiwoQueueConfig")
+		os.Exit(1)
+	}
+
+	// Setup AIM controllers
+	if err = aimcontroller.SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to setup AIM controllers")
 		os.Exit(1)
 	}
 
