@@ -27,13 +27,10 @@ package aim
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	inf "gopkg.in/inf.v0"
 
 	"k8s.io/client-go/tools/record"
-
-	aim "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 
@@ -145,7 +142,7 @@ type observation struct {
 	applyTerminal     bool
 }
 
-func (r *ModelCacheReconciler) observe(ctx context.Context, mc *aim.ModelCache) (*observation, error) {
+func (r *ModelCacheReconciler) observe(ctx context.Context, mc *aimv1alpha1.ModelCache) (*observation, error) {
 	ob := &observation{}
 	// PVC
 	pvcName := r.pvcName(mc)
@@ -233,24 +230,6 @@ func (r *ModelCacheReconciler) plan(_ context.Context, mc *aimv1alpha1.ModelCach
 	return desired, nil
 }
 
-// classifyApplyError inspects known immutable-field patterns to produce
-// a stable reason/message for status projection.
-func classifyApplyError(err error) (reason, message string, terminal bool) {
-	if err == nil {
-		return "", "", false
-	}
-	msg := err.Error()
-	lower := strings.ToLower(msg)
-
-	// Common immutability markers from API server validation
-	if strings.Contains(lower, "immutable") ||
-		strings.Contains(lower, "may not be changed") ||
-		(strings.Contains(lower, "forbidden") && strings.Contains(lower, "immutable")) {
-		return "StorageImmutable", msg, true
-	}
-	return "ApplyError", msg, false
-}
-
 type stateFlags struct {
 	failure      bool
 	ready        bool
@@ -272,7 +251,7 @@ func (r *ModelCacheReconciler) calculateStateFlags(ob observation) stateFlags {
 	}
 }
 
-func (r *ModelCacheReconciler) projectStatus(ctx context.Context, mc *aim.ModelCache, ob *observation, errs controllerutils.ReconcileErrors) error {
+func (r *ModelCacheReconciler) projectStatus(_ context.Context, mc *aimv1alpha1.ModelCache, ob *observation, errs controllerutils.ReconcileErrors) error {
 	status := mc.Status
 	var conditions []metav1.Condition
 
@@ -305,8 +284,8 @@ func (r *ModelCacheReconciler) projectStatus(ctx context.Context, mc *aim.ModelC
 	}
 
 	//Check dependencies (pvc & job)
-	status.PersistentVolumeClaim = r.pvcName(mc)
-	status.ObservedGeneration = mc.GetGeneration()
+	mc.Status.PersistentVolumeClaim = r.pvcName(mc)
+	mc.Status.ObservedGeneration = mc.GetGeneration()
 
 	stateFlags := r.calculateStateFlags(*ob)
 
@@ -328,23 +307,23 @@ func (r *ModelCacheReconciler) projectStatus(ctx context.Context, mc *aim.ModelC
 }
 
 func (r *ModelCacheReconciler) buildStorageReadyCondition(ob observation) metav1.Condition {
-	cond := metav1.Condition{Type: aim.ConditionStorageReady}
+	cond := metav1.Condition{Type: aimv1alpha1.ConditionStorageReady}
 
 	switch {
 	case !ob.pvcFound:
 		cond.Status = metav1.ConditionFalse
-		cond.Reason = aim.ReasonPVCPending
+		cond.Reason = aimv1alpha1.ReasonPVCPending
 		cond.Message = "PVC not created yet"
 	case ob.pvc.Status.Phase == corev1.ClaimBound:
 		cond.Status = metav1.ConditionTrue
-		cond.Reason = aim.ReasonPVCBound
+		cond.Reason = aimv1alpha1.ReasonPVCBound
 	case ob.pvc.Status.Phase == corev1.ClaimPending:
 		cond.Status = metav1.ConditionFalse
-		cond.Reason = aim.ReasonPVCProvisioning
+		cond.Reason = aimv1alpha1.ReasonPVCProvisioning
 		cond.Message = "PVC is provisioning"
 	case ob.pvc.Status.Phase == corev1.ClaimLost:
 		cond.Status = metav1.ConditionFalse
-		cond.Reason = aim.ReasonPVCLost
+		cond.Reason = aimv1alpha1.ReasonPVCLost
 		cond.Message = "PVC lost"
 	default:
 		cond.Status = metav1.ConditionUnknown
@@ -355,16 +334,16 @@ func (r *ModelCacheReconciler) buildStorageReadyCondition(ob observation) metav1
 }
 
 func (r *ModelCacheReconciler) buildReadyCondition(sf stateFlags) metav1.Condition {
-	cond := metav1.Condition{Type: aim.ConditionReady}
+	cond := metav1.Condition{Type: aimv1alpha1.ConditionReady}
 	if sf.ready {
 		cond.Status = metav1.ConditionTrue
-		cond.Reason = aim.ReasonWarm
+		cond.Reason = aimv1alpha1.ReasonWarm
 	} else {
 		cond.Status = metav1.ConditionFalse
 		if !sf.canCreateJob {
-			cond.Reason = aim.ReasonWaitingForPVC
+			cond.Reason = aimv1alpha1.ReasonWaitingForPVC
 		} else {
-			cond.Reason = aim.ReasonDownloading
+			cond.Reason = aimv1alpha1.ReasonDownloading
 		}
 	}
 
@@ -372,22 +351,22 @@ func (r *ModelCacheReconciler) buildReadyCondition(sf stateFlags) metav1.Conditi
 }
 
 func (r *ModelCacheReconciler) buildProgressingCondition(ob observation, sf stateFlags) metav1.Condition {
-	cond := metav1.Condition{Type: aim.ConditionProgressing}
+	cond := metav1.Condition{Type: aimv1alpha1.ConditionProgressing}
 	cond.Status = boolToCondition(sf.progressing)
 
 	if !ob.storageReady && !sf.canCreateJob {
-		cond.Reason = aim.ReasonWaitingForPVC
+		cond.Reason = aimv1alpha1.ReasonWaitingForPVC
 	} else if ob.jobPendingOrRunning || (!ob.jobFound && sf.canCreateJob) {
-		cond.Reason = aim.ReasonDownloading
+		cond.Reason = aimv1alpha1.ReasonDownloading
 	} else {
-		cond.Reason = aim.ReasonRetryBackoff
+		cond.Reason = aimv1alpha1.ReasonRetryBackoff
 	}
 
 	return cond
 }
 
 func (r *ModelCacheReconciler) buildFailureCondition(ob observation, sf stateFlags) metav1.Condition {
-	cond := metav1.Condition{Type: aim.ConditionFailure}
+	cond := metav1.Condition{Type: aimv1alpha1.ConditionFailure}
 	cond.Status = boolToCondition(sf.failure)
 	cond.Reason = "NoFailure" // Ensure Reason is always non-empty to satisfy schema
 
@@ -395,24 +374,24 @@ func (r *ModelCacheReconciler) buildFailureCondition(ob observation, sf stateFla
 		cond.Reason = ob.applyErrorReason
 		cond.Message = ob.applyErrorMessage
 	} else if ob.storageLost {
-		cond.Reason = aim.ReasonPVCLost
+		cond.Reason = aimv1alpha1.ReasonPVCLost
 	} else if ob.jobFailed {
-		cond.Reason = aim.ReasonDownloadFailed
+		cond.Reason = aimv1alpha1.ReasonDownloadFailed
 	}
 
 	return cond
 }
 
-func (r *ModelCacheReconciler) determineOverallStatus(sf stateFlags, ob observation) aim.ModelCacheStatusEnum {
+func (r *ModelCacheReconciler) determineOverallStatus(sf stateFlags, ob observation) aimv1alpha1.ModelCacheStatusEnum {
 	switch {
 	case sf.failure && (ob.applyTerminal || ob.jobFailed):
-		return aim.ModelCacheStatusFailed
+		return aimv1alpha1.ModelCacheStatusFailed
 	case sf.ready:
-		return aim.ModelCacheStatusAvailable
+		return aimv1alpha1.ModelCacheStatusAvailable
 	case sf.progressing:
-		return aim.ModelCacheStatusProgressing
+		return aimv1alpha1.ModelCacheStatusProgressing
 	default:
-		return aim.ModelCacheStatusPending
+		return aimv1alpha1.ModelCacheStatusPending
 	}
 }
 
@@ -421,7 +400,7 @@ func (r *ModelCacheReconciler) determineOverallStatus(sf stateFlags, ob observat
 //	return cond != nil && cond.Status == metav1.ConditionTrue
 //}
 
-func (r *ModelCacheReconciler) buildPVC(mc *aim.ModelCache, pvcName string) *corev1.PersistentVolumeClaim {
+func (r *ModelCacheReconciler) buildPVC(mc *aimv1alpha1.ModelCache, pvcName string) *corev1.PersistentVolumeClaim {
 	var sc *string
 	if mc.Spec.StorageClassName != "" {
 		v := mc.Spec.StorageClassName
@@ -456,7 +435,7 @@ func MultiplyQuantityByFloatExact(q resource.Quantity, factor float64) resource.
 	return *resource.NewDecimalQuantity(*dec, q.Format)
 }
 
-func (r *ModelCacheReconciler) buildDownloadJob(mc *aim.ModelCache, jobName string, pvcName string) *batchv1.Job {
+func (r *ModelCacheReconciler) buildDownloadJob(mc *aimv1alpha1.ModelCache, jobName string, pvcName string) *batchv1.Job {
 	mountPath := "/cache"
 	println(mc.Spec.ModelDownloadImage)
 	return &batchv1.Job{
@@ -547,11 +526,11 @@ du -sh %s/.hf 2>/dev/null || true
 	}
 }
 
-func (r *ModelCacheReconciler) pvcName(mc *aim.ModelCache) string {
+func (r *ModelCacheReconciler) pvcName(mc *aimv1alpha1.ModelCache) string {
 	return baseutils.FormatNameWithPostfix(mc.Name, "cache")
 }
 
-func (r *ModelCacheReconciler) jobName(mc *aim.ModelCache) string {
+func (r *ModelCacheReconciler) jobName(mc *aimv1alpha1.ModelCache) string {
 	return baseutils.FormatNameWithPostfix(mc.Name, "cache-download")
 }
 
@@ -572,40 +551,10 @@ func mergeConditions(existing, updates []metav1.Condition) []metav1.Condition {
 	return out
 }
 
-// conditionsEqual compares two condition slices ignoring LastTransitionTime and ObservedGeneration
-func conditionsEqual(a, b []metav1.Condition) bool {
-	// naive length + per-type compare
-	if len(a) != len(b) {
-		return false
-	}
-	// index by type
-	index := func(list []metav1.Condition) map[string]metav1.Condition {
-		m := map[string]metav1.Condition{}
-		for _, c := range list {
-			m[c.Type] = c
-		}
-		return m
-	}
-	ma, mb := index(a), index(b)
-	if len(ma) != len(mb) {
-		return false
-	}
-	for t, ca := range ma {
-		cb, ok := mb[t]
-		if !ok {
-			return false
-		}
-		if ca.Type != cb.Type || ca.Status != cb.Status || ca.Reason != cb.Reason || ca.Message != cb.Message {
-			return false
-		}
-	}
-	return true
-}
-
 func (r *ModelCacheReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Recorder = mgr.GetEventRecorderFor("modelcache-controller")
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&aim.ModelCache{}).
+		For(&aimv1alpha1.ModelCache{}).
 		Owns(&corev1.PersistentVolumeClaim{}).
 		Owns(&batchv1.Job{}).
 		WithOptions(controller.Options{MaxConcurrentReconciles: 2}).
@@ -623,24 +572,4 @@ func mergeStringMap(a, b map[string]string) map[string]string {
 		out[k] = v
 	}
 	return out
-}
-
-// summarizeConditionTransitions produces a compact, human-friendly diff of condition changes
-func summarizeConditionTransitions(oldC, newC []metav1.Condition) string {
-	idx := func(cs []metav1.Condition) map[string]metav1.Condition {
-		m := map[string]metav1.Condition{}
-		for _, c := range cs {
-			m[c.Type] = c
-		}
-		return m
-	}
-	o, n := idx(oldC), idx(newC)
-	var parts []string
-	for t, nc := range n {
-		oc, ok := o[t]
-		if !ok || oc.Status != nc.Status || oc.Reason != nc.Reason {
-			parts = append(parts, fmt.Sprintf("%s: %s→%s (%s)", t, string(oc.Status), string(nc.Status), nc.Reason))
-		}
-	}
-	return strings.Join(parts, "; ")
 }
