@@ -57,6 +57,7 @@ spec:
 | `defaultStorageClassName` | Namespace override for cache storage class. |
 | `serviceAccountName` | ServiceAccount used by discovery jobs and other supporting pods. |
 | `imagePullSecrets` | Additional registry credentials appended to the pod spec. Namespace entries override any duplicates from the cluster config. |
+| `routing.routeTemplate` | Optional HTTP path template applied to services in the namespace. See [Routing templates](#routing-templates) for details. |
 
 ## Referencing runtime configs from workloads
 
@@ -106,3 +107,23 @@ status:
 ## Operator namespace
 
 The AIM controllers determine the operator namespace from the `AIM_OPERATOR_NAMESPACE` environment variable (default: `kaiwo-system`). Cluster-scoped workflows such as cluster templates run auxiliary pods in this namespace and resolve namespaced runtime configs there.
+
+## Routing templates
+
+Runtime configs can supply a reusable HTTP route template via `spec.routing.routeTemplate`. The template is rendered against the `AIMService` object using JSONPath expressions wrapped in `{…}`:
+
+```yaml
+spec:
+  routing:
+    routeTemplate: "/{.metadata.namespace}/{.metadata.labels['team']}/{.spec.model}/"
+```
+
+During reconciliation the controller:
+
+- Evaluates each placeholder with JSONPath (missing or multi-value expressions fail the render).
+- Lowercases and RFC 3986–encodes every path segment.
+- Trims duplicate slashes and the trailing slash, enforcing a 200-character maximum.
+
+A rendered path longer than 200 characters, an invalid JSONPath, or missing data degrades the `AIMService` with reason `RouteTemplateInvalid` and skips HTTPRoute creation.  
+
+Services may override the runtime config by setting `spec.routing.routeTemplate`; if omitted, the runtime config (or the built-in namespace/UID default) is used. The service-level behaviour is described in [AIMService routing](./service.md#routing-templates).

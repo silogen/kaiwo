@@ -178,9 +178,10 @@ const (
 	AIMServiceReasonRuntimeConfigMissing = "RuntimeConfigMissing"
 
 	// Routing
-	AIMServiceReasonConfiguringRoute = "ConfiguringRoute"
-	AIMServiceReasonRouteReady       = "RouteReady"
-	AIMServiceReasonRouteFailed      = "RouteFailed"
+	AIMServiceReasonConfiguringRoute     = "ConfiguringRoute"
+	AIMServiceReasonRouteReady           = "RouteReady"
+	AIMServiceReasonRouteFailed          = "RouteFailed"
+	AIMServiceReasonRouteTemplateInvalid = "RouteTemplateInvalid"
 )
 
 // +kubebuilder:object:root=true
@@ -222,6 +223,11 @@ type AIMServiceRouting struct {
 	// Annotations to add to the HTTPRoute resource.
 	// +optional
 	Annotations map[string]string `json:"annotations,omitempty"`
+
+	// RouteTemplate overrides the HTTP path template used for routing.
+	// The value is rendered against the AIMService object using JSONPath expressions.
+	// +optional
+	RouteTemplate string `json:"routeTemplate,omitempty"`
 }
 
 // AIMServiceRoutingStatus captures observed routing details.

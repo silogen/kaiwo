@@ -2,6 +2,8 @@ apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMService
 metadata:
   name: test
+  labels:
+    "aim.silogen.ai/workload-id": "a79b9bd4-c9cf-41af-9135-f20b89ccbb4e"
 spec:
   aimImageName: test
   templateRef: test
@@ -10,3 +12,4 @@ spec:
     gatewayRef:
       name: kserve-ingress-gateway
       namespace: kgateway-system
+    routeTemplate: "/{.metadata.namespace}/{.metadata.labels['aim.silogen.ai/workload-id']}"

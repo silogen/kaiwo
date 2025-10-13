@@ -120,6 +120,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `defaultStorageClassName` _string_ | DefaultStorageClassName is the storage class used for model caches when one is not<br />specified directly on the consumer resource. |  |  |
+| `routing` _[AIMRuntimeRoutingConfig](#aimruntimeroutingconfig)_ | Routing controls HTTP routing defaults applied to AIM resources. |  |  |
 
 
 #### AIMClusterServiceTemplate
@@ -422,6 +423,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `defaultStorageClassName` _string_ | DefaultStorageClassName is the storage class used for model caches when one is not<br />specified directly on the consumer resource. |  |  |
+| `routing` _[AIMRuntimeRoutingConfig](#aimruntimeroutingconfig)_ | Routing controls HTTP routing defaults applied to AIM resources. |  |  |
 
 
 #### AIMRuntimeConfigCredentials
@@ -492,6 +494,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `defaultStorageClassName` _string_ | DefaultStorageClassName is the storage class used for model caches when one is not<br />specified directly on the consumer resource. |  |  |
+| `routing` _[AIMRuntimeRoutingConfig](#aimruntimeroutingconfig)_ | Routing controls HTTP routing defaults applied to AIM resources. |  |  |
 | `serviceAccountName` _string_ | ServiceAccountName is the service account used for discovery jobs, cache warmers,<br />and any other workloads spawned by the operator on behalf of this runtime config. |  |  |
 | `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets are merged with controller defaults when creating pods that need<br />to pull model or runtime images. |  |  |
 
@@ -535,6 +538,24 @@ _Appears in:_
 | `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
 | `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. |  | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
 | `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
+
+
+#### AIMRuntimeRoutingConfig
+
+
+
+AIMRuntimeRoutingConfig configures routing defaults applied during inference service creation.
+
+
+
+_Appears in:_
+- [AIMClusterRuntimeConfigSpec](#aimclusterruntimeconfigspec)
+- [AIMRuntimeConfigCommon](#aimruntimeconfigcommon)
+- [AIMRuntimeConfigSpec](#aimruntimeconfigspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `routeTemplate` _string_ | RouteTemplate renders a HTTP path prefix using the AIMService as context.<br />Example: `/\{.metadata.namespace\}/\{.metadata.labels['team']\}/\{.spec.model\}/` |  |  |
 
 
 #### AIMService
@@ -611,6 +632,7 @@ _Appears in:_
 | `enabled` _boolean_ | Enabled toggles HTTP routing management. | false |  |
 | `gatewayRef` _[ParentReference](#parentreference)_ | GatewayRef identifies the Gateway parent that should receive the HTTPRoute.<br />When omitted while routing is enabled, reconciliation will report a failure. |  |  |
 | `annotations` _object (keys:string, values:string)_ | Annotations to add to the HTTPRoute resource. |  |  |
+| `routeTemplate` _string_ | RouteTemplate overrides the HTTP path template used for routing.<br />The value is rendered against the AIMService object using JSONPath expressions. |  |  |
 
 
 #### AIMServiceRoutingStatus

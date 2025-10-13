@@ -165,3 +165,27 @@ Template status tracks the discovery lifecycle and provides information about di
 The `status` field provides a quick overview of template readiness. Templates start in `Pending` state when created, transition to `Progressing` while discovery runs, reach `Available` once discovery succeeds, or move to `Failed` if discovery encounters errors. Services should wait for templates to reach `Available` status before deploying.
 
 The `modelSources` array is the primary output of the discovery cache. Each entry includes the model name, download source URI (often a Hugging Face Hub reference), and expected size in bytes. Services and caching mechanisms reference this array to determine what to download and where to find it.
+
+## Service routing templates
+
+When `spec.routing.enabled` is true on an `AIMService`, the operator creates an HTTPRoute that forwards traffic through Gateway API. The HTTP path prefix is computed in three steps:
+
+1. Use `spec.routing.routeTemplate` on the service if present.
+2. Otherwise fall back to the resolved runtime config’s `spec.routing.routeTemplate`.
+3. If neither is set, default to `/<namespace>/<service-uid>`.
+
+Route templates accept JSONPath fragments wrapped in `{…}` and are rendered against the full `AIMService` object. Every segment is lowercased, RFC 3986 encoded, and de-duplicated; the trailing slash is trimmed and the final string must stay under 200 characters. Invalid expressions, missing data, or a path that exceeds the limit degrade the service with reason `RouteTemplateInvalid`, and the controller skips HTTPRoute creation while leaving the ServingRuntime intact.
+
+Example override on the service:
+
+```yaml
+spec:
+  routing:
+    enabled: true
+    gatewayRef:
+      name: inference-gateway
+      namespace: gateways
+    routeTemplate: "/{.metadata.namespace}/{.metadata.labels['team']}/{.spec.model}/"
+```
+
+Namespace administrators can define the same `routeTemplate` field inside runtime configs to establish tenant-wide defaults, while individual services can provide more specific overrides when necessary. See [AIMService routing](./service.md#routing-templates) for the full behaviour.

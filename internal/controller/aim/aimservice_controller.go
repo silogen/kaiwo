@@ -136,6 +136,8 @@ type aimServiceObservation struct {
 	ShouldCreateTemplate   bool
 	RuntimeConfigSpec      aimv1alpha1.AIMRuntimeConfigSpec
 	EffectiveRuntimeConfig *aimv1alpha1.AIMEffectiveRuntimeConfig
+	RoutePath              string
+	RouteTemplateErr       error
 	RuntimeConfigErr       error
 	InferenceService       *servingv1beta1.InferenceService
 	HTTPRoute              *gatewayapiv1.HTTPRoute
@@ -264,6 +266,14 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 		obs.ShouldCreateTemplate = true
 	}
 
+	if service.Spec.Routing != nil && service.Spec.Routing.Enabled && obs.templateFound() {
+		if routePath, err := shared.ResolveServiceRoutePath(service, obs.RuntimeConfigSpec); err != nil {
+			obs.RouteTemplateErr = err
+		} else {
+			obs.RoutePath = routePath
+		}
+	}
+
 	return obs, nil
 }
 
@@ -291,7 +301,10 @@ func (r *AIMServiceReconciler) plan(_ context.Context, service *aimv1alpha1.AIMS
 
 	// Only create/update the InferenceService once the template is available.
 	if obs.TemplateAvailable && obs.RuntimeConfigErr == nil {
-		routePath := routePathPrefix(service)
+		routePath := shared.DefaultRoutePath(service)
+		if obs.RouteTemplateErr == nil && obs.RoutePath != "" {
+			routePath = obs.RoutePath
+		}
 		templateState := aimstate.NewTemplateState(aimstate.TemplateState{
 			Name:              obs.TemplateName,
 			Namespace:         obs.TemplateNamespace,
@@ -306,7 +319,7 @@ func (r *AIMServiceReconciler) plan(_ context.Context, service *aimv1alpha1.AIMS
 		inferenceService := shared.BuildInferenceService(serviceState, ownerRef)
 		desired = append(desired, inferenceService)
 
-		if serviceState.Routing.Enabled && serviceState.Routing.GatewayRef != nil {
+		if serviceState.Routing.Enabled && serviceState.Routing.GatewayRef != nil && obs.RouteTemplateErr == nil {
 			route := shared.BuildInferenceServiceHTTPRoute(serviceState, ownerRef)
 			desired = append(desired, route)
 		}
@@ -341,10 +354,6 @@ func evaluateHTTPRouteStatus(route *gatewayapiv1.HTTPRoute) (bool, string, strin
 	return true, aimv1alpha1.AIMServiceReasonRouteReady, "HTTPRoute is ready"
 }
 
-func routePathPrefix(service *aimv1alpha1.AIMService) string {
-	return fmt.Sprintf("/%s/%s", service.Namespace, string(service.UID))
-}
-
 func evaluateRoutingStatus(
 	service *aimv1alpha1.AIMService,
 	obs *aimServiceObservation,
@@ -357,8 +366,13 @@ func evaluateRoutingStatus(
 		return false, true
 	}
 
+	routePath := shared.DefaultRoutePath(service)
+	if obs != nil && obs.RoutePath != "" {
+		routePath = obs.RoutePath
+	}
+
 	status.Routing = &aimv1alpha1.AIMServiceRoutingStatus{
-		Path: routePathPrefix(service),
+		Path: routePath,
 	}
 
 	if service.Spec.Routing.GatewayRef == nil {
@@ -448,6 +462,10 @@ func (r *AIMServiceReconciler) projectStatus(
 		fmt.Sprintf("Resolved template %q", obs.TemplateName))
 
 	if handleRuntimeConfigMissing(status, obs, setCondition) {
+		return nil
+	}
+
+	if handleRouteTemplateError(status, service, obs, setCondition) {
 		return nil
 	}
 
@@ -556,6 +574,29 @@ func handleRuntimeConfigMissing(
 	setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, reason, message)
 	setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, reason, "Cannot configure runtime without AIMRuntimeConfig")
 	setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionFalse, reason, "Runtime configuration is missing")
+	setCondition(aimv1alpha1.AIMServiceConditionReady, metav1.ConditionFalse, reason, message)
+	return true
+}
+
+func handleRouteTemplateError(
+	status *aimv1alpha1.AIMServiceStatus,
+	service *aimv1alpha1.AIMService,
+	obs *aimServiceObservation,
+	setCondition func(conditionType string, conditionStatus metav1.ConditionStatus, reason, message string),
+) bool {
+	if service.Spec.Routing == nil || !service.Spec.Routing.Enabled {
+		return false
+	}
+	if obs == nil || obs.RouteTemplateErr == nil {
+		return false
+	}
+
+	status.Status = aimv1alpha1.AIMServiceStatusDegraded
+	message := obs.RouteTemplateErr.Error()
+	reason := aimv1alpha1.AIMServiceReasonRouteTemplateInvalid
+	setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, reason, message)
+	setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, reason, "Cannot configure HTTP routing")
+	setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionFalse, reason, "Routing template is invalid")
 	setCondition(aimv1alpha1.AIMServiceConditionReady, metav1.ConditionFalse, reason, message)
 	return true
 }

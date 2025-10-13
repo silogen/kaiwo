@@ -389,6 +389,11 @@ spec:
                     required:
                     - name
                     type: object
+                  routeTemplate:
+                    description: |-
+                      RouteTemplate overrides the HTTP path template used for routing.
+                      The value is rendered against the AIMService object using JSONPath expressions.
+                    type: string
                 type: object
               runtimeConfigName:
                 default: default

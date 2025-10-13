@@ -33,6 +33,10 @@ type AIMRuntimeConfigCommon struct {
 	// DefaultStorageClassName is the storage class used for model caches when one is not
 	// specified directly on the consumer resource.
 	DefaultStorageClassName string `json:"defaultStorageClassName,omitempty"`
+
+	// Routing controls HTTP routing defaults applied to AIM resources.
+	// +optional
+	Routing *AIMRuntimeRoutingConfig `json:"routing,omitempty"`
 }
 
 // AIMRuntimeConfigCredentials captures namespace-scoped authentication knobs.
@@ -55,6 +59,14 @@ type AIMClusterRuntimeConfigSpec struct {
 type AIMRuntimeConfigSpec struct {
 	AIMRuntimeConfigCommon      `json:",inline"`
 	AIMRuntimeConfigCredentials `json:",inline"`
+}
+
+// AIMRuntimeRoutingConfig configures routing defaults applied during inference service creation.
+type AIMRuntimeRoutingConfig struct {
+	// RouteTemplate renders a HTTP path prefix using the AIMService as context.
+	// Example: `/{.metadata.namespace}/{.metadata.labels['team']}/{.spec.model}/`
+	// +optional
+	RouteTemplate string `json:"routeTemplate,omitempty"`
 }
 
 // AIMRuntimeConfigStatus records the resolved config reference surfaced to consumers.

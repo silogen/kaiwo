@@ -61,6 +61,16 @@ spec:
                   DefaultStorageClassName is the storage class used for model caches when one is not
                   specified directly on the consumer resource.
                 type: string
+              routing:
+                description: Routing controls HTTP routing defaults applied to AIM
+                  resources.
+                properties:
+                  routeTemplate:
+                    description: |-
+                      RouteTemplate renders a HTTP path prefix using the AIMService as context.
+                      Example: `/{.metadata.namespace}/{.metadata.labels['team']}/{.spec.model}/`
+                    type: string
+                type: object
             type: object
           status:
             description: AIMRuntimeConfigStatus records the resolved config reference

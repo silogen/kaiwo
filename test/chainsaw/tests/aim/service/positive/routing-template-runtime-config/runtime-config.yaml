@@ -1,0 +1,7 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMRuntimeConfig
+metadata:
+  name: routing-template-config
+spec:
+  routing:
+    routeTemplate: "/{.metadata.namespace}/{.metadata.labels['team']}/{.spec.aimImageName}/"

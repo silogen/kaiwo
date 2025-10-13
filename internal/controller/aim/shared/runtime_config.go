@@ -138,6 +138,12 @@ func mergeRuntimeConfigs(clusterCfg *aimv1alpha1.AIMClusterRuntimeConfig, namesp
 		if len(nsSpec.ImagePullSecrets) > 0 {
 			effective.ImagePullSecrets = mergeImagePullSecrets(effective.ImagePullSecrets, nsSpec.ImagePullSecrets)
 		}
+
+		if nsSpec.Routing != nil {
+			effective.Routing = copyRuntimeRoutingConfig(nsSpec.Routing)
+		}
+	} else if effective.Routing != nil {
+		effective.Routing = copyRuntimeRoutingConfig(effective.Routing)
 	}
 
 	return effective
@@ -147,7 +153,18 @@ func copyRuntimeConfigCommon(common aimv1alpha1.AIMRuntimeConfigCommon) aimv1alp
 	result := aimv1alpha1.AIMRuntimeConfigCommon{
 		DefaultStorageClassName: common.DefaultStorageClassName,
 	}
+	if common.Routing != nil {
+		result.Routing = copyRuntimeRoutingConfig(common.Routing)
+	}
 	return result
+}
+
+func copyRuntimeRoutingConfig(routing *aimv1alpha1.AIMRuntimeRoutingConfig) *aimv1alpha1.AIMRuntimeRoutingConfig {
+	if routing == nil {
+		return nil
+	}
+	copy := *routing
+	return &copy
 }
 
 func mergeImagePullSecrets(base []corev1.LocalObjectReference, overrides []corev1.LocalObjectReference) []corev1.LocalObjectReference {

@@ -1,0 +1,15 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-service
+  labels:
+    team: Data-Team
+spec:
+  aimImageName: meta/route-config
+  templateRef: llama-3-8b-latency-routing-template-config
+  runtimeConfigName: routing-template-config
+  routing:
+    enabled: true
+    gatewayRef:
+      name: kserve-ingress-gateway
+      namespace: kgateway-system

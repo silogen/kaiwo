@@ -1,0 +1,65 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: routing-template-invalid
+spec:
+  description: Service reports RouteTemplateInvalid when template cannot be rendered
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create prerequisites
+    try:
+    - apply:
+        file: cluster-image.yaml
+    - apply:
+        file: cluster-template.yaml
+
+  - name: Wait for template to become Available
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: llama-3-8b-latency-routing-template-invalid
+          status:
+            status: Available
+
+  - name: Create runtime config with broken route template
+    try:
+    - apply:
+        file: runtime-config.yaml
+
+  - name: Create AIMService
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service reports template failure
+    try:
+    - assert:
+        timeout: 60s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-service
+          status:
+            status: Degraded
+            (conditions[?type == 'Failure']):
+            - status: "True"
+              reason: RouteTemplateInvalid
+            (contains(conditions[?type == 'Failure'][0].message, 'missing-label')): true
+            (conditions[?type == 'RuntimeReady']):
+            - status: "False"
+              reason: RouteTemplateInvalid
+
+  - name: Verify HTTPRoute was not created
+    try:
+    - error:
+        resource:
+          apiVersion: gateway.networking.k8s.io/v1
+          kind: HTTPRoute
+          metadata:
+            name: test-service-route

@@ -1,0 +1,11 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterServiceTemplate
+metadata:
+  name: llama-3-8b-latency-routing-template-service
+spec:
+  aimImageName: llama-3-8b-routing-template-service
+  runtimeConfigName: routing-template-service
+  metric: latency
+  gpuSelector:
+    count: 1
+    model: MI300X

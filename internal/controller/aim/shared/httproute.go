@@ -91,6 +91,9 @@ func BuildInferenceServiceHTTPRoute(serviceState aimstate.ServiceState, ownerRef
 		pathPrefix = "/" + pathPrefix
 	}
 	pathPrefix = strings.TrimRight(pathPrefix, "/")
+	if pathPrefix == "" {
+		pathPrefix = "/"
+	}
 
 	port := gatewayapiv1.PortNumber(constants.CommonDefaultHttpPort)
 	backend := gatewayapiv1.HTTPBackendRef{
