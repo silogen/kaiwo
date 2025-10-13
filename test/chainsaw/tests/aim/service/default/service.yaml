@@ -3,8 +3,8 @@ kind: AIMService
 metadata:
   name: test
 spec:
-  aimImageName: llama-3-8b-cluster-with-image
-  templateRef: llama-3-8b-latency-with-image
+  aimImageName: test
+  templateRef: test
   routing:
     enabled: true
     gatewayRef:

@@ -8,10 +8,10 @@ spec:
     image: kserve/storage-initializer:latest
     resources:
       requests:
-        memory: 100Mi
-        cpu: 2Gi
+        memory: 12Gi
+        cpu: 100m
       limits:
-        memory: 4Gi
+        memory: 12Gi
         cpu: "1"
   supportedUriFormats:
   - prefix: gs://
