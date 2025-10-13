@@ -204,6 +204,7 @@ func (r *AIMServiceTemplateReconciler) plan(_ context.Context, template *aimv1al
 		Template:    template,
 		APIVersion:  template.APIVersion,
 		Kind:        template.Kind,
+		Status:      template.Status.Status,
 		Observation: observation,
 	}, shared.TemplatePlanBuilders{
 		BuildRuntime: func(input shared.TemplatePlanInput) client.Object {

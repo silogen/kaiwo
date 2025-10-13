@@ -180,12 +180,14 @@ func PlanTemplateResources(ctx TemplatePlanContext, builders TemplatePlanBuilder
 
 	var desired []client.Object
 
-	if builders.BuildRuntime != nil {
+	// Only create the ServingRuntime after discovery has completed successfully
+	if ctx.Status == aimv1alpha1.AIMTemplateStatusAvailable && builders.BuildRuntime != nil {
 		if runtime := builders.BuildRuntime(input); runtime != nil {
 			desired = append(desired, runtime)
 		}
 	}
 
+	// Create discovery job if template is not yet Available and job hasn't completed
 	if ctx.Status != aimv1alpha1.AIMTemplateStatusAvailable &&
 		builders.BuildDiscoveryJob != nil &&
 		(ctx.Observation.Job == nil || !IsJobComplete(ctx.Observation.Job)) {
