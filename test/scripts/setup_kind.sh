@@ -60,7 +60,7 @@ kubectl apply -f test/configs/kaiwoconfig/local-kind.yaml
 
 kind get kubeconfig -n "$TEST_NAME" > kaiwo_test_kubeconfig.yaml 
 
-./test/generate_certs.sh
+./test/scripts/generate_certs.sh
 
 WEBHOOK_CERT_DIRECTORY=$(pwd)/certs
 KUBECONFIG=$(pwd)/kaiwo_test_kubeconfig.yaml
