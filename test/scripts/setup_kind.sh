@@ -60,7 +60,11 @@ kubectl apply -f test/configs/kaiwoconfig/local-kind.yaml
 
 kind get kubeconfig -n "$TEST_NAME" > kaiwo_test_kubeconfig.yaml 
 
-bash test/scripts/generate_certs.sh
+if [[ -n "${CI:-}"  ]]; then
+  echo "Running in CI. Skipping cert generation"
+else  
+  bash test/scripts/generate_certs.sh
+fi
 
 WEBHOOK_CERT_DIRECTORY=$(pwd)/certs
 KUBECONFIG=$(pwd)/kaiwo_test_kubeconfig.yaml
