@@ -96,6 +96,10 @@ type ModelCacheStatus struct {
 	PersistentVolumeClaim string `json:"persistentVolumeClaim,omitempty"`
 }
 
+func (m *ModelCache) GetStatus() *ModelCacheStatus {
+	return &m.Status
+}
+
 // Condition types
 const (
 	// ConditionProgressing is True when the cache is actively being prepared (PVC being bound, job running, etc.)

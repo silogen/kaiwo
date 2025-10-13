@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package controller
+package aim
 
 import (
 	"context"
@@ -45,20 +45,21 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/util/retry"
+	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
+	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
+	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 )
 
 // ModelCacheReconciler reconciles a ModelCache object
 type ModelCacheReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Scheme    *runtime.Scheme
+	Recorder  record.EventRecorder
+	Clientset kubernetes.Interface
 }
 
 // RBAC markers
@@ -72,100 +73,52 @@ type ModelCacheReconciler struct {
 const (
 	// The amount of headroom given to the PVC
 	// FIXME Currently HF duplicates the cache, so doubling the storage for now
-	storageMultiplier float64 = 2.1
+	modelCacheFieldOwner         = "modelcache-controller"
+	storageMultiplier    float64 = 2.1
 )
 
 func (r *ModelCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx).WithValues("modelcache", req.String())
+	//logger := log.FromContext(ctx).WithValues("modelcache-controller", req.String())
 	// Fetch CR
-	var mc aim.ModelCache
+	var mc aimv1alpha1.ModelCache
 	if err := r.Get(ctx, req.NamespacedName, &mc); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// Observe
-	ob, err := r.observe(ctx, &mc)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("observation failed: %w", err)
-	}
-
-	// Deletion guard: don't mutate children when deleting
-	if !mc.DeletionTimestamp.IsZero() {
-		st := r.projectStatus(&mc, ob)
-		meta.SetStatusCondition(&st.Conditions, metav1.Condition{Type: aim.ConditionReady, Status: metav1.ConditionFalse, Reason: "Finalizing", Message: "Resource is being deleted"})
-		before := mc.DeepCopy()
-		mc.Status = st
-		_ = r.Status().Patch(ctx, &mc, client.MergeFrom(before))
-		logger.Info("finalizing ModelCache; skipping child mutations", "name", req.NamespacedName)
-		return ctrl.Result{}, nil
-	}
-
-	// Apply (ensure PVC and Job)
-	if err := r.apply(ctx, &mc, ob); err != nil {
-		// classify and project failure, then return error for backoff
-		reason, message, terminal := classifyApplyError(err)
-		ob.applyErrorReason = reason
-		ob.applyErrorMessage = message
-		ob.applyTerminal = terminal
-		st := r.projectStatus(&mc, ob)
-		before := mc.DeepCopy()
-		mc.Status = st
-		_ = r.Status().Patch(ctx, &mc, client.MergeFrom(before))
-		r.Recorder.Event(&mc, corev1.EventTypeWarning, reason, message)
-		logger.Error(err, "apply failed", "reason", reason)
-		return ctrl.Result{}, fmt.Errorf("apply failed: %w", err)
-	}
-
-	// Emit events based on observed state prior to apply, gated by prior status
-	prevStorage := meta.FindStatusCondition(mc.Status.Conditions, aim.ConditionStorageReady)
-	prevReady := meta.FindStatusCondition(mc.Status.Conditions, aim.ConditionReady)
-	if !ob.pvcFound && (prevStorage == nil || prevStorage.Status != metav1.ConditionTrue) {
-		r.Recorder.Event(&mc, corev1.EventTypeNormal, "PVCEnsured", fmt.Sprintf("Ensured PVC %s", r.pvcName(&mc)))
-		logger.V(1).Info("PVC ensured (SSA)", "pvc", r.pvcName(&mc))
-	}
-	if ob.storageReady && (prevStorage == nil || prevStorage.Status != metav1.ConditionTrue) {
-		r.Recorder.Event(&mc, corev1.EventTypeNormal, "PVCBound", fmt.Sprintf("PVC %s is Bound", r.pvcName(&mc)))
-		logger.Info("PVC bound", "pvc", r.pvcName(&mc))
-	}
-	if ob.storageReady && !ob.jobFound && (prevReady == nil || prevReady.Status != metav1.ConditionTrue) {
-		r.Recorder.Event(&mc, corev1.EventTypeNormal, "DownloadJobEnsured", fmt.Sprintf("Ensured download Job %s", r.jobName(&mc)))
-		logger.V(1).Info("Download job ensured (SSA)", "job", r.jobName(&mc))
-	}
-	if ob.jobSucceeded && (prevReady == nil || prevReady.Status != metav1.ConditionTrue) {
-		r.Recorder.Event(&mc, corev1.EventTypeNormal, "DownloadJobCompleted", fmt.Sprintf("Job %s completed successfully", r.jobName(&mc)))
-		logger.Info("Download job completed", "job", r.jobName(&mc))
-	}
-	if ob.jobFailed && (prevReady == nil || prevReady.Status != metav1.ConditionTrue) {
-		r.Recorder.Event(&mc, corev1.EventTypeWarning, "DownloadJobFailed", fmt.Sprintf("Job %s failed", r.jobName(&mc)))
-		logger.Info("Download job failed", "job", r.jobName(&mc))
-	}
-
-	// Status projection and patch
-	newStatus := r.projectStatus(&mc, ob)
-	changed := !conditionsEqual(newStatus.Conditions, mc.Status.Conditions) ||
-		newStatus.Status != mc.Status.Status ||
-		newStatus.PersistentVolumeClaim != mc.Status.PersistentVolumeClaim ||
-		newStatus.ObservedGeneration != mc.Status.ObservedGeneration
-
-	if changed {
-		summary := summarizeConditionTransitions(mc.Status.Conditions, newStatus.Conditions)
-		if summary != "" {
-			evtType := corev1.EventTypeNormal
-			if cond := meta.FindStatusCondition(newStatus.Conditions, aim.ConditionFailure); cond != nil && cond.Status == metav1.ConditionTrue {
-				evtType = corev1.EventTypeWarning
+	return controllerutils.Reconcile(ctx, controllerutils.ReconcileSpec[*aimv1alpha1.ModelCache, aimv1alpha1.ModelCacheStatus]{
+		Client:   r.Client,
+		Scheme:   r.Scheme,
+		Object:   &mc,
+		Recorder: r.Recorder,
+		ObserveFn: func(ctx context.Context) (any, error) {
+			return r.observe(ctx, &mc)
+		},
+		FieldOwner: modelCacheFieldOwner,
+		PlanFn: func(ctx context.Context, obs any) ([]client.Object, error) {
+			var o *observation
+			if obs != nil {
+				var ok bool
+				o, ok = obs.(*observation)
+				if !ok {
+					return nil, fmt.Errorf("unexpected observation type %T", obs)
+				}
 			}
-			logger.Info("status transitioned", "changes", summary)
-			r.Recorder.Event(&mc, evtType, "StatusChanged", summary)
-		}
-		before := mc.DeepCopy()
-		mc.Status = newStatus
-		if err := r.Status().Patch(ctx, &mc, client.MergeFrom(before)); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to patch ModelCache status: %w", err)
-		}
-	}
+			return r.plan(ctx, &mc, o)
+		},
+		ProjectFn: func(ctx context.Context, obs any, errs controllerutils.ReconcileErrors) error {
+			var o *observation
+			if obs != nil {
+				var ok bool
+				o, ok = obs.(*observation)
+				if !ok {
+					return fmt.Errorf("unexpected observation type %T", obs)
+				}
+			}
+			return r.projectStatus(ctx, &mc, o, errs)
+		},
+		FinalizeFn: nil,
+	})
 
-	// Rely on watch events instead of periodic requeue
-	return ctrl.Result{}, nil
 }
 
 // observation holds read-only snapshot of dependent resources and derived flags
@@ -192,7 +145,8 @@ type observation struct {
 	applyTerminal     bool
 }
 
-func (r *ModelCacheReconciler) observe(ctx context.Context, mc *aim.ModelCache) (ob observation, err error) {
+func (r *ModelCacheReconciler) observe(ctx context.Context, mc *aim.ModelCache) (*observation, error) {
+	ob := &observation{}
 	// PVC
 	pvcName := r.pvcName(mc)
 	if err := r.Get(ctx, types.NamespacedName{Namespace: mc.Namespace, Name: pvcName}, &ob.pvc); err != nil {
@@ -251,40 +205,32 @@ func (r *ModelCacheReconciler) observe(ctx context.Context, mc *aim.ModelCache) 
 	return ob, nil
 }
 
-func (r *ModelCacheReconciler) apply(ctx context.Context, mc *aim.ModelCache, ob observation) error {
-	// Server-Side Apply desired PVC on every reconcile
-	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		pvc := r.buildPVC(mc, r.pvcName(mc))
-		if err := ctrl.SetControllerReference(mc, pvc, r.Scheme); err != nil {
-			return fmt.Errorf("owner pvc: %w", err)
-		}
-		if err := r.Patch(ctx, pvc, client.Apply, client.FieldOwner("modelcache-controller")); err != nil {
-			return fmt.Errorf("apply pvc: %w", err)
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
+func (r *ModelCacheReconciler) plan(_ context.Context, mc *aimv1alpha1.ModelCache, ob *observation) ([]client.Object, error) {
+	var desired []client.Object
 
-	// Apply Job when storage is ready OR when PVC is pending with WaitForFirstConsumer
+	if ob == nil {
+		return desired, nil
+	}
+	// Include PVC on every reconcile
+	pvc := r.buildPVC(mc, r.pvcName(mc))
+	if err := ctrl.SetControllerReference(mc, pvc, r.Scheme); err != nil {
+		return desired, fmt.Errorf("owner pvc: %w", err)
+	}
+	desired = append(desired, pvc)
+
+	// Include Job when storage is ready OR when PVC is pending with WaitForFirstConsumer
 	canCreateJob := ob.storageReady || (ob.pvcFound && ob.pvc.Status.Phase == corev1.ClaimPending && ob.waitForFirstConsumer)
 	if canCreateJob && !ob.jobFound {
-		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			job := r.buildDownloadJob(mc, r.jobName(mc), r.pvcName(mc))
-			if err := ctrl.SetControllerReference(mc, job, r.Scheme); err != nil {
-				return fmt.Errorf("owner job: %w", err)
-			}
-			if err := r.Patch(ctx, job, client.Apply, client.FieldOwner("modelcache-controller")); err != nil {
-				return fmt.Errorf("apply job: %w", err)
-			}
-			return nil
-		})
-		if err != nil {
-			return err
+
+		job := r.buildDownloadJob(mc, r.jobName(mc), r.pvcName(mc))
+		if err := ctrl.SetControllerReference(mc, job, r.Scheme); err != nil {
+			return desired, fmt.Errorf("owner job: %w", err)
 		}
+		desired = append(desired, job)
+
 	}
-	return nil
+
+	return desired, nil
 }
 
 // classifyApplyError inspects known immutable-field patterns to produce
@@ -326,22 +272,59 @@ func (r *ModelCacheReconciler) calculateStateFlags(ob observation) stateFlags {
 	}
 }
 
-func (r *ModelCacheReconciler) projectStatus(mc *aim.ModelCache, ob observation) aim.ModelCacheStatus {
+func (r *ModelCacheReconciler) projectStatus(ctx context.Context, mc *aim.ModelCache, ob *observation, errs controllerutils.ReconcileErrors) error {
 	status := mc.Status
+	var conditions []metav1.Condition
+
+	//Report any outstanding errors to report from previous controller actions
+	if errs.HasError() {
+
+		if errs.ObserveErr != nil {
+			conditions = append(conditions, controllerutils.NewCondition(
+				controllerutils.ConditionTypeFailure,
+				metav1.ConditionTrue,
+				controllerutils.ReasonFailed,
+				fmt.Sprintf("We have observation errors: %v", errs.ObserveErr),
+			))
+		}
+
+		if errs.ApplyErr != nil {
+			conditions = append(conditions, controllerutils.NewCondition(
+				controllerutils.ConditionTypeFailure,
+				metav1.ConditionTrue,
+				controllerutils.ReasonFailed,
+				fmt.Sprintf("We  %v", errs.ObserveErr),
+			))
+		}
+
+		mc.Status.Status = aimv1alpha1.ModelCacheStatusFailed
+		for _, cond := range conditions {
+			meta.SetStatusCondition(&mc.Status.Conditions, cond)
+		}
+		return nil
+	}
+
+	//Check dependencies (pvc & job)
 	status.PersistentVolumeClaim = r.pvcName(mc)
 	status.ObservedGeneration = mc.GetGeneration()
 
-	stateFlags := r.calculateStateFlags(ob)
+	stateFlags := r.calculateStateFlags(*ob)
 
-	storageCond := r.buildStorageReadyCondition(ob)
+	storageCond := r.buildStorageReadyCondition(*ob)
 	readyCond := r.buildReadyCondition(stateFlags)
-	progressingCond := r.buildProgressingCondition(ob, stateFlags)
-	failureCond := r.buildFailureCondition(ob, stateFlags)
+	progressingCond := r.buildProgressingCondition(*ob, stateFlags)
+	failureCond := r.buildFailureCondition(*ob, stateFlags)
 
 	status.Conditions = mergeConditions(status.Conditions, []metav1.Condition{storageCond, readyCond, progressingCond, failureCond})
-	status.Status = r.determineOverallStatus(stateFlags, ob)
+	for _, cond := range status.Conditions {
+		meta.SetStatusCondition(&mc.Status.Conditions, cond)
+	}
+	mc.Status.Status = r.determineOverallStatus(stateFlags, *ob)
 
-	return status
+	//fmt.Printf("%v\n", newStatus)
+	//r.Recorder
+
+	return nil
 }
 
 func (r *ModelCacheReconciler) buildStorageReadyCondition(ob observation) metav1.Condition {
@@ -622,11 +605,11 @@ func conditionsEqual(a, b []metav1.Condition) bool {
 func (r *ModelCacheReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Recorder = mgr.GetEventRecorderFor("modelcache-controller")
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&aim.ModelCache{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		For(&aim.ModelCache{}).
 		Owns(&corev1.PersistentVolumeClaim{}).
-		Owns(&batchv1.Job{}, builder.WithPredicates(JobStatusChangedPredicate())).
+		Owns(&batchv1.Job{}).
 		WithOptions(controller.Options{MaxConcurrentReconciles: 2}).
-		Named("modelcache").
+		Named("modelcache-controller").
 		Complete(r)
 }
 
