@@ -23,19 +23,19 @@ spec:
     - jsonPath: .status.status
       name: Status
       type: string
-    - jsonPath: .spec.modelId
-      name: Model
+    - jsonPath: .status.profile.metadata.engine
+      name: Engine
       type: string
-    - jsonPath: .spec.metric
+    - jsonPath: .status.profile.metadata.metric
       name: Metric
       type: string
-    - jsonPath: .spec.precision
+    - jsonPath: .status.profile.metadata.precision
       name: Precision
       type: string
-    - jsonPath: .spec.gpuSelector.count
+    - jsonPath: .status.profile.metadata.gpu_count
       name: GPUs/replica
       type: integer
-    - jsonPath: .spec.gpuSelector.model
+    - jsonPath: .status.profile.metadata.gpu
       name: GPU
       type: string
     name: v1alpha1
