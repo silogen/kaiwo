@@ -1,0 +1,75 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: template-ref-overrides
+spec:
+  description: AIMService with templateRef and overrides clones the source template
+  timeouts:
+    assert: 90s
+  steps:
+  - name: Ensure base template is available
+    try:
+    - assert:
+        timeout: 5s
+        file: ../../_shared/template-available.yaml
+
+  - name: Create AIMService with overrides and templateRef
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify derived template exists with overrides
+    try:
+    - assert:
+        timeout: 60s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMServiceTemplate
+          metadata:
+            name: default-testing-llama-3-8b-ovr-d49d9414
+            (ownerReferences[?kind == 'AIMService']):
+            - name: template-ref-overrides
+          spec:
+            metric: latency
+            precision: fp16
+
+  - name: Wait for derived template Available
+    try:
+    - assert:
+        timeout: 120s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMServiceTemplate
+          metadata:
+            name: default-testing-llama-3-8b-ovr-d49d9414
+          status:
+            status: Available
+
+  - name: Verify AIMService resolved template
+    try:
+    - assert:
+        timeout: 3m
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: template-ref-overrides
+          status:
+            status: Running
+            resolvedTemplateRef: default-testing-llama-3-8b-ovr-d49d9414
+            (conditions[?type == 'Ready']):
+            - status: "True"
+
+  - name: Verify InferenceService uses derived runtime
+    try:
+    - assert:
+        timeout: 2m
+        resource:
+          apiVersion: serving.kserve.io/v1beta1
+          kind: InferenceService
+          metadata:
+            name: template-ref-overrides
+          spec:
+            predictor:
+              model:
+                runtime: default-testing-llama-3-8b-ovr-d49d9414

@@ -1,0 +1,75 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: default-template-overrides
+spec:
+  description: AIMService without templateRef but with overrides clones the default template
+  timeouts:
+    assert: 90s
+  steps:
+  - name: Ensure default template is available
+    try:
+    - assert:
+        timeout: 5s
+        file: ../../_shared/template-available.yaml
+
+  - name: Create AIMService with overrides
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify namespace template created with overrides
+    try:
+  - assert:
+        timeout: 60s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMServiceTemplate
+          metadata:
+            name: default-testing-llama-3-8b-ovr-2926054f
+            (ownerReferences[?kind == 'AIMService']):
+            - name: default-template-overrides
+          spec:
+            metric: throughput
+            precision: fp8
+
+  - name: Wait for derived template to become Available
+    try:
+    - assert:
+        timeout: 120s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMServiceTemplate
+          metadata:
+            name: default-testing-llama-3-8b-ovr-2926054f
+          status:
+            status: Available
+
+  - name: Verify AIMService runs with overrides
+    try:
+    - assert:
+        timeout: 3m
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: default-template-overrides
+          status:
+            status: Running
+            resolvedTemplateRef: default-testing-llama-3-8b-ovr-2926054f
+            (conditions[?type == 'Ready']):
+            - status: "True"
+
+  - name: Verify InferenceService uses overrides
+    try:
+    - assert:
+        timeout: 2m
+        resource:
+          apiVersion: serving.kserve.io/v1beta1
+          kind: InferenceService
+          metadata:
+            name: default-template-overrides
+          spec:
+            predictor:
+              model:
+                runtime: default-testing-llama-3-8b-ovr-2926054f

@@ -1,0 +1,55 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: default-template
+spec:
+  description: AIMService without templateRef uses the image default template
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Ensure default template is available
+    try:
+    - assert:
+        timeout: 5s
+        file: ../../_shared/template-available.yaml
+
+  - name: Create AIMService without templateRef
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify resolved template recorded
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: default-template-service
+          status:
+            resolvedTemplateRef: default-testing-llama-3-8b
+
+  - name: Verify InferenceService created
+    try:
+    - assert:
+        timeout: 2m
+        resource:
+          apiVersion: serving.kserve.io/v1beta1
+          kind: InferenceService
+          metadata:
+            name: default-template-service
+
+  - name: Verify AIMService becomes Running
+    try:
+    - assert:
+        timeout: 3m
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: default-template-service
+          status:
+            status: Running
+            (conditions[?type == 'Ready']):
+            - status: "True"
