@@ -32,8 +32,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/silogen/kaiwo/internal/controller/framework"
-
 	servingv1beta1 "github.com/kserve/kserve/pkg/apis/serving/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -52,6 +50,7 @@ import (
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 	"github.com/silogen/kaiwo/internal/controller/aim/shared"
 	aimstate "github.com/silogen/kaiwo/internal/controller/aim/state"
+	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
@@ -98,7 +97,7 @@ func (r *AIMServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	logger.Info("Reconciling AIMService", "name", service.Name, "namespace", service.Namespace)
 
-	return framework.Reconcile(ctx, framework.ReconcileSpec[*aimv1alpha1.AIMService, aimv1alpha1.AIMServiceStatus]{
+	return controllerutils.Reconcile(ctx, controllerutils.ReconcileSpec[*aimv1alpha1.AIMService, aimv1alpha1.AIMServiceStatus]{
 		Client:     r.Client,
 		Scheme:     r.Scheme,
 		Object:     &service,
@@ -118,7 +117,7 @@ func (r *AIMServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			}
 			return r.plan(ctx, &service, observation)
 		},
-		ProjectFn: func(ctx context.Context, obs any, errs framework.ReconcileErrors) error {
+		ProjectFn: func(ctx context.Context, obs any, errs controllerutils.ReconcileErrors) error {
 			var observation *aimServiceObservation
 			if obs != nil {
 				var ok bool
@@ -612,7 +611,7 @@ func (r *AIMServiceReconciler) projectStatus(
 	_ context.Context,
 	service *aimv1alpha1.AIMService,
 	obs *aimServiceObservation,
-	errs framework.ReconcileErrors,
+	errs controllerutils.ReconcileErrors,
 ) error {
 	status := &service.Status
 	status.EffectiveRuntimeConfig = nil
@@ -742,7 +741,7 @@ func (r *AIMServiceReconciler) projectStatus(
 func (r *AIMServiceReconciler) handleReconcileErrors(
 	status *aimv1alpha1.AIMServiceStatus,
 	setCondition func(conditionType string, conditionStatus metav1.ConditionStatus, reason, message string),
-	errs framework.ReconcileErrors,
+	errs controllerutils.ReconcileErrors,
 ) bool {
 	if !errs.HasError() {
 		return false
