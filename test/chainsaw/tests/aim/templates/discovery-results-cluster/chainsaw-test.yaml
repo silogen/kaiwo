@@ -41,8 +41,6 @@ spec:
             name: llama-3-8b-latency-discovery-cluster
           status:
             profile:
-              model: meta-llama/Llama-3.1-8B-Instruct
-              quantized_model: amd/Llama-3.1-8B-Instruct-FP8-KV
               metadata:
                 engine: vllm
                 gpu: MI300X
