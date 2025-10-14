@@ -108,9 +108,15 @@ func ObserveTemplate[R client.Object](ctx context.Context, opts TemplateObservat
 	if opts.LookupImage != nil {
 		image, err := opts.LookupImage(ctx)
 		if err != nil {
-			return nil, err
+			// For image not found errors, continue with empty image
+			// This allows status projection to handle it gracefully
+			if !errors.Is(err, ErrImageNotFound) {
+				return nil, err
+			}
+			// obs.Image remains empty string
+		} else {
+			obs.Image = image
 		}
-		obs.Image = image
 	}
 
 	if opts.ResolveRuntimeConfig != nil {

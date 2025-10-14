@@ -64,15 +64,18 @@ type AIMRuntimeParameters struct {
 	//
 	// +optional
 	// +kubebuilder:validation:Enum=latency;throughput
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="metric is immutable"
 	Metric *AIMMetric `json:"metric,omitempty"`
 
 	// Precision selects the numeric precision used by the runtime.
 	// +optional
 	// +kubebuilder:validation:Enum=auto;fp4;fp8;fp16;fp32;bf16;int4;int8
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="precision is immutable"
 	Precision *AIMPrecision `json:"precision,omitempty"`
 
 	// AimGpuSelector contains the strategy to choose the resources to give each replica
 	// +optional
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="gpuSelector is immutable"
 	GpuSelector *AimGpuSelector `json:"gpuSelector,omitempty"`
 }
 
@@ -222,7 +225,7 @@ type AIMModelSource struct {
 }
 
 // AIMTemplateStatusEnum defines coarse-grained states for a template.
-// +kubebuilder:validation:Enum=Pending;Progressing;Available;Failed
+// +kubebuilder:validation:Enum=Pending;Progressing;Available;Degraded;Failed
 type AIMTemplateStatusEnum string
 
 const (

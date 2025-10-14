@@ -1,9 +1,9 @@
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
-  name: template-update-triggers-reconcile
+  name: template-immutability
 spec:
-  description: Test that template changes trigger service reconciliation
+  description: Test that template spec fields are immutable
   timeouts:
     assert: 60s
   steps:
@@ -28,51 +28,12 @@ spec:
             (profile.metadata.precision == 'fp16'): true
             (profile.metadata.metric == 'latency'): true
 
-  - name: Create AIMService
-    try:
-    - apply:
-        file: service.yaml
-
-  - name: Verify service resolves with v1 template
-    try:
-    - assert:
-        timeout: 30s
-        resource:
-          apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMService
-          metadata:
-            name: test-service
-          status:
-            (conditions[?type == 'Resolved']):
-            - status: "True"
-
-  - name: Update template to v2
+  - name: Attempt to update template spec (should fail)
     try:
     - apply:
         file: cluster-template-v2.yaml
-
-  - name: Wait for updated template to become Available
-    try:
-    - assert:
-        timeout: 30s
-        resource:
-          apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMClusterServiceTemplate
-          metadata:
-            name: llama-3-8b-latency-template-update
-          status:
-            status: Available
-            (profile.metadata.precision == 'fp8'): true
-            (profile.metadata.metric == 'throughput'): true
-
-  - name: Verify service effectiveRuntimeConfig hash changed
-    try:
-    - assert:
-        timeout: 30s
-        resource:
-          apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMService
-          metadata:
-            name: test-service
-          status:
-            (effectiveRuntimeConfig != null): true
+        expect:
+        - check:
+            ($error != null): true
+            ($error.reason): Invalid
+            ($error.message ~= 'immutable'): true

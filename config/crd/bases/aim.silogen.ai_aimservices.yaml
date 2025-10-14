@@ -249,6 +249,9 @@ spec:
                     - count
                     - model
                     type: object
+                    x-kubernetes-validations:
+                    - message: gpuSelector is immutable
+                      rule: self == oldSelf
                   metric:
                     allOf:
                     - enum:
@@ -263,6 +266,9 @@ spec:
                       - `latency`: prioritize low end‑to‑end latency
                       - `throughput`: prioritize sustained requests/second
                     type: string
+                    x-kubernetes-validations:
+                    - message: metric is immutable
+                      rule: self == oldSelf
                   precision:
                     allOf:
                     - enum:
@@ -282,6 +288,9 @@ spec:
                     description: Precision selects the numeric precision used by the
                       runtime.
                     type: string
+                    x-kubernetes-validations:
+                    - message: precision is immutable
+                      rule: self == oldSelf
                 type: object
               replicas:
                 default: 1

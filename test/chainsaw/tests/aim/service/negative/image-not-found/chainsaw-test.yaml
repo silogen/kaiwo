@@ -12,7 +12,7 @@ spec:
     - apply:
         file: cluster-template.yaml
 
-  - name: Verify template fails with ImageNotFound
+  - name: Verify template is degraded with ImageNotFound
     try:
     - assert:
         timeout: 30s
@@ -22,7 +22,7 @@ spec:
           metadata:
             name: llama-3-8b-latency-image-missing
           status:
-            status: Failed
+            status: Degraded
             (conditions[?type == 'Ready']):
             - status: "False"
 
@@ -31,7 +31,7 @@ spec:
     - apply:
         file: service.yaml
 
-  - name: Verify service fails
+  - name: Verify service does not become ready
     try:
     - assert:
         timeout: 30s
@@ -41,4 +41,4 @@ spec:
           metadata:
             name: test-service
           status:
-            (status == 'Failed' || status == 'Pending'): true
+            (status != 'Ready'): true

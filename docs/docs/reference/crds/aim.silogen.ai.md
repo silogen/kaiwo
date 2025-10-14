@@ -826,7 +826,7 @@ _Appears in:_
 | `observedGeneration` _integer_ | ObservedGeneration is the most recent generation observed by the controller. |  |  |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest observations of template state. |  |  |
 | `effectiveRuntimeConfig` _[AIMEffectiveRuntimeConfig](#aimeffectiveruntimeconfig)_ | EffectiveRuntimeConfig surfaces the merged runtime configuration applied to this template. |  |  |
-| `status` _[AIMTemplateStatusEnum](#aimtemplatestatusenum)_ | Status represents the current high‑level status of the template lifecycle.<br />Values: `Pending`, `Progressing`, `Available`, `Failed`. | Pending | Enum: [Pending Progressing Available Failed] <br /> |
+| `status` _[AIMTemplateStatusEnum](#aimtemplatestatusenum)_ | Status represents the current high‑level status of the template lifecycle.<br />Values: `Pending`, `Progressing`, `Available`, `Failed`. | Pending | Enum: [Pending Progressing Available Degraded Failed] <br /> |
 | `modelSources` _[AIMModelSource](#aimmodelsource) array_ | ModelSources list the models that this template requires to run. These are the models that will be<br />cached, if this template is cached. |  |  |
 | `profile` _[AIMProfile](#aimprofile)_ | Profile contains the full discovery result profile as a free-form JSON object.<br />This includes metadata, engine args, environment variables, and model details. |  |  |
 
@@ -953,7 +953,7 @@ _Underlying type:_ _string_
 AIMTemplateStatusEnum defines coarse-grained states for a template.
 
 _Validation:_
-- Enum: [Pending Progressing Available Failed]
+- Enum: [Pending Progressing Available Degraded Failed]
 
 _Appears in:_
 - [AIMServiceTemplateStatus](#aimservicetemplatestatus)
