@@ -4,19 +4,19 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.1
-  name: modelcaches.aim.silogen.ai
+  name: aimmodelcaches.aim.silogen.ai
 spec:
   group: aim.silogen.ai
   names:
     categories:
     - aim
     - all
-    kind: ModelCache
-    listKind: ModelCacheList
-    plural: modelcaches
+    kind: AIMModelCache
+    listKind: AIMModelCacheList
+    plural: aimmodelcaches
     shortNames:
     - mc
-    singular: modelcache
+    singular: aimmodelcache
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -35,7 +35,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: ModelCache is the Schema for the modelcaches API
+        description: AIMModelCache is the Schema for the modelcaches API
         properties:
           apiVersion:
             description: |-
@@ -55,7 +55,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: ModelCacheSpec defines the desired state of ModelCache
+            description: AIMModelCacheSpec defines the desired state of AIMModelCache
             properties:
               env:
                 description: |-
@@ -232,7 +232,7 @@ spec:
             - sourceUri
             type: object
           status:
-            description: ModelCacheStatus defines the observed state of ModelCache
+            description: AIMModelCacheStatus defines the observed state of AIMModelCache
             properties:
               conditions:
                 description: Conditions represent the latest available observations

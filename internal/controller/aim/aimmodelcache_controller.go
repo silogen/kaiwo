@@ -51,8 +51,8 @@ import (
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 )
 
-// ModelCacheReconciler reconciles a ModelCache object
-type ModelCacheReconciler struct {
+// AIMModelCacheReconciler reconciles a AIMModelCache object
+type AIMModelCacheReconciler struct {
 	client.Client
 	Scheme    *runtime.Scheme
 	Recorder  record.EventRecorder
@@ -71,15 +71,15 @@ const (
 	modelCacheFieldOwner = "modelcache-controller"
 )
 
-func (r *ModelCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *AIMModelCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	//logger := log.FromContext(ctx).WithValues("modelcache-controller", req.String())
 	// Fetch CR
-	var mc aimv1alpha1.ModelCache
+	var mc aimv1alpha1.AIMModelCache
 	if err := r.Get(ctx, req.NamespacedName, &mc); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	return controllerutils.Reconcile(ctx, controllerutils.ReconcileSpec[*aimv1alpha1.ModelCache, aimv1alpha1.ModelCacheStatus]{
+	return controllerutils.Reconcile(ctx, controllerutils.ReconcileSpec[*aimv1alpha1.AIMModelCache, aimv1alpha1.AIMModelCacheStatus]{
 		Client:   r.Client,
 		Scheme:   r.Scheme,
 		Object:   &mc,
@@ -139,7 +139,7 @@ type observation struct {
 	applyTerminal     bool
 }
 
-func (r *ModelCacheReconciler) observe(ctx context.Context, mc *aimv1alpha1.ModelCache) (*observation, error) {
+func (r *AIMModelCacheReconciler) observe(ctx context.Context, mc *aimv1alpha1.AIMModelCache) (*observation, error) {
 	ob := &observation{}
 	// PVC
 	pvcName := r.pvcName(mc)
@@ -199,7 +199,7 @@ func (r *ModelCacheReconciler) observe(ctx context.Context, mc *aimv1alpha1.Mode
 	return ob, nil
 }
 
-func (r *ModelCacheReconciler) plan(_ context.Context, mc *aimv1alpha1.ModelCache, ob *observation) ([]client.Object, error) {
+func (r *AIMModelCacheReconciler) plan(_ context.Context, mc *aimv1alpha1.AIMModelCache, ob *observation) ([]client.Object, error) {
 	var desired []client.Object
 
 	if ob == nil {
@@ -234,7 +234,7 @@ type stateFlags struct {
 	progressing  bool
 }
 
-func (r *ModelCacheReconciler) calculateStateFlags(ob observation) stateFlags {
+func (r *AIMModelCacheReconciler) calculateStateFlags(ob observation) stateFlags {
 	failure := ob.storageLost || ob.jobFailed || ob.applyErrorReason != ""
 	ready := ob.storageReady && ob.jobSucceeded && ob.applyErrorReason == ""
 	canCreateJob := ob.storageReady || (ob.pvcFound && ob.pvc.Status.Phase == corev1.ClaimPending && ob.waitForFirstConsumer)
@@ -248,7 +248,7 @@ func (r *ModelCacheReconciler) calculateStateFlags(ob observation) stateFlags {
 	}
 }
 
-func (r *ModelCacheReconciler) projectStatus(_ context.Context, mc *aimv1alpha1.ModelCache, ob *observation, errs controllerutils.ReconcileErrors) error {
+func (r *AIMModelCacheReconciler) projectStatus(_ context.Context, mc *aimv1alpha1.AIMModelCache, ob *observation, errs controllerutils.ReconcileErrors) error {
 	status := mc.Status
 	var conditions []metav1.Condition
 
@@ -273,7 +273,7 @@ func (r *ModelCacheReconciler) projectStatus(_ context.Context, mc *aimv1alpha1.
 			))
 		}
 
-		mc.Status.Status = aimv1alpha1.ModelCacheStatusFailed
+		mc.Status.Status = aimv1alpha1.AIMModelCacheStatusFailed
 		for _, cond := range conditions {
 			meta.SetStatusCondition(&mc.Status.Conditions, cond)
 		}
@@ -303,7 +303,7 @@ func (r *ModelCacheReconciler) projectStatus(_ context.Context, mc *aimv1alpha1.
 	return nil
 }
 
-func (r *ModelCacheReconciler) buildStorageReadyCondition(ob observation) metav1.Condition {
+func (r *AIMModelCacheReconciler) buildStorageReadyCondition(ob observation) metav1.Condition {
 	cond := metav1.Condition{Type: aimv1alpha1.ConditionStorageReady}
 
 	switch {
@@ -330,7 +330,7 @@ func (r *ModelCacheReconciler) buildStorageReadyCondition(ob observation) metav1
 	return cond
 }
 
-func (r *ModelCacheReconciler) buildReadyCondition(sf stateFlags) metav1.Condition {
+func (r *AIMModelCacheReconciler) buildReadyCondition(sf stateFlags) metav1.Condition {
 	cond := metav1.Condition{Type: aimv1alpha1.ConditionReady}
 	if sf.ready {
 		cond.Status = metav1.ConditionTrue
@@ -347,7 +347,7 @@ func (r *ModelCacheReconciler) buildReadyCondition(sf stateFlags) metav1.Conditi
 	return cond
 }
 
-func (r *ModelCacheReconciler) buildProgressingCondition(ob observation, sf stateFlags) metav1.Condition {
+func (r *AIMModelCacheReconciler) buildProgressingCondition(ob observation, sf stateFlags) metav1.Condition {
 	cond := metav1.Condition{Type: aimv1alpha1.ConditionProgressing}
 	cond.Status = boolToCondition(sf.progressing)
 
@@ -362,7 +362,7 @@ func (r *ModelCacheReconciler) buildProgressingCondition(ob observation, sf stat
 	return cond
 }
 
-func (r *ModelCacheReconciler) buildFailureCondition(ob observation, sf stateFlags) metav1.Condition {
+func (r *AIMModelCacheReconciler) buildFailureCondition(ob observation, sf stateFlags) metav1.Condition {
 	cond := metav1.Condition{Type: aimv1alpha1.ConditionFailure}
 	cond.Status = boolToCondition(sf.failure)
 	cond.Reason = "NoFailure" // Ensure Reason is always non-empty to satisfy schema
@@ -379,25 +379,25 @@ func (r *ModelCacheReconciler) buildFailureCondition(ob observation, sf stateFla
 	return cond
 }
 
-func (r *ModelCacheReconciler) determineOverallStatus(sf stateFlags, ob observation) aimv1alpha1.ModelCacheStatusEnum {
+func (r *AIMModelCacheReconciler) determineOverallStatus(sf stateFlags, ob observation) aimv1alpha1.AIMModelCacheStatusEnum {
 	switch {
 	case sf.failure && (ob.applyTerminal || ob.jobFailed):
-		return aimv1alpha1.ModelCacheStatusFailed
+		return aimv1alpha1.AIMModelCacheStatusFailed
 	case sf.ready:
-		return aimv1alpha1.ModelCacheStatusAvailable
+		return aimv1alpha1.AIMModelCacheStatusAvailable
 	case sf.progressing:
-		return aimv1alpha1.ModelCacheStatusProgressing
+		return aimv1alpha1.AIMModelCacheStatusProgressing
 	default:
-		return aimv1alpha1.ModelCacheStatusPending
+		return aimv1alpha1.AIMModelCacheStatusPending
 	}
 }
 
-//func (r *ModelCacheReconciler) isProgressing(st aim.ModelCacheStatus) bool {
+//func (r *AIMModelCacheReconciler) isProgressing(st aim.AIMModelCacheStatus) bool {
 //	cond := meta.FindStatusCondition(st.Conditions, aim.ConditionProgressing)
 //	return cond != nil && cond.Status == metav1.ConditionTrue
 //}
 
-func (r *ModelCacheReconciler) buildPVC(mc *aimv1alpha1.ModelCache, pvcName string) *corev1.PersistentVolumeClaim {
+func (r *AIMModelCacheReconciler) buildPVC(mc *aimv1alpha1.AIMModelCache, pvcName string) *corev1.PersistentVolumeClaim {
 	var sc *string
 	if mc.Spec.StorageClassName != "" {
 		v := mc.Spec.StorageClassName
@@ -432,7 +432,7 @@ func MultiplyQuantityByFloatExact(q resource.Quantity, factor float64) resource.
 	return *resource.NewDecimalQuantity(*dec, q.Format)
 }
 
-func (r *ModelCacheReconciler) buildDownloadJob(mc *aimv1alpha1.ModelCache, jobName string, pvcName string) *batchv1.Job {
+func (r *AIMModelCacheReconciler) buildDownloadJob(mc *aimv1alpha1.AIMModelCache, jobName string, pvcName string) *batchv1.Job {
 	mountPath := "/cache"
 	println(mc.Spec.ModelDownloadImage)
 	return &batchv1.Job{
@@ -523,11 +523,11 @@ du -sh %s/.hf 2>/dev/null || true
 	}
 }
 
-func (r *ModelCacheReconciler) pvcName(mc *aimv1alpha1.ModelCache) string {
+func (r *AIMModelCacheReconciler) pvcName(mc *aimv1alpha1.AIMModelCache) string {
 	return baseutils.FormatNameWithPostfix(mc.Name, "cache")
 }
 
-func (r *ModelCacheReconciler) jobName(mc *aimv1alpha1.ModelCache) string {
+func (r *AIMModelCacheReconciler) jobName(mc *aimv1alpha1.AIMModelCache) string {
 	return baseutils.FormatNameWithPostfix(mc.Name, "cache-download")
 }
 
@@ -548,10 +548,10 @@ func mergeConditions(existing, updates []metav1.Condition) []metav1.Condition {
 	return out
 }
 
-func (r *ModelCacheReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *AIMModelCacheReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Recorder = mgr.GetEventRecorderFor("modelcache-controller")
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&aimv1alpha1.ModelCache{}).
+		For(&aimv1alpha1.AIMModelCache{}).
 		Owns(&corev1.PersistentVolumeClaim{}).
 		Owns(&batchv1.Job{}).
 		WithOptions(controller.Options{MaxConcurrentReconciles: 2}).

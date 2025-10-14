@@ -66,10 +66,10 @@ func SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
-	if err := (&ModelCacheReconciler{
+	if err := (&AIMModelCacheReconciler{
 		Client:    mgr.GetClient(),
 		Scheme:    mgr.GetScheme(),
-		Recorder:  mgr.GetEventRecorderFor("modelcache-controll"),
+		Recorder:  mgr.GetEventRecorderFor("aim-modelcache-controll"),
 		Clientset: clientset,
 	}).SetupWithManager(mgr); err != nil {
 		return err
