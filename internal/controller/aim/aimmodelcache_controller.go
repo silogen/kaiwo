@@ -68,10 +68,7 @@ type ModelCacheReconciler struct {
 // +kubebuilder:rbac:groups=storage.k8s.io,resources=storageclasses,verbs=get;list;watch
 
 const (
-	// The amount of headroom given to the PVC
-	// FIXME Currently HF duplicates the cache, so doubling the storage for now
-	modelCacheFieldOwner         = "modelcache-controller"
-	storageMultiplier    float64 = 2.1
+	modelCacheFieldOwner = "modelcache-controller"
 )
 
 func (r *ModelCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -420,7 +417,7 @@ func (r *ModelCacheReconciler) buildPVC(mc *aimv1alpha1.ModelCache, pvcName stri
 			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany},
 			Resources: corev1.VolumeResourceRequirements{
 				Requests: corev1.ResourceList{
-					corev1.ResourceStorage: MultiplyQuantityByFloatExact(mc.Spec.Size, storageMultiplier),
+					corev1.ResourceStorage: mc.Spec.Size,
 				},
 			},
 			StorageClassName: sc,
