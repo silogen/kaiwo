@@ -43,6 +43,8 @@ import (
 
 var labelValueRegex = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
 
+const amdGPUResourceName corev1.ResourceName = "amd.com/gpu"
+
 // sanitizeLabelValue converts a string to a valid Kubernetes label value.
 // Valid label values must:
 // - Be empty or consist of alphanumeric characters, '-', '_' or '.'
@@ -243,6 +245,9 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 		},
 	}
 
+	container := &inferenceService.Spec.Predictor.Model.Container
+	container.Resources = resolveServiceResources(serviceState)
+
 	if serviceState.Replicas != nil {
 		inferenceService.Spec.Predictor.MinReplicas = serviceState.Replicas
 		inferenceService.Spec.Predictor.MaxReplicas = *serviceState.Replicas
@@ -253,6 +258,46 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 	}
 
 	return inferenceService
+}
+
+func resolveServiceResources(serviceState aimstate.ServiceState) corev1.ResourceRequirements {
+	var resolved corev1.ResourceRequirements
+
+	if serviceState.Resources != nil {
+		resolved = *serviceState.Resources.DeepCopy()
+	}
+
+	if gpuCount := templateGPUCount(serviceState.Template); gpuCount > 0 {
+		if resolved.Requests == nil {
+			resolved.Requests = corev1.ResourceList{}
+		}
+		if resolved.Limits == nil {
+			resolved.Limits = corev1.ResourceList{}
+		}
+		if _, ok := resolved.Requests[amdGPUResourceName]; !ok {
+			if qty := resource.NewQuantity(gpuCount, resource.DecimalSI); qty != nil {
+				resolved.Requests[amdGPUResourceName] = *qty
+			}
+		}
+		if _, ok := resolved.Limits[amdGPUResourceName]; !ok {
+			if qty := resource.NewQuantity(gpuCount, resource.DecimalSI); qty != nil {
+				resolved.Limits[amdGPUResourceName] = *qty
+			}
+		}
+	}
+
+	return resolved
+}
+
+func templateGPUCount(template aimstate.TemplateState) int64 {
+	if template.Status == nil {
+		return 0
+	}
+	gpuCount := template.Status.Profile.Metadata.GPUCount
+	if gpuCount <= 0 {
+		return 0
+	}
+	return int64(gpuCount)
 }
 
 // GetClusterServingRuntime fetches a ClusterServingRuntime by name

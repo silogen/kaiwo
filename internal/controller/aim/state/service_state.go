@@ -36,6 +36,7 @@ type ServiceState struct {
 	RuntimeName        string
 	ModelID            string
 	Env                []corev1.EnvVar
+	Resources          *corev1.ResourceRequirements
 	Replicas           *int32
 	ImagePullSecrets   []corev1.LocalObjectReference
 	ServiceAccountName string
@@ -77,6 +78,15 @@ func NewServiceState(service *aimv1alpha1.AIMService, template TemplateState, op
 
 	if len(template.RuntimeConfigSpec.ImagePullSecrets) > 0 {
 		state.ImagePullSecrets = mergePullSecretRefs(state.ImagePullSecrets, template.RuntimeConfigSpec.ImagePullSecrets)
+	}
+
+	switch {
+	case service.Spec.Resources != nil:
+		state.Resources = service.Spec.Resources.DeepCopy()
+	case template.SpecCommon.Resources != nil:
+		state.Resources = template.SpecCommon.Resources.DeepCopy()
+	case template.ImageResources != nil:
+		state.Resources = template.ImageResources.DeepCopy()
 	}
 
 	if state.RuntimeName == "" {

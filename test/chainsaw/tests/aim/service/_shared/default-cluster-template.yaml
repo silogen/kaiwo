@@ -1,11 +1,9 @@
 apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMClusterServiceTemplate
 metadata:
-  name: llama-3-8b-latency-ips-config
+  name: default-testing-llama-3-8b
 spec:
-  aimImageName: llama-3-8b-ips-config
-  metric: latency
-  runtimeConfigName: ips-config
+  aimImageName: default-testing-llama-3-8b
   gpuSelector:
     count: 1
     model: MI300X

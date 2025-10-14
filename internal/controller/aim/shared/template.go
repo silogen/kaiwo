@@ -50,6 +50,7 @@ import (
 type TemplateObservation struct {
 	Job              *batchv1.Job
 	Image            string
+	ImageResources   *corev1.ResourceRequirements
 	ImagePullSecrets []corev1.LocalObjectReference
 	RuntimeConfig    *RuntimeConfigResolution
 }
@@ -77,7 +78,7 @@ type TemplateObservationOptions[R client.Object] struct {
 	GetRuntime              func(ctx context.Context) (R, error)
 	ShouldCheckDiscoveryJob bool
 	GetDiscoveryJob         func(ctx context.Context) (*batchv1.Job, error)
-	LookupImage             func(ctx context.Context) (string, error)
+	LookupImage             func(ctx context.Context) (*ImageLookupResult, error)
 	ResolveRuntimeConfig    func(ctx context.Context) (*RuntimeConfigResolution, error)
 	OnRuntimeConfigResolved func(resolution *RuntimeConfigResolution)
 }
@@ -114,8 +115,9 @@ func ObserveTemplate[R client.Object](ctx context.Context, opts TemplateObservat
 				return nil, err
 			}
 			// obs.Image remains empty string
-		} else {
-			obs.Image = image
+		} else if image != nil {
+			obs.Image = image.Image
+			obs.ImageResources = image.Resources.DeepCopy()
 		}
 	}
 

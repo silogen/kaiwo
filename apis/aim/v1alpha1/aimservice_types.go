@@ -50,7 +50,7 @@ type AIMServiceSpec struct {
 
 	// TemplateRef is the name of the AIMServiceTemplate or AIMClusterServiceTemplate to use.
 	// The template selects the runtime profile and GPU parameters.
-	TemplateRef string `json:"templateRef"`
+	TemplateRef string `json:"templateRef,omitempty"`
 
 	// CacheModel requests that model sources be cached when starting the service
 	// if the template itself does not warm the cache.
@@ -67,6 +67,11 @@ type AIMServiceSpec struct {
 	// RuntimeConfigName references the AIM runtime configuration (by name) to use for this service.
 	// +kubebuilder:default=default
 	RuntimeConfigName string `json:"runtimeConfigName,omitempty"`
+
+	// Resources overrides the container resource requirements for this service.
+	// When specified, these values take precedence over the template and image defaults.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 
 	// Overrides allows overriding specific template parameters for this service.
 	// When specified, these values take precedence over the template values.

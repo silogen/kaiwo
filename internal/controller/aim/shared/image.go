@@ -29,6 +29,7 @@ import (
 	"errors"
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -39,33 +40,57 @@ import (
 // ErrImageNotFound is returned when an image is not found in the catalog
 var ErrImageNotFound = errors.New("image not found in catalog")
 
+// ImageLookupResult captures the resolved image metadata from the catalog.
+type ImageLookupResult struct {
+	Image     string
+	Resources corev1.ResourceRequirements
+}
+
+// DeepCopy returns a deep copy of the ImageLookupResult.
+func (r *ImageLookupResult) DeepCopy() *ImageLookupResult {
+	if r == nil {
+		return nil
+	}
+	copy := &ImageLookupResult{
+		Image: r.Image,
+	}
+	copy.Resources = *r.Resources.DeepCopy()
+	return copy
+}
+
 // LookupImageForClusterTemplate looks up the container image for a cluster-scoped template.
 // It searches only in AIMClusterImage resources.
 // Returns ErrImageNotFound if no image is found in the catalog.
-func LookupImageForClusterTemplate(ctx context.Context, k8sClient client.Client, modelName string) (string, error) {
+func LookupImageForClusterTemplate(ctx context.Context, k8sClient client.Client, modelName string) (*ImageLookupResult, error) {
 	clusterImage := &aimv1alpha1.AIMClusterImage{}
 
 	if err := k8sClient.Get(ctx, client.ObjectKey{Name: modelName}, clusterImage); err == nil {
-		return clusterImage.Spec.Image, nil
+		return &ImageLookupResult{
+			Image:     clusterImage.Spec.Image,
+			Resources: *clusterImage.Spec.Resources.DeepCopy(),
+		}, nil
 	} else if !apierrors.IsNotFound(err) {
-		return "", fmt.Errorf("failed to lookup AIMClusterImage: %w", err)
+		return nil, fmt.Errorf("failed to lookup AIMClusterImage: %w", err)
 	}
 
-	return "", ErrImageNotFound
+	return nil, ErrImageNotFound
 }
 
 // LookupImageForNamespaceTemplate looks up the container image for a namespace-scoped template.
 // It searches AIMImage resources in the specified namespace first, then falls back to
 // cluster-scoped AIMClusterImage resources.
 // Returns ErrImageNotFound if no image is found in either location.
-func LookupImageForNamespaceTemplate(ctx context.Context, k8sClient client.Client, namespace, modelName string) (string, error) {
+func LookupImageForNamespaceTemplate(ctx context.Context, k8sClient client.Client, namespace, modelName string) (*ImageLookupResult, error) {
 	// Try namespace-scoped AIMImage first
 	nsImage := &aimv1alpha1.AIMImage{}
 
 	if err := k8sClient.Get(ctx, client.ObjectKey{Name: modelName, Namespace: namespace}, nsImage); err == nil {
-		return nsImage.Spec.Image, nil
+		return &ImageLookupResult{
+			Image:     nsImage.Spec.Image,
+			Resources: *nsImage.Spec.Resources.DeepCopy(),
+		}, nil
 	} else if !apierrors.IsNotFound(err) {
-		return "", fmt.Errorf("failed to lookup AIMImage: %w", err)
+		return nil, fmt.Errorf("failed to lookup AIMImage: %w", err)
 	}
 
 	// Fall back to cluster-scoped namespace

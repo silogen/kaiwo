@@ -3,8 +3,7 @@ kind: AIMService
 metadata:
   name: test-service
 spec:
-  aimImageName: llama-3-8b-env-vars
-  templateRef: llama-3-8b-latency-env-vars
+  aimImageName: default-testing-llama-3-8b
   replicas: 1
   env:
   - name: HF_TOKEN

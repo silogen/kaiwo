@@ -3,7 +3,6 @@ kind: AIMService
 metadata:
   name: test-service
 spec:
-  aimImageName: llama-3-8b-ips-config
-  templateRef: llama-3-8b-latency-ips-config
+  aimImageName: default-testing-llama-3-8b
   runtimeConfigName: ips-config
   replicas: 1

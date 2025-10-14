@@ -164,7 +164,7 @@ func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *ai
 			}
 			return job, nil
 		},
-		LookupImage: func(ctx context.Context) (string, error) {
+		LookupImage: func(ctx context.Context) (*shared.ImageLookupResult, error) {
 			return shared.LookupImageForNamespaceTemplate(ctx, r.Client, template.Namespace, template.Spec.AIMImageName)
 		},
 		ResolveRuntimeConfig: func(ctx context.Context) (*shared.RuntimeConfigResolution, error) {

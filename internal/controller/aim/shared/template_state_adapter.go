@@ -51,6 +51,7 @@ func NewTemplateState(
 
 	if observation != nil {
 		base.Image = observation.Image
+		base.ImageResources = observation.ImageResources
 		base.ImagePullSecrets = observation.ImagePullSecrets
 	}
 

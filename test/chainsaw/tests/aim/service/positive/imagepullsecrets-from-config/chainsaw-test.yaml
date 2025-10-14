@@ -7,28 +7,18 @@ spec:
   timeouts:
     assert: 60s
   steps:
+  - name: Ensure template is available
+    try:
+      - assert:
+          timeout: 5s
+          file: ../../_shared/template-available.yaml
+
   - name: Create prerequisites
     try:
     - apply:
         file: secret.yaml
     - apply:
         file: runtime-config.yaml
-    - apply:
-        file: cluster-image.yaml
-    - apply:
-        file: cluster-template.yaml
-
-  - name: Wait for template to become Available
-    try:
-    - assert:
-        timeout: 30s
-        resource:
-          apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMClusterServiceTemplate
-          metadata:
-            name: llama-3-8b-latency-ips-config
-          status:
-            status: Available
 
   - name: Create AIMService
     try:

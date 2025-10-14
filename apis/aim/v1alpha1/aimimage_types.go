@@ -23,6 +23,7 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -54,6 +55,15 @@ type AIMImageSpec struct {
 	// RuntimeConfigName references the AIM runtime configuration (by name) to use for this image.
 	// +kubebuilder:default=default
 	RuntimeConfigName string `json:"runtimeConfigName,omitempty"`
+
+	// Resources defines the default resource requirements for services using this image.
+	// Template- or service-level values override these defaults.
+	// +kubebuilder:validation:Required
+	// Must have both cpu and memory in requests
+	// +kubebuilder:validation:XValidation:rule="has(self.requests) && 'cpu' in self.requests && 'memory' in self.requests",message="resources.requests must include cpu and memory"
+	// Must have memory in limits
+	// +kubebuilder:validation:XValidation:rule="has(self.limits) && 'memory' in self.limits",message="resources.limits must include memory"
+	Resources corev1.ResourceRequirements `json:"resources"`
 }
 
 // AIMImageStatus defines the observed state of AIMImage.

@@ -37,6 +37,13 @@ spec:
   image: ghcr.io/example/llama-3.1-8b-instruct:v1.2.0
   defaultServiceTemplate: llama-3-8b-latency
   runtimeConfigName: platform-default
+  resources:
+    limits:
+      cpu: "8"
+      memory: 64Gi
+    requests:
+      cpu: "4"
+      memory: 32Gi
 ```
 
 Namespace-scoped images follow the same structure but include a namespace and allow teams to override cluster defaults:
@@ -51,11 +58,24 @@ spec:
   image: ghcr.io/ml-team/llama-3.1-8b-instruct:dev-latest
   defaultServiceTemplate: llama-3-8b-experimental
   runtimeConfigName: ml-team
+  resources:
+    limits:
+      cpu: "8"
+      memory: 48Gi
+    requests:
+      cpu: "4"
+      memory: 24Gi
 ```
 
 ### Behind the Scenes
 
-When templates or services reference a model ID, the operator looks up the corresponding image from the catalog. For namespace-scoped lookups, the operator checks for an `AIMImage` in the same namespace first, then falls back to cluster-scoped `AIMClusterImage` resources. This lookup determines which container image to use for discovery jobs and runtime deployments.
+When templates or services reference a model ID, the operator looks up the corresponding image from the catalog. For namespace-scoped lookups, the operator checks for an `AIMImage` in the same namespace first, then falls back to cluster-scoped `AIMClusterImage` resources. The resolved image contributes both the container reference and its default `resources`. During reconciliation the controller merges resources in this order:
+
+1. `AIMService.spec.resources` (service-level override).
+2. `AIMServiceTemplate.spec.resources` (template default).
+3. `AIMImage.spec.resources` (catalog default).
+
+If GPU quantities are still unset after the merge, the controller copies them from discovery metadata recorded on the template.
 
 ## Service Templates
 

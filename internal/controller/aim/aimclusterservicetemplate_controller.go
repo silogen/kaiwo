@@ -163,7 +163,7 @@ func (r *AIMClusterServiceTemplateReconciler) observe(ctx context.Context, templ
 			}
 			return job, nil
 		},
-		LookupImage: func(ctx context.Context) (string, error) {
+		LookupImage: func(ctx context.Context) (*shared.ImageLookupResult, error) {
 			return shared.LookupImageForClusterTemplate(ctx, r.Client, template.Spec.AIMImageName)
 		},
 		ResolveRuntimeConfig: func(ctx context.Context) (*shared.RuntimeConfigResolution, error) {

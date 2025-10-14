@@ -28,10 +28,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/silogen/kaiwo/internal/controller/framework"
 
 	servingv1beta1 "github.com/kserve/kserve/pkg/apis/serving/v1beta1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -144,6 +146,7 @@ type aimServiceObservation struct {
 	TemplateStatus         *aimv1alpha1.AIMServiceTemplateStatus
 	TemplateSpecCommon     aimv1alpha1.AIMServiceTemplateSpecCommon
 	TemplateNamespace      string
+	ImageResources         *corev1.ResourceRequirements
 }
 
 func (o *aimServiceObservation) templateFound() bool {
@@ -158,8 +161,19 @@ func (o *aimServiceObservation) runtimeName() string {
 }
 
 func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1.AIMService) (*aimServiceObservation, error) {
+	templateName, err := r.templateNameForService(ctx, service)
+	if err != nil {
+		return nil, err
+	}
+
+	if service.Spec.TemplateRef == "" && templateName != "" {
+		if err := r.ensureTemplateRef(ctx, service, templateName); err != nil {
+			return nil, err
+		}
+	}
+
 	obs := &aimServiceObservation{
-		TemplateName: resolveTemplateName(service),
+		TemplateName: templateName,
 		Scope:        templateScopeNone,
 	}
 
@@ -195,6 +209,11 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 				}
 			}
 			obs.TemplateNamespace = namespaceTemplate.Namespace
+			if image, imageErr := shared.LookupImageForNamespaceTemplate(ctx, r.Client, namespaceTemplate.Namespace, namespaceTemplate.Spec.AIMImageName); imageErr == nil {
+				obs.ImageResources = image.Resources.DeepCopy()
+			} else if imageErr != nil && !errors.Is(imageErr, shared.ErrImageNotFound) {
+				return nil, fmt.Errorf("failed to lookup AIMImage %q in namespace %q: %w", namespaceTemplate.Spec.AIMImageName, namespaceTemplate.Namespace, imageErr)
+			}
 		case apierrors.IsNotFound(err):
 			// Fall through to cluster lookup.
 		default:
@@ -228,6 +247,11 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 				return nil, fmt.Errorf("failed to resolve AIMRuntimeConfig %q in namespace %q: %w", runtimeConfigName, service.Namespace, resolveErr)
 			}
 			obs.TemplateNamespace = ""
+			if image, imageErr := shared.LookupImageForClusterTemplate(ctx, r.Client, clusterTemplate.Spec.AIMImageName); imageErr == nil {
+				obs.ImageResources = image.Resources.DeepCopy()
+			} else if imageErr != nil && !errors.Is(imageErr, shared.ErrImageNotFound) {
+				return nil, fmt.Errorf("failed to lookup AIMClusterImage %q: %w", clusterTemplate.Spec.AIMImageName, imageErr)
+			}
 		case apierrors.IsNotFound(err):
 			obs.ShouldCreateTemplate = true
 		default:
@@ -309,6 +333,7 @@ func (r *AIMServiceReconciler) plan(_ context.Context, service *aimv1alpha1.AIMS
 			Name:              obs.TemplateName,
 			Namespace:         obs.TemplateNamespace,
 			SpecCommon:        obs.TemplateSpecCommon,
+			ImageResources:    obs.ImageResources,
 			RuntimeConfigSpec: obs.RuntimeConfigSpec,
 			Status:            obs.TemplateStatus,
 		})
@@ -451,7 +476,7 @@ func (r *AIMServiceReconciler) projectStatus(
 	if obs == nil || !obs.templateFound() {
 		status.Status = aimv1alpha1.AIMServiceStatusPending
 		setCondition(aimv1alpha1.AIMServiceConditionResolved, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonTemplateNotFound,
-			fmt.Sprintf("AIMServiceTemplate %q not found; will create default template", resolveTemplateName(service)))
+			fmt.Sprintf("AIMServiceTemplate %q not found; will create default template", templateNameFromSpec(service)))
 		setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonCreatingRuntime, "Waiting for template creation")
 		setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonTemplateNotFound, "Waiting for template to be created")
 		setCondition(aimv1alpha1.AIMServiceConditionReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonTemplateNotFound, "Template missing")
@@ -741,6 +766,10 @@ func buildDerivedTemplate(service *aimv1alpha1.AIMService, templateName string, 
 		template.Spec.AIMRuntimeParameters = service.Spec.Overrides.AIMRuntimeParameters
 	}
 
+	if service.Spec.Resources != nil {
+		template.Spec.Resources = service.Spec.Resources.DeepCopy()
+	}
+
 	if service.Spec.CacheModel {
 		template.Spec.Caching = &aimv1alpha1.AIMTemplateCachingConfig{
 			Enabled: service.Spec.CacheModel,
@@ -749,13 +778,6 @@ func buildDerivedTemplate(service *aimv1alpha1.AIMService, templateName string, 
 	}
 
 	return template
-}
-
-func resolveTemplateName(service *aimv1alpha1.AIMService) string {
-	if service.Spec.TemplateRef != "" {
-		return service.Spec.TemplateRef
-	}
-	return service.Name
 }
 
 func hasOwnerReference(refs []metav1.OwnerReference, uid types.UID) bool {
@@ -790,4 +812,72 @@ func requestsForServices(services []aimv1alpha1.AIMService) []reconcile.Request 
 		})
 	}
 	return requests
+}
+
+func (r *AIMServiceReconciler) templateNameForService(ctx context.Context, service *aimv1alpha1.AIMService) (string, error) {
+	if ref := strings.TrimSpace(service.Spec.TemplateRef); ref != "" {
+		return ref, nil
+	}
+
+	defaultTemplate, err := r.lookupDefaultServiceTemplate(ctx, service)
+	if err != nil {
+		return "", err
+	}
+
+	if defaultTemplate != "" {
+		return defaultTemplate, nil
+	}
+
+	return service.Name, nil
+}
+
+func (r *AIMServiceReconciler) lookupDefaultServiceTemplate(ctx context.Context, service *aimv1alpha1.AIMService) (string, error) {
+	imageName := strings.TrimSpace(service.Spec.AIMImageName)
+	if imageName == "" {
+		return "", nil
+	}
+
+	if service.Namespace != "" {
+		var nsImage aimv1alpha1.AIMImage
+		if err := r.Get(ctx, types.NamespacedName{Name: imageName, Namespace: service.Namespace}, &nsImage); err == nil {
+			if tpl := strings.TrimSpace(nsImage.Spec.DefaultServiceTemplate); tpl != "" {
+				return tpl, nil
+			}
+		} else if !apierrors.IsNotFound(err) {
+			return "", fmt.Errorf("failed to get AIMImage %s/%s: %w", service.Namespace, imageName, err)
+		}
+	}
+
+	var clusterImage aimv1alpha1.AIMClusterImage
+	if err := r.Get(ctx, client.ObjectKey{Name: imageName}, &clusterImage); err == nil {
+		if tpl := strings.TrimSpace(clusterImage.Spec.DefaultServiceTemplate); tpl != "" {
+			return tpl, nil
+		}
+	} else if !apierrors.IsNotFound(err) {
+		return "", fmt.Errorf("failed to get AIMClusterImage %s: %w", imageName, err)
+	}
+
+	return "", nil
+}
+
+func (r *AIMServiceReconciler) ensureTemplateRef(ctx context.Context, service *aimv1alpha1.AIMService, templateName string) error {
+	if service.Spec.TemplateRef != "" || templateName == "" {
+		return nil
+	}
+
+	original := service.DeepCopy()
+	service.Spec.TemplateRef = templateName
+
+	if err := r.Patch(ctx, service, client.MergeFrom(original)); err != nil {
+		return fmt.Errorf("failed to set templateRef to %q: %w", templateName, err)
+	}
+
+	return nil
+}
+
+func templateNameFromSpec(service *aimv1alpha1.AIMService) string {
+	if ref := strings.TrimSpace(service.Spec.TemplateRef); ref != "" {
+		return ref
+	}
+	return service.Name
 }

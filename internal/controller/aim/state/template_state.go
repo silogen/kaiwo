@@ -34,6 +34,7 @@ type TemplateState struct {
 	Namespace         string
 	SpecCommon        aimv1alpha1.AIMServiceTemplateSpecCommon
 	Image             string
+	ImageResources    *corev1.ResourceRequirements
 	ImagePullSecrets  []corev1.LocalObjectReference
 	RuntimeConfigSpec aimv1alpha1.AIMRuntimeConfigSpec
 	Status            *aimv1alpha1.AIMServiceTemplateStatus
@@ -43,6 +44,14 @@ type TemplateState struct {
 // NewTemplateState constructs a TemplateState from the provided base values.
 // Callers populate the struct with template-derived data before invoking this helper.
 func NewTemplateState(base TemplateState) TemplateState {
+	if base.SpecCommon.Resources != nil {
+		base.SpecCommon.Resources = base.SpecCommon.Resources.DeepCopy()
+	}
+
+	if base.ImageResources != nil {
+		base.ImageResources = base.ImageResources.DeepCopy()
+	}
+
 	base.ImagePullSecrets = copyPullSecrets(base.ImagePullSecrets)
 
 	if base.Status != nil {

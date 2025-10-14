@@ -2,7 +2,7 @@
 
 `AIMService` is the user-facing CRD that turns discovery results into a running inference endpoint. It stitches together an image, service template, runtime configuration, and optional routing to produce a KServe `InferenceService` (and, if requested, an HTTPRoute).
 
-This guide summarises the key fields, how runtime configs flow into services, and the new route-template behaviour.
+This guide summarises the key fields, how runtime configs flow into services, and the route-template behaviour.
 
 ## Spec
 
@@ -17,6 +17,13 @@ spec:
   templateRef: llama-3-8b-latency
   runtimeConfigName: team-config
   replicas: 2
+  resources:
+    limits:
+      cpu: "6"
+      memory: 48Gi
+    requests:
+      cpu: "3"
+      memory: 32Gi
   routing:
     enabled: true
     gatewayRef:
@@ -33,6 +40,7 @@ spec:
 | `templateRef` | Name of an `AIMServiceTemplate` or `AIMClusterServiceTemplate`. |
 | `runtimeConfigName` | Overrides registry credentials / routing defaults (`default` by default). |
 | `replicas` | Optional replica override; template values still govern GPU profile. |
+| `resources` | Optional `ResourceRequirements` override that sits on top of template/image defaults. |
 | `routing` | Enables Gateway exposure and optional per-service route template. |
 
 The service controller first resolves the template (preferring namespace templates, then cluster templates), merges runtime config data, and creates/updates the downstream KServe resources. If the referenced template is absent, the controller creates a derived namespace template on the fly (`templateRef` defaults to the service name).
@@ -44,6 +52,16 @@ The service controller first resolves the template (preferring namespace templat
 - The merged spec is copied into the service status (`status.effectiveRuntimeConfig`) for audit purposes.
 - If the service references a config that does not exist, it enters a `Degraded` state with reason `RuntimeConfigMissing` until the config is created.
 
+### Resource resolution
+
+`AIMService` surfaces a three-tier resource lookup:
+
+1. `spec.resources` on the service wins when present.
+2. Otherwise, the controller falls back to `spec.resources` on the resolved template.
+3. Finally, it uses the catalog defaults defined on the underlying `AIMImage` / `AIMClusterImage`.
+
+After the merge, if neither requests nor limits specify `amd.com/gpu`, the controller fills them from the discovery metadata stored on the template (`status.profile.metadata.gpu_count`) so the resulting KServe `InferenceService` always requests the expected number of devices, unless explicitly overridden.
+
 ### Routing templates
 
 When `spec.routing.enabled` is true:
@@ -53,7 +71,7 @@ When `spec.routing.enabled` is true:
    - `spec.routing.routeTemplate` from the runtime config.
    - Default: `/<namespace>/<service-uid>`.
 2. Templates use JSONPath expressions wrapped in `{…}` and are rendered against the entire `AIMService` object. Label and annotation lookups (for keys such as `aim.silogen.ai/workload-id`) are resolved directly.
-3. Each segment is lowercased and RFC 3986 encoded; trailing slashes are trimmed and the final path must be ≤ 200 characters.
+3. Each segment is lowercased and RFC-3986 encoded; trailing slashes are trimmed and the final path must be ≤ 200 characters.
 4. Rendering failures (invalid JSONPath, missing label/annotation, oversized path) degrade the service with reason `RouteTemplateInvalid`. The controller skips HTTPRoute creation but still manages the ServingRuntime.
 
 Runtime config templates provide namespace-wide defaults, while services can opt in to custom paths as shown above.

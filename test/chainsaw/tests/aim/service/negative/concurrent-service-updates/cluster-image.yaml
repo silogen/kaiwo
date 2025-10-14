@@ -5,3 +5,8 @@ metadata:
 spec:
   image: ghcr.io/silogen/aim:0.4.0-meta-llama-llama-3.1-8b-instruct-v20251006
   defaultServiceTemplate: llama-3-8b-latency-concurrent
+  resources:
+    limits:
+      amd.com/gpu: "1"
+    requests:
+      amd.com/gpu: "1"

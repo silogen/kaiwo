@@ -1,0 +1,13 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterImage
+metadata:
+  name: default-testing-llama-3-8b
+spec:
+  image: ghcr.io/silogen/aim:0.4.0-meta-llama-llama-3.1-8b-instruct-v20251006
+  defaultServiceTemplate: default-testing-llama-3-8b
+  resources:
+    limits:
+      memory: 48Gi
+    requests:
+      cpu: 4
+      memory: 40Gi

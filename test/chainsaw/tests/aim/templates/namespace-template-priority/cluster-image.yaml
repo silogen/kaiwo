@@ -5,3 +5,8 @@ metadata:
 spec:
   image: busybox:latest-aim-cluster
   defaultServiceTemplate: llama-3-8b-latency-priority
+  resources:
+    limits:
+      amd.com/gpu: "1"
+    requests:
+      amd.com/gpu: "1"

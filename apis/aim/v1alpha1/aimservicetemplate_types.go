@@ -95,6 +95,11 @@ type AIMServiceTemplateSpecCommon struct {
 	// RuntimeConfigName references the AIM runtime configuration (by name) to use for this template.
 	// +kubebuilder:default=default
 	RuntimeConfigName string `json:"runtimeConfigName,omitempty"`
+
+	// Resources defines the default container resource requirements applied to services derived from this template.
+	// Service-specific values override the template defaults.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 // AIMTemplateCachingConfig configures model caching behavior for namespace-scoped templates.
