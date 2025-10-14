@@ -115,6 +115,10 @@ type AIMServiceStatus struct {
 	// Routing surfaces information about the configured HTTP routing, when enabled.
 	// +optional
 	Routing *AIMServiceRoutingStatus `json:"routing,omitempty"`
+
+	// ResolvedTemplateRef records the template name the controller selected (namespace or cluster).
+	// When spec.templateRef is omitted, this field surfaces the resolved image default or derived template.
+	ResolvedTemplateRef string `json:"resolvedTemplateRef,omitempty"`
 }
 
 // AIMServiceStatusEnum defines coarse-grained states for a service.

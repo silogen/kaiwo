@@ -7,8 +7,10 @@ spec:
   defaultServiceTemplate: image-fallback-template
   resources:
     limits:
-      cpu: "5"
+      cpu: '5'
       memory: 30Gi
+      amd.com/gpu: '1'
     requests:
-      cpu: "3"
+      cpu: '3'
       memory: 20Gi
+      amd.com/gpu: '1'

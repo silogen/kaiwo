@@ -7,6 +7,10 @@ spec:
   defaultServiceTemplate: llama-3-8b-latency-routing-template-config
   resources:
     limits:
-      amd.com/gpu: "1"
+      amd.com/gpu: '1'
+      cpu: '6'
+      memory: 48Gi
     requests:
-      amd.com/gpu: "1"
+      amd.com/gpu: '1'
+      cpu: '4'
+      memory: 40Gi
