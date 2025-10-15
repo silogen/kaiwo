@@ -234,7 +234,8 @@ func PopulateObservationFromNamespaceTemplate(
 ) error {
 	obs.Scope = TemplateScopeNamespace
 	obs.TemplateAvailable = template.Status.Status == aimv1alpha1.AIMTemplateStatusAvailable
-	obs.TemplateOwnedByService = HasOwnerReference(template.GetOwnerReferences(), service.UID)
+	obs.TemplateOwnedByService = HasOwnerReference(template.GetOwnerReferences(), service.UID) ||
+		IsDerivedTemplate(template.GetLabels())
 	if template.Status.EffectiveRuntimeConfig != nil {
 		obs.EffectiveRuntimeConfig = template.Status.EffectiveRuntimeConfig.DeepCopy()
 	}

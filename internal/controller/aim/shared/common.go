@@ -44,6 +44,14 @@ func HasOwnerReference(refs []metav1.OwnerReference, uid types.UID) bool {
 	return false
 }
 
+// IsDerivedTemplate returns true when the provided labels indicate a controller-managed derived template.
+func IsDerivedTemplate(labels map[string]string) bool {
+	if len(labels) == 0 {
+		return false
+	}
+	return labels[LabelKeyDerivedTemplate] == LabelValueDerivedTemplate
+}
+
 // RequestsForServices converts a list of AIMServices to reconcile requests.
 func RequestsForServices(services []aimv1alpha1.AIMService) []reconcile.Request {
 	if len(services) == 0 {

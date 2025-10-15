@@ -193,15 +193,15 @@ const (
 	AIMServiceReasonRouteTemplateInvalid = "RouteTemplateInvalid"
 )
 
+// AIMService manages a KServe-based AIM inference service for the selected model and template.
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=aimsvc,categories=aim;all
-// +kubebuilder:printcolumn:name="Model",type=string,JSONPath=`.spec.model`
-// +kubebuilder:printcolumn:name="Template",type=string,JSONPath=`.spec.templateRef`
-// +kubebuilder:printcolumn:name="Replicas",type=integer,JSONPath=`.spec.replicas`
 // +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.status`
+// +kubebuilder:printcolumn:name="Image",type=string,JSONPath=`.spec.aimImageName`
+// +kubebuilder:printcolumn:name="Template",type=string,JSONPath=`.status.resolvedTemplateRef`
+// +kubebuilder:printcolumn:name="Replicas",type=integer,JSONPath=`.spec.replicas`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
-// AIMService manages a KServe-based AIM inference service for the selected model and template.
 type AIMService struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

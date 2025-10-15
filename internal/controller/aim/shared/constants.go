@@ -40,8 +40,9 @@ const (
 	AimLabelDomain = "aim.silogen.ai"
 
 	// AIM label keys.
-	LabelKeyTemplate = AimLabelDomain + "/template"
-	LabelKeyModelID  = AimLabelDomain + "/model-id"
+	LabelKeyTemplate        = AimLabelDomain + "/template"
+	LabelKeyModelID         = AimLabelDomain + "/model-id"
+	LabelKeyDerivedTemplate = AimLabelDomain + "/derived-template"
 
 	// AIM label values.
 	LabelValueRuntimeName        = "aim-runtime"
@@ -51,6 +52,7 @@ const (
 	LabelValueDiscoveryComponent = "discovery-job"
 	LabelValueServiceName        = "aim-service"
 	LabelValueServiceComponent   = "inference-service"
+	LabelValueDerivedTemplate    = "true"
 )
 
 var (

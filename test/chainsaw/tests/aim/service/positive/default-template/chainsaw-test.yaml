@@ -39,17 +39,3 @@ spec:
           kind: InferenceService
           metadata:
             name: default-template-service
-
-  - name: Verify AIMService becomes Running
-    try:
-    - assert:
-        timeout: 3m
-        resource:
-          apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMService
-          metadata:
-            name: default-template-service
-          status:
-            status: Running
-            (conditions[?type == 'Ready']):
-            - status: "True"

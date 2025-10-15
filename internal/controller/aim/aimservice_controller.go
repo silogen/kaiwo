@@ -186,7 +186,7 @@ func (r *AIMServiceReconciler) plan(_ context.Context, service *aimv1alpha1.AIMS
 		if obs != nil && obs.TemplateSpec != nil {
 			baseSpec = obs.TemplateSpec.DeepCopy()
 		}
-		template := shared.BuildDerivedTemplate(service, obs.TemplateName, ownerRef, baseSpec)
+		template := shared.BuildDerivedTemplate(service, obs.TemplateName, baseSpec)
 		desired = append(desired, template)
 	}
 

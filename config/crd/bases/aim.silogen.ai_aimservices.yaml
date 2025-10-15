@@ -20,18 +20,18 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.model
-      name: Model
+    - jsonPath: .status.status
+      name: Status
       type: string
-    - jsonPath: .spec.templateRef
+    - jsonPath: .spec.aimImageName
+      name: Image
+      type: string
+    - jsonPath: .status.resolvedTemplateRef
       name: Template
       type: string
     - jsonPath: .spec.replicas
       name: Replicas
       type: integer
-    - jsonPath: .status.status
-      name: Status
-      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date

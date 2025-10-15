@@ -38,7 +38,6 @@ import (
 func BuildDerivedTemplate(
 	service *aimv1alpha1.AIMService,
 	templateName string,
-	ownerRef metav1.OwnerReference,
 	baseSpec *aimv1alpha1.AIMServiceTemplateSpec,
 ) *aimv1alpha1.AIMServiceTemplate {
 	spec := aimv1alpha1.AIMServiceTemplateSpec{}
@@ -108,9 +107,13 @@ func BuildDerivedTemplate(
 			Kind:       "AIMServiceTemplate",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            templateName,
-			Namespace:       service.Namespace,
-			OwnerReferences: []metav1.OwnerReference{ownerRef},
+			Name:      templateName,
+			Namespace: service.Namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/managed-by": LabelValueManagedBy,
+				LabelKeyDerivedTemplate:        LabelValueDerivedTemplate,
+			},
+			OwnerReferences: []metav1.OwnerReference{},
 		},
 		Spec: spec,
 	}
