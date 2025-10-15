@@ -110,7 +110,6 @@ jobs:
       run: |
         TTL=${{ env.TTL_TAG }} IMAGE_NAME=${{ steps.vars.outputs.full_image }} \
         bash ./kaiwo.sh --build --push=ttl.sh
-      # If your kaiwo.sh uses docker build, wire cache hints there (cache-from/to type=local or gha)
 
     - name: Build CLI binary
       run: |
@@ -138,7 +137,19 @@ jobs:
         # Match your kind/k8s pause image as needed
         docker pull registry.k8s.io/pause:3.10
         # Add any images your tests frequently need:
-        # docker pull ghcr.io/yourorg/your-test-helper:tag
+        docker pull busybox:latest
+        docker pull ubuntu:latest
+        docker pull registry.k8s.io/kube-scheduler:v1.32.0
+        docker pull rayproject/ray:2.41.0
+        docker pull ghcr.io/silogen/kaiwo-python:0.6
+        docker pull ghcr.io/silogen/fake-gpu-operator-device-plugin:0.0.0-dev
+        docker pull ghcr.io/silogen/fake-gpu-operator-mig-faker:0.0.0-dev
+        docker pull ghcr.io/silogen/fake-gpu-operator-status-exporter:0.0.0-dev
+        docker pull ghcr.io/silogen/fake-gpu-operator-status-exporter:0.0.0-dev
+        docker pull ghcr.io/silogen/fake-gpu-operator-status-updater:0.0.0-dev
+        docker pull ghcr.io/silogen/fake-gpu-operator-topology-server:0.0.0-dev
+        docker pull ghcr.io/silogen/ray-test:v0.3
+        docker pull registry.k8s.io/pause:3.9
         docker save -o /tmp/images.tar \
           docker.io/library/busybox:stable \
           registry.k8s.io/pause:3.10

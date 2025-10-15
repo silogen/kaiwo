@@ -163,7 +163,9 @@ _cache_scope() {
   echo "kaiwo-${GITHUB_REF_NAME:-main}"
 }
 
-container_build() {
+container_push()  { "$CONTAINER_TOOL" push "$1"; }
+
+container_build_push() {
   local image="$1"
 
   if [ "$CONTAINER_TOOL" = "docker" ] && _use_buildx && [[ -n "${CI:-}"  ]]; then
@@ -171,15 +173,16 @@ container_build() {
       --progress=plain \
       --cache-from=type=gha,scope="$(_cache_scope)" \
       --cache-to=type=gha,mode=max,scope="$(_cache_scope)" \
+      --push \
       -t "$image" \
       .
 
   else
     "$CONTAINER_TOOL" build -t "$1" .
+    info "Pushing to ttl.sh (${ref})"
+    container_push "${ref}"
   fi
 }
-
-container_push()  { "$CONTAINER_TOOL" push "$1"; }
 
 kind_load_image() {
   local ref="$1"
@@ -293,17 +296,15 @@ compute_image_ref() {
 }
 
 # ---------- Build Functions ----------
-build_image() {
+build_push_image() {
   local ref="$1"
   info "Building image: ${ref}"
-  container_build "${ref}"
+  container_build_push "${ref}"
 }
 
 build_and_upload_ttl() {
   local ref="$1"
-  build_image "${ref}"
-  info "Pushing to ttl.sh (${ref})"
-  container_push "${ref}"
+  build_push_image "${ref}"
   save_image_ref "${ref}"
   ok "Image uploaded: ${ref}"
   info "Stored image reference in ${IMAGE_REF_FILE}"
