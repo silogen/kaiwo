@@ -157,8 +157,28 @@ save_image_ref() {
   printf '%s\n' "$name_part" > "${LEGACY_NAME_FILE}"
 }
 
-# Container ops (docker|podman)
-container_build() { "$CONTAINER_TOOL" build -t "$1" .; }
+_use_buildx() { command -v docker >/dev/null && docker buildx version >/dev/null 2>&1; }
+
+_cache_scope() {
+  echo "kaiwo-${GITHUB_REF_NAME:-main}"
+}
+
+container_build() {
+  local image="$1"
+
+  if [ "$CONTAINER_TOOL" = "docker" ] && _use_buildx && [[ -n "${CI:-}"  ]]; then
+    docker buildx build \
+      --progress=plain \
+      --cache-from=type=gha,scope="$(_cache_scope)" \
+      --cache-to=type=gha,mode=max,scope="$(_cache_scope)" \
+      -t "$image" \
+      .
+
+  else
+    "$CONTAINER_TOOL" build -t "$1" .
+  fi
+}
+
 container_push()  { "$CONTAINER_TOOL" push "$1"; }
 
 kind_load_image() {

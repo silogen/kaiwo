@@ -68,16 +68,9 @@ jobs:
       run: |
         go mod tidy
         make test
-      # (optional) Upload test reports if you have them
-      # - uses: actions/upload-artifact@v4
-      #   with:
-      #     name: junit
-      #     path: path/to/junit-xml/*.xml
-      #     retention-days: 7
 
   build-image:
     name: Build & push (ttl.sh)
-#    needs: test                   # <-- waits for tests to pass
     runs-on: ubuntu-latest
     outputs:
       image: ${{ steps.vars.outputs.full_image }}
@@ -87,6 +80,15 @@ jobs:
     - uses: actions/checkout@v4
     - uses: docker/setup-qemu-action@v3
     - uses: docker/setup-buildx-action@v3
+    - name: Configure Docker build cache
+      uses: actions/cache@v4
+      with:
+        path: /tmp/.buildx-cache
+        key: buildx-${{ github.ref_name }}-${{ github.sha }}
+        restore-keys: |
+          buildx-${{ github.ref_name }}-
+          buildx-
+
     - uses: actions/setup-go@v5
       with:
         go-version-file: go.mod
@@ -98,14 +100,17 @@ jobs:
         ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
         REPO="ttl.sh/${ID}"
         TAG="${{ env.TTL_TAG }}"
-        echo "repo=${REPO}"                >> "$GITHUB_OUTPUT"
-        echo "tag=${TAG}"                  >> "$GITHUB_OUTPUT"
-        echo "full_image=${REPO}:${TAG}"   >> "$GITHUB_OUTPUT"
+        echo "repo=${REPO}"              >> "$GITHUB_OUTPUT"
+        echo "tag=${TAG}"                >> "$GITHUB_OUTPUT"
+        echo "full_image=${REPO}:${TAG}" >> "$GITHUB_OUTPUT"
 
     - name: Build & push to ttl.sh
+      env:
+        DOCKER_BUILDKIT: '1'
       run: |
         TTL=${{ env.TTL_TAG }} IMAGE_NAME=${{ steps.vars.outputs.full_image }} \
         bash ./kaiwo.sh --build --push=ttl.sh
+      # If your kaiwo.sh uses docker build, wire cache hints there (cache-from/to type=local or gha)
 
     - name: Build CLI binary
       run: |
@@ -122,9 +127,30 @@ jobs:
         if-no-files-found: error
         retention-days: 5
 
+  seed-images:
+    name: Seed images (artifact)
+    runs-on: ubuntu-latest
+    steps:
+    - name: Pre-pull useful images
+      run: |
+        set -euxo pipefail
+        docker pull docker.io/library/busybox:stable
+        # Match your kind/k8s pause image as needed
+        docker pull registry.k8s.io/pause:3.10
+        # Add any images your tests frequently need:
+        # docker pull ghcr.io/yourorg/your-test-helper:tag
+        docker save -o /tmp/images.tar \
+          docker.io/library/busybox:stable \
+          registry.k8s.io/pause:3.10
+    - uses: actions/upload-artifact@v4
+      with:
+        name: kind-image-seed
+        path: /tmp/images.tar
+        retention-days: 7
+
   e2e-kind:
-    name: E2E on kind
-    needs: build-image
+    name: E2E on kind (${{ matrix.installer }}, shard ${{ matrix.shard }}/${{ matrix.total }})
+    needs: [build-image, seed-images]  
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -133,12 +159,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Free disk space (preinstalled SDKs/tools)
+    - name: Free a bit of disk
       run: |
-        sudo rm -rf /usr/local/lib/android    || true
-        sudo rm -rf /usr/share/dotnet         || true
-        sudo rm -rf /opt/ghc                  || true
-        sudo rm -rf /opt/hostedtoolcache      || true
+        sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc || true
         sudo apt-get clean
         docker system prune -af || true
         df -h
@@ -164,7 +187,7 @@ jobs:
       with:
         release: v0.2.12
 
-    - name: Install kind (CLI) & verify
+    - name: Install kind (CLI)
       run: |
         curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.26.0/kind-linux-amd64
         chmod +x ./kind
@@ -180,8 +203,51 @@ jobs:
         rm helmfile.tar.gz
         helmfile version
 
+    - name: Start pull-through caches
+      run: |
+        docker network create kind || true
+        docker run -d --name proxy-docker-hub --restart=always \
+          --net=kind -e REGISTRY_PROXY_REMOTEURL=https://registry-1.docker.io registry:2
+        docker run -d --name proxy-k8s --restart=always \
+          --net=kind -e REGISTRY_PROXY_REMOTEURL=https://registry.k8s.io registry:2
+        docker run -d --name proxy-ghcr --restart=always \
+          --net=kind -e REGISTRY_PROXY_REMOTEURL=https://ghcr.io registry:2
+
+    - name: Create kind cluster (wired to caches)
+      run: |
+        cat > kind.yaml <<'EOF'
+        kind: Cluster
+        apiVersion: kind.x-k8s.io/v1alpha4
+        networking:
+          kubeProxyMode: nftables
+        nodes:
+        - role: control-plane
+        - role: worker
+        - role: worker
+        - role: worker
+        - role: worker
+        - role: worker
+        containerdConfigPatches:
+          - |-
+            [plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
+              endpoint = ["http://proxy-docker-hub:5000"]
+            [plugins."io.containerd.grpc.v1.cri".registry.mirrors."ghcr.io"]
+              endpoint = ["http://proxy-ghcr:5000"]
+            [plugins."io.containerd.grpc.v1.cri".registry.mirrors."registry.k8s.io"]
+              endpoint = ["http://proxy-k8s:5000"]
+        EOF
+        kind create cluster --name ci --config kind.yaml --wait 180s
+
+    - name: Load seeded images into kind
+      uses: actions/download-artifact@v4
+      with:
+        name: kind-image-seed
+        path: .
+    - name: kind load image-archive
+      run: |
+        kind load image-archive images.tar --name ci || true
+
     - name: Additional cluster setup
-      # Static Kaiwo components (scheduler, namespace) are skipped, as these are included in the Kustomization manifests and the Helm chart
       run: bash ./test/scripts/setup_kind.sh --skip-static
 
     - name: Install CRDs and Deploy (${{ matrix.installer }})
