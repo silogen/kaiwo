@@ -33,6 +33,7 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -345,27 +346,50 @@ func ObserveDerivedTemplate(
 		return PopulateObservationFromNamespaceTemplate(ctx, k8sClient, service, &namespaceTemplate, obs)
 
 	case apierrors.IsNotFound(err):
-		// Derived template doesn't exist yet, load base template spec for creation
-		return loadBaseTemplateForDerivedCreation(ctx, k8sClient, service, resolution.BaseName, obs)
+		baseSpec, baseScope, err := LoadBaseTemplateSpec(ctx, k8sClient, service, resolution.BaseName)
+		if err != nil {
+			return err
+		}
+
+		match, matchErr := findMatchingTemplateForDerivedSpec(ctx, k8sClient, service, baseSpec)
+		if matchErr != nil {
+			return matchErr
+		}
+
+		if match != nil {
+			if match.NamespaceTemplate != nil {
+				obs.TemplateName = match.NamespaceTemplate.Name
+				return PopulateObservationFromNamespaceTemplate(ctx, k8sClient, service, match.NamespaceTemplate, obs)
+			}
+
+			if match.ClusterTemplate != nil {
+				obs.TemplateName = match.ClusterTemplate.Name
+				return PopulateObservationFromClusterTemplate(ctx, k8sClient, service, match.ClusterTemplate, obs)
+			}
+		}
+
+		// Derived template doesn't exist yet, prepare observation for creation
+		return prepareObservationForDerivedCreation(ctx, k8sClient, service, baseSpec, baseScope, obs)
 
 	default:
 		return fmt.Errorf("failed to get AIMServiceTemplate %s/%s: %w", service.Namespace, resolution.FinalName, err)
 	}
 }
 
-// loadBaseTemplateForDerivedCreation loads the base template spec and prepares observation for derived template creation.
-func loadBaseTemplateForDerivedCreation(
+type templateMatch struct {
+	NamespaceTemplate *aimv1alpha1.AIMServiceTemplate
+	ClusterTemplate   *aimv1alpha1.AIMClusterServiceTemplate
+}
+
+// prepareObservationForDerivedCreation populates observation data required to create a derived template.
+func prepareObservationForDerivedCreation(
 	ctx context.Context,
 	k8sClient client.Client,
 	service *aimv1alpha1.AIMService,
-	baseName string,
+	baseSpec *aimv1alpha1.AIMServiceTemplateSpec,
+	baseScope TemplateScope,
 	obs *ServiceObservation,
 ) error {
-	baseSpec, baseScope, err := LoadBaseTemplateSpec(ctx, k8sClient, service, baseName)
-	if err != nil {
-		return err
-	}
-
 	if baseSpec == nil {
 		obs.ShouldCreateTemplate = true
 		return nil
@@ -389,6 +413,60 @@ func loadBaseTemplateForDerivedCreation(
 
 	obs.ShouldCreateTemplate = true
 	return nil
+}
+
+// findMatchingTemplateForDerivedSpec searches for an existing template whose spec matches the derived spec.
+func findMatchingTemplateForDerivedSpec(
+	ctx context.Context,
+	k8sClient client.Client,
+	service *aimv1alpha1.AIMService,
+	baseSpec *aimv1alpha1.AIMServiceTemplateSpec,
+) (*templateMatch, error) {
+	if service == nil || service.Spec.Overrides == nil {
+		return nil, nil
+	}
+
+	expectedTemplate := BuildDerivedTemplate(service, "placeholder", baseSpec)
+	expectedSpec := expectedTemplate.Spec
+
+	if service.Namespace != "" {
+		var templateList aimv1alpha1.AIMServiceTemplateList
+		if err := k8sClient.List(ctx, &templateList, client.InNamespace(service.Namespace)); err != nil {
+			return nil, fmt.Errorf("failed to list AIMServiceTemplates in namespace %q: %w", service.Namespace, err)
+		}
+		for i := range templateList.Items {
+			template := &templateList.Items[i]
+			if template.Spec.AIMImageName != expectedSpec.AIMImageName {
+				continue
+			}
+			if !apiequality.Semantic.DeepEqual(template.Spec, expectedSpec) {
+				continue
+			}
+			return &templateMatch{NamespaceTemplate: template.DeepCopy()}, nil
+		}
+	}
+
+	if len(expectedSpec.Env) > 0 || len(expectedSpec.ImagePullSecrets) > 0 || expectedSpec.Caching != nil {
+		// Derived spec relies on namespace-scoped fields; cluster templates cannot satisfy it.
+		return nil, nil
+	}
+
+	var clusterTemplateList aimv1alpha1.AIMClusterServiceTemplateList
+	if err := k8sClient.List(ctx, &clusterTemplateList); err != nil {
+		return nil, fmt.Errorf("failed to list AIMClusterServiceTemplates: %w", err)
+	}
+	for i := range clusterTemplateList.Items {
+		template := &clusterTemplateList.Items[i]
+		if template.Spec.AIMImageName != expectedSpec.AIMImageName {
+			continue
+		}
+		if !apiequality.Semantic.DeepEqual(template.Spec.AIMServiceTemplateSpecCommon, expectedSpec.AIMServiceTemplateSpecCommon) {
+			continue
+		}
+		return &templateMatch{ClusterTemplate: template.DeepCopy()}, nil
+	}
+
+	return nil, nil
 }
 
 // ObserveNonDerivedTemplate handles observation for services with non-derived templates.
