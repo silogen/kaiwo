@@ -701,6 +701,7 @@ _Appears in:_
 | `effectiveRuntimeConfig` _[AIMEffectiveRuntimeConfig](#aimeffectiveruntimeconfig)_ | EffectiveRuntimeConfig surfaces the runtime configuration applied to this service. |  |  |
 | `status` _[AIMServiceStatusEnum](#aimservicestatusenum)_ | Status represents the current high‑level status of the service lifecycle.<br />Values: `Pending`, `Starting`, `Running`, `Failed`, `Degraded`. | Pending | Enum: [Pending Starting Running Failed Degraded] <br /> |
 | `routing` _[AIMServiceRoutingStatus](#aimserviceroutingstatus)_ | Routing surfaces information about the configured HTTP routing, when enabled. |  |  |
+| `resolvedTemplateRef` _string_ | ResolvedTemplateRef records the template name the controller selected (namespace or cluster).<br />When spec.templateRef is omitted, this field surfaces the resolved image default or derived template. |  |  |
 
 
 #### AIMServiceStatusEnum

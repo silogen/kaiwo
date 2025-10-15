@@ -184,24 +184,7 @@ func buildServingRuntimeSpec(template aimstate.TemplateState) servingv1alpha1.Se
 	}
 }
 
-func CopyPullSecrets(in []corev1.LocalObjectReference) []corev1.LocalObjectReference {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make([]corev1.LocalObjectReference, len(in))
-	copy(out, in)
-	return out
-}
-
-// CopyEnvVars returns a deep-copy of environment variables.
-func CopyEnvVars(in []corev1.EnvVar) []corev1.EnvVar {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make([]corev1.EnvVar, len(in))
-	copy(out, in)
-	return out
-}
+// CopyPullSecrets and CopyEnvVars are now in common.go to avoid duplication
 
 // BuildInferenceService constructs a KServe InferenceService referencing a ServingRuntime or ClusterServingRuntime.
 func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.OwnerReference) *servingv1beta1.InferenceService {

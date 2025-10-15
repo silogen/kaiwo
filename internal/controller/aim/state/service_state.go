@@ -134,6 +134,15 @@ func copyEnvVars(in []corev1.EnvVar) []corev1.EnvVar {
 	return out
 }
 
+func copyPullSecrets(in []corev1.LocalObjectReference) []corev1.LocalObjectReference {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]corev1.LocalObjectReference, len(in))
+	copy(out, in)
+	return out
+}
+
 func mergePullSecretRefs(base []corev1.LocalObjectReference, extras []corev1.LocalObjectReference) []corev1.LocalObjectReference {
 	if len(extras) == 0 {
 		return base

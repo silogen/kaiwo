@@ -77,11 +77,4 @@ func ExtractPrimaryModelSource(sources []aimv1alpha1.AIMModelSource) *aimv1alpha
 	return nil
 }
 
-func copyPullSecrets(in []corev1.LocalObjectReference) []corev1.LocalObjectReference {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make([]corev1.LocalObjectReference, len(in))
-	copy(out, in)
-	return out
-}
+// copyPullSecrets and copyEnvVars are defined in service_state.go
