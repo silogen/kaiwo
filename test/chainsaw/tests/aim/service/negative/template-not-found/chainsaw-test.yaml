@@ -13,7 +13,7 @@ spec:
     - apply:
         file: service.yaml
 
-  - name: Verify service fails with TemplateNotFound
+  - name: Verify service status shows Pending with TemplateNotFound
     try:
     - assert:
         timeout: 30s
@@ -23,10 +23,20 @@ spec:
           metadata:
             name: test-service
           status:
-            status: Failed
+            status: Pending
             (conditions[?type == 'Resolved']):
             - status: "False"
               reason: TemplateNotFound
+
+  - name: Verify no AIMServiceTemplate was auto-created
+    try:
+    - error:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMServiceTemplate
+          metadata:
+            name: non-existent-template
+            namespace: ($namespace)
 
   - name: Verify no InferenceService was created
     try:

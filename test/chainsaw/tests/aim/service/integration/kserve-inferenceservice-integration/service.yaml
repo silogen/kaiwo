@@ -3,6 +3,10 @@ kind: AIMService
 metadata:
   name: test-service
 spec:
-  aimImageName: llama-3-8b-kserve-integration
-  templateRef: llama-3-8b-latency-kserve-integration
-  replicas: 1
+  aimImageName: default-testing-llama-3-8b
+  routing:
+    enabled: true
+    gatewayRef:
+      name: kserve-ingress-gateway
+      namespace: kgateway-system
+    routeTemplate: "/integration/test"

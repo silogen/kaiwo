@@ -72,6 +72,7 @@ type ServiceObservation struct {
 	RoutePath              string
 	RouteTemplateErr       error
 	RuntimeConfigErr       error
+	ImageErr               error
 	TemplateStatus         *aimv1alpha1.AIMServiceTemplateStatus
 	TemplateSpecCommon     aimv1alpha1.AIMServiceTemplateSpecCommon
 	TemplateSpec           *aimv1alpha1.AIMServiceTemplateSpec
@@ -263,7 +264,9 @@ func PopulateObservationFromNamespaceTemplate(
 	obs.TemplateNamespace = template.Namespace
 	if image, imageErr := LookupImageForNamespaceTemplate(ctx, k8sClient, template.Namespace, template.Spec.AIMImageName); imageErr == nil {
 		obs.ImageResources = image.Resources.DeepCopy()
-	} else if !errors.Is(imageErr, ErrImageNotFound) {
+	} else if errors.Is(imageErr, ErrImageNotFound) {
+		obs.ImageErr = fmt.Errorf("AIMImage %q not found in namespace %q", template.Spec.AIMImageName, template.Namespace)
+	} else {
 		return fmt.Errorf("failed to lookup AIMImage %q in namespace %q: %w", template.Spec.AIMImageName, template.Namespace, imageErr)
 	}
 	return nil
@@ -304,7 +307,9 @@ func PopulateObservationFromClusterTemplate(
 	}
 	if image, imageErr := LookupImageForClusterTemplate(ctx, k8sClient, template.Spec.AIMImageName); imageErr == nil {
 		obs.ImageResources = image.Resources.DeepCopy()
-	} else if !errors.Is(imageErr, ErrImageNotFound) {
+	} else if errors.Is(imageErr, ErrImageNotFound) {
+		obs.ImageErr = fmt.Errorf("AIMClusterImage %q not found", template.Spec.AIMImageName)
+	} else {
 		return fmt.Errorf("failed to lookup AIMClusterImage %q: %w", template.Spec.AIMImageName, imageErr)
 	}
 	return nil
@@ -388,6 +393,8 @@ func loadBaseTemplateForDerivedCreation(
 
 // ObserveNonDerivedTemplate handles observation for services with non-derived templates.
 // It searches for namespace-scoped templates first, then falls back to cluster-scoped templates.
+// Does not set ShouldCreateTemplate - that decision is made in the controller based on whether
+// an explicit templateRef was provided.
 func ObserveNonDerivedTemplate(
 	ctx context.Context,
 	k8sClient client.Client,
@@ -416,6 +423,7 @@ func ObserveNonDerivedTemplate(
 }
 
 // observeClusterTemplate attempts to fetch and populate observation from a cluster-scoped template.
+// Does not set ShouldCreateTemplate - that decision is made in the controller.
 func observeClusterTemplate(
 	ctx context.Context,
 	k8sClient client.Client,
@@ -431,7 +439,7 @@ func observeClusterTemplate(
 		return PopulateObservationFromClusterTemplate(ctx, k8sClient, service, &clusterTemplate, obs)
 
 	case apierrors.IsNotFound(err):
-		obs.ShouldCreateTemplate = true
+		// Template not found - let the controller decide whether to create one
 		return nil
 
 	default:
@@ -481,11 +489,17 @@ func lookupImageResourcesForScope(
 		if err != nil && !errors.Is(err, ErrImageNotFound) {
 			return fmt.Errorf("failed to lookup AIMImage %q in namespace %q: %w", imageName, namespace, err)
 		}
+		if errors.Is(err, ErrImageNotFound) {
+			obs.ImageErr = fmt.Errorf("AIMImage %q not found in namespace %q", imageName, namespace)
+		}
 
 	case TemplateScopeCluster:
 		image, err = LookupImageForClusterTemplate(ctx, k8sClient, imageName)
 		if err != nil && !errors.Is(err, ErrImageNotFound) {
 			return fmt.Errorf("failed to lookup AIMClusterImage %q: %w", imageName, err)
+		}
+		if errors.Is(err, ErrImageNotFound) {
+			obs.ImageErr = fmt.Errorf("AIMClusterImage %q not found", imageName)
 		}
 	}
 

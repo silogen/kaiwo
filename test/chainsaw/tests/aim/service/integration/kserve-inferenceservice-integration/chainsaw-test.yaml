@@ -7,24 +7,11 @@ spec:
   timeouts:
     assert: 120s
   steps:
-  - name: Create prerequisites
+  - name: Ensure template is available
     try:
-    - apply:
-        file: cluster-image.yaml
-    - apply:
-        file: cluster-template.yaml
-
-  - name: Wait for template to become Available
-    try:
-    - assert:
-        timeout: 30s
-        resource:
-          apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMClusterServiceTemplate
-          metadata:
-            name: llama-3-8b-latency-kserve-integration
-          status:
-            status: Available
+      - assert:
+          timeout: 5s
+          file: ../../_shared/template-available.yaml
 
   - name: Create AIMService
     try:
@@ -74,3 +61,70 @@ spec:
           status:
             (conditions[?type == 'Ready']):
             - status: "True"
+
+  - name: Verify HTTPRoute is created and ready
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: gateway.networking.k8s.io/v1
+          kind: HTTPRoute
+          metadata:
+            name: test-service
+            (ownerReferences[?kind == 'AIMService']):
+            - name: test-service
+          (status.parents[0].conditions[?type == 'Accepted']):
+          - status: "True"
+
+  - name: Test HTTP endpoint through gateway
+    try:
+    - script:
+        timeout: 60s
+        content: |
+          #!/bin/bash
+          set -e
+
+          # Get the gateway service
+          GATEWAY_SVC="kserve-ingress-gateway.kgateway-system.svc.cluster.local"
+
+          # Get the resolved path from AIMService status
+          ROUTE_PATH=$(kubectl get aimservice test-service -o jsonpath='{.status.routing.path}')
+          echo "Testing endpoint: ${ROUTE_PATH}/v1/models"
+
+          # Port-forward to the gateway service in the background
+          kubectl port-forward -n kgateway-system svc/kserve-ingress-gateway 8080:80 &
+          PF_PID=$!
+
+          # Wait for port-forward to be ready
+          sleep 3
+
+          # Cleanup function
+          cleanup() {
+            kill $PF_PID 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          # Curl the endpoint through the gateway
+          RESPONSE=$(curl -s -w "\n%{http_code}" "http://localhost:8080${ROUTE_PATH}/v1/models" -H "Host: ${GATEWAY_SVC}")
+
+          # Extract status code (last line)
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
+          # Extract body (all lines except last)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "HTTP Response Code: $HTTP_CODE"
+          echo "Response Body: $BODY"
+
+          # Verify response code is 200
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "ERROR: Expected HTTP 200, got $HTTP_CODE"
+            exit 1
+          fi
+
+          # Verify response is valid JSON
+          if ! echo "$BODY" | jq . > /dev/null 2>&1; then
+            echo "ERROR: Response is not valid JSON"
+            exit 1
+          fi
+
+          echo "SUCCESS: Service is accessible and returns valid JSON"

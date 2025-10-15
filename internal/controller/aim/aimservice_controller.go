@@ -148,9 +148,13 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 		obs.TemplateNamespace = service.Namespace
 	}
 
-	// Mark for template creation if no template was found
+	// Mark for template creation only if no template was found AND no explicit templateRef was provided
+	// When a user explicitly specifies a templateRef, we should not auto-create - the service should fail
 	if !obs.TemplateFound() {
-		obs.ShouldCreateTemplate = true
+		hasExplicitTemplateRef := strings.TrimSpace(service.Spec.TemplateRef) != ""
+		if !hasExplicitTemplateRef || resolution.Derived {
+			obs.ShouldCreateTemplate = true
+		}
 	}
 
 	// Resolve route path if routing is enabled via service or runtime defaults
