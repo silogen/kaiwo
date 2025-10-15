@@ -144,4 +144,4 @@ rules:
 # Validate storageclass
 - apiGroups: ["storage.k8s.io"]
   resources: ["storageclasses"]
-  verbs: ["get"]
+  verbs: ["get","list","watch"]
