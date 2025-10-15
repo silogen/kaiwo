@@ -29,7 +29,7 @@ rules:
   - "kaiwoqueueconfigs"
   - "kaiwoservices"
   - "clustermodels"
-  - "modelcaches"
+  - "aimmodelcaches"
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
 - apiGroups: ["aim.silogen.ai"]
@@ -42,7 +42,7 @@ rules:
   - "aimclusterservicetemplates"
   - "aimtemplatecaches"
   - "aimservices"
-  - "modelcaches"
+  - "aimmodelcaches"
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
 - apiGroups: ["config.kaiwo.silogen.ai"]
