@@ -5,8 +5,7 @@ metadata:
   labels:
     team: Data-Team
 spec:
-  aimImageName: meta/route-config
-  templateRef: llama-3-8b-latency-routing-template-config
+  aimImageName: default-testing-llama-3-8b
   runtimeConfigName: routing-template-config
   routing:
     enabled: true

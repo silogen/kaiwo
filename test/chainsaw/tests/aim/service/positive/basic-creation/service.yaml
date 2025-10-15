@@ -4,4 +4,3 @@ metadata:
   name: test-service
 spec:
   aimImageName: default-testing-llama-3-8b
-  replicas: 1

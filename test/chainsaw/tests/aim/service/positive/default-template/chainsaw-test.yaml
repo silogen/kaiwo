@@ -28,7 +28,9 @@ spec:
           metadata:
             name: default-template-service
           status:
-            resolvedTemplateRef: default-testing-llama-3-8b
+            resolvedTemplate:
+              name: default-testing-llama-3-8b
+              scope: Cluster
 
   - name: Verify InferenceService created
     try:

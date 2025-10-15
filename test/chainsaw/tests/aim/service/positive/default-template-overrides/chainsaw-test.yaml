@@ -21,7 +21,7 @@ spec:
   - name: Verify the service uses an overridden template, and that the derived template exists and becomes available
     try:
     - script:
-        content: kubectl get aimservice default-template-overrides -n $NAMESPACE -o jsonpath='{.status.resolvedTemplateRef}'
+        content: kubectl get aimservice default-template-overrides -n $NAMESPACE -o jsonpath='{.status.resolvedTemplate.name}'
         env:
           - name: NAMESPACE
             value: ($namespace)

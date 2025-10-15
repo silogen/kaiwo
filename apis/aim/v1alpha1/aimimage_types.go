@@ -80,13 +80,13 @@ type AIMImageStatus struct {
 	EffectiveRuntimeConfig *AIMEffectiveRuntimeConfig `json:"effectiveRuntimeConfig,omitempty"`
 }
 
+// AIMClusterImage is the Schema for cluster-scoped AIM image catalog entries.
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster,shortName=aimclimg,categories=aim;all
 // +kubebuilder:printcolumn:name="Model ID",type=string,JSONPath=`.spec.modelId`
 // +kubebuilder:printcolumn:name="Image",type=string,JSONPath=`.spec.image`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
-// AIMClusterImage is the Schema for cluster-scoped AIM image catalog entries.
 type AIMClusterImage struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -95,21 +95,21 @@ type AIMClusterImage struct {
 	Status AIMImageStatus `json:"status,omitempty"`
 }
 
-// +kubebuilder:object:root=true
 // AIMClusterImageList contains a list of AIMClusterImage.
+// +kubebuilder:object:root=true
 type AIMClusterImageList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []AIMClusterImage `json:"items"`
 }
 
+// AIMImage is the Schema for namespace-scoped AIM image catalog entries.
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=aimimg,categories=aim;all
 // +kubebuilder:printcolumn:name="Model ID",type=string,JSONPath=`.spec.modelId`
 // +kubebuilder:printcolumn:name="Image",type=string,JSONPath=`.spec.image`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
-// AIMImage is the Schema for namespace-scoped AIM image catalog entries.
 type AIMImage struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -118,8 +118,8 @@ type AIMImage struct {
 	Status AIMImageStatus `json:"status,omitempty"`
 }
 
-// +kubebuilder:object:root=true
 // AIMImageList contains a list of AIMImage.
+// +kubebuilder:object:root=true
 type AIMImageList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
