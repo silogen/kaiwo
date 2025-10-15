@@ -67,7 +67,8 @@ type ServiceObservation struct {
 	TemplateOwnedByService bool
 	ShouldCreateTemplate   bool
 	RuntimeConfigSpec      aimv1alpha1.AIMRuntimeConfigSpec
-	EffectiveRuntimeConfig *aimv1alpha1.AIMEffectiveRuntimeConfig
+	ResolvedRuntimeConfig  *aimv1alpha1.AIMResolvedRuntimeConfig
+	ResolvedImage          *aimv1alpha1.AIMResolvedReference
 	RoutePath              string
 	RouteTemplateErr       error
 	RuntimeConfigErr       error
@@ -236,8 +237,11 @@ func PopulateObservationFromNamespaceTemplate(
 	obs.TemplateAvailable = template.Status.Status == aimv1alpha1.AIMTemplateStatusAvailable
 	obs.TemplateOwnedByService = HasOwnerReference(template.GetOwnerReferences(), service.UID) ||
 		IsDerivedTemplate(template.GetLabels())
-	if template.Status.EffectiveRuntimeConfig != nil {
-		obs.EffectiveRuntimeConfig = template.Status.EffectiveRuntimeConfig.DeepCopy()
+	if template.Status.ResolvedRuntimeConfig != nil {
+		obs.ResolvedRuntimeConfig = template.Status.ResolvedRuntimeConfig
+	}
+	if template.Status.ResolvedImage != nil {
+		obs.ResolvedImage = template.Status.ResolvedImage
 	}
 	obs.TemplateStatus = template.Status.DeepCopy()
 	obs.TemplateSpecCommon = template.Spec.AIMServiceTemplateSpecCommon
@@ -252,8 +256,8 @@ func PopulateObservationFromNamespaceTemplate(
 		}
 	} else {
 		obs.RuntimeConfigSpec = resolution.EffectiveSpec
-		if resolution.EffectiveStatus != nil {
-			obs.EffectiveRuntimeConfig = resolution.EffectiveStatus
+		if resolution.ResolvedRef != nil {
+			obs.ResolvedRuntimeConfig = resolution.ResolvedRef
 		}
 	}
 	obs.TemplateNamespace = template.Namespace
@@ -275,8 +279,11 @@ func PopulateObservationFromClusterTemplate(
 ) error {
 	obs.Scope = TemplateScopeCluster
 	obs.TemplateAvailable = template.Status.Status == aimv1alpha1.AIMTemplateStatusAvailable
-	if template.Status.EffectiveRuntimeConfig != nil {
-		obs.EffectiveRuntimeConfig = template.Status.EffectiveRuntimeConfig.DeepCopy()
+	if template.Status.ResolvedRuntimeConfig != nil {
+		obs.ResolvedRuntimeConfig = template.Status.ResolvedRuntimeConfig
+	}
+	if template.Status.ResolvedImage != nil {
+		obs.ResolvedImage = template.Status.ResolvedImage
 	}
 	obs.TemplateStatus = template.Status.DeepCopy()
 	obs.TemplateSpecCommon = template.Spec.AIMServiceTemplateSpecCommon
@@ -287,8 +294,8 @@ func PopulateObservationFromClusterTemplate(
 	obs.TemplateSpecCommon.RuntimeConfigName = runtimeConfigName
 	if resolution, resolveErr := ResolveRuntimeConfig(ctx, k8sClient, service.Namespace, runtimeConfigName); resolveErr == nil {
 		obs.RuntimeConfigSpec = resolution.EffectiveSpec
-		if resolution.EffectiveStatus != nil {
-			obs.EffectiveRuntimeConfig = resolution.EffectiveStatus
+		if resolution.ResolvedRef != nil {
+			obs.ResolvedRuntimeConfig = resolution.ResolvedRef
 		}
 	} else if errors.Is(resolveErr, ErrRuntimeConfigNotFound) {
 		obs.RuntimeConfigErr = fmt.Errorf("AIMRuntimeConfig %q not found in namespace %q", runtimeConfigName, service.Namespace)
@@ -450,8 +457,8 @@ func resolveRuntimeConfigForObservation(
 	}
 
 	obs.RuntimeConfigSpec = resolution.EffectiveSpec
-	if resolution.EffectiveStatus != nil {
-		obs.EffectiveRuntimeConfig = resolution.EffectiveStatus
+	if resolution.ResolvedRef != nil {
+		obs.ResolvedRuntimeConfig = resolution.ResolvedRef
 	}
 	return nil
 }

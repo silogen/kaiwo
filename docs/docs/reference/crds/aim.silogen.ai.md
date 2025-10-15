@@ -184,27 +184,6 @@ _Appears in:_
 | `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core)_ | Resources defines the default container resource requirements applied to services derived from this template.<br />Service-specific values override the template defaults. |  |  |
 
 
-#### AIMEffectiveRuntimeConfig
-
-
-
-AIMEffectiveRuntimeConfig surfaces the resolved configuration applied to a consumer.
-
-
-
-_Appears in:_
-- [AIMImageStatus](#aimimagestatus)
-- [AIMServiceStatus](#aimservicestatus)
-- [AIMServiceTemplateStatus](#aimservicetemplatestatus)
-- [AIMTemplateCacheStatus](#aimtemplatecachestatus)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `namespaceRef` _[AIMRuntimeConfigReference](#aimruntimeconfigreference)_ | NamespaceRef points at the namespace-scoped runtime config, if present. |  |  |
-| `clusterRef` _[AIMRuntimeConfigReference](#aimruntimeconfigreference)_ | ClusterRef points at the cluster-scoped runtime config, if present. |  |  |
-| `hash` _string_ | Hash is a stable hash of the merged configuration used for change detection. |  |  |
-
-
 #### AIMImage
 
 
@@ -279,7 +258,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `observedGeneration` _integer_ | ObservedGeneration is the most recent generation observed by the controller |  |  |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest available observations of the model's state |  |  |
-| `effectiveRuntimeConfig` _[AIMEffectiveRuntimeConfig](#aimeffectiveruntimeconfig)_ | EffectiveRuntimeConfig surfaces the resolved runtime configuration used while reconciling the image. |  |  |
+| `resolvedRuntimeConfig` _[AIMResolvedRuntimeConfig](#aimresolvedruntimeconfig)_ | ResolvedRuntimeConfig captures metadata about the runtime config that was resolved. |  |  |
 
 
 #### AIMMetric
@@ -401,7 +380,7 @@ _Validation:_
 
 _Appears in:_
 - [AIMResolvedReference](#aimresolvedreference)
-- [AIMRuntimeConfigReference](#aimruntimeconfigreference)
+- [AIMResolvedRuntimeConfig](#aimresolvedruntimeconfig)
 - [AIMServiceResolvedTemplate](#aimserviceresolvedtemplate)
 
 | Field | Description |
@@ -420,8 +399,34 @@ AIMResolvedReference captures metadata about a resolved reference.
 
 
 _Appears in:_
-- [AIMRuntimeConfigReference](#aimruntimeconfigreference)
+- [AIMResolvedRuntimeConfig](#aimresolvedruntimeconfig)
 - [AIMServiceResolvedTemplate](#aimserviceresolvedtemplate)
+- [AIMServiceStatus](#aimservicestatus)
+- [AIMServiceTemplateStatus](#aimservicetemplatestatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | Name is the resource name that satisfied the reference. |  |  |
+| `namespace` _string_ | Namespace identifies where the resource was found when namespace-scoped.<br />Empty indicates a cluster-scoped resource. |  |  |
+| `scope` _[AIMResolutionScope](#aimresolutionscope)_ | Scope indicates whether the resolved resource was namespace or cluster scoped. |  | Enum: [Namespace Cluster Unknown] <br /> |
+| `kind` _string_ | Kind is the fully-qualified kind of the resolved reference, when known. |  |  |
+| `uid` _[UID](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#uid-types-pkg)_ | UID captures the unique identifier of the resolved reference, when known. |  |  |
+
+
+#### AIMResolvedRuntimeConfig
+
+
+
+AIMResolvedRuntimeConfig captures metadata about the runtime config that was resolved.
+This follows the same pattern as AIMServiceResolvedTemplate for consistency.
+
+
+
+_Appears in:_
+- [AIMImageStatus](#aimimagestatus)
+- [AIMServiceStatus](#aimservicestatus)
+- [AIMServiceTemplateStatus](#aimservicetemplatestatus)
+- [AIMTemplateCacheStatus](#aimtemplatecachestatus)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -503,26 +508,6 @@ AIMRuntimeConfigList contains a list of AIMRuntimeConfig.
 | `kind` _string_ | `AIMRuntimeConfigList` | | |
 | `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
 | `items` _[AIMRuntimeConfig](#aimruntimeconfig) array_ |  |  |  |
-
-
-#### AIMRuntimeConfigReference
-
-
-
-AIMRuntimeConfigReference records the source runtime config used during resolution.
-
-
-
-_Appears in:_
-- [AIMEffectiveRuntimeConfig](#aimeffectiveruntimeconfig)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `name` _string_ | Name is the resource name that satisfied the reference. |  |  |
-| `namespace` _string_ | Namespace identifies where the resource was found when namespace-scoped.<br />Empty indicates a cluster-scoped resource. |  |  |
-| `scope` _[AIMResolutionScope](#aimresolutionscope)_ | Scope indicates whether the resolved resource was namespace or cluster scoped. |  | Enum: [Namespace Cluster Unknown] <br /> |
-| `kind` _string_ | Kind is the fully-qualified kind of the resolved reference, when known. |  |  |
-| `uid` _[UID](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#uid-types-pkg)_ | UID captures the unique identifier of the resolved reference, when known. |  |  |
 
 
 #### AIMRuntimeConfigSpec
@@ -763,7 +748,8 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `observedGeneration` _integer_ | ObservedGeneration is the most recent generation observed by the controller. |  |  |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest observations of template state. |  |  |
-| `effectiveRuntimeConfig` _[AIMEffectiveRuntimeConfig](#aimeffectiveruntimeconfig)_ | EffectiveRuntimeConfig surfaces the runtime configuration applied to this service. |  |  |
+| `resolvedRuntimeConfig` _[AIMResolvedRuntimeConfig](#aimresolvedruntimeconfig)_ | ResolvedRuntimeConfig captures metadata about the runtime config that was resolved. |  |  |
+| `resolvedImage` _[AIMResolvedReference](#aimresolvedreference)_ | ResolvedImage captures metadata about the image that was resolved. |  |  |
 | `status` _[AIMServiceStatusEnum](#aimservicestatusenum)_ | Status represents the current high‑level status of the service lifecycle.<br />Values: `Pending`, `Starting`, `Running`, `Failed`, `Degraded`. | Pending | Enum: [Pending Starting Running Failed Degraded] <br /> |
 | `routing` _[AIMServiceRoutingStatus](#aimserviceroutingstatus)_ | Routing surfaces information about the configured HTTP routing, when enabled. |  |  |
 | `resolvedTemplate` _[AIMServiceResolvedTemplate](#aimserviceresolvedtemplate)_ | ResolvedTemplate captures metadata about the template that satisfied the reference. |  |  |
@@ -898,7 +884,8 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `observedGeneration` _integer_ | ObservedGeneration is the most recent generation observed by the controller. |  |  |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest observations of template state. |  |  |
-| `effectiveRuntimeConfig` _[AIMEffectiveRuntimeConfig](#aimeffectiveruntimeconfig)_ | EffectiveRuntimeConfig surfaces the merged runtime configuration applied to this template. |  |  |
+| `resolvedRuntimeConfig` _[AIMResolvedRuntimeConfig](#aimresolvedruntimeconfig)_ | ResolvedRuntimeConfig captures metadata about the runtime config that was resolved. |  |  |
+| `resolvedImage` _[AIMResolvedReference](#aimresolvedreference)_ | ResolvedImage captures metadata about the image that was resolved. |  |  |
 | `status` _[AIMTemplateStatusEnum](#aimtemplatestatusenum)_ | Status represents the current high‑level status of the template lifecycle.<br />Values: `Pending`, `Progressing`, `Available`, `Failed`. | Pending | Enum: [Pending Progressing Available Degraded Failed] <br /> |
 | `modelSources` _[AIMModelSource](#aimmodelsource) array_ | ModelSources list the models that this template requires to run. These are the models that will be<br />cached, if this template is cached. |  |  |
 | `profile` _[AIMProfile](#aimprofile)_ | Profile contains the full discovery result profile as a free-form JSON object.<br />This includes metadata, engine args, environment variables, and model details. |  |  |
@@ -977,7 +964,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `observedGeneration` _integer_ | ObservedGeneration is the most recent generation observed by the controller. |  |  |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest observations of the template cache state. |  |  |
-| `effectiveRuntimeConfig` _[AIMEffectiveRuntimeConfig](#aimeffectiveruntimeconfig)_ | EffectiveRuntimeConfig surfaces the runtime config references used to warm the cache. |  |  |
+| `resolvedRuntimeConfig` _[AIMResolvedRuntimeConfig](#aimresolvedruntimeconfig)_ | ResolvedRuntimeConfig captures metadata about the runtime config that was resolved. |  |  |
 | `status` _[AIMTemplateCacheStatusEnum](#aimtemplatecachestatusenum)_ | Status represents the current high-level status of the template cache. | Pending | Enum: [Pending Progressing Available Failed] <br /> |
 | `resolvedTemplateKind` _string_ | ResolvedTemplateKind indicates whether the template resolved to a namespace-scoped<br />AIMServiceTemplate or cluster-scoped AIMClusterServiceTemplate.<br />Values: "AIMServiceTemplate", "AIMClusterServiceTemplate" |  |  |
 

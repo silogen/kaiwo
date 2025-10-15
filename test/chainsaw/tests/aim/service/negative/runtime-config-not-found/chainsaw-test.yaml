@@ -7,31 +7,18 @@ spec:
   timeouts:
     assert: 60s
   steps:
-  - name: Create prerequisites
+  - name: Ensure template is available
     try:
-    - apply:
-        file: cluster-image.yaml
-    - apply:
-        file: cluster-template.yaml
-
-  - name: Wait for template - should continue without config
-    try:
-    - assert:
-        timeout: 30s
-        resource:
-          apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMClusterServiceTemplate
-          metadata:
-            name: llama-3-8b-latency-config-missing
-          status:
-            status: Available
+      - assert:
+          timeout: 5s
+          file: ../../_shared/template-available.yaml
 
   - name: Create AIMService
     try:
     - apply:
         file: service.yaml
 
-  - name: Verify service resolves despite missing config
+  - name: Verify service is degraded due to missing config
     try:
     - assert:
         timeout: 30s
@@ -41,14 +28,7 @@ spec:
           metadata:
             name: test-service
           status:
-            (conditions[?type == 'Resolved']):
-            - status: "True"
-
-  - name: Verify InferenceService was created
-    try:
-    - assert:
-        resource:
-          apiVersion: serving.kserve.io/v1beta1
-          kind: InferenceService
-          metadata:
-            name: test-service
+            status: Degraded
+            (conditions[?type == 'Failure']:
+              - status: True
+                reason: RuntimeConfigMissing

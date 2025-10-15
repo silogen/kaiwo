@@ -416,10 +416,11 @@ func ProjectTemplateStatus(
 	templateStatus := template.GetStatus()
 	currentStatus := templateStatus.Status
 
-	// Set effective runtime config
-	templateStatus.EffectiveRuntimeConfig = nil
+	// Set resolved runtime config and image
+	templateStatus.ResolvedRuntimeConfig = nil
+	templateStatus.ResolvedImage = nil
 	if obs != nil && obs.RuntimeConfig != nil {
-		templateStatus.EffectiveRuntimeConfig = obs.RuntimeConfig.EffectiveStatus
+		templateStatus.ResolvedRuntimeConfig = obs.RuntimeConfig.ResolvedRef
 	}
 
 	// Try each handler in order, applying the first one that returns a result

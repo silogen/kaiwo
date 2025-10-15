@@ -76,8 +76,9 @@ type AIMImageStatus struct {
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// EffectiveRuntimeConfig surfaces the resolved runtime configuration used while reconciling the image.
-	EffectiveRuntimeConfig *AIMEffectiveRuntimeConfig `json:"effectiveRuntimeConfig,omitempty"`
+	// ResolvedRuntimeConfig captures metadata about the runtime config that was resolved.
+	// +optional
+	ResolvedRuntimeConfig *AIMResolvedRuntimeConfig `json:"resolvedRuntimeConfig,omitempty"`
 }
 
 // AIMClusterImage is the Schema for cluster-scoped AIM image catalog entries.

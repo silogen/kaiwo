@@ -1,8 +1,0 @@
-apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMService
-metadata:
-  name: test-service
-spec:
-  aimImageName: llama-3-8b-isolation
-  templateRef: llama-3-8b-throughput-isolation
-  replicas: 1

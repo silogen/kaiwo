@@ -7,24 +7,11 @@ spec:
   timeouts:
     assert: 60s
   steps:
-  - name: Create template without image
+  - name: Ensure template is available
     try:
-    - apply:
-        file: cluster-template.yaml
-
-  - name: Verify template is degraded with ImageNotFound
-    try:
-    - assert:
-        timeout: 30s
-        resource:
-          apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMClusterServiceTemplate
-          metadata:
-            name: llama-3-8b-latency-image-missing
-          status:
-            status: Degraded
-            (conditions[?type == 'Ready']):
-            - status: "False"
+      - assert:
+          timeout: 5s
+          file: ../../_shared/template-available.yaml
 
   - name: Create AIMService
     try:
@@ -41,4 +28,10 @@ spec:
           metadata:
             name: test-service
           status:
-            (status != 'Ready'): true
+            status: Degraded
+            (conditions[?type == 'RuntimeReady']):
+              - status: "False"
+                reason: ImageNotFound
+            (conditions[?type == 'Failure']):
+              - status: "True"
+                reason: ImageNotFound

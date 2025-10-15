@@ -1,18 +1,20 @@
 # AIM Runtime Configuration
 
-The AIM operator resolves runtime settings from two complementary Custom Resource Definitions (CRDs):
+The AIM operator resolves runtime settings from two Custom Resource Definitions (CRDs):
 
 - **`AIMClusterRuntimeConfig`** provides cluster-wide defaults that apply to every namespace.
-- **`AIMRuntimeConfig`** is namespaced and supplies tenant-specific overrides, primarily for authentication secrets.
+- **`AIMRuntimeConfig`** is namespaced and supplies tenant-specific configuration, including authentication secrets.
 
 Every AIM workload that needs runtime settings (images, templates, services, caches) references a configuration by name using the `runtimeConfigName` field. If the field is omitted, the operator automatically falls back to a config named `default`.
 
 ## Resolution model
 
 1. The controller first looks for an `AIMRuntimeConfig` in the workload's namespace whose name matches `runtimeConfigName` (or `default`).
-2. If no namespaced config exists, the controller falls back to an `AIMClusterRuntimeConfig` with the same name.
-3. When both exist, fields are merged deterministically: namespace-scoped values override cluster defaults, while unset fields inherit from the cluster config.
-4. The merged configuration is published in the consumer's `status.effectiveRuntimeConfig` field, including references to the contributing objects and a hash of the merged spec.
+2. If a namespace-scoped config is found, it is used **exclusively** — no field-level merging occurs.
+3. If no namespaced config exists, the controller falls back to an `AIMClusterRuntimeConfig` with the same name.
+4. The resolved configuration is published in the consumer's `status.effectiveRuntimeConfig` field, including a reference to the source object and a hash of the spec.
+
+**Important**: When both namespace and cluster configs exist with the same name, the namespace config **completely replaces** the cluster config. There is no field-level merging or inheritance. This ensures predictable, easy-to-understand behavior where what you write is what you get.
 
 If a workload explicitly references a runtime config that does not exist at either scope, reconciliation fails with a clear error. When the implicit `default` config is missing, the controller emits a warning event and continues, allowing workloads that do not require extra configuration to proceed.
 
@@ -37,7 +39,7 @@ Cluster configs never carry secrets. They model cluster-wide policy knobs such a
 
 ## Namespace runtime configuration
 
-`AIMRuntimeConfig` inherits the cluster fields and adds authentication data for a specific namespace:
+`AIMRuntimeConfig` provides namespace-specific configuration including authentication data:
 
 ```yaml
 apiVersion: aim.silogen.ai/v1alpha1
@@ -46,18 +48,27 @@ metadata:
   name: default
   namespace: ml-team
 spec:
-  defaultStorageClassName: team-ssd         # overrides the cluster default
+  defaultStorageClassName: team-ssd
   serviceAccountName: aim-runtime
   imagePullSecrets:
   - name: ghcr-team-secret
+  routing:
+    enabled: true
+    gatewayRef:
+      name: kserve-gateway
+      namespace: kgateway-system
 ```
 
 | Field | Purpose |
 | ----- | ------- |
-| `defaultStorageClassName` | Namespace override for cache storage class. |
+| `defaultStorageClassName` | Storage class used for model caches. |
 | `serviceAccountName` | ServiceAccount used by discovery jobs and other supporting pods. |
-| `imagePullSecrets` | Additional registry credentials appended to the pod spec. Namespace entries override any duplicates from the cluster config. |
+| `imagePullSecrets` | Registry credentials added to pod specs. |
+| `routing.enabled` | Enable or disable HTTP routing for services using this config. |
+| `routing.gatewayRef` | Gateway parent for HTTPRoute resources. |
 | `routing.routeTemplate` | Optional HTTP path template applied to services in the namespace. See [Routing templates](#routing-templates) for details. |
+
+**Note**: If you want cluster-wide defaults for fields like `defaultStorageClassName` or `routing`, you must explicitly specify them in each namespace config. There is no automatic inheritance from cluster configs.
 
 ## Referencing runtime configs from workloads
 
@@ -83,8 +94,9 @@ spec:
   precision: fp16
 ```
 
-If `runtimeConfigName` is omitted, the controller resolves the `default` config and records the chosen objects in the template's status:
+If `runtimeConfigName` is omitted, the controller resolves the `default` config and records the chosen object in the template's status.
 
+When using a namespace config:
 ```yaml
 status:
   effectiveRuntimeConfig:
@@ -92,11 +104,22 @@ status:
       kind: AIMRuntimeConfig
       namespace: ml-team
       name: default
+      scope: Namespace
+    hash: 792403ad…
+```
+
+When falling back to a cluster config:
+```yaml
+status:
+  effectiveRuntimeConfig:
     clusterRef:
       kind: AIMClusterRuntimeConfig
       name: default
-    hash: 792403ad…
+      scope: Cluster
+    hash: 5f8a9b2c…
 ```
+
+Only one ref (namespace or cluster) will be present, never both.
 
 ## Error and warning behaviour
 

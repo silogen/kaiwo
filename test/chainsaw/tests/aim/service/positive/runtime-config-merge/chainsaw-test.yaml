@@ -3,7 +3,7 @@ kind: Test
 metadata:
   name: runtime-config-merge
 spec:
-  description: Test that namespace runtime config overrides cluster runtime config
+  description: Test that namespace runtime config completely replaces cluster config (no merging)
   timeouts:
     assert: 60s
   steps:
@@ -39,7 +39,7 @@ spec:
     - apply:
         file: service.yaml
 
-  - name: Verify service has both cluster and namespace refs
+  - name: Verify service uses namespace config only (no merging)
     try:
     - assert:
         timeout: 30s
@@ -52,14 +52,14 @@ spec:
             (conditions[?type == 'Resolved']):
             - status: "True"
             (effectiveRuntimeConfig != null): true
-            (effectiveRuntimeConfig.clusterRef != null): true
             (effectiveRuntimeConfig.namespaceRef != null): true
-            (effectiveRuntimeConfig.clusterRef.scope == 'Cluster'): true
             (effectiveRuntimeConfig.namespaceRef.scope == 'Namespace'): true
             (effectiveRuntimeConfig.namespaceRef.namespace == $namespace): true
+            # Cluster ref should NOT be present (namespace completely overrides)
+            (effectiveRuntimeConfig.clusterRef == null): true
             (routing.path == join('', ['/tenant/', $namespace, '/test-service'])): true
 
-  - name: Verify HTTPRoute prefers namespace runtime config
+  - name: Verify HTTPRoute uses namespace runtime config
     try:
     - assert:
         timeout: 30s

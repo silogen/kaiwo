@@ -3,6 +3,5 @@ kind: AIMService
 metadata:
   name: test-service
 spec:
-  aimImageName: llama-3-8b-template-missing
+  aimImageName: default-testing-llama-3-8b
   templateRef: non-existent-template
-  replicas: 1

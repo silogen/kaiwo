@@ -7,24 +7,11 @@ spec:
   timeouts:
     assert: 60s
   steps:
-  - name: Create prerequisites
+  - name: Ensure template is available
     try:
-    - apply:
-        file: cluster-image.yaml
-    - apply:
-        file: cluster-template.yaml
-
-  - name: Wait for template to become Available
-    try:
-    - assert:
-        timeout: 30s
-        resource:
-          apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMClusterServiceTemplate
-          metadata:
-            name: llama-3-8b-latency-routing-no-ref
-          status:
-            status: Available
+      - assert:
+          timeout: 5s
+          file: ../../_shared/template-available.yaml
 
   - name: Create AIMService with routing enabled but no gatewayRef
     try:

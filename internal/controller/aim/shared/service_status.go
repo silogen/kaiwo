@@ -348,11 +348,15 @@ func ProjectServiceStatus(
 	errs controllerutils.ReconcileErrors,
 ) {
 	status := &service.Status
-	status.EffectiveRuntimeConfig = nil
+	status.ResolvedRuntimeConfig = nil
+	status.ResolvedImage = nil
 	status.Routing = nil
 
-	if obs != nil && obs.EffectiveRuntimeConfig != nil {
-		status.EffectiveRuntimeConfig = obs.EffectiveRuntimeConfig.DeepCopy()
+	if obs != nil && obs.ResolvedRuntimeConfig != nil {
+		status.ResolvedRuntimeConfig = obs.ResolvedRuntimeConfig
+	}
+	if obs != nil && obs.ResolvedImage != nil {
+		status.ResolvedImage = obs.ResolvedImage
 	}
 
 	// Helper to update status conditions.

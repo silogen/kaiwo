@@ -284,80 +284,40 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
-              effectiveRuntimeConfig:
-                description: EffectiveRuntimeConfig surfaces the runtime config references
-                  used to warm the cache.
-                properties:
-                  clusterRef:
-                    description: ClusterRef points at the cluster-scoped runtime config,
-                      if present.
-                    properties:
-                      kind:
-                        description: Kind is the fully-qualified kind of the resolved
-                          reference, when known.
-                        type: string
-                      name:
-                        description: Name is the resource name that satisfied the
-                          reference.
-                        type: string
-                      namespace:
-                        description: |-
-                          Namespace identifies where the resource was found when namespace-scoped.
-                          Empty indicates a cluster-scoped resource.
-                        type: string
-                      scope:
-                        description: Scope indicates whether the resolved resource
-                          was namespace or cluster scoped.
-                        enum:
-                        - Namespace
-                        - Cluster
-                        - Unknown
-                        type: string
-                      uid:
-                        description: UID captures the unique identifier of the resolved
-                          reference, when known.
-                        type: string
-                    type: object
-                  hash:
-                    description: Hash is a stable hash of the merged configuration
-                      used for change detection.
-                    type: string
-                  namespaceRef:
-                    description: NamespaceRef points at the namespace-scoped runtime
-                      config, if present.
-                    properties:
-                      kind:
-                        description: Kind is the fully-qualified kind of the resolved
-                          reference, when known.
-                        type: string
-                      name:
-                        description: Name is the resource name that satisfied the
-                          reference.
-                        type: string
-                      namespace:
-                        description: |-
-                          Namespace identifies where the resource was found when namespace-scoped.
-                          Empty indicates a cluster-scoped resource.
-                        type: string
-                      scope:
-                        description: Scope indicates whether the resolved resource
-                          was namespace or cluster scoped.
-                        enum:
-                        - Namespace
-                        - Cluster
-                        - Unknown
-                        type: string
-                      uid:
-                        description: UID captures the unique identifier of the resolved
-                          reference, when known.
-                        type: string
-                    type: object
-                type: object
               observedGeneration:
                 description: ObservedGeneration is the most recent generation observed
                   by the controller.
                 format: int64
                 type: integer
+              resolvedRuntimeConfig:
+                description: ResolvedRuntimeConfig captures metadata about the runtime
+                  config that was resolved.
+                properties:
+                  kind:
+                    description: Kind is the fully-qualified kind of the resolved
+                      reference, when known.
+                    type: string
+                  name:
+                    description: Name is the resource name that satisfied the reference.
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace identifies where the resource was found when namespace-scoped.
+                      Empty indicates a cluster-scoped resource.
+                    type: string
+                  scope:
+                    description: Scope indicates whether the resolved resource was
+                      namespace or cluster scoped.
+                    enum:
+                    - Namespace
+                    - Cluster
+                    - Unknown
+                    type: string
+                  uid:
+                    description: UID captures the unique identifier of the resolved
+                      reference, when known.
+                    type: string
+                type: object
               resolvedTemplateKind:
                 description: |-
                   ResolvedTemplateKind indicates whether the template resolved to a namespace-scoped

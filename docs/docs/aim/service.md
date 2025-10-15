@@ -43,16 +43,16 @@ spec:
 | `resources` | Optional `ResourceRequirements` override that sits on top of template/image defaults. |
 | `routing` | Enables Gateway exposure and optional per-service route template. |
 
-The service controller first resolves the template (preferring namespace templates, then cluster templates), merges runtime config data, and creates/updates the downstream KServe resources. If the referenced template is absent, the controller creates a derived namespace template on the fly (`templateRef` defaults to the service name). When `templateRef` is omitted but the service provides overrides, the controller copies the image’s default template into a namespace-scoped template owned by the service before applying the overrides.
+The service controller first resolves the template (preferring namespace templates, then cluster templates), resolves runtime config data, and creates/updates the downstream KServe resources. If the referenced template is absent, the controller creates a derived namespace template on the fly (`templateRef` defaults to the service name). When `templateRef` is omitted but the service provides overrides, the controller copies the image's default template into a namespace-scoped template owned by the service before applying the overrides.
 
 When overrides trigger a derived template, the controller appends a short hash suffix (e.g., `-ovr-2926054f`) to the base template name so multiple override sets do not collide.
 
 ### Runtime config flow
 
 - `runtimeConfigName` → resolve namespace `AIMRuntimeConfig`, then cluster `AIMClusterRuntimeConfig`.
-- Namespace values override cluster defaults for storage, service account, image pull secrets, and routing.
-- The merged spec is copied into the service status (`status.effectiveRuntimeConfig`) for audit purposes.
-- If the service references a config that does not exist, it enters a `Degraded` state with reason `RuntimeConfigMissing` until the config is created.
+- **Namespace config completely replaces cluster config** — there is no field-level merging. If a namespace config exists, it is used exclusively. If not, the cluster config is used as a fallback.
+- The resolved config is recorded in the service status (`status.effectiveRuntimeConfig`) for audit purposes.
+- If the service references a config that does not exist at either scope, it enters a `Degraded` state with reason `RuntimeConfigMissing` until the config is created.
 
 ### Resource resolution
 
@@ -86,7 +86,7 @@ Runtime config templates provide namespace-wide defaults, while services can opt
 | ----- | ----------- |
 | `status` | Coarse lifecycle: `Pending`, `Starting`, `Running`, `Failed`, `Degraded`. |
 | `conditions` | `Resolved`, `RuntimeReady`, `RoutingReady`, `CacheReady`, `Failure`, etc. |
-| `effectiveRuntimeConfig` | References to the runtime config(s) used and a hash of the merged spec. |
+| `effectiveRuntimeConfig` | Reference to the runtime config used (namespace or cluster) and a hash of the spec. |
 | `resolvedTemplateRef` | Template name actually applied (namespace or cluster), including derived templates created for overrides. |
 | `routing.path` | Resolved HTTP path when routing is enabled and the template rendered successfully. |
 

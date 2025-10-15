@@ -7,10 +7,6 @@ spec:
   timeouts:
     assert: 60s
   steps:
-  - name: Create image without template
-    try:
-    - apply:
-        file: cluster-image.yaml
 
   - name: Create AIMService referencing non-existent template
     try:

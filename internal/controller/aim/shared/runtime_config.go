@@ -26,13 +26,9 @@ package shared
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -40,7 +36,8 @@ import (
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 )
 
-// RuntimeConfigResolution captures the merged runtime configuration.
+// RuntimeConfigResolution captures the resolved runtime configuration.
+// Namespace config completely overrides cluster config when present (no merging).
 type RuntimeConfigResolution struct {
 	// Name is the runtime config name requested by the consumer.
 	Name string
@@ -53,14 +50,15 @@ type RuntimeConfigResolution struct {
 	ClusterConfigNotFound   bool
 	NamespaceConfigNotFound bool
 
-	EffectiveSpec   aimv1alpha1.AIMRuntimeConfigSpec
-	EffectiveStatus *aimv1alpha1.AIMEffectiveRuntimeConfig
+	EffectiveSpec aimv1alpha1.AIMRuntimeConfigSpec
+	ResolvedRef   *aimv1alpha1.AIMResolvedRuntimeConfig
 }
 
 // ErrRuntimeConfigNotFound indicates that neither namespace nor cluster runtime config could be located.
 var ErrRuntimeConfigNotFound = errors.New("runtime config not found")
 
-// ResolveRuntimeConfig merges namespace and cluster runtime configs with namespace precedence.
+// ResolveRuntimeConfig resolves runtime config using complete override semantics.
+// Namespace config completely replaces cluster config when present - no field-level merging.
 // When configName is empty, the default runtime config name is used.
 func ResolveRuntimeConfig(ctx context.Context, k8sClient client.Client, namespace, configName string) (*RuntimeConfigResolution, error) {
 	name := NormalizeRuntimeConfigName(configName)
@@ -98,13 +96,33 @@ func ResolveRuntimeConfig(ctx context.Context, k8sClient client.Client, namespac
 		return nil, fmt.Errorf("runtime config %q not found: %w", name, ErrRuntimeConfigNotFound)
 	}
 
-	resolution.EffectiveSpec = mergeRuntimeConfigs(resolution.ClusterConfig, resolution.NamespaceConfig)
-
-	effectiveStatus, err := buildEffectiveRuntimeConfigStatus(resolution.ClusterConfig, resolution.NamespaceConfig, resolution.EffectiveSpec)
-	if err != nil {
-		return nil, err
+	// Namespace config completely overrides cluster config (no merging)
+	if resolution.NamespaceConfig != nil {
+		resolution.EffectiveSpec = resolution.NamespaceConfig.Spec
+		resolution.ResolvedRef = &aimv1alpha1.AIMResolvedRuntimeConfig{
+			AIMResolvedReference: aimv1alpha1.AIMResolvedReference{
+				Name:      resolution.NamespaceConfig.Name,
+				Namespace: resolution.NamespaceConfig.Namespace,
+				Scope:     aimv1alpha1.AIMResolutionScopeNamespace,
+				Kind:      "AIMRuntimeConfig",
+				UID:       resolution.NamespaceConfig.UID,
+			},
+		}
+	} else if resolution.ClusterConfig != nil {
+		// Convert cluster config spec to namespace config spec format
+		resolution.EffectiveSpec = aimv1alpha1.AIMRuntimeConfigSpec{
+			AIMRuntimeConfigCommon: resolution.ClusterConfig.Spec.AIMRuntimeConfigCommon,
+			// Credentials fields remain empty when using cluster config
+		}
+		resolution.ResolvedRef = &aimv1alpha1.AIMResolvedRuntimeConfig{
+			AIMResolvedReference: aimv1alpha1.AIMResolvedReference{
+				Name:  resolution.ClusterConfig.Name,
+				Scope: aimv1alpha1.AIMResolutionScopeCluster,
+				Kind:  "AIMClusterRuntimeConfig",
+				UID:   resolution.ClusterConfig.UID,
+			},
+		}
 	}
-	resolution.EffectiveStatus = effectiveStatus
 
 	return resolution, nil
 }
@@ -115,124 +133,4 @@ func NormalizeRuntimeConfigName(name string) string {
 		return DefaultRuntimeConfigName
 	}
 	return name
-}
-
-func mergeRuntimeConfigs(clusterCfg *aimv1alpha1.AIMClusterRuntimeConfig, namespaceCfg *aimv1alpha1.AIMRuntimeConfig) aimv1alpha1.AIMRuntimeConfigSpec {
-	var effective aimv1alpha1.AIMRuntimeConfigSpec
-
-	if clusterCfg != nil {
-		effective.AIMRuntimeConfigCommon = copyRuntimeConfigCommon(clusterCfg.Spec.AIMRuntimeConfigCommon)
-	}
-
-	if namespaceCfg != nil {
-		nsSpec := namespaceCfg.Spec
-
-		if nsSpec.DefaultStorageClassName != "" {
-			effective.DefaultStorageClassName = nsSpec.DefaultStorageClassName
-		}
-
-		if nsSpec.ServiceAccountName != "" {
-			effective.ServiceAccountName = nsSpec.ServiceAccountName
-		}
-
-		if len(nsSpec.ImagePullSecrets) > 0 {
-			effective.ImagePullSecrets = mergeImagePullSecrets(effective.ImagePullSecrets, nsSpec.ImagePullSecrets)
-		}
-
-		if nsSpec.Routing != nil {
-			effective.Routing = copyRuntimeRoutingConfig(nsSpec.Routing)
-		}
-	} else if effective.Routing != nil {
-		effective.Routing = copyRuntimeRoutingConfig(effective.Routing)
-	}
-
-	return effective
-}
-
-func copyRuntimeConfigCommon(common aimv1alpha1.AIMRuntimeConfigCommon) aimv1alpha1.AIMRuntimeConfigCommon {
-	result := aimv1alpha1.AIMRuntimeConfigCommon{
-		DefaultStorageClassName: common.DefaultStorageClassName,
-	}
-	if common.Routing != nil {
-		result.Routing = copyRuntimeRoutingConfig(common.Routing)
-	}
-	return result
-}
-
-func copyRuntimeRoutingConfig(routing *aimv1alpha1.AIMRuntimeRoutingConfig) *aimv1alpha1.AIMRuntimeRoutingConfig {
-	if routing == nil {
-		return nil
-	}
-	cfg := *routing
-	if routing.Enabled != nil {
-		enabled := *routing.Enabled
-		cfg.Enabled = &enabled
-	}
-	if routing.GatewayRef != nil {
-		cfg.GatewayRef = routing.GatewayRef.DeepCopy()
-	}
-	return &cfg
-}
-
-func mergeImagePullSecrets(base []corev1.LocalObjectReference, overrides []corev1.LocalObjectReference) []corev1.LocalObjectReference {
-	if len(base) == 0 {
-		return append([]corev1.LocalObjectReference(nil), overrides...)
-	}
-
-	result := append([]corev1.LocalObjectReference(nil), base...)
-	index := make(map[string]int, len(result))
-	for i, secret := range result {
-		index[secret.Name] = i
-	}
-
-	for _, secret := range overrides {
-		if pos, ok := index[secret.Name]; ok {
-			result[pos] = secret
-			continue
-		}
-		index[secret.Name] = len(result)
-		result = append(result, secret)
-	}
-
-	return result
-}
-
-func buildEffectiveRuntimeConfigStatus(clusterCfg *aimv1alpha1.AIMClusterRuntimeConfig, namespaceCfg *aimv1alpha1.AIMRuntimeConfig, effective aimv1alpha1.AIMRuntimeConfigSpec) (*aimv1alpha1.AIMEffectiveRuntimeConfig, error) {
-	status := &aimv1alpha1.AIMEffectiveRuntimeConfig{}
-
-	if namespaceCfg != nil {
-		status.NamespaceRef = &aimv1alpha1.AIMRuntimeConfigReference{
-			AIMResolvedReference: aimv1alpha1.AIMResolvedReference{
-				Name:      namespaceCfg.Name,
-				Namespace: namespaceCfg.Namespace,
-				Scope:     aimv1alpha1.AIMResolutionScopeNamespace,
-				Kind:      "AIMRuntimeConfig",
-				UID:       namespaceCfg.UID,
-			},
-		}
-	}
-
-	if clusterCfg != nil {
-		status.ClusterRef = &aimv1alpha1.AIMRuntimeConfigReference{
-			AIMResolvedReference: aimv1alpha1.AIMResolvedReference{
-				Name:  clusterCfg.Name,
-				Scope: aimv1alpha1.AIMResolutionScopeCluster,
-				Kind:  "AIMClusterRuntimeConfig",
-				UID:   clusterCfg.UID,
-			},
-		}
-	}
-
-	hashBytes, err := json.Marshal(effective)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal effective runtime config: %w", err)
-	}
-	sum := sha256.Sum256(hashBytes)
-	status.Hash = hex.EncodeToString(sum[:])
-
-	if status.NamespaceRef == nil && status.ClusterRef == nil && status.Hash == "" {
-		return nil, nil
-	}
-
-	return status, nil
 }

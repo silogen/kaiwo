@@ -88,21 +88,10 @@ type AIMRuntimeConfigStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
-// AIMRuntimeConfigReference records the source runtime config used during resolution.
-type AIMRuntimeConfigReference struct {
+// AIMResolvedRuntimeConfig captures metadata about the runtime config that was resolved.
+// This follows the same pattern as AIMServiceResolvedTemplate for consistency.
+type AIMResolvedRuntimeConfig struct {
 	AIMResolvedReference `json:",inline"`
-}
-
-// AIMEffectiveRuntimeConfig surfaces the resolved configuration applied to a consumer.
-type AIMEffectiveRuntimeConfig struct {
-	// NamespaceRef points at the namespace-scoped runtime config, if present.
-	NamespaceRef *AIMRuntimeConfigReference `json:"namespaceRef,omitempty"`
-
-	// ClusterRef points at the cluster-scoped runtime config, if present.
-	ClusterRef *AIMRuntimeConfigReference `json:"clusterRef,omitempty"`
-
-	// Hash is a stable hash of the merged configuration used for change detection.
-	Hash string `json:"hash,omitempty"`
 }
 
 // +kubebuilder:object:root=true
