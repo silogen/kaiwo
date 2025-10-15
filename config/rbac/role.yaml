@@ -71,7 +71,7 @@ rules:
   - "aimclusterservicetemplates/status"
   - "aimtemplatecaches/status"
   - "aimservices/status"
-  - "modelcaches/status"
+  - "aimmodelcaches/status"
   verbs: ["get", "update", "patch"]
 
 - apiGroups: ["gateway.networking.k8s.io"]
@@ -92,7 +92,7 @@ rules:
   - "kaiwoservices/status"
   - "kaiwoqueueconfigs/status"
   - "clustermodels/status"
-  - "modelcaches/status"
+  - "aimmodelcaches/status"
   verbs: ["get", "update", "patch"]
 
 - apiGroups: ["batch"]

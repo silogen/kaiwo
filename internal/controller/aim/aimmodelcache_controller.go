@@ -60,9 +60,9 @@ type AIMModelCacheReconciler struct {
 }
 
 // RBAC markers
-// +kubebuilder:rbac:groups=aim.silogen.ai,resources=modelcaches,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=aim.silogen.ai,resources=modelcaches/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=aim.silogen.ai,resources=modelcaches/finalizers,verbs=update
+// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimmodelcaches,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimmodelcaches/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimmodelcaches/finalizers,verbs=update
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=storage.k8s.io,resources=storageclasses,verbs=get;list;watch
