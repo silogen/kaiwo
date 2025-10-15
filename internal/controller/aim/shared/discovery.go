@@ -30,6 +30,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"sort"
 	"strconv"
 
@@ -134,14 +135,47 @@ type DiscoveryJobSpec struct {
 	OwnerRef         metav1.OwnerReference
 }
 
+const (
+	// Kubernetes name limit
+	kubernetesNameMaxLength = 63
+
+	// Job name components
+	discoveryJobPrefix = "discover-"
+	discoveryJobSuffix = "-"
+
+	// Hash length for job uniqueness (4 bytes = 8 hex chars)
+	discoveryJobHashLength = 4
+	discoveryJobHashHexLen = 8
+
+	// DiscoveryJobBackoffLimit is the number of retries before marking the discovery job as failed
+	DiscoveryJobBackoffLimit = 3
+
+	// DiscoveryJobTTLSeconds defines how long completed discovery jobs persist
+	// before automatic cleanup. This allows time for status inspection and log retrieval.
+	DiscoveryJobTTLSeconds = 60
+)
+
 // BuildDiscoveryJob creates a Job that runs model discovery dry-run
 func BuildDiscoveryJob(spec DiscoveryJobSpec) *batchv1.Job {
 	// Create deterministic job name with hash of key parameters
 	hash := sha256.Sum256([]byte(spec.ModelID + spec.Image))
-	jobName := fmt.Sprintf("discover-%s-%x", spec.TemplateName, hash[:4])
+	hashHex := fmt.Sprintf("%x", hash[:discoveryJobHashLength])
 
-	backoffLimit := int32(3)
-	ttlSeconds := int32(60) // Clean up after 1 minute (enough time to fetch status)
+	// Calculate max template name length to keep total <= 63 chars
+	// Format: "discover-<template>-<hash>"
+	reservedLength := len(discoveryJobPrefix) + len(discoveryJobSuffix) + discoveryJobHashHexLen
+	maxTemplateNameLength := kubernetesNameMaxLength - reservedLength
+
+	// Truncate template name if necessary
+	templateName := spec.TemplateName
+	if len(templateName) > maxTemplateNameLength {
+		templateName = templateName[:maxTemplateNameLength]
+	}
+
+	jobName := fmt.Sprintf("%s%s%s%s", discoveryJobPrefix, templateName, discoveryJobSuffix, hashHex)
+
+	backoffLimit := int32(DiscoveryJobBackoffLimit)
+	ttlSeconds := int32(DiscoveryJobTTLSeconds)
 
 	// Add AIM environmental variables
 
@@ -291,14 +325,8 @@ func IsJobFailed(job *batchv1.Job) bool {
 	return false
 }
 
-// ParseDiscoveryLogs parses the discovery job output to extract model sources and profile.
-// Reads pod logs from the completed job and parses the JSON output.
-func ParseDiscoveryLogs(ctx context.Context, k8sClient client.Client, clientset kubernetes.Interface, job *batchv1.Job) (*ParsedDiscovery, error) {
-	if !IsJobSucceeded(job) {
-		return nil, fmt.Errorf("job has not succeeded yet")
-	}
-
-	// List pods for this job
+// findSuccessfulPodForJob locates a successfully completed pod for the given job.
+func findSuccessfulPodForJob(ctx context.Context, k8sClient client.Client, job *batchv1.Job) (*corev1.Pod, error) {
 	var podList corev1.PodList
 	if err := k8sClient.List(ctx, &podList, client.InNamespace(job.Namespace), client.MatchingLabels{
 		"job-name": job.Name,
@@ -311,21 +339,19 @@ func ParseDiscoveryLogs(ctx context.Context, k8sClient client.Client, clientset 
 	}
 
 	// Find a successful pod
-	var successfulPod *corev1.Pod
 	for i := range podList.Items {
 		pod := &podList.Items[i]
 		if pod.Status.Phase == corev1.PodSucceeded {
-			successfulPod = pod
-			break
+			return pod, nil
 		}
 	}
 
-	if successfulPod == nil {
-		return nil, fmt.Errorf("no successful pod found for job %s", job.Name)
-	}
+	return nil, fmt.Errorf("no successful pod found for job %s", job.Name)
+}
 
-	// Get pod logs
-	req := clientset.CoreV1().Pods(successfulPod.Namespace).GetLogs(successfulPod.Name, &corev1.PodLogOptions{
+// streamPodLogs retrieves logs from the specified pod's discovery container.
+func streamPodLogs(ctx context.Context, clientset kubernetes.Interface, pod *corev1.Pod) ([]byte, error) {
+	req := clientset.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, &corev1.PodLogOptions{
 		Container: "discovery",
 	})
 
@@ -333,48 +359,105 @@ func ParseDiscoveryLogs(ctx context.Context, k8sClient client.Client, clientset 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get pod logs: %w", err)
 	}
-	defer func() { _ = logs.Close() }()
+	defer func() {
+		if closeErr := logs.Close(); closeErr != nil {
+			// Log the error but don't fail the operation since we may have already read the logs
+			// Note: In production, this should use a proper logger from the context
+			fmt.Fprintf(os.Stderr, "warning: failed to close log stream: %v\n", closeErr)
+		}
+	}()
 
-	// Read logs
 	logBytes, err := io.ReadAll(logs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read pod logs: %w", err)
 	}
 
-	// Parse JSON array output
+	return logBytes, nil
+}
+
+// extractLastValidJSONArray attempts to find and extract a valid JSON array from mixed log output.
+// Returns the JSON bytes if found, or an error if extraction fails.
+func extractLastValidJSONArray(logBytes []byte) ([]byte, error) {
+	lastStartIdx := -1
+	lastEndIdx := -1
+
+	// Find the last occurrence of '[' that starts a valid JSON array
+	for i := len(logBytes) - 1; i >= 0; i-- {
+		if logBytes[i] == ']' && lastEndIdx == -1 {
+			lastEndIdx = i
+		}
+		if logBytes[i] == '[' && lastEndIdx != -1 {
+			// Try parsing from this '[' to the found ']'
+			testBytes := logBytes[i : lastEndIdx+1]
+			var testResults []discoveryResult
+			if json.Unmarshal(testBytes, &testResults) == nil && len(testResults) > 0 {
+				// Valid JSON array found
+				lastStartIdx = i
+				break
+			}
+		}
+	}
+
+	if lastStartIdx == -1 || lastEndIdx == -1 {
+		return nil, fmt.Errorf("no valid JSON array found in logs")
+	}
+
+	return logBytes[lastStartIdx : lastEndIdx+1], nil
+}
+
+// parseDiscoveryJSON parses discovery results from log bytes, with fallback for mixed output.
+func parseDiscoveryJSON(ctx context.Context, logBytes []byte) ([]discoveryResult, error) {
+	// Check for cancellation before expensive parsing
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("context cancelled before parsing JSON: %w", err)
+	}
+
 	var results []discoveryResult
-	if err := json.Unmarshal(logBytes, &results); err != nil {
-		// Try extracting the last valid JSON array from mixed stdout/stderr
-		// The JSON array may appear multiple times in the logs - take the last instance
-		lastStartIdx := -1
-		lastEndIdx := -1
+	if err := json.Unmarshal(logBytes, &results); err == nil {
+		return results, nil
+	}
 
-		// Find the last occurrence of '[' that starts a valid JSON array
-		for i := len(logBytes) - 1; i >= 0; i-- {
-			if logBytes[i] == ']' && lastEndIdx == -1 {
-				lastEndIdx = i
-			}
-			if logBytes[i] == '[' && lastEndIdx != -1 {
-				// Try parsing from this '[' to the found ']'
-				testBytes := logBytes[i : lastEndIdx+1]
-				var testResults []discoveryResult
-				if json.Unmarshal(testBytes, &testResults) == nil && len(testResults) > 0 {
-					// Valid JSON array found
-					lastStartIdx = i
-					break
-				}
-			}
-		}
+	// Try extracting the last valid JSON array from mixed stdout/stderr
+	jsonBytes, err := extractLastValidJSONArray(logBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse discovery JSON: %w", err)
+	}
 
-		if lastStartIdx == -1 || lastEndIdx == -1 {
-			return nil, fmt.Errorf("failed to parse discovery JSON and no valid JSON array found in logs: %w", err)
-		}
+	if err := json.Unmarshal(jsonBytes, &results); err != nil {
+		return nil, fmt.Errorf("failed to parse extracted JSON array: %w", err)
+	}
 
-		jsonBytes := logBytes[lastStartIdx : lastEndIdx+1]
+	return results, nil
+}
 
-		if err := json.Unmarshal(jsonBytes, &results); err != nil {
-			return nil, fmt.Errorf("failed to parse extracted JSON array: %w", err)
-		}
+// ParseDiscoveryLogs parses the discovery job output to extract model sources and profile.
+// Reads pod logs from the completed job and parses the JSON output.
+func ParseDiscoveryLogs(ctx context.Context, k8sClient client.Client, clientset kubernetes.Interface, job *batchv1.Job) (*ParsedDiscovery, error) {
+	// Check for cancellation early
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("context cancelled before parsing discovery logs: %w", err)
+	}
+
+	if !IsJobSucceeded(job) {
+		return nil, fmt.Errorf("job has not succeeded yet")
+	}
+
+	// Find successful pod
+	successfulPod, err := findSuccessfulPodForJob(ctx, k8sClient, job)
+	if err != nil {
+		return nil, err
+	}
+
+	// Stream pod logs
+	logBytes, err := streamPodLogs(ctx, clientset, successfulPod)
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse discovery JSON
+	results, err := parseDiscoveryJSON(ctx, logBytes)
+	if err != nil {
+		return nil, err
 	}
 
 	if len(results) == 0 {

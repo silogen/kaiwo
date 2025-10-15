@@ -32,9 +32,9 @@ import (
 	aimstate "github.com/silogen/kaiwo/internal/controller/aim/state"
 )
 
-// NewTemplateState constructs a TemplateState from the template specification, observation, and status.
-// This is an adapter function that maintains compatibility with the original signature.
-func NewTemplateState(
+// BuildTemplateStateFromObservation constructs a TemplateState from the template specification, observation, and status.
+// This is an adapter function that combines template metadata with observed resources.
+func BuildTemplateStateFromObservation(
 	name, namespace string,
 	specCommon aimv1alpha1.AIMServiceTemplateSpecCommon,
 	observation *TemplateObservation,

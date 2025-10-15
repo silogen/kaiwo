@@ -37,13 +37,24 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/silogen/kaiwo/internal/controller/aim/helpers"
 	aimstate "github.com/silogen/kaiwo/internal/controller/aim/state"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
-var labelValueRegex = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
+const (
+	// amdGPUResourceName is the resource name for AMD GPUs in Kubernetes
+	amdGPUResourceName corev1.ResourceName = "amd.com/gpu"
 
-const amdGPUResourceName corev1.ResourceName = "amd.com/gpu"
+	// DefaultSharedMemorySize is the default size allocated for /dev/shm in inference containers.
+	// This is required for efficient inter-process communication in model serving workloads.
+	DefaultSharedMemorySize = "8Gi"
+
+	// KubernetesLabelValueMaxLength is the maximum length for a Kubernetes label value
+	KubernetesLabelValueMaxLength = 63
+)
+
+var labelValueRegex = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
 
 // sanitizeLabelValue converts a string to a valid Kubernetes label value.
 // Valid label values must:
@@ -59,9 +70,9 @@ func sanitizeLabelValue(s string) string {
 	sanitized = strings.TrimLeft(sanitized, "_.-")
 	sanitized = strings.TrimRight(sanitized, "_.-")
 
-	// Truncate to 63 characters
-	if len(sanitized) > 63 {
-		sanitized = sanitized[:63]
+	// Truncate to maximum label value length
+	if len(sanitized) > KubernetesLabelValueMaxLength {
+		sanitized = sanitized[:KubernetesLabelValueMaxLength]
 		// Trim trailing non-alphanumeric after truncation
 		sanitized = strings.TrimRight(sanitized, "_.-")
 	}
@@ -122,7 +133,14 @@ func buildServingRuntimeObjectMeta(template aimstate.TemplateState, ownerRef met
 }
 
 func buildServingRuntimeSpec(template aimstate.TemplateState) servingv1alpha1.ServingRuntimeSpec {
-	dshmSizeLimit := resource.MustParse("8Gi")
+	dshmSizeLimit := resource.MustParse(DefaultSharedMemorySize)
+
+	// Determine model ID: prefer ModelSource.Name, fall back to AIMImageName
+	modelID := template.SpecCommon.AIMImageName
+	if template.ModelSource != nil {
+		modelID = template.ModelSource.Name
+	}
+
 	return servingv1alpha1.ServingRuntimeSpec{
 		SupportedModelFormats: []servingv1alpha1.SupportedModelFormat{
 			{
@@ -131,7 +149,7 @@ func buildServingRuntimeSpec(template aimstate.TemplateState) servingv1alpha1.Se
 			},
 		},
 		ServingRuntimePodSpec: servingv1alpha1.ServingRuntimePodSpec{
-			ImagePullSecrets: CopyPullSecrets(template.ImagePullSecrets),
+			ImagePullSecrets: helpers.CopyPullSecrets(template.ImagePullSecrets),
 			Containers: []corev1.Container{
 				{
 					Name:  "kserve-container",
@@ -139,7 +157,7 @@ func buildServingRuntimeSpec(template aimstate.TemplateState) servingv1alpha1.Se
 					Env: []corev1.EnvVar{
 						{
 							Name:  "AIM_MODEL_ID",
-							Value: template.ModelSource.Name,
+							Value: modelID,
 						},
 						{
 							Name:  "VLLM_ENABLE_METRICS",
@@ -184,7 +202,7 @@ func buildServingRuntimeSpec(template aimstate.TemplateState) servingv1alpha1.Se
 	}
 }
 
-// CopyPullSecrets and CopyEnvVars are now in common.go to avoid duplication
+// CopyPullSecrets and CopyEnvVars helpers live under internal/controller/aim/helpers.
 
 // BuildInferenceService constructs a KServe InferenceService referencing a ServingRuntime or ClusterServingRuntime.
 func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.OwnerReference) *servingv1beta1.InferenceService {
@@ -209,7 +227,7 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 			Predictor: servingv1beta1.PredictorSpec{
 				ComponentExtensionSpec: servingv1beta1.ComponentExtensionSpec{},
 				PodSpec: servingv1beta1.PodSpec{
-					ImagePullSecrets:   CopyPullSecrets(serviceState.ImagePullSecrets),
+					ImagePullSecrets:   helpers.CopyPullSecrets(serviceState.ImagePullSecrets),
 					ServiceAccountName: serviceState.ServiceAccountName,
 				},
 				Model: &servingv1beta1.ModelSpec{
@@ -220,7 +238,7 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 					Runtime: baseutils.Pointer(serviceState.RuntimeName),
 					PredictorExtensionSpec: servingv1beta1.PredictorExtensionSpec{
 						Container: corev1.Container{
-							Env: CopyEnvVars(serviceState.Env),
+							Env: helpers.CopyEnvVars(serviceState.Env),
 						},
 					},
 				},
@@ -236,7 +254,7 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 		inferenceService.Spec.Predictor.MaxReplicas = *serviceState.Replicas
 	}
 
-	if serviceState.ModelSource != nil {
+	if serviceState.ModelSource != nil && serviceState.ModelSource.SourceURI != "" {
 		inferenceService.Spec.Predictor.Model.StorageURI = baseutils.Pointer(serviceState.ModelSource.SourceURI)
 	}
 

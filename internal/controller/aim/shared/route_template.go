@@ -36,6 +36,12 @@ import (
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 )
 
+const (
+	// MaxRoutePathLength is the maximum allowed length for a route path.
+	// This prevents excessively long paths that could cause issues with gateways or proxies.
+	MaxRoutePathLength = 200
+)
+
 var (
 	routeTemplatePattern      = regexp.MustCompile(`\{([^{}]+)\}`)
 	labelAccessPattern        = regexp.MustCompile(`^\.metadata\.labels\[['"]([^'"]+)['"]\]$`)
@@ -197,8 +203,8 @@ func normalizeRoutePath(raw string) (string, error) {
 		path = "/"
 	}
 
-	if len(path) > 200 {
-		return "", fmt.Errorf("route path %q exceeds 200 characters", path)
+	if len(path) > MaxRoutePathLength {
+		return "", fmt.Errorf("route path %q exceeds %d characters", path, MaxRoutePathLength)
 	}
 
 	return path, nil

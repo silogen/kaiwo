@@ -30,6 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
+	"github.com/silogen/kaiwo/internal/controller/aim/helpers"
 )
 
 // BuildDerivedTemplate constructs an AIMServiceTemplate for a service with overrides.
@@ -75,15 +76,15 @@ func BuildDerivedTemplate(
 	spec.AIMServiceTemplateSpecCommon = specCommon
 
 	if len(service.Spec.Env) > 0 {
-		spec.Env = CopyEnvVars(service.Spec.Env)
+		spec.Env = helpers.CopyEnvVars(service.Spec.Env)
 	} else {
-		spec.Env = CopyEnvVars(spec.Env)
+		spec.Env = helpers.CopyEnvVars(spec.Env)
 	}
 
 	if len(service.Spec.ImagePullSecrets) > 0 {
-		spec.ImagePullSecrets = CopyPullSecrets(service.Spec.ImagePullSecrets)
+		spec.ImagePullSecrets = helpers.CopyPullSecrets(service.Spec.ImagePullSecrets)
 	} else {
-		spec.ImagePullSecrets = CopyPullSecrets(spec.ImagePullSecrets)
+		spec.ImagePullSecrets = helpers.CopyPullSecrets(spec.ImagePullSecrets)
 	}
 
 	if service.Spec.Resources != nil {
@@ -95,7 +96,7 @@ func BuildDerivedTemplate(
 	if service.Spec.CacheModel {
 		spec.Caching = &aimv1alpha1.AIMTemplateCachingConfig{
 			Enabled: service.Spec.CacheModel,
-			Env:     CopyEnvVars(service.Spec.Env),
+			Env:     helpers.CopyEnvVars(service.Spec.Env),
 		}
 	} else if spec.Caching != nil {
 		spec.Caching = spec.Caching.DeepCopy()

@@ -27,34 +27,12 @@ package shared
 import (
 	"strings"
 
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 )
-
-// CopyPullSecrets returns a deep-copy of image pull secrets.
-// This consolidates the duplicated copyPullSecrets functions across the codebase.
-func CopyPullSecrets(in []corev1.LocalObjectReference) []corev1.LocalObjectReference {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make([]corev1.LocalObjectReference, len(in))
-	copy(out, in)
-	return out
-}
-
-// CopyEnvVars returns a deep-copy of environment variables.
-func CopyEnvVars(in []corev1.EnvVar) []corev1.EnvVar {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make([]corev1.EnvVar, len(in))
-	copy(out, in)
-	return out
-}
 
 // HasOwnerReference checks if the given UID exists in the owner references list.
 func HasOwnerReference(refs []metav1.OwnerReference, uid types.UID) bool {

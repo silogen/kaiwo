@@ -47,7 +47,6 @@ import (
 )
 
 const (
-	// namespaceTemplateFinalizerName = "aim.silogen.ai/namespace-template-finalizer"
 	namespaceTemplateFieldOwner            = "aim-namespace-template-controller"
 	namespaceTemplateRuntimeConfigIndexKey = ".spec.runtimeConfigName"
 )
@@ -87,11 +86,10 @@ func (r *AIMServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	// Use framework orchestrator with closures
 	return controllerutils.Reconcile(ctx, controllerutils.ReconcileSpec[*aimv1alpha1.AIMServiceTemplate, aimv1alpha1.AIMServiceTemplateStatus]{
-		Client:   r.Client,
-		Scheme:   r.Scheme,
-		Object:   &template,
-		Recorder: r.Recorder,
-		// FinalizerName: namespaceTemplateFinalizerName,
+		Client:     r.Client,
+		Scheme:     r.Scheme,
+		Object:     &template,
+		Recorder:   r.Recorder,
 		FieldOwner: namespaceTemplateFieldOwner,
 
 		ObserveFn: func(ctx context.Context) (any, error) {
@@ -208,7 +206,7 @@ func (r *AIMServiceTemplateReconciler) plan(_ context.Context, template *aimv1al
 		Observation: observation,
 	}, shared.TemplatePlanBuilders{
 		BuildRuntime: func(input shared.TemplatePlanInput) client.Object {
-			state := shared.NewTemplateState(
+			state := shared.BuildTemplateStateFromObservation(
 				template.Name,
 				template.Namespace,
 				template.Spec.AIMServiceTemplateSpecCommon,

@@ -26,7 +26,7 @@ package shared
 
 import (
 	"context"
-	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -137,7 +137,7 @@ func OverridesSuffix(overrides *aimv1alpha1.AIMServiceOverrides) string {
 		return ""
 	}
 
-	sum := sha1.Sum(bytes)
+	sum := sha256.Sum256(bytes)
 	return fmt.Sprintf("%x", sum[:])[:8]
 }
 

@@ -26,6 +26,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
+	"github.com/silogen/kaiwo/internal/controller/aim/helpers"
 )
 
 // TemplateState captures the resolved data required to materialize runtimes and services from a template.
@@ -52,7 +53,7 @@ func NewTemplateState(base TemplateState) TemplateState {
 		base.ImageResources = base.ImageResources.DeepCopy()
 	}
 
-	base.ImagePullSecrets = copyPullSecrets(base.ImagePullSecrets)
+	base.ImagePullSecrets = helpers.CopyPullSecrets(base.ImagePullSecrets)
 
 	if base.Status != nil {
 		base.Status = base.Status.DeepCopy()
@@ -76,5 +77,3 @@ func ExtractPrimaryModelSource(sources []aimv1alpha1.AIMModelSource) *aimv1alpha
 	}
 	return nil
 }
-
-// copyPullSecrets and copyEnvVars are defined in service_state.go

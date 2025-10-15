@@ -27,6 +27,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
+	"github.com/silogen/kaiwo/internal/controller/aim/helpers"
 )
 
 // ServiceState captures the resolved desired state for an AIMService across vendors.
@@ -62,15 +63,19 @@ type ServiceStateOptions struct {
 // NewServiceState projects the AIMService and template data into a vendor-neutral structure.
 func NewServiceState(service *aimv1alpha1.AIMService, template TemplateState, opts ServiceStateOptions) ServiceState {
 	// TODO handle caching
-	// TODO handle if model source is nil
+
+	modelID := template.SpecCommon.AIMImageName
+	if template.ModelSource != nil {
+		modelID = template.ModelSource.Name
+	}
 
 	state := ServiceState{
 		Name:               service.Name,
 		Namespace:          service.Namespace,
 		RuntimeName:        opts.RuntimeName,
-		ModelID:            template.ModelSource.Name,
-		Env:                copyEnvVars(service.Spec.Env),
-		ImagePullSecrets:   copyPullSecrets(service.Spec.ImagePullSecrets),
+		ModelID:            modelID,
+		Env:                helpers.CopyEnvVars(service.Spec.Env),
+		ImagePullSecrets:   helpers.CopyPullSecrets(service.Spec.ImagePullSecrets),
 		ServiceAccountName: template.ServiceAccountName(),
 		Template:           template,
 		ModelSource:        template.ModelSource,
@@ -125,30 +130,14 @@ func NewServiceState(service *aimv1alpha1.AIMService, template TemplateState, op
 	return state
 }
 
-func copyEnvVars(in []corev1.EnvVar) []corev1.EnvVar {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make([]corev1.EnvVar, len(in))
-	copy(out, in)
-	return out
-}
-
-func copyPullSecrets(in []corev1.LocalObjectReference) []corev1.LocalObjectReference {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make([]corev1.LocalObjectReference, len(in))
-	copy(out, in)
-	return out
-}
-
+// mergePullSecretRefs merges image pull secrets from base and extras, avoiding duplicates.
+// Extras take precedence when there's a name collision.
 func mergePullSecretRefs(base []corev1.LocalObjectReference, extras []corev1.LocalObjectReference) []corev1.LocalObjectReference {
 	if len(extras) == 0 {
 		return base
 	}
 	if len(base) == 0 {
-		return copyPullSecrets(extras)
+		return helpers.CopyPullSecrets(extras)
 	}
 
 	index := make(map[string]struct{}, len(base))

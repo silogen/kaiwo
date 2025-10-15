@@ -29,9 +29,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	stderrors "errors"
+	"errors"
+	"fmt"
 
-	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -58,7 +58,7 @@ type RuntimeConfigResolution struct {
 }
 
 // ErrRuntimeConfigNotFound indicates that neither namespace nor cluster runtime config could be located.
-var ErrRuntimeConfigNotFound = stderrors.New("runtime config not found")
+var ErrRuntimeConfigNotFound = errors.New("runtime config not found")
 
 // ResolveRuntimeConfig merges namespace and cluster runtime configs with namespace precedence.
 // When configName is empty, the default runtime config name is used.
@@ -75,7 +75,7 @@ func ResolveRuntimeConfig(ctx context.Context, k8sClient client.Client, namespac
 		err := k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, &nsCfg)
 		if err != nil {
 			if !apierrors.IsNotFound(err) {
-				return nil, errors.Wrapf(err, "failed to get AIMRuntimeConfig %q in namespace %q", name, namespace)
+				return nil, fmt.Errorf("failed to get AIMRuntimeConfig %q in namespace %q: %w", name, namespace, err)
 			}
 			resolution.NamespaceConfigNotFound = true
 		} else {
@@ -87,7 +87,7 @@ func ResolveRuntimeConfig(ctx context.Context, k8sClient client.Client, namespac
 	err := k8sClient.Get(ctx, client.ObjectKey{Name: name}, &clusterCfg)
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
-			return nil, errors.Wrapf(err, "failed to get AIMClusterRuntimeConfig %q", name)
+			return nil, fmt.Errorf("failed to get AIMClusterRuntimeConfig %q: %w", name, err)
 		}
 		resolution.ClusterConfigNotFound = true
 	} else {
@@ -95,7 +95,7 @@ func ResolveRuntimeConfig(ctx context.Context, k8sClient client.Client, namespac
 	}
 
 	if resolution.NamespaceConfig == nil && resolution.ClusterConfig == nil && name != DefaultRuntimeConfigName {
-		return nil, errors.Wrapf(ErrRuntimeConfigNotFound, "runtime config %q not found", name)
+		return nil, fmt.Errorf("runtime config %q not found: %w", name, ErrRuntimeConfigNotFound)
 	}
 
 	resolution.EffectiveSpec = mergeRuntimeConfigs(resolution.ClusterConfig, resolution.NamespaceConfig)
@@ -212,7 +212,7 @@ func buildEffectiveRuntimeConfigStatus(clusterCfg *aimv1alpha1.AIMClusterRuntime
 
 	hashBytes, err := json.Marshal(effective)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to marshal effective runtime config")
+		return nil, fmt.Errorf("failed to marshal effective runtime config: %w", err)
 	}
 	sum := sha256.Sum256(hashBytes)
 	status.Hash = hex.EncodeToString(sum[:])

@@ -204,17 +204,23 @@ func (r *AIMServiceReconciler) plan(_ context.Context, service *aimv1alpha1.AIMS
 			RuntimeConfigSpec: obs.RuntimeConfigSpec,
 			Status:            obs.TemplateStatus,
 		})
-		serviceState := aimstate.NewServiceState(service, templateState, aimstate.ServiceStateOptions{
-			RuntimeName: obs.RuntimeName(),
-			RoutePath:   routePath,
-		})
-		inferenceService := shared.BuildInferenceService(serviceState, ownerRef)
-		desired = append(desired, inferenceService)
 
-		if serviceState.Routing.Enabled && serviceState.Routing.GatewayRef != nil && obs.RouteTemplateErr == nil {
-			route := shared.BuildInferenceServiceHTTPRoute(serviceState, ownerRef)
-			desired = append(desired, route)
+		// Only proceed if we have a model source (discovery must have succeeded and populated ModelSources)
+		if templateState.ModelSource != nil {
+			serviceState := aimstate.NewServiceState(service, templateState, aimstate.ServiceStateOptions{
+				RuntimeName: obs.RuntimeName(),
+				RoutePath:   routePath,
+			})
+			inferenceService := shared.BuildInferenceService(serviceState, ownerRef)
+			desired = append(desired, inferenceService)
+
+			if serviceState.Routing.Enabled && serviceState.Routing.GatewayRef != nil && obs.RouteTemplateErr == nil {
+				route := shared.BuildInferenceServiceHTTPRoute(serviceState, ownerRef)
+				desired = append(desired, route)
+			}
 		}
+		// If ModelSource is nil, the status projection will handle showing that discovery
+		// succeeded but produced no usable model sources.
 	}
 
 	return desired, nil

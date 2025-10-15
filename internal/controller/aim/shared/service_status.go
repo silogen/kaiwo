@@ -64,17 +64,17 @@ func EvaluateHTTPRouteStatus(route *gatewayapiv1.HTTPRoute) (bool, string, strin
 }
 
 // EvaluateRoutingStatus checks routing configuration and updates status accordingly.
-// Returns (enabled, ready) to indicate if routing is enabled and if it's ready.
+// Returns (enabled, ready, hasFatalError) to indicate if routing is enabled, if it's ready, and if there's a terminal error.
 func EvaluateRoutingStatus(
 	service *aimv1alpha1.AIMService,
 	obs *ServiceObservation,
 	status *aimv1alpha1.AIMServiceStatus,
 	setCondition func(conditionType string, conditionStatus metav1.ConditionStatus, reason, message string),
-) (enabled bool, ready bool) {
+) (enabled bool, ready bool, hasFatalError bool) {
 	routingEnabled := service.Spec.Routing != nil && service.Spec.Routing.Enabled
 	if !routingEnabled {
 		setCondition(aimv1alpha1.AIMServiceConditionRoutingReady, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonRouteReady, "Routing disabled")
-		return false, true
+		return false, true, false
 	}
 
 	routePath := DefaultRoutePath(service)
@@ -92,13 +92,13 @@ func EvaluateRoutingStatus(
 		status.Status = aimv1alpha1.AIMServiceStatusFailed
 		setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonRouteFailed,
 			"Routing gateway reference is missing")
-		return true, false
+		return true, false, true
 	}
 
 	// Check if HTTPRoute exists in observation
 	// Note: The caller should fetch the HTTPRoute and include it in the observation
 	// This function only evaluates the status, it doesn't fetch resources
-	return true, false
+	return true, false, false
 }
 
 // HandleReconcileErrors processes reconciliation errors and updates service status.
@@ -236,6 +236,37 @@ func HandleTemplateNotAvailable(
 	return true
 }
 
+// HandleMissingModelSource checks if the template is available but has no model sources.
+// Returns true if model sources are missing (discovery succeeded but produced no usable sources).
+func HandleMissingModelSource(
+	status *aimv1alpha1.AIMServiceStatus,
+	obs *ServiceObservation,
+	setCondition func(conditionType string, conditionStatus metav1.ConditionStatus, reason, message string),
+) bool {
+	if !obs.TemplateAvailable || obs.TemplateStatus == nil {
+		return false
+	}
+
+	// Check if template is Available but has no model sources
+	hasModelSources := len(obs.TemplateStatus.ModelSources) > 0
+	if hasModelSources {
+		return false
+	}
+
+	status.Status = aimv1alpha1.AIMServiceStatusDegraded
+	reason := "NoModelSources"
+	message := fmt.Sprintf("Template %q is Available but discovery produced no usable model sources", obs.TemplateName)
+
+	setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, reason, message)
+	setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, reason,
+		"Cannot create InferenceService without model sources")
+	setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionFalse, reason,
+		"Service is degraded due to missing model sources")
+	setCondition(aimv1alpha1.AIMServiceConditionReady, metav1.ConditionFalse, reason,
+		"Service cannot be ready without model sources")
+	return true
+}
+
 // EvaluateInferenceServiceStatus checks InferenceService and routing readiness.
 // Updates status conditions based on the InferenceService and routing state.
 func EvaluateInferenceServiceStatus(
@@ -335,10 +366,10 @@ func ProjectServiceStatus(
 		status.ResolvedTemplateRef = TemplateNameFromSpec(service)
 	}
 
-	routingEnabled, routingReady := EvaluateRoutingStatus(service, obs, status, setCondition)
+	routingEnabled, routingReady, routingHasFatalError := EvaluateRoutingStatus(service, obs, status, setCondition)
 
-	// Check routing readiness if enabled
-	if routingEnabled {
+	// Check routing readiness if enabled (but skip if we already have a fatal routing error)
+	if routingEnabled && !routingHasFatalError {
 		if httpRoute == nil {
 			setCondition(aimv1alpha1.AIMServiceConditionRoutingReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonConfiguringRoute,
 				"Waiting for HTTPRoute to be created")
@@ -362,8 +393,8 @@ func ProjectServiceStatus(
 		return
 	}
 
-	// Clear failure condition when reconciliation succeeds.
-	if !routingEnabled || routingReady {
+	// Clear failure condition when reconciliation succeeds and there are no routing errors.
+	if !routingEnabled || (routingReady && !routingHasFatalError) {
 		setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonResolved, "No active failures")
 	}
 
@@ -393,6 +424,10 @@ func ProjectServiceStatus(
 	}
 
 	if HandleTemplateNotAvailable(status, obs, setCondition) {
+		return
+	}
+
+	if HandleMissingModelSource(status, obs, setCondition) {
 		return
 	}
 

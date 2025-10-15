@@ -26,9 +26,8 @@ package aim
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
-
-	pkgerrors "github.com/pkg/errors"
 
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 
@@ -51,7 +50,6 @@ import (
 )
 
 const (
-	// clusterTemplateFinalizerName = "aim.silogen.ai/cluster-template-finalizer"
 	clusterTemplateFieldOwner            = "aim-cluster-template-controller"
 	clusterTemplateRuntimeConfigIndexKey = ".spec.runtimeConfigName"
 )
@@ -90,11 +88,10 @@ func (r *AIMClusterServiceTemplateReconciler) Reconcile(ctx context.Context, req
 
 	// Use framework orchestrator with closures
 	return controllerutils.Reconcile(ctx, controllerutils.ReconcileSpec[*aimv1alpha1.AIMClusterServiceTemplate, aimv1alpha1.AIMServiceTemplateStatus]{
-		Client:   r.Client,
-		Scheme:   r.Scheme,
-		Object:   &template,
-		Recorder: r.Recorder,
-		// FinalizerName: clusterTemplateFinalizerName,
+		Client:     r.Client,
+		Scheme:     r.Scheme,
+		Object:     &template,
+		Recorder:   r.Recorder,
 		FieldOwner: clusterTemplateFieldOwner,
 
 		ObserveFn: func(ctx context.Context) (any, error) {
@@ -169,7 +166,7 @@ func (r *AIMClusterServiceTemplateReconciler) observe(ctx context.Context, templ
 		ResolveRuntimeConfig: func(ctx context.Context) (*shared.RuntimeConfigResolution, error) {
 			resolution, err := shared.ResolveRuntimeConfig(ctx, r.Client, operatorNamespace, template.Spec.RuntimeConfigName)
 			if err != nil {
-				if pkgerrors.Cause(err) == shared.ErrRuntimeConfigNotFound {
+				if stderrors.Is(err, shared.ErrRuntimeConfigNotFound) {
 					logger.Info("Namespace AIMRuntimeConfig not found for cluster template, proceeding without overrides",
 						"name", template.Spec.RuntimeConfigName,
 						"operatorNamespace", operatorNamespace)
