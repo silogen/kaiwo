@@ -77,3 +77,27 @@ func ExtractPrimaryModelSource(sources []aimv1alpha1.AIMModelSource) *aimv1alpha
 	}
 	return nil
 }
+
+// StatusMetric returns the metric discovered during template resolution, if available.
+func (s TemplateState) StatusMetric() *aimv1alpha1.AIMMetric {
+	if s.Status == nil {
+		return nil
+	}
+	if metric := s.Status.Profile.Metadata.Metric; metric != "" {
+		m := metric
+		return &m
+	}
+	return nil
+}
+
+// StatusPrecision returns the precision discovered during template resolution, if available.
+func (s TemplateState) StatusPrecision() *aimv1alpha1.AIMPrecision {
+	if s.Status == nil {
+		return nil
+	}
+	if precision := s.Status.Profile.Metadata.Precision; precision != "" {
+		p := precision
+		return &p
+	}
+	return nil
+}

@@ -220,6 +220,7 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 				"app.kubernetes.io/managed-by": LabelValueManagedBy,
 				LabelKeyTemplate:               serviceState.Template.Name,
 				LabelKeyModelID:                sanitizeLabelValue(serviceState.ModelID),
+				LabelKeyImageName:              sanitizeLabelValue(serviceState.Template.SpecCommon.AIMImageName),
 			},
 			OwnerReferences: []metav1.OwnerReference{ownerRef},
 		},
@@ -248,6 +249,14 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 
 	container := &inferenceService.Spec.Predictor.Model.Container
 	container.Resources = resolveServiceResources(serviceState)
+
+	if metric := serviceState.Template.StatusMetric(); metric != nil {
+		inferenceService.Labels[LabelKeyMetric] = sanitizeLabelValue(string(*metric))
+	}
+
+	if precision := serviceState.Template.StatusPrecision(); precision != nil {
+		inferenceService.Labels[LabelKeyPrecision] = sanitizeLabelValue(string(*precision))
+	}
 
 	if serviceState.Replicas != nil {
 		inferenceService.Spec.Predictor.MinReplicas = serviceState.Replicas

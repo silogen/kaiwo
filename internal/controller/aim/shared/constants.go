@@ -43,6 +43,9 @@ const (
 	LabelKeyTemplate        = AimLabelDomain + "/template"
 	LabelKeyModelID         = AimLabelDomain + "/model-id"
 	LabelKeyDerivedTemplate = AimLabelDomain + "/derived-template"
+	LabelKeyImageName       = AimLabelDomain + "/aim-image"
+	LabelKeyMetric          = AimLabelDomain + "/template.metric"
+	LabelKeyPrecision       = AimLabelDomain + "/template.precision"
 
 	// AIM label values.
 	LabelValueRuntimeName        = "aim-runtime"

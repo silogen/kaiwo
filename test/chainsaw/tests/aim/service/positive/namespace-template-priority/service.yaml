@@ -3,6 +3,6 @@ kind: AIMService
 metadata:
   name: test-service
 spec:
-  aimImageName: llama-3-8b-ns-priority
-  templateRef: llama-3-8b-latency-ns-priority-namespace
+  aimImageName: default-testing-llama-3-8b
+  templateRef: llama-3-8b-latency-ns-priority
   replicas: 1
