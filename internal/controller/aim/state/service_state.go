@@ -26,9 +26,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"github.com/silogen/kaiwo/internal/controller/aim/routingconfig"
+
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 	"github.com/silogen/kaiwo/internal/controller/aim/helpers"
-	"github.com/silogen/kaiwo/internal/controller/aim/routingconfig"
 )
 
 // ServiceState captures the resolved desired state for an AIMService across vendors.

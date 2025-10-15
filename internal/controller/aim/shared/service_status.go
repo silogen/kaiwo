@@ -28,13 +28,14 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/silogen/kaiwo/internal/controller/aim/routingconfig"
+
 	servingv1beta1 "github.com/kserve/kserve/pkg/apis/serving/v1beta1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
-	"github.com/silogen/kaiwo/internal/controller/aim/routingconfig"
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 )
 
