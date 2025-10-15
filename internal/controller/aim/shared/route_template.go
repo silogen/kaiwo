@@ -31,7 +31,7 @@ import (
 	"regexp"
 	"strings"
 
-	jsonpath "k8s.io/client-go/util/jsonpath"
+	"k8s.io/client-go/util/jsonpath"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 )

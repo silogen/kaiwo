@@ -51,11 +51,11 @@ func (r *ImageLookupResult) DeepCopy() *ImageLookupResult {
 	if r == nil {
 		return nil
 	}
-	copy := &ImageLookupResult{
+	result := &ImageLookupResult{
 		Image: r.Image,
 	}
-	copy.Resources = *r.Resources.DeepCopy()
-	return copy
+	result.Resources = *r.Resources.DeepCopy()
+	return result
 }
 
 // LookupImageForClusterTemplate looks up the container image for a cluster-scoped template.

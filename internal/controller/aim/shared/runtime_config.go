@@ -163,8 +163,8 @@ func copyRuntimeRoutingConfig(routing *aimv1alpha1.AIMRuntimeRoutingConfig) *aim
 	if routing == nil {
 		return nil
 	}
-	copy := *routing
-	return &copy
+	cfg := *routing
+	return &cfg
 }
 
 func mergeImagePullSecrets(base []corev1.LocalObjectReference, overrides []corev1.LocalObjectReference) []corev1.LocalObjectReference {

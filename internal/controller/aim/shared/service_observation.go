@@ -258,7 +258,7 @@ func PopulateObservationFromNamespaceTemplate(
 	obs.TemplateNamespace = template.Namespace
 	if image, imageErr := LookupImageForNamespaceTemplate(ctx, k8sClient, template.Namespace, template.Spec.AIMImageName); imageErr == nil {
 		obs.ImageResources = image.Resources.DeepCopy()
-	} else if imageErr != nil && !errors.Is(imageErr, ErrImageNotFound) {
+	} else if !errors.Is(imageErr, ErrImageNotFound) {
 		return fmt.Errorf("failed to lookup AIMImage %q in namespace %q: %w", template.Spec.AIMImageName, template.Namespace, imageErr)
 	}
 	return nil
