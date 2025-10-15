@@ -25,7 +25,7 @@ package v1alpha1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 // AIMRuntimeConfigCommon captures configuration fields shared across cluster and namespace scopes.
@@ -63,6 +63,14 @@ type AIMRuntimeConfigSpec struct {
 
 // AIMRuntimeRoutingConfig configures routing defaults applied during inference service creation.
 type AIMRuntimeRoutingConfig struct {
+	// Enabled toggles HTTP routing management for consumers of this runtime config.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// GatewayRef identifies the Gateway parent that should receive HTTPRoutes for consumers.
+	// +optional
+	GatewayRef *gatewayapiv1.ParentReference `json:"gatewayRef,omitempty"`
+
 	// RouteTemplate renders a HTTP path prefix using the AIMService as context.
 	// Example: `/{.metadata.namespace}/{.metadata.labels['team']}/{.spec.model}/`
 	// +optional
@@ -82,17 +90,7 @@ type AIMRuntimeConfigStatus struct {
 
 // AIMRuntimeConfigReference records the source runtime config used during resolution.
 type AIMRuntimeConfigReference struct {
-	// Name is the metadata.name of the runtime config.
-	Name string `json:"name"`
-
-	// Namespace is only set for namespace-scoped runtime configs.
-	Namespace string `json:"namespace,omitempty"`
-
-	// UID is included to detect stale references.
-	UID types.UID `json:"uid,omitempty"`
-
-	// Kind is either "AIMRuntimeConfig" or "AIMClusterRuntimeConfig".
-	Kind string `json:"kind"`
+	AIMResolvedReference `json:",inline"`
 }
 
 // AIMEffectiveRuntimeConfig surfaces the resolved configuration applied to a consumer.

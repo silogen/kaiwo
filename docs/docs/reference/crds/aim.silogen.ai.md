@@ -390,6 +390,48 @@ _Appears in:_
 | `precision` _[AIMPrecision](#aimprecision)_ |  |  | Enum: [bf16 fp16 fp8 int8] <br /> |
 
 
+#### AIMResolutionScope
+
+_Underlying type:_ _string_
+
+AIMResolutionScope describes the scope of a resolved reference.
+
+_Validation:_
+- Enum: [Namespace Cluster Unknown]
+
+_Appears in:_
+- [AIMResolvedReference](#aimresolvedreference)
+- [AIMRuntimeConfigReference](#aimruntimeconfigreference)
+- [AIMServiceResolvedTemplate](#aimserviceresolvedtemplate)
+
+| Field | Description |
+| --- | --- |
+| `Namespace` | AIMResolutionScopeNamespace denotes a namespace-scoped resource.<br /> |
+| `Cluster` | AIMResolutionScopeCluster denotes a cluster-scoped resource.<br /> |
+| `Unknown` | AIMResolutionScopeUnknown denotes that the scope could not be determined.<br /> |
+
+
+#### AIMResolvedReference
+
+
+
+AIMResolvedReference captures metadata about a resolved reference.
+
+
+
+_Appears in:_
+- [AIMRuntimeConfigReference](#aimruntimeconfigreference)
+- [AIMServiceResolvedTemplate](#aimserviceresolvedtemplate)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | Name is the resource name that satisfied the reference. |  |  |
+| `namespace` _string_ | Namespace identifies where the resource was found when namespace-scoped.<br />Empty indicates a cluster-scoped resource. |  |  |
+| `scope` _[AIMResolutionScope](#aimresolutionscope)_ | Scope indicates whether the resolved resource was namespace or cluster scoped. |  | Enum: [Namespace Cluster Unknown] <br /> |
+| `kind` _string_ | Kind is the fully-qualified kind of the resolved reference, when known. |  |  |
+| `uid` _[UID](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#uid-types-pkg)_ | UID captures the unique identifier of the resolved reference, when known. |  |  |
+
+
 #### AIMRuntimeConfig
 
 
@@ -476,10 +518,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | Name is the metadata.name of the runtime config. |  |  |
-| `namespace` _string_ | Namespace is only set for namespace-scoped runtime configs. |  |  |
-| `uid` _[UID](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#uid-types-pkg)_ | UID is included to detect stale references. |  |  |
-| `kind` _string_ | Kind is either "AIMRuntimeConfig" or "AIMClusterRuntimeConfig". |  |  |
+| `name` _string_ | Name is the resource name that satisfied the reference. |  |  |
+| `namespace` _string_ | Namespace identifies where the resource was found when namespace-scoped.<br />Empty indicates a cluster-scoped resource. |  |  |
+| `scope` _[AIMResolutionScope](#aimresolutionscope)_ | Scope indicates whether the resolved resource was namespace or cluster scoped. |  | Enum: [Namespace Cluster Unknown] <br /> |
+| `kind` _string_ | Kind is the fully-qualified kind of the resolved reference, when known. |  |  |
+| `uid` _[UID](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#uid-types-pkg)_ | UID captures the unique identifier of the resolved reference, when known. |  |  |
 
 
 #### AIMRuntimeConfigSpec
@@ -557,6 +600,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
+| `enabled` _boolean_ | Enabled toggles HTTP routing management for consumers of this runtime config. |  |  |
+| `gatewayRef` _[ParentReference](#parentreference)_ | GatewayRef identifies the Gateway parent that should receive HTTPRoutes for consumers. |  |  |
 | `routeTemplate` _string_ | RouteTemplate renders a HTTP path prefix using the AIMService as context.<br />Example: `/\{.metadata.namespace\}/\{.metadata.labels['team']\}/\{.spec.model\}/` |  |  |
 
 
@@ -622,7 +667,7 @@ _Appears in:_
 
 
 
-AIMServiceResolvedTemplate captures the template the service resolved to.
+AIMServiceResolvedTemplate retains the historical name while reusing the shared structure.
 
 
 
@@ -631,9 +676,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | Name is the template name that satisfied the service reference. |  |  |
-| `namespace` _string_ | Namespace is the namespace that contained the resolved template, when namespace-scoped.<br />Empty indicates a cluster-scoped template. |  |  |
-| `scope` _[AIMServiceTemplateScope](#aimservicetemplatescope)_ | Scope indicates whether the resolved template was namespace or cluster scoped. |  | Enum: [Namespace Cluster Unknown] <br /> |
+| `name` _string_ | Name is the resource name that satisfied the reference. |  |  |
+| `namespace` _string_ | Namespace identifies where the resource was found when namespace-scoped.<br />Empty indicates a cluster-scoped resource. |  |  |
+| `scope` _[AIMResolutionScope](#aimresolutionscope)_ | Scope indicates whether the resolved resource was namespace or cluster scoped. |  | Enum: [Namespace Cluster Unknown] <br /> |
+| `kind` _string_ | Kind is the fully-qualified kind of the resolved reference, when known. |  |  |
+| `uid` _[UID](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#uid-types-pkg)_ | UID captures the unique identifier of the resolved reference, when known. |  |  |
 
 
 #### AIMServiceRouting
@@ -781,23 +828,6 @@ _Appears in:_
 | `items` _[AIMServiceTemplate](#aimservicetemplate) array_ |  |  |  |
 
 
-#### AIMServiceTemplateScope
-
-_Underlying type:_ _string_
-
-AIMServiceTemplateScope enumerates the scopes an AIMService template reference can resolve to.
-
-_Validation:_
-- Enum: [Namespace Cluster Unknown]
-
-_Appears in:_
-- [AIMServiceResolvedTemplate](#aimserviceresolvedtemplate)
-
-| Field | Description |
-| --- | --- |
-| `Namespace` | AIMServiceTemplateScopeNamespace denotes a namespace-scoped template.<br /> |
-| `Cluster` | AIMServiceTemplateScopeCluster denotes a cluster-scoped template.<br /> |
-| `Unknown` | AIMServiceTemplateScopeUnknown denotes that the scope could not be resolved.<br /> |
 
 
 #### AIMServiceTemplateSpec

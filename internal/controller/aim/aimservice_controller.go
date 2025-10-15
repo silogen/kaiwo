@@ -43,6 +43,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
+	"github.com/silogen/kaiwo/internal/controller/aim/routingconfig"
 	"github.com/silogen/kaiwo/internal/controller/aim/shared"
 	aimstate "github.com/silogen/kaiwo/internal/controller/aim/state"
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
@@ -152,8 +153,9 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 		obs.ShouldCreateTemplate = true
 	}
 
-	// Resolve route path if routing is enabled
-	if service.Spec.Routing != nil && service.Spec.Routing.Enabled && obs.TemplateFound() {
+	// Resolve route path if routing is enabled via service or runtime defaults
+	routingConfig := routingconfig.Resolve(service, obs.RuntimeConfigSpec.Routing)
+	if routingConfig.Enabled && obs.TemplateFound() {
 		if routePath, err := shared.ResolveServiceRoutePath(service, obs.RuntimeConfigSpec); err != nil {
 			obs.RouteTemplateErr = err
 		} else {

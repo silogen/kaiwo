@@ -120,32 +120,6 @@ type AIMServiceStatus struct {
 	ResolvedTemplate *AIMServiceResolvedTemplate `json:"resolvedTemplate,omitempty"`
 }
 
-// AIMServiceResolvedTemplate captures the template the service resolved to.
-type AIMServiceResolvedTemplate struct {
-	// Name is the template name that satisfied the service reference.
-	Name string `json:"name,omitempty"`
-
-	// Namespace is the namespace that contained the resolved template, when namespace-scoped.
-	// Empty indicates a cluster-scoped template.
-	Namespace string `json:"namespace,omitempty"`
-
-	// Scope indicates whether the resolved template was namespace or cluster scoped.
-	Scope AIMServiceTemplateScope `json:"scope,omitempty"`
-}
-
-// AIMServiceTemplateScope enumerates the scopes an AIMService template reference can resolve to.
-// +kubebuilder:validation:Enum=Namespace;Cluster;Unknown
-type AIMServiceTemplateScope string
-
-const (
-	// AIMServiceTemplateScopeNamespace denotes a namespace-scoped template.
-	AIMServiceTemplateScopeNamespace AIMServiceTemplateScope = "Namespace"
-	// AIMServiceTemplateScopeCluster denotes a cluster-scoped template.
-	AIMServiceTemplateScopeCluster AIMServiceTemplateScope = "Cluster"
-	// AIMServiceTemplateScopeUnknown denotes that the scope could not be resolved.
-	AIMServiceTemplateScopeUnknown AIMServiceTemplateScope = "Unknown"
-)
-
 // AIMServiceStatusEnum defines coarse-grained states for a service.
 // +kubebuilder:validation:Enum=Pending;Starting;Running;Failed;Degraded
 type AIMServiceStatusEnum string

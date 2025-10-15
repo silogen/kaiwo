@@ -3,8 +3,7 @@ kind: AIMService
 metadata:
   name: test-service
 spec:
-  aimImageName: llama-3-8b-routing-annotations
-  templateRef: llama-3-8b-latency-routing-annotations
+  aimImageName: default-testing-llama-3-8b
   replicas: 1
   routing:
     enabled: true

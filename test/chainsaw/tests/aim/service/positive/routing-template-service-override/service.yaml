@@ -3,8 +3,7 @@ kind: AIMService
 metadata:
   name: test-service
 spec:
-  aimImageName: meta/service-override
-  templateRef: llama-3-8b-latency-routing-template-service
+  aimImageName: default-testing-llama-3-8b
   runtimeConfigName: routing-template-service
   routing:
     enabled: true

@@ -34,6 +34,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
+	"github.com/silogen/kaiwo/internal/controller/aim/routingconfig"
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 )
 
@@ -72,8 +73,13 @@ func EvaluateRoutingStatus(
 	status *aimv1alpha1.AIMServiceStatus,
 	setCondition func(conditionType string, conditionStatus metav1.ConditionStatus, reason, message string),
 ) (enabled bool, ready bool, hasFatalError bool) {
-	routingEnabled := service.Spec.Routing != nil && service.Spec.Routing.Enabled
-	if !routingEnabled {
+	var runtimeRouting *aimv1alpha1.AIMRuntimeRoutingConfig
+	if obs != nil {
+		runtimeRouting = obs.RuntimeConfigSpec.Routing
+	}
+
+	resolved := routingconfig.Resolve(service, runtimeRouting)
+	if !resolved.Enabled {
 		setCondition(aimv1alpha1.AIMServiceConditionRoutingReady, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonRouteReady, "Routing disabled")
 		return false, true, false
 	}
@@ -87,18 +93,15 @@ func EvaluateRoutingStatus(
 		Path: routePath,
 	}
 
-	if service.Spec.Routing.GatewayRef == nil {
-		setCondition(aimv1alpha1.AIMServiceConditionRoutingReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonRouteFailed,
-			"routing.gatewayRef must be specified when routing is enabled")
+	if resolved.GatewayRef == nil {
+		message := "routing.gatewayRef must be specified via AIMService or runtime config when routing is enabled"
+		setCondition(aimv1alpha1.AIMServiceConditionRoutingReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonRouteFailed, message)
 		status.Status = aimv1alpha1.AIMServiceStatusFailed
 		setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonRouteFailed,
 			"Routing gateway reference is missing")
 		return true, false, true
 	}
 
-	// Check if HTTPRoute exists in observation
-	// Note: The caller should fetch the HTTPRoute and include it in the observation
-	// This function only evaluates the status, it doesn't fetch resources
 	return true, false, false
 }
 
@@ -324,14 +327,14 @@ func EvaluateInferenceServiceStatus(
 	setCondition(aimv1alpha1.AIMServiceConditionReady, metav1.ConditionFalse, reason, message)
 }
 
-func convertTemplateScope(scope TemplateScope) aimv1alpha1.AIMServiceTemplateScope {
+func convertTemplateScope(scope TemplateScope) aimv1alpha1.AIMResolutionScope {
 	switch scope {
 	case TemplateScopeNamespace:
-		return aimv1alpha1.AIMServiceTemplateScopeNamespace
+		return aimv1alpha1.AIMResolutionScopeNamespace
 	case TemplateScopeCluster:
-		return aimv1alpha1.AIMServiceTemplateScopeCluster
+		return aimv1alpha1.AIMResolutionScopeCluster
 	default:
-		return aimv1alpha1.AIMServiceTemplateScopeUnknown
+		return aimv1alpha1.AIMResolutionScopeUnknown
 	}
 }
 
@@ -375,16 +378,20 @@ func ProjectServiceStatus(
 	status.ResolvedTemplate = nil
 	if obs != nil && obs.TemplateName != "" {
 		status.ResolvedTemplate = &aimv1alpha1.AIMServiceResolvedTemplate{
-			Name:      obs.TemplateName,
-			Namespace: obs.TemplateNamespace,
-			Scope:     convertTemplateScope(obs.Scope),
+			AIMResolvedReference: aimv1alpha1.AIMResolvedReference{
+				Name:      obs.TemplateName,
+				Namespace: obs.TemplateNamespace,
+				Scope:     convertTemplateScope(obs.Scope),
+				Kind:      "AIMServiceTemplate",
+			},
 		}
-	} else {
-		if name := strings.TrimSpace(TemplateNameFromSpec(service)); name != "" {
-			status.ResolvedTemplate = &aimv1alpha1.AIMServiceResolvedTemplate{
+	} else if name := strings.TrimSpace(TemplateNameFromSpec(service)); name != "" {
+		status.ResolvedTemplate = &aimv1alpha1.AIMServiceResolvedTemplate{
+			AIMResolvedReference: aimv1alpha1.AIMResolvedReference{
 				Name:  name,
-				Scope: aimv1alpha1.AIMServiceTemplateScopeUnknown,
-			}
+				Scope: aimv1alpha1.AIMResolutionScopeUnknown,
+				Kind:  "AIMServiceTemplate",
+			},
 		}
 	}
 

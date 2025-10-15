@@ -28,6 +28,7 @@ import (
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 	"github.com/silogen/kaiwo/internal/controller/aim/helpers"
+	"github.com/silogen/kaiwo/internal/controller/aim/routingconfig"
 )
 
 // ServiceState captures the resolved desired state for an AIMService across vendors.
@@ -107,7 +108,9 @@ func NewServiceState(service *aimv1alpha1.AIMService, template TemplateState, op
 		state.Replicas = &replicas
 	}
 
-	if service.Spec.Routing != nil && service.Spec.Routing.Enabled {
+	resolvedRouting := routingconfig.Resolve(service, template.RuntimeConfigSpec.Routing)
+
+	if resolvedRouting.Enabled {
 		routing := ServiceRoutingState{
 			Enabled:    true,
 			PathPrefix: opts.RoutePath,
@@ -115,10 +118,10 @@ func NewServiceState(service *aimv1alpha1.AIMService, template TemplateState, op
 		if routing.PathPrefix == "" {
 			routing.PathPrefix = "/"
 		}
-		if service.Spec.Routing.GatewayRef != nil {
-			routing.GatewayRef = service.Spec.Routing.GatewayRef.DeepCopy()
+		if resolvedRouting.GatewayRef != nil {
+			routing.GatewayRef = resolvedRouting.GatewayRef.DeepCopy()
 		}
-		if len(service.Spec.Routing.Annotations) > 0 {
+		if service.Spec.Routing != nil && len(service.Spec.Routing.Annotations) > 0 {
 			routing.Annotations = make(map[string]string, len(service.Spec.Routing.Annotations))
 			for k, v := range service.Spec.Routing.Annotations {
 				routing.Annotations[k] = v

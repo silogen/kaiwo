@@ -25,7 +25,6 @@ SOFTWARE.
 package shared
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/kserve/kserve/pkg/constants"
@@ -38,7 +37,8 @@ import (
 
 // InferenceServiceRouteName returns the canonical HTTPRoute name for an InferenceService.
 func InferenceServiceRouteName(serviceName string) string {
-	return fmt.Sprintf("%s-route", serviceName)
+	return serviceName
+	// return fmt.Sprintf("%s-route", serviceName)
 }
 
 // BuildInferenceServiceHTTPRoute creates an HTTPRoute that exposes the predictor service via the provided gateway parent.

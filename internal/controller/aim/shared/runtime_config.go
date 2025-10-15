@@ -164,6 +164,13 @@ func copyRuntimeRoutingConfig(routing *aimv1alpha1.AIMRuntimeRoutingConfig) *aim
 		return nil
 	}
 	cfg := *routing
+	if routing.Enabled != nil {
+		enabled := *routing.Enabled
+		cfg.Enabled = &enabled
+	}
+	if routing.GatewayRef != nil {
+		cfg.GatewayRef = routing.GatewayRef.DeepCopy()
+	}
 	return &cfg
 }
 
@@ -195,18 +202,24 @@ func buildEffectiveRuntimeConfigStatus(clusterCfg *aimv1alpha1.AIMClusterRuntime
 
 	if namespaceCfg != nil {
 		status.NamespaceRef = &aimv1alpha1.AIMRuntimeConfigReference{
-			Name:      namespaceCfg.Name,
-			Namespace: namespaceCfg.Namespace,
-			UID:       namespaceCfg.UID,
-			Kind:      "AIMRuntimeConfig",
+			AIMResolvedReference: aimv1alpha1.AIMResolvedReference{
+				Name:      namespaceCfg.Name,
+				Namespace: namespaceCfg.Namespace,
+				Scope:     aimv1alpha1.AIMResolutionScopeNamespace,
+				Kind:      "AIMRuntimeConfig",
+				UID:       namespaceCfg.UID,
+			},
 		}
 	}
 
 	if clusterCfg != nil {
 		status.ClusterRef = &aimv1alpha1.AIMRuntimeConfigReference{
-			Name: clusterCfg.Name,
-			UID:  clusterCfg.UID,
-			Kind: "AIMClusterRuntimeConfig",
+			AIMResolvedReference: aimv1alpha1.AIMResolvedReference{
+				Name:  clusterCfg.Name,
+				Scope: aimv1alpha1.AIMResolutionScopeCluster,
+				Kind:  "AIMClusterRuntimeConfig",
+				UID:   clusterCfg.UID,
+			},
 		}
 	}
 

@@ -277,21 +277,30 @@ spec:
                       if present.
                     properties:
                       kind:
-                        description: Kind is either "AIMRuntimeConfig" or "AIMClusterRuntimeConfig".
+                        description: Kind is the fully-qualified kind of the resolved
+                          reference, when known.
                         type: string
                       name:
-                        description: Name is the metadata.name of the runtime config.
+                        description: Name is the resource name that satisfied the
+                          reference.
                         type: string
                       namespace:
-                        description: Namespace is only set for namespace-scoped runtime
-                          configs.
+                        description: |-
+                          Namespace identifies where the resource was found when namespace-scoped.
+                          Empty indicates a cluster-scoped resource.
+                        type: string
+                      scope:
+                        description: Scope indicates whether the resolved resource
+                          was namespace or cluster scoped.
+                        enum:
+                        - Namespace
+                        - Cluster
+                        - Unknown
                         type: string
                       uid:
-                        description: UID is included to detect stale references.
+                        description: UID captures the unique identifier of the resolved
+                          reference, when known.
                         type: string
-                    required:
-                    - kind
-                    - name
                     type: object
                   hash:
                     description: Hash is a stable hash of the merged configuration
@@ -302,21 +311,30 @@ spec:
                       config, if present.
                     properties:
                       kind:
-                        description: Kind is either "AIMRuntimeConfig" or "AIMClusterRuntimeConfig".
+                        description: Kind is the fully-qualified kind of the resolved
+                          reference, when known.
                         type: string
                       name:
-                        description: Name is the metadata.name of the runtime config.
+                        description: Name is the resource name that satisfied the
+                          reference.
                         type: string
                       namespace:
-                        description: Namespace is only set for namespace-scoped runtime
-                          configs.
+                        description: |-
+                          Namespace identifies where the resource was found when namespace-scoped.
+                          Empty indicates a cluster-scoped resource.
+                        type: string
+                      scope:
+                        description: Scope indicates whether the resolved resource
+                          was namespace or cluster scoped.
+                        enum:
+                        - Namespace
+                        - Cluster
+                        - Unknown
                         type: string
                       uid:
-                        description: UID is included to detect stale references.
+                        description: UID captures the unique identifier of the resolved
+                          reference, when known.
                         type: string
-                    required:
-                    - kind
-                    - name
                     type: object
                 type: object
               modelSources:
