@@ -4,3 +4,9 @@ metadata:
   name: merge-config
 spec:
   defaultStorageClassName: slow-storage
+  routing:
+    enabled: true
+    gatewayRef:
+      name: kserve-ingress-gateway
+      namespace: kgateway-system
+    routeTemplate: "/cluster-merge/{.metadata.name}"

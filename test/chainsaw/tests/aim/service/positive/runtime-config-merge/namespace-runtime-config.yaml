@@ -7,3 +7,9 @@ spec:
   serviceAccountName: namespace-sa
   imagePullSecrets:
   - name: namespace-secret
+  routing:
+    enabled: true
+    gatewayRef:
+      name: kserve-ingress-gateway
+      namespace: kgateway-system
+    routeTemplate: "/tenant/{.metadata.namespace}/{.metadata.name}"

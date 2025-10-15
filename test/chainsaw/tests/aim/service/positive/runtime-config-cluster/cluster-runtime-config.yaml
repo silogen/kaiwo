@@ -4,3 +4,9 @@ metadata:
   name: cluster-runtime-config
 spec:
   defaultStorageClassName: fast-storage
+  routing:
+    enabled: true
+    gatewayRef:
+      name: kserve-ingress-gateway
+      namespace: kgateway-system
+    routeTemplate: "/cluster/{.metadata.name}"

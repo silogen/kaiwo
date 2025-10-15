@@ -54,6 +54,23 @@ spec:
             (effectiveRuntimeConfig != null): true
             (effectiveRuntimeConfig.clusterRef != null): true
             (effectiveRuntimeConfig.namespaceRef != null): true
+            (effectiveRuntimeConfig.clusterRef.scope == 'Cluster'): true
+            (effectiveRuntimeConfig.namespaceRef.scope == 'Namespace'): true
+            (effectiveRuntimeConfig.namespaceRef.namespace == $namespace): true
+            (routing.path == join('', ['/tenant/', $namespace, '/test-service'])): true
+
+  - name: Verify HTTPRoute prefers namespace runtime config
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: gateway.networking.k8s.io/v1
+          kind: HTTPRoute
+          metadata:
+            name: test-service-route
+          spec:
+            (parentRefs[0].name == 'kserve-ingress-gateway'): true
+            (rules[0].matches[0].path.value == join('', ['/tenant/', $namespace, '/test-service'])): true
 
   - name: Verify namespace config values are used (serviceAccountName from namespace)
     try:

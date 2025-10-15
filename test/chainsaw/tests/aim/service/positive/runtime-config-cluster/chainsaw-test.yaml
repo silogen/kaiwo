@@ -50,3 +50,19 @@ spec:
             (effectiveRuntimeConfig != null): true
             (effectiveRuntimeConfig.clusterRef != null): true
             (effectiveRuntimeConfig.clusterRef.name == 'cluster-runtime-config'): true
+            (effectiveRuntimeConfig.clusterRef.scope == 'Cluster'): true
+            (effectiveRuntimeConfig.namespaceRef == null): true
+            (routing.path == '/cluster/test-service'): true
+
+  - name: Verify HTTPRoute configured from runtime defaults
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: gateway.networking.k8s.io/v1
+          kind: HTTPRoute
+          metadata:
+            name: test-service-route
+          spec:
+            (parentRefs[0].name == 'kserve-ingress-gateway'): true
+            (rules[0].matches[0].path.value == '/cluster/test-service'): true
