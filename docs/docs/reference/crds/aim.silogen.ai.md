@@ -618,6 +618,24 @@ _Appears in:_
 | `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
 
 
+#### AIMServiceResolvedTemplate
+
+
+
+AIMServiceResolvedTemplate captures the template the service resolved to.
+
+
+
+_Appears in:_
+- [AIMServiceStatus](#aimservicestatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | Name is the template name that satisfied the service reference. |  |  |
+| `namespace` _string_ | Namespace is the namespace that contained the resolved template, when namespace-scoped.<br />Empty indicates a cluster-scoped template. |  |  |
+| `scope` _[AIMServiceTemplateScope](#aimservicetemplatescope)_ | Scope indicates whether the resolved template was namespace or cluster scoped. |  | Enum: [Namespace Cluster Unknown] <br /> |
+
+
 #### AIMServiceRouting
 
 
@@ -701,7 +719,7 @@ _Appears in:_
 | `effectiveRuntimeConfig` _[AIMEffectiveRuntimeConfig](#aimeffectiveruntimeconfig)_ | EffectiveRuntimeConfig surfaces the runtime configuration applied to this service. |  |  |
 | `status` _[AIMServiceStatusEnum](#aimservicestatusenum)_ | Status represents the current high‑level status of the service lifecycle.<br />Values: `Pending`, `Starting`, `Running`, `Failed`, `Degraded`. | Pending | Enum: [Pending Starting Running Failed Degraded] <br /> |
 | `routing` _[AIMServiceRoutingStatus](#aimserviceroutingstatus)_ | Routing surfaces information about the configured HTTP routing, when enabled. |  |  |
-| `resolvedTemplateRef` _string_ | ResolvedTemplateRef records the template name the controller selected (namespace or cluster).<br />When spec.templateRef is omitted, this field surfaces the resolved image default or derived template. |  |  |
+| `resolvedTemplate` _[AIMServiceResolvedTemplate](#aimserviceresolvedtemplate)_ | ResolvedTemplate captures metadata about the template that satisfied the reference. |  |  |
 
 
 #### AIMServiceStatusEnum
@@ -761,6 +779,25 @@ _Appears in:_
 | `kind` _string_ | `AIMServiceTemplateList` | | |
 | `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
 | `items` _[AIMServiceTemplate](#aimservicetemplate) array_ |  |  |  |
+
+
+#### AIMServiceTemplateScope
+
+_Underlying type:_ _string_
+
+AIMServiceTemplateScope enumerates the scopes an AIMService template reference can resolve to.
+
+_Validation:_
+- Enum: [Namespace Cluster Unknown]
+
+_Appears in:_
+- [AIMServiceResolvedTemplate](#aimserviceresolvedtemplate)
+
+| Field | Description |
+| --- | --- |
+| `Namespace` | AIMServiceTemplateScopeNamespace denotes a namespace-scoped template.<br /> |
+| `Cluster` | AIMServiceTemplateScopeCluster denotes a cluster-scoped template.<br /> |
+| `Unknown` | AIMServiceTemplateScopeUnknown denotes that the scope could not be resolved.<br /> |
 
 
 #### AIMServiceTemplateSpec

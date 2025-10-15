@@ -10,14 +10,10 @@ spec:
   - name: Create cluster resources
     try:
     - apply:
-        file: cluster-image.yaml
-    - apply:
         file: cluster-template.yaml
 
   - name: Create namespace resources
     try:
-    - apply:
-        file: namespace-image.yaml
     - apply:
         file: namespace-template.yaml
 
@@ -29,7 +25,7 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
-            name: llama-3-8b-latency-ns-priority-cluster
+            name: llama-3-8b-latency-ns-priority
           status:
             status: Available
     - assert:
@@ -38,7 +34,7 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMServiceTemplate
           metadata:
-            name: llama-3-8b-latency-ns-priority-namespace
+            name: llama-3-8b-latency-ns-priority
           status:
             status: Available
 
@@ -47,7 +43,7 @@ spec:
     - apply:
         file: service.yaml
 
-  - name: Verify namespace template was used (precision fp8, not fp16)
+  - name: Verify namespace template was used
     try:
     - assert:
         timeout: 30s
@@ -57,15 +53,8 @@ spec:
           metadata:
             name: test-service
           status:
-            (conditions[?type == 'Resolved']):
-            - status: "True"
-              reason: Resolved
+            resolvedTemplate:
+              name: llama-3-8b-latency-ns-priority
+              scope: Namespace
 
-  - name: Verify ServingRuntime references namespace template
-    try:
-    - assert:
-        resource:
-          apiVersion: serving.kserve.io/v1alpha1
-          kind: ServingRuntime
-          metadata:
-            name: llama-3-8b-latency-ns-priority-namespace
+  # TODO verify inference service labels

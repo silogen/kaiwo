@@ -268,7 +268,9 @@ func (r *AIMServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		}
 		resolved := strings.TrimSpace(service.Spec.TemplateRef)
 		if resolved == "" {
-			resolved = strings.TrimSpace(service.Status.ResolvedTemplateRef)
+			if service.Status.ResolvedTemplate != nil {
+				resolved = strings.TrimSpace(service.Status.ResolvedTemplate.Name)
+			}
 		}
 		if resolved == "" {
 			return nil

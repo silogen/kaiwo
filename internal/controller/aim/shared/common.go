@@ -73,8 +73,10 @@ func RequestsForServices(services []aimv1alpha1.AIMService) []reconcile.Request 
 // TemplateNameFromSpec returns the template name from the service spec or status.
 // Falls back to service name if no template reference is found.
 func TemplateNameFromSpec(service *aimv1alpha1.AIMService) string {
-	if ref := strings.TrimSpace(service.Status.ResolvedTemplateRef); ref != "" {
-		return ref
+	if service.Status.ResolvedTemplate != nil {
+		if ref := strings.TrimSpace(service.Status.ResolvedTemplate.Name); ref != "" {
+			return ref
+		}
 	}
 	if ref := strings.TrimSpace(service.Spec.TemplateRef); ref != "" {
 		return ref

@@ -26,6 +26,7 @@ package shared
 
 import (
 	"fmt"
+	"strings"
 
 	servingv1beta1 "github.com/kserve/kserve/pkg/apis/serving/v1beta1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -323,6 +324,17 @@ func EvaluateInferenceServiceStatus(
 	setCondition(aimv1alpha1.AIMServiceConditionReady, metav1.ConditionFalse, reason, message)
 }
 
+func convertTemplateScope(scope TemplateScope) aimv1alpha1.AIMServiceTemplateScope {
+	switch scope {
+	case TemplateScopeNamespace:
+		return aimv1alpha1.AIMServiceTemplateScopeNamespace
+	case TemplateScopeCluster:
+		return aimv1alpha1.AIMServiceTemplateScopeCluster
+	default:
+		return aimv1alpha1.AIMServiceTemplateScopeUnknown
+	}
+}
+
 // ProjectServiceStatus computes and updates the service status based on observations and errors.
 // This is a high-level orchestrator that calls the individual status handler functions.
 func ProjectServiceStatus(
@@ -360,10 +372,20 @@ func ProjectServiceStatus(
 		setCondition(aimv1alpha1.AIMServiceConditionCacheReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonWaitingForCache, "Waiting for cache warm-up")
 	}
 
+	status.ResolvedTemplate = nil
 	if obs != nil && obs.TemplateName != "" {
-		status.ResolvedTemplateRef = obs.TemplateName
+		status.ResolvedTemplate = &aimv1alpha1.AIMServiceResolvedTemplate{
+			Name:      obs.TemplateName,
+			Namespace: obs.TemplateNamespace,
+			Scope:     convertTemplateScope(obs.Scope),
+		}
 	} else {
-		status.ResolvedTemplateRef = TemplateNameFromSpec(service)
+		if name := strings.TrimSpace(TemplateNameFromSpec(service)); name != "" {
+			status.ResolvedTemplate = &aimv1alpha1.AIMServiceResolvedTemplate{
+				Name:  name,
+				Scope: aimv1alpha1.AIMServiceTemplateScopeUnknown,
+			}
+		}
 	}
 
 	routingEnabled, routingReady, routingHasFatalError := EvaluateRoutingStatus(service, obs, status, setCondition)
