@@ -64,7 +64,7 @@ func TestResolveServiceRoutePath_RuntimeConfigFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveServiceRoutePath failed: %v", err)
 	}
-	if want := "/testing/meta/llama-3-8b"; path != want {
+	if want := "/testing/meta-llama-3-8b"; path != want {
 		t.Fatalf("unexpected path: got %q want %q", path, want)
 	}
 }
@@ -119,11 +119,14 @@ func TestResolveServiceRoutePath_MissingLabel(t *testing.T) {
 
 func TestResolveServiceRoutePath_PathTooLong(t *testing.T) {
 	svc := newTestService()
-	segment := strings.Repeat("a", 201)
-	svc.Labels["aim.silogen.ai/workload-id"] = segment
+	segment := strings.Repeat("abcdefghijklmnopqrstuvwxyz", 4) // 104 runes per segment after RFC1123 trimming to 63
+	svc.Labels["segment-a"] = segment
+	svc.Labels["segment-b"] = segment
+	svc.Labels["segment-c"] = segment
+	svc.Labels["segment-d"] = segment
 	svc.Spec.Routing = &aimv1alpha1.AIMServiceRouting{
 		Enabled:       true,
-		RouteTemplate: "/{.metadata.labels['aim.silogen.ai/workload-id']}",
+		RouteTemplate: "/{.metadata.labels['segment-a']}/{.metadata.labels['segment-b']}/{.metadata.labels['segment-c']}/{.metadata.labels['segment-d']}",
 	}
 
 	_, err := ResolveServiceRoutePath(svc, aimv1alpha1.AIMRuntimeConfigSpec{})

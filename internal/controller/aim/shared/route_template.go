@@ -26,7 +26,6 @@ package shared
 
 import (
 	"fmt"
-	"net/url"
 	"reflect"
 	"regexp"
 	"strings"
@@ -34,6 +33,7 @@ import (
 	"k8s.io/client-go/util/jsonpath"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
 const (
@@ -98,7 +98,7 @@ func renderRouteTemplate(template string, service *aimv1alpha1.AIMService) (stri
 		if err != nil {
 			return "", fmt.Errorf("failed to evaluate route template %q: %w", expr, err)
 		}
-		builder.WriteString(value)
+		builder.WriteString(applyTemplateValueModifiers(expr, value))
 
 		last = end
 	}
@@ -179,7 +179,15 @@ func normalizeRoutePath(raw string) (string, error) {
 		raw = "/" + raw
 	}
 
-	segments := strings.Split(raw, "/")
+	normalized := strings.TrimRight(raw, "/")
+	if normalized == "" {
+		normalized = "/"
+	}
+	if len(normalized) > MaxRoutePathLength {
+		return "", fmt.Errorf("route path %q exceeds %d characters", normalized, MaxRoutePathLength)
+	}
+
+	segments := strings.Split(normalized, "/")
 	encoded := make([]string, 0, len(segments))
 	for i, segment := range segments {
 		if i == 0 {
@@ -190,6 +198,9 @@ func normalizeRoutePath(raw string) (string, error) {
 			continue
 		}
 		encodedSegment := encodeRouteSegment(segment)
+		if encodedSegment == "" {
+			continue
+		}
 		encoded = append(encoded, encodedSegment)
 	}
 
@@ -211,8 +222,22 @@ func normalizeRoutePath(raw string) (string, error) {
 }
 
 func encodeRouteSegment(segment string) string {
-	lower := strings.ToLower(segment)
-	return url.PathEscape(lower)
+	segment = strings.TrimSpace(segment)
+	if segment == "" {
+		return ""
+	}
+	return baseutils.MakeRFC1123Compliant(segment)
+}
+
+func applyTemplateValueModifiers(expr, value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return value
+	}
+	if annotationAccessPattern.MatchString(expr) {
+		return value
+	}
+	return baseutils.MakeRFC1123Compliant(value)
 }
 
 func normalizeBracketKeys(expr string) string {
