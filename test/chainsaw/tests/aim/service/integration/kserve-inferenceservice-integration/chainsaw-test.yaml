@@ -10,9 +10,9 @@ spec:
 
   - name: Ensure template is available
     try:
-      - assert:
-          timeout: 5s
-          file: ../../_shared/template-available.yaml
+    - assert:
+        timeout: 5s
+        file: ../../_shared/template-available.yaml
 
   - name: Create AIMService
     try:
@@ -62,6 +62,6 @@ spec:
 
   - name: Test HTTP endpoint through gateway
     try:
-      - script:
-          timeout: 60s
-          content: bash script.sh
+    - script:
+        timeout: 60s
+        content: bash script.sh

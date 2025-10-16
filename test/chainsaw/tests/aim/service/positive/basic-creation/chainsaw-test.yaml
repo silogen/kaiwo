@@ -45,17 +45,17 @@ spec:
 
   - name: Verify service transitions to Starting
     try:
-      - assert:
-          timeout: 15s
-          resource:
-            apiVersion: aim.silogen.ai/v1alpha1
-            kind: AIMService
-            metadata:
-              name: test-service
-            status:
-              (status == 'Starting' || status == 'Running'): true
-              (conditions[?type == 'Progressing']):
-                - status: "True"
+    - assert:
+        timeout: 15s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-service
+          status:
+            (status == 'Starting' || status == 'Running'): true
+            (conditions[?type == 'Progressing']):
+            - status: "True"
 
   - name: Verify service becomes Running
     try:
@@ -69,8 +69,8 @@ spec:
           status:
             status: Running
             (conditions[?type == 'Ready']):
-                - status: "True"
+            - status: "True"
             (conditions[?type == 'Resolved']):
-              - status: "True"
+            - status: "True"
             (conditions[?type == 'RuntimeReady']):
-              - status: "True"
+            - status: "True"

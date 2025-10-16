@@ -44,6 +44,7 @@ import (
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 	"github.com/silogen/kaiwo/internal/controller/aim/shared"
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
 const (
@@ -82,7 +83,7 @@ func (r *AIMServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, err
 	}
 
-	logger.Info("Reconciling AIMServiceTemplate", "name", template.Name, "namespace", template.Namespace)
+	baseutils.Debug(logger, "Reconciling AIMServiceTemplate", "name", template.Name, "namespace", template.Namespace)
 
 	// Use framework orchestrator with closures
 	return controllerutils.Reconcile(ctx, controllerutils.ReconcileSpec[*aimv1alpha1.AIMServiceTemplate, aimv1alpha1.AIMServiceTemplateStatus]{
@@ -174,13 +175,13 @@ func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *ai
 		},
 		OnRuntimeConfigResolved: func(resolution *shared.RuntimeConfigResolution) {
 			if resolution.NamespaceConfig == nil && resolution.ClusterConfig == nil && resolution.Name == shared.DefaultRuntimeConfigName {
-				logger.Info("Default AIMRuntimeConfig not found, proceeding without overrides")
+				baseutils.Debug(logger, "Default AIMRuntimeConfig not found, proceeding without overrides")
 				controllerutils.EmitWarningEvent(r.Recorder, template, "DefaultRuntimeConfigNotFound",
 					"Default AIMRuntimeConfig not found, proceeding with controller defaults.")
 				return
 			}
 
-			logger.Info("Resolved AIMRuntimeConfig",
+			baseutils.Debug(logger, "Resolved AIMRuntimeConfig",
 				"name", resolution.Name,
 				"sources", shared.JoinRuntimeConfigSources(resolution, template.Namespace),
 				"imagePullSecrets", len(resolution.EffectiveSpec.ImagePullSecrets))

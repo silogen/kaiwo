@@ -9,9 +9,9 @@ spec:
   steps:
   - name: Ensure template is available
     try:
-      - assert:
-          timeout: 5s
-          file: ../../_shared/template-available.yaml
+    - assert:
+        timeout: 5s
+        file: ../../_shared/template-available.yaml
 
   - name: Create runtime config with broken route template
     try:

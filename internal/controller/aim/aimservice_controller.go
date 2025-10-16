@@ -84,7 +84,7 @@ func (r *AIMServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	logger.Info("Reconciling AIMService", "name", service.Name, "namespace", service.Namespace)
+	baseutils.Debug(logger, "Reconciling AIMService", "name", service.Name, "namespace", service.Namespace)
 
 	return controllerutils.Reconcile(ctx, controllerutils.ReconcileSpec[*aimv1alpha1.AIMService, aimv1alpha1.AIMServiceStatus]{
 		Client:     r.Client,

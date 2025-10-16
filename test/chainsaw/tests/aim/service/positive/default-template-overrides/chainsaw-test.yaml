@@ -23,11 +23,11 @@ spec:
     - script:
         content: kubectl get aimservice default-template-overrides -n $NAMESPACE -o jsonpath='{.status.resolvedTemplate.name}'
         env:
-          - name: NAMESPACE
-            value: ($namespace)
+        - name: NAMESPACE
+          value: ($namespace)
         outputs:
-          - name: template_name
-            value: ($stdout)
+        - name: template_name
+          value: ($stdout)
         check:
           (starts_with($stdout, 'default-testing-llama-3-8b-ovr')): true
     - assert:

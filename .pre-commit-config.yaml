@@ -33,7 +33,7 @@ repos:
   hooks:
   - id: yamlfmt
     args: [--offset, "0", --sequence, "2", --mapping, "2", "--width", "4096", "--preserve-quotes", "--implicit_start", "--preserve_null"]
-    exclude: "(^config/prometheus/.*\\.ya?ml$)|(^docs/mkdocs\\.ya?ml$)|(^config/crd/.*\\.ya?ml$)|(^chart/templates/.*\\.(ya?ml|tpl)$)|(^.*/templates/.*\\.(ya?ml|tpl)$)|(^test/chainsaw/tests/.*\\.ya?ml$)"
+    exclude: "(^config/prometheus/.*\\.ya?ml$)|(^docs/mkdocs\\.ya?ml$)|(^config/crd/.*\\.ya?ml$)|(^chart/templates/.*\\.(ya?ml|tpl)$)|(^.*/templates/.*\\.(ya?ml|tpl)$)"
 
 - repo: https://github.com/psf/black
   rev: 25.1.0

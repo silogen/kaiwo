@@ -47,6 +47,7 @@ import (
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 	"github.com/silogen/kaiwo/internal/controller/aim/shared"
 	aimstate "github.com/silogen/kaiwo/internal/controller/aim/state"
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
 const (
@@ -84,7 +85,7 @@ func (r *AIMClusterServiceTemplateReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{}, err
 	}
 
-	logger.Info("Reconciling AIMClusterServiceTemplate", "name", template.Name)
+	baseutils.Debug(logger, "Reconciling AIMClusterServiceTemplate", "name", template.Name)
 
 	// Use framework orchestrator with closures
 	return controllerutils.Reconcile(ctx, controllerutils.ReconcileSpec[*aimv1alpha1.AIMClusterServiceTemplate, aimv1alpha1.AIMServiceTemplateStatus]{
@@ -167,7 +168,7 @@ func (r *AIMClusterServiceTemplateReconciler) observe(ctx context.Context, templ
 			resolution, err := shared.ResolveRuntimeConfig(ctx, r.Client, operatorNamespace, template.Spec.RuntimeConfigName)
 			if err != nil {
 				if stderrors.Is(err, shared.ErrRuntimeConfigNotFound) {
-					logger.Info("Namespace AIMRuntimeConfig not found for cluster template, proceeding without overrides",
+					baseutils.Debug(logger, "Namespace AIMRuntimeConfig not found for cluster template, proceeding without overrides",
 						"name", template.Spec.RuntimeConfigName,
 						"operatorNamespace", operatorNamespace)
 					return nil, nil
@@ -178,13 +179,13 @@ func (r *AIMClusterServiceTemplateReconciler) observe(ctx context.Context, templ
 		},
 		OnRuntimeConfigResolved: func(resolution *shared.RuntimeConfigResolution) {
 			if resolution.NamespaceConfig == nil && resolution.ClusterConfig == nil && resolution.Name == shared.DefaultRuntimeConfigName {
-				logger.Info("Default AIMRuntimeConfig not found for cluster template, proceeding without overrides")
+				baseutils.Debug(logger, "Default AIMRuntimeConfig not found for cluster template, proceeding without overrides")
 				controllerutils.EmitWarningEvent(r.Recorder, template, "DefaultRuntimeConfigNotFound",
 					"Default AIMRuntimeConfig not found, proceeding with controller defaults.")
 				return
 			}
 
-			logger.Info("Resolved AIMRuntimeConfig",
+			baseutils.Debug(logger, "Resolved AIMRuntimeConfig",
 				"name", resolution.Name,
 				"sources", shared.JoinRuntimeConfigSources(resolution, operatorNamespace),
 				"imagePullSecrets", len(resolution.EffectiveSpec.ImagePullSecrets))

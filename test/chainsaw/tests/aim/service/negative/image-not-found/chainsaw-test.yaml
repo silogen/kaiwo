@@ -9,8 +9,8 @@ spec:
   steps:
   - name: Create prerequisites
     try:
-      - apply:
-          file: cluster-template.yaml
+    - apply:
+        file: cluster-template.yaml
 
   - name: Create AIMService
     try:
@@ -29,8 +29,8 @@ spec:
           status:
             status: Degraded
             (conditions[?type == 'RuntimeReady']):
-              - status: "False"
-                reason: ImageNotFound
+            - status: "False"
+              reason: ImageNotFound
             (conditions[?type == 'Failure']):
-              - status: "True"
-                reason: ImageNotFound
+            - status: "True"
+              reason: ImageNotFound

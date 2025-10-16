@@ -59,11 +59,11 @@ spec:
 
   - name: Verify inference service uses the correct template
     try:
-      - assert:
-          resource:
-            apiVersion: serving.kserve.io/v1beta1
-            kind: InferenceService
-            metadata:
-              name: test-service
-              labels:
-                aim.silogen.ai/template.precision: fp8
+    - assert:
+        resource:
+          apiVersion: serving.kserve.io/v1beta1
+          kind: InferenceService
+          metadata:
+            name: test-service
+            labels:
+              aim.silogen.ai/template.precision: fp8

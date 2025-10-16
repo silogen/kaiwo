@@ -9,9 +9,9 @@ spec:
   steps:
   - name: Ensure template is available
     try:
-      - assert:
-          timeout: 5s
-          file: ../../_shared/template-available.yaml
+    - assert:
+        timeout: 5s
+        file: ../../_shared/template-available.yaml
 
   - name: Create AIMService
     try:
@@ -31,5 +31,5 @@ spec:
           status:
             status: Degraded
             (conditions[?type == 'Failure']):
-              - status: "True"
-                reason: RuntimeConfigMissing
+            - status: "True"
+              reason: RuntimeConfigMissing
