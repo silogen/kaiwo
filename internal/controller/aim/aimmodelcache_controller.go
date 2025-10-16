@@ -28,8 +28,6 @@ import (
 	"context"
 	"fmt"
 
-	inf "gopkg.in/inf.v0"
-
 	"k8s.io/client-go/tools/record"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
@@ -417,13 +415,6 @@ func (r *AIMModelCacheReconciler) buildPVC(mc *aimv1alpha1.AIMModelCache, pvcNam
 			StorageClassName: sc,
 		},
 	}
-}
-
-func MultiplyQuantityByFloatExact(q resource.Quantity, factor float64) resource.Quantity {
-	dec := q.AsDec()
-	factorDec := inf.NewDec(int64(factor*1e6), 6) // represent float as decimal
-	dec.Mul(dec, factorDec)
-	return *resource.NewDecimalQuantity(*dec, q.Format)
 }
 
 func (r *AIMModelCacheReconciler) buildDownloadJob(mc *aimv1alpha1.AIMModelCache, jobName string, pvcName string) *batchv1.Job {
