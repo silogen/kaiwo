@@ -362,7 +362,7 @@ func (r *AIMModelCacheReconciler) buildProgressingCondition(ob observation, sf s
 func (r *AIMModelCacheReconciler) buildFailureCondition(ob observation, sf stateFlags) metav1.Condition {
 	cond := metav1.Condition{Type: aimv1alpha1.ConditionFailure}
 	cond.Status = boolToCondition(sf.failure)
-	cond.Reason = "NoFailure" // Ensure Reason is always non-empty to satisfy schema
+	cond.Reason = aimv1alpha1.NoFailure // Ensure Reason is always non-empty to satisfy schema
 
 	if ob.applyErrorReason != "" {
 		cond.Reason = ob.applyErrorReason

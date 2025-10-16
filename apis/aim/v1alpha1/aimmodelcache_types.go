@@ -137,7 +137,7 @@ const (
 	ReasonWarm = "Warm"
 
 	// Failure
-
+	NoFailure            = "NoFailure"
 	ReasonDownloadFailed = "DownloadFailed"
 )
 
