@@ -443,8 +443,8 @@ func (r *AIMModelCacheReconciler) buildDownloadJob(mc *aimv1alpha1.AIMModelCache
 			}),
 		},
 		Spec: batchv1.JobSpec{
-			BackoffLimit:            baseutils.Pointer(int32(0)),
-			TTLSecondsAfterFinished: baseutils.Pointer(int32(30)), // Cleanup after 30s to allow status observation
+			BackoffLimit:            baseutils.Pointer(int32(2)),
+			TTLSecondsAfterFinished: baseutils.Pointer(int32(60 * 10)), // Cleanup after 10min to allow status observation
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					RestartPolicy: corev1.RestartPolicyNever,
