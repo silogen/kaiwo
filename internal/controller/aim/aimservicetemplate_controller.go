@@ -44,10 +44,10 @@ import (
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 	"github.com/silogen/kaiwo/internal/controller/aim/shared"
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
 const (
-	// namespaceTemplateFinalizerName = "aim.silogen.ai/namespace-template-finalizer"
 	namespaceTemplateFieldOwner            = "aim-namespace-template-controller"
 	namespaceTemplateRuntimeConfigIndexKey = ".spec.runtimeConfigName"
 )
@@ -83,15 +83,14 @@ func (r *AIMServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, err
 	}
 
-	logger.Info("Reconciling AIMServiceTemplate", "name", template.Name, "namespace", template.Namespace)
+	baseutils.Debug(logger, "Reconciling AIMServiceTemplate", "name", template.Name, "namespace", template.Namespace)
 
 	// Use framework orchestrator with closures
 	return controllerutils.Reconcile(ctx, controllerutils.ReconcileSpec[*aimv1alpha1.AIMServiceTemplate, aimv1alpha1.AIMServiceTemplateStatus]{
-		Client:   r.Client,
-		Scheme:   r.Scheme,
-		Object:   &template,
-		Recorder: r.Recorder,
-		// FinalizerName: namespaceTemplateFinalizerName,
+		Client:     r.Client,
+		Scheme:     r.Scheme,
+		Object:     &template,
+		Recorder:   r.Recorder,
 		FieldOwner: namespaceTemplateFieldOwner,
 
 		ObserveFn: func(ctx context.Context) (any, error) {
@@ -164,7 +163,7 @@ func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *ai
 			}
 			return job, nil
 		},
-		LookupImage: func(ctx context.Context) (string, error) {
+		LookupImage: func(ctx context.Context) (*shared.ImageLookupResult, error) {
 			return shared.LookupImageForNamespaceTemplate(ctx, r.Client, template.Namespace, template.Spec.AIMImageName)
 		},
 		ResolveRuntimeConfig: func(ctx context.Context) (*shared.RuntimeConfigResolution, error) {
@@ -176,13 +175,13 @@ func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *ai
 		},
 		OnRuntimeConfigResolved: func(resolution *shared.RuntimeConfigResolution) {
 			if resolution.NamespaceConfig == nil && resolution.ClusterConfig == nil && resolution.Name == shared.DefaultRuntimeConfigName {
-				logger.Info("Default AIMRuntimeConfig not found, proceeding without overrides")
+				baseutils.Debug(logger, "Default AIMRuntimeConfig not found, proceeding without overrides")
 				controllerutils.EmitWarningEvent(r.Recorder, template, "DefaultRuntimeConfigNotFound",
 					"Default AIMRuntimeConfig not found, proceeding with controller defaults.")
 				return
 			}
 
-			logger.Info("Resolved AIMRuntimeConfig",
+			baseutils.Debug(logger, "Resolved AIMRuntimeConfig",
 				"name", resolution.Name,
 				"sources", shared.JoinRuntimeConfigSources(resolution, template.Namespace),
 				"imagePullSecrets", len(resolution.EffectiveSpec.ImagePullSecrets))
@@ -208,15 +207,15 @@ func (r *AIMServiceTemplateReconciler) plan(_ context.Context, template *aimv1al
 		Observation: observation,
 	}, shared.TemplatePlanBuilders{
 		BuildRuntime: func(input shared.TemplatePlanInput) client.Object {
-			return shared.BuildServingRuntime(shared.ServingRuntimeSpec{
-				Name:             template.Name,
-				Namespace:        template.Namespace,
-				ModelID:          template.Spec.AIMImageName,
-				Image:            input.Observation.Image,
-				OwnerRef:         input.OwnerReference,
-				ServiceAccount:   input.RuntimeConfigSpec.ServiceAccountName,
-				ImagePullSecrets: input.Observation.ImagePullSecrets,
-			})
+			state := shared.BuildTemplateStateFromObservation(
+				template.Name,
+				template.Namespace,
+				template.Spec.AIMServiceTemplateSpecCommon,
+				input.Observation,
+				input.RuntimeConfigSpec,
+				template.Status.DeepCopy(),
+			)
+			return shared.BuildServingRuntimeFromState(state, input.OwnerReference)
 		},
 		BuildDiscoveryJob: func(input shared.TemplatePlanInput) client.Object {
 			return shared.BuildDiscoveryJob(shared.DiscoveryJobSpec{

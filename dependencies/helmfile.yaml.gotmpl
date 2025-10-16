@@ -35,6 +35,27 @@ releases:
           create: true
           name: rwx-nfs
 
+  - name: kgateway-crd
+    namespace: kgateway-system
+    chart: oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
+    version: v2.1.0-main
+    createNamespace: true
+    wait: true
+    timeout: 600
+
+  - name: kgateway
+    namespace: kgateway-system
+    chart: oci://cr.kgateway.dev/kgateway-dev/charts/kgateway
+    version: v2.1.0-main
+    createNamespace: false
+    wait: true
+    timeout: 600
+    needs:
+      - kgateway-system/kgateway-crd
+    values:
+      - agentgateway:
+          enabled: true
+
   - name: kserve-crd
     namespace: kserve-system
     chart: oci://ghcr.io/kserve/charts/kserve-crd
@@ -58,7 +79,6 @@ releases:
             deploymentMode: RawDeployment
             gateway:
               ingressGateway:
-                enableGatewayApi: true
-                kserveGateway: aim-system/kserve-ingress-gateway
+                enableGatewayApi: false
           localmodel:
             enabled: false

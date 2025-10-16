@@ -1,0 +1,49 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: routing-template-runtime-config
+spec:
+  description: Service picks up HTTP route prefix from runtime config template
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Ensure template is available
+    try:
+    - assert:
+        timeout: 5s
+        file: ../../_shared/template-available.yaml
+
+  - name: Create runtime config with namespace route template
+    try:
+    - apply:
+        file: runtime-config.yaml
+
+  - name: Create AIMService
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service status exposes rendered route
+    try:
+    - assert:
+        timeout: 60s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-service
+          status:
+            (conditions[?type == 'Resolved']):
+            - status: "True"
+            (routing.path == join('', ['/', $namespace, '/data-team/default-testing-llama-3-8b'])): true
+
+  - name: Verify HTTPRoute uses rendered prefix
+    try:
+    - assert:
+        resource:
+          apiVersion: gateway.networking.k8s.io/v1
+          kind: HTTPRoute
+          metadata:
+            name: test-service
+          spec:
+            (rules[0].matches[0].path.value == join('', ['/', $namespace, '/data-team/default-testing-llama-3-8b'])): true

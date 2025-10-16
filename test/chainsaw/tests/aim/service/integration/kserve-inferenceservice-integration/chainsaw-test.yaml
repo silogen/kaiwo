@@ -1,0 +1,67 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: kserve-inferenceservice-integration
+spec:
+  description: Test full InferenceService creation and readiness
+  timeouts:
+    assert: 120s
+  steps:
+
+  - name: Ensure template is available
+    try:
+    - assert:
+        timeout: 5s
+        file: ../../_shared/template-available.yaml
+
+  - name: Create AIMService
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify AIMService reports RuntimeReady
+    try:
+    - assert:
+        timeout: 3m
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-service
+          status:
+            status: Running
+            (conditions[?type == 'RuntimeReady']):
+            - status: "True"
+              reason: RuntimeReady
+
+  - name: Verify InferenceService becomes Ready
+    try:
+    - assert:
+        resource:
+          apiVersion: serving.kserve.io/v1beta1
+          kind: InferenceService
+          metadata:
+            name: test-service
+          status:
+            (conditions[?type == 'Ready']):
+            - status: "True"
+
+  - name: Verify HTTPRoute is created and ready
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: gateway.networking.k8s.io/v1
+          kind: HTTPRoute
+          metadata:
+            name: test-service
+            (ownerReferences[?kind == 'AIMService']):
+            - name: test-service
+          (status.parents[0].conditions[?type == 'Accepted']):
+          - status: "True"
+
+  - name: Test HTTP endpoint through gateway
+    try:
+    - script:
+        timeout: 60s
+        content: bash script.sh

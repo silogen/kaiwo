@@ -1,0 +1,11 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-service
+spec:
+  aimImageName: default-testing-llama-3-8b
+  routing:
+    enabled: true
+    gatewayRef:
+      name: non-existent-gateway
+      namespace: non-existent-namespace

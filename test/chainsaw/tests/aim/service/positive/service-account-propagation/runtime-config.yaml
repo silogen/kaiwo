@@ -1,0 +1,6 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMRuntimeConfig
+metadata:
+  name: sa-config
+spec:
+  serviceAccountName: custom-sa

@@ -73,8 +73,10 @@ import (
 	// +kubebuilder:scaffold:imports
 
 	servingv1alpha1 "github.com/kserve/kserve/pkg/apis/serving/v1alpha1"
+	servingv1beta1 "github.com/kserve/kserve/pkg/apis/serving/v1beta1"
 	appwrapperv1beta2 "github.com/project-codeflare/appwrapper/api/v1beta2"
 	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	kueuev1alpha1 "sigs.k8s.io/kueue/apis/kueue/v1alpha1"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
@@ -104,6 +106,8 @@ func init() {
 	utilruntime.Must(rayv1.AddToScheme(scheme))
 	utilruntime.Must(appwrapperv1beta2.AddToScheme(scheme))
 	utilruntime.Must(servingv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(servingv1beta1.AddToScheme(scheme))
+	utilruntime.Must(gatewayapiv1.Install(scheme))
 }
 
 func setupFormattedLogOutput() logr.Logger {

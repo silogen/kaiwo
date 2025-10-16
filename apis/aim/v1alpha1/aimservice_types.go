@@ -25,6 +25,7 @@ package v1alpha1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 // AIMServiceOverrides allows overriding template parameters at the service level.
@@ -49,7 +50,7 @@ type AIMServiceSpec struct {
 
 	// TemplateRef is the name of the AIMServiceTemplate or AIMClusterServiceTemplate to use.
 	// The template selects the runtime profile and GPU parameters.
-	TemplateRef string `json:"templateRef"`
+	TemplateRef string `json:"templateRef,omitempty"`
 
 	// CacheModel requests that model sources be cached when starting the service
 	// if the template itself does not warm the cache.
@@ -67,6 +68,11 @@ type AIMServiceSpec struct {
 	// +kubebuilder:default=default
 	RuntimeConfigName string `json:"runtimeConfigName,omitempty"`
 
+	// Resources overrides the container resource requirements for this service.
+	// When specified, these values take precedence over the template and image defaults.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
 	// Overrides allows overriding specific template parameters for this service.
 	// When specified, these values take precedence over the template values.
 	// +optional
@@ -82,6 +88,10 @@ type AIMServiceSpec struct {
 	// ImagePullSecrets references secrets for pulling AIM container images.
 	// +optional
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
+	// Routing enables HTTP routing through Gateway API for this service.
+	// +optional
+	Routing *AIMServiceRouting `json:"routing,omitempty"`
 }
 
 // AIMServiceStatus defines the observed state of AIMService.
@@ -94,13 +104,25 @@ type AIMServiceStatus struct {
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// EffectiveRuntimeConfig surfaces the runtime configuration applied to this service.
-	EffectiveRuntimeConfig *AIMEffectiveRuntimeConfig `json:"effectiveRuntimeConfig,omitempty"`
+	// ResolvedRuntimeConfig captures metadata about the runtime config that was resolved.
+	// +optional
+	ResolvedRuntimeConfig *AIMResolvedRuntimeConfig `json:"resolvedRuntimeConfig,omitempty"`
+
+	// ResolvedImage captures metadata about the image that was resolved.
+	// +optional
+	ResolvedImage *AIMResolvedReference `json:"resolvedImage,omitempty"`
 
 	// Status represents the current high‑level status of the service lifecycle.
 	// Values: `Pending`, `Starting`, `Running`, `Failed`, `Degraded`.
 	// +kubebuilder:default=Pending
 	Status AIMServiceStatusEnum `json:"status,omitempty"`
+
+	// Routing surfaces information about the configured HTTP routing, when enabled.
+	// +optional
+	Routing *AIMServiceRoutingStatus `json:"routing,omitempty"`
+
+	// ResolvedTemplate captures metadata about the template that satisfied the reference.
+	ResolvedTemplate *AIMServiceResolvedTemplate `json:"resolvedTemplate,omitempty"`
 }
 
 // AIMServiceStatusEnum defines coarse-grained states for a service.
@@ -163,25 +185,27 @@ const (
 	AIMServiceReasonCacheFailed     = "CacheFailed"
 
 	// Runtime
-	AIMServiceReasonCreatingRuntime = "CreatingRuntime"
-	AIMServiceReasonRuntimeReady    = "RuntimeReady"
-	AIMServiceReasonRuntimeFailed   = "RuntimeFailed"
+	AIMServiceReasonCreatingRuntime      = "CreatingRuntime"
+	AIMServiceReasonRuntimeReady         = "RuntimeReady"
+	AIMServiceReasonRuntimeFailed        = "RuntimeFailed"
+	AIMServiceReasonRuntimeConfigMissing = "RuntimeConfigMissing"
 
 	// Routing
-	AIMServiceReasonConfiguringRoute = "ConfiguringRoute"
-	AIMServiceReasonRouteReady       = "RouteReady"
-	AIMServiceReasonRouteFailed      = "RouteFailed"
+	AIMServiceReasonConfiguringRoute     = "ConfiguringRoute"
+	AIMServiceReasonRouteReady           = "RouteReady"
+	AIMServiceReasonRouteFailed          = "RouteFailed"
+	AIMServiceReasonRouteTemplateInvalid = "RouteTemplateInvalid"
 )
 
+// AIMService manages a KServe-based AIM inference service for the selected model and template.
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=aimsvc,categories=aim;all
-// +kubebuilder:printcolumn:name="Model",type=string,JSONPath=`.spec.model`
-// +kubebuilder:printcolumn:name="Template",type=string,JSONPath=`.spec.templateRef`
-// +kubebuilder:printcolumn:name="Replicas",type=integer,JSONPath=`.spec.replicas`
 // +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.status`
+// +kubebuilder:printcolumn:name="Image",type=string,JSONPath=`.spec.aimImageName`
+// +kubebuilder:printcolumn:name="Template",type=string,JSONPath=`.status.resolvedTemplateRef`
+// +kubebuilder:printcolumn:name="Replicas",type=integer,JSONPath=`.spec.replicas`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
-// AIMService manages a KServe-based AIM inference service for the selected model and template.
 type AIMService struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -196,6 +220,40 @@ type AIMServiceList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []AIMService `json:"items"`
+}
+
+// AIMServiceRouting configures optional HTTP routing for the service.
+type AIMServiceRouting struct {
+	// Enabled toggles HTTP routing management.
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled,omitempty"`
+
+	// GatewayRef identifies the Gateway parent that should receive the HTTPRoute.
+	// When omitted while routing is enabled, reconciliation will report a failure.
+	// +optional
+	GatewayRef *gatewayapiv1.ParentReference `json:"gatewayRef,omitempty"`
+
+	// Annotations to add to the HTTPRoute resource.
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
+
+	// RouteTemplate overrides the HTTP path template used for routing.
+	// The value is rendered against the AIMService object using JSONPath expressions.
+	// +optional
+	RouteTemplate string `json:"routeTemplate,omitempty"`
+}
+
+// AIMServiceRoutingStatus captures observed routing details.
+type AIMServiceRoutingStatus struct {
+	// Path is the HTTP path prefix used when routing is enabled.
+	// Example: `/tenant/svc-uuid`.
+	// +optional
+	Path string `json:"path,omitempty"`
+}
+
+// GetStatus returns a pointer to the AIMService status.
+func (svc *AIMService) GetStatus() *AIMServiceStatus {
+	return &svc.Status
 }
 
 func init() {

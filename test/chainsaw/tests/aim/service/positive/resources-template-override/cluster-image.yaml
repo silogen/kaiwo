@@ -1,0 +1,16 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterImage
+metadata:
+  name: template-override-image
+spec:
+  image: ghcr.io/silogen/aim:0.4.0-meta-llama-llama-3.1-8b-instruct-v20251006
+  defaultServiceTemplate: template-override-template
+  resources:
+    limits:
+      cpu: '4'
+      memory: 24Gi
+      amd.com/gpu: '1'
+    requests:
+      cpu: '2'
+      memory: 12Gi
+      amd.com/gpu: '1'

@@ -37,6 +37,13 @@ spec:
   image: ghcr.io/example/llama-3.1-8b-instruct:v1.2.0
   defaultServiceTemplate: llama-3-8b-latency
   runtimeConfigName: platform-default
+  resources:
+    limits:
+      cpu: "8"
+      memory: 64Gi
+    requests:
+      cpu: "4"
+      memory: 32Gi
 ```
 
 Namespace-scoped images follow the same structure but include a namespace and allow teams to override cluster defaults:
@@ -51,11 +58,24 @@ spec:
   image: ghcr.io/ml-team/llama-3.1-8b-instruct:dev-latest
   defaultServiceTemplate: llama-3-8b-experimental
   runtimeConfigName: ml-team
+  resources:
+    limits:
+      cpu: "8"
+      memory: 48Gi
+    requests:
+      cpu: "4"
+      memory: 24Gi
 ```
 
 ### Behind the Scenes
 
-When templates or services reference a model ID, the operator looks up the corresponding image from the catalog. For namespace-scoped lookups, the operator checks for an `AIMImage` in the same namespace first, then falls back to cluster-scoped `AIMClusterImage` resources. This lookup determines which container image to use for discovery jobs and runtime deployments.
+When templates or services reference a model ID, the operator looks up the corresponding image from the catalog. For namespace-scoped lookups, the operator checks for an `AIMImage` in the same namespace first, then falls back to cluster-scoped `AIMClusterImage` resources. The resolved image contributes both the container reference and its default `resources`. During reconciliation the controller merges resources in this order:
+
+1. `AIMService.spec.resources` (service-level override).
+2. `AIMServiceTemplate.spec.resources` (template default).
+3. `AIMImage.spec.resources` (catalog default).
+
+If GPU quantities are still unset after the merge, the controller copies them from discovery metadata recorded on the template.
 
 ## Service Templates
 
@@ -165,3 +185,27 @@ Template status tracks the discovery lifecycle and provides information about di
 The `status` field provides a quick overview of template readiness. Templates start in `Pending` state when created, transition to `Progressing` while discovery runs, reach `Available` once discovery succeeds, or move to `Failed` if discovery encounters errors. Services should wait for templates to reach `Available` status before deploying.
 
 The `modelSources` array is the primary output of the discovery cache. Each entry includes the model name, download source URI (often a Hugging Face Hub reference), and expected size in bytes. Services and caching mechanisms reference this array to determine what to download and where to find it.
+
+## Service routing templates
+
+When `spec.routing.enabled` is true on an `AIMService`, the operator creates an HTTPRoute that forwards traffic through Gateway API. The HTTP path prefix is computed in three steps:
+
+1. Use `spec.routing.routeTemplate` on the service if present.
+2. Otherwise fall back to the resolved runtime config’s `spec.routing.routeTemplate`.
+3. If neither is set, default to `/<namespace>/<service-uid>`.
+
+Route templates accept JSONPath fragments wrapped in `{…}` and are rendered against the full `AIMService` object. Every segment is lowercased, RFC 3986 encoded, and de-duplicated; the trailing slash is trimmed and the final string must stay under 200 characters. Invalid expressions, missing data, or a path that exceeds the limit degrade the service with reason `RouteTemplateInvalid`, and the controller skips HTTPRoute creation while leaving the ServingRuntime intact.
+
+Example override on the service:
+
+```yaml
+spec:
+  routing:
+    enabled: true
+    gatewayRef:
+      name: inference-gateway
+      namespace: gateways
+    routeTemplate: "/{.metadata.namespace}/{.metadata.labels['team']}/{.spec.model}/"
+```
+
+Namespace administrators can define the same `routeTemplate` field inside runtime configs to establish tenant-wide defaults, while individual services can provide more specific overrides when necessary. See [AIMService routing](./service.md#routing-templates) for the full behaviour.

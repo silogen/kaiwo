@@ -26,16 +26,19 @@ spec:
     - jsonPath: .spec.modelId
       name: Model
       type: string
-    - jsonPath: .spec.metric
+    - jsonPath: .status.profile.metadata.engine
+      name: Engine
+      type: string
+    - jsonPath: .status.profile.metadata.metric
       name: Metric
       type: string
-    - jsonPath: .spec.precision
+    - jsonPath: .status.profile.metadata.precision
       name: Precision
       type: string
-    - jsonPath: .spec.gpuSelector.count
+    - jsonPath: .status.profile.metadata.gpu_count
       name: GPUs/replica
       type: integer
-    - jsonPath: .spec.gpuSelector.model
+    - jsonPath: .status.profile.metadata.gpu
       name: GPU
       type: string
     name: v1alpha1
@@ -356,6 +359,9 @@ spec:
                 - count
                 - model
                 type: object
+                x-kubernetes-validations:
+                - message: gpuSelector is immutable
+                  rule: self == oldSelf
               imagePullSecrets:
                 description: ImagePullSecrets references secrets for pulling AIM container
                   images.
@@ -390,6 +396,9 @@ spec:
                   - `latency`: prioritize low end‑to‑end latency
                   - `throughput`: prioritize sustained requests/second
                 type: string
+                x-kubernetes-validations:
+                - message: metric is immutable
+                  rule: self == oldSelf
               precision:
                 allOf:
                 - enum:
@@ -408,6 +417,70 @@ spec:
                   - int8
                 description: Precision selects the numeric precision used by the runtime.
                 type: string
+                x-kubernetes-validations:
+                - message: precision is immutable
+                  rule: self == oldSelf
+              resources:
+                description: |-
+                  Resources defines the default container resource requirements applied to services derived from this template.
+                  Service-specific values override the template defaults.
+                properties:
+                  claims:
+                    description: |-
+                      Claims lists the names of resources, defined in spec.resourceClaims,
+                      that are used by this container.
+
+                      This is an alpha field and requires enabling the
+                      DynamicResourceAllocation feature gate.
+
+                      This field is immutable. It can only be set for containers.
+                    items:
+                      description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                      properties:
+                        name:
+                          description: |-
+                            Name must match the name of one entry in pod.spec.resourceClaims of
+                            the Pod where this field is used. It makes that resource available
+                            inside a container.
+                          type: string
+                        request:
+                          description: |-
+                            Request is the name chosen for a request in the referenced claim.
+                            If empty, everything from the claim is made available, otherwise
+                            only the result of this request.
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  limits:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Limits describes the maximum amount of compute resources allowed.
+                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                    type: object
+                  requests:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Requests describes the minimum amount of compute resources required.
+                      If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                      otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                    type: object
+                type: object
               runtimeConfigName:
                 default: default
                 description: RuntimeConfigName references the AIM runtime configuration
@@ -480,57 +553,6 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
-              effectiveRuntimeConfig:
-                description: EffectiveRuntimeConfig surfaces the merged runtime configuration
-                  applied to this template.
-                properties:
-                  clusterRef:
-                    description: ClusterRef points at the cluster-scoped runtime config,
-                      if present.
-                    properties:
-                      kind:
-                        description: Kind is either "AIMRuntimeConfig" or "AIMClusterRuntimeConfig".
-                        type: string
-                      name:
-                        description: Name is the metadata.name of the runtime config.
-                        type: string
-                      namespace:
-                        description: Namespace is only set for namespace-scoped runtime
-                          configs.
-                        type: string
-                      uid:
-                        description: UID is included to detect stale references.
-                        type: string
-                    required:
-                    - kind
-                    - name
-                    type: object
-                  hash:
-                    description: Hash is a stable hash of the merged configuration
-                      used for change detection.
-                    type: string
-                  namespaceRef:
-                    description: NamespaceRef points at the namespace-scoped runtime
-                      config, if present.
-                    properties:
-                      kind:
-                        description: Kind is either "AIMRuntimeConfig" or "AIMClusterRuntimeConfig".
-                        type: string
-                      name:
-                        description: Name is the metadata.name of the runtime config.
-                        type: string
-                      namespace:
-                        description: Namespace is only set for namespace-scoped runtime
-                          configs.
-                        type: string
-                      uid:
-                        description: UID is included to detect stale references.
-                        type: string
-                    required:
-                    - kind
-                    - name
-                    type: object
-                type: object
               modelSources:
                 description: |-
                   ModelSources list the models that this template requires to run. These are the models that will be
@@ -565,7 +587,96 @@ spec:
                 description: |-
                   Profile contains the full discovery result profile as a free-form JSON object.
                   This includes metadata, engine args, environment variables, and model details.
-                x-kubernetes-preserve-unknown-fields: true
+                properties:
+                  engine_args:
+                    x-kubernetes-preserve-unknown-fields: true
+                  env_vars:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  metadata:
+                    properties:
+                      engine:
+                        type: string
+                      gpu:
+                        type: string
+                      gpu_count:
+                        format: int32
+                        type: integer
+                      metric:
+                        description: AIMMetric enumerates the targeted service characteristic
+                        enum:
+                        - latency
+                        - throughput
+                        type: string
+                      precision:
+                        description: AIMPrecision enumerates supported numeric precisions
+                        enum:
+                        - bf16
+                        - fp16
+                        - fp8
+                        - int8
+                        type: string
+                    type: object
+                type: object
+              resolvedImage:
+                description: ResolvedImage captures metadata about the image that
+                  was resolved.
+                properties:
+                  kind:
+                    description: Kind is the fully-qualified kind of the resolved
+                      reference, when known.
+                    type: string
+                  name:
+                    description: Name is the resource name that satisfied the reference.
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace identifies where the resource was found when namespace-scoped.
+                      Empty indicates a cluster-scoped resource.
+                    type: string
+                  scope:
+                    description: Scope indicates whether the resolved resource was
+                      namespace or cluster scoped.
+                    enum:
+                    - Namespace
+                    - Cluster
+                    - Unknown
+                    type: string
+                  uid:
+                    description: UID captures the unique identifier of the resolved
+                      reference, when known.
+                    type: string
+                type: object
+              resolvedRuntimeConfig:
+                description: ResolvedRuntimeConfig captures metadata about the runtime
+                  config that was resolved.
+                properties:
+                  kind:
+                    description: Kind is the fully-qualified kind of the resolved
+                      reference, when known.
+                    type: string
+                  name:
+                    description: Name is the resource name that satisfied the reference.
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace identifies where the resource was found when namespace-scoped.
+                      Empty indicates a cluster-scoped resource.
+                    type: string
+                  scope:
+                    description: Scope indicates whether the resolved resource was
+                      namespace or cluster scoped.
+                    enum:
+                    - Namespace
+                    - Cluster
+                    - Unknown
+                    type: string
+                  uid:
+                    description: UID captures the unique identifier of the resolved
+                      reference, when known.
+                    type: string
+                type: object
               status:
                 default: Pending
                 description: |-
@@ -575,6 +686,7 @@ spec:
                 - Pending
                 - Progressing
                 - Available
+                - Degraded
                 - Failed
                 type: string
             type: object

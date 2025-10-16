@@ -26,6 +26,7 @@ package aim
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
@@ -45,10 +46,11 @@ import (
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 	"github.com/silogen/kaiwo/internal/controller/aim/shared"
+	aimstate "github.com/silogen/kaiwo/internal/controller/aim/state"
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
 const (
-	// clusterTemplateFinalizerName = "aim.silogen.ai/cluster-template-finalizer"
 	clusterTemplateFieldOwner            = "aim-cluster-template-controller"
 	clusterTemplateRuntimeConfigIndexKey = ".spec.runtimeConfigName"
 )
@@ -83,15 +85,14 @@ func (r *AIMClusterServiceTemplateReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{}, err
 	}
 
-	logger.Info("Reconciling AIMClusterServiceTemplate", "name", template.Name)
+	baseutils.Debug(logger, "Reconciling AIMClusterServiceTemplate", "name", template.Name)
 
 	// Use framework orchestrator with closures
 	return controllerutils.Reconcile(ctx, controllerutils.ReconcileSpec[*aimv1alpha1.AIMClusterServiceTemplate, aimv1alpha1.AIMServiceTemplateStatus]{
-		Client:   r.Client,
-		Scheme:   r.Scheme,
-		Object:   &template,
-		Recorder: r.Recorder,
-		// FinalizerName: clusterTemplateFinalizerName,
+		Client:     r.Client,
+		Scheme:     r.Scheme,
+		Object:     &template,
+		Recorder:   r.Recorder,
 		FieldOwner: clusterTemplateFieldOwner,
 
 		ObserveFn: func(ctx context.Context) (any, error) {
@@ -160,25 +161,31 @@ func (r *AIMClusterServiceTemplateReconciler) observe(ctx context.Context, templ
 			}
 			return job, nil
 		},
-		LookupImage: func(ctx context.Context) (string, error) {
+		LookupImage: func(ctx context.Context) (*shared.ImageLookupResult, error) {
 			return shared.LookupImageForClusterTemplate(ctx, r.Client, template.Spec.AIMImageName)
 		},
 		ResolveRuntimeConfig: func(ctx context.Context) (*shared.RuntimeConfigResolution, error) {
 			resolution, err := shared.ResolveRuntimeConfig(ctx, r.Client, operatorNamespace, template.Spec.RuntimeConfigName)
 			if err != nil {
+				if stderrors.Is(err, shared.ErrRuntimeConfigNotFound) {
+					baseutils.Debug(logger, "Namespaced AIMRuntimeConfig not found for cluster template, proceeding without overrides",
+						"name", template.Spec.RuntimeConfigName,
+						"operatorNamespace", operatorNamespace)
+					return nil, nil
+				}
 				return nil, fmt.Errorf("failed to resolve AIMRuntimeConfig %q: %w", template.Spec.RuntimeConfigName, err)
 			}
 			return resolution, nil
 		},
 		OnRuntimeConfigResolved: func(resolution *shared.RuntimeConfigResolution) {
 			if resolution.NamespaceConfig == nil && resolution.ClusterConfig == nil && resolution.Name == shared.DefaultRuntimeConfigName {
-				logger.Info("Default AIMRuntimeConfig not found for cluster template, proceeding without overrides")
+				baseutils.Debug(logger, "Default AIMRuntimeConfig not found for cluster template, proceeding without overrides")
 				controllerutils.EmitWarningEvent(r.Recorder, template, "DefaultRuntimeConfigNotFound",
 					"Default AIMRuntimeConfig not found, proceeding with controller defaults.")
 				return
 			}
 
-			logger.Info("Resolved AIMRuntimeConfig",
+			baseutils.Debug(logger, "Resolved AIMRuntimeConfig",
 				"name", resolution.Name,
 				"sources", shared.JoinRuntimeConfigSources(resolution, operatorNamespace),
 				"imagePullSecrets", len(resolution.EffectiveSpec.ImagePullSecrets))
@@ -206,15 +213,19 @@ func (r *AIMClusterServiceTemplateReconciler) plan(_ context.Context, template *
 		Observation: observation,
 	}, shared.TemplatePlanBuilders{
 		BuildRuntime: func(input shared.TemplatePlanInput) client.Object {
-			return shared.BuildClusterServingRuntime(shared.ClusterServingRuntimeSpec{
-				Name:             template.Name,
-				ModelID:          template.Spec.AIMImageName,
-				Image:            input.Observation.Image,
-				Metric:           template.Spec.Metric,
-				OwnerRef:         input.OwnerReference,
-				ServiceAccount:   input.RuntimeConfigSpec.ServiceAccountName,
-				ImagePullSecrets: input.Observation.ImagePullSecrets,
-			})
+			base := aimstate.TemplateState{
+				Name:              template.Name,
+				Namespace:         "",
+				SpecCommon:        template.Spec.AIMServiceTemplateSpecCommon,
+				RuntimeConfigSpec: input.RuntimeConfigSpec,
+				Status:            template.Status.DeepCopy(),
+			}
+			if input.Observation != nil {
+				base.Image = input.Observation.Image
+				base.ImagePullSecrets = input.Observation.ImagePullSecrets
+			}
+			templateState := aimstate.NewTemplateState(base)
+			return shared.BuildClusterServingRuntime(templateState, input.OwnerReference)
 		},
 		BuildDiscoveryJob: func(input shared.TemplatePlanInput) client.Object {
 			return shared.BuildDiscoveryJob(shared.DiscoveryJobSpec{

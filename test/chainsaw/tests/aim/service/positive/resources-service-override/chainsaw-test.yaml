@@ -1,0 +1,54 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: resources-service-override
+spec:
+  description: Service-level resources override both template and image defaults
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create prerequisites
+    try:
+    - apply:
+        file: cluster-image.yaml
+    - apply:
+        file: cluster-template.yaml
+
+  - name: Wait for template to become Available
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: service-override-template
+          status:
+            status: Available
+
+  - name: Create AIMService
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service resources applied to InferenceService
+    try:
+    - assert:
+        timeout: 2m
+        resource:
+          apiVersion: serving.kserve.io/v1beta1
+          kind: InferenceService
+          metadata:
+            name: service-override-service
+          spec:
+            predictor:
+              model:
+                resources:
+                  requests:
+                    amd.com/gpu: "2"
+                    cpu: "7"
+                    memory: 56Gi
+                  limits:
+                    amd.com/gpu: "2"
+                    cpu: "9"
+                    memory: 72Gi

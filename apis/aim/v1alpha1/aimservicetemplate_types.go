@@ -64,15 +64,18 @@ type AIMRuntimeParameters struct {
 	//
 	// +optional
 	// +kubebuilder:validation:Enum=latency;throughput
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="metric is immutable"
 	Metric *AIMMetric `json:"metric,omitempty"`
 
 	// Precision selects the numeric precision used by the runtime.
 	// +optional
 	// +kubebuilder:validation:Enum=auto;fp4;fp8;fp16;fp32;bf16;int4;int8
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="precision is immutable"
 	Precision *AIMPrecision `json:"precision,omitempty"`
 
 	// AimGpuSelector contains the strategy to choose the resources to give each replica
 	// +optional
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="gpuSelector is immutable"
 	GpuSelector *AimGpuSelector `json:"gpuSelector,omitempty"`
 }
 
@@ -92,6 +95,11 @@ type AIMServiceTemplateSpecCommon struct {
 	// RuntimeConfigName references the AIM runtime configuration (by name) to use for this template.
 	// +kubebuilder:default=default
 	RuntimeConfigName string `json:"runtimeConfigName,omitempty"`
+
+	// Resources defines the default container resource requirements applied to services derived from this template.
+	// Service-specific values override the template defaults.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 // AIMTemplateCachingConfig configures model caching behavior for namespace-scoped templates.
@@ -174,8 +182,13 @@ type AIMServiceTemplateStatus struct {
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// EffectiveRuntimeConfig surfaces the merged runtime configuration applied to this template.
-	EffectiveRuntimeConfig *AIMEffectiveRuntimeConfig `json:"effectiveRuntimeConfig,omitempty"`
+	// ResolvedRuntimeConfig captures metadata about the runtime config that was resolved.
+	// +optional
+	ResolvedRuntimeConfig *AIMResolvedRuntimeConfig `json:"resolvedRuntimeConfig,omitempty"`
+
+	// ResolvedImage captures metadata about the image that was resolved.
+	// +optional
+	ResolvedImage *AIMResolvedReference `json:"resolvedImage,omitempty"`
 
 	// Status represents the current high‑level status of the template lifecycle.
 	// Values: `Pending`, `Progressing`, `Available`, `Failed`.
@@ -188,10 +201,25 @@ type AIMServiceTemplateStatus struct {
 
 	// Profile contains the full discovery result profile as a free-form JSON object.
 	// This includes metadata, engine args, environment variables, and model details.
-	// +optional
+	Profile AIMProfile `json:"profile,omitempty"`
+}
+
+type AIMProfile struct {
 	// +kubebuilder:pruning:PreserveUnknownFields
 	// +kubebuilder:validation:Schemaless
-	Profile *apiextensionsv1.JSON `json:"profile,omitempty"`
+	EngineArgs *apiextensionsv1.JSON `json:"engine_args,omitempty"`
+
+	EnvVars map[string]string `json:"env_vars,omitempty"`
+
+	Metadata AIMProfileMetadata `json:"metadata,omitempty"`
+}
+
+type AIMProfileMetadata struct {
+	Engine    string       `json:"engine,omitempty"`
+	GPU       string       `json:"gpu,omitempty"`
+	GPUCount  int32        `json:"gpu_count,omitempty"`
+	Metric    AIMMetric    `json:"metric,omitempty"`
+	Precision AIMPrecision `json:"precision,omitempty"`
 }
 
 type AIMModelSource struct {
@@ -207,7 +235,7 @@ type AIMModelSource struct {
 }
 
 // AIMTemplateStatusEnum defines coarse-grained states for a template.
-// +kubebuilder:validation:Enum=Pending;Progressing;Available;Failed
+// +kubebuilder:validation:Enum=Pending;Progressing;Available;Degraded;Failed
 type AIMTemplateStatusEnum string
 
 const (
@@ -256,10 +284,12 @@ const (
 // +kubebuilder:resource:shortName=aimst,categories=aim;all
 // +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.status`
 // +kubebuilder:printcolumn:name="Model",type=string,JSONPath=`.spec.modelId`
-// +kubebuilder:printcolumn:name="Metric",type=string,JSONPath=`.spec.metric`
-// +kubebuilder:printcolumn:name="Precision",type=string,JSONPath=`.spec.precision`
-// +kubebuilder:printcolumn:name="GPUs/replica",type=integer,JSONPath=`.spec.gpuSelector.count`
-// +kubebuilder:printcolumn:name="GPU",type=string,JSONPath=`.spec.gpuSelector.model`
+// +kubebuilder:printcolumn:name="Engine",type=string,JSONPath=`.status.profile.metadata.engine`
+// +kubebuilder:printcolumn:name="Metric",type=string,JSONPath=`.status.profile.metadata.metric`
+// +kubebuilder:printcolumn:name="Precision",type=string,JSONPath=`.status.profile.metadata.precision`
+// +kubebuilder:printcolumn:name="GPUs/replica",type=integer,JSONPath=`.status.profile.metadata.gpu_count`
+// +kubebuilder:printcolumn:name="GPU",type=string,JSONPath=`.status.profile.metadata.gpu`
+
 type AIMServiceTemplate struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -279,11 +309,11 @@ type AIMServiceTemplateList struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster,shortName=aimclst,categories=aim;all
 // +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.status`
-// +kubebuilder:printcolumn:name="Model",type=string,JSONPath=`.spec.modelId`
-// +kubebuilder:printcolumn:name="Metric",type=string,JSONPath=`.spec.metric`
-// +kubebuilder:printcolumn:name="Precision",type=string,JSONPath=`.spec.precision`
-// +kubebuilder:printcolumn:name="GPUs/replica",type=integer,JSONPath=`.spec.gpuSelector.count`
-// +kubebuilder:printcolumn:name="GPU",type=string,JSONPath=`.spec.gpuSelector.model`
+// +kubebuilder:printcolumn:name="Engine",type=string,JSONPath=`.status.profile.metadata.engine`
+// +kubebuilder:printcolumn:name="Metric",type=string,JSONPath=`.status.profile.metadata.metric`
+// +kubebuilder:printcolumn:name="Precision",type=string,JSONPath=`.status.profile.metadata.precision`
+// +kubebuilder:printcolumn:name="GPUs/replica",type=integer,JSONPath=`.status.profile.metadata.gpu_count`
+// +kubebuilder:printcolumn:name="GPU",type=string,JSONPath=`.status.profile.metadata.gpu`
 type AIMClusterServiceTemplate struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

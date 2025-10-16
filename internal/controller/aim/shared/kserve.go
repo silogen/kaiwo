@@ -29,14 +29,29 @@ import (
 	"regexp"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/api/resource"
+
 	servingv1alpha1 "github.com/kserve/kserve/pkg/apis/serving/v1alpha1"
+	servingv1beta1 "github.com/kserve/kserve/pkg/apis/serving/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/silogen/kaiwo/internal/controller/aim/helpers"
+	aimstate "github.com/silogen/kaiwo/internal/controller/aim/state"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
+)
 
-	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
+const (
+	// amdGPUResourceName is the resource name for AMD GPUs in Kubernetes
+	amdGPUResourceName corev1.ResourceName = "amd.com/gpu"
+
+	// DefaultSharedMemorySize is the default size allocated for /dev/shm in inference containers.
+	// This is required for efficient inter-process communication in model serving workloads.
+	DefaultSharedMemorySize = "8Gi"
+
+	// KubernetesLabelValueMaxLength is the maximum length for a Kubernetes label value
+	KubernetesLabelValueMaxLength = 63
 )
 
 var labelValueRegex = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
@@ -55,9 +70,9 @@ func sanitizeLabelValue(s string) string {
 	sanitized = strings.TrimLeft(sanitized, "_.-")
 	sanitized = strings.TrimRight(sanitized, "_.-")
 
-	// Truncate to 63 characters
-	if len(sanitized) > 63 {
-		sanitized = sanitized[:63]
+	// Truncate to maximum label value length
+	if len(sanitized) > KubernetesLabelValueMaxLength {
+		sanitized = sanitized[:KubernetesLabelValueMaxLength]
 		// Trim trailing non-alphanumeric after truncation
 		sanitized = strings.TrimRight(sanitized, "_.-")
 	}
@@ -70,103 +85,161 @@ func sanitizeLabelValue(s string) string {
 	return sanitized
 }
 
-// ClusterServingRuntimeSpec defines parameters for creating a ClusterServingRuntime
-type ClusterServingRuntimeSpec struct {
-	Name             string
-	ModelID          string
-	Image            string
-	Metric           *aimv1alpha1.AIMMetric
-	OwnerRef         metav1.OwnerReference
-	ServiceAccount   string
-	ImagePullSecrets []corev1.LocalObjectReference
-}
-
-// ServingRuntimeSpec defines parameters for creating a ServingRuntime
-type ServingRuntimeSpec struct {
-	Name             string
-	Namespace        string
-	ModelID          string
-	Image            string
-	OwnerRef         metav1.OwnerReference
-	ServiceAccount   string
-	ImagePullSecrets []corev1.LocalObjectReference
-}
-
-// BuildClusterServingRuntime creates a KServe ClusterServingRuntime for a cluster-scoped template
-func BuildClusterServingRuntime(spec ClusterServingRuntimeSpec) *servingv1alpha1.ClusterServingRuntime {
+// BuildClusterServingRuntime creates a KServe ClusterServingRuntime for a cluster-scoped template.
+func BuildClusterServingRuntime(template aimstate.TemplateState, ownerRef metav1.OwnerReference) *servingv1alpha1.ClusterServingRuntime {
 	runtime := &servingv1alpha1.ClusterServingRuntime{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: servingv1alpha1.SchemeGroupVersion.String(),
 			Kind:       "ClusterServingRuntime",
 		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: spec.Name,
-			Labels: map[string]string{
-				"app.kubernetes.io/name":       LabelValueRuntimeName,
-				"app.kubernetes.io/component":  LabelValueRuntimeComponent,
-				"app.kubernetes.io/managed-by": LabelValueManagedBy,
-				LabelKeyModelID:                sanitizeLabelValue(spec.ModelID),
-			},
-			OwnerReferences: []metav1.OwnerReference{spec.OwnerRef},
-		},
-		Spec: servingv1alpha1.ServingRuntimeSpec{
-			SupportedModelFormats: []servingv1alpha1.SupportedModelFormat{
-				{
-					Name:    "aim",
-					Version: baseutils.Pointer("1"),
-				},
-			},
-			ServingRuntimePodSpec: servingv1alpha1.ServingRuntimePodSpec{
-				ImagePullSecrets: CopyPullSecrets(spec.ImagePullSecrets),
-				Containers: []corev1.Container{
-					{
-						Name:  "kserve-container",
-						Image: spec.Image,
-						Args: []string{
-							"--model-id", spec.ModelID,
-						},
-					},
-				},
-			},
-		},
+		ObjectMeta: buildServingRuntimeObjectMeta(template, ownerRef, nil),
+		Spec:       buildServingRuntimeSpec(template),
 	}
 
 	return runtime
 }
 
-// BuildServingRuntime creates a KServe ServingRuntime for a namespace-scoped template
-func BuildServingRuntime(spec ServingRuntimeSpec) *servingv1alpha1.ServingRuntime {
+// BuildServingRuntime creates a KServe ServingRuntime for a namespace-scoped template.
+func BuildServingRuntime(template aimstate.TemplateState, ownerRef metav1.OwnerReference) *servingv1alpha1.ServingRuntime {
 	runtime := &servingv1alpha1.ServingRuntime{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: servingv1alpha1.SchemeGroupVersion.String(),
 			Kind:       "ServingRuntime",
 		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      spec.Name,
-			Namespace: spec.Namespace,
-			Labels: map[string]string{
-				"app.kubernetes.io/name":       LabelValueRuntimeName,
-				"app.kubernetes.io/component":  LabelValueRuntimeComponent,
-				"app.kubernetes.io/managed-by": LabelValueManagedBy,
-				LabelKeyModelID:                sanitizeLabelValue(spec.ModelID),
-			},
-			OwnerReferences: []metav1.OwnerReference{spec.OwnerRef},
+		ObjectMeta: buildServingRuntimeObjectMeta(template, ownerRef, &template.Namespace),
+		Spec:       buildServingRuntimeSpec(template),
+	}
+
+	return runtime
+}
+
+func buildServingRuntimeObjectMeta(template aimstate.TemplateState, ownerRef metav1.OwnerReference, namespace *string) metav1.ObjectMeta {
+	meta := metav1.ObjectMeta{
+		Name: template.Name,
+		Labels: map[string]string{
+			"app.kubernetes.io/name":       LabelValueRuntimeName,
+			"app.kubernetes.io/component":  LabelValueRuntimeComponent,
+			"app.kubernetes.io/managed-by": LabelValueManagedBy,
+			LabelKeyModelID:                sanitizeLabelValue(template.SpecCommon.AIMImageName),
 		},
-		Spec: servingv1alpha1.ServingRuntimeSpec{
-			SupportedModelFormats: []servingv1alpha1.SupportedModelFormat{
+		OwnerReferences: []metav1.OwnerReference{ownerRef},
+	}
+
+	if namespace != nil {
+		meta.Namespace = *namespace
+	}
+
+	return meta
+}
+
+func buildServingRuntimeSpec(template aimstate.TemplateState) servingv1alpha1.ServingRuntimeSpec {
+	dshmSizeLimit := resource.MustParse(DefaultSharedMemorySize)
+
+	// Determine model ID: prefer ModelSource.Name, fall back to AIMImageName
+	modelID := template.SpecCommon.AIMImageName
+	if template.ModelSource != nil {
+		modelID = template.ModelSource.Name
+	}
+
+	return servingv1alpha1.ServingRuntimeSpec{
+		SupportedModelFormats: []servingv1alpha1.SupportedModelFormat{
+			{
+				Name:    "aim",
+				Version: baseutils.Pointer("1"),
+			},
+		},
+		ServingRuntimePodSpec: servingv1alpha1.ServingRuntimePodSpec{
+			ImagePullSecrets: helpers.CopyPullSecrets(template.ImagePullSecrets),
+			Containers: []corev1.Container{
 				{
-					Name:    "aim",
-					Version: baseutils.Pointer("1"),
+					Name:  "kserve-container",
+					Image: template.Image,
+					Env: []corev1.EnvVar{
+						{
+							Name:  "AIM_MODEL_ID",
+							Value: modelID,
+						},
+						{
+							Name:  "VLLM_ENABLE_METRICS",
+							Value: "true",
+						},
+					},
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							"amd.com/gpu": *resource.NewQuantity(int64(template.Status.Profile.Metadata.GPUCount), resource.DecimalSI),
+						},
+						Limits: corev1.ResourceList{
+							"amd.com/gpu": *resource.NewQuantity(int64(template.Status.Profile.Metadata.GPUCount), resource.DecimalSI),
+						},
+					},
+					Ports: []corev1.ContainerPort{
+						{
+							ContainerPort: 8000,
+							Name:          "http",
+							Protocol:      corev1.ProtocolTCP,
+						},
+					},
+					VolumeMounts: []corev1.VolumeMount{
+						{
+							Name:      "dshm",
+							MountPath: "/dev/shm",
+						},
+					},
 				},
 			},
-			ServingRuntimePodSpec: servingv1alpha1.ServingRuntimePodSpec{
-				ImagePullSecrets: CopyPullSecrets(spec.ImagePullSecrets),
-				Containers: []corev1.Container{
-					{
-						Name:  "kserve-container",
-						Image: spec.Image,
-						Args: []string{
-							"--model-id", spec.ModelID,
+			Volumes: []corev1.Volume{
+				{
+					Name: "dshm",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{
+							Medium:    corev1.StorageMediumMemory,
+							SizeLimit: &dshmSizeLimit,
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+// CopyPullSecrets and CopyEnvVars helpers live under internal/controller/aim/helpers.
+
+// BuildInferenceService constructs a KServe InferenceService referencing a ServingRuntime or ClusterServingRuntime.
+func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.OwnerReference) *servingv1beta1.InferenceService {
+	inferenceService := &servingv1beta1.InferenceService{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: servingv1beta1.SchemeGroupVersion.String(),
+			Kind:       "InferenceService",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      serviceState.Name,
+			Namespace: serviceState.Namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/name":       LabelValueServiceName,
+				"app.kubernetes.io/component":  LabelValueServiceComponent,
+				"app.kubernetes.io/managed-by": LabelValueManagedBy,
+				LabelKeyTemplate:               serviceState.Template.Name,
+				LabelKeyModelID:                sanitizeLabelValue(serviceState.ModelID),
+				LabelKeyImageName:              sanitizeLabelValue(serviceState.Template.SpecCommon.AIMImageName),
+			},
+			OwnerReferences: []metav1.OwnerReference{ownerRef},
+		},
+		Spec: servingv1beta1.InferenceServiceSpec{
+			Predictor: servingv1beta1.PredictorSpec{
+				ComponentExtensionSpec: servingv1beta1.ComponentExtensionSpec{},
+				PodSpec: servingv1beta1.PodSpec{
+					ImagePullSecrets:   helpers.CopyPullSecrets(serviceState.ImagePullSecrets),
+					ServiceAccountName: serviceState.ServiceAccountName,
+				},
+				Model: &servingv1beta1.ModelSpec{
+					ModelFormat: servingv1beta1.ModelFormat{
+						Name:    "aim",
+						Version: baseutils.Pointer("1"),
+					},
+					Runtime: baseutils.Pointer(serviceState.RuntimeName),
+					PredictorExtensionSpec: servingv1beta1.PredictorExtensionSpec{
+						Container: corev1.Container{
+							Env: helpers.CopyEnvVars(serviceState.Env),
 						},
 					},
 				},
@@ -174,16 +247,67 @@ func BuildServingRuntime(spec ServingRuntimeSpec) *servingv1alpha1.ServingRuntim
 		},
 	}
 
-	return runtime
+	container := &inferenceService.Spec.Predictor.Model.Container
+	container.Resources = resolveServiceResources(serviceState)
+
+	if metric := serviceState.Template.StatusMetric(); metric != nil {
+		inferenceService.Labels[LabelKeyMetric] = sanitizeLabelValue(string(*metric))
+	}
+
+	if precision := serviceState.Template.StatusPrecision(); precision != nil {
+		inferenceService.Labels[LabelKeyPrecision] = sanitizeLabelValue(string(*precision))
+	}
+
+	if serviceState.Replicas != nil {
+		inferenceService.Spec.Predictor.MinReplicas = serviceState.Replicas
+		inferenceService.Spec.Predictor.MaxReplicas = *serviceState.Replicas
+	}
+
+	if serviceState.ModelSource != nil && serviceState.ModelSource.SourceURI != "" {
+		inferenceService.Spec.Predictor.Model.StorageURI = baseutils.Pointer(serviceState.ModelSource.SourceURI)
+	}
+
+	return inferenceService
 }
 
-func CopyPullSecrets(in []corev1.LocalObjectReference) []corev1.LocalObjectReference {
-	if len(in) == 0 {
-		return nil
+func resolveServiceResources(serviceState aimstate.ServiceState) corev1.ResourceRequirements {
+	var resolved corev1.ResourceRequirements
+
+	if serviceState.Resources != nil {
+		resolved = *serviceState.Resources.DeepCopy()
 	}
-	out := make([]corev1.LocalObjectReference, len(in))
-	copy(out, in)
-	return out
+
+	if gpuCount := templateGPUCount(serviceState.Template); gpuCount > 0 {
+		if resolved.Requests == nil {
+			resolved.Requests = corev1.ResourceList{}
+		}
+		if resolved.Limits == nil {
+			resolved.Limits = corev1.ResourceList{}
+		}
+		if _, ok := resolved.Requests[amdGPUResourceName]; !ok {
+			if qty := resource.NewQuantity(gpuCount, resource.DecimalSI); qty != nil {
+				resolved.Requests[amdGPUResourceName] = *qty
+			}
+		}
+		if _, ok := resolved.Limits[amdGPUResourceName]; !ok {
+			if qty := resource.NewQuantity(gpuCount, resource.DecimalSI); qty != nil {
+				resolved.Limits[amdGPUResourceName] = *qty
+			}
+		}
+	}
+
+	return resolved
+}
+
+func templateGPUCount(template aimstate.TemplateState) int64 {
+	if template.Status == nil {
+		return 0
+	}
+	gpuCount := template.Status.Profile.Metadata.GPUCount
+	if gpuCount <= 0 {
+		return 0
+	}
+	return int64(gpuCount)
 }
 
 // GetClusterServingRuntime fetches a ClusterServingRuntime by name

@@ -277,9 +277,16 @@ spec:
   modelId: meta/llama-3-8b:1.1+20240915
   image: registry.example.com/aim/llama3-8b:1.1
   defaultServiceTemplate: llama3-8b-latency-gpu1
+  resources:
+    limits:
+      cpu: "8"
+      memory: 64Gi
+    requests:
+      cpu: "4"
+      memory: 32Gi
 ```
 
-A namespace-scoped `AIMImage` variant is also available for namespace-specific model overrides.
+A namespace-scoped `AIMImage` variant is also available for namespace-specific model overrides. The controller merges resource requirements in the order **service → template → image**, so platform teams can publish sensible defaults in the catalog while allowing templates or individual services to tighten CPU/memory requests when needed. If no GPU quantity is present after this merge, the operator uses the template discovery metadata to request the expected number of accelerators automatically.
 
 (Optional) provide a cluster template:
 

@@ -19,7 +19,7 @@ spec:
           metadata:
             name: llama-3-8b-latency-no-image
           status:
-            status: Failed
+            status: Degraded
             conditions:
             - type: Failure
               status: "True"

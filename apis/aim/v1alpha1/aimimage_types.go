@@ -23,6 +23,7 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -54,6 +55,15 @@ type AIMImageSpec struct {
 	// RuntimeConfigName references the AIM runtime configuration (by name) to use for this image.
 	// +kubebuilder:default=default
 	RuntimeConfigName string `json:"runtimeConfigName,omitempty"`
+
+	// Resources defines the default resource requirements for services using this image.
+	// Template- or service-level values override these defaults.
+	// +kubebuilder:validation:Required
+	// Must have both cpu and memory in requests
+	// +kubebuilder:validation:XValidation:rule="has(self.requests) && 'cpu' in self.requests && 'memory' in self.requests",message="resources.requests must include cpu and memory"
+	// Must have memory in limits
+	// +kubebuilder:validation:XValidation:rule="has(self.limits) && 'memory' in self.limits",message="resources.limits must include memory"
+	Resources corev1.ResourceRequirements `json:"resources"`
 }
 
 // AIMImageStatus defines the observed state of AIMImage.
@@ -66,17 +76,18 @@ type AIMImageStatus struct {
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// EffectiveRuntimeConfig surfaces the resolved runtime configuration used while reconciling the image.
-	EffectiveRuntimeConfig *AIMEffectiveRuntimeConfig `json:"effectiveRuntimeConfig,omitempty"`
+	// ResolvedRuntimeConfig captures metadata about the runtime config that was resolved.
+	// +optional
+	ResolvedRuntimeConfig *AIMResolvedRuntimeConfig `json:"resolvedRuntimeConfig,omitempty"`
 }
 
+// AIMClusterImage is the Schema for cluster-scoped AIM image catalog entries.
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster,shortName=aimclimg,categories=aim;all
 // +kubebuilder:printcolumn:name="Model ID",type=string,JSONPath=`.spec.modelId`
 // +kubebuilder:printcolumn:name="Image",type=string,JSONPath=`.spec.image`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
-// AIMClusterImage is the Schema for cluster-scoped AIM image catalog entries.
 type AIMClusterImage struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -85,21 +96,21 @@ type AIMClusterImage struct {
 	Status AIMImageStatus `json:"status,omitempty"`
 }
 
-// +kubebuilder:object:root=true
 // AIMClusterImageList contains a list of AIMClusterImage.
+// +kubebuilder:object:root=true
 type AIMClusterImageList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []AIMClusterImage `json:"items"`
 }
 
+// AIMImage is the Schema for namespace-scoped AIM image catalog entries.
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=aimimg,categories=aim;all
 // +kubebuilder:printcolumn:name="Model ID",type=string,JSONPath=`.spec.modelId`
 // +kubebuilder:printcolumn:name="Image",type=string,JSONPath=`.spec.image`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
-// AIMImage is the Schema for namespace-scoped AIM image catalog entries.
 type AIMImage struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -108,8 +119,8 @@ type AIMImage struct {
 	Status AIMImageStatus `json:"status,omitempty"`
 }
 
-// +kubebuilder:object:root=true
 // AIMImageList contains a list of AIMImage.
+// +kubebuilder:object:root=true
 type AIMImageList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

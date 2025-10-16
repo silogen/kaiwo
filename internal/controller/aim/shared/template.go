@@ -34,7 +34,6 @@ import (
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -42,6 +41,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/silogen/kaiwo/internal/controller/aim/helpers"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
@@ -51,6 +51,7 @@ import (
 type TemplateObservation struct {
 	Job              *batchv1.Job
 	Image            string
+	ImageResources   *corev1.ResourceRequirements
 	ImagePullSecrets []corev1.LocalObjectReference
 	RuntimeConfig    *RuntimeConfigResolution
 }
@@ -78,7 +79,7 @@ type TemplateObservationOptions[R client.Object] struct {
 	GetRuntime              func(ctx context.Context) (R, error)
 	ShouldCheckDiscoveryJob bool
 	GetDiscoveryJob         func(ctx context.Context) (*batchv1.Job, error)
-	LookupImage             func(ctx context.Context) (string, error)
+	LookupImage             func(ctx context.Context) (*ImageLookupResult, error)
 	ResolveRuntimeConfig    func(ctx context.Context) (*RuntimeConfigResolution, error)
 	OnRuntimeConfigResolved func(resolution *RuntimeConfigResolution)
 }
@@ -109,9 +110,16 @@ func ObserveTemplate[R client.Object](ctx context.Context, opts TemplateObservat
 	if opts.LookupImage != nil {
 		image, err := opts.LookupImage(ctx)
 		if err != nil {
-			return nil, err
+			// For image not found errors, continue with empty image
+			// This allows status projection to handle it gracefully
+			if !errors.Is(err, ErrImageNotFound) {
+				return nil, err
+			}
+			// obs.Image remains empty string
+		} else if image != nil {
+			obs.Image = image.Image
+			obs.ImageResources = image.Resources.DeepCopy()
 		}
-		obs.Image = image
 	}
 
 	if opts.ResolveRuntimeConfig != nil {
@@ -121,7 +129,7 @@ func ObserveTemplate[R client.Object](ctx context.Context, opts TemplateObservat
 		}
 		if resolution != nil {
 			obs.RuntimeConfig = resolution
-			obs.ImagePullSecrets = CopyPullSecrets(resolution.EffectiveSpec.ImagePullSecrets)
+			obs.ImagePullSecrets = helpers.CopyPullSecrets(resolution.EffectiveSpec.ImagePullSecrets)
 			if opts.OnRuntimeConfigResolved != nil {
 				opts.OnRuntimeConfigResolved(resolution)
 			}
@@ -181,12 +189,14 @@ func PlanTemplateResources(ctx TemplatePlanContext, builders TemplatePlanBuilder
 
 	var desired []client.Object
 
-	if builders.BuildRuntime != nil {
+	// Only create the ServingRuntime after discovery has completed successfully
+	if ctx.Status == aimv1alpha1.AIMTemplateStatusAvailable && builders.BuildRuntime != nil {
 		if runtime := builders.BuildRuntime(input); runtime != nil {
 			desired = append(desired, runtime)
 		}
 	}
 
+	// Create discovery job if template is not yet Available and job hasn't completed
 	if ctx.Status != aimv1alpha1.AIMTemplateStatusAvailable &&
 		builders.BuildDiscoveryJob != nil &&
 		(ctx.Observation.Job == nil || !IsJobComplete(ctx.Observation.Job)) {
@@ -224,6 +234,172 @@ func JoinRuntimeConfigSources(resolution *RuntimeConfigResolution, namespaceLabe
 	return strings.Join(sources, ", ")
 }
 
+// templateStatusResult encapsulates the status, conditions, and additional fields to set.
+type templateStatusResult struct {
+	Status       aimv1alpha1.AIMTemplateStatusEnum
+	Conditions   []metav1.Condition
+	ModelSources []aimv1alpha1.AIMModelSource
+	Profile      *aimv1alpha1.AIMProfile
+}
+
+// applyTemplateStatusResult applies the computed status result to the template.
+func applyTemplateStatusResult(templateStatus *aimv1alpha1.AIMServiceTemplateStatus, result templateStatusResult) {
+	templateStatus.Status = result.Status
+	for _, cond := range result.Conditions {
+		meta.SetStatusCondition(&templateStatus.Conditions, cond)
+	}
+	if len(result.ModelSources) > 0 {
+		templateStatus.ModelSources = result.ModelSources
+	}
+	if result.Profile != nil {
+		templateStatus.Profile = *result.Profile
+	}
+}
+
+// handleTemplateReconcileErrors processes reconciliation errors and returns appropriate status.
+func handleTemplateReconcileErrors(errs controllerutils.ReconcileErrors, imageNotFoundMessage string) *templateStatusResult {
+	if !errs.HasError() {
+		return nil
+	}
+
+	status := aimv1alpha1.AIMTemplateStatusFailed
+	var conditions []metav1.Condition
+
+	if errs.ObserveErr != nil {
+		if errors.Is(errs.ObserveErr, ErrImageNotFound) {
+			status = aimv1alpha1.AIMTemplateStatusDegraded
+			conditions = append(conditions,
+				controllerutils.NewCondition(controllerutils.ConditionTypeFailure, metav1.ConditionTrue, "ImageNotFound", imageNotFoundMessage),
+				controllerutils.NewCondition(controllerutils.ConditionTypeReady, metav1.ConditionFalse, "ImageNotFound", "Cannot proceed without image"),
+			)
+		} else {
+			conditions = append(conditions,
+				controllerutils.NewCondition(controllerutils.ConditionTypeFailure, metav1.ConditionTrue, controllerutils.ReasonFailed, fmt.Sprintf("Observation failed: %v", errs.ObserveErr)),
+				controllerutils.NewCondition(controllerutils.ConditionTypeReady, metav1.ConditionFalse, controllerutils.ReasonFailed, "Template is not ready due to errors"),
+			)
+		}
+	}
+
+	if errs.ApplyErr != nil {
+		conditions = append(conditions,
+			controllerutils.NewCondition(controllerutils.ConditionTypeFailure, metav1.ConditionTrue, controllerutils.ReasonFailed, fmt.Sprintf("Apply failed: %v", errs.ApplyErr)),
+			controllerutils.NewCondition(controllerutils.ConditionTypeReady, metav1.ConditionFalse, controllerutils.ReasonFailed, "Template is not ready due to errors"),
+		)
+	}
+
+	return &templateStatusResult{Status: status, Conditions: conditions}
+}
+
+// handleTemplateMissingImage handles the case where the image is missing.
+func handleTemplateMissingImage(obs *TemplateObservation, imageNotFoundMessage string) *templateStatusResult {
+	if obs.Image != "" {
+		return nil
+	}
+
+	return &templateStatusResult{
+		Status: aimv1alpha1.AIMTemplateStatusDegraded,
+		Conditions: []metav1.Condition{
+			controllerutils.NewCondition(controllerutils.ConditionTypeFailure, metav1.ConditionTrue, "ImageNotFound", imageNotFoundMessage),
+			controllerutils.NewCondition(controllerutils.ConditionTypeReady, metav1.ConditionFalse, "ImageNotFound", "Cannot proceed without image"),
+		},
+	}
+}
+
+// handleTemplateDiscoveryRunning handles the case where discovery job is running.
+func handleTemplateDiscoveryRunning(obs *TemplateObservation, currentStatus aimv1alpha1.AIMTemplateStatusEnum, recorder record.EventRecorder, template TemplateWithStatus) *templateStatusResult {
+	if obs.Job == nil || IsJobComplete(obs.Job) {
+		return nil
+	}
+
+	// Emit event if transitioning from Pending to Progressing
+	if currentStatus == aimv1alpha1.AIMTemplateStatusPending {
+		controllerutils.EmitNormalEvent(recorder, template, "DiscoveryStarted", "Discovery job is running")
+	}
+
+	return &templateStatusResult{
+		Status: aimv1alpha1.AIMTemplateStatusProgressing,
+		Conditions: []metav1.Condition{
+			controllerutils.NewCondition(controllerutils.ConditionTypeProgressing, metav1.ConditionTrue, controllerutils.ReasonDiscoveryRunning, "Discovery job is running"),
+			controllerutils.NewCondition(controllerutils.ConditionTypeDiscovered, metav1.ConditionFalse, controllerutils.ReasonJobPending, "Discovery job has not completed"),
+			controllerutils.NewCondition(controllerutils.ConditionTypeReady, metav1.ConditionFalse, controllerutils.ReasonReconciling, "Template is not ready yet"),
+		},
+	}
+}
+
+// handleTemplateDiscoveryFailed handles the case where discovery job failed.
+func handleTemplateDiscoveryFailed(obs *TemplateObservation, currentStatus aimv1alpha1.AIMTemplateStatusEnum, recorder record.EventRecorder, template TemplateWithStatus) *templateStatusResult {
+	if obs.Job == nil || !IsJobFailed(obs.Job) {
+		return nil
+	}
+
+	// Emit event if transitioning from Progressing to Failed
+	if currentStatus == aimv1alpha1.AIMTemplateStatusProgressing {
+		controllerutils.EmitWarningEvent(recorder, template, "DiscoveryFailed", "Discovery job failed")
+	}
+
+	return &templateStatusResult{
+		Status: aimv1alpha1.AIMTemplateStatusFailed,
+		Conditions: []metav1.Condition{
+			controllerutils.NewCondition(controllerutils.ConditionTypeFailure, metav1.ConditionTrue, controllerutils.ReasonJobFailed, "Discovery job failed"),
+			controllerutils.NewCondition(controllerutils.ConditionTypeDiscovered, metav1.ConditionFalse, controllerutils.ReasonDiscoveryFailed, "Discovery failed"),
+			controllerutils.NewCondition(controllerutils.ConditionTypeReady, metav1.ConditionFalse, controllerutils.ReasonFailed, "Template is not ready"),
+		},
+	}
+}
+
+// handleTemplateDiscoverySucceeded handles the case where discovery job succeeded.
+func handleTemplateDiscoverySucceeded(ctx context.Context, k8sClient client.Client, clientset kubernetes.Interface, obs *TemplateObservation, currentStatus aimv1alpha1.AIMTemplateStatusEnum, recorder record.EventRecorder, template TemplateWithStatus) *templateStatusResult {
+	if obs.Job == nil || !IsJobSucceeded(obs.Job) {
+		return nil
+	}
+
+	// Emit event if transitioning from Progressing to Available
+	if currentStatus == aimv1alpha1.AIMTemplateStatusProgressing {
+		controllerutils.EmitNormalEvent(recorder, template, "DiscoverySucceeded", "Model sources discovered successfully")
+	}
+
+	// Parse discovery results
+	discovery, err := ParseDiscoveryLogs(ctx, k8sClient, clientset, obs.Job)
+	if err != nil {
+		controllerutils.EmitWarningEvent(recorder, template, "DiscoveryParseFailed", fmt.Sprintf("Failed to parse discovery output: %v", err))
+		return &templateStatusResult{
+			Status: aimv1alpha1.AIMTemplateStatusFailed,
+			Conditions: []metav1.Condition{
+				controllerutils.NewCondition(controllerutils.ConditionTypeFailure, metav1.ConditionTrue, "DiscoveryParseFailed", fmt.Sprintf("Failed to parse discovery output: %v", err)),
+				controllerutils.NewCondition(controllerutils.ConditionTypeReady, metav1.ConditionFalse, "DiscoveryParseFailed", "Template is not ready"),
+			},
+		}
+	}
+
+	return &templateStatusResult{
+		Status: aimv1alpha1.AIMTemplateStatusAvailable,
+		Conditions: []metav1.Condition{
+			controllerutils.NewCondition(controllerutils.ConditionTypeDiscovered, metav1.ConditionTrue, controllerutils.ReasonDiscovered, "Model sources discovered"),
+			controllerutils.NewCondition(controllerutils.ConditionTypeProgressing, metav1.ConditionFalse, controllerutils.ReasonAvailable, "Discovery complete"),
+			controllerutils.NewCondition(controllerutils.ConditionTypeReady, metav1.ConditionTrue, controllerutils.ReasonAvailable, "Template is ready"),
+		},
+		ModelSources: discovery.ModelSources,
+		Profile:      discovery.Profile,
+	}
+}
+
+// handleTemplateInitialState handles the case where no discovery job exists yet.
+func handleTemplateInitialState(currentStatus aimv1alpha1.AIMTemplateStatusEnum) *templateStatusResult {
+	// Check if template is already Available (job lookup was skipped to prevent re-running discovery)
+	if currentStatus == aimv1alpha1.AIMTemplateStatusAvailable {
+		// Template is already Available, return nil to indicate no status changes needed
+		return nil
+	}
+
+	return &templateStatusResult{
+		Status: aimv1alpha1.AIMTemplateStatusPending,
+		Conditions: []metav1.Condition{
+			controllerutils.NewCondition(controllerutils.ConditionTypeProgressing, metav1.ConditionTrue, controllerutils.ReasonReconciling, "Initiating discovery"),
+			controllerutils.NewCondition(controllerutils.ConditionTypeReady, metav1.ConditionFalse, controllerutils.ReasonReconciling, "Template is not ready"),
+		},
+	}
+}
+
 // ProjectTemplateStatus computes status from observation and errors.
 // This is shared between cluster and namespace-scoped template controllers.
 // Modifies templateStatus directly and emits events for discovery phase changes.
@@ -239,272 +415,37 @@ func ProjectTemplateStatus(
 ) error {
 	templateStatus := template.GetStatus()
 	currentStatus := templateStatus.Status
-	var conditions []metav1.Condition
-	var status aimv1alpha1.AIMTemplateStatusEnum
-	templateStatus.EffectiveRuntimeConfig = nil
 
+	// Set resolved runtime config and image
+	templateStatus.ResolvedRuntimeConfig = nil
+	templateStatus.ResolvedImage = nil
 	if obs != nil && obs.RuntimeConfig != nil {
-		templateStatus.EffectiveRuntimeConfig = obs.RuntimeConfig.EffectiveStatus
+		templateStatus.ResolvedRuntimeConfig = obs.RuntimeConfig.ResolvedRef
 	}
 
-	// Handle errors first
-	if errs.HasError() {
-		status = aimv1alpha1.AIMTemplateStatusFailed
-
-		if errs.ObserveErr != nil {
-			// Check if the error is specifically ErrImageNotFound
-			if errors.Is(errs.ObserveErr, ErrImageNotFound) {
-				conditions = append(conditions, controllerutils.NewCondition(
-					controllerutils.ConditionTypeFailure,
-					metav1.ConditionTrue,
-					"ImageNotFound",
-					imageNotFoundMessage,
-				))
-				conditions = append(conditions, controllerutils.NewCondition(
-					controllerutils.ConditionTypeReady,
-					metav1.ConditionFalse,
-					"ImageNotFound",
-					"Cannot proceed without image",
-				))
-			} else {
-				conditions = append(conditions, controllerutils.NewCondition(
-					controllerutils.ConditionTypeFailure,
-					metav1.ConditionTrue,
-					controllerutils.ReasonFailed,
-					fmt.Sprintf("Observation failed: %v", errs.ObserveErr),
-				))
-				conditions = append(conditions, controllerutils.NewCondition(
-					controllerutils.ConditionTypeReady,
-					metav1.ConditionFalse,
-					controllerutils.ReasonFailed,
-					"Template is not ready due to errors",
-				))
-			}
-		}
-
-		if errs.ApplyErr != nil {
-			conditions = append(conditions, controllerutils.NewCondition(
-				controllerutils.ConditionTypeFailure,
-				metav1.ConditionTrue,
-				controllerutils.ReasonFailed,
-				fmt.Sprintf("Apply failed: %v", errs.ApplyErr),
-			))
-			conditions = append(conditions, controllerutils.NewCondition(
-				controllerutils.ConditionTypeReady,
-				metav1.ConditionFalse,
-				controllerutils.ReasonFailed,
-				"Template is not ready due to errors",
-			))
-		}
-
-		// Set status and conditions
-		templateStatus.Status = status
-		for _, cond := range conditions {
-			meta.SetStatusCondition(&templateStatus.Conditions, cond)
-		}
-		return nil
+	// Try each handler in order, applying the first one that returns a result
+	handlers := []func() *templateStatusResult{
+		func() *templateStatusResult { return handleTemplateReconcileErrors(errs, imageNotFoundMessage) },
+		func() *templateStatusResult { return handleTemplateMissingImage(obs, imageNotFoundMessage) },
+		func() *templateStatusResult {
+			return handleTemplateDiscoveryRunning(obs, currentStatus, recorder, template)
+		},
+		func() *templateStatusResult {
+			return handleTemplateDiscoveryFailed(obs, currentStatus, recorder, template)
+		},
+		func() *templateStatusResult {
+			return handleTemplateDiscoverySucceeded(ctx, k8sClient, clientset, obs, currentStatus, recorder, template)
+		},
+		func() *templateStatusResult { return handleTemplateInitialState(currentStatus) },
 	}
 
-	// Check if image is missing
-	if obs.Image == "" {
-		status = aimv1alpha1.AIMTemplateStatusFailed
-
-		conditions = append(conditions, controllerutils.NewCondition(
-			controllerutils.ConditionTypeFailure,
-			metav1.ConditionTrue,
-			"ImageNotFound",
-			imageNotFoundMessage,
-		))
-
-		conditions = append(conditions, controllerutils.NewCondition(
-			controllerutils.ConditionTypeReady,
-			metav1.ConditionFalse,
-			"ImageNotFound",
-			"Cannot proceed without image",
-		))
-
-		// Set status and conditions
-		templateStatus.Status = status
-		for _, cond := range conditions {
-			meta.SetStatusCondition(&templateStatus.Conditions, cond)
-		}
-		return nil
-	}
-
-	// Progressing condition: True while job is running
-	if obs.Job != nil && !IsJobComplete(obs.Job) {
-		status = aimv1alpha1.AIMTemplateStatusProgressing
-
-		// Emit event if transitioning from Pending to Progressing
-		if currentStatus == aimv1alpha1.AIMTemplateStatusPending {
-			controllerutils.EmitNormalEvent(recorder, template, "DiscoveryStarted", "Discovery job is running")
-		}
-
-		conditions = append(conditions, controllerutils.NewCondition(
-			controllerutils.ConditionTypeProgressing,
-			metav1.ConditionTrue,
-			controllerutils.ReasonDiscoveryRunning,
-			"Discovery job is running",
-		))
-
-		conditions = append(conditions, controllerutils.NewCondition(
-			controllerutils.ConditionTypeDiscovered,
-			metav1.ConditionFalse,
-			controllerutils.ReasonJobPending,
-			"Discovery job has not completed",
-		))
-
-		conditions = append(conditions, controllerutils.NewCondition(
-			controllerutils.ConditionTypeReady,
-			metav1.ConditionFalse,
-			controllerutils.ReasonReconciling,
-			"Template is not ready yet",
-		))
-
-		// Set status and conditions
-		templateStatus.Status = status
-		for _, cond := range conditions {
-			meta.SetStatusCondition(&templateStatus.Conditions, cond)
-		}
-		return nil
-	}
-
-	// Discovery failed
-	if obs.Job != nil && IsJobFailed(obs.Job) {
-		status = aimv1alpha1.AIMTemplateStatusFailed
-
-		// Emit event if transitioning from Progressing to Failed
-		if currentStatus == aimv1alpha1.AIMTemplateStatusProgressing {
-			controllerutils.EmitWarningEvent(recorder, template, "DiscoveryFailed", "Discovery job failed")
-		}
-
-		conditions = append(conditions, controllerutils.NewCondition(
-			controllerutils.ConditionTypeFailure,
-			metav1.ConditionTrue,
-			controllerutils.ReasonJobFailed,
-			"Discovery job failed",
-		))
-
-		conditions = append(conditions, controllerutils.NewCondition(
-			controllerutils.ConditionTypeDiscovered,
-			metav1.ConditionFalse,
-			controllerutils.ReasonDiscoveryFailed,
-			"Discovery failed",
-		))
-
-		conditions = append(conditions, controllerutils.NewCondition(
-			controllerutils.ConditionTypeReady,
-			metav1.ConditionFalse,
-			controllerutils.ReasonFailed,
-			"Template is not ready",
-		))
-
-		// Set status and conditions
-		templateStatus.Status = status
-		for _, cond := range conditions {
-			meta.SetStatusCondition(&templateStatus.Conditions, cond)
-		}
-		return nil
-	}
-
-	// Discovery succeeded
-	var modelSources []aimv1alpha1.AIMModelSource
-	var profile *apiextensionsv1.JSON
-	if obs.Job != nil && IsJobSucceeded(obs.Job) {
-		status = aimv1alpha1.AIMTemplateStatusAvailable
-
-		// Emit event if transitioning from Progressing to Available
-		if currentStatus == aimv1alpha1.AIMTemplateStatusProgressing {
-			controllerutils.EmitNormalEvent(recorder, template, "DiscoverySucceeded", "Model sources discovered successfully")
-		}
-
-		conditions = append(conditions, controllerutils.NewCondition(
-			controllerutils.ConditionTypeDiscovered,
-			metav1.ConditionTrue,
-			controllerutils.ReasonDiscovered,
-			"Model sources discovered",
-		))
-
-		conditions = append(conditions, controllerutils.NewCondition(
-			controllerutils.ConditionTypeProgressing,
-			metav1.ConditionFalse,
-			controllerutils.ReasonAvailable,
-			"Discovery complete",
-		))
-
-		conditions = append(conditions, controllerutils.NewCondition(
-			controllerutils.ConditionTypeReady,
-			metav1.ConditionTrue,
-			controllerutils.ReasonAvailable,
-			"Template is ready",
-		))
-
-		// Parse discovery results
-		discovery, err := ParseDiscoveryLogs(ctx, k8sClient, clientset, obs.Job)
-		if err != nil {
-			// Discovery job succeeded but parsing failed
-			status = aimv1alpha1.AIMTemplateStatusFailed
-
-			controllerutils.EmitWarningEvent(recorder, template, "DiscoveryParseFailed",
-				fmt.Sprintf("Failed to parse discovery output: %v", err))
-
-			conditions = []metav1.Condition{
-				controllerutils.NewCondition(
-					controllerutils.ConditionTypeFailure,
-					metav1.ConditionTrue,
-					"DiscoveryParseFailed",
-					fmt.Sprintf("Failed to parse discovery output: %v", err),
-				),
-				controllerutils.NewCondition(
-					controllerutils.ConditionTypeReady,
-					metav1.ConditionFalse,
-					"DiscoveryParseFailed",
-					"Template is not ready",
-				),
-			}
-		} else {
-			modelSources = discovery.ModelSources
-			profile = discovery.Profile
-		}
-	} else {
-		// Check if template is already Available (job lookup was skipped to prevent re-running discovery)
-		if currentStatus == aimv1alpha1.AIMTemplateStatusAvailable {
-			// Template is already Available, return without status changes
-			// This prevents resetting to Pending when job lookup is skipped for Available templates
+	for _, handler := range handlers {
+		if result := handler(); result != nil {
+			applyTemplateStatusResult(templateStatus, *result)
 			return nil
 		}
-
-		// No job yet (initial state)
-		status = aimv1alpha1.AIMTemplateStatusPending
-
-		conditions = append(conditions, controllerutils.NewCondition(
-			controllerutils.ConditionTypeProgressing,
-			metav1.ConditionTrue,
-			controllerutils.ReasonReconciling,
-			"Initiating discovery",
-		))
-
-		conditions = append(conditions, controllerutils.NewCondition(
-			controllerutils.ConditionTypeReady,
-			metav1.ConditionFalse,
-			controllerutils.ReasonReconciling,
-			"Template is not ready",
-		))
 	}
 
-	// Update status fields directly
-	templateStatus.Status = status
-	for _, cond := range conditions {
-		meta.SetStatusCondition(&templateStatus.Conditions, cond)
-	}
-
-	// Set additional fields
-	if len(modelSources) > 0 {
-		templateStatus.ModelSources = modelSources
-	}
-	if profile != nil {
-		templateStatus.Profile = profile
-	}
-
+	// No handler applied, no changes needed (template already in correct state)
 	return nil
 }

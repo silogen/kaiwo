@@ -1,0 +1,38 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: service-account-propagation
+spec:
+  description: Test that serviceAccountName propagates from runtime config to InferenceService
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Ensure template is available
+    try:
+    - assert:
+        timeout: 5s
+        file: ../../_shared/template-available.yaml
+  - name: Create prerequisites
+    try:
+    - apply:
+        file: service-account.yaml
+    - apply:
+        file: runtime-config.yaml
+
+  - name: Create AIMService
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify InferenceService has custom serviceAccountName
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: serving.kserve.io/v1beta1
+          kind: InferenceService
+          metadata:
+            name: test-service
+          spec:
+            predictor:
+              serviceAccountName: custom-sa

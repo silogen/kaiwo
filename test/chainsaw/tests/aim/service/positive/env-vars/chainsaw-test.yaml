@@ -1,0 +1,37 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: env-vars
+spec:
+  description: Test environment variables are passed to InferenceService
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Ensure template is available
+    try:
+    - assert:
+        timeout: 5s
+        file: ../../_shared/template-available.yaml
+
+  - name: Create AIMService with env vars
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify InferenceService has env vars
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: serving.kserve.io/v1beta1
+          kind: InferenceService
+          metadata:
+            name: test-service
+          spec:
+            predictor:
+              (model.env[?name == 'HF_TOKEN']):
+              - name: HF_TOKEN
+                value: "test-token-123"
+              (model.env[?name == 'CUSTOM_VAR']):
+              - name: CUSTOM_VAR
+                value: "custom-value"
