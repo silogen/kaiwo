@@ -211,6 +211,13 @@ func BuildDiscoveryJob(spec DiscoveryJobSpec) *batchv1.Job {
 		}
 	}
 
+	// Security context for pod security standards compliance
+	allowPrivilegeEscalation := false
+	runAsNonRoot := true
+	seccompProfile := &corev1.SeccompProfile{
+		Type: corev1.SeccompProfileTypeRuntimeDefault,
+	}
+
 	job := &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "batch/v1",
@@ -235,6 +242,10 @@ func BuildDiscoveryJob(spec DiscoveryJobSpec) *batchv1.Job {
 					RestartPolicy:      corev1.RestartPolicyNever,
 					ImagePullSecrets:   spec.ImagePullSecrets,
 					ServiceAccountName: spec.ServiceAccount,
+					SecurityContext: &corev1.PodSecurityContext{
+						RunAsNonRoot:   &runAsNonRoot,
+						SeccompProfile: seccompProfile,
+					},
 					Containers: []corev1.Container{
 						{
 							Name:  "discovery",
@@ -244,6 +255,13 @@ func BuildDiscoveryJob(spec DiscoveryJobSpec) *batchv1.Job {
 								"--format=json",
 							},
 							Env: env,
+							SecurityContext: &corev1.SecurityContext{
+								AllowPrivilegeEscalation: &allowPrivilegeEscalation,
+								RunAsNonRoot:             &runAsNonRoot,
+								Capabilities: &corev1.Capabilities{
+									Drop: []corev1.Capability{"ALL"},
+								},
+							},
 						},
 					},
 				},

@@ -17,6 +17,9 @@ spec:
     try:
     - apply:
         file: service.yaml
+    - sleep:
+        # Give the reconciler time to handle the object
+        duration: 5s
 
   - name: Verify the service uses an overridden template, and that the derived template exists and becomes available
     try:

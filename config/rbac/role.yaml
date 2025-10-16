@@ -58,6 +58,11 @@ rules:
   - "inferenceservices"
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
+- apiGroups: ["gateway.networking.k8s.io"]
+  resources:
+  - "httproutes"
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
 - apiGroups: ["aim.silogen.ai"]
   resources:
   - "aimimages/status"
@@ -68,6 +73,11 @@ rules:
   - "aimservices/status"
   - "modelcaches/status"
   verbs: ["get", "update", "patch"]
+
+- apiGroups: ["gateway.networking.k8s.io"]
+  resources:
+  - "httproutes/status"
+  verbs: ["get"]
 
 - apiGroups: ["serving.kserve.io"]
   resources:
