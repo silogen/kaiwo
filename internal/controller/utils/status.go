@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"reflect"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -57,6 +58,10 @@ func PatchStatus[T ObjectWithStatus[S], S any](
 		// Fetch the latest version of the object to avoid conflicts
 		key := client.ObjectKeyFromObject(obj)
 		if err := k8sClient.Get(ctx, key, obj); err != nil {
+			// If the object has been deleted, there's no status to patch - treat as success
+			if apierrors.IsNotFound(err) {
+				return nil
+			}
 			return err
 		}
 
