@@ -268,7 +268,7 @@ func (r *AIMModelCacheReconciler) projectStatus(_ context.Context, mc *aimv1alph
 				controllerutils.ConditionTypeFailure,
 				metav1.ConditionTrue,
 				controllerutils.ReasonFailed,
-				fmt.Sprintf("We  %v", errs.ObserveErr),
+				fmt.Sprintf("Apply failed: %v", errs.ApplyErr),
 			))
 		}
 
