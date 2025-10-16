@@ -72,7 +72,6 @@ const (
 )
 
 func (r *AIMModelCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	//logger := log.FromContext(ctx).WithValues("modelcache-controller", req.String())
 	// Fetch CR
 	var mc aimv1alpha1.AIMModelCache
 	if err := r.Get(ctx, req.NamespacedName, &mc); err != nil {
@@ -392,11 +391,6 @@ func (r *AIMModelCacheReconciler) determineOverallStatus(sf stateFlags, ob obser
 	}
 }
 
-//func (r *AIMModelCacheReconciler) isProgressing(st aim.AIMModelCacheStatus) bool {
-//	cond := meta.FindStatusCondition(st.Conditions, aim.ConditionProgressing)
-//	return cond != nil && cond.Status == metav1.ConditionTrue
-//}
-
 func (r *AIMModelCacheReconciler) buildPVC(mc *aimv1alpha1.AIMModelCache, pvcName string) *corev1.PersistentVolumeClaim {
 	var sc *string
 	if mc.Spec.StorageClassName != "" {
@@ -434,7 +428,7 @@ func MultiplyQuantityByFloatExact(q resource.Quantity, factor float64) resource.
 
 func (r *AIMModelCacheReconciler) buildDownloadJob(mc *aimv1alpha1.AIMModelCache, jobName string, pvcName string) *batchv1.Job {
 	mountPath := "/cache"
-	println(mc.Spec.ModelDownloadImage)
+
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: batchv1.SchemeGroupVersion.String(),
@@ -477,7 +471,6 @@ func (r *AIMModelCacheReconciler) buildDownloadJob(mc *aimv1alpha1.AIMModelCache
 							},
 						},
 					},
-					// TODO find out how to reduce the duplicate cache size during download
 					Containers: []corev1.Container{
 						{
 							Name:            "model-download",
