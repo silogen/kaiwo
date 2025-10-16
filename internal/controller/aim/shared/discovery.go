@@ -214,6 +214,7 @@ func BuildDiscoveryJob(spec DiscoveryJobSpec) *batchv1.Job {
 	// Security context for pod security standards compliance
 	allowPrivilegeEscalation := false
 	runAsNonRoot := true
+	runAsUser := int64(65532) // Standard non-root user ID (commonly used in distroless images)
 	seccompProfile := &corev1.SeccompProfile{
 		Type: corev1.SeccompProfileTypeRuntimeDefault,
 	}
@@ -244,6 +245,7 @@ func BuildDiscoveryJob(spec DiscoveryJobSpec) *batchv1.Job {
 					ServiceAccountName: spec.ServiceAccount,
 					SecurityContext: &corev1.PodSecurityContext{
 						RunAsNonRoot:   &runAsNonRoot,
+						RunAsUser:      &runAsUser,
 						SeccompProfile: seccompProfile,
 					},
 					Containers: []corev1.Container{
