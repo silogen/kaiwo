@@ -55,26 +55,29 @@ case "$ACTION" in
     safe_kubectl_apply_k "$KUSTOMIZE_CLIENT"
 
     echo "Waiting for Cert-Manager to be deployed..."
+    pids=()
     for deploy in cert-manager cert-manager-webhook cert-manager-cainjector; do
-      echo "Waiting for deployment: $deploy"
-      if kubectl get deployment/$deploy -n cert-manager >/dev/null 2>&1; then
-        kubectl rollout status deployment/$deploy -n cert-manager --timeout=5m
-      else
-        echo "Warning: $deploy deployment not found, skipping wait."
-      fi
+      (
+        echo "Waiting for deployment: $deploy"
+        if kubectl get "deployment/$deploy" -n cert-manager >/dev/null 2>&1; then
+          kubectl rollout status "deployment/$deploy" -n cert-manager --timeout=5m
+        else
+          echo "Warning: $deploy deployment not found, skipping wait."
+        fi
+      ) &
+      pids+=($!)
     done
+    for pid in "${pids[@]}"; do wait "$pid" || true; done
 
     echo "2. Applying server-side Kustomize resources from $KUSTOMIZE_SERVER..."
     if [ -d "$KUSTOMIZE_SERVER" ]; then
       kubectl kustomize "$KUSTOMIZE_SERVER" > .build.yaml
 
-      # Apply CRDs first (server-side)
       yq eval 'select(.kind == "CustomResourceDefinition")' .build.yaml \
         | kubectl apply --server-side --force-conflicts -f -
 
-      # Wait for each CRD to become Established
       yq eval --no-doc -r 'select(.kind == "CustomResourceDefinition") | .metadata.name' .build.yaml \
-        | xargs -r -n1 -I{} kubectl wait --for=condition=Established --timeout=90s crd/{}
+        | xargs -r -n1 -P8 -I{} kubectl wait --for=condition=Established --timeout=90s crd/{}
 
       kubectl apply --server-side --force-conflicts -f .build.yaml
 
@@ -83,9 +86,11 @@ case "$ACTION" in
     fi
 
     echo "Waiting for other dependencies to be deployed..."
-    kubectl rollout status deployment/kueue-controller-manager -n kueue-system --timeout=5m || true
-    kubectl rollout status deployment/kuberay-operator --timeout=5m || true
-    kubectl rollout status deployment/appwrapper-controller-manager -n appwrapper-system --timeout=5m || true
+    pids=()
+    (kubectl rollout status deployment/kueue-controller-manager -n kueue-system --timeout=5m || true) & pids+=($!)
+    (kubectl rollout status deployment/kuberay-operator --timeout=5m || true) & pids+=($!)
+    (kubectl rollout status deployment/appwrapper-controller-manager -n appwrapper-system --timeout=5m || true) & pids+=($!)
+    for pid in "${pids[@]}"; do wait "$pid" || true; done
 
     echo "3. Installing Helm charts..."
     safe_helmfile sync

@@ -38,17 +38,38 @@ else
   echo "Skipping standard dependency installation"
 fi
 
-# Fake GPU labels
-kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 "$TEST_NAME"-worker3 "$TEST_NAME"-worker4 run.ai/simulated-gpu-node-pool=default
-kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 "$TEST_NAME"-worker3 "$TEST_NAME"-worker4 nvidia.com/gpu.product=Tesla-K80
-kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 "$TEST_NAME"-worker3 "$TEST_NAME"-worker4 nvidia.com/gpu.count=8
+NODES=(
+  "${TEST_NAME}-worker"
+  "${TEST_NAME}-worker2"
+  "${TEST_NAME}-worker3"
+  "${TEST_NAME}-worker4"
+)
 
-# Simulate an NVIDIA GPU present for Kaiwo
-kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 "$TEST_NAME"-worker3 "$TEST_NAME"-worker4 feature.node.kubernetes.io/pci-10de.present=true
-kubectl label node "$TEST_NAME"-worker "$TEST_NAME"-worker2 "$TEST_NAME"-worker3 "$TEST_NAME"-worker4 kaiwo.silogen.ai/node.gpu.partitioned=false
+# Some setups may not have all 4 workers; filter to only existing nodes.
+EXISTING_NODES=()
+for n in "${NODES[@]}"; do
+  if kubectl get node "$n" >/dev/null 2>&1; then
+    EXISTING_NODES+=("$n")
+  fi
+done
+
+if ((${#EXISTING_NODES[@]})); then
+  echo "Labeling nodes: ${EXISTING_NODES[*]}"
+  # Combine all labels in ONE kubectl call (much faster) and overwrite if present
+  kubectl label node "${EXISTING_NODES[@]}" \
+    run.ai/simulated-gpu-node-pool=default \
+    nvidia.com/gpu.product=Tesla-K80 \
+    nvidia.com/gpu.count=8 \
+    feature.node.kubernetes.io/pci-10de.present=true \
+    kaiwo.silogen.ai/node.gpu.partitioned=false \
+    --overwrite
+else
+  echo "No matching worker nodes found to label (skipping)."
+fi
+
 
 if [ "$SKIP_KAIWO_STATIC" = false ]; then
-  find config/static -name '*.yaml' -print0 | xargs -0 -n1 kubectl apply -f
+  kubectl apply -R -f config/static
 fi
 
 
