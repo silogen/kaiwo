@@ -168,7 +168,7 @@ func (r *AIMClusterServiceTemplateReconciler) observe(ctx context.Context, templ
 			resolution, err := shared.ResolveRuntimeConfig(ctx, r.Client, operatorNamespace, template.Spec.RuntimeConfigName)
 			if err != nil {
 				if stderrors.Is(err, shared.ErrRuntimeConfigNotFound) {
-					baseutils.Debug(logger, "Namespace AIMRuntimeConfig not found for cluster template, proceeding without overrides",
+					baseutils.Debug(logger, "Namespaced AIMRuntimeConfig not found for cluster template, proceeding without overrides",
 						"name", template.Spec.RuntimeConfigName,
 						"operatorNamespace", operatorNamespace)
 					return nil, nil
