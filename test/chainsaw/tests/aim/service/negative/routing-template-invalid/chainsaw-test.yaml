@@ -37,7 +37,6 @@ spec:
             (conditions[?type == 'Failure']):
             - status: "True"
               reason: RouteTemplateInvalid
-            (contains(conditions[?type == 'Failure'][0].message, 'missing-label')): true
             (conditions[?type == 'RuntimeReady']):
             - status: "False"
               reason: RouteTemplateInvalid

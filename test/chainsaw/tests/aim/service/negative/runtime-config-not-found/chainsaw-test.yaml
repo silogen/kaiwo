@@ -18,6 +18,7 @@ spec:
     - apply:
         file: service.yaml
 
+
   - name: Verify service is degraded due to missing config
     try:
     - assert:
@@ -29,6 +30,6 @@ spec:
             name: test-service
           status:
             status: Degraded
-            (conditions[?type == 'Failure']:
-              - status: True
+            (conditions[?type == 'Failure']):
+              - status: "True"
                 reason: RuntimeConfigMissing

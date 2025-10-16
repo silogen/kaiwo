@@ -96,6 +96,8 @@ func (o *ServiceObservation) RuntimeName() string {
 
 // ResolveTemplateNameForService determines the template name to use for a service.
 // It handles default template lookup, base template resolution, and derived template naming.
+// Returns an empty BaseName/FinalName if no template can be resolved, which indicates
+// the service should enter a degraded state.
 func ResolveTemplateNameForService(ctx context.Context, k8sClient client.Client, service *aimv1alpha1.AIMService) (TemplateResolution, error) {
 	var res TemplateResolution
 
@@ -105,17 +107,15 @@ func ResolveTemplateNameForService(ctx context.Context, k8sClient client.Client,
 		if err != nil {
 			return res, err
 		}
-		if defaultTemplate != "" {
-			baseName = defaultTemplate
-		} else {
-			baseName = service.Name
-		}
+		baseName = defaultTemplate
+		// If no default template is found, baseName remains empty.
+		// The controller will handle this by entering a degraded state.
 	}
 
 	res.BaseName = baseName
 	res.Derived = service.Spec.Overrides != nil
 
-	if res.Derived {
+	if res.Derived && baseName != "" {
 		suffix := OverridesSuffix(service.Spec.Overrides)
 		if suffix != "" {
 			res.FinalName = DerivedTemplateName(baseName, suffix)

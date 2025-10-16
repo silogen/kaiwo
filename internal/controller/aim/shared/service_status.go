@@ -257,7 +257,8 @@ func HandleTemplateDegraded(
 }
 
 // HandleTemplateNotAvailable checks if the template is not available and updates status.
-// Returns true if the template is not yet available.
+// Returns true if the template is not yet available (Pending or Progressing).
+// Sets the service to Pending state because it's waiting for a dependency (the template).
 func HandleTemplateNotAvailable(
 	status *aimv1alpha1.AIMServiceStatus,
 	obs *ServiceObservation,
@@ -267,12 +268,16 @@ func HandleTemplateNotAvailable(
 		return false
 	}
 
-	status.Status = aimv1alpha1.AIMServiceStatusStarting
-	setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonCreatingRuntime,
+	// Service is Pending because it's waiting for the template to become available.
+	// The template itself may be Progressing (running discovery) or Pending.
+	status.Status = aimv1alpha1.AIMServiceStatusPending
+
+	reason := "TemplateNotAvailable"
+	setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, reason,
 		fmt.Sprintf("Template %q is not yet Available", obs.TemplateName))
-	setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonCreatingRuntime,
+	setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionTrue, reason,
 		"Waiting for template discovery to complete")
-	setCondition(aimv1alpha1.AIMServiceConditionReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonCreatingRuntime,
+	setCondition(aimv1alpha1.AIMServiceConditionReady, metav1.ConditionFalse, reason,
 		"Template is not available")
 	return true
 }
@@ -461,18 +466,26 @@ func handleTemplateNotFound(
 		return false
 	}
 
-	status.Status = aimv1alpha1.AIMServiceStatusPending
 	var message string
 	if obs != nil && obs.ShouldCreateTemplate {
+		status.Status = aimv1alpha1.AIMServiceStatusPending
 		message = "Template not found; creating derived template"
-	} else {
-		message = "Template not found"
-	}
-	setCondition(aimv1alpha1.AIMServiceConditionResolved, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonTemplateNotFound, message)
-	if obs != nil && obs.ShouldCreateTemplate {
+		setCondition(aimv1alpha1.AIMServiceConditionResolved, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonTemplateNotFound, message)
 		setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonCreatingRuntime, "Waiting for template creation")
 		setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonTemplateNotFound, "Waiting for template to be created")
 	} else {
+		// No template could be resolved and no derived template will be created.
+		// This is a degraded state - the service cannot proceed.
+		status.Status = aimv1alpha1.AIMServiceStatusDegraded
+		if obs != nil && obs.BaseTemplateName == "" {
+			message = "No template reference specified and no default template found on the image. Provide spec.templateRef or configure the image's defaultServiceTemplate field."
+		} else if obs != nil {
+			message = fmt.Sprintf("Template %q not found. Create the template or verify the template name.", obs.BaseTemplateName)
+		} else {
+			message = "Template not found"
+		}
+		setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonTemplateNotFound, message)
+		setCondition(aimv1alpha1.AIMServiceConditionResolved, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonTemplateNotFound, message)
 		setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonTemplateNotFound, "Referenced template does not exist")
 		setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonTemplateNotFound, "Cannot proceed without template")
 	}

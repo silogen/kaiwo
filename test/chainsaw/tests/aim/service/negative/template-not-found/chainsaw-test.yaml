@@ -13,7 +13,7 @@ spec:
     - apply:
         file: service.yaml
 
-  - name: Verify service status shows Pending with TemplateNotFound
+  - name: Verify service status shows Degraded with TemplateNotFound
     try:
     - assert:
         timeout: 30s
@@ -23,7 +23,7 @@ spec:
           metadata:
             name: test-service
           status:
-            status: Pending
+            status: Degraded
             (conditions[?type == 'Resolved']):
             - status: "False"
               reason: TemplateNotFound

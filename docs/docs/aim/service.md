@@ -111,13 +111,13 @@ The template resolution process determines which template configuration the serv
 
 When a service is created or updated, the controller follows this resolution sequence:
 
-1. **Explicit templateRef**: If `spec.templateRef` is specified, the controller searches for a template with that name (namespace-scoped first, then cluster-scoped).
+1. **Explicit templateRef**: If `spec.templateRef` is specified, the controller searches for a template with that name (namespace-scoped first, then cluster-scoped). If the template is not found, the service enters a `Degraded` state.
 
-2. **Default template lookup**: If `templateRef` is omitted, the controller examines the referenced AIMImage (namespace-scoped first, then cluster-scoped) and uses its `defaultServiceTemplate` field.
+2. **Default template lookup**: If `templateRef` is omitted, the controller examines the referenced AIMImage (namespace-scoped first, then cluster-scoped) and uses its `defaultServiceTemplate` field. If no default template is configured, the service enters a `Degraded` state with an appropriate error message.
 
-3. **Service name fallback**: If no default template is specified on the image, the controller uses the service's name as the template name.
+3. **Override handling**: If `spec.overrides` is specified, the controller modifies the template name by appending a hash suffix and creates a derived template. See [Template derivation](#template-derivation-and-overrides) below.
 
-4. **Override handling**: If `spec.overrides` is specified, the controller modifies the template name by appending a hash suffix and creates a derived template. See [Template derivation](#template-derivation-and-overrides) below.
+The controller enforces explicit configuration: services must either reference an existing template via `spec.templateRef` or rely on a configured `defaultServiceTemplate` on the image. There is no automatic template creation unless `spec.overrides` is specified. This prevents unexpected behavior and ensures clear configuration management.
 
 The resolved template reference, including whether it is namespace-scoped or cluster-scoped, is recorded in `status.resolvedTemplate`.
 
@@ -253,6 +253,50 @@ status:
     status: "False"
     reason: RouteTemplateInvalid
     message: HTTPRoute creation skipped due to invalid route template
+```
+
+### Example status - template not found
+
+```yaml
+status:
+  status: Degraded
+  conditions:
+  - type: Failure
+    status: "True"
+    reason: TemplateNotFound
+    message: 'Template "llama-latency" not found. Create the template or verify the template name.'
+  - type: Resolved
+    status: "False"
+    reason: TemplateNotFound
+    message: 'Template "llama-latency" not found. Create the template or verify the template name.'
+  - type: RuntimeReady
+    status: "False"
+    reason: TemplateNotFound
+    message: Referenced template does not exist
+  - type: Progressing
+    status: "False"
+    reason: TemplateNotFound
+    message: Cannot proceed without template
+```
+
+### Example status - no default template configured
+
+```yaml
+status:
+  status: Degraded
+  conditions:
+  - type: Failure
+    status: "True"
+    reason: TemplateNotFound
+    message: 'No template reference specified and no default template found on the image. Provide spec.templateRef or configure the image''s defaultServiceTemplate field.'
+  - type: Resolved
+    status: "False"
+    reason: TemplateNotFound
+    message: 'No template reference specified and no default template found on the image. Provide spec.templateRef or configure the image''s defaultServiceTemplate field.'
+  - type: RuntimeReady
+    status: "False"
+    reason: TemplateNotFound
+    message: Referenced template does not exist
 ```
 
 ## Events and debugging

@@ -149,13 +149,11 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 		obs.TemplateNamespace = service.Namespace
 	}
 
-	// Mark for template creation only if no template was found AND no explicit templateRef was provided
-	// When a user explicitly specifies a templateRef, we should not auto-create - the service should fail
-	if !obs.TemplateFound() {
-		hasExplicitTemplateRef := strings.TrimSpace(service.Spec.TemplateRef) != ""
-		if !hasExplicitTemplateRef || resolution.Derived {
-			obs.ShouldCreateTemplate = true
-		}
+	// Only auto-create templates when overrides are specified (derived templates).
+	// If no template can be resolved and no overrides are specified, the service should degrade.
+	// This prevents magic template creation and enforces explicit configuration.
+	if !obs.TemplateFound() && resolution.Derived {
+		obs.ShouldCreateTemplate = true
 	}
 
 	// Resolve route path if routing is enabled via service or runtime defaults

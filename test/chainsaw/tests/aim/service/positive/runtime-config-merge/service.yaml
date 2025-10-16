@@ -1,9 +1,0 @@
-apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMService
-metadata:
-  name: test-service
-spec:
-  aimImageName: llama-3-8b-runtime-merge
-  templateRef: llama-3-8b-latency-runtime-merge
-  runtimeConfigName: merge-config
-  replicas: 1
