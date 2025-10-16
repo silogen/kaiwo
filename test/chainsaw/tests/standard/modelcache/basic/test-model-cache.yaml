@@ -3,6 +3,6 @@ kind: AIMModelCache
 metadata:
   name: test
 spec:
-  sourceUri: hf://Qwen/Qwen2.5-0.5B
-  size: 1Gi
+  sourceUri: hf://HuggingFaceTB/SmolLM2-135M
+  size: 280Mi
   storageClassName: rwx-nfs
