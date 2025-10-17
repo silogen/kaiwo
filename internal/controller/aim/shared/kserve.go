@@ -142,6 +142,10 @@ func buildServingRuntimeSpec(template aimstate.TemplateState) servingv1alpha1.Se
 	}
 
 	return servingv1alpha1.ServingRuntimeSpec{
+		// The AIM containers handle downloading themselves
+		StorageHelper: &servingv1alpha1.StorageHelper{
+			Disabled: true,
+		},
 		SupportedModelFormats: []servingv1alpha1.SupportedModelFormat{
 			{
 				Name:    "aim",
@@ -274,10 +278,6 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 	if serviceState.Replicas != nil {
 		inferenceService.Spec.Predictor.MinReplicas = serviceState.Replicas
 		inferenceService.Spec.Predictor.MaxReplicas = *serviceState.Replicas
-	}
-
-	if serviceState.ModelSource != nil && serviceState.ModelSource.SourceURI != "" {
-		inferenceService.Spec.Predictor.Model.StorageURI = baseutils.Pointer(serviceState.ModelSource.SourceURI)
 	}
 
 	return inferenceService
