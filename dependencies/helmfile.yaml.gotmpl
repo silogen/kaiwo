@@ -48,7 +48,8 @@ releases:
     chart: oci://cr.kgateway.dev/kgateway-dev/charts/kgateway
     version: v2.1.0-main
     createNamespace: false
-    wait: true
+    wait: false              
+    disableValidation: true     
     timeout: 600
     needs:
       - kgateway-system/kgateway-crd
@@ -69,7 +70,8 @@ releases:
     chart: oci://ghcr.io/kserve/charts/kserve
     version: v0.15.2
     createNamespace: false
-    wait: true
+    wait: false              
+    disableValidation: true    
     timeout: 600
     needs:
       - kserve-system/kserve-crd

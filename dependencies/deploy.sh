@@ -43,7 +43,6 @@ safe_kubectl_apply_k() {
 }
 safe_helmfile() {
   local subcmd="$1"; shift
-  # Use absolute paths so Helmfile never depends on CWD
   helmfile -f "$HELMFILE_ABS" --state-values-file "$ENV_FILE_ABS" "$subcmd" "$@" || true
 }
 
@@ -54,35 +53,45 @@ case "$ACTION" in
     echo "1. Applying client-side Kustomize resources..."
     safe_kubectl_apply_k "$KUSTOMIZE_CLIENT"
 
-    echo "Waiting for Cert-Manager to be deployed..."
-    pids=()
+    # While we wait for cert-manager (the hard dependency), do SAFE background work:
+    #  - pre-render server-side kustomize manifest (no cluster changes yet)
+    #  - helm repo updates (so sync doesn't stall)
+    TMP_BUILD="$(mktemp)"
+    render_pid=""
+    if [ -d "$KUSTOMIZE_SERVER" ]; then
+      ( kubectl kustomize "$KUSTOMIZE_SERVER" > "$TMP_BUILD" ) &
+      render_pid=$!
+    fi
+    ( safe_helmfile repos ) &
+
+    echo "Waiting for Cert-Manager to be deployed (gate for downstream components)..."
     for deploy in cert-manager cert-manager-webhook cert-manager-cainjector; do
-      (
-        echo "Waiting for deployment: $deploy"
-        if kubectl get "deployment/$deploy" -n cert-manager >/dev/null 2>&1; then
-          kubectl rollout status "deployment/$deploy" -n cert-manager --timeout=5m
-        else
-          echo "Warning: $deploy deployment not found, skipping wait."
-        fi
-      ) &
-      pids+=($!)
+      echo "Waiting for deployment: $deploy"
+      if kubectl get "deployment/$deploy" -n cert-manager >/dev/null 2>&1; then
+        kubectl rollout status "deployment/$deploy" -n cert-manager --timeout=5m
+      else
+        echo "Warning: $deploy deployment not found, skipping wait."
+      fi
     done
-    for pid in "${pids[@]}"; do wait "$pid" || true; done
+    # Join the background render (if any) now that cert-manager is ready
+    if [ -n "${render_pid}" ]; then wait "${render_pid}" || true; fi
 
     echo "2. Applying server-side Kustomize resources from $KUSTOMIZE_SERVER..."
     if [ -d "$KUSTOMIZE_SERVER" ]; then
-      kubectl kustomize "$KUSTOMIZE_SERVER" > .build.yaml
-
-      yq eval 'select(.kind == "CustomResourceDefinition")' .build.yaml \
+      # Apply CRDs first (server-side) from the pre-rendered manifest
+      yq eval 'select(.kind == "CustomResourceDefinition")' "$TMP_BUILD" \
         | kubectl apply --server-side --force-conflicts -f -
 
-      yq eval --no-doc -r 'select(.kind == "CustomResourceDefinition") | .metadata.name' .build.yaml \
+      # Wait for each CRD to become Established (parallelized)
+      yq eval --no-doc -r 'select(.kind == "CustomResourceDefinition") | .metadata.name' "$TMP_BUILD" \
         | xargs -r -n1 -P8 -I{} kubectl wait --for=condition=Established --timeout=90s crd/{}
 
-      kubectl apply --server-side --force-conflicts -f .build.yaml
-
+      # Apply the rest (server-side)
+      kubectl apply --server-side --force-conflicts -f "$TMP_BUILD"
+      rm -f "$TMP_BUILD"
     else
       echo "Skip apply: kustomize path '$KUSTOMIZE_SERVER' not found."
+      [ -f "$TMP_BUILD" ] && rm -f "$TMP_BUILD"
     fi
 
     echo "Waiting for other dependencies to be deployed..."
