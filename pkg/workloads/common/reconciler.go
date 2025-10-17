@@ -67,6 +67,9 @@ type Reconciler struct {
 // 1. Observe the workload status from the cluster
 // 2. If the status or conditions have changed, update the status and requeue
 // 3. If the status is active, ensure all remote resources match the desired state
+
+// +kubebuilder:rbac:groups="",resources=namespaces;events;secrets;services;pods/log;pods;persistentvolumeclaims;configmaps,verbs=get;list;watch;create;update;patch;delete
+
 func (wr *Reconciler) Reconcile(ctx context.Context) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
