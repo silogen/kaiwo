@@ -28,8 +28,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ModelCacheSpec defines the desired state of ModelCache
-type ModelCacheSpec struct {
+// AIMModelCacheSpec defines the desired state of AIMModelCache
+type AIMModelCacheSpec struct {
 	// SourceURI is the source of the model to be downloaded. This is the only
 	// identifier
 	// +kubebuilder:validation:MinLength=1
@@ -50,30 +50,34 @@ type ModelCacheSpec struct {
 	// +listMapKey=name
 	Env []corev1.EnvVar `json:"env,omitempty"`
 
+	// ModelDownloadImage is the image used to download the model
+	// +kubebuilder:default="kserve/storage-initializer:v0.16.0-rc0"
+	ModelDownloadImage string `json:"modelDownloadImage"`
+
 	// ImagePullSecrets references secrets for pulling AIM container images.
 	// +optional
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 }
 
 // +kubebuilder:validation:Enum=Pending;Progressing;Available;Failed
-type ModelCacheStatusEnum string
+type AIMModelCacheStatusEnum string
 
 const (
-	// ModelCacheStatusPending denotes that the model cache has not been created yet
-	ModelCacheStatusPending ModelCacheStatusEnum = "Pending"
+	// AIMModelCacheStatusPending denotes that the model cache has not been created yet
+	AIMModelCacheStatusPending AIMModelCacheStatusEnum = "Pending"
 
-	// ModelCacheStatusProgressing denotes that the model cache is currently being filled
-	ModelCacheStatusProgressing ModelCacheStatusEnum = "Progressing"
+	// AIMModelCacheStatusProgressing denotes that the model cache is currently being filled
+	AIMModelCacheStatusProgressing AIMModelCacheStatusEnum = "Progressing"
 
-	// ModelCacheStatusAvailable denotes that a model cache is filled and ready to be used
-	ModelCacheStatusAvailable ModelCacheStatusEnum = "Available"
+	// AIMModelCacheStatusAvailable denotes that a model cache is filled and ready to be used
+	AIMModelCacheStatusAvailable AIMModelCacheStatusEnum = "Available"
 
-	// ModelCacheStatusFailed denotes that the model cache has failed. A more detailed reason will be available in the conditions.
-	ModelCacheStatusFailed ModelCacheStatusEnum = "Failed"
+	// AIMModelCacheStatusFailed denotes that the model cache has failed. A more detailed reason will be available in the conditions.
+	AIMModelCacheStatusFailed AIMModelCacheStatusEnum = "Failed"
 )
 
-// ModelCacheStatus defines the observed state of ModelCache
-type ModelCacheStatus struct {
+// AIMModelCacheStatus defines the observed state of AIMModelCache
+type AIMModelCacheStatus struct {
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
 	// Conditions represent the latest available observations of the model cache's state
@@ -83,13 +87,17 @@ type ModelCacheStatus struct {
 
 	// Status represents the current status of the model cache
 	// +kubebuilder:default=Pending
-	Status ModelCacheStatusEnum `json:"status,omitempty"`
+	Status AIMModelCacheStatusEnum `json:"status,omitempty"`
 
 	// LastUsed represents the last time a model was deployed that used this cache
 	LastUsed *metav1.Time `json:"lastUsed,omitempty"`
 
 	// PersistentVolumeClaim represents the name of the created PVC
 	PersistentVolumeClaim string `json:"persistentVolumeClaim,omitempty"`
+}
+
+func (m *AIMModelCache) GetStatus() *AIMModelCacheStatus {
+	return &m.Status
 }
 
 // Condition types
@@ -129,7 +137,7 @@ const (
 	ReasonWarm = "Warm"
 
 	// Failure
-
+	NoFailure            = "NoFailure"
 	ReasonDownloadFailed = "DownloadFailed"
 )
 
@@ -141,24 +149,24 @@ const (
 // +kubebuilder:printcolumn:name="PVC",type=string,JSONPath=`.status.persistentVolumeClaim`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
-// ModelCache is the Schema for the modelcaches API
-type ModelCache struct {
+// AIMModelCache is the Schema for the modelcaches API
+type AIMModelCache struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ModelCacheSpec   `json:"spec,omitempty"`
-	Status ModelCacheStatus `json:"status,omitempty"`
+	Spec   AIMModelCacheSpec   `json:"spec,omitempty"`
+	Status AIMModelCacheStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// ModelCacheList contains a list of ModelCache
-type ModelCacheList struct {
+// AIMModelCacheList contains a list of AIMModelCache
+type AIMModelCacheList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []ModelCache `json:"items"`
+	Items           []AIMModelCache `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&ModelCache{}, &ModelCacheList{})
+	SchemeBuilder.Register(&AIMModelCache{}, &AIMModelCacheList{})
 }

@@ -17,6 +17,8 @@ Package v1alpha1 contains API Schema definitions for the AIM v1alpha1 API group.
 - [AIMClusterServiceTemplateList](#aimclusterservicetemplatelist)
 - [AIMImage](#aimimage)
 - [AIMImageList](#aimimagelist)
+- [AIMModelCache](#aimmodelcache)
+- [AIMModelCacheList](#aimmodelcachelist)
 - [AIMRuntimeConfig](#aimruntimeconfig)
 - [AIMRuntimeConfigList](#aimruntimeconfiglist)
 - [AIMService](#aimservice)
@@ -25,8 +27,6 @@ Package v1alpha1 contains API Schema definitions for the AIM v1alpha1 API group.
 - [AIMServiceTemplateList](#aimservicetemplatelist)
 - [AIMTemplateCache](#aimtemplatecache)
 - [AIMTemplateCacheList](#aimtemplatecachelist)
-- [ModelCache](#modelcache)
-- [ModelCacheList](#modelcachelist)
 
 
 
@@ -282,6 +282,105 @@ _Appears in:_
 | --- | --- |
 | `latency` |  |
 | `throughput` |  |
+
+
+#### AIMModelCache
+
+
+
+AIMModelCache is the Schema for the modelcaches API
+
+
+
+_Appears in:_
+- [AIMModelCacheList](#aimmodelcachelist)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `AIMModelCache` | | |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `spec` _[AIMModelCacheSpec](#aimmodelcachespec)_ |  |  |  |
+| `status` _[AIMModelCacheStatus](#aimmodelcachestatus)_ |  |  |  |
+
+
+#### AIMModelCacheList
+
+
+
+AIMModelCacheList contains a list of AIMModelCache
+
+
+
+
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `AIMModelCacheList` | | |
+| `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `items` _[AIMModelCache](#aimmodelcache) array_ |  |  |  |
+
+
+#### AIMModelCacheSpec
+
+
+
+AIMModelCacheSpec defines the desired state of AIMModelCache
+
+
+
+_Appears in:_
+- [AIMModelCache](#aimmodelcache)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `sourceUri` _string_ | SourceURI is the source of the model to be downloaded. This is the only<br />identifier |  | MinLength: 1 <br />Pattern: `^(hf\|s3)://[^ \t\r\n]+$` <br /> |
+| `storageClassName` _string_ | StorageClassName specifies the storage class for the cache volume |  |  |
+| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#quantity-resource-api)_ | Size specifies the size of the cache volume |  |  |
+| `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env lists the environment variables to use for authentication when downloading models.<br />These variables are used for authentication with model registries (e.g., HuggingFace tokens). |  |  |
+| `modelDownloadImage` _string_ | ModelDownloadImage is the image used to download the model | kserve/storage-initializer:v0.16.0-rc0 |  |
+| `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets references secrets for pulling AIM container images. |  |  |
+
+
+#### AIMModelCacheStatus
+
+
+
+AIMModelCacheStatus defines the observed state of AIMModelCache
+
+
+
+_Appears in:_
+- [AIMModelCache](#aimmodelcache)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `observedGeneration` _integer_ |  |  |  |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest available observations of the model cache's state |  |  |
+| `status` _[AIMModelCacheStatusEnum](#aimmodelcachestatusenum)_ | Status represents the current status of the model cache | Pending | Enum: [Pending Progressing Available Failed] <br /> |
+| `lastUsed` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | LastUsed represents the last time a model was deployed that used this cache |  |  |
+| `persistentVolumeClaim` _string_ | PersistentVolumeClaim represents the name of the created PVC |  |  |
+
+
+#### AIMModelCacheStatusEnum
+
+_Underlying type:_ _string_
+
+
+
+_Validation:_
+- Enum: [Pending Progressing Available Failed]
+
+_Appears in:_
+- [AIMModelCacheStatus](#aimmodelcachestatus)
+
+| Field | Description |
+| --- | --- |
+| `Pending` | AIMModelCacheStatusPending denotes that the model cache has not been created yet<br /> |
+| `Progressing` | AIMModelCacheStatusProgressing denotes that the model cache is currently being filled<br /> |
+| `Available` | AIMModelCacheStatusAvailable denotes that a model cache is filled and ready to be used<br /> |
+| `Failed` | AIMModelCacheStatusFailed denotes that the model cache has failed. A more detailed reason will be available in the conditions.<br /> |
 
 
 #### AIMModelSource
@@ -1046,103 +1145,5 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `count` _integer_ | Count is the number of the GPU resources requested per replica |  | Minimum: 1 <br /> |
 | `model` _string_ | Model is the model name of the GPU that is supported by this template |  | MinLength: 1 <br /> |
-
-
-#### ModelCache
-
-
-
-ModelCache is the Schema for the modelcaches API
-
-
-
-_Appears in:_
-- [ModelCacheList](#modelcachelist)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
-| `kind` _string_ | `ModelCache` | | |
-| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
-| `spec` _[ModelCacheSpec](#modelcachespec)_ |  |  |  |
-| `status` _[ModelCacheStatus](#modelcachestatus)_ |  |  |  |
-
-
-#### ModelCacheList
-
-
-
-ModelCacheList contains a list of ModelCache
-
-
-
-
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
-| `kind` _string_ | `ModelCacheList` | | |
-| `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
-| `items` _[ModelCache](#modelcache) array_ |  |  |  |
-
-
-#### ModelCacheSpec
-
-
-
-ModelCacheSpec defines the desired state of ModelCache
-
-
-
-_Appears in:_
-- [ModelCache](#modelcache)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `sourceUri` _string_ | SourceURI is the source of the model to be downloaded. This is the only<br />identifier |  | MinLength: 1 <br />Pattern: `^(hf\|s3)://[^ \t\r\n]+$` <br /> |
-| `storageClassName` _string_ | StorageClassName specifies the storage class for the cache volume |  |  |
-| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#quantity-resource-api)_ | Size specifies the size of the cache volume |  |  |
-| `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env lists the environment variables to use for authentication when downloading models.<br />These variables are used for authentication with model registries (e.g., HuggingFace tokens). |  |  |
-| `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets references secrets for pulling AIM container images. |  |  |
-
-
-#### ModelCacheStatus
-
-
-
-ModelCacheStatus defines the observed state of ModelCache
-
-
-
-_Appears in:_
-- [ModelCache](#modelcache)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `observedGeneration` _integer_ |  |  |  |
-| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest available observations of the model cache's state |  |  |
-| `status` _[ModelCacheStatusEnum](#modelcachestatusenum)_ | Status represents the current status of the model cache | Pending | Enum: [Pending Progressing Available Failed] <br /> |
-| `lastUsed` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | LastUsed represents the last time a model was deployed that used this cache |  |  |
-| `persistentVolumeClaim` _string_ | PersistentVolumeClaim represents the name of the created PVC |  |  |
-
-
-#### ModelCacheStatusEnum
-
-_Underlying type:_ _string_
-
-
-
-_Validation:_
-- Enum: [Pending Progressing Available Failed]
-
-_Appears in:_
-- [ModelCacheStatus](#modelcachestatus)
-
-| Field | Description |
-| --- | --- |
-| `Pending` | ModelCacheStatusPending denotes that the model cache has not been created yet<br /> |
-| `Progressing` | ModelCacheStatusProgressing denotes that the model cache is currently being filled<br /> |
-| `Available` | ModelCacheStatusAvailable denotes that a model cache is filled and ready to be used<br /> |
-| `Failed` | ModelCacheStatusFailed denotes that the model cache has failed. A more detailed reason will be available in the conditions.<br /> |
 
 
