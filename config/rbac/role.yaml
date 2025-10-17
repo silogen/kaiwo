@@ -29,7 +29,7 @@ rules:
   - "kaiwoqueueconfigs"
   - "kaiwoservices"
   - "clustermodels"
-  - "modelcaches"
+  - "aimmodelcaches"
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
 - apiGroups: ["aim.silogen.ai"]
@@ -42,7 +42,7 @@ rules:
   - "aimclusterservicetemplates"
   - "aimtemplatecaches"
   - "aimservices"
-  - "modelcaches"
+  - "aimmodelcaches"
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
 - apiGroups: ["config.kaiwo.silogen.ai"]
@@ -71,7 +71,7 @@ rules:
   - "aimclusterservicetemplates/status"
   - "aimtemplatecaches/status"
   - "aimservices/status"
-  - "modelcaches/status"
+  - "aimmodelcaches/status"
   verbs: ["get", "update", "patch"]
 
 - apiGroups: ["gateway.networking.k8s.io"]
@@ -92,7 +92,7 @@ rules:
   - "kaiwoservices/status"
   - "kaiwoqueueconfigs/status"
   - "clustermodels/status"
-  - "modelcaches/status"
+  - "aimmodelcaches/status"
   verbs: ["get", "update", "patch"]
 
 - apiGroups: ["batch"]
@@ -140,3 +140,8 @@ rules:
 - apiGroups: ["coordination.k8s.io"]
   resources: ["leases"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+# Validate storageclass
+- apiGroups: ["storage.k8s.io"]
+  resources: ["storageclasses"]
+  verbs: ["get","list","watch"]

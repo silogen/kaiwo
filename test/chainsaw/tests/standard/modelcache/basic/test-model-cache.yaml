@@ -1,0 +1,8 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMModelCache
+metadata:
+  name: test
+spec:
+  sourceUri: hf://HuggingFaceTB/SmolLM2-135M
+  size: 280Mi
+  storageClassName: rwx-nfs

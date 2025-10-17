@@ -4,19 +4,19 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.1
-  name: modelcaches.kaiwo.silogen.ai
+  name: aimmodelcaches.aim.silogen.ai
 spec:
-  group: kaiwo.silogen.ai
+  group: aim.silogen.ai
   names:
     categories:
-    - kaiwo
+    - aim
     - all
-    kind: ModelCache
-    listKind: ModelCacheList
-    plural: modelcaches
+    kind: AIMModelCache
+    listKind: AIMModelCacheList
+    plural: aimmodelcaches
     shortNames:
     - mc
-    singular: modelcache
+    singular: aimmodelcache
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -35,7 +35,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: ModelCache is the Schema for the modelcaches API
+        description: AIMModelCache is the Schema for the modelcaches API
         properties:
           apiVersion:
             description: |-
@@ -55,11 +55,12 @@ spec:
           metadata:
             type: object
           spec:
-            description: ModelCacheSpec defines the desired state of ModelCache
+            description: AIMModelCacheSpec defines the desired state of AIMModelCache
             properties:
               env:
-                description: Env lists the environment variables required to download
-                  the model into the cache
+                description: |-
+                  Env lists the environment variables to use for authentication when downloading models.
+                  These variables are used for authentication with model registries (e.g., HuggingFace tokens).
                 items:
                   description: EnvVar represents an environment variable present in
                     a Container.
@@ -179,6 +180,31 @@ spec:
                 x-kubernetes-list-map-keys:
                 - name
                 x-kubernetes-list-type: map
+              imagePullSecrets:
+                description: ImagePullSecrets references secrets for pulling AIM container
+                  images.
+                items:
+                  description: |-
+                    LocalObjectReference contains enough information to let you locate the
+                    referenced object inside the same namespace.
+                  properties:
+                    name:
+                      default: ""
+                      description: |-
+                        Name of the referent.
+                        This field is effectively required, but due to backwards compatibility is
+                        allowed to be empty. Instances of this type with an empty value here are
+                        almost certainly wrong.
+                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                      type: string
+                  type: object
+                  x-kubernetes-map-type: atomic
+                type: array
+              modelDownloadImage:
+                default: kserve/storage-initializer:v0.16.0-rc0
+                description: ModelDownloadImage is the image used to download the
+                  model
+                type: string
               size:
                 anyOf:
                 - type: integer
@@ -186,28 +212,27 @@ spec:
                 description: Size specifies the size of the cache volume
                 pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                 x-kubernetes-int-or-string: true
-                x-kubernetes-validations:
-                - message: size must be greater than 0
-                  rule: quantity(self.size) > quantity('0')
               sourceUri:
                 description: |-
                   SourceURI is the source of the model to be downloaded. This is the only
                   identifier
                 minLength: 1
+                pattern: ^(hf|s3)://[^ \t\r\n]+$
                 type: string
                 x-kubernetes-validations:
                 - message: sourceUri is immutable
-                  rule: self.sourceUri == oldSelf.sourceUri
+                  rule: self == oldSelf
               storageClassName:
                 description: StorageClassName specifies the storage class for the
                   cache volume
                 type: string
             required:
+            - modelDownloadImage
             - size
             - sourceUri
             type: object
           status:
-            description: ModelCacheStatus defines the observed state of ModelCache
+            description: AIMModelCacheStatus defines the observed state of AIMModelCache
             properties:
               conditions:
                 description: Conditions represent the latest available observations
