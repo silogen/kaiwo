@@ -109,7 +109,6 @@ func (r *AIMModelCacheReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		},
 		FinalizeFn: nil,
 	})
-
 }
 
 // observation holds read-only snapshot of dependent resources and derived flags
@@ -249,7 +248,7 @@ func (r *AIMModelCacheReconciler) projectStatus(_ context.Context, mc *aimv1alph
 	status := mc.Status
 	var conditions []metav1.Condition
 
-	//Report any outstanding errors to report from previous controller actions
+	// Report any outstanding errors to report from previous controller actions
 	if errs.HasError() {
 
 		if errs.ObserveErr != nil {
@@ -277,7 +276,7 @@ func (r *AIMModelCacheReconciler) projectStatus(_ context.Context, mc *aimv1alph
 		return nil
 	}
 
-	//Check dependencies (pvc & job)
+	// Check dependencies (pvc & job)
 	mc.Status.PersistentVolumeClaim = r.pvcName(mc)
 	mc.Status.ObservedGeneration = mc.GetGeneration()
 
@@ -294,8 +293,8 @@ func (r *AIMModelCacheReconciler) projectStatus(_ context.Context, mc *aimv1alph
 	}
 	mc.Status.Status = r.determineOverallStatus(stateFlags, *ob)
 
-	//fmt.Printf("%v\n", newStatus)
-	//r.Recorder
+	// fmt.Printf("%v\n", newStatus)
+	// r.Recorder
 
 	return nil
 }
