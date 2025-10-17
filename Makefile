@@ -142,6 +142,7 @@ define copy-helm-resources
 	@cat config/rbac/role.yaml > $(CHART_DIR)/rbac-resources.yaml
 	@echo "---" >> $(CHART_DIR)/rbac-resources.yaml
 	@cat config/rbac/role_binding.yaml >> $(CHART_DIR)/rbac-resources.yaml
+	@cat config/rbac/leader_election_role.yaml config/rbac/leader_election_role_binding.yaml >> $(CHART_DIR)/rbac-resources.yaml
 	@echo "Copying scheduler resources from config/static/scheduler..."
 	@cat config/static/scheduler/kaiwo-scheduler.yaml > $(CHART_DIR)/scheduler-resources.yaml
 endef
