@@ -55,6 +55,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
@@ -83,6 +84,9 @@ import (
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 	aimcontroller "github.com/silogen/kaiwo/internal/controller/aim"
 
+	infrastructurev1alpha1 "github.com/silogen/kaiwo/apis/infrastructure/v1alpha1"
+	infrastructurecontroller "github.com/silogen/kaiwo/internal/controller/infrastructure"
+
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
@@ -99,6 +103,7 @@ func init() {
 	utilruntime.Must(kaiwo.AddToScheme(scheme))
 	utilruntime.Must(configapi.AddToScheme(scheme))
 	utilruntime.Must(aimv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(infrastructurev1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 
 	utilruntime.Must(kueuev1beta1.AddToScheme(scheme))
@@ -327,6 +332,17 @@ func main() {
 	// Setup AIM controllers
 	if err = aimcontroller.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to setup AIM controllers")
+		os.Exit(1)
+	}
+
+	// Setup Infrastructure controllers
+	clientset, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		setupLog.Error(err, "unable to create clientset for infrastructure controllers")
+		os.Exit(1)
+	}
+	if err = infrastructurecontroller.SetupWithManager(mgr, clientset); err != nil {
+		setupLog.Error(err, "unable to setup Infrastructure controllers")
 		os.Exit(1)
 	}
 

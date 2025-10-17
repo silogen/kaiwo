@@ -36,6 +36,7 @@ manifests: controller-gen
 		paths=./apis/kaiwo/v1alpha1/... \
 		paths=./apis/config/v1alpha1/... \
 		paths=./apis/aim/v1alpha1/... \
+		paths=./apis/infrastructure/v1alpha1/... \
 		output:crd:artifacts:config=config/crd/bases
 
 .PHONY: generate
@@ -44,7 +45,8 @@ generate: controller-gen
 	$(CONTROLLER_GEN) object:headerFile=".copyright-template.goheader" \
 		paths=./apis/kaiwo/v1alpha1/... \
 		paths=./apis/aim/v1alpha1/... \
-		paths=./apis/config/v1alpha1/...
+		paths=./apis/config/v1alpha1/... \
+		paths=./apis/infrastructure/v1alpha1/...
 	@rm .copyright-template.goheader
 	
 .PHONY: fmt

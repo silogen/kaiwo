@@ -1,0 +1,486 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.1
+  name: partitioningplans.infrastructure.silogen.ai
+spec:
+  group: infrastructure.silogen.ai
+  names:
+    categories:
+    - infrastructure
+    - gpu
+    kind: PartitioningPlan
+    listKind: PartitioningPlanList
+    plural: partitioningplans
+    shortNames:
+    - gpuplan
+    - plan
+    singular: partitioningplan
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.summary.succeeded
+      name: Succeeded
+      type: integer
+    - jsonPath: .status.summary.failed
+      name: Failed
+      type: integer
+    - jsonPath: .status.summary.matchingNodes
+      name: Total
+      type: integer
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          PartitioningPlan is the Schema for the partitioningplans API.
+          It orchestrates the application of partition profiles across a set of nodes.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: PartitioningPlanSpec defines the desired state of PartitioningPlan.
+            properties:
+              defaults:
+                description: Defaults defines default policies inherited by NodePartitioning
+                  resources.
+                properties:
+                  retry:
+                    description: Retry defines the default retry policy.
+                    properties:
+                      backoffSeconds:
+                        default: 60
+                        description: |-
+                          BackoffSeconds is the base backoff duration between retries.
+                          Actual backoff is: backoffSeconds * 2^attempts
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      maxAttempts:
+                        default: 3
+                        description: MaxAttempts is the maximum number of retry attempts
+                          before giving up.
+                        format: int32
+                        minimum: 1
+                        type: integer
+                    type: object
+                type: object
+              dryRun:
+                description: |-
+                  DryRun indicates whether to simulate the plan without making any changes.
+                  When true, NodePartitioning resources are created but marked as Skipped.
+                type: boolean
+              partitionings:
+                description: Partitionings defines the rules mapping nodes to partition
+                  profiles.
+                items:
+                  description: PartitioningRule maps a node selector to a partition
+                    profile.
+                  properties:
+                    exclude:
+                      description: Exclude is an optional label selector to exclude
+                        specific nodes.
+                      properties:
+                        matchExpressions:
+                          description: matchExpressions is a list of label selector
+                            requirements. The requirements are ANDed.
+                          items:
+                            description: |-
+                              A label selector requirement is a selector that contains values, a key, and an operator that
+                              relates the key and values.
+                            properties:
+                              key:
+                                description: key is the label key that the selector
+                                  applies to.
+                                type: string
+                              operator:
+                                description: |-
+                                  operator represents a key's relationship to a set of values.
+                                  Valid operators are In, NotIn, Exists and DoesNotExist.
+                                type: string
+                              values:
+                                description: |-
+                                  values is an array of string values. If the operator is In or NotIn,
+                                  the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                  the values array must be empty. This array is replaced during a strategic
+                                  merge patch.
+                                items:
+                                  type: string
+                                type: array
+                                x-kubernetes-list-type: atomic
+                            required:
+                            - key
+                            - operator
+                            type: object
+                          type: array
+                          x-kubernetes-list-type: atomic
+                        matchLabels:
+                          additionalProperties:
+                            type: string
+                          description: |-
+                            matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                            map is equivalent to an element of matchExpressions, whose key field is "key", the
+                            operator is "In", and the values array contains only "value". The requirements are ANDed.
+                          type: object
+                      type: object
+                      x-kubernetes-map-type: atomic
+                    name:
+                      description: Name is an optional human-readable name for this
+                        rule.
+                      type: string
+                    profileRef:
+                      description: ProfileRef references the PartitioningProfile to
+                        apply.
+                      properties:
+                        kind:
+                          default: PartitioningProfile
+                          description: Kind of the profile reference (currently only
+                            PartitioningProfile supported).
+                          enum:
+                          - PartitioningProfile
+                          type: string
+                        name:
+                          description: Name of the PartitioningProfile.
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    selector:
+                      description: Selector selects nodes to partition.
+                      properties:
+                        matchExpressions:
+                          description: matchExpressions is a list of label selector
+                            requirements. The requirements are ANDed.
+                          items:
+                            description: |-
+                              A label selector requirement is a selector that contains values, a key, and an operator that
+                              relates the key and values.
+                            properties:
+                              key:
+                                description: key is the label key that the selector
+                                  applies to.
+                                type: string
+                              operator:
+                                description: |-
+                                  operator represents a key's relationship to a set of values.
+                                  Valid operators are In, NotIn, Exists and DoesNotExist.
+                                type: string
+                              values:
+                                description: |-
+                                  values is an array of string values. If the operator is In or NotIn,
+                                  the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                  the values array must be empty. This array is replaced during a strategic
+                                  merge patch.
+                                items:
+                                  type: string
+                                type: array
+                                x-kubernetes-list-type: atomic
+                            required:
+                            - key
+                            - operator
+                            type: object
+                          type: array
+                          x-kubernetes-list-type: atomic
+                        matchLabels:
+                          additionalProperties:
+                            type: string
+                          description: |-
+                            matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                            map is equivalent to an element of matchExpressions, whose key field is "key", the
+                            operator is "In", and the values array contains only "value". The requirements are ANDed.
+                          type: object
+                      type: object
+                      x-kubernetes-map-type: atomic
+                  required:
+                  - profileRef
+                  - selector
+                  type: object
+                minItems: 1
+                type: array
+              paused:
+                description: |-
+                  Paused indicates whether the plan should stop reconciling.
+                  When true, no new node operations will be started, but status updates continue.
+                type: boolean
+              rollout:
+                description: Rollout defines how to orchestrate node changes.
+                properties:
+                  drainPolicy:
+                    description: DrainPolicy defines how to drain nodes.
+                    properties:
+                      enabled:
+                        default: true
+                        description: Enabled determines whether the node should be
+                          drained.
+                        type: boolean
+                      evictionKind:
+                        default: Eviction
+                        description: |-
+                          EvictionKind specifies how to evict pods.
+                          Eviction: Use Eviction API (respects PDBs)
+                          Delete: Direct pod deletion (ignores PDBs)
+                          None: Skip eviction (use with caution)
+                        enum:
+                        - Eviction
+                        - Delete
+                        - None
+                        type: string
+                      respectPDB:
+                        default: true
+                        description: |-
+                          RespectPDB determines whether to respect PodDisruptionBudgets.
+                          Only applies when EvictionKind is "Eviction".
+                        type: boolean
+                      timeoutSeconds:
+                        default: 1200
+                        description: TimeoutSeconds is the maximum time to wait for
+                          pods to terminate.
+                        format: int32
+                        minimum: 1
+                        type: integer
+                    required:
+                    - enabled
+                    type: object
+                  maxParallel:
+                    default: 1
+                    description: MaxParallel is the maximum number of nodes to process
+                      in parallel.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  maxUnavailable:
+                    default: 1
+                    description: |-
+                      MaxUnavailable is the maximum number of nodes allowed to be unavailable at once.
+                      Unavailable means: Draining, Applying, Verifying, or Failed.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                type: object
+              verification:
+                description: |-
+                  Verification defines global verification settings.
+                  These can be overridden by individual profiles.
+                properties:
+                  gpuReadyLabel:
+                    default: amd.com/gpu.ready
+                    description: |-
+                      GpuReadyLabel is the node label that indicates GPU readiness.
+                      The controller waits for this label to be present with value "true".
+                    type: string
+                  requirePluginResources:
+                    description: |-
+                      RequirePluginResources is a list of resource names that must appear
+                      in node.status.allocatable after partitioning.
+                    items:
+                      type: string
+                    type: array
+                  timeoutSeconds:
+                    default: 900
+                    description: TimeoutSeconds is the maximum time to wait for verification
+                      to pass.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                type: object
+            required:
+            - partitionings
+            type: object
+          status:
+            description: PartitioningPlanStatus defines the observed state of PartitioningPlan.
+            properties:
+              conditions:
+                description: Conditions represent the latest available observations
+                  of the plan's state.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              lastSyncTime:
+                description: LastSyncTime is the timestamp of the last successful
+                  reconciliation.
+                format: date-time
+                type: string
+              nodeStatuses:
+                description: |-
+                  NodeStatuses is a lightweight cache of per-node status for dashboards.
+                  The source of truth is in the NodePartitioning resources.
+                items:
+                  description: NodeStatusSummary provides a lightweight summary of
+                    a node's partitioning status.
+                  properties:
+                    currentHash:
+                      description: CurrentHash is the current state hash.
+                      type: string
+                    desiredHash:
+                      description: DesiredHash is the desired state hash.
+                      type: string
+                    lastError:
+                      description: LastError is the most recent error message.
+                      type: string
+                    lastUpdateTime:
+                      description: LastUpdateTime is the timestamp of the last status
+                        update.
+                      format: date-time
+                      type: string
+                    nodeName:
+                      description: NodeName is the name of the node.
+                      type: string
+                    phase:
+                      description: Phase is the current phase.
+                      enum:
+                      - Pending
+                      - Draining
+                      - Applying
+                      - WaitingOperator
+                      - Verifying
+                      - Succeeded
+                      - Failed
+                      - Skipped
+                      type: string
+                    retries:
+                      description: Retries is the number of retry attempts so far.
+                      format: int32
+                      type: integer
+                  required:
+                  - desiredHash
+                  - nodeName
+                  - phase
+                  type: object
+                type: array
+              observedGeneration:
+                description: ObservedGeneration is the most recent generation observed
+                  by the controller.
+                format: int64
+                type: integer
+              phase:
+                description: Phase represents the overall phase of the plan.
+                enum:
+                - Pending
+                - Progressing
+                - Paused
+                - Completed
+                - Degraded
+                type: string
+              summary:
+                description: Summary aggregates node counts by phase.
+                properties:
+                  applying:
+                    description: Applying is the number of nodes in Applying or related
+                      phases.
+                    format: int32
+                    type: integer
+                  failed:
+                    description: Failed is the number of nodes that failed.
+                    format: int32
+                    type: integer
+                  matchingNodes:
+                    description: MatchingNodes is the number of nodes matched by the
+                      plan's selectors.
+                    format: int32
+                    type: integer
+                  pending:
+                    description: Pending is the number of nodes in Pending phase.
+                    format: int32
+                    type: integer
+                  skipped:
+                    description: Skipped is the number of nodes that were skipped.
+                    format: int32
+                    type: integer
+                  succeeded:
+                    description: Succeeded is the number of nodes that completed successfully.
+                    format: int32
+                    type: integer
+                  totalNodes:
+                    description: TotalNodes is the total number of nodes tracked by
+                      the plan.
+                    format: int32
+                    type: integer
+                  verifying:
+                    description: Verifying is the number of nodes in Verifying phase.
+                    format: int32
+                    type: integer
+                type: object
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

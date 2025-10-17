@@ -1,0 +1,336 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.1
+  name: nodepartitionings.infrastructure.silogen.ai
+spec:
+  group: infrastructure.silogen.ai
+  names:
+    categories:
+    - infrastructure
+    - gpu
+    kind: NodePartitioning
+    listKind: NodePartitioningList
+    plural: nodepartitionings
+    shortNames:
+    - nodepartition
+    - np
+    singular: nodepartitioning
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.nodeName
+      name: Node
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .spec.profileRef.name
+      name: Profile
+      type: string
+    - jsonPath: .status.attempts
+      name: Attempts
+      type: integer
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          NodePartitioning is the Schema for the nodepartitionings API.
+          It represents a per-node work item for applying a partition profile.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: NodePartitioningSpec defines the desired state of NodePartitioning.
+            properties:
+              desiredHash:
+                description: |-
+                  DesiredHash is a deterministic hash of the desired partition state.
+                  Used for idempotency and change detection.
+                minLength: 1
+                type: string
+              drainPolicy:
+                description: DrainPolicy defines how to drain the node (inherited
+                  from plan).
+                properties:
+                  enabled:
+                    default: true
+                    description: Enabled determines whether the node should be drained.
+                    type: boolean
+                  evictionKind:
+                    default: Eviction
+                    description: |-
+                      EvictionKind specifies how to evict pods.
+                      Eviction: Use Eviction API (respects PDBs)
+                      Delete: Direct pod deletion (ignores PDBs)
+                      None: Skip eviction (use with caution)
+                    enum:
+                    - Eviction
+                    - Delete
+                    - None
+                    type: string
+                  respectPDB:
+                    default: true
+                    description: |-
+                      RespectPDB determines whether to respect PodDisruptionBudgets.
+                      Only applies when EvictionKind is "Eviction".
+                    type: boolean
+                  timeoutSeconds:
+                    default: 1200
+                    description: TimeoutSeconds is the maximum time to wait for pods
+                      to terminate.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                required:
+                - enabled
+                type: object
+              nodeName:
+                description: NodeName is the name of the target node.
+                minLength: 1
+                type: string
+              planRef:
+                description: PlanRef references the parent PartitioningPlan.
+                properties:
+                  name:
+                    description: Name of the PartitioningPlan.
+                    type: string
+                  uid:
+                    description: UID of the PartitioningPlan (for strong ownership).
+                    type: string
+                required:
+                - name
+                type: object
+              profileRef:
+                description: ProfileRef references the PartitioningProfile to apply.
+                properties:
+                  kind:
+                    default: PartitioningProfile
+                    description: Kind of the profile reference (currently only PartitioningProfile
+                      supported).
+                    enum:
+                    - PartitioningProfile
+                    type: string
+                  name:
+                    description: Name of the PartitioningProfile.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              retry:
+                description: Retry defines the retry policy (inherited from plan).
+                properties:
+                  backoffSeconds:
+                    default: 60
+                    description: |-
+                      BackoffSeconds is the base backoff duration between retries.
+                      Actual backoff is: backoffSeconds * 2^attempts
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  maxAttempts:
+                    default: 3
+                    description: MaxAttempts is the maximum number of retry attempts
+                      before giving up.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                type: object
+              verification:
+                description: Verification defines how to verify the partition (inherited
+                  from plan/profile).
+                properties:
+                  gpuReadyLabel:
+                    default: amd.com/gpu.ready
+                    description: |-
+                      GpuReadyLabel is the node label that indicates GPU readiness.
+                      The controller waits for this label to be present with value "true".
+                    type: string
+                  requirePluginResources:
+                    description: |-
+                      RequirePluginResources is a list of resource names that must appear
+                      in node.status.allocatable after partitioning.
+                    items:
+                      type: string
+                    type: array
+                  timeoutSeconds:
+                    default: 900
+                    description: TimeoutSeconds is the maximum time to wait for verification
+                      to pass.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                type: object
+            required:
+            - desiredHash
+            - nodeName
+            - planRef
+            - profileRef
+            type: object
+          status:
+            description: NodePartitioningStatus defines the observed state of NodePartitioning.
+            properties:
+              attempts:
+                description: Attempts is the number of retry attempts so far.
+                format: int32
+                type: integer
+              conditions:
+                description: Conditions represent the latest available observations
+                  of the operation's state.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              currentHash:
+                description: CurrentHash is the hash of the current applied state.
+                type: string
+              history:
+                description: History is a ring buffer of recent state transitions
+                  (max 20 entries).
+                items:
+                  description: NodePartitioningHistoryEntry records a state transition.
+                  properties:
+                    at:
+                      description: At is the timestamp of the transition.
+                      format: date-time
+                      type: string
+                    message:
+                      description: Message is a human-readable description of the
+                        transition.
+                      type: string
+                    phase:
+                      description: Phase is the phase at this point in history.
+                      enum:
+                      - Pending
+                      - Draining
+                      - Applying
+                      - WaitingOperator
+                      - Verifying
+                      - Succeeded
+                      - Failed
+                      - Skipped
+                      type: string
+                  required:
+                  - at
+                  - message
+                  - phase
+                  type: object
+                type: array
+                x-kubernetes-list-type: atomic
+              lastError:
+                description: LastError is the most recent error message.
+                type: string
+              lastErrorClass:
+                description: LastErrorClass is a normalized error classification for
+                  alerting.
+                enum:
+                - ""
+                - NodeNotFound
+                - DrainTimeout
+                - OperatorUnavailable
+                - ApplyFailed
+                - VerifyFailed
+                - UnsupportedHardware
+                type: string
+              lastUpdateTime:
+                description: LastUpdateTime is the timestamp of the last status update.
+                format: date-time
+                type: string
+              observedGeneration:
+                description: ObservedGeneration is the most recent generation observed
+                  by the controller.
+                format: int64
+                type: integer
+              phase:
+                description: Phase represents the current phase in the state machine.
+                enum:
+                - Pending
+                - Draining
+                - Applying
+                - WaitingOperator
+                - Verifying
+                - Succeeded
+                - Failed
+                - Skipped
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
