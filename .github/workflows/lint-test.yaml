@@ -133,10 +133,6 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - uses: actions/setup-go@v5
-      with:
-        go-version-file: go.mod
-
     - name: Free disk space
       shell: bash
       run: |
@@ -159,6 +155,11 @@ jobs:
           fi
         done
         wait
+
+
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
 
     - name: Download CLI artifact
       uses: actions/download-artifact@v4
