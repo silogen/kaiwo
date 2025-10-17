@@ -37,18 +37,14 @@ help: ## Display this help.
 .PHONY: manifests
 manifests: controller-gen
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd:maxDescLen=512,allowDangerousTypes=true,generateEmbeddedObjectMeta=true \
-		paths=./apis/kaiwo/v1alpha1/... \
-		paths=./apis/config/v1alpha1/... \
-		paths=./apis/aim/v1alpha1/... \
+		paths=./... \
 		output:crd:artifacts:config=config/crd/bases
 
 .PHONY: generate
 generate: controller-gen
 	@sed 's/^/\/\/ /' .copyright-template > .copyright-template.goheader
 	$(CONTROLLER_GEN) object:headerFile=".copyright-template.goheader" \
-		paths=./apis/kaiwo/v1alpha1/... \
-		paths=./apis/aim/v1alpha1/... \
-		paths=./apis/config/v1alpha1/...
+		paths=./...
 	@rm .copyright-template.goheader
 	
 .PHONY: fmt

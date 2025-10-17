@@ -67,6 +67,8 @@ type KaiwoQueueConfigReconciler struct {
 // +kubebuilder:rbac:groups=kaiwo.silogen.ai,resources=kaiwoqueueconfigs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=kaiwo.silogen.ai,resources=kaiwoqueueconfigs/finalizers,verbs=update
 // +kubebuilder:rbac:groups=config.kaiwo.silogen.ai,resources=kaiwoconfigs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=kueue.x-k8s.io,resources=resourceflavors;clusterqueues;localqueues;workloads;admissionchecks;workloadpriorityclasses;topologies,verbs=get;list;watch;create;update;patch;delete
 
 func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
