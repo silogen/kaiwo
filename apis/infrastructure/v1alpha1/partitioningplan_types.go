@@ -43,17 +43,9 @@ type PartitioningPlanSpec struct {
 	// Rollout defines how to orchestrate node changes.
 	Rollout RolloutPolicy `json:"rollout,omitempty"`
 
-	// Verification defines global verification settings.
-	// These can be overridden by individual profiles.
-	Verification VerificationSpec `json:"verification,omitempty"`
-
-	// Defaults defines default policies inherited by NodePartitioning resources.
-	// +optional
-	Defaults *PlanDefaults `json:"defaults,omitempty"`
-
-	// Partitionings defines the rules mapping nodes to partition profiles.
+	// Rules defines the rules mapping nodes to partition profiles.
 	// +kubebuilder:validation:MinItems=1
-	Partitionings []PartitioningRule `json:"partitionings"`
+	Rules []PartitioningRule `json:"rules"`
 }
 
 // PartitioningPlanStatus defines the observed state of PartitioningPlan.

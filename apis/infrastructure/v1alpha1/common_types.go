@@ -26,100 +26,13 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 )
-
-// DrainPolicy defines how pods should be evicted from a node during partitioning.
-type DrainPolicy struct {
-	// Enabled determines whether the node should be drained.
-	// +kubebuilder:default=true
-	Enabled bool `json:"enabled"`
-
-	// TimeoutSeconds is the maximum time to wait for pods to terminate.
-	// +kubebuilder:default=1200
-	// +kubebuilder:validation:Minimum=1
-	TimeoutSeconds int32 `json:"timeoutSeconds,omitempty"`
-
-	// EvictionKind specifies how to evict pods.
-	// Eviction: Use Eviction API (respects PDBs)
-	// Delete: Direct pod deletion (ignores PDBs)
-	// None: Skip eviction (use with caution)
-	// +kubebuilder:default=Eviction
-	// +kubebuilder:validation:Enum=Eviction;Delete;None
-	EvictionKind string `json:"evictionKind,omitempty"`
-
-	// RespectPDB determines whether to respect PodDisruptionBudgets.
-	// Only applies when EvictionKind is "Eviction".
-	// +kubebuilder:default=true
-	RespectPDB bool `json:"respectPDB,omitempty"`
-}
-
-// VerificationSpec defines how to verify that partitioning succeeded.
-type VerificationSpec struct {
-	// GpuReadyLabel is the node label that indicates GPU readiness.
-	// The controller waits for this label to be present with value "true".
-	// +kubebuilder:default="amd.com/gpu.ready"
-	GpuReadyLabel string `json:"gpuReadyLabel,omitempty"`
-
-	// RequirePluginResources is a list of resource names that must appear
-	// in node.status.allocatable after partitioning.
-	// +optional
-	RequirePluginResources []string `json:"requirePluginResources,omitempty"`
-
-	// TimeoutSeconds is the maximum time to wait for verification to pass.
-	// +kubebuilder:default=900
-	// +kubebuilder:validation:Minimum=1
-	TimeoutSeconds int32 `json:"timeoutSeconds,omitempty"`
-}
-
-// RetryPolicy defines how to handle failures and retries.
-type RetryPolicy struct {
-	// MaxAttempts is the maximum number of retry attempts before giving up.
-	// +kubebuilder:default=3
-	// +kubebuilder:validation:Minimum=1
-	MaxAttempts int32 `json:"maxAttempts,omitempty"`
-
-	// BackoffSeconds is the base backoff duration between retries.
-	// Actual backoff is: backoffSeconds * 2^attempts
-	// +kubebuilder:default=60
-	// +kubebuilder:validation:Minimum=1
-	BackoffSeconds int32 `json:"backoffSeconds,omitempty"`
-}
 
 // ProfileReference references a PartitioningProfile.
 type ProfileReference struct {
-	// Kind of the profile reference (currently only PartitioningProfile supported).
-	// +kubebuilder:default=PartitioningProfile
-	// +kubebuilder:validation:Enum=PartitioningProfile
-	Kind string `json:"kind,omitempty"`
-
 	// Name of the PartitioningProfile.
 	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
-}
-
-// OperatorPayloadReference references external configuration for the GPU operator.
-type OperatorPayloadReference struct {
-	// Kind of the reference (ConfigMap, Secret, or Inline).
-	// +kubebuilder:default=ConfigMap
-	// +kubebuilder:validation:Enum=ConfigMap;Secret;Inline
-	Kind string `json:"kind,omitempty"`
-
-	// Name of the ConfigMap or Secret.
-	// Required when Kind is ConfigMap or Secret.
-	// +optional
-	Name string `json:"name,omitempty"`
-
-	// Namespace of the ConfigMap or Secret.
-	// Required when Kind is ConfigMap or Secret.
-	// +optional
-	Namespace string `json:"namespace,omitempty"`
-
-	// Inline payload data (arbitrary JSON).
-	// Required when Kind is Inline.
-	// +optional
-	// +kubebuilder:pruning:PreserveUnknownFields
-	Inline *runtime.RawExtension `json:"inline,omitempty"`
 }
 
 // ExpectedResource defines an expected resource after partitioning.
@@ -307,7 +220,7 @@ type RolloutPolicy struct {
 	MaxUnavailable int32 `json:"maxUnavailable,omitempty"`
 
 	// DrainPolicy defines how to drain nodes.
-	DrainPolicy DrainPolicy `json:"drainPolicy,omitempty"`
+	// DrainPolicy DrainPolicy `json:"drainPolicy,omitempty"`
 }
 
 // PartitioningRule maps a node selector to a partition profile.
@@ -319,19 +232,8 @@ type PartitioningRule struct {
 	// Selector selects nodes to partition.
 	Selector metav1.LabelSelector `json:"selector"`
 
-	// Exclude is an optional label selector to exclude specific nodes.
-	// +optional
-	Exclude *metav1.LabelSelector `json:"exclude,omitempty"`
-
 	// ProfileRef references the PartitioningProfile to apply.
 	ProfileRef ProfileReference `json:"profileRef"`
-}
-
-// PlanDefaults defines default policies inherited by NodePartitioning resources.
-type PlanDefaults struct {
-	// Retry defines the default retry policy.
-	// +optional
-	Retry *RetryPolicy `json:"retry,omitempty"`
 }
 
 // PlanSummary aggregates node counts by phase.

@@ -63,89 +63,41 @@ spec:
           spec:
             description: PartitioningPlanSpec defines the desired state of PartitioningPlan.
             properties:
-              defaults:
-                description: Defaults defines default policies inherited by NodePartitioning
-                  resources.
-                properties:
-                  retry:
-                    description: Retry defines the default retry policy.
-                    properties:
-                      backoffSeconds:
-                        default: 60
-                        description: |-
-                          BackoffSeconds is the base backoff duration between retries.
-                          Actual backoff is: backoffSeconds * 2^attempts
-                        format: int32
-                        minimum: 1
-                        type: integer
-                      maxAttempts:
-                        default: 3
-                        description: MaxAttempts is the maximum number of retry attempts
-                          before giving up.
-                        format: int32
-                        minimum: 1
-                        type: integer
-                    type: object
-                type: object
               dryRun:
                 description: |-
                   DryRun indicates whether to simulate the plan without making any changes.
                   When true, NodePartitioning resources are created but marked as Skipped.
                 type: boolean
-              partitionings:
-                description: Partitionings defines the rules mapping nodes to partition
-                  profiles.
+              paused:
+                description: |-
+                  Paused indicates whether the plan should stop reconciling.
+                  When true, no new node operations will be started, but status updates continue.
+                type: boolean
+              rollout:
+                description: Rollout defines how to orchestrate node changes.
+                properties:
+                  maxParallel:
+                    default: 1
+                    description: MaxParallel is the maximum number of nodes to process
+                      in parallel.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  maxUnavailable:
+                    default: 1
+                    description: |-
+                      MaxUnavailable is the maximum number of nodes allowed to be unavailable at once.
+                      Unavailable means: Draining, Applying, Verifying, or Failed.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                type: object
+              rules:
+                description: Rules defines the rules mapping nodes to partition profiles.
                 items:
                   description: PartitioningRule maps a node selector to a partition
                     profile.
                   properties:
-                    exclude:
-                      description: Exclude is an optional label selector to exclude
-                        specific nodes.
-                      properties:
-                        matchExpressions:
-                          description: matchExpressions is a list of label selector
-                            requirements. The requirements are ANDed.
-                          items:
-                            description: |-
-                              A label selector requirement is a selector that contains values, a key, and an operator that
-                              relates the key and values.
-                            properties:
-                              key:
-                                description: key is the label key that the selector
-                                  applies to.
-                                type: string
-                              operator:
-                                description: |-
-                                  operator represents a key's relationship to a set of values.
-                                  Valid operators are In, NotIn, Exists and DoesNotExist.
-                                type: string
-                              values:
-                                description: |-
-                                  values is an array of string values. If the operator is In or NotIn,
-                                  the values array must be non-empty. If the operator is Exists or DoesNotExist,
-                                  the values array must be empty. This array is replaced during a strategic
-                                  merge patch.
-                                items:
-                                  type: string
-                                type: array
-                                x-kubernetes-list-type: atomic
-                            required:
-                            - key
-                            - operator
-                            type: object
-                          type: array
-                          x-kubernetes-list-type: atomic
-                        matchLabels:
-                          additionalProperties:
-                            type: string
-                          description: |-
-                            matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
-                            map is equivalent to an element of matchExpressions, whose key field is "key", the
-                            operator is "In", and the values array contains only "value". The requirements are ANDed.
-                          type: object
-                      type: object
-                      x-kubernetes-map-type: atomic
                     name:
                       description: Name is an optional human-readable name for this
                         rule.
@@ -154,13 +106,6 @@ spec:
                       description: ProfileRef references the PartitioningProfile to
                         apply.
                       properties:
-                        kind:
-                          default: PartitioningProfile
-                          description: Kind of the profile reference (currently only
-                            PartitioningProfile supported).
-                          enum:
-                          - PartitioningProfile
-                          type: string
                         name:
                           description: Name of the PartitioningProfile.
                           minLength: 1
@@ -220,94 +165,8 @@ spec:
                   type: object
                 minItems: 1
                 type: array
-              paused:
-                description: |-
-                  Paused indicates whether the plan should stop reconciling.
-                  When true, no new node operations will be started, but status updates continue.
-                type: boolean
-              rollout:
-                description: Rollout defines how to orchestrate node changes.
-                properties:
-                  drainPolicy:
-                    description: DrainPolicy defines how to drain nodes.
-                    properties:
-                      enabled:
-                        default: true
-                        description: Enabled determines whether the node should be
-                          drained.
-                        type: boolean
-                      evictionKind:
-                        default: Eviction
-                        description: |-
-                          EvictionKind specifies how to evict pods.
-                          Eviction: Use Eviction API (respects PDBs)
-                          Delete: Direct pod deletion (ignores PDBs)
-                          None: Skip eviction (use with caution)
-                        enum:
-                        - Eviction
-                        - Delete
-                        - None
-                        type: string
-                      respectPDB:
-                        default: true
-                        description: |-
-                          RespectPDB determines whether to respect PodDisruptionBudgets.
-                          Only applies when EvictionKind is "Eviction".
-                        type: boolean
-                      timeoutSeconds:
-                        default: 1200
-                        description: TimeoutSeconds is the maximum time to wait for
-                          pods to terminate.
-                        format: int32
-                        minimum: 1
-                        type: integer
-                    required:
-                    - enabled
-                    type: object
-                  maxParallel:
-                    default: 1
-                    description: MaxParallel is the maximum number of nodes to process
-                      in parallel.
-                    format: int32
-                    minimum: 1
-                    type: integer
-                  maxUnavailable:
-                    default: 1
-                    description: |-
-                      MaxUnavailable is the maximum number of nodes allowed to be unavailable at once.
-                      Unavailable means: Draining, Applying, Verifying, or Failed.
-                    format: int32
-                    minimum: 0
-                    type: integer
-                type: object
-              verification:
-                description: |-
-                  Verification defines global verification settings.
-                  These can be overridden by individual profiles.
-                properties:
-                  gpuReadyLabel:
-                    default: amd.com/gpu.ready
-                    description: |-
-                      GpuReadyLabel is the node label that indicates GPU readiness.
-                      The controller waits for this label to be present with value "true".
-                    type: string
-                  requirePluginResources:
-                    description: |-
-                      RequirePluginResources is a list of resource names that must appear
-                      in node.status.allocatable after partitioning.
-                    items:
-                      type: string
-                    type: array
-                  timeoutSeconds:
-                    default: 900
-                    description: TimeoutSeconds is the maximum time to wait for verification
-                      to pass.
-                    format: int32
-                    minimum: 1
-                    type: integer
-                type: object
             required:
-            - partitionings
+            - rules
             type: object
           status:
             description: PartitioningPlanStatus defines the observed state of PartitioningPlan.

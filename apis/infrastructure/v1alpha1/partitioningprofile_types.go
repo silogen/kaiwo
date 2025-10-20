@@ -25,6 +25,7 @@ SOFTWARE.
 package v1alpha1
 
 import (
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -43,14 +44,11 @@ type PartitioningProfileSpec struct {
 	// ExpectedResources defines the resources that should appear in
 	// node.status.allocatable after partitioning succeeds.
 	// +optional
-	ExpectedResources []ExpectedResource `json:"expectedResources,omitempty"`
+	ExpectedResources map[string]resource.Quantity `json:"expectedResources,omitempty"`
 
-	// Verification defines how to verify that partitioning succeeded.
-	Verification VerificationSpec `json:"verification,omitempty"`
-
-	// OperatorPayload contains the GPU operator configuration to apply.
-	// This is typically a reference to a ConfigMap containing the DCM config.json.
-	OperatorPayload OperatorPayloadReference `json:"operatorPayload"`
+	// ProfileName is the name of the profile to be applied.
+	// This is the name of the profile under `gpu-config-profile` in DCM config.json.
+	ProfileName string `json:"profileName"`
 }
 
 // PartitioningProfileStatus defines the observed state of PartitioningProfile.

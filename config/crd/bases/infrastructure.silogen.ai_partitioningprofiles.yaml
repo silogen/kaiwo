@@ -59,57 +59,21 @@ spec:
                 minLength: 1
                 type: string
               expectedResources:
+                additionalProperties:
+                  anyOf:
+                  - type: integer
+                  - type: string
+                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                  x-kubernetes-int-or-string: true
                 description: |-
                   ExpectedResources defines the resources that should appear in
                   node.status.allocatable after partitioning succeeds.
-                items:
-                  description: ExpectedResource defines an expected resource after
-                    partitioning.
-                  properties:
-                    count:
-                      description: Count is the expected number of resources.
-                      format: int32
-                      minimum: 0
-                      type: integer
-                    name:
-                      description: Name is the resource name (e.g., "amd.com/gpu").
-                      minLength: 1
-                      type: string
-                  required:
-                  - count
-                  - name
-                  type: object
-                type: array
-              operatorPayload:
-                description: |-
-                  OperatorPayload contains the GPU operator configuration to apply.
-                  This is typically a reference to a ConfigMap containing the DCM config.json.
-                properties:
-                  inline:
-                    description: |-
-                      Inline payload data (arbitrary JSON).
-                      Required when Kind is Inline.
-                    type: object
-                    x-kubernetes-preserve-unknown-fields: true
-                  kind:
-                    default: ConfigMap
-                    description: Kind of the reference (ConfigMap, Secret, or Inline).
-                    enum:
-                    - ConfigMap
-                    - Secret
-                    - Inline
-                    type: string
-                  name:
-                    description: |-
-                      Name of the ConfigMap or Secret.
-                      Required when Kind is ConfigMap or Secret.
-                    type: string
-                  namespace:
-                    description: |-
-                      Namespace of the ConfigMap or Secret.
-                      Required when Kind is ConfigMap or Secret.
-                    type: string
                 type: object
+              profileName:
+                description: |-
+                  ProfileName is the name of the profile to be applied.
+                  This is the name of the profile under `gpu-config-profile` in DCM config.json.
+                type: string
               targetSelector:
                 description: |-
                   TargetSelector is an optional guardrail to ensure the profile is only
@@ -159,34 +123,9 @@ spec:
                     type: object
                 type: object
                 x-kubernetes-map-type: atomic
-              verification:
-                description: Verification defines how to verify that partitioning
-                  succeeded.
-                properties:
-                  gpuReadyLabel:
-                    default: amd.com/gpu.ready
-                    description: |-
-                      GpuReadyLabel is the node label that indicates GPU readiness.
-                      The controller waits for this label to be present with value "true".
-                    type: string
-                  requirePluginResources:
-                    description: |-
-                      RequirePluginResources is a list of resource names that must appear
-                      in node.status.allocatable after partitioning.
-                    items:
-                      type: string
-                    type: array
-                  timeoutSeconds:
-                    default: 900
-                    description: TimeoutSeconds is the maximum time to wait for verification
-                      to pass.
-                    format: int32
-                    minimum: 1
-                    type: integer
-                type: object
             required:
             - displayName
-            - operatorPayload
+            - profileName
             type: object
           status:
             description: PartitioningProfileStatus defines the observed state of PartitioningProfile.

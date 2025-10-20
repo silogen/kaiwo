@@ -69,42 +69,6 @@ spec:
                   Used for idempotency and change detection.
                 minLength: 1
                 type: string
-              drainPolicy:
-                description: DrainPolicy defines how to drain the node (inherited
-                  from plan).
-                properties:
-                  enabled:
-                    default: true
-                    description: Enabled determines whether the node should be drained.
-                    type: boolean
-                  evictionKind:
-                    default: Eviction
-                    description: |-
-                      EvictionKind specifies how to evict pods.
-                      Eviction: Use Eviction API (respects PDBs)
-                      Delete: Direct pod deletion (ignores PDBs)
-                      None: Skip eviction (use with caution)
-                    enum:
-                    - Eviction
-                    - Delete
-                    - None
-                    type: string
-                  respectPDB:
-                    default: true
-                    description: |-
-                      RespectPDB determines whether to respect PodDisruptionBudgets.
-                      Only applies when EvictionKind is "Eviction".
-                    type: boolean
-                  timeoutSeconds:
-                    default: 1200
-                    description: TimeoutSeconds is the maximum time to wait for pods
-                      to terminate.
-                    format: int32
-                    minimum: 1
-                    type: integer
-                required:
-                - enabled
-                type: object
               nodeName:
                 description: NodeName is the name of the target node.
                 minLength: 1
@@ -124,63 +88,12 @@ spec:
               profileRef:
                 description: ProfileRef references the PartitioningProfile to apply.
                 properties:
-                  kind:
-                    default: PartitioningProfile
-                    description: Kind of the profile reference (currently only PartitioningProfile
-                      supported).
-                    enum:
-                    - PartitioningProfile
-                    type: string
                   name:
                     description: Name of the PartitioningProfile.
                     minLength: 1
                     type: string
                 required:
                 - name
-                type: object
-              retry:
-                description: Retry defines the retry policy (inherited from plan).
-                properties:
-                  backoffSeconds:
-                    default: 60
-                    description: |-
-                      BackoffSeconds is the base backoff duration between retries.
-                      Actual backoff is: backoffSeconds * 2^attempts
-                    format: int32
-                    minimum: 1
-                    type: integer
-                  maxAttempts:
-                    default: 3
-                    description: MaxAttempts is the maximum number of retry attempts
-                      before giving up.
-                    format: int32
-                    minimum: 1
-                    type: integer
-                type: object
-              verification:
-                description: Verification defines how to verify the partition (inherited
-                  from plan/profile).
-                properties:
-                  gpuReadyLabel:
-                    default: amd.com/gpu.ready
-                    description: |-
-                      GpuReadyLabel is the node label that indicates GPU readiness.
-                      The controller waits for this label to be present with value "true".
-                    type: string
-                  requirePluginResources:
-                    description: |-
-                      RequirePluginResources is a list of resource names that must appear
-                      in node.status.allocatable after partitioning.
-                    items:
-                      type: string
-                    type: array
-                  timeoutSeconds:
-                    default: 900
-                    description: TimeoutSeconds is the maximum time to wait for verification
-                      to pass.
-                    format: int32
-                    minimum: 1
-                    type: integer
                 type: object
             required:
             - desiredHash
@@ -191,10 +104,6 @@ spec:
           status:
             description: NodePartitioningStatus defines the observed state of NodePartitioning.
             properties:
-              attempts:
-                description: Attempts is the number of retry attempts so far.
-                format: int32
-                type: integer
               conditions:
                 description: Conditions represent the latest available observations
                   of the operation's state.
@@ -258,58 +167,6 @@ spec:
                 x-kubernetes-list-type: map
               currentHash:
                 description: CurrentHash is the hash of the current applied state.
-                type: string
-              history:
-                description: History is a ring buffer of recent state transitions
-                  (max 20 entries).
-                items:
-                  description: NodePartitioningHistoryEntry records a state transition.
-                  properties:
-                    at:
-                      description: At is the timestamp of the transition.
-                      format: date-time
-                      type: string
-                    message:
-                      description: Message is a human-readable description of the
-                        transition.
-                      type: string
-                    phase:
-                      description: Phase is the phase at this point in history.
-                      enum:
-                      - Pending
-                      - Draining
-                      - Applying
-                      - WaitingOperator
-                      - Verifying
-                      - Succeeded
-                      - Failed
-                      - Skipped
-                      type: string
-                  required:
-                  - at
-                  - message
-                  - phase
-                  type: object
-                type: array
-                x-kubernetes-list-type: atomic
-              lastError:
-                description: LastError is the most recent error message.
-                type: string
-              lastErrorClass:
-                description: LastErrorClass is a normalized error classification for
-                  alerting.
-                enum:
-                - ""
-                - NodeNotFound
-                - DrainTimeout
-                - OperatorUnavailable
-                - ApplyFailed
-                - VerifyFailed
-                - UnsupportedHardware
-                type: string
-              lastUpdateTime:
-                description: LastUpdateTime is the timestamp of the last status update.
-                format: date-time
                 type: string
               observedGeneration:
                 description: ObservedGeneration is the most recent generation observed

@@ -54,16 +54,6 @@ type NodePartitioningSpec struct {
 
 	// ProfileRef references the PartitioningProfile to apply.
 	ProfileRef ProfileReference `json:"profileRef"`
-
-	// DrainPolicy defines how to drain the node (inherited from plan).
-	DrainPolicy DrainPolicy `json:"drainPolicy,omitempty"`
-
-	// Verification defines how to verify the partition (inherited from plan/profile).
-	Verification VerificationSpec `json:"verification,omitempty"`
-
-	// Retry defines the retry policy (inherited from plan).
-	// +optional
-	Retry *RetryPolicy `json:"retry,omitempty"`
 }
 
 // NodePartitioningStatus defines the observed state of NodePartitioning.
@@ -85,27 +75,6 @@ type NodePartitioningStatus struct {
 	// CurrentHash is the hash of the current applied state.
 	// +optional
 	CurrentHash string `json:"currentHash,omitempty"`
-
-	// Attempts is the number of retry attempts so far.
-	// +optional
-	Attempts int32 `json:"attempts,omitempty"`
-
-	// LastErrorClass is a normalized error classification for alerting.
-	// +optional
-	LastErrorClass ErrorClass `json:"lastErrorClass,omitempty"`
-
-	// LastError is the most recent error message.
-	// +optional
-	LastError string `json:"lastError,omitempty"`
-
-	// LastUpdateTime is the timestamp of the last status update.
-	// +optional
-	LastUpdateTime *metav1.Time `json:"lastUpdateTime,omitempty"`
-
-	// History is a ring buffer of recent state transitions (max 20 entries).
-	// +optional
-	// +listType=atomic
-	History []NodePartitioningHistoryEntry `json:"history,omitempty"`
 }
 
 // NodePartitioning is the Schema for the nodepartitionings API.
