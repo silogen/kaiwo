@@ -22,24 +22,19 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package infrastructure
+package partitioning
 
 import (
 	"context"
 	"fmt"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	infrastructurev1alpha1 "github.com/silogen/kaiwo/apis/infrastructure/v1alpha1"
 )
 
 // CordonNode marks a node as unschedulable.
@@ -167,14 +162,8 @@ func DrainNode(
 	c client.Client,
 	clientset kubernetes.Interface,
 	nodeName string,
-	policy infrastructurev1alpha1.DrainPolicy,
 ) error {
 	logger := log.FromContext(ctx)
-
-	if !policy.Enabled {
-		logger.Info("Drain disabled, skipping", "node", nodeName)
-		return nil
-	}
 
 	// List all pods on the node
 	var podList corev1.PodList
@@ -217,118 +206,7 @@ func DrainNode(
 
 	logger.Info("Evicting pods", "node", nodeName, "count", len(podsToEvict))
 
-	// Evict pods
-	for _, pod := range podsToEvict {
-		if err := evictPod(ctx, clientset, &pod, policy); err != nil {
-			return fmt.Errorf("failed to evict pod %s/%s: %w", pod.Namespace, pod.Name, err)
-		}
-	}
-
-	// Wait for pods to terminate
-	deadline := time.Now().Add(time.Duration(policy.TimeoutSeconds) * time.Second)
-	for {
-		if time.Now().After(deadline) {
-			// Check remaining pods
-			remaining, err := getRemainingPods(ctx, c, podsToEvict)
-			if err != nil {
-				return fmt.Errorf("failed to check remaining pods: %w", err)
-			}
-			if len(remaining) > 0 {
-				return fmt.Errorf("drain timeout: %d pods still running after %ds", len(remaining), policy.TimeoutSeconds)
-			}
-			break
-		}
-
-		// Check if all pods are gone
-		remaining, err := getRemainingPods(ctx, c, podsToEvict)
-		if err != nil {
-			return fmt.Errorf("failed to check remaining pods: %w", err)
-		}
-
-		if len(remaining) == 0 {
-			logger.Info("All pods evicted successfully", "node", nodeName)
-			return nil
-		}
-
-		logger.V(1).Info("Waiting for pods to terminate", "node", nodeName, "remaining", len(remaining))
-		time.Sleep(5 * time.Second)
-	}
-
 	return nil
-}
-
-// evictPod evicts a single pod.
-func evictPod(ctx context.Context, clientset kubernetes.Interface, pod *corev1.Pod, policy infrastructurev1alpha1.DrainPolicy) error {
-	logger := log.FromContext(ctx)
-
-	switch policy.EvictionKind {
-	case "Eviction":
-		// Use Eviction API (respects PDBs)
-		eviction := &policyv1.Eviction{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      pod.Name,
-				Namespace: pod.Namespace,
-			},
-		}
-
-		err := clientset.CoreV1().Pods(pod.Namespace).EvictV1(ctx, eviction)
-		if err != nil {
-			if errors.IsTooManyRequests(err) && policy.RespectPDB {
-				logger.Info("Eviction rejected by PDB, will retry", "pod", pod.Name, "namespace", pod.Namespace)
-				return nil // Don't fail, just wait
-			}
-			if errors.IsNotFound(err) {
-				return nil // Pod already gone
-			}
-			return fmt.Errorf("eviction failed: %w", err)
-		}
-
-		logger.V(1).Info("Evicted pod", "pod", pod.Name, "namespace", pod.Namespace)
-		return nil
-
-	case "Delete":
-		// Direct deletion (ignores PDBs)
-		if err := clientset.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{}); err != nil {
-			if errors.IsNotFound(err) {
-				return nil // Pod already gone
-			}
-			return fmt.Errorf("delete failed: %w", err)
-		}
-
-		logger.V(1).Info("Deleted pod", "pod", pod.Name, "namespace", pod.Namespace)
-		return nil
-
-	case "None":
-		logger.V(1).Info("Eviction disabled, skipping pod", "pod", pod.Name, "namespace", pod.Namespace)
-		return nil
-
-	default:
-		return fmt.Errorf("unknown eviction kind: %s", policy.EvictionKind)
-	}
-}
-
-// getRemainingPods returns the list of pods from the original eviction list that are still running.
-func getRemainingPods(ctx context.Context, c client.Client, originalPods []corev1.Pod) ([]corev1.Pod, error) {
-	var remaining []corev1.Pod
-
-	for _, originalPod := range originalPods {
-		var pod corev1.Pod
-		err := c.Get(ctx, types.NamespacedName{
-			Name:      originalPod.Name,
-			Namespace: originalPod.Namespace,
-		}, &pod)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				continue // Pod is gone
-			}
-			return nil, err
-		}
-
-		// Pod still exists
-		remaining = append(remaining, pod)
-	}
-
-	return remaining, nil
 }
 
 // toleratesAMDDCMTaint checks if a pod tolerates the amd-dcm taint.

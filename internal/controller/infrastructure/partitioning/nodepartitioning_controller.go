@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package infrastructure
+package partitioning
 
 import (
 	"context"
@@ -169,15 +169,12 @@ func (r *NodePartitioningReconciler) projectStatus(
 	logger := log.FromContext(ctx)
 
 	// Initialize status
-	now := metav1.Now()
 	np.Status.ObservedGeneration = np.Generation
-	np.Status.LastUpdateTime = &now
 
 	// Handle observation errors
 	if errs.ObserveErr != nil {
 		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseFailed)
-		np.Status.LastError = fmt.Sprintf("Observation failed: %v", errs.ObserveErr)
-		np.Status.LastErrorClass = infrastructurev1alpha1.ErrorClassNodeNotFound
+		// TODO event
 		return nil
 	}
 
@@ -187,9 +184,8 @@ func (r *NodePartitioningReconciler) projectStatus(
 
 	// Check if node exists
 	if obs.Node == nil {
+		// TODO event
 		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseFailed)
-		np.Status.LastError = fmt.Sprintf("Node %s not found", np.Spec.NodeName)
-		np.Status.LastErrorClass = infrastructurev1alpha1.ErrorClassNodeNotFound
 		meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
 			Type:               infrastructurev1alpha1.NodePartitioningConditionNodeCordoned,
 			Status:             metav1.ConditionFalse,
@@ -202,19 +198,16 @@ func (r *NodePartitioningReconciler) projectStatus(
 
 	// Check if profile exists
 	if obs.Profile == nil {
+		// TODO event
 		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseFailed)
-		np.Status.LastError = fmt.Sprintf("PartitioningProfile %s not found", np.Spec.ProfileRef.Name)
-		np.Status.LastErrorClass = infrastructurev1alpha1.ErrorClassApplyFailed
 		return nil
 	}
 
 	// Execute state machine
 	if err := r.executeStateMachine(ctx, np, obs); err != nil {
+		// TODO event
 		logger.Error(err, "State machine execution failed")
 		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseFailed)
-		np.Status.LastError = err.Error()
-		// Classify error
-		np.Status.LastErrorClass = classifyError(err)
 		return nil // Don't fail reconciliation, status is updated
 	}
 
@@ -245,7 +238,6 @@ func (r *NodePartitioningReconciler) executeStateMachine(
 	case infrastructurev1alpha1.NodePartitioningPhasePending:
 		// Start draining
 		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseDraining)
-		r.addHistoryEntry(np, "Started cordoning and draining node")
 		controllerutils.EmitNormalEvent(r.Recorder, np, "DrainStarted", fmt.Sprintf("Started draining node %s", np.Spec.NodeName))
 		return nil
 
@@ -275,7 +267,7 @@ func (r *NodePartitioningReconciler) executeStateMachine(
 		})
 
 		// Drain node
-		if err := DrainNode(ctx, r.Client, r.Clientset, np.Spec.NodeName, np.Spec.DrainPolicy); err != nil {
+		if err := DrainNode(ctx, r.Client, r.Clientset, np.Spec.NodeName); err != nil {
 			return fmt.Errorf("failed to drain node: %w", err)
 		}
 		meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
@@ -290,7 +282,6 @@ func (r *NodePartitioningReconciler) executeStateMachine(
 
 		// Move to applying
 		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseApplying)
-		r.addHistoryEntry(np, "Drain completed, applying DCM profile")
 		return nil
 
 	case infrastructurev1alpha1.NodePartitioningPhaseApplying:
@@ -317,16 +308,10 @@ func (r *NodePartitioningReconciler) executeStateMachine(
 
 		// Move to waiting for operator
 		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseWaitingOperator)
-		r.addHistoryEntry(np, "Waiting for AMD GPU operator to reconcile")
 		return nil
 
 	case infrastructurev1alpha1.NodePartitioningPhaseWaitingOperator:
-		// Wait for operator to be ready
-		if err := WaitForOperatorReady(ctx, r.Client, np.Spec.NodeName, np.Spec.Verification.TimeoutSeconds); err != nil {
-			// Not ready yet, will retry
-			logger.V(1).Info("Operator not ready yet", "node", np.Spec.NodeName, "error", err)
-			return nil // Don't fail, just wait
-		}
+		// TODO Wait for operator to be ready
 
 		meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
 			Type:               infrastructurev1alpha1.NodePartitioningConditionOperatorReady,
@@ -338,14 +323,10 @@ func (r *NodePartitioningReconciler) executeStateMachine(
 
 		// Move to verifying
 		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseVerifying)
-		r.addHistoryEntry(np, "Verifying partition configuration")
 		return nil
 
 	case infrastructurev1alpha1.NodePartitioningPhaseVerifying:
-		// Verify partitioning succeeded
-		if err := VerifyPartitioning(ctx, r.Client, np.Spec.NodeName, obs.Profile, np.Spec.Verification); err != nil {
-			return fmt.Errorf("verification failed: %w", err)
-		}
+		// TODO verify correct
 
 		meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
 			Type:               infrastructurev1alpha1.NodePartitioningConditionVerified,
@@ -373,13 +354,12 @@ func (r *NodePartitioningReconciler) executeStateMachine(
 
 		// Move to succeeded
 		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseSucceeded)
-		r.addHistoryEntry(np, "Partitioning completed successfully")
 		controllerutils.EmitNormalEvent(r.Recorder, np, "NodeSucceeded", fmt.Sprintf("Node %s partitioning completed successfully", np.Spec.NodeName))
 		return nil
 
 	case infrastructurev1alpha1.NodePartitioningPhaseFailed:
 		// Phase 1: Stay in failed state, no retry logic
-		logger.Info("NodePartitioning is in failed state", "node", np.Spec.NodeName, "error", np.Status.LastError)
+		logger.Info("NodePartitioning is in failed state", "node", np.Spec.NodeName)
 		return nil
 
 	case infrastructurev1alpha1.NodePartitioningPhaseSucceeded:
@@ -387,7 +367,6 @@ func (r *NodePartitioningReconciler) executeStateMachine(
 		if np.Status.CurrentHash != np.Spec.DesiredHash {
 			logger.Info("Desired state changed, re-partitioning", "node", np.Spec.NodeName)
 			r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhasePending)
-			r.addHistoryEntry(np, "Desired state changed, starting re-partition")
 		}
 		return nil
 
@@ -399,22 +378,6 @@ func (r *NodePartitioningReconciler) executeStateMachine(
 // setPhase updates the phase and adds a history entry.
 func (r *NodePartitioningReconciler) setPhase(_ context.Context, np *infrastructurev1alpha1.NodePartitioning, phase infrastructurev1alpha1.NodePartitioningPhase) {
 	np.Status.Phase = phase
-}
-
-// addHistoryEntry adds an entry to the history ring buffer.
-func (r *NodePartitioningReconciler) addHistoryEntry(np *infrastructurev1alpha1.NodePartitioning, message string) {
-	entry := infrastructurev1alpha1.NodePartitioningHistoryEntry{
-		At:      metav1.Now(),
-		Phase:   np.Status.Phase,
-		Message: message,
-	}
-
-	np.Status.History = append(np.Status.History, entry)
-
-	// Keep only last 20 entries
-	if len(np.Status.History) > 20 {
-		np.Status.History = np.Status.History[len(np.Status.History)-20:]
-	}
 }
 
 // isDevicePluginReady checks if the AMD device plugin is ready on a node.
@@ -431,29 +394,6 @@ func (r *NodePartitioningReconciler) isDevicePluginReady(ctx context.Context, no
 	}
 
 	return false
-}
-
-// classifyError classifies an error into an ErrorClass.
-func classifyError(err error) infrastructurev1alpha1.ErrorClass {
-	errStr := err.Error()
-
-	if contains(errStr, "not found") {
-		return infrastructurev1alpha1.ErrorClassNodeNotFound
-	}
-	if contains(errStr, "drain timeout") || contains(errStr, "timeout") {
-		return infrastructurev1alpha1.ErrorClassDrainTimeout
-	}
-	if contains(errStr, "operator") {
-		return infrastructurev1alpha1.ErrorClassOperatorUnavailable
-	}
-	if contains(errStr, "apply") || contains(errStr, "profile") {
-		return infrastructurev1alpha1.ErrorClassApplyFailed
-	}
-	if contains(errStr, "verif") {
-		return infrastructurev1alpha1.ErrorClassVerifyFailed
-	}
-
-	return infrastructurev1alpha1.ErrorClassApplyFailed // Default
 }
 
 // SetupWithManager sets up the controller with the Manager.

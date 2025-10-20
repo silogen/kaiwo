@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package infrastructure
+package partitioning
 
 import (
 	"context"
@@ -139,24 +139,18 @@ func (r *PartitioningPlanReconciler) observe(ctx context.Context, plan *infrastr
 
 	// Build set of matching nodes across all partitioning rules
 	matchingNodesMap := make(map[string]corev1.Node)
-	for _, rule := range plan.Spec.Partitionings {
+	for _, rule := range plan.Spec.Rules {
 		selector, err := metav1.LabelSelectorAsSelector(&rule.Selector)
 		if err != nil {
 			return nil, fmt.Errorf("invalid selector in rule %q: %w", rule.Name, err)
 		}
 
 		var excludeSelector labels.Selector
-		if rule.Exclude != nil {
-			excludeSelector, err = metav1.LabelSelectorAsSelector(rule.Exclude)
-			if err != nil {
-				return nil, fmt.Errorf("invalid exclude selector in rule %q: %w", rule.Name, err)
-			}
-		}
 
 		for _, node := range allNodes.Items {
 			if selector.Matches(labels.Set(node.Labels)) {
 				// Check exclude
-				if excludeSelector != nil && excludeSelector.Matches(labels.Set(node.Labels)) {
+				if excludeSelector.Matches(labels.Set(node.Labels)) {
 					continue
 				}
 				matchingNodesMap[node.Name] = node
@@ -195,7 +189,7 @@ func (r *PartitioningPlanReconciler) observe(ctx context.Context, plan *infrastr
 
 	// 3. Resolve referenced profiles
 	profileNames := make(map[string]bool)
-	for _, rule := range plan.Spec.Partitionings {
+	for _, rule := range plan.Spec.Rules {
 		profileNames[rule.ProfileRef.Name] = true
 	}
 
@@ -230,8 +224,8 @@ func (r *PartitioningPlanReconciler) plan(ctx context.Context, plan *infrastruct
 	for _, node := range obs.MatchingNodes {
 		// Find which rule matches this node (use first match)
 		var matchedRule *infrastructurev1alpha1.PartitioningRule
-		for i := range plan.Spec.Partitionings {
-			rule := &plan.Spec.Partitionings[i]
+		for i := range plan.Spec.Rules {
+			rule := &plan.Spec.Rules[i]
 			selector, err := metav1.LabelSelectorAsSelector(&rule.Selector)
 			if err != nil {
 				continue
@@ -239,17 +233,6 @@ func (r *PartitioningPlanReconciler) plan(ctx context.Context, plan *infrastruct
 
 			if !selector.Matches(labels.Set(node.Labels)) {
 				continue
-			}
-
-			// Check exclude
-			if rule.Exclude != nil {
-				excludeSelector, err := metav1.LabelSelectorAsSelector(rule.Exclude)
-				if err != nil {
-					continue
-				}
-				if excludeSelector.Matches(labels.Set(node.Labels)) {
-					continue
-				}
 			}
 
 			matchedRule = rule
@@ -268,7 +251,7 @@ func (r *PartitioningPlanReconciler) plan(ctx context.Context, plan *infrastruct
 		}
 
 		// Compute desired hash
-		desiredHash, err := computeDesiredHash(plan, profile)
+		desiredHash, err := computeDesiredHash(profile)
 		if err != nil {
 			logger.Error(err, "Failed to compute desired hash", "node", node.Name)
 			continue
@@ -288,26 +271,7 @@ func (r *PartitioningPlanReconciler) plan(ctx context.Context, plan *infrastruct
 				NodeName:    node.Name,
 				DesiredHash: desiredHash,
 				ProfileRef:  matchedRule.ProfileRef,
-				DrainPolicy: plan.Spec.Rollout.DrainPolicy,
-				Verification: infrastructurev1alpha1.VerificationSpec{
-					GpuReadyLabel:          plan.Spec.Verification.GpuReadyLabel,
-					RequirePluginResources: plan.Spec.Verification.RequirePluginResources,
-					TimeoutSeconds:         plan.Spec.Verification.TimeoutSeconds,
-				},
 			},
-		}
-
-		// Override with profile verification if specified
-		if profile.Spec.Verification.GpuReadyLabel != "" {
-			np.Spec.Verification.GpuReadyLabel = profile.Spec.Verification.GpuReadyLabel
-		}
-		if profile.Spec.Verification.TimeoutSeconds > 0 {
-			np.Spec.Verification.TimeoutSeconds = profile.Spec.Verification.TimeoutSeconds
-		}
-
-		// Add retry policy from defaults
-		if plan.Spec.Defaults != nil && plan.Spec.Defaults.Retry != nil {
-			np.Spec.Retry = plan.Spec.Defaults.Retry
 		}
 
 		// Set owner reference
@@ -428,13 +392,10 @@ func (r *PartitioningPlanReconciler) projectStatus(
 
 		// Add to node statuses
 		nodeStatuses = append(nodeStatuses, infrastructurev1alpha1.NodeStatusSummary{
-			NodeName:       child.Spec.NodeName,
-			DesiredHash:    child.Spec.DesiredHash,
-			CurrentHash:    child.Status.CurrentHash,
-			Phase:          child.Status.Phase,
-			Retries:        child.Status.Attempts,
-			LastError:      child.Status.LastError,
-			LastUpdateTime: *child.Status.LastUpdateTime,
+			NodeName:    child.Spec.NodeName,
+			DesiredHash: child.Spec.DesiredHash,
+			CurrentHash: child.Status.CurrentHash,
+			Phase:       child.Status.Phase,
 		})
 	}
 
@@ -536,13 +497,11 @@ func (r *PartitioningPlanReconciler) projectStatus(
 }
 
 // computeDesiredHash computes a deterministic hash of the desired partition state.
-func computeDesiredHash(plan *infrastructurev1alpha1.PartitioningPlan, profile *infrastructurev1alpha1.PartitioningProfile) (string, error) {
+func computeDesiredHash(profile *infrastructurev1alpha1.PartitioningProfile) (string, error) {
 	// Include relevant fields in the hash
 	hashInput := map[string]interface{}{
 		"profileName":       profile.Name,
 		"profileGeneration": profile.Generation,
-		"drainPolicy":       plan.Spec.Rollout.DrainPolicy,
-		"verification":      plan.Spec.Verification,
 		"profileSpec":       profile.Spec,
 	}
 

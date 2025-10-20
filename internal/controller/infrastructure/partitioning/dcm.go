@@ -22,11 +22,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package infrastructure
+package partitioning
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
@@ -157,70 +156,4 @@ func RemoveProfileFromNode(ctx context.Context, c client.Client, nodeName string
 
 	logger.Info("Removed DCM profile label from node", "node", nodeName)
 	return nil
-}
-
-// ResolveOperatorPayload resolves the operator payload from a PartitioningProfile.
-// Returns the payload as a JSON map.
-func ResolveOperatorPayload(
-	ctx context.Context,
-	c client.Client,
-	payloadRef infrastructurev1alpha1.OperatorPayloadReference,
-) (map[string]interface{}, error) {
-	switch payloadRef.Kind {
-	case "Inline":
-		if payloadRef.Inline == nil {
-			return nil, fmt.Errorf("inline payload is nil")
-		}
-		var payload map[string]interface{}
-		if err := json.Unmarshal(payloadRef.Inline.Raw, &payload); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal inline payload: %w", err)
-		}
-		return payload, nil
-
-	case "ConfigMap":
-		var cm corev1.ConfigMap
-		if err := c.Get(ctx, types.NamespacedName{
-			Name:      payloadRef.Name,
-			Namespace: payloadRef.Namespace,
-		}, &cm); err != nil {
-			return nil, fmt.Errorf("failed to get ConfigMap %s/%s: %w", payloadRef.Namespace, payloadRef.Name, err)
-		}
-
-		// Try to find the payload in the ConfigMap data
-		// Look for common keys: config.json, dcm-config, profile
-		for _, key := range []string{"config.json", "dcm-config", "profile"} {
-			if data, ok := cm.Data[key]; ok {
-				var payload map[string]interface{}
-				if err := json.Unmarshal([]byte(data), &payload); err != nil {
-					return nil, fmt.Errorf("failed to unmarshal ConfigMap data[%s]: %w", key, err)
-				}
-				return payload, nil
-			}
-		}
-		return nil, fmt.Errorf("ConfigMap %s/%s does not contain expected keys (config.json, dcm-config, profile)", payloadRef.Namespace, payloadRef.Name)
-
-	case "Secret":
-		var secret corev1.Secret
-		if err := c.Get(ctx, types.NamespacedName{
-			Name:      payloadRef.Name,
-			Namespace: payloadRef.Namespace,
-		}, &secret); err != nil {
-			return nil, fmt.Errorf("failed to get Secret %s/%s: %w", payloadRef.Namespace, payloadRef.Name, err)
-		}
-
-		// Try to find the payload in the Secret data
-		for _, key := range []string{"config.json", "dcm-config", "profile"} {
-			if data, ok := secret.Data[key]; ok {
-				var payload map[string]interface{}
-				if err := json.Unmarshal(data, &payload); err != nil {
-					return nil, fmt.Errorf("failed to unmarshal Secret data[%s]: %w", key, err)
-				}
-				return payload, nil
-			}
-		}
-		return nil, fmt.Errorf("secret %s/%s does not contain expected keys (config.json, dcm-config, profile)", payloadRef.Namespace, payloadRef.Name)
-
-	default:
-		return nil, fmt.Errorf("unsupported payload reference kind: %s", payloadRef.Kind)
-	}
 }

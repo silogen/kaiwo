@@ -22,37 +22,33 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package infrastructure
+package partitioning
 
 import (
-	corev1 "k8s.io/api/core/v1"
-
-	infrastructurev1alpha1 "github.com/silogen/kaiwo/apis/infrastructure/v1alpha1"
+	"k8s.io/client-go/kubernetes"
+	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-// PlanObservation holds the observed state for a PartitioningPlan.
-type PlanObservation struct {
-	// MatchingNodes are the nodes selected by the plan's selectors.
-	MatchingNodes []corev1.Node
+// SetupWithManager registers all infrastructure controllers with the manager.
+func SetupWithManager(mgr ctrl.Manager, clientset kubernetes.Interface) error {
+	// Register PartitioningPlan controller
+	if err := (&PartitioningPlanReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("partitioning-plan-controller"),
+	}).SetupWithManager(mgr); err != nil {
+		return err
+	}
 
-	// ExistingChildren are the NodePartitioning resources owned by this plan.
-	ExistingChildren []infrastructurev1alpha1.NodePartitioning
+	// Register NodePartitioning controller
+	if err := (&NodePartitioningReconciler{
+		Client:    mgr.GetClient(),
+		Scheme:    mgr.GetScheme(),
+		Recorder:  mgr.GetEventRecorderFor("node-partitioning-controller"),
+		Clientset: clientset,
+	}).SetupWithManager(mgr); err != nil {
+		return err
+	}
 
-	// Profiles maps profile names to their resolved profiles.
-	Profiles map[string]*infrastructurev1alpha1.PartitioningProfile
-}
-
-// NodePartitioningObservation holds the observed state for a NodePartitioning.
-type NodePartitioningObservation struct {
-	// Node is the target node, if it exists.
-	Node *corev1.Node
-
-	// Profile is the resolved PartitioningProfile.
-	Profile *infrastructurev1alpha1.PartitioningProfile
-
-	// DCMConfigMap is the AMD GPU Operator DCM ConfigMap.
-	DCMConfigMap *corev1.ConfigMap
-
-	// DevicePluginReady indicates whether the AMD device plugin is running on the node.
-	DevicePluginReady bool
+	return nil
 }

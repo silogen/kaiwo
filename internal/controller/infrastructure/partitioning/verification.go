@@ -22,33 +22,23 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package infrastructure
+package partitioning
 
 import (
-	"k8s.io/client-go/kubernetes"
-	ctrl "sigs.k8s.io/controller-runtime"
+	corev1 "k8s.io/api/core/v1"
 )
 
-// SetupWithManager registers all infrastructure controllers with the manager.
-func SetupWithManager(mgr ctrl.Manager, clientset kubernetes.Interface) error {
-	// Register PartitioningPlan controller
-	if err := (&PartitioningPlanReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("partitioning-plan-controller"),
-	}).SetupWithManager(mgr); err != nil {
-		return err
+// isPodReady checks if a pod is in Ready condition.
+func isPodReady(pod *corev1.Pod) bool {
+	if pod.Status.Phase != corev1.PodRunning {
+		return false
 	}
 
-	// Register NodePartitioning controller
-	if err := (&NodePartitioningReconciler{
-		Client:    mgr.GetClient(),
-		Scheme:    mgr.GetScheme(),
-		Recorder:  mgr.GetEventRecorderFor("node-partitioning-controller"),
-		Clientset: clientset,
-	}).SetupWithManager(mgr); err != nil {
-		return err
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == corev1.PodReady {
+			return condition.Status == corev1.ConditionTrue
+		}
 	}
 
-	return nil
+	return false
 }

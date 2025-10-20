@@ -33,6 +33,7 @@ import (
 	"path/filepath"
 	"time"
 
+	infrastructurecontroller "github.com/silogen/kaiwo/internal/controller/infrastructure/partitioning"
 	controllerutils "github.com/silogen/kaiwo/pkg/workloads/common"
 
 	"github.com/go-logr/logr"
@@ -85,8 +86,6 @@ import (
 	aimcontroller "github.com/silogen/kaiwo/internal/controller/aim"
 
 	infrastructurev1alpha1 "github.com/silogen/kaiwo/apis/infrastructure/v1alpha1"
-	infrastructurecontroller "github.com/silogen/kaiwo/internal/controller/infrastructure"
-
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
