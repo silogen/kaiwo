@@ -135,7 +135,7 @@ func buildServingRuntimeObjectMeta(template aimstate.TemplateState, ownerRef met
 func buildServingRuntimeSpec(template aimstate.TemplateState) servingv1alpha1.ServingRuntimeSpec {
 	dshmSizeLimit := resource.MustParse(DefaultSharedMemorySize)
 
-	// Determine model ID: prefer ModelSource.Name, fall back to AIMImageName
+	// Determine model ID: prefer ModelSource.Description, fall back to AIMImageName
 	modelID := template.SpecCommon.AIMImageName
 	if template.ModelSource != nil {
 		modelID = template.ModelSource.Name

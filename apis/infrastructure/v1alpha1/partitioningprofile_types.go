@@ -31,9 +31,9 @@ import (
 
 // PartitioningProfileSpec defines the desired state of PartitioningProfile.
 type PartitioningProfileSpec struct {
-	// DisplayName is a human-readable description of this profile.
-	// +kubebuilder:validation:MinLength=1
-	DisplayName string `json:"displayName"`
+	// Description is a human-readable description of this profile.
+	// +optional
+	Description string `json:"description,omitempty"`
 
 	// TargetSelector is an optional guardrail to ensure the profile is only
 	// applied to compatible nodes. If specified, the controller will validate
@@ -46,9 +46,9 @@ type PartitioningProfileSpec struct {
 	// +optional
 	ExpectedResources map[string]resource.Quantity `json:"expectedResources,omitempty"`
 
-	// ProfileName is the name of the profile to be applied.
+	// DcmProfileName is the name of the profile to be applied.
 	// This is the name of the profile under `gpu-config-profile` in DCM config.json.
-	ProfileName string `json:"profileName"`
+	DcmProfileName string `json:"dcmProfileName"`
 }
 
 // PartitioningProfileStatus defines the observed state of PartitioningProfile.
@@ -70,7 +70,7 @@ type PartitioningProfileStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster,shortName=gpuprofile;pp,categories=infrastructure;gpu
-// +kubebuilder:printcolumn:name="Display Name",type=string,JSONPath=`.spec.displayName`
+// +kubebuilder:printcolumn:name="DCM profile",type=string,JSONPath=`.spec.dcmProfileName`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 type PartitioningProfile struct {
 	metav1.TypeMeta   `json:",inline"`

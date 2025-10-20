@@ -219,15 +219,19 @@ type RolloutPolicy struct {
 	// +kubebuilder:validation:Minimum=0
 	MaxUnavailable int32 `json:"maxUnavailable,omitempty"`
 
+	// ExcludeControlPlane controls if control plane nodes are excluded or not.
+	// +kubebuilder:default=true
+	ExcludeControlPlane bool `json:"excludeControlPlane,omitempty"`
+
 	// DrainPolicy defines how to drain nodes.
 	// DrainPolicy DrainPolicy `json:"drainPolicy,omitempty"`
 }
 
 // PartitioningRule maps a node selector to a partition profile.
 type PartitioningRule struct {
-	// Name is an optional human-readable name for this rule.
+	// Description is an optional human-readable name for this rule.
 	// +optional
-	Name string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
 
 	// Selector selects nodes to partition.
 	Selector metav1.LabelSelector `json:"selector"`

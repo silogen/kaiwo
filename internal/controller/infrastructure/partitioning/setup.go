@@ -25,12 +25,21 @@ SOFTWARE.
 package partitioning
 
 import (
+	"context"
+
+	infrastructurev1alpha1 "github.com/silogen/kaiwo/apis/infrastructure/v1alpha1"
 	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // SetupWithManager registers all infrastructure controllers with the manager.
 func SetupWithManager(mgr ctrl.Manager, clientset kubernetes.Interface) error {
+	// Add field indexers
+	if err := setupFieldIndexers(mgr); err != nil {
+		return err
+	}
+
 	// Register PartitioningPlan controller
 	if err := (&PartitioningPlanReconciler{
 		Client:   mgr.GetClient(),
@@ -47,6 +56,24 @@ func SetupWithManager(mgr ctrl.Manager, clientset kubernetes.Interface) error {
 		Recorder:  mgr.GetEventRecorderFor("node-partitioning-controller"),
 		Clientset: clientset,
 	}).SetupWithManager(mgr); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// setupFieldIndexers adds field indexers for efficient lookups.
+func setupFieldIndexers(mgr ctrl.Manager) error {
+	// Index NodePartitioning by spec.nodeName for quick lookup by node name
+	if err := mgr.GetFieldIndexer().IndexField(
+		context.Background(),
+		&infrastructurev1alpha1.NodePartitioning{},
+		".spec.nodeName",
+		func(obj client.Object) []string {
+			np := obj.(*infrastructurev1alpha1.NodePartitioning)
+			return []string{np.Spec.NodeName}
+		},
+	); err != nil {
 		return err
 	}
 

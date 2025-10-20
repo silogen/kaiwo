@@ -104,7 +104,7 @@ func runSelectWorkload(ctx context.Context, clients k8s.KubernetesClients, state
 	}
 
 	columns := []string{
-		"Name",
+		"Description",
 		"WorkloadStatus",
 		"Kaiwo user",
 	}

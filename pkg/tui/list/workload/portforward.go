@@ -117,7 +117,7 @@ func runPortForward(ctx context.Context, clients k8s.KubernetesClients, state *t
 
 	columns := []string{
 		"Type",
-		"Name",
+		"Description",
 		"Port name",
 		"Port",
 		"Protocol",

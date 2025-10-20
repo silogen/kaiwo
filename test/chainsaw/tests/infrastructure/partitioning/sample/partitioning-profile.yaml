@@ -1,0 +1,8 @@
+apiVersion: infrastructure.silogen.ai/v1alpha1
+kind: PartitioningProfile
+metadata:
+  name: test
+spec:
+  dcmProfileName: cpx
+  expectedResources:
+    amd.com/gpu: 63

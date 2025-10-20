@@ -280,6 +280,9 @@ generate-crd-docs:
 
 	crd-ref-docs --source-path apis/aim/v1alpha1/ --renderer=markdown --output-path=docs/docs/reference/crds/aim.silogen.ai.md --config docs/crd-ref-cocs-config.yaml
 
+	crd-ref-docs --source-path apis/infrastructure/v1alpha1/ --renderer=markdown --output-path=docs/docs/reference/crds/infrastructure.silogen.ai.md --config docs/crd-ref-cocs-config.yaml
+
+
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary
 # $2 - package url which can be installed

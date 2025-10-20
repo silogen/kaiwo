@@ -142,17 +142,17 @@ func (r *PartitioningPlanReconciler) observe(ctx context.Context, plan *infrastr
 	for _, rule := range plan.Spec.Rules {
 		selector, err := metav1.LabelSelectorAsSelector(&rule.Selector)
 		if err != nil {
-			return nil, fmt.Errorf("invalid selector in rule %q: %w", rule.Name, err)
+			return nil, fmt.Errorf("invalid selector in rule %q: %w", rule.Description, err)
 		}
 
-		var excludeSelector labels.Selector
-
 		for _, node := range allNodes.Items {
+			// Skip control plane nodes if excludeControlPlane is enabled
+			if plan.Spec.Rollout.ExcludeControlPlane && isControlPlaneNode(&node) {
+				logger.V(1).Info("Excluding control plane node", "node", node.Name)
+				continue
+			}
+
 			if selector.Matches(labels.Set(node.Labels)) {
-				// Check exclude
-				if excludeSelector.Matches(labels.Set(node.Labels)) {
-					continue
-				}
 				matchingNodesMap[node.Name] = node
 			}
 		}
@@ -512,6 +512,25 @@ func computeDesiredHash(profile *infrastructurev1alpha1.PartitioningProfile) (st
 
 	hash := sha256.Sum256(data)
 	return fmt.Sprintf("sha256:%x", hash), nil
+}
+
+// isControlPlaneNode checks if a node has control plane labels.
+func isControlPlaneNode(node *corev1.Node) bool {
+	if node.Labels == nil {
+		return false
+	}
+
+	// Check for the newer control-plane label
+	if _, exists := node.Labels["node-role.kubernetes.io/control-plane"]; exists {
+		return true
+	}
+
+	// Check for the older master label (deprecated but still in use)
+	if _, exists := node.Labels["node-role.kubernetes.io/master"]; exists {
+		return true
+	}
+
+	return false
 }
 
 // SetupWithManager sets up the controller with the Manager.

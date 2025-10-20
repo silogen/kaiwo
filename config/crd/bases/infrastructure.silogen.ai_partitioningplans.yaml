@@ -76,6 +76,11 @@ spec:
               rollout:
                 description: Rollout defines how to orchestrate node changes.
                 properties:
+                  excludeControlPlane:
+                    default: true
+                    description: ExcludeControlPlane controls if control plane nodes
+                      are excluded or not.
+                    type: boolean
                   maxParallel:
                     default: 1
                     description: MaxParallel is the maximum number of nodes to process
@@ -98,9 +103,9 @@ spec:
                   description: PartitioningRule maps a node selector to a partition
                     profile.
                   properties:
-                    name:
-                      description: Name is an optional human-readable name for this
-                        rule.
+                    description:
+                      description: Description is an optional human-readable name
+                        for this rule.
                       type: string
                     profileRef:
                       description: ProfileRef references the PartitioningProfile to

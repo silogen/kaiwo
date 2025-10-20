@@ -37,8 +37,13 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	infrastructurev1alpha1 "github.com/silogen/kaiwo/apis/infrastructure/v1alpha1"
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
@@ -174,7 +179,7 @@ func (r *NodePartitioningReconciler) projectStatus(
 	// Handle observation errors
 	if errs.ObserveErr != nil {
 		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseFailed)
-		// TODO event
+		controllerutils.EmitWarningEvent(r.Recorder, np, "ObservationFailed", fmt.Sprintf("Failed to observe cluster state: %v", errs.ObserveErr))
 		return nil
 	}
 
@@ -184,7 +189,7 @@ func (r *NodePartitioningReconciler) projectStatus(
 
 	// Check if node exists
 	if obs.Node == nil {
-		// TODO event
+		controllerutils.EmitWarningEvent(r.Recorder, np, "NodeNotFound", fmt.Sprintf("Target node %s does not exist", np.Spec.NodeName))
 		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseFailed)
 		meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
 			Type:               infrastructurev1alpha1.NodePartitioningConditionNodeCordoned,
@@ -198,14 +203,14 @@ func (r *NodePartitioningReconciler) projectStatus(
 
 	// Check if profile exists
 	if obs.Profile == nil {
-		// TODO event
+		controllerutils.EmitWarningEvent(r.Recorder, np, "ProfileNotFound", fmt.Sprintf("PartitioningProfile %s does not exist", np.Spec.ProfileRef.Name))
 		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseFailed)
 		return nil
 	}
 
 	// Execute state machine
 	if err := r.executeStateMachine(ctx, np, obs); err != nil {
-		// TODO event
+		controllerutils.EmitWarningEvent(r.Recorder, np, "StateMachineFailed", fmt.Sprintf("State machine execution failed: %v", err))
 		logger.Error(err, "State machine execution failed")
 		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseFailed)
 		return nil // Don't fail reconciliation, status is updated
@@ -236,83 +241,119 @@ func (r *NodePartitioningReconciler) executeStateMachine(
 		return nil
 
 	case infrastructurev1alpha1.NodePartitioningPhasePending:
-		// Start draining
+		// Transition to draining phase
 		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseDraining)
 		controllerutils.EmitNormalEvent(r.Recorder, np, "DrainStarted", fmt.Sprintf("Started draining node %s", np.Spec.NodeName))
+		// Return to allow status update and requeue
 		return nil
 
 	case infrastructurev1alpha1.NodePartitioningPhaseDraining:
-		// Cordon node
-		if err := CordonNode(ctx, r.Client, np.Spec.NodeName); err != nil {
-			return fmt.Errorf("failed to cordon node: %w", err)
+		// Check if already cordoned
+		cordonedCond := meta.FindStatusCondition(np.Status.Conditions, infrastructurev1alpha1.NodePartitioningConditionNodeCordoned)
+		if cordonedCond == nil || cordonedCond.Status != metav1.ConditionTrue {
+			// Cordon node
+			if err := CordonNode(ctx, r.Client, np.Spec.NodeName); err != nil {
+				return fmt.Errorf("failed to cordon node: %w", err)
+			}
+			meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
+				Type:               infrastructurev1alpha1.NodePartitioningConditionNodeCordoned,
+				Status:             metav1.ConditionTrue,
+				Reason:             "CordonSucceeded",
+				Message:            "Node cordoned successfully",
+				ObservedGeneration: np.Generation,
+			})
+			// Requeue to continue in next reconcile
+			return nil
 		}
-		meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
-			Type:               infrastructurev1alpha1.NodePartitioningConditionNodeCordoned,
-			Status:             metav1.ConditionTrue,
-			Reason:             "CordonSucceeded",
-			Message:            "Node cordoned successfully",
-			ObservedGeneration: np.Generation,
-		})
 
-		// Apply taint
-		if err := TaintNode(ctx, r.Client, np.Spec.NodeName); err != nil {
-			return fmt.Errorf("failed to taint node: %w", err)
+		// Check if already tainted
+		taintedCond := meta.FindStatusCondition(np.Status.Conditions, infrastructurev1alpha1.NodePartitioningConditionNodeTainted)
+		if taintedCond == nil || taintedCond.Status != metav1.ConditionTrue {
+			// Apply taint
+			if err := TaintNode(ctx, r.Client, np.Spec.NodeName); err != nil {
+				return fmt.Errorf("failed to taint node: %w", err)
+			}
+			meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
+				Type:               infrastructurev1alpha1.NodePartitioningConditionNodeTainted,
+				Status:             metav1.ConditionTrue,
+				Reason:             "TaintApplied",
+				Message:            fmt.Sprintf("Taint %s=%s:NoExecute applied", TaintKey, TaintValue),
+				ObservedGeneration: np.Generation,
+			})
+			// Requeue to continue in next reconcile
+			return nil
 		}
-		meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
-			Type:               infrastructurev1alpha1.NodePartitioningConditionNodeTainted,
-			Status:             metav1.ConditionTrue,
-			Reason:             "TaintApplied",
-			Message:            fmt.Sprintf("Taint %s=%s:NoExecute applied", TaintKey, TaintValue),
-			ObservedGeneration: np.Generation,
-		})
 
-		// Drain node
-		if err := DrainNode(ctx, r.Client, r.Clientset, np.Spec.NodeName); err != nil {
-			return fmt.Errorf("failed to drain node: %w", err)
+		// Check if drain is already completed
+		drainedCond := meta.FindStatusCondition(np.Status.Conditions, infrastructurev1alpha1.NodePartitioningConditionDrainCompleted)
+		if drainedCond == nil || drainedCond.Status != metav1.ConditionTrue {
+			// Drain node (this is now idempotent and fast)
+			if err := DrainNode(ctx, r.Client, r.Clientset, np.Spec.NodeName); err != nil {
+				return fmt.Errorf("failed to drain node: %w", err)
+			}
+			meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
+				Type:               infrastructurev1alpha1.NodePartitioningConditionDrainCompleted,
+				Status:             metav1.ConditionTrue,
+				Reason:             "DrainSucceeded",
+				Message:            "All non-tolerated pods evicted successfully",
+				ObservedGeneration: np.Generation,
+			})
+			controllerutils.EmitNormalEvent(r.Recorder, np, "DrainCompleted", fmt.Sprintf("Node %s drained successfully", np.Spec.NodeName))
+			// Requeue to continue in next reconcile
+			return nil
 		}
-		meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
-			Type:               infrastructurev1alpha1.NodePartitioningConditionDrainCompleted,
-			Status:             metav1.ConditionTrue,
-			Reason:             "DrainSucceeded",
-			Message:            "All non-tolerated pods evicted successfully",
-			ObservedGeneration: np.Generation,
-		})
 
-		controllerutils.EmitNormalEvent(r.Recorder, np, "DrainCompleted", fmt.Sprintf("Node %s drained successfully", np.Spec.NodeName))
-
-		// Move to applying
+		// All drain steps complete, move to applying phase
 		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseApplying)
 		return nil
 
 	case infrastructurev1alpha1.NodePartitioningPhaseApplying:
-		// Ensure profile is in DCM ConfigMap
-		profileName, err := EnsureDCMProfileInConfigMap(ctx, r.Client, obs.Profile)
-		if err != nil {
-			return fmt.Errorf("failed to ensure DCM profile in ConfigMap: %w", err)
+		// Check if profile already applied
+		profileAppliedCond := meta.FindStatusCondition(np.Status.Conditions, infrastructurev1alpha1.NodePartitioningConditionProfileApplied)
+		if profileAppliedCond == nil || profileAppliedCond.Status != metav1.ConditionTrue {
+			// Ensure profile is in DCM ConfigMap
+			profileName, err := EnsureDCMProfileInConfigMap(ctx, r.Client, obs.Profile)
+			if err != nil {
+				return fmt.Errorf("failed to ensure DCM profile in ConfigMap: %w", err)
+			}
+
+			// Apply profile to node (label)
+			if err := ApplyProfileToNode(ctx, r.Client, np.Spec.NodeName, profileName); err != nil {
+				return fmt.Errorf("failed to apply profile to node: %w", err)
+			}
+
+			meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
+				Type:               infrastructurev1alpha1.NodePartitioningConditionProfileApplied,
+				Status:             metav1.ConditionTrue,
+				Reason:             "DCMConfigUpdated",
+				Message:            fmt.Sprintf("DCM profile %s applied to node", profileName),
+				ObservedGeneration: np.Generation,
+			})
+
+			controllerutils.EmitNormalEvent(r.Recorder, np, "ProfileApplied", fmt.Sprintf("Applied profile %s to node %s", profileName, np.Spec.NodeName))
+			// Requeue to continue in next reconcile
+			return nil
 		}
 
-		// Apply profile to node (label)
-		if err := ApplyProfileToNode(ctx, r.Client, np.Spec.NodeName, profileName); err != nil {
-			return fmt.Errorf("failed to apply profile to node: %w", err)
-		}
-
-		meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
-			Type:               infrastructurev1alpha1.NodePartitioningConditionProfileApplied,
-			Status:             metav1.ConditionTrue,
-			Reason:             "DCMConfigUpdated",
-			Message:            fmt.Sprintf("DCM profile %s applied to node", profileName),
-			ObservedGeneration: np.Generation,
-		})
-
-		controllerutils.EmitNormalEvent(r.Recorder, np, "ProfileApplied", fmt.Sprintf("Applied profile %s to node %s", profileName, np.Spec.NodeName))
-
-		// Move to waiting for operator
+		// Profile applied, move to waiting for operator
 		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseWaitingOperator)
 		return nil
 
 	case infrastructurev1alpha1.NodePartitioningPhaseWaitingOperator:
-		// TODO Wait for operator to be ready
+		// Check if device plugin is ready on this node
+		if !obs.DevicePluginReady {
+			meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
+				Type:               infrastructurev1alpha1.NodePartitioningConditionOperatorReady,
+				Status:             metav1.ConditionFalse,
+				Reason:             "DevicePluginNotReady",
+				Message:            "Waiting for AMD GPU device plugin to be ready",
+				ObservedGeneration: np.Generation,
+			})
+			// Requeue - will be triggered by node status changes
+			return nil
+		}
 
+		// Device plugin is ready
 		meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
 			Type:               infrastructurev1alpha1.NodePartitioningConditionOperatorReady,
 			Status:             metav1.ConditionTrue,
@@ -326,8 +367,41 @@ func (r *NodePartitioningReconciler) executeStateMachine(
 		return nil
 
 	case infrastructurev1alpha1.NodePartitioningPhaseVerifying:
-		// TODO verify correct
+		// Verify that the DCM label is correctly applied
+		if obs.Node.Labels[DCMNodeLabelKey] == "" {
+			meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
+				Type:               infrastructurev1alpha1.NodePartitioningConditionVerified,
+				Status:             metav1.ConditionFalse,
+				Reason:             "DCMLabelMissing",
+				Message:            "DCM profile label not found on node",
+				ObservedGeneration: np.Generation,
+			})
+			// Requeue to retry
+			return nil
+		}
 
+		// Verify that allocatable GPU resources exist
+		hasGPUResources := false
+		for key := range obs.Node.Status.Allocatable {
+			if key.String() == "amd.com/gpu" {
+				hasGPUResources = true
+				break
+			}
+		}
+
+		if !hasGPUResources {
+			meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
+				Type:               infrastructurev1alpha1.NodePartitioningConditionVerified,
+				Status:             metav1.ConditionFalse,
+				Reason:             "GPUResourcesNotFound",
+				Message:            "GPU resources not yet available on node",
+				ObservedGeneration: np.Generation,
+			})
+			// Requeue to retry - will be triggered by node allocatable changes
+			return nil
+		}
+
+		// Verification passed
 		meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
 			Type:               infrastructurev1alpha1.NodePartitioningConditionVerified,
 			Status:             metav1.ConditionTrue,
@@ -398,8 +472,83 @@ func (r *NodePartitioningReconciler) isDevicePluginReady(ctx context.Context, no
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *NodePartitioningReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// Create predicate to watch for DCM label changes and allocatable resource changes
+	nodeChangePredicate := predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			// Don't reconcile on node creation
+			return false
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			// Don't reconcile on node deletion (NodePartitioning will handle missing node)
+			return false
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldNode, ok := e.ObjectOld.(*corev1.Node)
+			if !ok {
+				return false
+			}
+			newNode, ok := e.ObjectNew.(*corev1.Node)
+			if !ok {
+				return false
+			}
+
+			// Check if DCM label changed
+			oldLabel := oldNode.Labels[DCMNodeLabelKey]
+			newLabel := newNode.Labels[DCMNodeLabelKey]
+			if oldLabel != newLabel {
+				return true
+			}
+
+			// Check if allocatable resources changed (specifically GPU resources)
+			oldAllocatable := oldNode.Status.Allocatable
+			newAllocatable := newNode.Status.Allocatable
+
+			// Check for any GPU-related resource changes
+			for key := range newAllocatable {
+				if key.String() == "amd.com/gpu" || key.String() == "nvidia.com/gpu" {
+					if !oldAllocatable[key].Equal(newAllocatable[key]) {
+						return true
+					}
+				}
+			}
+
+			return false
+		},
+		GenericFunc: func(e event.GenericEvent) bool {
+			return false
+		},
+	}
+
+	// Map Node events to NodePartitioning reconcile requests
+	nodeToNodePartitioning := handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+		node, ok := obj.(*corev1.Node)
+		if !ok {
+			return nil
+		}
+
+		// List all NodePartitioning resources for this node
+		var npList infrastructurev1alpha1.NodePartitioningList
+		if err := r.List(ctx, &npList, client.MatchingFields{
+			".spec.nodeName": node.Name,
+		}); err != nil {
+			return nil
+		}
+
+		var requests []reconcile.Request
+		for _, np := range npList.Items {
+			requests = append(requests, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: np.Name,
+				},
+			})
+		}
+
+		return requests
+	})
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&infrastructurev1alpha1.NodePartitioning{}).
+		Watches(&corev1.Node{}, nodeToNodePartitioning, builder.WithPredicates(nodeChangePredicate)).
 		Named("node-partitioning").
 		Complete(r)
 }

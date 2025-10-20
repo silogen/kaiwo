@@ -21,8 +21,8 @@ spec:
   scope: Cluster
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.displayName
-      name: Display Name
+    - jsonPath: .spec.dcmProfileName
+      name: DCM profile
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
@@ -54,9 +54,13 @@ spec:
           spec:
             description: PartitioningProfileSpec defines the desired state of PartitioningProfile.
             properties:
-              displayName:
-                description: DisplayName is a human-readable description of this profile.
-                minLength: 1
+              dcmProfileName:
+                description: |-
+                  DcmProfileName is the name of the profile to be applied.
+                  This is the name of the profile under `gpu-config-profile` in DCM config.json.
+                type: string
+              description:
+                description: Description is a human-readable description of this profile.
                 type: string
               expectedResources:
                 additionalProperties:
@@ -69,11 +73,6 @@ spec:
                   ExpectedResources defines the resources that should appear in
                   node.status.allocatable after partitioning succeeds.
                 type: object
-              profileName:
-                description: |-
-                  ProfileName is the name of the profile to be applied.
-                  This is the name of the profile under `gpu-config-profile` in DCM config.json.
-                type: string
               targetSelector:
                 description: |-
                   TargetSelector is an optional guardrail to ensure the profile is only
@@ -124,8 +123,7 @@ spec:
                 type: object
                 x-kubernetes-map-type: atomic
             required:
-            - displayName
-            - profileName
+            - dcmProfileName
             type: object
           status:
             description: PartitioningProfileStatus defines the observed state of PartitioningProfile.

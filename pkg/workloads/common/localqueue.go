@@ -81,7 +81,7 @@ func EnsureLocalQueue(ctx context.Context, k8sClient client.Client, scheme *runt
 					// Create the LocalQueue
 					err = k8sClient.Create(ctx, localQueue)
 					if err != nil {
-						logger.Error(err, "Failed to create LocalQueue", "Name", name, "Namespace", namespace)
+						logger.Error(err, "Failed to create LocalQueue", "Description", name, "Namespace", namespace)
 						return fmt.Errorf("failed to create LocalQueue %s in namespace %s: %w", clusterQueueName, namespace, err)
 					}
 					return nil
