@@ -82,9 +82,20 @@ case "$ACTION" in
       yq eval 'select(.kind == "CustomResourceDefinition")' "$TMP_BUILD" \
         | kubectl apply --server-side --force-conflicts -f -
 
-      # Wait for each CRD to become Established (parallelized)
-      yq eval --no-doc -r 'select(.kind == "CustomResourceDefinition") | .metadata.name' "$TMP_BUILD" \
-        | xargs -r -n1 -P8 -I{} kubectl wait --for=condition=Established --timeout=90s crd/{}
+       # Robust CRD wait (tolerate transient nil conditions)
+      yq -r 'select(.kind == "CustomResourceDefinition") | .metadata.name' "$TMP_BUILD" \
+        | xargs -r -n1 -P8 -I{} bash -c '
+            CRD="{}"
+            for i in {1..6}; do
+              if kubectl wait --for=condition=Established --timeout=15s "crd/${CRD}" >/dev/null 2>&1; then
+                echo "CRD ${CRD}: Established"
+                exit 0
+              fi
+              sleep 3
+            done
+            echo "WARN: CRD ${CRD} not reported Established after retries; continuing"
+            exit 0
+          '
 
       # Apply the rest (server-side)
       kubectl apply --server-side --force-conflicts -f "$TMP_BUILD"
