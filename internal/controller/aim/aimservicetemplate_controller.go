@@ -67,6 +67,7 @@ type AIMServiceTemplateReconciler struct {
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimruntimeconfigs,verbs=get;list;watch
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclusterimages,verbs=get;list;watch
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimimages,verbs=get;list;watch
+// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimmodelcache,verbs=get;list;watch;create;update;patch
 // +kubebuilder:rbac:groups=serving.kserve.io,resources=servingruntimes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
@@ -189,6 +190,31 @@ func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *ai
 			controllerutils.EmitNormalEvent(r.Recorder, template, "RuntimeConfigResolved",
 				fmt.Sprintf("Using AIMRuntimeConfig %q from %s", resolution.Name, shared.JoinRuntimeConfigSources(resolution, template.Namespace)))
 		},
+		FindMissingModelCaches: func(ctx context.Context) (missing []aimv1alpha1.AIMModelSource, err error) {
+			//Check if caching is enabled
+			if !template.Spec.Caching.Enabled {
+				return missing, nil
+			}
+			//Fetch available caches in the namespace
+			var caches = aimv1alpha1.AIMModelCacheList{}
+			if err := r.Client.List(ctx, &caches, client.InNamespace(template.Namespace)); err != nil {
+				return nil, err
+			}
+
+			// Return all caches the the discovery job have added, but
+			// first remove any where matching model caches already exist
+		SEARCH:
+			for _, model := range template.Status.ModelSources {
+				//only append if we don't already have a cache
+				for _, cached := range caches.Items {
+					if cached.Spec.SourceURI == model.SourceURI {
+						continue SEARCH
+					}
+				}
+				missing = append(missing, model)
+			}
+			return
+		},
 	})
 }
 
@@ -232,8 +258,10 @@ func (r *AIMServiceTemplateReconciler) plan(_ context.Context, template *aimv1al
 		},
 	})
 
-	// TODO: If caching.enabled, create AIMTemplateCache object
-	// This will be handled in a future iteration
+	//Add any missing caches
+	for _, cache := range shared.BuildModelCaches(template, *observation) {
+		desired = append(desired, cache)
+	}
 
 	return desired, nil
 }

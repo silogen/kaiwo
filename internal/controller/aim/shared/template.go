@@ -54,6 +54,7 @@ type TemplateObservation struct {
 	ImageResources   *corev1.ResourceRequirements
 	ImagePullSecrets []corev1.LocalObjectReference
 	RuntimeConfig    *RuntimeConfigResolution
+	MissingCaches    []aimv1alpha1.AIMModelSource
 }
 
 // TemplateSpec provides the common template specification
@@ -82,6 +83,7 @@ type TemplateObservationOptions[R client.Object] struct {
 	LookupImage             func(ctx context.Context) (*ImageLookupResult, error)
 	ResolveRuntimeConfig    func(ctx context.Context) (*RuntimeConfigResolution, error)
 	OnRuntimeConfigResolved func(resolution *RuntimeConfigResolution)
+	FindMissingModelCaches  func(ctx context.Context) ([]aimv1alpha1.AIMModelSource, error)
 }
 
 // ObserveTemplate gathers runtime, discovery job, image, and runtime config information with common error handling.
@@ -136,6 +138,15 @@ func ObserveTemplate[R client.Object](ctx context.Context, opts TemplateObservat
 		}
 	}
 
+	if opts.FindMissingModelCaches != nil {
+		missing, err := opts.FindMissingModelCaches(ctx)
+		if err != nil {
+			return nil, err
+		} else {
+			obs.MissingCaches = missing
+		}
+	}
+
 	return obs, nil
 }
 
@@ -159,6 +170,7 @@ type TemplatePlanInput struct {
 type TemplatePlanBuilders struct {
 	BuildRuntime      func(input TemplatePlanInput) client.Object
 	BuildDiscoveryJob func(input TemplatePlanInput) client.Object
+	BuildModelCaches  func(input TemplatePlanInput) []client.Object
 }
 
 // PlanTemplateResources produces desired objects based on the observation and controller-provided builders.
@@ -448,4 +460,25 @@ func ProjectTemplateStatus(
 
 	// No handler applied, no changes needed (template already in correct state)
 	return nil
+}
+
+func BuildModelCaches(template *aimv1alpha1.AIMServiceTemplate, obs TemplateObservation) (caches []*aimv1alpha1.AIMModelCache) {
+	for _, cache := range obs.MissingCaches {
+		caches = append(caches,
+			&aimv1alpha1.AIMModelCache{
+				TypeMeta: metav1.TypeMeta{APIVersion: "aimv1alpha1", Kind: "AIMModelCache"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      cache.Name + "-cache",
+					Namespace: template.Namespace,
+				},
+				Spec: aimv1alpha1.AIMModelCacheSpec{
+					StorageClassName: template.Spec.Caching.StorageClass,
+					SourceURI:        cache.SourceURI,
+					Size:             cache.Size,
+				},
+			},
+		)
+
+	}
+	return
 }
