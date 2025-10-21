@@ -1,0 +1,20 @@
+apiVersion: infrastructure.silogen.ai/v1alpha1
+kind: PartitioningPlan
+metadata:
+  name: plan-happy
+spec:
+  dryRun: false
+  rollout:
+    maxParallel: 1
+    maxUnavailable: 1
+    excludeControlPlane: true
+  rules:
+  - description: apply CPX profile to worker nodes
+    selector:
+      matchExpressions:
+      - key: node-role.kubernetes.io/control-plane
+        operator: DoesNotExist
+      - key: amd.com/gpu
+        operator: Exists
+    profileRef:
+      name: partitioning-profile-cpx

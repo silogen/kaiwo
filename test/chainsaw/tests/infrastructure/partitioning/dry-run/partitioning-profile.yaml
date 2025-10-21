@@ -1,0 +1,7 @@
+apiVersion: infrastructure.silogen.ai/v1alpha1
+kind: PartitioningProfile
+metadata:
+  name: partitioning-profile-dryrun
+spec:
+  description: Chainsaw dry-run test profile
+  dcmProfileName: default

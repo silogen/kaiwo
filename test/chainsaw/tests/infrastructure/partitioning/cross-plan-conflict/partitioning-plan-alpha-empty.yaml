@@ -1,0 +1,17 @@
+apiVersion: infrastructure.silogen.ai/v1alpha1
+kind: PartitioningPlan
+metadata:
+  name: plan-conflict-alpha
+spec:
+  dryRun: true
+  rollout:
+    maxParallel: 1
+    maxUnavailable: 1
+    excludeControlPlane: true
+  rules:
+  - description: alpha release rule
+    selector:
+      matchLabels:
+        partitioning.silogen.ai/release: "true"
+    profileRef:
+      name: partitioning-profile-conflict

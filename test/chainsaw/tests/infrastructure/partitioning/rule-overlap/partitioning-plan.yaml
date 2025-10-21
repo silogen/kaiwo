@@ -1,0 +1,29 @@
+apiVersion: infrastructure.silogen.ai/v1alpha1
+kind: PartitioningPlan
+metadata:
+  name: plan-rule-overlap
+spec:
+  dryRun: true
+  rollout:
+    maxParallel: 1
+    maxUnavailable: 1
+    excludeControlPlane: true
+  rules:
+  - description: first rule
+    selector:
+      matchExpressions:
+      - key: node-role.kubernetes.io/control-plane
+        operator: DoesNotExist
+      - key: amd.com/gpu
+        operator: Exists
+    profileRef:
+      name: partitioning-profile-overlap
+  - description: second rule duplicates selection
+    selector:
+      matchExpressions:
+      - key: node-role.kubernetes.io/control-plane
+        operator: DoesNotExist
+      - key: amd.com/gpu
+        operator: Exists
+    profileRef:
+      name: partitioning-profile-overlap

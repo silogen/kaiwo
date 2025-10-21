@@ -1,0 +1,18 @@
+apiVersion: infrastructure.silogen.ai/v1alpha1
+kind: PartitioningPlan
+metadata:
+  name: plan-toggle
+spec:
+  dryRun: true
+  rollout:
+    maxParallel: 2
+    maxUnavailable: 2
+    excludeControlPlane: false
+  rules:
+  - description: include control plane nodes
+    selector:
+      matchExpressions:
+      - key: amd.com/gpu
+        operator: Exists
+    profileRef:
+      name: partitioning-profile-toggle

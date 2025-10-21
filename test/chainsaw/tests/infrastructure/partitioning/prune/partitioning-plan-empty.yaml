@@ -1,0 +1,17 @@
+apiVersion: infrastructure.silogen.ai/v1alpha1
+kind: PartitioningPlan
+metadata:
+  name: plan-prune
+spec:
+  dryRun: true
+  rollout:
+    maxParallel: 1
+    maxUnavailable: 1
+    excludeControlPlane: true
+  rules:
+  - description: intentionally unmatched selector
+    selector:
+      matchLabels:
+        partitioning.silogen.ai/never: "true"
+    profileRef:
+      name: partitioning-profile-prune

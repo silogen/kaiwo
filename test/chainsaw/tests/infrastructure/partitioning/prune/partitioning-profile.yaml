@@ -1,0 +1,7 @@
+apiVersion: infrastructure.silogen.ai/v1alpha1
+kind: PartitioningProfile
+metadata:
+  name: partitioning-profile-prune
+spec:
+  description: Chainsaw prune test profile
+  dcmProfileName: default

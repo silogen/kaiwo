@@ -1,0 +1,20 @@
+apiVersion: infrastructure.silogen.ai/v1alpha1
+kind: PartitioningPlan
+metadata:
+  name: plan-prune
+spec:
+  dryRun: true
+  rollout:
+    maxParallel: 1
+    maxUnavailable: 1
+    excludeControlPlane: true
+  rules:
+  - description: match GPU workers
+    selector:
+      matchExpressions:
+      - key: node-role.kubernetes.io/control-plane
+        operator: DoesNotExist
+      - key: amd.com/gpu
+        operator: Exists
+    profileRef:
+      name: partitioning-profile-prune
