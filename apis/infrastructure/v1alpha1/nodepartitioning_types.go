@@ -57,8 +57,8 @@ type NodePartitioningSpec struct {
 	// +kubebuilder:validation:MinLength=1
 	DesiredHash string `json:"desiredHash"`
 
-	// ProfileRef references the PartitioningProfile to apply.
-	ProfileRef ProfileReference `json:"profileRef"`
+	// Profile defines the partitioning profile to apply to the node.
+	Profile PartitioningProfileSpec `json:"profile"`
 }
 
 // NodePartitioningStatus defines the observed state of NodePartitioning.
@@ -90,7 +90,7 @@ type NodePartitioningStatus struct {
 // +kubebuilder:resource:scope=Cluster,shortName=nodepartition;np,categories=infrastructure;gpu
 // +kubebuilder:printcolumn:name="Node",type=string,JSONPath=`.spec.nodeName`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
-// +kubebuilder:printcolumn:name="Profile",type=string,JSONPath=`.spec.profileRef.name`
+// +kubebuilder:printcolumn:name="Profile",type=string,JSONPath=`.spec.profile.dcmProfileName`
 // +kubebuilder:printcolumn:name="Attempts",type=integer,JSONPath=`.status.attempts`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 type NodePartitioning struct {

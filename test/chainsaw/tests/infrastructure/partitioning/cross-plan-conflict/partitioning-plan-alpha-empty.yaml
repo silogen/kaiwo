@@ -13,5 +13,6 @@ spec:
     selector:
       matchLabels:
         partitioning.silogen.ai/release: "true"
-    profileRef:
-      name: partitioning-profile-conflict
+    profile:
+      description: Chainsaw profile for plan conflict test
+      dcmProfileName: default

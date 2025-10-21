@@ -65,7 +65,6 @@ type NodePartitioningReconciler struct {
 // +kubebuilder:rbac:groups=infrastructure.silogen.ai,resources=nodepartitionings,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=infrastructure.silogen.ai,resources=nodepartitionings/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=infrastructure.silogen.ai,resources=nodepartitionings/finalizers,verbs=update
-// +kubebuilder:rbac:groups=infrastructure.silogen.ai,resources=partitioningprofiles,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups="",resources=nodes/status,verbs=get;patch
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;delete
@@ -138,17 +137,6 @@ func (r *NodePartitioningReconciler) observe(ctx context.Context, np *infrastruc
 	}
 	obs.Node = &node
 
-	// Get the PartitioningProfile
-	var profile infrastructurev1alpha1.PartitioningProfile
-	if err := r.Get(ctx, types.NamespacedName{Name: np.Spec.ProfileRef.Name}, &profile); err != nil {
-		if errors.IsNotFound(err) {
-			logger.Info("PartitioningProfile not found", "profile", np.Spec.ProfileRef.Name)
-			return obs, nil
-		}
-		return nil, fmt.Errorf("failed to get PartitioningProfile %s: %w", np.Spec.ProfileRef.Name, err)
-	}
-	obs.Profile = &profile
-
 	// Get DCM ConfigMap
 	dcmConfigMap, err := GetDCMConfigMap(ctx, r.Client)
 	if err != nil {
@@ -201,13 +189,6 @@ func (r *NodePartitioningReconciler) projectStatus(
 		return nil
 	}
 
-	// Check if profile exists
-	if obs.Profile == nil {
-		controllerutils.EmitWarningEvent(r.Recorder, np, "ProfileNotFound", fmt.Sprintf("PartitioningProfile %s does not exist", np.Spec.ProfileRef.Name))
-		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseFailed)
-		return nil
-	}
-
 	// Execute state machine
 	if err := r.executeStateMachine(ctx, np, obs); err != nil {
 		controllerutils.EmitWarningEvent(r.Recorder, np, "StateMachineFailed", fmt.Sprintf("State machine execution failed: %v", err))
@@ -244,7 +225,7 @@ func (r *NodePartitioningReconciler) executeStateMachine(
 
 			controllerutils.EmitNormalEvent(r.Recorder, np, "DryRunSkipped",
 				fmt.Sprintf("Dry-run: Would partition node %s with profile %s",
-					np.Spec.NodeName, np.Spec.ProfileRef.Name))
+					np.Spec.NodeName, np.Spec.Profile.DcmProfileName))
 		}
 		return nil
 	}
@@ -334,7 +315,7 @@ func (r *NodePartitioningReconciler) executeStateMachine(
 		profileAppliedCond := meta.FindStatusCondition(np.Status.Conditions, infrastructurev1alpha1.NodePartitioningConditionProfileApplied)
 		if profileAppliedCond == nil || profileAppliedCond.Status != metav1.ConditionTrue {
 			// Ensure profile is in DCM ConfigMap
-			profileName, err := EnsureDCMProfileInConfigMap(ctx, r.Client, obs.Profile)
+			profileName, err := EnsureDCMProfileInConfigMap(ctx, r.Client, &np.Spec.Profile)
 			if err != nil {
 				return fmt.Errorf("failed to ensure DCM profile in ConfigMap: %w", err)
 			}
@@ -390,12 +371,13 @@ func (r *NodePartitioningReconciler) executeStateMachine(
 
 	case infrastructurev1alpha1.NodePartitioningPhaseVerifying:
 		// Verify that the DCM label is correctly applied
-		if obs.Node.Labels[DCMNodeLabelKey] == "" {
+		expectedLabel := np.Spec.Profile.DcmProfileName
+		if obs.Node.Labels[DCMNodeLabelKey] != expectedLabel {
 			meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
 				Type:               infrastructurev1alpha1.NodePartitioningConditionVerified,
 				Status:             metav1.ConditionFalse,
 				Reason:             "DCMLabelMissing",
-				Message:            "DCM profile label not found on node",
+				Message:            fmt.Sprintf("DCM profile label %q not found on node", expectedLabel),
 				ObservedGeneration: np.Generation,
 			})
 			// Requeue to retry

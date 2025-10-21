@@ -16,5 +16,5 @@ spec:
         operator: DoesNotExist
       - key: amd.com/gpu
         operator: Exists
-    profileRef:
-      name: partitioning-profile-does-not-exist
+    profile:
+      description: invalid profile missing dcmProfileName

@@ -3,137 +3,142 @@ kind: Test
 metadata:
   name: partitioning-happy-path
 spec:
-  concurrent: false
+  parallel: false
   steps:
-  - name: partition-and-restore
+  - name: partition-to-cpx
     try:
-  - apply:
-      file: partitioning-profile-cpx.yaml
-  - apply:
-      file: partitioning-profile-spx.yaml
-  - apply:
-      file: partitioning-plan-cpx.yaml
-  - wait:
-      apiVersion: infrastructure.silogen.ai/v1alpha1
-      kind: NodePartitioning
-      name: plan-happy-($values.amd_gpu_partitioning_node_name)
-      timeout: 2m
-      for:
-        jsonPath:
-          path: .spec.profileRef.name
-          value: partitioning-profile-cpx
-  - patch:
-      resource:
-        apiVersion: v1
-        kind: Node
-        metadata:
-          name: ($values.amd_gpu_partitioning_node_name)
-          labels:
-            dcm.amd.com/gpu-config-profile: partitioning-profile-cpx
-  - patch:
-      resource:
+    - apply:
+        file: partitioning-plan-cpx.yaml
+    - wait:
         apiVersion: infrastructure.silogen.ai/v1alpha1
         kind: NodePartitioning
-        metadata:
-          name: plan-happy-($values.amd_gpu_partitioning_node_name)
-        status:
-          phase: Succeeded
-          currentHash: patched-cpx
-  - wait:
-      apiVersion: infrastructure.silogen.ai/v1alpha1
-      kind: PartitioningPlan
-      name: plan-happy
-      timeout: 2m
+        name: plan-happy-($values.amd_gpu_partitioning_node_name)
+        timeout: 2m
+        for:
+          jsonPath:
+            path: .spec.profile.dcmProfileName
+            value: cpx
+    - patch:
+        resource:
+          apiVersion: v1
+          kind: Node
+          metadata:
+            name: ($values.amd_gpu_partitioning_node_name)
+            labels:
+              dcm.amd.com/gpu-config-profile: cpx
+    - patch:
+        resource:
+          apiVersion: infrastructure.silogen.ai/v1alpha1
+          kind: NodePartitioning
+          metadata:
+            name: plan-happy-($values.amd_gpu_partitioning_node_name)
+          status:
+            phase: Succeeded
+            currentHash: patched-cpx
+
+  - name: verify-cpx-completion
+    try:
+    - wait:
+        apiVersion: infrastructure.silogen.ai/v1alpha1
+        kind: PartitioningPlan
+        name: plan-happy
+        timeout: 2m
         for:
           condition:
             name: PlanReady
             value: "True"
-  - wait:
-      apiVersion: infrastructure.silogen.ai/v1alpha1
-      kind: PartitioningPlan
-      name: plan-happy
-      timeout: 2m
-      for:
-        jsonPath:
-          path: .status.phase
-          value: Completed
-  - assert:
-      resource:
+    - wait:
+        apiVersion: infrastructure.silogen.ai/v1alpha1
+        kind: PartitioningPlan
+        name: plan-happy
+        timeout: 2m
+        for:
+          jsonPath:
+            path: .status.phase
+            value: Completed
+    - assert:
+        resource:
+          apiVersion: infrastructure.silogen.ai/v1alpha1
+          kind: NodePartitioning
+          metadata:
+            name: plan-happy-($values.amd_gpu_partitioning_node_name)
+          spec:
+            profile:
+              dcmProfileName: cpx
+          status:
+            phase: Succeeded
+            currentHash: patched-cpx
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Node
+          metadata:
+            name: ($values.amd_gpu_partitioning_node_name)
+            labels:
+              dcm.amd.com/gpu-config-profile: cpx
+
+  - name: revert-to-spx
+    try:
+    - apply:
+        file: partitioning-plan-spx.yaml
+    - wait:
         apiVersion: infrastructure.silogen.ai/v1alpha1
         kind: NodePartitioning
-        metadata:
-          name: plan-happy-($values.amd_gpu_partitioning_node_name)
-        spec:
-          profileRef:
-            name: partitioning-profile-cpx
-        status:
-          phase: Succeeded
-          currentHash: patched-cpx
-  - assert:
-      resource:
-        apiVersion: v1
-        kind: Node
-        metadata:
-          name: ($values.amd_gpu_partitioning_node_name)
-          labels:
-            dcm.amd.com/gpu-config-profile: partitioning-profile-cpx
-  - apply:
-      file: partitioning-plan-spx.yaml
-  - wait:
-      apiVersion: infrastructure.silogen.ai/v1alpha1
-      kind: NodePartitioning
-      name: plan-happy-($values.amd_gpu_partitioning_node_name)
-      timeout: 2m
-      for:
-        jsonPath:
-          path: .spec.profileRef.name
-          value: partitioning-profile-spx
-  - patch:
-      resource:
-        apiVersion: v1
-        kind: Node
-        metadata:
-          name: ($values.amd_gpu_partitioning_node_name)
-          labels:
-            dcm.amd.com/gpu-config-profile: partitioning-profile-spx
-  - patch:
-      resource:
+        name: plan-happy-($values.amd_gpu_partitioning_node_name)
+        timeout: 2m
+        for:
+          jsonPath:
+            path: .spec.profile.dcmProfileName
+            value: spx
+    - patch:
+        resource:
+          apiVersion: v1
+          kind: Node
+          metadata:
+            name: ($values.amd_gpu_partitioning_node_name)
+            labels:
+              dcm.amd.com/gpu-config-profile: spx
+    - patch:
+        resource:
+          apiVersion: infrastructure.silogen.ai/v1alpha1
+          kind: NodePartitioning
+          metadata:
+            name: plan-happy-($values.amd_gpu_partitioning_node_name)
+          status:
+            phase: Succeeded
+            currentHash: patched-spx
+
+  - name: verify-spx-completion
+    try:
+    - wait:
         apiVersion: infrastructure.silogen.ai/v1alpha1
-        kind: NodePartitioning
-        metadata:
-          name: plan-happy-($values.amd_gpu_partitioning_node_name)
-        status:
-          phase: Succeeded
-          currentHash: patched-spx
-  - wait:
-      apiVersion: infrastructure.silogen.ai/v1alpha1
-      kind: PartitioningPlan
-      name: plan-happy
-      timeout: 2m
-      for:
-        jsonPath:
-          path: .status.phase
-          value: Completed
-  - assert:
-      resource:
-        apiVersion: infrastructure.silogen.ai/v1alpha1
-        kind: NodePartitioning
-        metadata:
-          name: plan-happy-($values.amd_gpu_partitioning_node_name)
-        spec:
-          profileRef:
-            name: partitioning-profile-spx
-        status:
-          phase: Succeeded
-          currentHash: patched-spx
-  - assert:
-      resource:
-        apiVersion: v1
-        kind: Node
-        metadata:
-          name: ($values.amd_gpu_partitioning_node_name)
-          labels:
-            dcm.amd.com/gpu-config-profile: partitioning-profile-spx
+        kind: PartitioningPlan
+        name: plan-happy
+        timeout: 2m
+        for:
+          jsonPath:
+            path: .status.phase
+            value: Completed
+    - assert:
+        resource:
+          apiVersion: infrastructure.silogen.ai/v1alpha1
+          kind: NodePartitioning
+          metadata:
+            name: plan-happy-($values.amd_gpu_partitioning_node_name)
+          spec:
+            profile:
+              dcmProfileName: spx
+          status:
+            phase: Succeeded
+            currentHash: patched-spx
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Node
+          metadata:
+            name: ($values.amd_gpu_partitioning_node_name)
+            labels:
+              dcm.amd.com/gpu-config-profile: spx
     catch:
     - command:
         entrypoint: kaiwo-dev

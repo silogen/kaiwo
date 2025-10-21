@@ -25,25 +25,25 @@ SOFTWARE.
 package v1alpha1
 
 import (
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ProfileReference references a PartitioningProfile.
-type ProfileReference struct {
-	// Name of the PartitioningProfile.
-	// +kubebuilder:validation:MinLength=1
-	Name string `json:"name"`
-}
+// PartitioningProfileSpec defines the inline partition configuration.
+type PartitioningProfileSpec struct {
+	// Description is a human-readable description of this profile.
+	// +optional
+	Description string `json:"description,omitempty"`
 
-// ExpectedResource defines an expected resource after partitioning.
-type ExpectedResource struct {
-	// Name is the resource name (e.g., "amd.com/gpu").
-	// +kubebuilder:validation:MinLength=1
-	Name string `json:"name"`
+	// ExpectedResources defines the resources that should appear in
+	// node.status.allocatable after partitioning succeeds.
+	// +optional
+	ExpectedResources map[string]resource.Quantity `json:"expectedResources,omitempty"`
 
-	// Count is the expected number of resources.
-	// +kubebuilder:validation:Minimum=0
-	Count int32 `json:"count"`
+	// DcmProfileName is the name of the profile to be applied.
+	// This is the name of the profile under `gpu-config-profile` in DCM config.json.
+	// +kubebuilder:validation:MinLength=1
+	DcmProfileName string `json:"dcmProfileName"`
 }
 
 // NodePartitioningPhase represents the current phase of node partitioning.
@@ -236,8 +236,8 @@ type PartitioningRule struct {
 	// Selector selects nodes to partition.
 	Selector metav1.LabelSelector `json:"selector"`
 
-	// ProfileRef references the PartitioningProfile to apply.
-	ProfileRef ProfileReference `json:"profileRef"`
+	// Profile defines the GPU partitioning profile that should be applied to matching nodes.
+	Profile PartitioningProfileSpec `json:"profile"`
 }
 
 // PlanSummary aggregates node counts by phase.

@@ -13,5 +13,7 @@ spec:
     selector:
       matchLabels:
         amd.com/gpu.product-name: AMD_Instinct_MI300X_OAM
-    profileRef:
-      name: test
+    profile:
+      dcmProfileName: cpx
+      expectedResources:
+        amd.com/gpu: "63"

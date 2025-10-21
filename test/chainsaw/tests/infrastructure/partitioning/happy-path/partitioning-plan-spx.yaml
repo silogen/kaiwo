@@ -16,5 +16,6 @@ spec:
         operator: DoesNotExist
       - key: amd.com/gpu
         operator: Exists
-    profileRef:
-      name: partitioning-profile-spx
+    profile:
+      description: Chainsaw SPX profile
+      dcmProfileName: spx

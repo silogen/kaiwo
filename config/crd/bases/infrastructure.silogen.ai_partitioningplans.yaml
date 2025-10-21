@@ -107,16 +107,33 @@ spec:
                       description: Description is an optional human-readable name
                         for this rule.
                       type: string
-                    profileRef:
-                      description: ProfileRef references the PartitioningProfile to
-                        apply.
+                    profile:
+                      description: Profile defines the GPU partitioning profile that
+                        should be applied to matching nodes.
                       properties:
-                        name:
-                          description: Name of the PartitioningProfile.
+                        dcmProfileName:
+                          description: |-
+                            DcmProfileName is the name of the profile to be applied.
+                            This is the name of the profile under `gpu-config-profile` in DCM config.json.
                           minLength: 1
                           type: string
+                        description:
+                          description: Description is a human-readable description
+                            of this profile.
+                          type: string
+                        expectedResources:
+                          additionalProperties:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          description: |-
+                            ExpectedResources defines the resources that should appear in
+                            node.status.allocatable after partitioning succeeds.
+                          type: object
                       required:
-                      - name
+                      - dcmProfileName
                       type: object
                     selector:
                       description: Selector selects nodes to partition.
@@ -165,7 +182,7 @@ spec:
                       type: object
                       x-kubernetes-map-type: atomic
                   required:
-                  - profileRef
+                  - profile
                   - selector
                   type: object
                 minItems: 1

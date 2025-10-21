@@ -3,7 +3,7 @@ kind: Test
 metadata:
   name: partitioning-dry-run
 spec:
-  concurrent: false
+  parallel: false
   steps:
   - name: apply-dry-run-plan
     try:
@@ -11,6 +11,9 @@ spec:
         file: partitioning-profile.yaml
     - apply:
         file: partitioning-plan.yaml
+
+  - name: validate-dry-run-status
+    try:
     - wait:
         apiVersion: infrastructure.silogen.ai/v1alpha1
         kind: PartitioningPlan
@@ -20,24 +23,24 @@ spec:
           condition:
             name: PlanReady
             value: "True"
-  - wait:
-      apiVersion: infrastructure.silogen.ai/v1alpha1
-      kind: PartitioningPlan
-      name: plan-dry-run
-      timeout: 1m
-      for:
-        jsonPath:
-          path: .status.summary.matchingNodes
-          value: "1"
-  - wait:
-      apiVersion: infrastructure.silogen.ai/v1alpha1
-      kind: NodePartitioning
-      name: plan-dry-run-($values.amd_gpu_partitioning_node_name)
-      timeout: 1m
-      for:
-        jsonPath:
-          path: .status.phase
-          value: Skipped
+    - wait:
+        apiVersion: infrastructure.silogen.ai/v1alpha1
+        kind: PartitioningPlan
+        name: plan-dry-run
+        timeout: 1m
+        for:
+          jsonPath:
+            path: .status.summary.matchingNodes
+            value: "1"
+    - wait:
+        apiVersion: infrastructure.silogen.ai/v1alpha1
+        kind: NodePartitioning
+        name: plan-dry-run-($values.amd_gpu_partitioning_node_name)
+        timeout: 1m
+        for:
+          jsonPath:
+            path: .status.phase
+            value: Skipped
     - assert:
         resource:
           apiVersion: infrastructure.silogen.ai/v1alpha1

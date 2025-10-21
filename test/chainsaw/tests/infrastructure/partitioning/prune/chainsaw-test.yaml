@@ -3,14 +3,17 @@ kind: Test
 metadata:
   name: partitioning-plan-prune
 spec:
-  concurrent: false
+  parallel: false
   steps:
-  - name: prune-unmatched-nodes
+  - name: create-initial-plan
     try:
     - apply:
         file: partitioning-profile.yaml
     - apply:
         file: partitioning-plan-initial.yaml
+
+  - name: verify-initial-state
+    try:
     - wait:
         apiVersion: infrastructure.silogen.ai/v1alpha1
         kind: PartitioningPlan
@@ -20,25 +23,28 @@ spec:
           condition:
             name: PlanReady
             value: "True"
-  - assert:
-      resource:
+    - assert:
+        resource:
+          apiVersion: infrastructure.silogen.ai/v1alpha1
+          kind: PartitioningPlan
+          metadata:
+            name: plan-prune
+          status:
+            summary:
+              matchingNodes: 1
+              totalNodes: 1
+    - wait:
         apiVersion: infrastructure.silogen.ai/v1alpha1
-        kind: PartitioningPlan
-        metadata:
-          name: plan-prune
-        status:
-          summary:
-            matchingNodes: 1
-            totalNodes: 1
-  - wait:
-      apiVersion: infrastructure.silogen.ai/v1alpha1
-      kind: NodePartitioning
-      name: plan-prune-($values.amd_gpu_partitioning_node_name)
-      timeout: 1m
-      for:
-        jsonPath:
-          path: .status.phase
-          value: Skipped
+        kind: NodePartitioning
+        name: plan-prune-($values.amd_gpu_partitioning_node_name)
+        timeout: 1m
+        for:
+          jsonPath:
+            path: .status.phase
+            value: Skipped
+
+  - name: prune-and-verify
+    try:
     - apply:
         file: partitioning-plan-empty.yaml
     - wait:
@@ -50,22 +56,22 @@ spec:
           jsonPath:
             path: .status.summary.matchingNodes
             value: "0"
-  - assert:
-      resource:
-        apiVersion: infrastructure.silogen.ai/v1alpha1
-        kind: PartitioningPlan
-        metadata:
+    - assert:
+        resource:
+          apiVersion: infrastructure.silogen.ai/v1alpha1
+          kind: PartitioningPlan
+          metadata:
             name: plan-prune
           status:
             summary:
               matchingNodes: 0
               totalNodes: 0
-  - error:
-      resource:
-        apiVersion: infrastructure.silogen.ai/v1alpha1
-        kind: NodePartitioning
-        metadata:
-          name: plan-prune-($values.amd_gpu_partitioning_node_name)
+    - error:
+        resource:
+          apiVersion: infrastructure.silogen.ai/v1alpha1
+          kind: NodePartitioning
+          metadata:
+            name: plan-prune-($values.amd_gpu_partitioning_node_name)
     catch:
     - command:
         entrypoint: kaiwo-dev

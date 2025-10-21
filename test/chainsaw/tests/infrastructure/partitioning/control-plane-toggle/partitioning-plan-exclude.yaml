@@ -16,5 +16,6 @@ spec:
         operator: DoesNotExist
       - key: amd.com/gpu
         operator: Exists
-    profileRef:
-      name: partitioning-profile-toggle
+    profile:
+      description: Chainsaw profile for control plane toggle
+      dcmProfileName: default

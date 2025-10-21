@@ -13,5 +13,6 @@ spec:
     selector:
       matchLabels:
         partitioning.silogen.ai/never: "true"
-    profileRef:
-      name: partitioning-profile-prune
+    profile:
+      description: Chainsaw prune test profile
+      dcmProfileName: default

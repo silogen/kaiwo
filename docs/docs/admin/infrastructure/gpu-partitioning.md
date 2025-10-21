@@ -6,83 +6,12 @@ This document describes the partitioning resources, explains the orchestration m
 
 ## Overview
 
-The GPU partitioning system consists of three Custom Resource Definitions (CRDs):
+The GPU partitioning system revolves around two Custom Resource Definitions (CRDs):
 
-- **`PartitioningProfile`** defines a reusable GPU partition configuration that specifies how GPUs should be divided.
-- **`PartitioningPlan`** orchestrates the application of profiles across a set of nodes using label selectors and rollout policies.
+- **`PartitioningPlan`** orchestrates the application of partition profiles across a set of nodes using label selectors and rollout policies. Each rule embeds the target profile inline.
 - **`NodePartitioning`** represents a per-node work item that executes the state machine for applying a partition profile to a single node.
 
 The controller automatically creates `NodePartitioning` resources when a plan matches nodes, then executes a multi-phase state machine that drains the node, applies the partition configuration, waits for the AMD GPU operator to reconfigure, verifies the result, and returns the node to service.
-
-## PartitioningProfile
-
-`PartitioningProfile` defines a reusable GPU partition configuration. Profiles are cluster-scoped and can be referenced by multiple plans.
-
-### Specification
-
-```yaml
-apiVersion: infrastructure.silogen.ai/v1alpha1
-kind: PartitioningProfile
-metadata:
-  name: mi300x-4-partition
-spec:
-  displayName: "MI300X 4-Way Partition"
-  profileName: mi300x-4way
-  targetSelector:
-    matchLabels:
-      gpu.amd.com/model: MI300X
-  expectedResources:
-    amd.com/gpu: "4"
-```
-
-### Fields
-
-| Field | Type | Description |
-| ----- | ---- | ----------- |
-| `displayName` | string | Human-readable description displayed in tools and dashboards. |
-| `profileName` | string | Name of the DCM profile to apply. This must match a profile defined in the AMD GPU operator's DCM ConfigMap (`config-manager-config` in the `kube-amd-gpu` namespace). |
-| `targetSelector` | LabelSelector | Optional node selector that validates nodes before applying this profile. When specified, the controller ensures nodes match these labels. Use this as a guardrail to prevent applying MI300X profiles to MI325X nodes. |
-| `expectedResources` | map[string]Quantity | Resources expected in `node.status.allocatable` after successful partitioning. The verification phase checks these values before marking the operation as complete. |
-
-### DCM profile integration
-
-The `profileName` field references a partition configuration in the AMD GPU operator's DCM (Device Configuration Manager) ConfigMap. The controller sets the `dcm.amd.com/gpu-config-profile` label on nodes to trigger the operator's reconfiguration logic.
-
-To list available DCM profiles:
-
-```bash
-kubectl -n kube-amd-gpu get configmap config-manager-config -o yaml
-```
-
-The DCM ConfigMap contains a `config.json` field with profile definitions. Ensure your `profileName` matches one of the defined profiles. The controller does not validate profile existence at profile creation time—validation occurs when the profile is applied to a node.
-
-### Example profiles
-
-Single GPU per partition:
-```yaml
-apiVersion: infrastructure.silogen.ai/v1alpha1
-kind: PartitioningProfile
-metadata:
-  name: mi300x-single
-spec:
-  displayName: "MI300X Single GPU"
-  profileName: mi300x-1gpu
-  expectedResources:
-    amd.com/gpu: "8"
-```
-
-Two GPUs per partition:
-```yaml
-apiVersion: infrastructure.silogen.ai/v1alpha1
-kind: PartitioningProfile
-metadata:
-  name: mi300x-dual
-spec:
-  displayName: "MI300X Dual GPU"
-  profileName: mi300x-2gpu
-  expectedResources:
-    amd.com/gpu: "4"
-```
 
 ## PartitioningPlan
 
@@ -107,15 +36,19 @@ spec:
       matchLabels:
         workload-type: inference
         gpu.amd.com/model: MI300X
-    profileRef:
-      name: mi300x-4-partition
+    profile:
+      dcmProfileName: mi300x-4way
+      expectedResources:
+        amd.com/gpu: "4"
   - name: mi325x-inference
     selector:
       matchLabels:
         workload-type: inference
         gpu.amd.com/model: MI325X
-    profileRef:
-      name: mi325x-8-partition
+    profile:
+      dcmProfileName: mi325x-8way
+      expectedResources:
+        amd.com/gpu: "8"
 ```
 
 ### Fields
@@ -129,13 +62,13 @@ spec:
 
 ### PartitioningRule
 
-Each rule consists of a node selector and a profile reference:
+Each rule consists of a node selector and an inline profile specification:
 
 | Field | Type | Description |
 | ----- | ---- | ----------- |
 | `name` | string | Optional human-readable identifier for the rule. |
 | `selector` | LabelSelector | Kubernetes label selector identifying target nodes. |
-| `profileRef.name` | string | Name of the `PartitioningProfile` to apply. |
+| `profile` | object | Inline profile containing the `dcmProfileName` (required), optional `description`, and optional `expectedResources` map used during verification. |
 
 ### Rollout policies
 
@@ -219,8 +152,8 @@ spec:
     uid: a1b2c3d4-e5f6-7890-abcd-ef1234567890
   nodeName: gpu-node-01
   desiredHash: sha256:a1b2c3d4e5f6...
-  profileRef:
-    name: mi300x-4-partition
+  profile:
+    dcmProfileName: mi300x-4gpu
 ```
 
 ### State machine
@@ -380,8 +313,8 @@ spec:
   - selector:
       matchLabels:
         gpu.present: "true"
-    profileRef:
-      name: dev-profile
+    profile:
+      dcmProfileName: dev-profile
 ```
 
 **Warning**: Partitioning control plane nodes can disrupt cluster operations. Ensure control plane components tolerate the `amd-dcm` taint or do not require GPU access before proceeding.
@@ -408,23 +341,9 @@ kubectl label node <node-name> node-role.kubernetes.io/control-plane=
 
 ### Applying a new partition profile
 
-Create a profile and a plan:
+Create a plan that embeds the desired profile inline:
 
 ```bash
-# Create the profile
-kubectl apply -f - <<EOF
-apiVersion: infrastructure.silogen.ai/v1alpha1
-kind: PartitioningProfile
-metadata:
-  name: mi300x-quad
-spec:
-  displayName: "MI300X 4-Way Partition"
-  profileName: mi300x-4gpu
-  expectedResources:
-    amd.com/gpu: "4"
-EOF
-
-# Create a plan targeting specific nodes
 kubectl apply -f - <<EOF
 apiVersion: infrastructure.silogen.ai/v1alpha1
 kind: PartitioningPlan
@@ -438,8 +357,10 @@ spec:
   - selector:
       matchLabels:
         node-pool: inference
-    profileRef:
-      name: mi300x-quad
+    profile:
+      dcmProfileName: mi300x-4gpu
+      expectedResources:
+        amd.com/gpu: "4"
 EOF
 ```
 
@@ -472,8 +393,8 @@ spec:
   - selector:
       matchLabels:
         node-pool: inference
-    profileRef:
-      name: mi300x-quad
+    profile:
+      dcmProfileName: mi300x-4gpu
 EOF
 
 # Review which nodes matched
@@ -495,11 +416,11 @@ Nodes currently undergoing partitioning continue to completion, but no new nodes
 
 ### Changing partition profiles
 
-To apply a different profile to the same nodes, update the plan's `profileRef`:
+To apply a different profile to the same nodes, update the plan's `profile` block:
 
 ```bash
 kubectl patch partitioningplan partition-inference-pool \
-  --type merge -p '{"spec":{"rules":[{"profileRef":{"name":"mi300x-dual"}}]}}'
+  --type merge -p '{"spec":{"rules":[{"profile":{"dcmProfileName":"mi300x-dual"}}]}}'
 ```
 
 The controller computes a new `desiredHash` for each `NodePartitioning` resource. Nodes that have already succeeded with the old profile transition back to `Pending` and re-execute the state machine with the new profile.

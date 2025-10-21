@@ -16,5 +16,6 @@ spec:
         operator: DoesNotExist
       - key: amd.com/gpu
         operator: Exists
-    profileRef:
-      name: partitioning-profile-conflict
+    profile:
+      description: Chainsaw profile for plan conflict test
+      dcmProfileName: default

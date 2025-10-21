@@ -44,18 +44,12 @@ type PlanObservation struct {
 	// ConflictingNodePartitionings are NodePartitioning resources that target the same node
 	// but are associated with other plans.
 	ConflictingNodePartitionings map[string][]infrastructurev1alpha1.NodePartitioning
-
-	// Profiles maps profile names to their resolved profiles.
-	Profiles map[string]*infrastructurev1alpha1.PartitioningProfile
 }
 
 // NodePartitioningObservation holds the observed state for a NodePartitioning.
 type NodePartitioningObservation struct {
 	// Node is the target node, if it exists.
 	Node *corev1.Node
-
-	// Profile is the resolved PartitioningProfile.
-	Profile *infrastructurev1alpha1.PartitioningProfile
 
 	// DCMConfigMap is the AMD GPU Operator DCM ConfigMap.
 	DCMConfigMap *corev1.ConfigMap

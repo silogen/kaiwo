@@ -76,18 +76,18 @@ func GetDCMConfigMap(ctx context.Context, c client.Client) (*corev1.ConfigMap, e
 	return &cm, nil
 }
 
-// EnsureDCMProfileInConfigMap ensures the profile from PartitioningProfile is present in the DCM ConfigMap.
+// EnsureDCMProfileInConfigMap ensures the inline profile is present in the DCM ConfigMap.
 // Returns the profile name that should be used in the node label.
 func EnsureDCMProfileInConfigMap(
 	ctx context.Context,
 	c client.Client,
-	profile *infrastructurev1alpha1.PartitioningProfile,
+	profile *infrastructurev1alpha1.PartitioningProfileSpec,
 ) (string, error) {
 	logger := log.FromContext(ctx)
 
 	// For Phase 1, we assume the profile is already in the ConfigMap
 	// and return the profile name that should be used
-	profileName := profile.Name
+	profileName := profile.DcmProfileName
 
 	logger.V(1).Info("Using DCM profile", "profileName", profileName)
 

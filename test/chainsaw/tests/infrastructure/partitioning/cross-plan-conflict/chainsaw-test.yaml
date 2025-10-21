@@ -3,32 +3,35 @@ kind: Test
 metadata:
   name: partitioning-cross-plan-conflict
 spec:
-  concurrent: false
+  parallel: false
   steps:
-  - name: detect-and-resolve-conflict
+  - name: apply-alpha-plan
     try:
     - apply:
         file: partitioning-profile.yaml
     - apply:
         file: partitioning-plan-alpha.yaml
-  - wait:
-      apiVersion: infrastructure.silogen.ai/v1alpha1
-      kind: PartitioningPlan
-      name: plan-conflict-alpha
-      timeout: 1m
-      for:
-        condition:
-          name: PlanReady
-          value: "True"
-  - wait:
-      apiVersion: infrastructure.silogen.ai/v1alpha1
-      kind: NodePartitioning
-      name: plan-conflict-alpha-($values.amd_gpu_partitioning_node_name)
-      timeout: 1m
-      for:
-        jsonPath:
-          path: .status.phase
-          value: Skipped
+    - wait:
+        apiVersion: infrastructure.silogen.ai/v1alpha1
+        kind: PartitioningPlan
+        name: plan-conflict-alpha
+        timeout: 1m
+        for:
+          condition:
+            name: PlanReady
+            value: "True"
+    - wait:
+        apiVersion: infrastructure.silogen.ai/v1alpha1
+        kind: NodePartitioning
+        name: plan-conflict-alpha-($values.amd_gpu_partitioning_node_name)
+        timeout: 1m
+        for:
+          jsonPath:
+            path: .status.phase
+            value: Skipped
+
+  - name: detect-conflict-in-beta
+    try:
     - apply:
         file: partitioning-plan-beta.yaml
     - wait:
@@ -40,60 +43,66 @@ spec:
           jsonPath:
             path: .status.phase
             value: Degraded
-  - assert:
-      resource:
-        apiVersion: infrastructure.silogen.ai/v1alpha1
-        kind: PartitioningPlan
-        metadata:
-          name: plan-conflict-beta
-        status:
-          conditions:
-          - type: PlanReady
-            status: "False"
-            reason: PlanningFailed
-  - error:
-      resource:
-        apiVersion: infrastructure.silogen.ai/v1alpha1
-        kind: NodePartitioning
-        metadata:
-          name: plan-conflict-beta-($values.amd_gpu_partitioning_node_name)
+    - assert:
+        resource:
+          apiVersion: infrastructure.silogen.ai/v1alpha1
+          kind: PartitioningPlan
+          metadata:
+            name: plan-conflict-beta
+          status:
+            conditions:
+            - type: PlanReady
+              status: "False"
+              reason: PlanningFailed
+    - error:
+        resource:
+          apiVersion: infrastructure.silogen.ai/v1alpha1
+          kind: NodePartitioning
+          metadata:
+            name: plan-conflict-beta-($values.amd_gpu_partitioning_node_name)
+
+  - name: release-alpha
+    try:
     - apply:
         file: partitioning-plan-alpha-empty.yaml
-  - wait:
-      apiVersion: infrastructure.silogen.ai/v1alpha1
-      kind: PartitioningPlan
-      name: plan-conflict-alpha
-      timeout: 1m
-      for:
-        jsonPath:
-          path: .status.summary.matchingNodes
-          value: "0"
-  - error:
-      resource:
+    - wait:
         apiVersion: infrastructure.silogen.ai/v1alpha1
-        kind: NodePartitioning
-        metadata:
-          name: plan-conflict-alpha-($values.amd_gpu_partitioning_node_name)
+        kind: PartitioningPlan
+        name: plan-conflict-alpha
+        timeout: 1m
+        for:
+          jsonPath:
+            path: .status.summary.matchingNodes
+            value: "0"
+    - error:
+        resource:
+          apiVersion: infrastructure.silogen.ai/v1alpha1
+          kind: NodePartitioning
+          metadata:
+            name: plan-conflict-alpha-($values.amd_gpu_partitioning_node_name)
+
+  - name: retry-beta-successfully
+    try:
     - apply:
         file: partitioning-plan-beta-retry.yaml
-  - wait:
-      apiVersion: infrastructure.silogen.ai/v1alpha1
-      kind: PartitioningPlan
-      name: plan-conflict-beta
-      timeout: 1m
-      for:
-        condition:
-          name: PlanReady
-          value: "True"
-  - wait:
-      apiVersion: infrastructure.silogen.ai/v1alpha1
-      kind: NodePartitioning
-      name: plan-conflict-beta-($values.amd_gpu_partitioning_node_name)
-      timeout: 1m
-      for:
-        jsonPath:
-          path: .status.phase
-          value: Skipped
+    - wait:
+        apiVersion: infrastructure.silogen.ai/v1alpha1
+        kind: PartitioningPlan
+        name: plan-conflict-beta
+        timeout: 1m
+        for:
+          condition:
+            name: PlanReady
+            value: "True"
+    - wait:
+        apiVersion: infrastructure.silogen.ai/v1alpha1
+        kind: NodePartitioning
+        name: plan-conflict-beta-($values.amd_gpu_partitioning_node_name)
+        timeout: 1m
+        for:
+          jsonPath:
+            path: .status.phase
+            value: Skipped
     catch:
     - command:
         entrypoint: kaiwo-dev

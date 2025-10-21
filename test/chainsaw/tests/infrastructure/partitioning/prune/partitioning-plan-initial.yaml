@@ -16,5 +16,6 @@ spec:
         operator: DoesNotExist
       - key: amd.com/gpu
         operator: Exists
-    profileRef:
-      name: partitioning-profile-prune
+    profile:
+      description: Chainsaw prune test profile
+      dcmProfileName: default

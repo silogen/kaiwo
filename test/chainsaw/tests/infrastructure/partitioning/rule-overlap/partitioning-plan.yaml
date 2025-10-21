@@ -16,8 +16,9 @@ spec:
         operator: DoesNotExist
       - key: amd.com/gpu
         operator: Exists
-    profileRef:
-      name: partitioning-profile-overlap
+    profile:
+      description: Chainsaw profile for rule overlap test
+      dcmProfileName: default
   - description: second rule duplicates selection
     selector:
       matchExpressions:
@@ -25,5 +26,6 @@ spec:
         operator: DoesNotExist
       - key: amd.com/gpu
         operator: Exists
-    profileRef:
-      name: partitioning-profile-overlap
+    profile:
+      description: Chainsaw profile for rule overlap test
+      dcmProfileName: default

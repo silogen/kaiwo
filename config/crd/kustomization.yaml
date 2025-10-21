@@ -18,7 +18,6 @@ resources:
 - bases/aim.silogen.ai_aimruntimeconfigs.yaml
 - bases/infrastructure.silogen.ai_nodepartitionings.yaml
 - bases/infrastructure.silogen.ai_partitioningplans.yaml
-- bases/infrastructure.silogen.ai_partitioningprofiles.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches: null

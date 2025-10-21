@@ -33,12 +33,12 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -64,7 +64,6 @@ type PartitioningPlanReconciler struct {
 // +kubebuilder:rbac:groups=infrastructure.silogen.ai,resources=partitioningplans,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=infrastructure.silogen.ai,resources=partitioningplans/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=infrastructure.silogen.ai,resources=partitioningplans/finalizers,verbs=update
-// +kubebuilder:rbac:groups=infrastructure.silogen.ai,resources=partitioningprofiles,verbs=get;list;watch
 // +kubebuilder:rbac:groups=infrastructure.silogen.ai,resources=nodepartitionings,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch
@@ -142,9 +141,7 @@ func (r *PartitioningPlanReconciler) Reconcile(ctx context.Context, req ctrl.Req
 // (3) resolving all referenced partitioning profiles into a cache for later steps.
 func (r *PartitioningPlanReconciler) observe(ctx context.Context, plan *infrastructurev1alpha1.PartitioningPlan) (*PlanObservation, error) {
 	logger := log.FromContext(ctx)
-	obs := &PlanObservation{
-		Profiles: make(map[string]*infrastructurev1alpha1.PartitioningProfile),
-	}
+	obs := &PlanObservation{}
 
 	// 1. Get all matching nodes
 	var allNodes corev1.NodeList
@@ -208,24 +205,6 @@ func (r *PartitioningPlanReconciler) observe(ctx context.Context, plan *infrastr
 	baseutils.Debug(logger, "Found existing children", "count", len(obs.ExistingChildren))
 	baseutils.Debug(logger, "Found NodePartitionings from other plans", "count", len(obs.ConflictingNodePartitionings))
 
-	// 3. Resolve referenced profiles
-	profileNames := make(map[string]bool)
-	for _, rule := range plan.Spec.Rules {
-		profileNames[rule.ProfileRef.Name] = true
-	}
-
-	for profileName := range profileNames {
-		var profile infrastructurev1alpha1.PartitioningProfile
-		if err := r.Get(ctx, types.NamespacedName{Name: profileName}, &profile); err != nil {
-			if errors.IsNotFound(err) {
-				logger.Info("PartitioningProfile not found", "profile", profileName)
-				continue
-			}
-			return nil, fmt.Errorf("failed to get PartitioningProfile %s: %w", profileName, err)
-		}
-		obs.Profiles[profileName] = &profile
-	}
-
 	return obs, nil
 }
 
@@ -257,7 +236,7 @@ func (r *PartitioningPlanReconciler) plan(ctx context.Context, plan *infrastruct
 				rule := plan.Spec.Rules[idx]
 				ruleLabel := rule.Description
 				if ruleLabel == "" {
-					ruleLabel = fmt.Sprintf("rule-%d (%s)", idx, rule.ProfileRef.Name)
+					ruleLabel = fmt.Sprintf("rule-%d (%s)", idx, rule.Profile.DcmProfileName)
 				}
 				ruleNames = append(ruleNames, ruleLabel)
 			}
@@ -279,15 +258,9 @@ func (r *PartitioningPlanReconciler) plan(ctx context.Context, plan *infrastruct
 		ruleIndex := matchIndexes[0]
 		matchedRule := &plan.Spec.Rules[ruleIndex]
 
-		// Get profile
-		profile, exists := obs.Profiles[matchedRule.ProfileRef.Name]
-		if !exists {
-			logger.Info("Profile not found for node", "node", node.Name, "profile", matchedRule.ProfileRef.Name)
-			continue
-		}
-
 		// Compute desired hash
-		desiredHash, err := computeDesiredHash(profile)
+		profileCopy := matchedRule.Profile
+		desiredHash, err := computeDesiredHash(&profileCopy)
 		if err != nil {
 			logger.Error(err, "Failed to compute desired hash", "node", node.Name)
 			continue
@@ -307,7 +280,7 @@ func (r *PartitioningPlanReconciler) plan(ctx context.Context, plan *infrastruct
 				DryRun:      plan.Spec.DryRun,
 				NodeName:    node.Name,
 				DesiredHash: desiredHash,
-				ProfileRef:  matchedRule.ProfileRef,
+				Profile:     matchedRule.Profile,
 			},
 		}
 
@@ -332,7 +305,7 @@ func (r *PartitioningPlanReconciler) plan(ctx context.Context, plan *infrastruct
 		if exists {
 			// Update if needed
 			if existing.Spec.DesiredHash != desiredChild.Spec.DesiredHash ||
-				existing.Spec.ProfileRef.Name != desiredChild.Spec.ProfileRef.Name ||
+				!apiequality.Semantic.DeepEqual(existing.Spec.Profile, desiredChild.Spec.Profile) ||
 				existing.Spec.DryRun != desiredChild.Spec.DryRun {
 				// Need to update
 				updated := existing.DeepCopy()
@@ -605,15 +578,12 @@ func (r *PartitioningPlanReconciler) cleanupStaleNodePartitionings(
 }
 
 // computeDesiredHash computes a deterministic hash of the desired partition state.
-func computeDesiredHash(profile *infrastructurev1alpha1.PartitioningProfile) (string, error) {
-	// Include relevant fields in the hash
-	hashInput := map[string]interface{}{
-		"profileName":       profile.Name,
-		"profileGeneration": profile.Generation,
-		"profileSpec":       profile.Spec,
+func computeDesiredHash(profile *infrastructurev1alpha1.PartitioningProfileSpec) (string, error) {
+	if profile == nil {
+		return "", fmt.Errorf("profile is nil")
 	}
 
-	data, err := json.Marshal(hashInput)
+	data, err := json.Marshal(profile)
 	if err != nil {
 		return "", err
 	}

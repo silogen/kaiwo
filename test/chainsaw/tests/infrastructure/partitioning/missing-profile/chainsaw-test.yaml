@@ -3,46 +3,12 @@ kind: Test
 metadata:
   name: partitioning-missing-profile
 spec:
-  concurrent: false
+  parallel: false
   steps:
-  - name: apply-plan-with-missing-profile
+  - name: apply-invalid-plan
     try:
     - apply:
         file: partitioning-plan.yaml
-    - wait:
-        apiVersion: infrastructure.silogen.ai/v1alpha1
-        kind: PartitioningPlan
-        name: plan-missing-profile
-        timeout: 1m
-        for:
-          condition:
-            name: PlanReady
-            value: "True"
-    - wait:
-        apiVersion: infrastructure.silogen.ai/v1alpha1
-        kind: PartitioningPlan
-        name: plan-missing-profile
-        timeout: 1m
-        for:
-          jsonPath:
-            path: .status.summary.matchingNodes
-            value: "1"
-    - error:
-        resource:
-          apiVersion: infrastructure.silogen.ai/v1alpha1
-          kind: NodePartitioning
-          metadata:
-            name: plan-missing-profile-($values.amd_gpu_partitioning_node_name)
-          fi
-    - assert:
-        resource:
-          apiVersion: infrastructure.silogen.ai/v1alpha1
-          kind: PartitioningPlan
-          metadata:
-            name: plan-missing-profile
-          status:
-            summary:
-              totalNodes: 0
     catch:
     - command:
         entrypoint: kaiwo-dev
@@ -50,3 +16,11 @@ spec:
         - name: PRINT_LEVEL
           value: ($values.print_level)
         args: ["debug", "chainsaw", "--print-level=$PRINT_LEVEL"]
+
+  - name: ensure-plan-not-created
+    try:
+    - error:
+        resource:
+          apiVersion: infrastructure.silogen.ai/v1alpha1
+          kind: PartitioningPlan
+          name: plan-missing-profile

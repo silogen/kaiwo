@@ -16,5 +16,6 @@ spec:
         operator: DoesNotExist
       - key: amd.com/gpu
         operator: Exists
-    profileRef:
-      name: partitioning-profile-cpx
+    profile:
+      description: Chainsaw CPX profile
+      dcmProfileName: cpx
