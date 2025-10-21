@@ -109,6 +109,11 @@ type AIMTemplateCachingConfig struct {
 	// +kubebuilder:default=false
 	Enabled bool `json:"enabled,omitempty"`
 
+	// StorageClass will be used as the storage class for any created AIMModelCache
+	// Defaults to empty string
+	// +kubebuilder:default=""
+	StorageClass string `json:"storageclass,omitempty"`
+
 	// Env specifies environment variables to use when downloading the model.
 	// These variables are available to the model download process and can be used
 	// to configure download behavior, authentication, proxies, etc.
