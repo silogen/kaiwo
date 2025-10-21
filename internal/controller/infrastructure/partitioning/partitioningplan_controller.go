@@ -28,7 +28,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -119,11 +121,25 @@ func (r *PartitioningPlanReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			return r.projectStatus(ctx, &plan, o, errs)
 		},
 
+		CleanupFn: func(ctx context.Context, obs any, desired []client.Object) error {
+			if obs == nil {
+				return nil
+			}
+			o, ok := obs.(*PlanObservation)
+			if !ok {
+				return fmt.Errorf("unexpected observation type %T", obs)
+			}
+			return r.cleanupStaleNodePartitionings(ctx, &plan, o)
+		},
+
 		FinalizeFn: nil, // Phase 1: No external cleanup needed
 	})
 }
 
-// observe gathers current cluster state (read-only).
+// observe gathers cluster state for a plan by
+// (1) walking every node and tracking which rules match this node,
+// (2) cataloging NodePartitioning CRs owned by this plan along with any conflicting CRs owned elsewhere, and
+// (3) resolving all referenced partitioning profiles into a cache for later steps.
 func (r *PartitioningPlanReconciler) observe(ctx context.Context, plan *infrastructurev1alpha1.PartitioningPlan) (*PlanObservation, error) {
 	logger := log.FromContext(ctx)
 	obs := &PlanObservation{
@@ -138,7 +154,9 @@ func (r *PartitioningPlanReconciler) observe(ctx context.Context, plan *infrastr
 
 	// Build set of matching nodes across all partitioning rules
 	matchingNodesMap := make(map[string]corev1.Node)
-	for _, rule := range plan.Spec.Rules {
+	obs.RuleMatches = make(map[string][]int)
+	for i := range plan.Spec.Rules {
+		rule := &plan.Spec.Rules[i]
 		selector, err := metav1.LabelSelectorAsSelector(&rule.Selector)
 		if err != nil {
 			return nil, fmt.Errorf("invalid selector in rule %q: %w", rule.Description, err)
@@ -153,6 +171,7 @@ func (r *PartitioningPlanReconciler) observe(ctx context.Context, plan *infrastr
 
 			if selector.Matches(labels.Set(node.Labels)) {
 				matchingNodesMap[node.Name] = node
+				obs.RuleMatches[node.Name] = append(obs.RuleMatches[node.Name], i)
 			}
 		}
 	}
@@ -164,27 +183,30 @@ func (r *PartitioningPlanReconciler) observe(ctx context.Context, plan *infrastr
 
 	baseutils.Debug(logger, "Found matching nodes", "count", len(obs.MatchingNodes))
 
-	// 2. Get existing NodePartitioning children
-	var children infrastructurev1alpha1.NodePartitioningList
-	if err := r.List(ctx, &children, client.MatchingFields{
-		".metadata.ownerReferences.uid": string(plan.UID),
-	}); err != nil {
-		logger.Info("Failed to list NodePartitioning children (index may not be set up yet)", "error", err)
-		// Try listing all and filtering manually
-		var allChildren infrastructurev1alpha1.NodePartitioningList
-		if err := r.List(ctx, &allChildren); err != nil {
-			return nil, fmt.Errorf("failed to list NodePartitioning resources: %w", err)
-		}
+	// 2. Get existing NodePartitioning children and detect conflicts
+	obs.ConflictingNodePartitionings = make(map[string][]infrastructurev1alpha1.NodePartitioning)
 
-		for _, child := range allChildren.Items {
-			if child.Spec.PlanRef.Name == plan.Name {
-				children.Items = append(children.Items, child)
-			}
-		}
+	var nodePartitionings infrastructurev1alpha1.NodePartitioningList
+	if err := r.List(ctx, &nodePartitionings); err != nil {
+		return nil, fmt.Errorf("failed to list NodePartitioning resources: %w", err)
 	}
 
-	obs.ExistingChildren = children.Items
+	for _, child := range nodePartitionings.Items {
+		nodeName := child.Spec.NodeName
+		if nodeName == "" {
+			continue
+		}
+
+		if child.Spec.PlanRef.Name == plan.Name {
+			obs.ExistingChildren = append(obs.ExistingChildren, child)
+			continue
+		}
+
+		obs.ConflictingNodePartitionings[nodeName] = append(obs.ConflictingNodePartitionings[nodeName], child)
+	}
+
 	baseutils.Debug(logger, "Found existing children", "count", len(obs.ExistingChildren))
+	baseutils.Debug(logger, "Found NodePartitionings from other plans", "count", len(obs.ConflictingNodePartitionings))
 
 	// 3. Resolve referenced profiles
 	profileNames := make(map[string]bool)
@@ -207,7 +229,10 @@ func (r *PartitioningPlanReconciler) observe(ctx context.Context, plan *infrastr
 	return obs, nil
 }
 
-// plan computes desired state (pure function).
+// plan turns the observation into desired NodePartitioning specs by
+// (1) validating each node is owned by exactly one rule and no other plan
+// (2) projecting the chosen profile and dry-run flag onto the spec, and
+// (3) diffing against existing children to determine which CRs need to be created or updated.
 func (r *PartitioningPlanReconciler) plan(ctx context.Context, plan *infrastructurev1alpha1.PartitioningPlan, obs *PlanObservation) ([]client.Object, error) {
 	logger := log.FromContext(ctx)
 
@@ -221,26 +246,38 @@ func (r *PartitioningPlanReconciler) plan(ctx context.Context, plan *infrastruct
 	desiredChildren := make(map[string]*infrastructurev1alpha1.NodePartitioning)
 
 	for _, node := range obs.MatchingNodes {
-		// Find which rule matches this node (use first match)
-		var matchedRule *infrastructurev1alpha1.PartitioningRule
-		for i := range plan.Spec.Rules {
-			rule := &plan.Spec.Rules[i]
-			selector, err := metav1.LabelSelectorAsSelector(&rule.Selector)
-			if err != nil {
-				continue
+		matchIndexes := obs.RuleMatches[node.Name]
+		if len(matchIndexes) == 0 {
+			logger.V(1).Info("No matching rules found for node during planning", "node", node.Name)
+			continue
+		}
+		if len(matchIndexes) > 1 {
+			var ruleNames []string
+			for _, idx := range matchIndexes {
+				rule := plan.Spec.Rules[idx]
+				ruleLabel := rule.Description
+				if ruleLabel == "" {
+					ruleLabel = fmt.Sprintf("rule-%d (%s)", idx, rule.ProfileRef.Name)
+				}
+				ruleNames = append(ruleNames, ruleLabel)
 			}
-
-			if !selector.Matches(labels.Set(node.Labels)) {
-				continue
-			}
-
-			matchedRule = rule
-			break
+			return nil, fmt.Errorf("multiple partitioning rules match node %s: %s", node.Name, strings.Join(ruleNames, ", "))
 		}
 
-		if matchedRule == nil {
-			continue // No rule matches, skip
+		if conflicts := obs.ConflictingNodePartitionings[node.Name]; len(conflicts) > 0 {
+			var owners []string
+			for _, conflict := range conflicts {
+				owner := conflict.Spec.PlanRef.Name
+				if owner == "" {
+					owner = "<unknown>"
+				}
+				owners = append(owners, fmt.Sprintf("%s/%s", owner, conflict.Name))
+			}
+			return nil, fmt.Errorf("node %s is already targeted by other partitioning plan(s): %s", node.Name, strings.Join(owners, ", "))
 		}
+
+		ruleIndex := matchIndexes[0]
+		matchedRule := &plan.Spec.Rules[ruleIndex]
 
 		// Get profile
 		profile, exists := obs.Profiles[matchedRule.ProfileRef.Name]
@@ -315,7 +352,10 @@ func (r *PartitioningPlanReconciler) plan(ctx context.Context, plan *infrastruct
 	return desired, nil
 }
 
-// projectStatus computes status from observation + errors.
+// projectStatus folds observation plus any reconciliation errors into status by
+// (1) stamping summary counts from child NodePartitionings
+// (2) deriving the overall Phase, and
+// (3) managing user-facing conditions so UIs and alerting capture the current rollout state.
 func (r *PartitioningPlanReconciler) projectStatus(
 	ctx context.Context,
 	plan *infrastructurev1alpha1.PartitioningPlan,
@@ -374,7 +414,12 @@ func (r *PartitioningPlanReconciler) projectStatus(
 	for _, child := range obs.ExistingChildren {
 		summary.TotalNodes++
 
-		switch child.Status.Phase {
+		phase := infrastructurev1alpha1.NodePartitioningPhase(child.Status.Phase)
+		if phase == "" {
+			phase = infrastructurev1alpha1.NodePartitioningPhasePending
+		}
+
+		switch phase {
 		case infrastructurev1alpha1.NodePartitioningPhasePending:
 			summary.Pending++
 		case infrastructurev1alpha1.NodePartitioningPhaseDraining,
@@ -396,7 +441,7 @@ func (r *PartitioningPlanReconciler) projectStatus(
 			NodeName:    child.Spec.NodeName,
 			DesiredHash: child.Spec.DesiredHash,
 			CurrentHash: child.Status.CurrentHash,
-			Phase:       child.Status.Phase,
+			Phase:       phase,
 		})
 	}
 
@@ -492,6 +537,68 @@ func (r *PartitioningPlanReconciler) projectStatus(
 			Message:            "Plan is active",
 			ObservedGeneration: plan.Generation,
 		})
+	}
+
+	return nil
+}
+
+// cleanupStaleNodePartitionings removes NodePartitioning children whose nodes are no longer targeted by the plan.
+func (r *PartitioningPlanReconciler) cleanupStaleNodePartitionings(
+	ctx context.Context,
+	plan *infrastructurev1alpha1.PartitioningPlan,
+	obs *PlanObservation,
+) error {
+	logger := log.FromContext(ctx)
+
+	keepNodes := make(map[string]struct{}, len(obs.RuleMatches))
+	for nodeName, matches := range obs.RuleMatches {
+		if len(matches) == 1 {
+			keepNodes[nodeName] = struct{}{}
+		}
+	}
+
+	var (
+		errs     []error
+		retained []infrastructurev1alpha1.NodePartitioning
+	)
+	for i := range obs.ExistingChildren {
+		child := obs.ExistingChildren[i]
+		if child.Spec.NodeName == "" {
+			retained = append(retained, child)
+			continue
+		}
+
+		if _, keep := keepNodes[child.Spec.NodeName]; keep {
+			retained = append(retained, child)
+			continue
+		}
+
+		if err := r.Delete(ctx, &child); err != nil {
+			if errors.IsNotFound(err) {
+				// Already gone, nothing to retain
+				continue
+			}
+			errs = append(errs, fmt.Errorf("failed to delete NodePartitioning %s: %w", child.Name, err))
+			retained = append(retained, child)
+			continue
+		}
+
+		logger.Info("Deleted NodePartitioning for node no longer targeted by plan",
+			"node", child.Spec.NodeName,
+			"nodePartitioning", child.Name)
+
+		controllerutils.EmitNormalEvent(
+			r.Recorder,
+			plan,
+			"NodePartitioningDeleted",
+			fmt.Sprintf("Removed NodePartitioning %s for node %s", child.Name, child.Spec.NodeName),
+		)
+	}
+
+	obs.ExistingChildren = retained
+
+	if len(errs) > 0 {
+		return stderrors.Join(errs...)
 	}
 
 	return nil

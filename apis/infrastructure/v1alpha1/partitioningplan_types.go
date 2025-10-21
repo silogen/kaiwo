@@ -29,6 +29,7 @@ import (
 )
 
 // PartitioningPlanSpec defines the desired state of PartitioningPlan.
+// +kubebuilder:validation:XValidation:message="dryRun cannot be re-enabled once disabled",rule="!(self.dryRun && (!has(oldSelf.dryRun) || oldSelf.dryRun == false))"
 type PartitioningPlanSpec struct {
 	// Paused indicates whether the plan should stop reconciling.
 	// When true, no new node operations will be started, but status updates continue.

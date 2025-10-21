@@ -114,6 +114,16 @@ func Reconcile[T ObjectWithStatus[S], S any](ctx context.Context, spec Reconcile
 		}
 	}
 
+	// Step 6b: Cleanup stale resources if requested
+	var cleanupErr error
+	if planErr == nil && spec.CleanupFn != nil {
+		cleanupErr = spec.CleanupFn(ctx, obs, desired)
+		errs.CleanupErr = cleanupErr
+		if cleanupErr != nil {
+			logger.Error(cleanupErr, "Cleanup failed")
+		}
+	}
+
 	// Step 7: Project status from observation + errors
 	originalStatus := cloneStatus(obj)
 	if projErr := spec.ProjectFn(ctx, obs, errs); projErr != nil {

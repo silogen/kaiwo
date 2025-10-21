@@ -173,6 +173,9 @@ spec:
             required:
             - rules
             type: object
+            x-kubernetes-validations:
+            - message: dryRun cannot be re-enabled once disabled
+              rule: '!(self.dryRun && (!has(oldSelf.dryRun) || oldSelf.dryRun == false))'
           status:
             description: PartitioningPlanStatus defines the observed state of PartitioningPlan.
             properties:

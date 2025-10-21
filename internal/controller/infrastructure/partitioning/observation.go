@@ -38,6 +38,13 @@ type PlanObservation struct {
 	// ExistingChildren are the NodePartitioning resources owned by this plan.
 	ExistingChildren []infrastructurev1alpha1.NodePartitioning
 
+	// RuleMatches tracks which rule indexes match each node.
+	RuleMatches map[string][]int
+
+	// ConflictingNodePartitionings are NodePartitioning resources that target the same node
+	// but are associated with other plans.
+	ConflictingNodePartitionings map[string][]infrastructurev1alpha1.NodePartitioning
+
 	// Profiles maps profile names to their resolved profiles.
 	Profiles map[string]*infrastructurev1alpha1.PartitioningProfile
 }

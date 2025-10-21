@@ -77,6 +77,11 @@ type ReconcileSpec[T ObjectWithStatus[S], S any] struct {
 	// Modifies Object.Status directly. Framework patches if changed.
 	ProjectFn func(ctx context.Context, obs any, errs ReconcileErrors) error
 
+	// CleanupFn performs post-apply cleanup (e.g., deleting stale owned resources).
+	// It receives the latest observation and the desired objects returned by PlanFn.
+	// Optional and only invoked when planning succeeds.
+	CleanupFn func(ctx context.Context, obs any, desired []client.Object) error
+
 	// FinalizeFn performs external cleanup during deletion (optional).
 	// Should only interact with external systems, not owned children.
 	FinalizeFn func(ctx context.Context, obs any) error
@@ -87,12 +92,17 @@ type ReconcileErrors struct {
 	ObserveErr  error
 	PlanErr     error
 	ApplyErr    error
+	CleanupErr  error
 	FinalizeErr error
 }
 
 // HasError returns true if any error is set
 func (e ReconcileErrors) HasError() bool {
-	return e.ObserveErr != nil || e.PlanErr != nil || e.ApplyErr != nil || e.FinalizeErr != nil
+	return e.ObserveErr != nil ||
+		e.PlanErr != nil ||
+		e.ApplyErr != nil ||
+		e.CleanupErr != nil ||
+		e.FinalizeErr != nil
 }
 
 // ApplyConfig configures the SSA apply operation
