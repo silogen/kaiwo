@@ -419,6 +419,10 @@ func (r *AIMModelCacheReconciler) buildPVC(mc *aimv1alpha1.AIMModelCache, pvcNam
 
 func (r *AIMModelCacheReconciler) buildDownloadJob(mc *aimv1alpha1.AIMModelCache, jobName string, pvcName string) *batchv1.Job {
 	mountPath := "/cache"
+	downloadImage := aimv1alpha1.DefaultDownloadImage
+	if len(mc.Spec.ModelDownloadImage) > 0 {
+		downloadImage = mc.Spec.ModelDownloadImage
+	}
 
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
@@ -465,7 +469,7 @@ func (r *AIMModelCacheReconciler) buildDownloadJob(mc *aimv1alpha1.AIMModelCache
 					Containers: []corev1.Container{
 						{
 							Name:            "model-download",
-							Image:           mc.Spec.ModelDownloadImage,
+							Image:           downloadImage,
 							ImagePullPolicy: corev1.PullIfNotPresent,
 							SecurityContext: &corev1.SecurityContext{
 								RunAsUser:  baseutils.Pointer(int64(1000)),

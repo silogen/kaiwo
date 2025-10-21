@@ -28,6 +28,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	//This is also set as a kubebuilder default - if update one, update both
+	DefaultDownloadImage = "kserve/storage-initializer:v0.16.0-rc0"
+)
+
 // AIMModelCacheSpec defines the desired state of AIMModelCache
 type AIMModelCacheSpec struct {
 	// SourceURI is the source of the model to be downloaded. This is the only
@@ -51,6 +56,8 @@ type AIMModelCacheSpec struct {
 	Env []corev1.EnvVar `json:"env,omitempty"`
 
 	// ModelDownloadImage is the image used to download the model
+	// If empty defaultDownloadImage is used, if not set when submitted
+	// kubebuilder default is set.
 	// +kubebuilder:default="kserve/storage-initializer:v0.16.0-rc0"
 	ModelDownloadImage string `json:"modelDownloadImage"`
 
