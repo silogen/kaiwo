@@ -475,6 +475,7 @@ func BuildModelCaches(template *aimv1alpha1.AIMServiceTemplate, obs TemplateObse
 					StorageClassName: template.Spec.Caching.StorageClass,
 					SourceURI:        cache.SourceURI,
 					Size:             cache.Size,
+					Env:              template.Spec.Caching.Env,
 				},
 			},
 		)
