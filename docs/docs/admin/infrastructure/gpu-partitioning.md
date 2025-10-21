@@ -97,10 +97,10 @@ metadata:
   name: partition-inference-nodes
 spec:
   paused: false
-  excludeControlPlane: true  # Default: protects control plane nodes
   rollout:
     maxParallel: 2
     maxUnavailable: 1
+    excludeControlPlane: true  # Default: protects control plane nodes
   rules:
   - name: mi300x-inference
     selector:
@@ -124,7 +124,6 @@ spec:
 | ----- | ---- | ----------- |
 | `paused` | bool | When true, the controller stops creating new `NodePartitioning` resources and pauses reconciliation. Existing node operations continue to completion. Use this to halt a rollout without deleting the plan. |
 | `dryRun` | bool | When true, the controller creates `NodePartitioning` resources but marks them as skipped. Use this to preview which nodes would be affected before committing to the operation. |
-| `excludeControlPlane` | bool | Protects control plane nodes from being partitioned. When true (default), nodes with the `node-role.kubernetes.io/control-plane` or `node-role.kubernetes.io/master` label are automatically excluded from all rules. Set to false to allow partitioning control plane nodes. |
 | `rollout` | RolloutPolicy | Controls orchestration behavior. See [Rollout policies](#rollout-policies) for details. |
 | `rules` | []PartitioningRule | Ordered list of rules mapping nodes to profiles. The controller evaluates rules in order and applies the first matching rule to each node. |
 
@@ -146,6 +145,7 @@ The `rollout` field controls how many nodes undergo partitioning simultaneously:
 | ----- | ------- | ----------- |
 | `maxParallel` | 1 | Maximum number of nodes to process concurrently. Higher values speed up cluster-wide rollouts but increase the blast radius of configuration errors. |
 | `maxUnavailable` | 1 | Maximum number of nodes allowed to be unavailable at once. A node is considered unavailable while in `Draining`, `Applying`, `WaitingOperator`, `Verifying`, or `Failed` phases. This prevents the plan from draining too many nodes simultaneously. |
+| `excludeControlPlane` | true | Protects control plane nodes from being partitioned. When true (default), nodes with the `node-role.kubernetes.io/control-plane` or `node-role.kubernetes.io/master` label are automatically excluded from all rules. Set to false to allow partitioning control plane nodes. |
 
 **Note**: The controller enforces both limits. If either `maxParallel` or `maxUnavailable` is reached, no additional nodes begin partitioning until existing operations complete or fail.
 
@@ -348,6 +348,8 @@ The controller does not automatically retry failed operations. If a node enters 
 
 The `excludeControlPlane` field provides automatic protection against accidentally partitioning control plane nodes. When enabled (the default), the controller automatically filters out nodes with control plane labels before applying any rules.
 
+**Default behavior**: Control plane nodes are protected even if you omit the `rollout` section entirely. The controller defaults to `excludeControlPlane: true` for safety.
+
 ### How it works
 
 The controller checks for the following standard Kubernetes labels:
@@ -372,7 +374,8 @@ kind: PartitioningPlan
 metadata:
   name: dev-cluster-partition
 spec:
-  excludeControlPlane: false  # Allows partitioning control plane nodes
+  rollout:
+    excludeControlPlane: false  # Allows partitioning control plane nodes
   rules:
   - selector:
       matchLabels:
@@ -629,7 +632,7 @@ Logs include structured fields for filtering:
 
 ### Control plane protection
 
-- **Keep `excludeControlPlane` enabled**: The default value of `true` prevents accidental partitioning of control plane nodes. Only set to `false` if you have a specific requirement and understand the risks.
+- **Control planes are protected by default**: Even if you omit the `rollout` section entirely, control plane nodes are automatically excluded. You must explicitly set `rollout.excludeControlPlane: false` to disable this protection.
 - **Label control plane nodes explicitly**: Ensure all control plane nodes have the `node-role.kubernetes.io/control-plane` label for proper protection.
 - **Separate GPU workloads from control plane**: In production clusters, run GPU workloads on dedicated worker nodes rather than collocating them with control plane components.
 

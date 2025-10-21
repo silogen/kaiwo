@@ -4,10 +4,14 @@ metadata:
   name: test
 spec:
   dryRun: true
+  rollout:
+    maxParallel: 1
+    maxUnavailable: 1
+    excludeControlPlane: true
   rules:
-    - description: Partition the AMD MI300X worker nodes
-      selector:
-        matchLabels:
-          amd.com/gpu.product-name: AMD_Instinct_MI300X_OAM
-      profileRef:
-        name: test
+  - description: Partition the AMD MI300X worker nodes
+    selector:
+      matchLabels:
+        amd.com/gpu.product-name: AMD_Instinct_MI300X_OAM
+    profileRef:
+      name: test

@@ -110,6 +110,16 @@ func (p *PartitioningPlan) GetStatus() *PartitioningPlanStatus {
 	return &p.Status
 }
 
+// ShouldExcludeControlPlane returns whether control plane nodes should be excluded.
+// If the rollout section was not specified (MaxParallel == 0), defaults to true for safety.
+func (p *PartitioningPlan) ShouldExcludeControlPlane() bool {
+	// If rollout was not specified, use safe default of true
+	if p.Spec.Rollout.MaxParallel == 0 {
+		return true
+	}
+	return p.Spec.Rollout.ExcludeControlPlane
+}
+
 func init() {
 	SchemeBuilder.Register(&PartitioningPlan{}, &PartitioningPlanList{})
 }

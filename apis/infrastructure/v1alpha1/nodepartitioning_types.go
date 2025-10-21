@@ -43,6 +43,11 @@ type NodePartitioningSpec struct {
 	// PlanRef references the parent PartitioningPlan.
 	PlanRef PlanReference `json:"planRef"`
 
+	// DryRun indicates whether this is a dry-run operation.
+	// When true, the controller will skip all actual operations and set phase to Skipped.
+	// +optional
+	DryRun bool `json:"dryRun,omitempty"`
+
 	// NodeName is the name of the target node.
 	// +kubebuilder:validation:MinLength=1
 	NodeName string `json:"nodeName"`

@@ -69,6 +69,11 @@ spec:
                   Used for idempotency and change detection.
                 minLength: 1
                 type: string
+              dryRun:
+                description: |-
+                  DryRun indicates whether this is a dry-run operation.
+                  When true, the controller will skip all actual operations and set phase to Skipped.
+                type: boolean
               nodeName:
                 description: NodeName is the name of the target node.
                 minLength: 1

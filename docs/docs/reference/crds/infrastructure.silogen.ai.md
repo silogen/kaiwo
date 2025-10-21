@@ -103,6 +103,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `planRef` _[PlanReference](#planreference)_ | PlanRef references the parent PartitioningPlan. |  |  |
+| `dryRun` _boolean_ | DryRun indicates whether this is a dry-run operation.<br />When true, the controller will skip all actual operations and set phase to Skipped. |  |  |
 | `nodeName` _string_ | NodeName is the name of the target node. |  | MinLength: 1 <br /> |
 | `desiredHash` _string_ | DesiredHash is a deterministic hash of the desired partition state.<br />Used for idempotency and change detection. |  | MinLength: 1 <br /> |
 | `profileRef` _[ProfileReference](#profilereference)_ | ProfileRef references the PartitioningProfile to apply. |  |  |
@@ -301,10 +302,10 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `displayName` _string_ | DisplayName is a human-readable description of this profile. |  | MinLength: 1 <br /> |
+| `description` _string_ | Description is a human-readable description of this profile. |  |  |
 | `targetSelector` _[LabelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#labelselector-v1-meta)_ | TargetSelector is an optional guardrail to ensure the profile is only<br />applied to compatible nodes. If specified, the controller will validate<br />that nodes match this selector before applying the profile. |  |  |
 | `expectedResources` _object (keys:string, values:[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#quantity-resource-api))_ | ExpectedResources defines the resources that should appear in<br />node.status.allocatable after partitioning succeeds. |  |  |
-| `profileName` _string_ | ProfileName is the name of the profile to be applied.<br />This is the name of the profile under `gpu-config-profile` in DCM config.json. |  |  |
+| `dcmProfileName` _string_ | DcmProfileName is the name of the profile to be applied.<br />This is the name of the profile under `gpu-config-profile` in DCM config.json. |  |  |
 
 
 #### PartitioningProfileStatus
@@ -337,7 +338,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | Name is an optional human-readable name for this rule. |  |  |
+| `description` _string_ | Description is an optional human-readable name for this rule. |  |  |
 | `selector` _[LabelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#labelselector-v1-meta)_ | Selector selects nodes to partition. |  |  |
 | `profileRef` _[ProfileReference](#profilereference)_ | ProfileRef references the PartitioningProfile to apply. |  |  |
 
@@ -414,5 +415,6 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `maxParallel` _integer_ | MaxParallel is the maximum number of nodes to process in parallel. | 1 | Minimum: 1 <br /> |
 | `maxUnavailable` _integer_ | MaxUnavailable is the maximum number of nodes allowed to be unavailable at once.<br />Unavailable means: Draining, Applying, Verifying, or Failed. | 1 | Minimum: 0 <br /> |
+| `excludeControlPlane` _boolean_ | ExcludeControlPlane controls if control plane nodes are excluded or not. | true |  |
 
 

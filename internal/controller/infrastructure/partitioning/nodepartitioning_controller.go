@@ -227,6 +227,28 @@ func (r *NodePartitioningReconciler) executeStateMachine(
 ) error {
 	logger := log.FromContext(ctx)
 
+	// Handle dry-run mode
+	if np.Spec.DryRun {
+		// Only skip if not already in a terminal state
+		if np.Status.Phase == "" || np.Status.Phase == infrastructurev1alpha1.NodePartitioningPhasePending {
+			logger.Info("Dry-run mode enabled, skipping actual operations", "node", np.Spec.NodeName)
+			r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseSkipped)
+
+			meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
+				Type:               "DryRun",
+				Status:             metav1.ConditionTrue,
+				Reason:             "DryRunEnabled",
+				Message:            "Dry-run mode: no actual changes will be made",
+				ObservedGeneration: np.Generation,
+			})
+
+			controllerutils.EmitNormalEvent(r.Recorder, np, "DryRunSkipped",
+				fmt.Sprintf("Dry-run: Would partition node %s with profile %s",
+					np.Spec.NodeName, np.Spec.ProfileRef.Name))
+		}
+		return nil
+	}
+
 	// Check if already at desired state
 	if np.Status.Phase == infrastructurev1alpha1.NodePartitioningPhaseSucceeded &&
 		np.Status.CurrentHash == np.Spec.DesiredHash {

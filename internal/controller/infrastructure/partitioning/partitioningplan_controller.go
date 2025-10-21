@@ -50,7 +50,6 @@ import (
 
 const (
 	partitioningPlanFieldOwner = "partitioning-plan-controller"
-	partitioningPlanFinalizer  = "infrastructure.silogen.ai/partitioning-plan"
 )
 
 // PartitioningPlanReconciler reconciles a PartitioningPlan object.
@@ -147,7 +146,7 @@ func (r *PartitioningPlanReconciler) observe(ctx context.Context, plan *infrastr
 
 		for _, node := range allNodes.Items {
 			// Skip control plane nodes if excludeControlPlane is enabled
-			if plan.Spec.Rollout.ExcludeControlPlane && isControlPlaneNode(&node) {
+			if plan.ShouldExcludeControlPlane() && isControlPlaneNode(&node) {
 				logger.V(1).Info("Excluding control plane node", "node", node.Name)
 				continue
 			}
@@ -268,6 +267,7 @@ func (r *PartitioningPlanReconciler) plan(ctx context.Context, plan *infrastruct
 					Name: plan.Name,
 					UID:  string(plan.UID),
 				},
+				DryRun:      plan.Spec.DryRun,
 				NodeName:    node.Name,
 				DesiredHash: desiredHash,
 				ProfileRef:  matchedRule.ProfileRef,
@@ -295,7 +295,8 @@ func (r *PartitioningPlanReconciler) plan(ctx context.Context, plan *infrastruct
 		if exists {
 			// Update if needed
 			if existing.Spec.DesiredHash != desiredChild.Spec.DesiredHash ||
-				existing.Spec.ProfileRef.Name != desiredChild.Spec.ProfileRef.Name {
+				existing.Spec.ProfileRef.Name != desiredChild.Spec.ProfileRef.Name ||
+				existing.Spec.DryRun != desiredChild.Spec.DryRun {
 				// Need to update
 				updated := existing.DeepCopy()
 				updated.Spec = desiredChild.Spec
