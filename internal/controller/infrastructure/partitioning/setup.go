@@ -27,6 +27,7 @@ package partitioning
 import (
 	"context"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -73,6 +74,19 @@ func setupFieldIndexers(mgr ctrl.Manager) error {
 		func(obj client.Object) []string {
 			np := obj.(*infrastructurev1alpha1.NodePartitioning)
 			return []string{np.Spec.NodeName}
+		},
+	); err != nil {
+		return err
+	}
+
+	// Index Pod by spec.nodeName for efficient node-based pod lookups (used in draining)
+	if err := mgr.GetFieldIndexer().IndexField(
+		context.Background(),
+		&corev1.Pod{},
+		"spec.nodeName",
+		func(obj client.Object) []string {
+			pod := obj.(*corev1.Pod)
+			return []string{pod.Spec.NodeName}
 		},
 	); err != nil {
 		return err

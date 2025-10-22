@@ -54,6 +54,7 @@ type NodePartitioningObservation struct {
 	// DCMConfigMap is the AMD GPU Operator DCM ConfigMap.
 	DCMConfigMap *corev1.ConfigMap
 
-	// DevicePluginReady indicates whether the AMD device plugin is running on the node.
-	DevicePluginReady bool
+	// DCMProfileState is the state of DCM profile application from the node label.
+	// Possible values: "", "processing", "success", "failed"
+	DCMProfileState string
 }

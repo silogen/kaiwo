@@ -303,17 +303,15 @@ func (r *PartitioningPlanReconciler) plan(ctx context.Context, plan *infrastruct
 	for nodeName, desiredChild := range desiredChildren {
 		existing, exists := existingMap[nodeName]
 		if exists {
-			// Update if needed
+			// Check if update is needed
 			if existing.Spec.DesiredHash != desiredChild.Spec.DesiredHash ||
 				!apiequality.Semantic.DeepEqual(existing.Spec.Profile, desiredChild.Spec.Profile) ||
 				existing.Spec.DryRun != desiredChild.Spec.DryRun {
-				// Need to update
-				updated := existing.DeepCopy()
-				updated.Spec = desiredChild.Spec
-				desired = append(desired, updated)
+				// Use the fresh desiredChild for SSA - it will handle the update
+				desired = append(desired, desiredChild)
 			}
 		} else {
-			// Create new
+			// Create new - use the fresh desiredChild
 			desired = append(desired, desiredChild)
 		}
 	}

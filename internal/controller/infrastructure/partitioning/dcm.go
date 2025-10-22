@@ -50,6 +50,9 @@ const (
 	// DCMNodeLabelKey is the label key used by DCM to select partition profiles.
 	DCMNodeLabelKey = "dcm.amd.com/gpu-config-profile"
 
+	// DCMNodeStateLabelKey is the label key used by DCM to indicate profile application state.
+	DCMNodeStateLabelKey = "dcm.amd.com/gpu-config-profile-state"
+
 	// TaintKey is the taint key used to drain nodes before partitioning.
 	TaintKey = "amd-dcm"
 
@@ -105,31 +108,38 @@ func EnsureDCMProfileInConfigMap(
 func ApplyProfileToNode(ctx context.Context, c client.Client, nodeName string, profileName string) error {
 	logger := log.FromContext(ctx)
 
-	var node corev1.Node
-	if err := c.Get(ctx, types.NamespacedName{Name: nodeName}, &node); err != nil {
-		return fmt.Errorf("failed to get node %s: %w", nodeName, err)
-	}
+	// Retry on conflict
+	return retryOnConflict(ctx, func() error {
+		var node corev1.Node
+		if err := c.Get(ctx, types.NamespacedName{Name: nodeName}, &node); err != nil {
+			return fmt.Errorf("failed to get node %s: %w", nodeName, err)
+		}
 
-	if node.Labels == nil {
-		node.Labels = make(map[string]string)
-	}
+		if node.Labels == nil {
+			node.Labels = make(map[string]string)
+		}
 
-	// Check if already labeled correctly
-	if currentProfile, exists := node.Labels[DCMNodeLabelKey]; exists && currentProfile == profileName {
-		logger.V(1).Info("Node already has correct DCM profile label",
-			"node", nodeName, "profileName", profileName)
+		// Check if already labeled correctly and state is empty (meaning we need to reprocess)
+		currentProfile, hasProfile := node.Labels[DCMNodeLabelKey]
+		currentState, _ := node.Labels[DCMNodeStateLabelKey]
+
+		if hasProfile && currentProfile == profileName && currentState == "" {
+			logger.V(1).Info("Node already has correct DCM profile label and state is cleared",
+				"node", nodeName, "profileName", profileName)
+			return nil
+		}
+
+		// Apply the profile label and clear the state label to trigger DCM reprocessing
+		node.Labels[DCMNodeLabelKey] = profileName
+		delete(node.Labels, DCMNodeStateLabelKey) // Clear state to signal DCM to process
+
+		if err := c.Update(ctx, &node); err != nil {
+			return err
+		}
+
+		logger.Info("Applied DCM profile label and cleared state", "node", nodeName, "profileName", profileName)
 		return nil
-	}
-
-	// Apply the label
-	node.Labels[DCMNodeLabelKey] = profileName
-
-	if err := c.Update(ctx, &node); err != nil {
-		return fmt.Errorf("failed to label node %s with DCM profile %s: %w", nodeName, profileName, err)
-	}
-
-	logger.Info("Applied DCM profile label to node", "node", nodeName, "profileName", profileName)
-	return nil
+	})
 }
 
 // RemoveProfileFromNode removes the DCM profile label from a node.

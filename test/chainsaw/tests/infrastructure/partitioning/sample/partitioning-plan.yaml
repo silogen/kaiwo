@@ -16,4 +16,5 @@ spec:
     profile:
       dcmProfileName: cpx
       expectedResources:
-        amd.com/gpu: "63"
+        amd.com/cpx_nps4: "63"
+#        amd.com/spx_nps1: "8"
