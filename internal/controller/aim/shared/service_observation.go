@@ -104,6 +104,7 @@ type ServiceObservation struct {
 	ImageReadyReason              string
 	ImageReadyMessage             string
 	InferenceServicePodImageError *ImagePullError // Categorized image pull error from InferenceService pods
+	ModelCaches                   *aimv1alpha1.AIMModelCacheList
 }
 
 // TemplateFound returns true if a template was resolved (namespace or cluster scope).
