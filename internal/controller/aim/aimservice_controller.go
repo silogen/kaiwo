@@ -32,6 +32,7 @@ import (
 	"github.com/silogen/kaiwo/internal/controller/aim/routingconfig"
 
 	servingv1beta1 "github.com/kserve/kserve/pkg/apis/serving/v1beta1"
+	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -158,12 +159,23 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 
 	// Resolve route path if routing is enabled via service or runtime defaults
 	routingConfig := routingconfig.Resolve(service, obs.RuntimeConfigSpec.Routing)
+
 	if routingConfig.Enabled && obs.TemplateFound() {
 		if routePath, err := shared.ResolveServiceRoutePath(service, obs.RuntimeConfigSpec); err != nil {
 			obs.RouteTemplateErr = err
 		} else {
 			obs.RoutePath = routePath
 		}
+	}
+
+	// If caching is enabled, observe available model caches
+	if service.Spec.CacheModel {
+		var modelCaches = aimv1alpha1.AIMModelCacheList{}
+		err := r.Client.List(ctx, &modelCaches)
+		if err != nil {
+			return nil, err
+		}
+		obs.ModelCaches = &modelCaches
 	}
 
 	return obs, nil
@@ -210,13 +222,35 @@ func (r *AIMServiceReconciler) plan(_ context.Context, service *aimv1alpha1.AIMS
 			Status:            obs.TemplateStatus,
 		})
 
+		var modelsReady = templateState.ModelSource != nil
+		var modelCachesToMount = []aimv1alpha1.AIMModelCache{}
+		if modelsReady && service.Spec.CacheModel {
+			// We know our models, verify that they are cached
+		SEARCH:
+			for _, model := range templateState.Status.ModelSources {
+				for _, modelCache := range obs.ModelCaches.Items {
+					// Select first modelCache that matches sourceURI and is Available
+					if model.SourceURI == modelCache.Spec.SourceURI && modelCache.Status.Status == aimv1alpha1.AIMModelCacheStatusAvailable {
+						modelCachesToMount = append(modelCachesToMount, modelCache)
+						continue SEARCH
+					}
+				}
+				// We searched for an Available cache, but didn't find one. models aren't ready for use
+				modelsReady = false
+			}
+
+		}
+
 		// Only proceed if we have a model source (discovery must have succeeded and populated ModelSources)
-		if templateState.ModelSource != nil {
+		if modelsReady {
 			serviceState := aimstate.NewServiceState(service, templateState, aimstate.ServiceStateOptions{
 				RuntimeName: obs.RuntimeName(),
 				RoutePath:   routePath,
 			})
 			inferenceService := shared.BuildInferenceService(serviceState, ownerRef)
+			for _, modelCache := range modelCachesToMount {
+				addModelCacheMount(inferenceService, modelCache)
+			}
 			desired = append(desired, inferenceService)
 
 			if serviceState.Routing.Enabled && serviceState.Routing.GatewayRef != nil && obs.RouteTemplateErr == nil {
@@ -229,6 +263,27 @@ func (r *AIMServiceReconciler) plan(_ context.Context, service *aimv1alpha1.AIMS
 	}
 
 	return desired, nil
+}
+
+func addModelCacheMount(inferenceService *servingv1beta1.InferenceService, modelCache aimv1alpha1.AIMModelCache) {
+
+	inferenceService.Spec.Predictor.Volumes = append(inferenceService.Spec.Predictor.Volumes, v1.Volume{
+		Name: modelCache.Name,
+		VolumeSource: v1.VolumeSource{
+			PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
+				ClaimName: modelCache.Status.PersistentVolumeClaim,
+			},
+		},
+	})
+
+	// Remove any protocol specifier
+	mountPath := strings.Split(modelCache.Spec.SourceURI, "://")[1]
+
+	inferenceService.Spec.Predictor.Model.PredictorExtensionSpec.Container.VolumeMounts = append(inferenceService.Spec.Predictor.Model.PredictorExtensionSpec.Container.VolumeMounts, v1.VolumeMount{
+		Name:      modelCache.Name,
+		MountPath: "/mnt/models/" + mountPath,
+	})
+
 }
 
 func (r *AIMServiceReconciler) projectStatus(

@@ -79,6 +79,7 @@ type ServiceObservation struct {
 	TemplateSpec           *aimv1alpha1.AIMServiceTemplateSpec
 	TemplateNamespace      string
 	ImageResources         *corev1.ResourceRequirements
+	ModelCaches            *aimv1alpha1.AIMModelCacheList
 }
 
 // TemplateFound returns true if a template was resolved (namespace or cluster scope).
