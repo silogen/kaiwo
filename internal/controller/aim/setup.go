@@ -95,5 +95,15 @@ func SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
+	// Setup AIMTemplateCache controller
+	if err := (&AIMTemplateCacheReconciler{
+		Client:    mgr.GetClient(),
+		Scheme:    mgr.GetScheme(),
+		Recorder:  mgr.GetEventRecorderFor("aim-templatecache-controller"),
+		Clientset: clientset,
+	}).SetupWithManager(mgr); err != nil {
+		return err
+	}
+
 	return nil
 }
