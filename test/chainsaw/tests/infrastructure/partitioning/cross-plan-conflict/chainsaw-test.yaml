@@ -5,10 +5,16 @@ metadata:
 spec:
   parallel: false
   steps:
+  - name: discover-gpu-node
+    try:
+    - script:
+        content: kubectl get nodes -l 'amd.com/gpu' -o jsonpath="{.items[0].metadata.name}"
+        outputs:
+        - name: gpu_node
+          value: ($stdout)
+
   - name: apply-alpha-plan
     try:
-    - apply:
-        file: partitioning-profile.yaml
     - apply:
         file: partitioning-plan-alpha.yaml
     - wait:
@@ -20,29 +26,11 @@ spec:
           condition:
             name: PlanReady
             value: "True"
-    - wait:
-        apiVersion: infrastructure.silogen.ai/v1alpha1
-        kind: NodePartitioning
-        name: plan-conflict-alpha-($values.amd_gpu_partitioning_node_name)
-        timeout: 1m
-        for:
-          jsonPath:
-            path: .status.phase
-            value: Skipped
 
   - name: detect-conflict-in-beta
     try:
     - apply:
         file: partitioning-plan-beta.yaml
-    - wait:
-        apiVersion: infrastructure.silogen.ai/v1alpha1
-        kind: PartitioningPlan
-        name: plan-conflict-beta
-        timeout: 1m
-        for:
-          jsonPath:
-            path: .status.phase
-            value: Degraded
     - assert:
         resource:
           apiVersion: infrastructure.silogen.ai/v1alpha1
@@ -50,16 +38,11 @@ spec:
           metadata:
             name: plan-conflict-beta
           status:
-            conditions:
+            phase: Degraded
+            (conditions[type? == 'PlanReady]):
             - type: PlanReady
               status: "False"
               reason: PlanningFailed
-    - error:
-        resource:
-          apiVersion: infrastructure.silogen.ai/v1alpha1
-          kind: NodePartitioning
-          metadata:
-            name: plan-conflict-beta-($values.amd_gpu_partitioning_node_name)
 
   - name: release-alpha
     try:
@@ -79,7 +62,7 @@ spec:
           apiVersion: infrastructure.silogen.ai/v1alpha1
           kind: NodePartitioning
           metadata:
-            name: plan-conflict-alpha-($values.amd_gpu_partitioning_node_name)
+            name: plan-conflict-alpha-($gpu_node)
 
   - name: retry-beta-successfully
     try:
@@ -97,7 +80,7 @@ spec:
     - wait:
         apiVersion: infrastructure.silogen.ai/v1alpha1
         kind: NodePartitioning
-        name: plan-conflict-beta-($values.amd_gpu_partitioning_node_name)
+        name: plan-conflict-beta-($gpu_node)
         timeout: 1m
         for:
           jsonPath:

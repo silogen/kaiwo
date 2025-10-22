@@ -5,6 +5,19 @@ metadata:
 spec:
   parallel: false
   steps:
+  - name: discover-nodes
+    try:
+    - script:
+        content: kubectl get nodes -l 'amd.com/gpu' -o jsonpath="{.items[0].metadata.name}"
+        outputs:
+        - name: gpu_node
+          value: ($stdout)
+    - script:
+        content: kubectl get nodes -l 'node-role.kubernetes.io/control-plane' -o jsonpath="{.items[0].metadata.name}"
+        outputs:
+        - name: control_plane_node
+          value: ($stdout)
+
   - name: apply-profile-and-exclude-plan
     try:
     - apply:
@@ -23,7 +36,7 @@ spec:
     - wait:
         apiVersion: infrastructure.silogen.ai/v1alpha1
         kind: NodePartitioning
-        name: plan-toggle-($values.amd_gpu_partitioning_node_name)
+        name: plan-toggle-($gpu_node)
         timeout: 1m
         for:
           jsonPath:
@@ -34,7 +47,7 @@ spec:
           apiVersion: infrastructure.silogen.ai/v1alpha1
           kind: NodePartitioning
           metadata:
-            name: plan-toggle-($values.amd_gpu_control_plane_node_name)
+            name: plan-toggle-($control_plane_node)
 
   - name: include-control-plane
     try:
@@ -52,7 +65,7 @@ spec:
     - wait:
         apiVersion: infrastructure.silogen.ai/v1alpha1
         kind: NodePartitioning
-        name: plan-toggle-($values.amd_gpu_control_plane_node_name)
+        name: plan-toggle-($control_plane_node)
         timeout: 1m
         for:
           jsonPath:
@@ -75,7 +88,7 @@ spec:
     - wait:
         apiVersion: infrastructure.silogen.ai/v1alpha1
         kind: NodePartitioning
-        name: plan-toggle-($values.amd_gpu_partitioning_node_name)
+        name: plan-toggle-($gpu_node)
         timeout: 1m
         for:
           jsonPath:
@@ -86,7 +99,7 @@ spec:
           apiVersion: infrastructure.silogen.ai/v1alpha1
           kind: NodePartitioning
           metadata:
-            name: plan-toggle-($values.amd_gpu_control_plane_node_name)
+            name: plan-toggle-($control_plane_node)
     catch:
     - command:
         entrypoint: kaiwo-dev

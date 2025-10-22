@@ -5,6 +5,14 @@ metadata:
 spec:
   parallel: false
   steps:
+  - name: discover-gpu-node
+    try:
+    - script:
+        content: kubectl get nodes -l 'amd.com/gpu' -o jsonpath="{.items[0].metadata.name}"
+        outputs:
+        - name: gpu_node
+          value: ($stdout)
+
   - name: partition-to-cpx
     try:
     - apply:
@@ -12,7 +20,7 @@ spec:
     - wait:
         apiVersion: infrastructure.silogen.ai/v1alpha1
         kind: NodePartitioning
-        name: plan-happy-($values.amd_gpu_partitioning_node_name)
+        name: plan-happy-($gpu_node)
         timeout: 2m
         for:
           jsonPath:
@@ -23,7 +31,7 @@ spec:
           apiVersion: v1
           kind: Node
           metadata:
-            name: ($values.amd_gpu_partitioning_node_name)
+            name: ($gpu_node)
             labels:
               dcm.amd.com/gpu-config-profile: cpx
     - patch:
@@ -31,7 +39,7 @@ spec:
           apiVersion: infrastructure.silogen.ai/v1alpha1
           kind: NodePartitioning
           metadata:
-            name: plan-happy-($values.amd_gpu_partitioning_node_name)
+            name: plan-happy-($gpu_node)
           status:
             phase: Succeeded
             currentHash: patched-cpx
@@ -61,7 +69,7 @@ spec:
           apiVersion: infrastructure.silogen.ai/v1alpha1
           kind: NodePartitioning
           metadata:
-            name: plan-happy-($values.amd_gpu_partitioning_node_name)
+            name: plan-happy-($gpu_node)
           spec:
             profile:
               dcmProfileName: cpx
@@ -73,7 +81,7 @@ spec:
           apiVersion: v1
           kind: Node
           metadata:
-            name: ($values.amd_gpu_partitioning_node_name)
+            name: ($gpu_node)
             labels:
               dcm.amd.com/gpu-config-profile: cpx
 
@@ -84,7 +92,7 @@ spec:
     - wait:
         apiVersion: infrastructure.silogen.ai/v1alpha1
         kind: NodePartitioning
-        name: plan-happy-($values.amd_gpu_partitioning_node_name)
+        name: plan-happy-($gpu_node)
         timeout: 2m
         for:
           jsonPath:
@@ -95,7 +103,7 @@ spec:
           apiVersion: v1
           kind: Node
           metadata:
-            name: ($values.amd_gpu_partitioning_node_name)
+            name: ($gpu_node)
             labels:
               dcm.amd.com/gpu-config-profile: spx
     - patch:
@@ -103,7 +111,7 @@ spec:
           apiVersion: infrastructure.silogen.ai/v1alpha1
           kind: NodePartitioning
           metadata:
-            name: plan-happy-($values.amd_gpu_partitioning_node_name)
+            name: plan-happy-($gpu_node)
           status:
             phase: Succeeded
             currentHash: patched-spx
@@ -124,7 +132,7 @@ spec:
           apiVersion: infrastructure.silogen.ai/v1alpha1
           kind: NodePartitioning
           metadata:
-            name: plan-happy-($values.amd_gpu_partitioning_node_name)
+            name: plan-happy-($gpu_node)
           spec:
             profile:
               dcmProfileName: spx
@@ -136,7 +144,7 @@ spec:
           apiVersion: v1
           kind: Node
           metadata:
-            name: ($values.amd_gpu_partitioning_node_name)
+            name: ($gpu_node)
             labels:
               dcm.amd.com/gpu-config-profile: spx
     catch:

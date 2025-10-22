@@ -5,10 +5,16 @@ metadata:
 spec:
   parallel: false
   steps:
+  - name: discover-gpu-node
+    try:
+    - script:
+        content: kubectl get nodes -l 'amd.com/gpu' -o jsonpath="{.items[0].metadata.name}"
+        outputs:
+        - name: gpu_node
+          value: ($stdout)
+
   - name: create-initial-plan
     try:
-    - apply:
-        file: partitioning-profile.yaml
     - apply:
         file: partitioning-plan-initial.yaml
 
@@ -36,7 +42,7 @@ spec:
     - wait:
         apiVersion: infrastructure.silogen.ai/v1alpha1
         kind: NodePartitioning
-        name: plan-prune-($values.amd_gpu_partitioning_node_name)
+        name: plan-prune-($gpu_node)
         timeout: 1m
         for:
           jsonPath:
@@ -71,7 +77,7 @@ spec:
           apiVersion: infrastructure.silogen.ai/v1alpha1
           kind: NodePartitioning
           metadata:
-            name: plan-prune-($values.amd_gpu_partitioning_node_name)
+            name: plan-prune-($gpu_node)
     catch:
     - command:
         entrypoint: kaiwo-dev

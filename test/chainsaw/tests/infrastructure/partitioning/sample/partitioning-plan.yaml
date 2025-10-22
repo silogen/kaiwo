@@ -14,7 +14,7 @@ spec:
       matchLabels:
         amd.com/gpu.product-name: AMD_Instinct_MI300X_OAM
     profile:
-      dcmProfileName: cpx
+      dcmProfileName: spx
       expectedResources:
-        amd.com/cpx_nps4: "63"
-#        amd.com/spx_nps1: "8"
+#        amd.com/cpx_nps4: "63"
+        amd.com/spx_nps1: "8"

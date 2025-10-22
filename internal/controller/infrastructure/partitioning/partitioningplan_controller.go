@@ -123,12 +123,7 @@ func (r *PartitioningPlanReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		CleanupErr: cleanupErr,
 	}
 
-	if err := r.projectStatus(ctx, &plan, obs, errs); err != nil {
-		if patchErr := patchPartitioningPlanStatus(ctx, r.Client, &plan, originalStatus); patchErr != nil {
-			logger.Error(patchErr, "Failed to patch status after projection error")
-		}
-		return ctrl.Result{}, err
-	}
+	r.projectStatus(ctx, &plan, obs, errs)
 
 	if err := patchPartitioningPlanStatus(ctx, r.Client, &plan, originalStatus); err != nil {
 		return ctrl.Result{}, err
@@ -350,7 +345,7 @@ func (r *PartitioningPlanReconciler) projectStatus(
 	plan *infrastructurev1alpha1.PartitioningPlan,
 	obs *PlanObservation,
 	errs reconcileErrors,
-) error {
+) {
 	logger := log.FromContext(ctx)
 
 	// Initialize status
@@ -369,7 +364,7 @@ func (r *PartitioningPlanReconciler) projectStatus(
 				ObservedGeneration: plan.Generation,
 			})
 			plan.Status.Phase = infrastructurev1alpha1.PartitioningPlanPhaseDegraded
-			return nil
+			return
 		}
 
 		if errs.PlanErr != nil {
@@ -381,7 +376,7 @@ func (r *PartitioningPlanReconciler) projectStatus(
 				ObservedGeneration: plan.Generation,
 			})
 			plan.Status.Phase = infrastructurev1alpha1.PartitioningPlanPhaseDegraded
-			return nil
+			return
 		}
 
 		if errs.ApplyErr != nil {
@@ -391,7 +386,7 @@ func (r *PartitioningPlanReconciler) projectStatus(
 	}
 
 	if obs == nil {
-		return nil
+		return
 	}
 
 	// Aggregate status from children
@@ -403,7 +398,7 @@ func (r *PartitioningPlanReconciler) projectStatus(
 	for _, child := range obs.ExistingChildren {
 		summary.TotalNodes++
 
-		phase := infrastructurev1alpha1.NodePartitioningPhase(child.Status.Phase)
+		phase := child.Status.Phase
 		if phase == "" {
 			phase = infrastructurev1alpha1.NodePartitioningPhasePending
 		}
@@ -527,8 +522,6 @@ func (r *PartitioningPlanReconciler) projectStatus(
 			ObservedGeneration: plan.Generation,
 		})
 	}
-
-	return nil
 }
 
 // cleanupStaleNodePartitionings removes NodePartitioning children whose nodes are no longer targeted by the plan.

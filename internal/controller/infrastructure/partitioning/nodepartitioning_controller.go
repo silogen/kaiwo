@@ -103,12 +103,7 @@ func (r *NodePartitioningReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		ObserveErr: observeErr,
 	}
 
-	if err := r.projectStatus(ctx, &np, obs, errs); err != nil {
-		if patchErr := patchNodePartitioningStatus(ctx, r.Client, &np, originalStatus); patchErr != nil {
-			logger.Error(patchErr, "Failed to patch status after projection error")
-		}
-		return ctrl.Result{}, err
-	}
+	r.projectStatus(ctx, &np, obs, errs)
 
 	if err := patchNodePartitioningStatus(ctx, r.Client, &np, originalStatus); err != nil {
 		return ctrl.Result{}, err
@@ -149,7 +144,7 @@ func (r *NodePartitioningReconciler) projectStatus(
 	np *infrastructurev1alpha1.NodePartitioning,
 	obs *NodePartitioningObservation,
 	errs reconcileErrors,
-) error {
+) {
 	logger := log.FromContext(ctx)
 
 	// Initialize status
@@ -161,11 +156,11 @@ func (r *NodePartitioningReconciler) projectStatus(
 		if r.Recorder != nil {
 			r.Recorder.Event(np, corev1.EventTypeWarning, "ObservationFailed", fmt.Sprintf("Failed to observe cluster state: %v", errs.ObserveErr))
 		}
-		return nil
+		return
 	}
 
 	if obs == nil {
-		return nil
+		return
 	}
 
 	// Check if node exists
@@ -181,7 +176,7 @@ func (r *NodePartitioningReconciler) projectStatus(
 			Message:            "Target node does not exist",
 			ObservedGeneration: np.Generation,
 		})
-		return nil
+		return
 	}
 
 	// Execute state machine
@@ -191,10 +186,7 @@ func (r *NodePartitioningReconciler) projectStatus(
 		}
 		logger.Error(err, "State machine execution failed")
 		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseFailed)
-		return nil // Don't fail reconciliation, status is updated
 	}
-
-	return nil
 }
 
 // executeStateMachine executes the node partitioning state machine.
@@ -288,479 +280,400 @@ func (r *NodePartitioningReconciler) executeStateMachine(
 
 	// State machine transitions
 	switch np.Status.Phase {
-	case "": // Uninitialized
-		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhasePending)
-		return nil
-
+	case "":
+		return r.handleUninitializedPhase(ctx, np)
 	case infrastructurev1alpha1.NodePartitioningPhasePending:
-		// Check if node resources already match expected - if so, skip drain/apply cycle
-		// Use Capacity (not Allocatable) because it reflects hardware configuration
-		// and isn't affected by device plugin pod not running
-		if len(np.Spec.Profile.ExpectedResources) > 0 {
-			resourcesMatch := true
-			var mismatches []string
+		return r.handlePendingPhase(ctx, np, obs)
+	case infrastructurev1alpha1.NodePartitioningPhaseDraining:
+		return r.handleDrainingPhase(ctx, np)
+	case infrastructurev1alpha1.NodePartitioningPhaseApplying:
+		return r.handleApplyingPhase(ctx, np)
+	case infrastructurev1alpha1.NodePartitioningPhaseWaitingOperator:
+		return r.handleWaitingOperatorPhase(ctx, np, obs)
+	case infrastructurev1alpha1.NodePartitioningPhaseVerifying:
+		return r.handleVerifyingPhase(ctx, np, obs)
+	case infrastructurev1alpha1.NodePartitioningPhaseFailed:
+		return r.handleFailedPhase(ctx, np)
+	case infrastructurev1alpha1.NodePartitioningPhaseSkipped:
+		return r.handleSkippedPhase(ctx, np)
+	case infrastructurev1alpha1.NodePartitioningPhaseSucceeded:
+		return r.handleSucceededPhase(ctx, np)
+	default:
+		return fmt.Errorf("unknown phase: %s", np.Status.Phase)
+	}
+}
 
-			for resourceName, expectedQty := range np.Spec.Profile.ExpectedResources {
-				actualQty, exists := obs.Node.Status.Capacity[corev1.ResourceName(resourceName)]
-				if !exists {
-					resourcesMatch = false
-					mismatches = append(mismatches, fmt.Sprintf("%s: not found", resourceName))
-					continue
-				}
-				if !actualQty.Equal(expectedQty) {
-					resourcesMatch = false
-					mismatches = append(mismatches, fmt.Sprintf("%s: got %s (expected %s)",
-						resourceName, actualQty.String(), expectedQty.String()))
-				}
-			}
+func (r *NodePartitioningReconciler) handleUninitializedPhase(ctx context.Context, np *infrastructurev1alpha1.NodePartitioning) error {
+	r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhasePending)
+	return nil
+}
 
-			if resourcesMatch {
-				// Node is already in desired state - skip directly to succeeded
-				logger.Info("Node resources already match expected, skipping drain/apply cycle",
-					"node", np.Spec.NodeName)
+func (r *NodePartitioningReconciler) handlePendingPhase(ctx context.Context, np *infrastructurev1alpha1.NodePartitioning, obs *NodePartitioningObservation) error {
+	logger := log.FromContext(ctx)
 
-				// Set all conditions to reflect current state
-				meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
-					Type:               infrastructurev1alpha1.NodePartitioningConditionNodeCordoned,
-					Status:             metav1.ConditionTrue,
-					Reason:             "AlreadyInDesiredState",
-					Message:            "Node already has desired configuration",
-					ObservedGeneration: np.Generation,
-				})
-				meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
-					Type:               infrastructurev1alpha1.NodePartitioningConditionNodeTainted,
-					Status:             metav1.ConditionTrue,
-					Reason:             "AlreadyInDesiredState",
-					Message:            "Node already has desired configuration",
-					ObservedGeneration: np.Generation,
-				})
+	if matched, mismatches := capacityMatchesExpected(np, obs.Node); matched {
+		logger.Info("Node resources already match expected, skipping drain/apply cycle",
+			"node", np.Spec.NodeName)
+
+		setCondition := func(condType string, message string) {
+			meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
+				Type:               condType,
+				Status:             metav1.ConditionTrue,
+				Reason:             "AlreadyInDesiredState",
+				Message:            message,
+				ObservedGeneration: np.Generation,
+			})
+		}
+
+		setCondition(infrastructurev1alpha1.NodePartitioningConditionNodeCordoned, "Node already has desired configuration")
+		setCondition(infrastructurev1alpha1.NodePartitioningConditionNodeTainted, "Node already has desired configuration")
+		setCondition(infrastructurev1alpha1.NodePartitioningConditionDrainCompleted, "Node already has desired configuration")
+		setCondition(infrastructurev1alpha1.NodePartitioningConditionProfileApplied, "Node resources match expected values")
+		setCondition(infrastructurev1alpha1.NodePartitioningConditionOperatorReady, "Node resources match expected values")
+		setCondition(infrastructurev1alpha1.NodePartitioningConditionVerified, "Node resources match expected configuration")
+
+		np.Status.CurrentHash = np.Spec.DesiredHash
+		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseSucceeded)
+		if r.Recorder != nil {
+			r.Recorder.Event(np, corev1.EventTypeNormal, "AlreadyConfigured",
+				fmt.Sprintf("Node %s already in desired state, skipped drain/apply", np.Spec.NodeName))
+		}
+		return nil
+	} else if len(mismatches) > 0 {
+		logger.Info("Node resources don't match expected, will partition",
+			"node", np.Spec.NodeName, "mismatches", mismatches)
+	}
+
+	r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseDraining)
+	if r.Recorder != nil {
+		r.Recorder.Event(np, corev1.EventTypeNormal, "DrainStarted", fmt.Sprintf("Started draining node %s", np.Spec.NodeName))
+	}
+	return nil
+}
+
+func (r *NodePartitioningReconciler) handleDrainingPhase(ctx context.Context, np *infrastructurev1alpha1.NodePartitioning) error {
+	ensureCondition := func(condType, reason, message string) {
+		meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
+			Type:               condType,
+			Status:             metav1.ConditionTrue,
+			Reason:             reason,
+			Message:            message,
+			ObservedGeneration: np.Generation,
+		})
+	}
+
+	if cond := meta.FindStatusCondition(np.Status.Conditions, infrastructurev1alpha1.NodePartitioningConditionNodeCordoned); cond == nil || cond.Status != metav1.ConditionTrue {
+		if err := CordonNode(ctx, r.Client, np.Spec.NodeName); err != nil {
+			return fmt.Errorf("failed to cordon node: %w", err)
+		}
+		ensureCondition(infrastructurev1alpha1.NodePartitioningConditionNodeCordoned, "CordonSucceeded", "Node cordoned successfully")
+		return nil
+	}
+
+	if cond := meta.FindStatusCondition(np.Status.Conditions, infrastructurev1alpha1.NodePartitioningConditionNodeTainted); cond == nil || cond.Status != metav1.ConditionTrue {
+		if err := TaintNode(ctx, r.Client, np.Spec.NodeName); err != nil {
+			return fmt.Errorf("failed to taint node: %w", err)
+		}
+		ensureCondition(infrastructurev1alpha1.NodePartitioningConditionNodeTainted, "TaintApplied", fmt.Sprintf("Taint %s=%s:NoExecute applied", TaintKey, TaintValue))
+		return nil
+	}
+
+	drainCond := meta.FindStatusCondition(np.Status.Conditions, infrastructurev1alpha1.NodePartitioningConditionDrainCompleted)
+	if drainCond == nil || drainCond.Status != metav1.ConditionTrue {
+		if err := DrainNode(ctx, r.Client, np.Spec.NodeName); err != nil {
+			if goerrors.Is(err, ErrDrainInProgress) {
 				meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
 					Type:               infrastructurev1alpha1.NodePartitioningConditionDrainCompleted,
-					Status:             metav1.ConditionTrue,
-					Reason:             "AlreadyInDesiredState",
-					Message:            "Node already has desired configuration",
-					ObservedGeneration: np.Generation,
-				})
-				meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
-					Type:               infrastructurev1alpha1.NodePartitioningConditionProfileApplied,
-					Status:             metav1.ConditionTrue,
-					Reason:             "AlreadyInDesiredState",
-					Message:            "Node resources match expected values",
-					ObservedGeneration: np.Generation,
-				})
-				meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
-					Type:               infrastructurev1alpha1.NodePartitioningConditionOperatorReady,
-					Status:             metav1.ConditionTrue,
-					Reason:             "AlreadyInDesiredState",
-					Message:            "Node resources match expected values",
-					ObservedGeneration: np.Generation,
-				})
-				meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
-					Type:               infrastructurev1alpha1.NodePartitioningConditionVerified,
-					Status:             metav1.ConditionTrue,
-					Reason:             "AlreadyInDesiredState",
-					Message:            "Node resources match expected configuration",
-					ObservedGeneration: np.Generation,
-				})
-
-				// Update current hash and move to succeeded
-				np.Status.CurrentHash = np.Spec.DesiredHash
-				r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseSucceeded)
-				if r.Recorder != nil {
-					r.Recorder.Event(np, corev1.EventTypeNormal, "AlreadyConfigured",
-						fmt.Sprintf("Node %s already in desired state, skipped drain/apply", np.Spec.NodeName))
-				}
-				return nil
-			}
-
-			// Resources don't match - proceed with partitioning
-			logger.Info("Node resources don't match expected, will partition",
-				"node", np.Spec.NodeName, "mismatches", mismatches)
-		}
-
-		// Transition to draining phase
-		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseDraining)
-		if r.Recorder != nil {
-			r.Recorder.Event(np, corev1.EventTypeNormal, "DrainStarted", fmt.Sprintf("Started draining node %s", np.Spec.NodeName))
-		}
-		// Return to allow status update and requeue
-		return nil
-
-	case infrastructurev1alpha1.NodePartitioningPhaseDraining:
-		// Check if already cordoned
-		cordonedCond := meta.FindStatusCondition(np.Status.Conditions, infrastructurev1alpha1.NodePartitioningConditionNodeCordoned)
-		if cordonedCond == nil || cordonedCond.Status != metav1.ConditionTrue {
-			// Cordon node
-			if err := CordonNode(ctx, r.Client, np.Spec.NodeName); err != nil {
-				return fmt.Errorf("failed to cordon node: %w", err)
-			}
-			meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
-				Type:               infrastructurev1alpha1.NodePartitioningConditionNodeCordoned,
-				Status:             metav1.ConditionTrue,
-				Reason:             "CordonSucceeded",
-				Message:            "Node cordoned successfully",
-				ObservedGeneration: np.Generation,
-			})
-			// Requeue to continue in next reconcile
-			return nil
-		}
-
-		// Check if already tainted
-		taintedCond := meta.FindStatusCondition(np.Status.Conditions, infrastructurev1alpha1.NodePartitioningConditionNodeTainted)
-		if taintedCond == nil || taintedCond.Status != metav1.ConditionTrue {
-			// Apply taint
-			if err := TaintNode(ctx, r.Client, np.Spec.NodeName); err != nil {
-				return fmt.Errorf("failed to taint node: %w", err)
-			}
-			meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
-				Type:               infrastructurev1alpha1.NodePartitioningConditionNodeTainted,
-				Status:             metav1.ConditionTrue,
-				Reason:             "TaintApplied",
-				Message:            fmt.Sprintf("Taint %s=%s:NoExecute applied", TaintKey, TaintValue),
-				ObservedGeneration: np.Generation,
-			})
-			// Requeue to continue in next reconcile
-			return nil
-		}
-
-		// Check if drain is already completed
-		drainedCond := meta.FindStatusCondition(np.Status.Conditions, infrastructurev1alpha1.NodePartitioningConditionDrainCompleted)
-		if drainedCond == nil || drainedCond.Status != metav1.ConditionTrue {
-			// Drain node (this is now idempotent and fast)
-			err := DrainNode(ctx, r.Client, np.Spec.NodeName)
-			if err != nil {
-				// Check if this is a "drain in progress" error or an actual failure
-				if goerrors.Is(err, ErrDrainInProgress) {
-					// Drain is still in progress - set condition to false and wait
-					meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
-						Type:               infrastructurev1alpha1.NodePartitioningConditionDrainCompleted,
-						Status:             metav1.ConditionFalse,
-						Reason:             "DrainInProgress",
-						Message:            err.Error(),
-						ObservedGeneration: np.Generation,
-					})
-					// Return nil to requeue and wait for pods to be evicted
-					return nil
-				}
-				// Actual error - return it to trigger failure
-				return fmt.Errorf("failed to drain node: %w", err)
-			}
-
-			// Drain succeeded
-			meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
-				Type:               infrastructurev1alpha1.NodePartitioningConditionDrainCompleted,
-				Status:             metav1.ConditionTrue,
-				Reason:             "DrainSucceeded",
-				Message:            "All non-tolerated pods evicted successfully",
-				ObservedGeneration: np.Generation,
-			})
-			if r.Recorder != nil {
-				r.Recorder.Event(np, corev1.EventTypeNormal, "DrainCompleted", fmt.Sprintf("Node %s drained successfully", np.Spec.NodeName))
-			}
-			// Requeue to continue in next reconcile
-			return nil
-		}
-
-		// All drain steps complete, move to applying phase
-		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseApplying)
-		return nil
-
-	case infrastructurev1alpha1.NodePartitioningPhaseApplying:
-		// Check if profile already applied
-		profileAppliedCond := meta.FindStatusCondition(np.Status.Conditions, infrastructurev1alpha1.NodePartitioningConditionProfileApplied)
-		if profileAppliedCond == nil || profileAppliedCond.Status != metav1.ConditionTrue {
-			// Apply profile to node (label)
-			if err := ApplyProfileToNode(ctx, r.Client, np.Spec.NodeName, np.Spec.Profile.DcmProfileName); err != nil {
-				return fmt.Errorf("failed to apply profile to node: %w", err)
-			}
-
-			meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
-				Type:               infrastructurev1alpha1.NodePartitioningConditionProfileApplied,
-				Status:             metav1.ConditionTrue,
-				Reason:             "DCMConfigUpdated",
-				Message:            fmt.Sprintf("DCM profile %s applied to node", np.Spec.Profile.DcmProfileName),
-				ObservedGeneration: np.Generation,
-			})
-
-			if r.Recorder != nil {
-				r.Recorder.Event(np, corev1.EventTypeNormal, "ProfileApplied", fmt.Sprintf("Applied profile %s to node %s", np.Spec.Profile.DcmProfileName, np.Spec.NodeName))
-			}
-			// Requeue to continue in next reconcile
-			return nil
-		}
-
-		// Profile applied, move to waiting for operator
-		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseWaitingOperator)
-		return nil
-
-	case infrastructurev1alpha1.NodePartitioningPhaseWaitingOperator:
-		// Check if resources already match expected - if so, skip directly to succeeded
-		// Use Capacity (not Allocatable) because it reflects hardware configuration
-		if len(np.Spec.Profile.ExpectedResources) > 0 {
-			resourcesMatch := true
-			var mismatches []string
-
-			for resourceName, expectedQty := range np.Spec.Profile.ExpectedResources {
-				actualQty, exists := obs.Node.Status.Capacity[corev1.ResourceName(resourceName)]
-				if !exists {
-					resourcesMatch = false
-					mismatches = append(mismatches, fmt.Sprintf("%s: not found", resourceName))
-					continue
-				}
-				if !actualQty.Equal(expectedQty) {
-					resourcesMatch = false
-					mismatches = append(mismatches, fmt.Sprintf("%s: got %s (expected %s)",
-						resourceName, actualQty.String(), expectedQty.String()))
-				}
-			}
-
-			if resourcesMatch {
-				// Resources already match - skip to succeeded
-				logger.Info("Node resources already match expected while waiting for operator, skipping to succeeded",
-					"node", np.Spec.NodeName)
-
-				// Set operator ready condition
-				meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
-					Type:               infrastructurev1alpha1.NodePartitioningConditionOperatorReady,
-					Status:             metav1.ConditionTrue,
-					Reason:             "AlreadyInDesiredState",
-					Message:            "Node resources match expected values",
-					ObservedGeneration: np.Generation,
-				})
-				meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
-					Type:               infrastructurev1alpha1.NodePartitioningConditionVerified,
-					Status:             metav1.ConditionTrue,
-					Reason:             "AlreadyInDesiredState",
-					Message:            "Node resources match expected configuration",
-					ObservedGeneration: np.Generation,
-				})
-
-				// Untaint and uncordon node
-				if err := UntaintNode(ctx, r.Client, np.Spec.NodeName); err != nil {
-					return fmt.Errorf("failed to untaint node: %w", err)
-				}
-
-				if err := UncordonNode(ctx, r.Client, np.Spec.NodeName); err != nil {
-					return fmt.Errorf("failed to uncordon node: %w", err)
-				}
-
-				// Update current hash and move to succeeded
-				np.Status.CurrentHash = np.Spec.DesiredHash
-				r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseSucceeded)
-				if r.Recorder != nil {
-					r.Recorder.Event(np, corev1.EventTypeNormal, "AlreadyConfigured",
-						fmt.Sprintf("Node %s already in desired state", np.Spec.NodeName))
-				}
-				return nil
-			}
-
-			// Resources don't match yet - wait for DCM
-			logger.V(1).Info("Resources don't match yet, waiting for DCM",
-				"node", np.Spec.NodeName, "mismatches", mismatches)
-		}
-
-		// Check DCM profile application state from node label
-		switch obs.DCMProfileState {
-		case "", "processing":
-			// DCM is still processing the profile
-			meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
-				Type:               infrastructurev1alpha1.NodePartitioningConditionOperatorReady,
-				Status:             metav1.ConditionFalse,
-				Reason:             "DCMProcessing",
-				Message:            "Waiting for DCM to apply GPU partitioning profile",
-				ObservedGeneration: np.Generation,
-			})
-			// Requeue - will be triggered by DCM state label changes
-			return nil
-
-		case "success":
-			// DCM successfully applied the profile
-			meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
-				Type:               infrastructurev1alpha1.NodePartitioningConditionOperatorReady,
-				Status:             metav1.ConditionTrue,
-				Reason:             "DCMSucceeded",
-				Message:            "DCM successfully applied GPU partitioning profile",
-				ObservedGeneration: np.Generation,
-			})
-
-			// Untaint and uncordon node before verification
-			if err := UntaintNode(ctx, r.Client, np.Spec.NodeName); err != nil {
-				return fmt.Errorf("failed to untaint node: %w", err)
-			}
-
-			if err := UncordonNode(ctx, r.Client, np.Spec.NodeName); err != nil {
-				return fmt.Errorf("failed to uncordon node: %w", err)
-			}
-
-			// Move to verifying
-			r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseVerifying)
-			return nil
-
-		case "failed":
-			// DCM failed to apply the profile
-			meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
-				Type:               infrastructurev1alpha1.NodePartitioningConditionOperatorReady,
-				Status:             metav1.ConditionFalse,
-				Reason:             "DCMFailed",
-				Message:            "DCM failed to apply GPU partitioning profile",
-				ObservedGeneration: np.Generation,
-			})
-
-			// Untaint and uncordon node to restore normal operation
-			if err := UntaintNode(ctx, r.Client, np.Spec.NodeName); err != nil {
-				logger.Error(err, "Failed to untaint node after DCM failure", "node", np.Spec.NodeName)
-			}
-
-			if err := UncordonNode(ctx, r.Client, np.Spec.NodeName); err != nil {
-				logger.Error(err, "Failed to uncordon node after DCM failure", "node", np.Spec.NodeName)
-			}
-
-			// Transition to Failed phase
-			if r.Recorder != nil {
-				r.Recorder.Event(np, corev1.EventTypeWarning, "DCMFailed",
-					fmt.Sprintf("DCM failed to apply profile to node %s", np.Spec.NodeName))
-			}
-			r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseFailed)
-			return nil
-
-		default:
-			// Unknown state
-			logger.Info("Unknown DCM profile state", "state", obs.DCMProfileState, "node", np.Spec.NodeName)
-			meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
-				Type:               infrastructurev1alpha1.NodePartitioningConditionOperatorReady,
-				Status:             metav1.ConditionFalse,
-				Reason:             "UnknownDCMState",
-				Message:            fmt.Sprintf("Unknown DCM profile state: %s", obs.DCMProfileState),
-				ObservedGeneration: np.Generation,
-			})
-			return nil
-		}
-
-	case infrastructurev1alpha1.NodePartitioningPhaseVerifying:
-		// Verify that the DCM label is correctly applied
-		expectedLabel := np.Spec.Profile.DcmProfileName
-		if obs.Node.Labels[DCMNodeLabelKey] != expectedLabel {
-			meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
-				Type:               infrastructurev1alpha1.NodePartitioningConditionVerified,
-				Status:             metav1.ConditionFalse,
-				Reason:             "DCMLabelMissing",
-				Message:            fmt.Sprintf("DCM profile label %q not found on node", expectedLabel),
-				ObservedGeneration: np.Generation,
-			})
-			// Requeue to retry
-			return nil
-		}
-
-		// Verify that allocatable GPU resources match expected resources
-		if len(np.Spec.Profile.ExpectedResources) > 0 {
-			// Check each expected resource
-			var mismatches []string
-			for resourceName, expectedQty := range np.Spec.Profile.ExpectedResources {
-				actualQty, exists := obs.Node.Status.Allocatable[corev1.ResourceName(resourceName)]
-				if !exists {
-					mismatches = append(mismatches, fmt.Sprintf("%s: not found (expected %s)", resourceName, expectedQty.String()))
-					continue
-				}
-				if !actualQty.Equal(expectedQty) {
-					mismatches = append(mismatches, fmt.Sprintf("%s: got %s (expected %s)", resourceName, actualQty.String(), expectedQty.String()))
-				}
-			}
-
-			if len(mismatches) > 0 {
-				meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
-					Type:               infrastructurev1alpha1.NodePartitioningConditionVerified,
 					Status:             metav1.ConditionFalse,
-					Reason:             "ResourceMismatch",
-					Message:            fmt.Sprintf("Resources don't match expected: %v", mismatches),
+					Reason:             "DrainInProgress",
+					Message:            err.Error(),
 					ObservedGeneration: np.Generation,
 				})
-				// Requeue to retry - will be triggered by node allocatable changes
 				return nil
 			}
-		} else {
-			// If no expected resources specified, just check that GPU resources exist
-			hasGPUResources := false
-			for key := range obs.Node.Status.Allocatable {
-				if key.String() == "amd.com/gpu" {
-					hasGPUResources = true
-					break
-				}
-			}
-
-			if !hasGPUResources {
-				meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
-					Type:               infrastructurev1alpha1.NodePartitioningConditionVerified,
-					Status:             metav1.ConditionFalse,
-					Reason:             "GPUResourcesNotFound",
-					Message:            "GPU resources not yet available on node",
-					ObservedGeneration: np.Generation,
-				})
-				// Requeue to retry - will be triggered by node allocatable changes
-				return nil
-			}
+			return fmt.Errorf("failed to drain node: %w", err)
 		}
 
-		// Verification passed
 		meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
-			Type:               infrastructurev1alpha1.NodePartitioningConditionVerified,
+			Type:               infrastructurev1alpha1.NodePartitioningConditionDrainCompleted,
 			Status:             metav1.ConditionTrue,
-			Reason:             "VerificationSucceeded",
-			Message:            "Node verification passed - all resources match expected values",
+			Reason:             "DrainSucceeded",
+			Message:            "All non-tolerated pods evicted successfully",
+			ObservedGeneration: np.Generation,
+		})
+		if r.Recorder != nil {
+			r.Recorder.Event(np, corev1.EventTypeNormal, "DrainCompleted", fmt.Sprintf("Node %s drained successfully", np.Spec.NodeName))
+		}
+		return nil
+	}
+
+	r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseApplying)
+	return nil
+}
+
+func (r *NodePartitioningReconciler) handleApplyingPhase(ctx context.Context, np *infrastructurev1alpha1.NodePartitioning) error {
+	cond := meta.FindStatusCondition(np.Status.Conditions, infrastructurev1alpha1.NodePartitioningConditionProfileApplied)
+	if cond == nil || cond.Status != metav1.ConditionTrue {
+		if err := ApplyProfileToNode(ctx, r.Client, np.Spec.NodeName, np.Spec.Profile.DcmProfileName); err != nil {
+			return fmt.Errorf("failed to apply profile to node: %w", err)
+		}
+
+		meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
+			Type:               infrastructurev1alpha1.NodePartitioningConditionProfileApplied,
+			Status:             metav1.ConditionTrue,
+			Reason:             "DCMConfigUpdated",
+			Message:            fmt.Sprintf("DCM profile %s applied to node", np.Spec.Profile.DcmProfileName),
 			ObservedGeneration: np.Generation,
 		})
 
 		if r.Recorder != nil {
-			r.Recorder.Event(np, corev1.EventTypeNormal, "VerificationSucceeded", fmt.Sprintf("Node %s verified successfully", np.Spec.NodeName))
+			r.Recorder.Event(np, corev1.EventTypeNormal, "ProfileApplied", fmt.Sprintf("Applied profile %s to node %s", np.Spec.Profile.DcmProfileName, np.Spec.NodeName))
 		}
+		return nil
+	}
 
-		// Untaint and uncordon
+	r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseWaitingOperator)
+	return nil
+}
+
+func (r *NodePartitioningReconciler) handleWaitingOperatorPhase(ctx context.Context, np *infrastructurev1alpha1.NodePartitioning, obs *NodePartitioningObservation) error {
+	logger := log.FromContext(ctx)
+
+	if matched, mismatches := capacityMatchesExpected(np, obs.Node); matched {
+		logger.Info("Node resources already match expected while waiting for operator, skipping to succeeded",
+			"node", np.Spec.NodeName)
+
+		meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
+			Type:               infrastructurev1alpha1.NodePartitioningConditionOperatorReady,
+			Status:             metav1.ConditionTrue,
+			Reason:             "AlreadyInDesiredState",
+			Message:            "Node resources match expected values",
+			ObservedGeneration: np.Generation,
+		})
+		meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
+			Type:               infrastructurev1alpha1.NodePartitioningConditionVerified,
+			Status:             metav1.ConditionTrue,
+			Reason:             "AlreadyInDesiredState",
+			Message:            "Node resources match expected configuration",
+			ObservedGeneration: np.Generation,
+		})
+
 		if err := UntaintNode(ctx, r.Client, np.Spec.NodeName); err != nil {
 			return fmt.Errorf("failed to untaint node: %w", err)
 		}
-
 		if err := UncordonNode(ctx, r.Client, np.Spec.NodeName); err != nil {
 			return fmt.Errorf("failed to uncordon node: %w", err)
 		}
 
-		// Update current hash to match desired
 		np.Status.CurrentHash = np.Spec.DesiredHash
-
-		// Move to succeeded
 		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseSucceeded)
 		if r.Recorder != nil {
-			r.Recorder.Event(np, corev1.EventTypeNormal, "NodeSucceeded", fmt.Sprintf("Node %s partitioning completed successfully", np.Spec.NodeName))
+			r.Recorder.Event(np, corev1.EventTypeNormal, "AlreadyConfigured",
+				fmt.Sprintf("Node %s already in desired state", np.Spec.NodeName))
 		}
 		return nil
-
-	case infrastructurev1alpha1.NodePartitioningPhaseFailed:
-		// Phase 1: Stay in failed state, no retry logic
-		logger.Info("NodePartitioning is in failed state", "node", np.Spec.NodeName)
-		return nil
-
-	case infrastructurev1alpha1.NodePartitioningPhaseSkipped:
-		// Stay in skipped state (dry-run mode)
-		// If dryRun is disabled, transition to pending to actually execute
-		if !np.Spec.DryRun {
-			logger.Info("DryRun disabled, transitioning to pending to execute", "node", np.Spec.NodeName)
-			r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhasePending)
-		}
-		return nil
-
-	case infrastructurev1alpha1.NodePartitioningPhaseSucceeded:
-		// Check if desired hash changed (need to re-partition)
-		if np.Status.CurrentHash != np.Spec.DesiredHash {
-			logger.Info("Desired state changed, re-partitioning", "node", np.Spec.NodeName)
-
-			// Clear all conditions so we start fresh
-			np.Status.Conditions = nil
-
-			r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhasePending)
-		}
-		return nil
-
-	default:
-		return fmt.Errorf("unknown phase: %s", np.Status.Phase)
+	} else if len(mismatches) > 0 {
+		logger.V(1).Info("Resources don't match yet, waiting for DCM",
+			"node", np.Spec.NodeName, "mismatches", mismatches)
 	}
+
+	switch obs.DCMProfileState {
+	case "", "processing":
+		meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
+			Type:               infrastructurev1alpha1.NodePartitioningConditionOperatorReady,
+			Status:             metav1.ConditionFalse,
+			Reason:             "DCMProcessing",
+			Message:            "Waiting for DCM to apply GPU partitioning profile",
+			ObservedGeneration: np.Generation,
+		})
+		return nil
+	case "success":
+		meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
+			Type:               infrastructurev1alpha1.NodePartitioningConditionOperatorReady,
+			Status:             metav1.ConditionTrue,
+			Reason:             "DCMSucceeded",
+			Message:            "DCM successfully applied GPU partitioning profile",
+			ObservedGeneration: np.Generation,
+		})
+
+		if err := UntaintNode(ctx, r.Client, np.Spec.NodeName); err != nil {
+			return fmt.Errorf("failed to untaint node: %w", err)
+		}
+		if err := UncordonNode(ctx, r.Client, np.Spec.NodeName); err != nil {
+			return fmt.Errorf("failed to uncordon node: %w", err)
+		}
+
+		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseVerifying)
+		return nil
+	case "failed":
+		meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
+			Type:               infrastructurev1alpha1.NodePartitioningConditionOperatorReady,
+			Status:             metav1.ConditionFalse,
+			Reason:             "DCMFailed",
+			Message:            "DCM failed to apply GPU partitioning profile",
+			ObservedGeneration: np.Generation,
+		})
+
+		if err := UntaintNode(ctx, r.Client, np.Spec.NodeName); err != nil {
+			logger.Error(err, "Failed to untaint node after DCM failure", "node", np.Spec.NodeName)
+		}
+		if err := UncordonNode(ctx, r.Client, np.Spec.NodeName); err != nil {
+			logger.Error(err, "Failed to uncordon node after DCM failure", "node", np.Spec.NodeName)
+		}
+
+		if r.Recorder != nil {
+			r.Recorder.Event(np, corev1.EventTypeWarning, "DCMFailed",
+				fmt.Sprintf("DCM failed to apply profile to node %s", np.Spec.NodeName))
+		}
+		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseFailed)
+		return nil
+	default:
+		logger.Info("Unknown DCM profile state", "state", obs.DCMProfileState, "node", np.Spec.NodeName)
+		meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
+			Type:               infrastructurev1alpha1.NodePartitioningConditionOperatorReady,
+			Status:             metav1.ConditionFalse,
+			Reason:             "UnknownDCMState",
+			Message:            fmt.Sprintf("Unknown DCM profile state: %s", obs.DCMProfileState),
+			ObservedGeneration: np.Generation,
+		})
+		return nil
+	}
+}
+
+func (r *NodePartitioningReconciler) handleVerifyingPhase(ctx context.Context, np *infrastructurev1alpha1.NodePartitioning, obs *NodePartitioningObservation) error {
+	expectedLabel := np.Spec.Profile.DcmProfileName
+	if obs.Node.Labels[DCMNodeLabelKey] != expectedLabel {
+		meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
+			Type:               infrastructurev1alpha1.NodePartitioningConditionVerified,
+			Status:             metav1.ConditionFalse,
+			Reason:             "DCMLabelMissing",
+			Message:            fmt.Sprintf("DCM profile label %q not found on node", expectedLabel),
+			ObservedGeneration: np.Generation,
+		})
+		return nil
+	}
+
+	if matched, mismatches := allocatableMatchesExpected(np, obs.Node); !matched {
+		if len(mismatches) > 0 {
+			meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
+				Type:               infrastructurev1alpha1.NodePartitioningConditionVerified,
+				Status:             metav1.ConditionFalse,
+				Reason:             "ResourceMismatch",
+				Message:            fmt.Sprintf("Resources don't match expected: %v", mismatches),
+				ObservedGeneration: np.Generation,
+			})
+			return nil
+		}
+		meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
+			Type:               infrastructurev1alpha1.NodePartitioningConditionVerified,
+			Status:             metav1.ConditionFalse,
+			Reason:             "GPUResourcesNotFound",
+			Message:            "GPU resources not yet available on node",
+			ObservedGeneration: np.Generation,
+		})
+		return nil
+	}
+
+	meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
+		Type:               infrastructurev1alpha1.NodePartitioningConditionVerified,
+		Status:             metav1.ConditionTrue,
+		Reason:             "VerificationSucceeded",
+		Message:            "Node verification passed - all resources match expected values",
+		ObservedGeneration: np.Generation,
+	})
+
+	if r.Recorder != nil {
+		r.Recorder.Event(np, corev1.EventTypeNormal, "VerificationSucceeded", fmt.Sprintf("Node %s verified successfully", np.Spec.NodeName))
+	}
+
+	if err := UntaintNode(ctx, r.Client, np.Spec.NodeName); err != nil {
+		return fmt.Errorf("failed to untaint node: %w", err)
+	}
+	if err := UncordonNode(ctx, r.Client, np.Spec.NodeName); err != nil {
+		return fmt.Errorf("failed to uncordon node: %w", err)
+	}
+
+	np.Status.CurrentHash = np.Spec.DesiredHash
+	r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseSucceeded)
+	if r.Recorder != nil {
+		r.Recorder.Event(np, corev1.EventTypeNormal, "NodeSucceeded", fmt.Sprintf("Node %s partitioning completed successfully", np.Spec.NodeName))
+	}
+	return nil
+}
+
+func (r *NodePartitioningReconciler) handleFailedPhase(ctx context.Context, np *infrastructurev1alpha1.NodePartitioning) error {
+	logger := log.FromContext(ctx)
+	logger.Info("NodePartitioning is in failed state", "node", np.Spec.NodeName)
+	return nil
+}
+
+func (r *NodePartitioningReconciler) handleSkippedPhase(ctx context.Context, np *infrastructurev1alpha1.NodePartitioning) error {
+	logger := log.FromContext(ctx)
+	if !np.Spec.DryRun {
+		logger.Info("DryRun disabled, transitioning to pending to execute", "node", np.Spec.NodeName)
+		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhasePending)
+	}
+	return nil
+}
+
+func (r *NodePartitioningReconciler) handleSucceededPhase(ctx context.Context, np *infrastructurev1alpha1.NodePartitioning) error {
+	logger := log.FromContext(ctx)
+	if np.Status.CurrentHash != np.Spec.DesiredHash {
+		logger.Info("Desired state changed, re-partitioning", "node", np.Spec.NodeName)
+		np.Status.Conditions = nil
+		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhasePending)
+	}
+	return nil
+}
+
+func capacityMatchesExpected(np *infrastructurev1alpha1.NodePartitioning, node *corev1.Node) (bool, []string) {
+	if node == nil || len(np.Spec.Profile.ExpectedResources) == 0 {
+		return false, nil
+	}
+
+	mismatches := make([]string, 0)
+	for resourceName, expectedQty := range np.Spec.Profile.ExpectedResources {
+		actualQty, exists := node.Status.Capacity[corev1.ResourceName(resourceName)]
+		if !exists {
+			mismatches = append(mismatches, fmt.Sprintf("%s: not found", resourceName))
+			continue
+		}
+		if !actualQty.Equal(expectedQty) {
+			mismatches = append(mismatches, fmt.Sprintf("%s: got %s (expected %s)",
+				resourceName, actualQty.String(), expectedQty.String()))
+		}
+	}
+
+	return len(mismatches) == 0, mismatches
+}
+
+func allocatableMatchesExpected(np *infrastructurev1alpha1.NodePartitioning, node *corev1.Node) (bool, []string) {
+	if node == nil {
+		return false, nil
+	}
+
+	if len(np.Spec.Profile.ExpectedResources) == 0 {
+		for key := range node.Status.Allocatable {
+			if key.String() == "amd.com/gpu" {
+				return true, nil
+			}
+		}
+		return false, nil
+	}
+
+	mismatches := make([]string, 0)
+	for resourceName, expectedQty := range np.Spec.Profile.ExpectedResources {
+		actualQty, exists := node.Status.Allocatable[corev1.ResourceName(resourceName)]
+		if !exists {
+			mismatches = append(mismatches, fmt.Sprintf("%s: not found (expected %s)", resourceName, expectedQty.String()))
+			continue
+		}
+		if !actualQty.Equal(expectedQty) {
+			mismatches = append(mismatches, fmt.Sprintf("%s: got %s (expected %s)", resourceName, actualQty.String(), expectedQty.String()))
+		}
+	}
+
+	return len(mismatches) == 0, mismatches
 }
 
 // setPhase updates the phase and adds a history entry.
@@ -789,7 +702,7 @@ func ApplyProfileToNode(ctx context.Context, c client.Client, nodeName string, p
 		}
 
 		currentProfile, hasProfile := node.Labels[DCMNodeLabelKey]
-		currentState, _ := node.Labels[DCMNodeStateLabelKey]
+		currentState := node.Labels[DCMNodeStateLabelKey]
 
 		if hasProfile && currentProfile == profileName && currentState == "" {
 			logger.V(1).Info("Node already has correct DCM profile label and state is cleared",

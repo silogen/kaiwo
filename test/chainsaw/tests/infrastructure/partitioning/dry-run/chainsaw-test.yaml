@@ -5,6 +5,14 @@ metadata:
 spec:
   parallel: false
   steps:
+  - name: discover-nodes
+    try:
+    - script:
+        content: kubectl get nodes -l 'amd.com/gpu' -o jsonpath="{.items[0].metadata.name}"
+        outputs:
+        - name: gpu_node
+          value: ($stdout)
+
   - name: apply-dry-run-plan
     try:
     - apply:
@@ -35,7 +43,7 @@ spec:
     - wait:
         apiVersion: infrastructure.silogen.ai/v1alpha1
         kind: NodePartitioning
-        name: plan-dry-run-($values.amd_gpu_partitioning_node_name)
+        name: plan-dry-run-($gpu_node)
         timeout: 1m
         for:
           jsonPath:
@@ -56,7 +64,7 @@ spec:
           apiVersion: infrastructure.silogen.ai/v1alpha1
           kind: NodePartitioning
           metadata:
-            name: plan-dry-run-($values.amd_gpu_partitioning_node_name)
+            name: plan-dry-run-($gpu_node)
           status:
             conditions:
             - type: DryRun
