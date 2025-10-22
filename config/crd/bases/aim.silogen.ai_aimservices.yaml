@@ -673,6 +673,36 @@ spec:
                       reference, when known.
                     type: string
                 type: object
+              resolvedTemplateCache:
+                description: ResolvedTemplateCache captures metadata about the template
+                  cache being used, if any.
+                properties:
+                  kind:
+                    description: Kind is the fully-qualified kind of the resolved
+                      reference, when known.
+                    type: string
+                  name:
+                    description: Name is the resource name that satisfied the reference.
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace identifies where the resource was found when namespace-scoped.
+                      Empty indicates a cluster-scoped resource.
+                    type: string
+                  scope:
+                    description: Scope indicates whether the resolved resource was
+                      namespace or cluster scoped.
+                    enum:
+                    - Namespace
+                    - Cluster
+                    - Merged
+                    - Unknown
+                    type: string
+                  uid:
+                    description: UID captures the unique identifier of the resolved
+                      reference, when known.
+                    type: string
+                type: object
               routing:
                 description: Routing surfaces information about the configured HTTP
                   routing, when enabled.

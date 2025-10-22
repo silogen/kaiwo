@@ -57,6 +57,11 @@ spec:
           spec:
             description: AIMTemplateCacheSpec defines the desired state of AIMTemplateCache
             properties:
+              downloadImage:
+                description: |-
+                  The image that should be used to download the models
+                  If not set the model cache controller will decide
+                type: string
               env:
                 description: |-
                   Env specifies environment variables to use for authentication when downloading models.
@@ -200,14 +205,50 @@ spec:
                   type: object
                   x-kubernetes-map-type: atomic
                 type: array
+              modelSources:
+                description: ModelSources are set by the template that wants these
+                  cached
+                items:
+                  description: |-
+                    AIMModelSource describes a model artifact that must be downloaded for inference.
+                    Discovery extracts these from the container's configuration to enable caching and validation.
+                  properties:
+                    name:
+                      description: |-
+                        Name is a human-readable identifier for this model artifact.
+                        May be empty if the source represents the primary model.
+                      type: string
+                    size:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      description: |-
+                        Size is the expected storage space required for this model artifact.
+                        Used for PVC sizing and capacity planning during cache creation.
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    sourceUri:
+                      description: |-
+                        SourceURI is the location from which the model should be downloaded.
+                        Supported schemes:
+                        - hf://org/model - Hugging Face Hub model
+                        - s3://bucket/key - S3-compatible storage
+                      pattern: ^(hf|s3)://[^ \t\r\n]+$
+                      type: string
+                  required:
+                  - size
+                  - sourceUri
+                  type: object
+                type: array
               runtimeConfigName:
                 default: default
                 description: RuntimeConfigName references the AIM runtime configuration
                   (by name) to use for this template cache.
                 type: string
               storageClassName:
-                description: StorageClassName is the name for the storage class to
-                  use for this cache
+                description: |-
+                  StorageClassName is the name for the storage class to use for this cache
+                  If not set the cluster default will be used
                 type: string
               templateRef:
                 description: |-

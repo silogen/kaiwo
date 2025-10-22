@@ -1,0 +1,50 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMRuntimeConfig
+metadata:
+  name: default
+spec:
+  defaultStorageClassName: "rwx-nfs"
+---
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMModel
+metadata:
+  name: aimdummy-model
+spec:
+  image: ghcr.io/silogen/aim-dummy:0.1.3
+  defaultServiceTemplate: aimdummy-template
+  resources:
+    limits:
+      cpu: "2"
+      memory: 512M
+    requests:
+      cpu: "100m"
+      memory: 128M
+---
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMServiceTemplate
+metadata:
+  name: aimdummy-template
+spec:
+  modelName: aimdummy-model
+  metric: latency
+  caching:
+    enabled: true
+---
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: smollm-chat
+  labels:
+    team: red 
+spec:
+  model: 
+    ref: aimdummy-model
+  templateRef: aimdummy-template
+  cacheModel: true
+  replicas: 1
+  routing:
+    enabled: true
+    gatewayRef:
+      name: inference-gateway
+      namespace: gateways
+    pathTemplate: "/{.metadata.namespace}/{.metadata.labels['team']}/chat"

@@ -1,0 +1,13 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMTemplateCache
+metadata:
+  name: integration-cache-precreated-private
+spec:
+  templateRef: aim-meta-llama-llama-3-2-1b-instruct-0-1x-mi300x-lat-fp16-2bab
+  storageClassName: rwx-nfs
+  env:
+  - name: HF_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: hf-token
+        key: token
