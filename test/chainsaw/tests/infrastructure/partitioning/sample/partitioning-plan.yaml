@@ -3,7 +3,7 @@ kind: PartitioningPlan
 metadata:
   name: test
 spec:
-  dryRun: true
+  dryRun: false
   rollout:
     maxParallel: 1
     maxUnavailable: 1

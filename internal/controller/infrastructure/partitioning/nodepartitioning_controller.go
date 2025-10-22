@@ -215,11 +215,61 @@ func (r *NodePartitioningReconciler) executeStateMachine(
 			logger.Info("Dry-run mode enabled, skipping actual operations", "node", np.Spec.NodeName)
 			r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseSkipped)
 
+			// Set DryRun condition
 			meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
 				Type:               "DryRun",
 				Status:             metav1.ConditionTrue,
 				Reason:             "DryRunEnabled",
 				Message:            "Dry-run mode: no actual changes will be made",
+				ObservedGeneration: np.Generation,
+			})
+
+			// Set all operational conditions to reflect they were skipped
+			meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
+				Type:               infrastructurev1alpha1.NodePartitioningConditionNodeCordoned,
+				Status:             metav1.ConditionFalse,
+				Reason:             "DryRunSkipped",
+				Message:            "Dry-run mode: node cordon skipped",
+				ObservedGeneration: np.Generation,
+			})
+
+			meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
+				Type:               infrastructurev1alpha1.NodePartitioningConditionNodeTainted,
+				Status:             metav1.ConditionFalse,
+				Reason:             "DryRunSkipped",
+				Message:            "Dry-run mode: node taint skipped",
+				ObservedGeneration: np.Generation,
+			})
+
+			meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
+				Type:               infrastructurev1alpha1.NodePartitioningConditionDrainCompleted,
+				Status:             metav1.ConditionFalse,
+				Reason:             "DryRunSkipped",
+				Message:            "Dry-run mode: node drain skipped",
+				ObservedGeneration: np.Generation,
+			})
+
+			meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
+				Type:               infrastructurev1alpha1.NodePartitioningConditionProfileApplied,
+				Status:             metav1.ConditionFalse,
+				Reason:             "DryRunSkipped",
+				Message:            fmt.Sprintf("Dry-run mode: DCM profile %s application skipped", np.Spec.Profile.DcmProfileName),
+				ObservedGeneration: np.Generation,
+			})
+
+			meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
+				Type:               infrastructurev1alpha1.NodePartitioningConditionOperatorReady,
+				Status:             metav1.ConditionFalse,
+				Reason:             "DryRunSkipped",
+				Message:            "Dry-run mode: operator ready check skipped",
+				ObservedGeneration: np.Generation,
+			})
+
+			meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
+				Type:               infrastructurev1alpha1.NodePartitioningConditionVerified,
+				Status:             metav1.ConditionFalse,
+				Reason:             "DryRunSkipped",
+				Message:            "Dry-run mode: verification skipped",
 				ObservedGeneration: np.Generation,
 			})
 

@@ -50,6 +50,36 @@ spec:
           status:
             summary:
               skipped: 1
+    # Validate that all operational conditions are set to False with DryRunSkipped reason
+    - assert:
+        resource:
+          apiVersion: infrastructure.silogen.ai/v1alpha1
+          kind: NodePartitioning
+          metadata:
+            name: plan-dry-run-($values.amd_gpu_partitioning_node_name)
+          status:
+            conditions:
+            - type: DryRun
+              status: "True"
+              reason: DryRunEnabled
+            - type: NodeCordoned
+              status: "False"
+              reason: DryRunSkipped
+            - type: NodeTainted
+              status: "False"
+              reason: DryRunSkipped
+            - type: DrainCompleted
+              status: "False"
+              reason: DryRunSkipped
+            - type: ProfileApplied
+              status: "False"
+              reason: DryRunSkipped
+            - type: OperatorReady
+              status: "False"
+              reason: DryRunSkipped
+            - type: Verified
+              status: "False"
+              reason: DryRunSkipped
     catch:
     - command:
         entrypoint: kaiwo-dev
