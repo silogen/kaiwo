@@ -133,15 +133,29 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Free disk space (preinstalled SDKs/tools)
+    - name: Free disk space
+      shell: bash
       run: |
-        sudo rm -rf /usr/local/lib/android    || true
-        sudo rm -rf /usr/share/dotnet         || true
-        sudo rm -rf /opt/ghc                  || true
-        sudo rm -rf /opt/hostedtoolcache      || true
-        sudo apt-get clean
-        docker system prune -af || true
-        df -h
+        set -euo pipefail
+
+        TARGETS=(
+          "/usr/local/lib/android"
+          "/usr/share/dotnet"
+          "/opt/ghc"
+          "/opt/hostedtoolcache"
+          "/usr/local/share/boost"
+          "/usr/local/share/powershell"
+          "/usr/share/swift"
+        )
+
+        echo "Deleting large preinstalled SDKs/tools in parallel..."
+        for d in "${TARGETS[@]}"; do
+          if [[ -e "$d" ]]; then
+            sudo rm -rf "$d" >/dev/null 2>&1 &
+          fi
+        done
+        wait
+
 
     - uses: actions/setup-go@v5
       with:
