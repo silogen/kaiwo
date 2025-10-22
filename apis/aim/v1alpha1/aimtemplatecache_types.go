@@ -48,7 +48,17 @@ type AIMTemplateCacheSpec struct {
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 
 	// StorageClassName is the name for the storage class to use for this cache
+	// If not set the cluster default will be used
+	// +optional
 	StorageClassName string `json:"storageClassName,omitempty"`
+
+	// The image that should be used to download the models
+	// If not set the model cache controller will decide
+	// +optional
+	DownloadImage string `json:"downloadImage,omitempty"`
+
+	// ModelSources are set by the template that wants these cached
+	ModelSources []AIMModelSource `json:"modelSources,omitempty"`
 
 	// RuntimeConfigName references the AIM runtime configuration (by name) to use for this template cache.
 	// +kubebuilder:default=default
@@ -142,6 +152,10 @@ type AIMTemplateCacheList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []AIMTemplateCache `json:"items"`
+}
+
+func (t *AIMTemplateCache) GetStatus() *AIMTemplateCacheStatus {
+	return &t.Status
 }
 
 func init() {
