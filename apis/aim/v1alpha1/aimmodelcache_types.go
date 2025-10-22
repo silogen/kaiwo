@@ -28,6 +28,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	DefaultDownloadImage = "kserve/storage-initializer:v0.16.0-rc0"
+)
+
 // AIMModelCacheSpec defines the desired state of AIMModelCache
 type AIMModelCacheSpec struct {
 	// SourceURI is the source of the model to be downloaded. This is the only
