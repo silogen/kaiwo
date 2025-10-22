@@ -29,13 +29,16 @@ import (
 	goerrors "errors"
 	"fmt"
 	"strings"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -48,12 +51,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	infrastructurev1alpha1 "github.com/silogen/kaiwo/apis/infrastructure/v1alpha1"
-	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
-)
-
-const (
-	nodePartitioningFieldOwner = "node-partitioning-controller"
 )
 
 // NodePartitioningReconciler reconciles a NodePartitioning object.
@@ -62,6 +60,12 @@ type NodePartitioningReconciler struct {
 	Scheme    *runtime.Scheme
 	Recorder  record.EventRecorder
 	Clientset kubernetes.Interface
+}
+
+type NodePartitioningObservation struct {
+	Node            *corev1.Node
+	DCMConfigMap    *corev1.ConfigMap
+	DCMProfileState string
 }
 
 // +kubebuilder:rbac:groups=infrastructure.silogen.ai,resources=nodepartitionings,verbs=get;list;watch;create;update;patch;delete
@@ -89,38 +93,32 @@ func (r *NodePartitioningReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	baseutils.Debug(logger, "Reconciling NodePartitioning", "name", np.Name, "node", np.Spec.NodeName, "phase", np.Status.Phase)
 
-	// Use framework orchestrator with closures
-	return controllerutils.Reconcile(ctx, controllerutils.ReconcileSpec[*infrastructurev1alpha1.NodePartitioning, infrastructurev1alpha1.NodePartitioningStatus]{
-		Client:     r.Client,
-		Scheme:     r.Scheme,
-		Object:     &np,
-		Recorder:   r.Recorder,
-		FieldOwner: nodePartitioningFieldOwner,
+	originalStatus := np.Status.DeepCopy()
+	if originalStatus == nil {
+		originalStatus = &infrastructurev1alpha1.NodePartitioningStatus{}
+	}
 
-		ObserveFn: func(ctx context.Context) (any, error) {
-			return r.observe(ctx, &np)
-		},
+	obs, observeErr := r.observe(ctx, &np)
+	errs := reconcileErrors{
+		ObserveErr: observeErr,
+	}
 
-		PlanFn: func(ctx context.Context, obs any) ([]client.Object, error) {
-			// NodePartitioning controller doesn't create child resources
-			// It performs direct operations on nodes
-			return nil, nil
-		},
+	if err := r.projectStatus(ctx, &np, obs, errs); err != nil {
+		if patchErr := patchNodePartitioningStatus(ctx, r.Client, &np, originalStatus); patchErr != nil {
+			logger.Error(patchErr, "Failed to patch status after projection error")
+		}
+		return ctrl.Result{}, err
+	}
 
-		ProjectFn: func(ctx context.Context, obs any, errs controllerutils.ReconcileErrors) error {
-			var o *NodePartitioningObservation
-			if obs != nil {
-				var ok bool
-				o, ok = obs.(*NodePartitioningObservation)
-				if !ok {
-					return fmt.Errorf("unexpected observation type %T", obs)
-				}
-			}
-			return r.projectStatus(ctx, &np, o, errs)
-		},
+	if err := patchNodePartitioningStatus(ctx, r.Client, &np, originalStatus); err != nil {
+		return ctrl.Result{}, err
+	}
 
-		FinalizeFn: nil, // Phase 1: No cleanup needed
-	})
+	if observeErr != nil {
+		return ctrl.Result{}, observeErr
+	}
+
+	return ctrl.Result{}, nil
 }
 
 // observe gathers current cluster state (read-only).
@@ -139,15 +137,6 @@ func (r *NodePartitioningReconciler) observe(ctx context.Context, np *infrastruc
 	}
 	obs.Node = &node
 
-	// Get DCM ConfigMap
-	dcmConfigMap, err := GetDCMConfigMap(ctx, r.Client)
-	if err != nil {
-		logger.Info("DCM ConfigMap not available", "error", err)
-		// Don't fail observation, just log
-	} else {
-		obs.DCMConfigMap = dcmConfigMap
-	}
-
 	// Check DCM profile application state from node label
 	obs.DCMProfileState = obs.Node.Labels[DCMNodeStateLabelKey]
 
@@ -159,7 +148,7 @@ func (r *NodePartitioningReconciler) projectStatus(
 	ctx context.Context,
 	np *infrastructurev1alpha1.NodePartitioning,
 	obs *NodePartitioningObservation,
-	errs controllerutils.ReconcileErrors,
+	errs reconcileErrors,
 ) error {
 	logger := log.FromContext(ctx)
 
@@ -169,7 +158,9 @@ func (r *NodePartitioningReconciler) projectStatus(
 	// Handle observation errors
 	if errs.ObserveErr != nil {
 		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseFailed)
-		controllerutils.EmitWarningEvent(r.Recorder, np, "ObservationFailed", fmt.Sprintf("Failed to observe cluster state: %v", errs.ObserveErr))
+		if r.Recorder != nil {
+			r.Recorder.Event(np, corev1.EventTypeWarning, "ObservationFailed", fmt.Sprintf("Failed to observe cluster state: %v", errs.ObserveErr))
+		}
 		return nil
 	}
 
@@ -179,7 +170,9 @@ func (r *NodePartitioningReconciler) projectStatus(
 
 	// Check if node exists
 	if obs.Node == nil {
-		controllerutils.EmitWarningEvent(r.Recorder, np, "NodeNotFound", fmt.Sprintf("Target node %s does not exist", np.Spec.NodeName))
+		if r.Recorder != nil {
+			r.Recorder.Event(np, corev1.EventTypeWarning, "NodeNotFound", fmt.Sprintf("Target node %s does not exist", np.Spec.NodeName))
+		}
 		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseFailed)
 		meta.SetStatusCondition(&np.Status.Conditions, metav1.Condition{
 			Type:               infrastructurev1alpha1.NodePartitioningConditionNodeCordoned,
@@ -193,7 +186,9 @@ func (r *NodePartitioningReconciler) projectStatus(
 
 	// Execute state machine
 	if err := r.executeStateMachine(ctx, np, obs); err != nil {
-		controllerutils.EmitWarningEvent(r.Recorder, np, "StateMachineFailed", fmt.Sprintf("State machine execution failed: %v", err))
+		if r.Recorder != nil {
+			r.Recorder.Event(np, corev1.EventTypeWarning, "StateMachineFailed", fmt.Sprintf("State machine execution failed: %v", err))
+		}
 		logger.Error(err, "State machine execution failed")
 		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseFailed)
 		return nil // Don't fail reconciliation, status is updated
@@ -275,9 +270,11 @@ func (r *NodePartitioningReconciler) executeStateMachine(
 				ObservedGeneration: np.Generation,
 			})
 
-			controllerutils.EmitNormalEvent(r.Recorder, np, "DryRunSkipped",
-				fmt.Sprintf("Dry-run: Would partition node %s with profile %s",
-					np.Spec.NodeName, np.Spec.Profile.DcmProfileName))
+			if r.Recorder != nil {
+				r.Recorder.Event(np, corev1.EventTypeNormal, "DryRunSkipped",
+					fmt.Sprintf("Dry-run: Would partition node %s with profile %s",
+						np.Spec.NodeName, np.Spec.Profile.DcmProfileName))
+			}
 		}
 		return nil
 	}
@@ -369,8 +366,10 @@ func (r *NodePartitioningReconciler) executeStateMachine(
 				// Update current hash and move to succeeded
 				np.Status.CurrentHash = np.Spec.DesiredHash
 				r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseSucceeded)
-				controllerutils.EmitNormalEvent(r.Recorder, np, "AlreadyConfigured",
-					fmt.Sprintf("Node %s already in desired state, skipped drain/apply", np.Spec.NodeName))
+				if r.Recorder != nil {
+					r.Recorder.Event(np, corev1.EventTypeNormal, "AlreadyConfigured",
+						fmt.Sprintf("Node %s already in desired state, skipped drain/apply", np.Spec.NodeName))
+				}
 				return nil
 			}
 
@@ -381,7 +380,9 @@ func (r *NodePartitioningReconciler) executeStateMachine(
 
 		// Transition to draining phase
 		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseDraining)
-		controllerutils.EmitNormalEvent(r.Recorder, np, "DrainStarted", fmt.Sprintf("Started draining node %s", np.Spec.NodeName))
+		if r.Recorder != nil {
+			r.Recorder.Event(np, corev1.EventTypeNormal, "DrainStarted", fmt.Sprintf("Started draining node %s", np.Spec.NodeName))
+		}
 		// Return to allow status update and requeue
 		return nil
 
@@ -426,7 +427,7 @@ func (r *NodePartitioningReconciler) executeStateMachine(
 		drainedCond := meta.FindStatusCondition(np.Status.Conditions, infrastructurev1alpha1.NodePartitioningConditionDrainCompleted)
 		if drainedCond == nil || drainedCond.Status != metav1.ConditionTrue {
 			// Drain node (this is now idempotent and fast)
-			err := DrainNode(ctx, r.Client, r.Clientset, np.Spec.NodeName)
+			err := DrainNode(ctx, r.Client, np.Spec.NodeName)
 			if err != nil {
 				// Check if this is a "drain in progress" error or an actual failure
 				if goerrors.Is(err, ErrDrainInProgress) {
@@ -453,7 +454,9 @@ func (r *NodePartitioningReconciler) executeStateMachine(
 				Message:            "All non-tolerated pods evicted successfully",
 				ObservedGeneration: np.Generation,
 			})
-			controllerutils.EmitNormalEvent(r.Recorder, np, "DrainCompleted", fmt.Sprintf("Node %s drained successfully", np.Spec.NodeName))
+			if r.Recorder != nil {
+				r.Recorder.Event(np, corev1.EventTypeNormal, "DrainCompleted", fmt.Sprintf("Node %s drained successfully", np.Spec.NodeName))
+			}
 			// Requeue to continue in next reconcile
 			return nil
 		}
@@ -466,14 +469,8 @@ func (r *NodePartitioningReconciler) executeStateMachine(
 		// Check if profile already applied
 		profileAppliedCond := meta.FindStatusCondition(np.Status.Conditions, infrastructurev1alpha1.NodePartitioningConditionProfileApplied)
 		if profileAppliedCond == nil || profileAppliedCond.Status != metav1.ConditionTrue {
-			// Ensure profile is in DCM ConfigMap
-			profileName, err := EnsureDCMProfileInConfigMap(ctx, r.Client, &np.Spec.Profile)
-			if err != nil {
-				return fmt.Errorf("failed to ensure DCM profile in ConfigMap: %w", err)
-			}
-
 			// Apply profile to node (label)
-			if err := ApplyProfileToNode(ctx, r.Client, np.Spec.NodeName, profileName); err != nil {
+			if err := ApplyProfileToNode(ctx, r.Client, np.Spec.NodeName, np.Spec.Profile.DcmProfileName); err != nil {
 				return fmt.Errorf("failed to apply profile to node: %w", err)
 			}
 
@@ -481,11 +478,13 @@ func (r *NodePartitioningReconciler) executeStateMachine(
 				Type:               infrastructurev1alpha1.NodePartitioningConditionProfileApplied,
 				Status:             metav1.ConditionTrue,
 				Reason:             "DCMConfigUpdated",
-				Message:            fmt.Sprintf("DCM profile %s applied to node", profileName),
+				Message:            fmt.Sprintf("DCM profile %s applied to node", np.Spec.Profile.DcmProfileName),
 				ObservedGeneration: np.Generation,
 			})
 
-			controllerutils.EmitNormalEvent(r.Recorder, np, "ProfileApplied", fmt.Sprintf("Applied profile %s to node %s", profileName, np.Spec.NodeName))
+			if r.Recorder != nil {
+				r.Recorder.Event(np, corev1.EventTypeNormal, "ProfileApplied", fmt.Sprintf("Applied profile %s to node %s", np.Spec.Profile.DcmProfileName, np.Spec.NodeName))
+			}
 			// Requeue to continue in next reconcile
 			return nil
 		}
@@ -548,8 +547,10 @@ func (r *NodePartitioningReconciler) executeStateMachine(
 				// Update current hash and move to succeeded
 				np.Status.CurrentHash = np.Spec.DesiredHash
 				r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseSucceeded)
-				controllerutils.EmitNormalEvent(r.Recorder, np, "AlreadyConfigured",
-					fmt.Sprintf("Node %s already in desired state", np.Spec.NodeName))
+				if r.Recorder != nil {
+					r.Recorder.Event(np, corev1.EventTypeNormal, "AlreadyConfigured",
+						fmt.Sprintf("Node %s already in desired state", np.Spec.NodeName))
+				}
 				return nil
 			}
 
@@ -615,8 +616,10 @@ func (r *NodePartitioningReconciler) executeStateMachine(
 			}
 
 			// Transition to Failed phase
-			controllerutils.EmitWarningEvent(r.Recorder, np, "DCMFailed",
-				fmt.Sprintf("DCM failed to apply profile to node %s", np.Spec.NodeName))
+			if r.Recorder != nil {
+				r.Recorder.Event(np, corev1.EventTypeWarning, "DCMFailed",
+					fmt.Sprintf("DCM failed to apply profile to node %s", np.Spec.NodeName))
+			}
 			r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseFailed)
 			return nil
 
@@ -706,7 +709,9 @@ func (r *NodePartitioningReconciler) executeStateMachine(
 			ObservedGeneration: np.Generation,
 		})
 
-		controllerutils.EmitNormalEvent(r.Recorder, np, "VerificationSucceeded", fmt.Sprintf("Node %s verified successfully", np.Spec.NodeName))
+		if r.Recorder != nil {
+			r.Recorder.Event(np, corev1.EventTypeNormal, "VerificationSucceeded", fmt.Sprintf("Node %s verified successfully", np.Spec.NodeName))
+		}
 
 		// Untaint and uncordon
 		if err := UntaintNode(ctx, r.Client, np.Spec.NodeName); err != nil {
@@ -722,7 +727,9 @@ func (r *NodePartitioningReconciler) executeStateMachine(
 
 		// Move to succeeded
 		r.setPhase(ctx, np, infrastructurev1alpha1.NodePartitioningPhaseSucceeded)
-		controllerutils.EmitNormalEvent(r.Recorder, np, "NodeSucceeded", fmt.Sprintf("Node %s partitioning completed successfully", np.Spec.NodeName))
+		if r.Recorder != nil {
+			r.Recorder.Event(np, corev1.EventTypeNormal, "NodeSucceeded", fmt.Sprintf("Node %s partitioning completed successfully", np.Spec.NodeName))
+		}
 		return nil
 
 	case infrastructurev1alpha1.NodePartitioningPhaseFailed:
@@ -759,6 +766,295 @@ func (r *NodePartitioningReconciler) executeStateMachine(
 // setPhase updates the phase and adds a history entry.
 func (r *NodePartitioningReconciler) setPhase(_ context.Context, np *infrastructurev1alpha1.NodePartitioning, phase infrastructurev1alpha1.NodePartitioningPhase) {
 	np.Status.Phase = phase
+}
+
+const (
+	DCMNodeLabelKey      = "dcm.amd.com/gpu-config-profile"
+	DCMNodeStateLabelKey = "dcm.amd.com/gpu-config-profile-state"
+	TaintKey             = "amd-dcm"
+	TaintValue           = "up"
+)
+
+func ApplyProfileToNode(ctx context.Context, c client.Client, nodeName string, profileName string) error {
+	logger := log.FromContext(ctx)
+
+	return retryOnConflict(ctx, func() error {
+		var node corev1.Node
+		if err := c.Get(ctx, types.NamespacedName{Name: nodeName}, &node); err != nil {
+			return fmt.Errorf("failed to get node %s: %w", nodeName, err)
+		}
+
+		if node.Labels == nil {
+			node.Labels = make(map[string]string)
+		}
+
+		currentProfile, hasProfile := node.Labels[DCMNodeLabelKey]
+		currentState, _ := node.Labels[DCMNodeStateLabelKey]
+
+		if hasProfile && currentProfile == profileName && currentState == "" {
+			logger.V(1).Info("Node already has correct DCM profile label and state is cleared",
+				"node", nodeName, "profileName", profileName)
+			return nil
+		}
+
+		node.Labels[DCMNodeLabelKey] = profileName
+		delete(node.Labels, DCMNodeStateLabelKey)
+
+		if err := c.Update(ctx, &node); err != nil {
+			return err
+		}
+
+		logger.Info("Applied DCM profile label and cleared state", "node", nodeName, "profileName", profileName)
+		return nil
+	})
+}
+
+func RemoveProfileFromNode(ctx context.Context, c client.Client, nodeName string) error {
+	logger := log.FromContext(ctx)
+
+	var node corev1.Node
+	if err := c.Get(ctx, types.NamespacedName{Name: nodeName}, &node); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to get node %s: %w", nodeName, err)
+	}
+
+	if node.Labels == nil || node.Labels[DCMNodeLabelKey] == "" {
+		return nil
+	}
+
+	delete(node.Labels, DCMNodeLabelKey)
+
+	if err := c.Update(ctx, &node); err != nil {
+		return fmt.Errorf("failed to remove DCM profile label from node %s: %w", nodeName, err)
+	}
+
+	logger.Info("Removed DCM profile label from node", "node", nodeName)
+	return nil
+}
+
+var ErrDrainInProgress = goerrors.New("drain in progress")
+
+func CordonNode(ctx context.Context, c client.Client, nodeName string) error {
+	logger := log.FromContext(ctx)
+
+	return retryOnConflict(ctx, func() error {
+		var node corev1.Node
+		if err := c.Get(ctx, types.NamespacedName{Name: nodeName}, &node); err != nil {
+			return fmt.Errorf("failed to get node %s: %w", nodeName, err)
+		}
+
+		if node.Spec.Unschedulable {
+			logger.V(1).Info("Node already cordoned", "node", nodeName)
+			return nil
+		}
+
+		node.Spec.Unschedulable = true
+		if err := c.Update(ctx, &node); err != nil {
+			return err
+		}
+
+		logger.Info("Cordoned node", "node", nodeName)
+		return nil
+	})
+}
+
+func UncordonNode(ctx context.Context, c client.Client, nodeName string) error {
+	logger := log.FromContext(ctx)
+
+	return retryOnConflict(ctx, func() error {
+		var node corev1.Node
+		if err := c.Get(ctx, types.NamespacedName{Name: nodeName}, &node); err != nil {
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			return fmt.Errorf("failed to get node %s: %w", nodeName, err)
+		}
+
+		if !node.Spec.Unschedulable {
+			logger.V(1).Info("Node already uncordoned", "node", nodeName)
+			return nil
+		}
+
+		node.Spec.Unschedulable = false
+		if err := c.Update(ctx, &node); err != nil {
+			return err
+		}
+
+		logger.Info("Uncordoned node", "node", nodeName)
+		return nil
+	})
+}
+
+func TaintNode(ctx context.Context, c client.Client, nodeName string) error {
+	logger := log.FromContext(ctx)
+
+	return retryOnConflict(ctx, func() error {
+		var node corev1.Node
+		if err := c.Get(ctx, types.NamespacedName{Name: nodeName}, &node); err != nil {
+			return fmt.Errorf("failed to get node %s: %w", nodeName, err)
+		}
+
+		taint := corev1.Taint{
+			Key:    TaintKey,
+			Value:  TaintValue,
+			Effect: corev1.TaintEffectNoExecute,
+		}
+
+		for _, existingTaint := range node.Spec.Taints {
+			if existingTaint.Key == taint.Key && existingTaint.Effect == taint.Effect {
+				logger.V(1).Info("Node already tainted", "node", nodeName, "taint", TaintKey)
+				return nil
+			}
+		}
+
+		node.Spec.Taints = append(node.Spec.Taints, taint)
+		if err := c.Update(ctx, &node); err != nil {
+			return err
+		}
+
+		logger.Info("Tainted node", "node", nodeName, "taint", TaintKey)
+		return nil
+	})
+}
+
+func UntaintNode(ctx context.Context, c client.Client, nodeName string) error {
+	logger := log.FromContext(ctx)
+
+	return retryOnConflict(ctx, func() error {
+		var node corev1.Node
+		if err := c.Get(ctx, types.NamespacedName{Name: nodeName}, &node); err != nil {
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			return fmt.Errorf("failed to get node %s: %w", nodeName, err)
+		}
+
+		var newTaints []corev1.Taint
+		found := false
+		for _, taint := range node.Spec.Taints {
+			if taint.Key == TaintKey && taint.Effect == corev1.TaintEffectNoExecute {
+				found = true
+				continue
+			}
+			newTaints = append(newTaints, taint)
+		}
+
+		if !found {
+			logger.V(1).Info("Node taint not present", "node", nodeName, "taint", TaintKey)
+			return nil
+		}
+
+		node.Spec.Taints = newTaints
+		if err := c.Update(ctx, &node); err != nil {
+			return err
+		}
+
+		logger.Info("Untainted node", "node", nodeName, "taint", TaintKey)
+		return nil
+	})
+}
+
+func DrainNode(
+	ctx context.Context,
+	c client.Client,
+	nodeName string,
+) error {
+	logger := log.FromContext(ctx)
+
+	var podList corev1.PodList
+	if err := c.List(ctx, &podList, &client.ListOptions{
+		FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": nodeName}),
+	}); err != nil {
+		return fmt.Errorf("failed to list pods on node %s: %w", nodeName, err)
+	}
+
+	logger.Info("Draining node", "node", nodeName, "totalPods", len(podList.Items))
+
+	var podsToEvict []corev1.Pod
+	for _, pod := range podList.Items {
+		if pod.DeletionTimestamp != nil {
+			continue
+		}
+
+		if toleratesAMDDCMTaint(&pod) {
+			logger.V(1).Info("Pod tolerates amd-dcm taint, skipping eviction",
+				"pod", pod.Name, "namespace", pod.Namespace)
+			continue
+		}
+
+		if isStaticPod(&pod) {
+			logger.V(1).Info("Skipping static pod", "pod", pod.Name, "namespace", pod.Namespace)
+			continue
+		}
+
+		podsToEvict = append(podsToEvict, pod)
+	}
+
+	if len(podsToEvict) == 0 {
+		logger.Info("No pods to evict - drain complete", "node", nodeName)
+		return nil
+	}
+
+	logger.Info("Waiting for pods to be evicted by taint", "node", nodeName, "remainingPods", len(podsToEvict))
+	return fmt.Errorf("waiting for %d pods to be evicted: %w", len(podsToEvict), ErrDrainInProgress)
+}
+
+func toleratesAMDDCMTaint(pod *corev1.Pod) bool {
+	for _, toleration := range pod.Spec.Tolerations {
+		if toleration.Key == "" && toleration.Operator == corev1.TolerationOpExists {
+			if toleration.Effect == "" || toleration.Effect == corev1.TaintEffectNoExecute {
+				return true
+			}
+		}
+
+		if toleration.Key == TaintKey && toleration.Effect == corev1.TaintEffectNoExecute {
+			if toleration.Operator == corev1.TolerationOpExists {
+				return true
+			}
+			if toleration.Operator == corev1.TolerationOpEqual && toleration.Value == TaintValue {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func isStaticPod(pod *corev1.Pod) bool {
+	for _, owner := range pod.OwnerReferences {
+		if owner.Kind == "Node" {
+			return true
+		}
+	}
+
+	if _, ok := pod.Annotations["kubernetes.io/config.mirror"]; ok {
+		return true
+	}
+
+	return false
+}
+
+func retryOnConflict(ctx context.Context, fn func() error) error {
+	backoff := wait.Backoff{
+		Steps:    5,
+		Duration: 100 * time.Millisecond,
+		Factor:   2.0,
+		Jitter:   0.1,
+	}
+
+	return wait.ExponentialBackoffWithContext(ctx, backoff, func(ctx context.Context) (bool, error) {
+		err := fn()
+		if err == nil {
+			return true, nil
+		}
+
+		if errors.IsConflict(err) {
+			return false, nil
+		}
+
+		return false, err
+	})
 }
 
 // SetupWithManager sets up the controller with the Manager.

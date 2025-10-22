@@ -46,7 +46,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	infrastructurev1alpha1 "github.com/silogen/kaiwo/apis/infrastructure/v1alpha1"
-	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
@@ -59,6 +58,13 @@ type PartitioningPlanReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
+}
+
+type PlanObservation struct {
+	MatchingNodes                []corev1.Node
+	ExistingChildren             []infrastructurev1alpha1.NodePartitioning
+	RuleMatches                  map[string][]int
+	ConflictingNodePartitionings map[string][]infrastructurev1alpha1.NodePartitioning
 }
 
 // +kubebuilder:rbac:groups=infrastructure.silogen.ai,resources=partitioningplans,verbs=get;list;watch;create;update;patch;delete
@@ -84,55 +90,67 @@ func (r *PartitioningPlanReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	baseutils.Debug(logger, "Reconciling PartitioningPlan", "name", plan.Name)
 
-	// Use framework orchestrator with closures
-	return controllerutils.Reconcile(ctx, controllerutils.ReconcileSpec[*infrastructurev1alpha1.PartitioningPlan, infrastructurev1alpha1.PartitioningPlanStatus]{
-		Client:     r.Client,
-		Scheme:     r.Scheme,
-		Object:     &plan,
-		Recorder:   r.Recorder,
-		FieldOwner: partitioningPlanFieldOwner,
+	originalStatus := plan.Status.DeepCopy()
+	if originalStatus == nil {
+		originalStatus = &infrastructurev1alpha1.PartitioningPlanStatus{}
+	}
 
-		ObserveFn: func(ctx context.Context) (any, error) {
-			return r.observe(ctx, &plan)
-		},
+	obs, observeErr := r.observe(ctx, &plan)
 
-		PlanFn: func(ctx context.Context, obs any) ([]client.Object, error) {
-			var o *PlanObservation
-			if obs != nil {
-				var ok bool
-				o, ok = obs.(*PlanObservation)
-				if !ok {
-					return nil, fmt.Errorf("unexpected observation type %T", obs)
-				}
-			}
-			return r.plan(ctx, &plan, o)
-		},
+	var (
+		desired    []client.Object
+		planErr    error
+		applyErr   error
+		cleanupErr error
+	)
 
-		ProjectFn: func(ctx context.Context, obs any, errs controllerutils.ReconcileErrors) error {
-			var o *PlanObservation
-			if obs != nil {
-				var ok bool
-				o, ok = obs.(*PlanObservation)
-				if !ok {
-					return fmt.Errorf("unexpected observation type %T", obs)
-				}
-			}
-			return r.projectStatus(ctx, &plan, o, errs)
-		},
+	if observeErr == nil {
+		desired, planErr = r.plan(ctx, &plan, obs)
+	}
 
-		CleanupFn: func(ctx context.Context, obs any, desired []client.Object) error {
-			if obs == nil {
-				return nil
-			}
-			o, ok := obs.(*PlanObservation)
-			if !ok {
-				return fmt.Errorf("unexpected observation type %T", obs)
-			}
-			return r.cleanupStaleNodePartitionings(ctx, &plan, o)
-		},
+	if observeErr == nil && planErr == nil && len(desired) > 0 {
+		applyErr = applyDesiredState(ctx, r.Client, r.Scheme, desired, partitioningPlanFieldOwner)
+	}
 
-		FinalizeFn: nil, // Phase 1: No external cleanup needed
-	})
+	if observeErr == nil && planErr == nil && obs != nil {
+		cleanupErr = r.cleanupStaleNodePartitionings(ctx, &plan, obs)
+	}
+
+	errs := reconcileErrors{
+		ObserveErr: observeErr,
+		PlanErr:    planErr,
+		ApplyErr:   applyErr,
+		CleanupErr: cleanupErr,
+	}
+
+	if err := r.projectStatus(ctx, &plan, obs, errs); err != nil {
+		if patchErr := patchPartitioningPlanStatus(ctx, r.Client, &plan, originalStatus); patchErr != nil {
+			logger.Error(patchErr, "Failed to patch status after projection error")
+		}
+		return ctrl.Result{}, err
+	}
+
+	if err := patchPartitioningPlanStatus(ctx, r.Client, &plan, originalStatus); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if observeErr != nil {
+		return ctrl.Result{}, observeErr
+	}
+
+	if applyErr != nil {
+		return ctrl.Result{}, applyErr
+	}
+
+	if planErr != nil {
+		return ctrl.Result{}, planErr
+	}
+
+	if cleanupErr != nil {
+		return ctrl.Result{}, cleanupErr
+	}
+
+	return ctrl.Result{}, nil
 }
 
 // observe gathers cluster state for a plan by
@@ -331,7 +349,7 @@ func (r *PartitioningPlanReconciler) projectStatus(
 	ctx context.Context,
 	plan *infrastructurev1alpha1.PartitioningPlan,
 	obs *PlanObservation,
-	errs controllerutils.ReconcileErrors,
+	errs reconcileErrors,
 ) error {
 	logger := log.FromContext(ctx)
 
@@ -558,12 +576,14 @@ func (r *PartitioningPlanReconciler) cleanupStaleNodePartitionings(
 			"node", child.Spec.NodeName,
 			"nodePartitioning", child.Name)
 
-		controllerutils.EmitNormalEvent(
-			r.Recorder,
-			plan,
-			"NodePartitioningDeleted",
-			fmt.Sprintf("Removed NodePartitioning %s for node %s", child.Name, child.Spec.NodeName),
-		)
+		if r.Recorder != nil {
+			r.Recorder.Event(
+				plan,
+				corev1.EventTypeNormal,
+				"NodePartitioningDeleted",
+				fmt.Sprintf("Removed NodePartitioning %s for node %s", child.Name, child.Spec.NodeName),
+			)
+		}
 	}
 
 	obs.ExistingChildren = retained
