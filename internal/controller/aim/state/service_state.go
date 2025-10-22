@@ -24,6 +24,7 @@ package state
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/silogen/kaiwo/internal/controller/aim/routingconfig"
@@ -36,6 +37,7 @@ import (
 type ServiceState struct {
 	Name               string
 	Namespace          string
+	Metadata           metav1.ObjectMeta
 	RuntimeName        string
 	ModelID            string
 	Env                []corev1.EnvVar
@@ -46,6 +48,7 @@ type ServiceState struct {
 	Template           TemplateState
 	ModelSource        *aimv1alpha1.AIMModelSource
 	Routing            ServiceRoutingState
+
 }
 
 // ServiceRoutingState carries routing configuration resolved for the service.
@@ -74,6 +77,7 @@ func NewServiceState(service *aimv1alpha1.AIMService, template TemplateState, op
 	state := ServiceState{
 		Name:               service.Name,
 		Namespace:          service.Namespace,
+		Metadata:           service.ObjectMeta,
 		RuntimeName:        opts.RuntimeName,
 		ModelID:            modelID,
 		Env:                helpers.CopyEnvVars(service.Spec.Env),
