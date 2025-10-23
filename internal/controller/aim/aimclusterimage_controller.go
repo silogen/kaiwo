@@ -203,6 +203,9 @@ func (r *AIMClusterImageReconciler) projectStatus(
 	if obs != nil && obs.MetadataError != nil {
 		extractionErr = obs.MetadataError
 	}
+	if obs != nil && obs.MetadataExtractionErr != nil && extractionErr == nil {
+		extractionErr = obs.MetadataExtractionErr
+	}
 
 	// If we successfully extracted metadata in this reconciliation, use it
 	// Otherwise, use what's already in the observation
