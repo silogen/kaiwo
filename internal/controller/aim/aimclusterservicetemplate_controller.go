@@ -71,6 +71,7 @@ type AIMClusterServiceTemplateReconciler struct {
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclusterimages,verbs=get;list;watch
 // +kubebuilder:rbac:groups=serving.kserve.io,resources=clusterservingruntimes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 func (r *AIMClusterServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -146,6 +147,7 @@ func (r *AIMClusterServiceTemplateReconciler) observe(ctx context.Context, templ
 	logger := log.FromContext(ctx)
 	operatorNamespace := shared.GetOperatorNamespace()
 	return shared.ObserveTemplate(ctx, shared.TemplateObservationOptions[*servingv1alpha1.ClusterServingRuntime]{
+		K8sClient: r.Client,
 		GetRuntime: func(ctx context.Context) (*servingv1alpha1.ClusterServingRuntime, error) {
 			runtime, err := shared.GetClusterServingRuntime(ctx, r.Client, template.Name)
 			if err != nil && !errors.IsNotFound(err) {
@@ -160,6 +162,9 @@ func (r *AIMClusterServiceTemplateReconciler) observe(ctx context.Context, templ
 				return nil, fmt.Errorf("failed to get discovery job: %w", err)
 			}
 			return job, nil
+		},
+		GetJobNamespace: func() string {
+			return operatorNamespace
 		},
 		LookupImage: func(ctx context.Context) (*shared.ImageLookupResult, error) {
 			return shared.LookupImageForClusterTemplate(ctx, r.Client, template.Spec.AIMImageName)

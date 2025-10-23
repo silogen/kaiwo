@@ -50,11 +50,13 @@ import (
 
 // TemplateObservation holds the common observed state for both template types
 type TemplateObservation struct {
-	Job              *batchv1.Job
-	Image            string
-	ImageResources   *corev1.ResourceRequirements
-	ImagePullSecrets []corev1.LocalObjectReference
-	RuntimeConfig    *RuntimeConfigResolution
+	Job                 *batchv1.Job
+	Image               string
+	ImageResources      *corev1.ResourceRequirements
+	ImagePullSecrets    []corev1.LocalObjectReference
+	RuntimeConfig       *RuntimeConfigResolution
+	JobPodImagePullFail bool   // True if job pod is stuck in ImagePullBackOff
+	JobPodFailureReason string // Detailed reason if JobPodImagePullFail is true
 }
 
 // TemplateSpec provides the common template specification
@@ -77,9 +79,11 @@ type RuntimeObservation[R client.Object] struct {
 
 // TemplateObservationOptions configures ObserveTemplate behaviour.
 type TemplateObservationOptions[R client.Object] struct {
+	K8sClient               client.Client // Required for pod status checking
 	GetRuntime              func(ctx context.Context) (R, error)
 	ShouldCheckDiscoveryJob bool
 	GetDiscoveryJob         func(ctx context.Context) (*batchv1.Job, error)
+	GetJobNamespace         func() string // Namespace where the job runs (for pod lookup)
 	LookupImage             func(ctx context.Context) (*ImageLookupResult, error)
 	ResolveRuntimeConfig    func(ctx context.Context) (*RuntimeConfigResolution, error)
 	OnRuntimeConfigResolved func(resolution *RuntimeConfigResolution)
@@ -106,6 +110,13 @@ func ObserveTemplate[R client.Object](ctx context.Context, opts TemplateObservat
 			return nil, err
 		}
 		obs.Job = job
+
+		// If we have a job and it's not complete, check if its pod is stuck in ImagePullBackOff
+		if job != nil && !IsJobComplete(job) && opts.GetJobNamespace != nil && opts.K8sClient != nil {
+			isImagePullFail, reason := checkJobPodImagePullStatus(ctx, opts.K8sClient, job, opts.GetJobNamespace)
+			obs.JobPodImagePullFail = isImagePullFail
+			obs.JobPodFailureReason = reason
+		}
 	}
 
 	if opts.LookupImage != nil {
@@ -195,6 +206,60 @@ func CountActiveDiscoveryJobs(ctx context.Context, k8sClient client.Client) (int
 
 	baseutils.Debug(logger, "Discovery job count", "active", activeCount, "total", len(jobs.Items))
 	return activeCount, nil
+}
+
+// checkJobPodImagePullStatus checks if a job's pod is stuck in ImagePullBackOff or ErrImagePull state.
+// Returns true and a reason string if the pod is stuck pulling images, false otherwise.
+func checkJobPodImagePullStatus(ctx context.Context, k8sClient client.Client, job *batchv1.Job, getNamespace func() string) (bool, string) {
+	logger := ctrl.LoggerFrom(ctx)
+	namespace := getNamespace()
+
+	// List pods owned by this job
+	var pods corev1.PodList
+	if err := k8sClient.List(ctx, &pods,
+		client.InNamespace(namespace),
+		client.MatchingLabels{
+			"job-name": job.Name,
+		}); err != nil {
+		baseutils.Debug(logger, "Failed to list pods for job",
+			"job", job.Name,
+			"namespace", namespace,
+			"error", err)
+		return false, ""
+	}
+
+	// Check each pod for ImagePullBackOff or ErrImagePull status
+	for i := range pods.Items {
+		pod := &pods.Items[i]
+
+		// Check init container statuses
+		for _, containerStatus := range pod.Status.InitContainerStatuses {
+			if containerStatus.State.Waiting != nil {
+				reason := containerStatus.State.Waiting.Reason
+				if reason == "ImagePullBackOff" || reason == "ErrImagePull" {
+					msg := fmt.Sprintf("Init container %q is stuck in %s: %s",
+						containerStatus.Name, reason, containerStatus.State.Waiting.Message)
+					baseutils.Debug(logger, "Found image pull failure", "pod", pod.Name, "container", containerStatus.Name, "reason", reason)
+					return true, msg
+				}
+			}
+		}
+
+		// Check main container statuses
+		for _, containerStatus := range pod.Status.ContainerStatuses {
+			if containerStatus.State.Waiting != nil {
+				reason := containerStatus.State.Waiting.Reason
+				if reason == "ImagePullBackOff" || reason == "ErrImagePull" {
+					msg := fmt.Sprintf("Container %q is stuck in %s: %s",
+						containerStatus.Name, reason, containerStatus.State.Waiting.Message)
+					baseutils.Debug(logger, "Found image pull failure", "pod", pod.Name, "container", containerStatus.Name, "reason", reason)
+					return true, msg
+				}
+			}
+		}
+	}
+
+	return false, ""
 }
 
 // PlanTemplateResources produces desired objects based on the observation and controller-provided builders.
@@ -367,6 +432,29 @@ func handleTemplateMissingImage(obs *TemplateObservation, imageNotFoundMessage s
 	}
 }
 
+// handleTemplateImagePullFailed handles the case where the discovery job pod is stuck in ImagePullBackOff.
+func handleTemplateImagePullFailed(obs *TemplateObservation, recorder record.EventRecorder, template TemplateWithStatus) *templateStatusResult {
+	if obs == nil || !obs.JobPodImagePullFail {
+		return nil
+	}
+
+	// Emit warning event about image pull failure
+	controllerutils.EmitWarningEvent(recorder, template, "ImagePullFailed",
+		fmt.Sprintf("Discovery job pod cannot pull image: %s", obs.JobPodFailureReason))
+
+	return &templateStatusResult{
+		Status: aimv1alpha1.AIMTemplateStatusDegraded,
+		Conditions: []metav1.Condition{
+			controllerutils.NewCondition(controllerutils.ConditionTypeFailure, metav1.ConditionTrue, "ImagePullBackOff",
+				fmt.Sprintf("Discovery job pod stuck pulling image: %s", obs.JobPodFailureReason)),
+			controllerutils.NewCondition(controllerutils.ConditionTypeProgressing, metav1.ConditionFalse, "ImagePullBackOff",
+				"Discovery cannot proceed due to image pull failure"),
+			controllerutils.NewCondition(controllerutils.ConditionTypeReady, metav1.ConditionFalse, "ImagePullBackOff",
+				"Template is not ready due to image pull failure"),
+		},
+	}
+}
+
 // handleTemplateDiscoveryRunning handles the case where discovery job is running.
 func handleTemplateDiscoveryRunning(obs *TemplateObservation, currentStatus aimv1alpha1.AIMTemplateStatusEnum, recorder record.EventRecorder, template TemplateWithStatus) *templateStatusResult {
 	if obs.Job == nil || IsJobComplete(obs.Job) {
@@ -489,6 +577,7 @@ func ProjectTemplateStatus(
 	handlers := []func() *templateStatusResult{
 		func() *templateStatusResult { return handleTemplateReconcileErrors(errs, imageNotFoundMessage) },
 		func() *templateStatusResult { return handleTemplateMissingImage(obs, imageNotFoundMessage) },
+		func() *templateStatusResult { return handleTemplateImagePullFailed(obs, recorder, template) },
 		func() *templateStatusResult {
 			return handleTemplateDiscoveryRunning(obs, currentStatus, recorder, template)
 		},
