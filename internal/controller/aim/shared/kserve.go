@@ -206,6 +206,26 @@ func buildServingRuntimeSpec(template aimstate.TemplateState) servingv1alpha1.Se
 
 // BuildInferenceService constructs a KServe InferenceService referencing a ServingRuntime or ClusterServingRuntime.
 func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.OwnerReference) *servingv1beta1.InferenceService {
+	
+	labels := make(map[string]string, 8)
+	if serviceState.Metadata.Labels != nil {
+		for k, v := range serviceState.Metadata.Labels {
+			labels[k] = v
+		}
+	}
+
+	systemLabels := map[string]string{
+		"app.kubernetes.io/name":       LabelValueServiceName,
+		"app.kubernetes.io/component":  LabelValueServiceComponent,
+		"app.kubernetes.io/managed-by": LabelValueManagedBy,
+		LabelKeyTemplate:               serviceState.Template.Name,
+		LabelKeyModelID:                sanitizeLabelValue(serviceState.ModelID),
+		LabelKeyImageName:              sanitizeLabelValue(serviceState.Template.SpecCommon.AIMImageName),
+	}
+	for k, v := range systemLabels {
+		labels[k] = v
+	}
+
 	inferenceService := &servingv1beta1.InferenceService{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: servingv1beta1.SchemeGroupVersion.String(),
@@ -214,14 +234,8 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      serviceState.Name,
 			Namespace: serviceState.Namespace,
-			Labels: map[string]string{
-				"app.kubernetes.io/name":       LabelValueServiceName,
-				"app.kubernetes.io/component":  LabelValueServiceComponent,
-				"app.kubernetes.io/managed-by": LabelValueManagedBy,
-				LabelKeyTemplate:               serviceState.Template.Name,
-				LabelKeyModelID:                sanitizeLabelValue(serviceState.ModelID),
-				LabelKeyImageName:              sanitizeLabelValue(serviceState.Template.SpecCommon.AIMImageName),
-			},
+			Annotations: serviceState.Metadata.Annotations,
+			Labels:          labels,
 			OwnerReferences: []metav1.OwnerReference{ownerRef},
 		},
 		Spec: servingv1beta1.InferenceServiceSpec{

@@ -42,6 +42,13 @@ spec:
             name: test-service
             (ownerReferences[?kind == 'AIMService']):
             - name: test-service
+            labels:
+              app.kubernetes.io/part-of: aim
+              example.com/owner: qa
+            annotations:
+              example.com/note: "propagate to ISVC"
+              example.com/release: "canary"
+
 
   - name: Verify service transitions to Starting
     try:
