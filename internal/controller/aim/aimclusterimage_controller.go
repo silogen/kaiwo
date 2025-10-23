@@ -153,6 +153,10 @@ func (r *AIMClusterImageReconciler) observe(ctx context.Context, image *aimv1alp
 		GetImageSpec: func() aimv1alpha1.AIMImageSpec {
 			return image.Spec
 		},
+
+		GetLabels: func() map[string]string {
+			return image.Labels
+		},
 	})
 }
 

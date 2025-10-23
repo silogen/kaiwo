@@ -131,11 +131,23 @@ type ImageObservationOptions struct {
 
 	// GetImageSpec returns the image spec.
 	GetImageSpec func() aimv1alpha1.AIMImageSpec
+
+	// GetLabels returns the image resource labels.
+	GetLabels func() map[string]string
 }
 
 // ObserveImage gathers the current state for an image resource.
 func ObserveImage(ctx context.Context, opts ImageObservationOptions) (*ImageObservation, error) {
 	obs := &ImageObservation{}
+
+	// Check if inspection should be skipped via label
+	if opts.GetLabels != nil {
+		labels := opts.GetLabels()
+		if labels[LabelKeySkipInspection] == "true" {
+			// Mark as already attempted to skip inspection
+			obs.MetadataAlreadyAttempted = true
+		}
+	}
 
 	// Resolve runtime config for image pull secrets
 	if opts.GetRuntimeConfig != nil {
