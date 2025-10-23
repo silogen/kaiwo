@@ -59,6 +59,20 @@ spec:
                 description: DefaultServiceTemplate is the default template to use
                   for this image, if the user does not provide any
                 type: string
+              discovery:
+                default:
+                  autoCreateTemplates: true
+                description: Discovery controls metadata extraction and automatic
+                  template creation for this image.
+                properties:
+                  autoCreateTemplates:
+                    description: AutoCreateTemplates controls whether recommended
+                      deployments from discovery automatically create ServiceTemplates.
+                    type: boolean
+                  enabled:
+                    description: Enabled toggles metadata discovery for this image.
+                    type: boolean
+                type: object
               image:
                 description: |-
                   Image is the container image URI for this AIM model.
@@ -379,6 +393,17 @@ spec:
                       reference, when known.
                     type: string
                 type: object
+              status:
+                default: Pending
+                description: Status represents the overall status of the image based
+                  on its templates
+                enum:
+                - Pending
+                - Progressing
+                - Ready
+                - Degraded
+                - Failed
+                type: string
             type: object
         type: object
     served: true

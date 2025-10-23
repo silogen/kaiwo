@@ -50,6 +50,38 @@ const (
 	AIMImageReasonMetadataExtractionFailed = "MetadataExtractionFailed"
 )
 
+// AIMImageStatusEnum represents the overall status of an AIMImage.
+// +kubebuilder:validation:Enum=Pending;Progressing;Ready;Degraded;Failed
+type AIMImageStatusEnum string
+
+const (
+	// AIMImageStatusPending indicates the image has been created but template generation has not started.
+	AIMImageStatusPending AIMImageStatusEnum = "Pending"
+
+	// AIMImageStatusProgressing indicates one or more templates are still being discovered.
+	AIMImageStatusProgressing AIMImageStatusEnum = "Progressing"
+
+	// AIMImageStatusReady indicates all templates are available and ready.
+	AIMImageStatusReady AIMImageStatusEnum = "Ready"
+
+	// AIMImageStatusDegraded indicates one or more templates are degraded or failed.
+	AIMImageStatusDegraded AIMImageStatusEnum = "Degraded"
+
+	// AIMImageStatusFailed indicates all templates are degraded or failed.
+	AIMImageStatusFailed AIMImageStatusEnum = "Failed"
+)
+
+// AIMImageDiscoverySpec configures metadata discovery and template generation for an image.
+type AIMImageDiscoverySpec struct {
+	// Enabled toggles metadata discovery for this image. Disabled by default.
+	Enabled bool `json:"enabled,omitempty"`
+
+	// AutoCreateTemplates controls whether recommended deployments from discovery
+	// automatically create ServiceTemplates. Enabled by default when discovery runs.
+	// +optional
+	AutoCreateTemplates *bool `json:"autoCreateTemplates,omitempty"`
+}
+
 // AIMImageSpec defines the desired state of AIMImage.
 type AIMImageSpec struct {
 	// Image is the container image URI for this AIM model.
@@ -59,6 +91,10 @@ type AIMImageSpec struct {
 
 	// DefaultServiceTemplate is the default template to use for this image, if the user does not provide any
 	DefaultServiceTemplate string `json:"defaultServiceTemplate,omitempty"`
+
+	// Discovery controls metadata extraction and automatic template creation for this image.
+	// +optional
+	Discovery AIMImageDiscoverySpec `json:"discovery,omitempty"`
 
 	// Resources defines the default resource requirements for services using this image.
 	// Template- or service-level values override these defaults.
@@ -74,6 +110,10 @@ type AIMImageSpec struct {
 type AIMImageStatus struct {
 	// ObservedGeneration is the most recent generation observed by the controller
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Status represents the overall status of the image based on its templates
+	// +kubebuilder:default=Pending
+	Status AIMImageStatusEnum `json:"status,omitempty"`
 
 	// Conditions represent the latest available observations of the model's state
 	// +listType=map
@@ -93,7 +133,7 @@ type AIMImageStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster,shortName=aimclimg,categories=aim;all
-// +kubebuilder:printcolumn:name="Model ID",type=string,JSONPath=`.spec.modelId`
+// +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.status`
 // +kubebuilder:printcolumn:name="Image",type=string,JSONPath=`.spec.image`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 type AIMClusterImage struct {
@@ -147,4 +187,34 @@ func (img *AIMClusterImage) GetStatus() *AIMImageStatus {
 
 func init() {
 	SchemeBuilder.Register(&AIMClusterImage{}, &AIMClusterImageList{}, &AIMImage{}, &AIMImageList{})
+}
+
+// IsEnabled returns true when discovery is enabled.
+func (d *AIMImageDiscoverySpec) IsEnabled() bool {
+	return d != nil && d.Enabled
+}
+
+// AutoCreateTemplatesEnabled returns true when auto template creation should run.
+// Defaults to true when unset.
+func (d *AIMImageDiscoverySpec) AutoCreateTemplatesEnabled() bool {
+	if d == nil || d.AutoCreateTemplates == nil {
+		return true
+	}
+	return *d.AutoCreateTemplates
+}
+
+// DiscoveryEnabled reports whether discovery is enabled on the image spec.
+func (spec *AIMImageSpec) DiscoveryEnabled() bool {
+	if spec == nil {
+		return false
+	}
+	return spec.Discovery.IsEnabled()
+}
+
+// AutoCreateTemplatesEnabled reports whether auto template creation is enabled on the image spec.
+func (spec *AIMImageSpec) AutoCreateTemplatesEnabled() bool {
+	if spec == nil {
+		return true
+	}
+	return spec.Discovery.AutoCreateTemplatesEnabled()
 }

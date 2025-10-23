@@ -2,8 +2,6 @@ apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMClusterImage
 metadata:
   name: llama-3-8b-cluster-priority
-  labels:
-    aim.silogen.ai/skip-inspection: "true"
 spec:
   image: busybox:latest-aim-cluster
   defaultServiceTemplate: llama-3-8b-latency-priority

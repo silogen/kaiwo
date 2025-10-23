@@ -278,9 +278,31 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `observedGeneration` _integer_ | ObservedGeneration is the most recent generation observed by the controller |  |  |
+| `status` _[AIMImageStatusEnum](#aimimagestatusenum)_ | Status represents the overall status of the image based on its templates | Pending | Enum: [Pending Progressing Ready Degraded Failed] <br /> |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest available observations of the model's state |  |  |
 | `resolvedRuntimeConfig` _[AIMResolvedRuntimeConfig](#aimresolvedruntimeconfig)_ | ResolvedRuntimeConfig captures metadata about the runtime config that was resolved. |  |  |
 | `imageMetadata` _[ImageMetadata](#imagemetadata)_ | ImageMetadata is the metadata extracted from an AIM image |  |  |
+
+
+#### AIMImageStatusEnum
+
+_Underlying type:_ _string_
+
+AIMImageStatusEnum represents the overall status of an AIMImage.
+
+_Validation:_
+- Enum: [Pending Progressing Ready Degraded Failed]
+
+_Appears in:_
+- [AIMImageStatus](#aimimagestatus)
+
+| Field | Description |
+| --- | --- |
+| `Pending` | AIMImageStatusPending indicates the image has been created but template generation has not started.<br /> |
+| `Progressing` | AIMImageStatusProgressing indicates one or more templates are still being discovered.<br /> |
+| `Ready` | AIMImageStatusReady indicates all templates are available and ready.<br /> |
+| `Degraded` | AIMImageStatusDegraded indicates one or more templates are degraded or failed.<br /> |
+| `Failed` | AIMImageStatusFailed indicates all templates are degraded or failed.<br /> |
 
 
 #### AIMMetric

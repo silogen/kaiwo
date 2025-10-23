@@ -117,6 +117,12 @@ type ImageObservation struct {
 
 	// ExistingTemplates are the ServiceTemplates currently owned by this image.
 	ExistingTemplates []client.Object
+
+	// DiscoveryEnabled reflects whether discovery is enabled on the image spec.
+	DiscoveryEnabled bool
+
+	// AutoCreateTemplates indicates if template auto-creation is configured.
+	AutoCreateTemplates bool
 }
 
 // ImageObservationOptions provides callbacks for observing image state.
@@ -132,23 +138,11 @@ type ImageObservationOptions struct {
 
 	// GetImageSpec returns the image spec.
 	GetImageSpec func() aimv1alpha1.AIMImageSpec
-
-	// GetLabels returns the image resource labels.
-	GetLabels func() map[string]string
 }
 
 // ObserveImage gathers the current state for an image resource.
 func ObserveImage(ctx context.Context, opts ImageObservationOptions) (*ImageObservation, error) {
 	obs := &ImageObservation{}
-
-	// Check if inspection should be skipped via label
-	if opts.GetLabels != nil {
-		labels := opts.GetLabels()
-		if labels[LabelKeySkipInspection] == "true" {
-			// Mark as already attempted to skip inspection
-			obs.MetadataAlreadyAttempted = true
-		}
-	}
 
 	// Resolve runtime config for image pull secrets
 	if opts.GetRuntimeConfig != nil {
@@ -177,6 +171,16 @@ func ObserveImage(ctx context.Context, opts ImageObservationOptions) (*ImageObse
 
 		if status.ImageMetadata != nil {
 			obs.ImageMetadata = status.ImageMetadata.DeepCopy()
+		}
+	}
+
+	// Apply discovery configuration from the spec
+	if opts.GetImageSpec != nil {
+		spec := opts.GetImageSpec()
+		obs.DiscoveryEnabled = spec.DiscoveryEnabled()
+		obs.AutoCreateTemplates = spec.AutoCreateTemplatesEnabled()
+		if !obs.DiscoveryEnabled {
+			obs.MetadataAlreadyAttempted = true
 		}
 	}
 
@@ -223,17 +227,39 @@ func PlanImageResources(ctx context.Context, input ImagePlanInput) ([]client.Obj
 	var desired []client.Object
 	var extractedMetadata *aimv1alpha1.ImageMetadata
 
+	observation := input.Observation
+	if observation == nil {
+		observation = &ImageObservation{}
+	}
+
+	spec := input.ImageSpec
+	if input.Observation == nil {
+		observation.DiscoveryEnabled = spec.DiscoveryEnabled()
+		observation.AutoCreateTemplates = spec.AutoCreateTemplatesEnabled()
+		if !observation.DiscoveryEnabled {
+			observation.MetadataAlreadyAttempted = true
+		}
+	}
+
+	discoveryEnabled := observation.DiscoveryEnabled
+	autoCreateTemplates := observation.AutoCreateTemplates
+	if input.Observation == nil {
+		// When observation was synthesized locally, fall back to spec defaults.
+		discoveryEnabled = spec.DiscoveryEnabled()
+		autoCreateTemplates = spec.AutoCreateTemplatesEnabled()
+	}
+
 	// Determine if we should attempt metadata extraction
-	shouldExtract := !input.Observation.MetadataAlreadyAttempted
+	shouldExtract := discoveryEnabled && !observation.MetadataAlreadyAttempted
 
 	if shouldExtract {
-		baseutils.Debug(logger, "Attempting metadata extraction for image", "image", input.ImageSpec.Image)
+		baseutils.Debug(logger, "Attempting metadata extraction for image", "image", spec.Image)
 		// Attempt to extract metadata
 		var imagePullSecrets []corev1.LocalObjectReference
 		var namespace string
 
-		if input.Observation.RuntimeConfigResolution != nil {
-			imagePullSecrets = input.Observation.RuntimeConfigResolution.EffectiveSpec.ImagePullSecrets
+		if observation.RuntimeConfigResolution != nil {
+			imagePullSecrets = observation.RuntimeConfigResolution.EffectiveSpec.ImagePullSecrets
 		}
 
 		// For namespace-scoped images, use the image's namespace for secrets
@@ -246,7 +272,7 @@ func PlanImageResources(ctx context.Context, input ImagePlanInput) ([]client.Obj
 
 		metadata, err := InspectImage(
 			ctx,
-			input.ImageSpec.Image,
+			spec.Image,
 			imagePullSecrets,
 			input.Clientset,
 			namespace,
@@ -265,16 +291,19 @@ func PlanImageResources(ctx context.Context, input ImagePlanInput) ([]client.Obj
 		} else {
 			baseutils.Debug(logger, "Metadata extraction succeeded but no model metadata found")
 		}
-	} else if input.Observation.ImageMetadata != nil {
+	} else if observation.ImageMetadata != nil {
 		// Use existing metadata
 		baseutils.Debug(logger, "Using existing metadata from observation")
-		extractedMetadata = input.Observation.ImageMetadata
+		extractedMetadata = observation.ImageMetadata
 	} else {
 		baseutils.Debug(logger, "Skipping metadata extraction (already attempted or skipped)")
 	}
 
 	// If we have metadata with recommended deployments, create templates
-	if extractedMetadata != nil && extractedMetadata.Model != nil && len(extractedMetadata.Model.RecommendedDeployments) > 0 {
+	if discoveryEnabled && autoCreateTemplates &&
+		extractedMetadata != nil &&
+		extractedMetadata.Model != nil &&
+		len(extractedMetadata.Model.RecommendedDeployments) > 0 {
 		for _, deployment := range extractedMetadata.Model.RecommendedDeployments {
 			template := buildServiceTemplateFromDeployment(
 				input.ImageName,
@@ -384,6 +413,7 @@ func generateTemplateName(imageName string, deployment aimv1alpha1.RecommendedDe
 // ProjectImageStatus updates the status of an image resource based on observation and errors.
 func ProjectImageStatus(
 	status *aimv1alpha1.AIMImageStatus,
+	spec aimv1alpha1.AIMImageSpec,
 	observation *ImageObservation,
 	extractedMetadata *aimv1alpha1.ImageMetadata,
 	extractionErr error,
@@ -413,6 +443,266 @@ func ProjectImageStatus(
 		})
 	}
 	// If both are nil, don't set any condition (extraction not attempted or skipped)
+
+	discoveryEnabled := spec.DiscoveryEnabled()
+	autoCreateTemplates := spec.AutoCreateTemplatesEnabled()
+	if observation != nil {
+		discoveryEnabled = observation.DiscoveryEnabled
+		autoCreateTemplates = observation.AutoCreateTemplates
+	}
+
+	metadataCompleted := extractedMetadata != nil
+	if !metadataCompleted && observation != nil {
+		metadataCompleted = observation.MetadataExtracted
+	}
+
+	if observation != nil && len(observation.ExistingTemplates) > 0 {
+		updateImageStatusFromTemplates(status, observation.ExistingTemplates, observedGeneration)
+		return
+	}
+
+	// No owned templates exist; determine aggregate status from discovery configuration.
+	if !discoveryEnabled {
+		markImageReady(status, "DiscoveryDisabled", "Discovery disabled; no templates to manage", observedGeneration)
+		return
+	}
+
+	if !autoCreateTemplates {
+		if metadataCompleted {
+			markImageReady(status, "AutoTemplateCreationDisabled", "Auto template creation disabled; discovery complete", observedGeneration)
+		} else {
+			markImageProgressing(status, "DiscoveryInProgress", "Discovery enabled; awaiting metadata extraction", observedGeneration)
+		}
+		return
+	}
+
+	if !metadataCompleted {
+		markImageProgressing(status, "DiscoveryInProgress", "Discovery enabled; awaiting metadata extraction", observedGeneration)
+		return
+	}
+
+	recommended := 0
+	if extractedMetadata != nil && extractedMetadata.Model != nil {
+		recommended = len(extractedMetadata.Model.RecommendedDeployments)
+	} else if observation != nil && observation.ImageMetadata != nil && observation.ImageMetadata.Model != nil {
+		recommended = len(observation.ImageMetadata.Model.RecommendedDeployments)
+	}
+
+	if recommended == 0 {
+		markImageReady(status, "NoRecommendedTemplates", "Discovery completed with no recommended templates", observedGeneration)
+	} else {
+		markImageProgressing(status, "TemplateCreationPending", fmt.Sprintf("%d template(s) pending creation", recommended), observedGeneration)
+	}
+}
+
+// updateImageStatusFromTemplates aggregates template statuses and sets conditions on the image.
+// Logic:
+// - Ready: All templates are Available
+// - Progressing: At least one template is Progressing (and none are Failed/Degraded)
+// - Degraded: One or more templates are Degraded or Failed (but not all)
+// - Failed: All templates are Degraded or Failed
+func updateImageStatusFromTemplates(status *aimv1alpha1.AIMImageStatus, templates []client.Object, observedGeneration int64) {
+	if status == nil {
+		return
+	}
+
+	// Default to Pending when no templates exist or none provide a definitive state.
+	status.Status = aimv1alpha1.AIMImageStatusPending
+
+	if len(templates) == 0 {
+		return
+	}
+
+	var availableCount, progressingCount, degradedCount, failedCount int
+	var messages []string
+
+	// Count templates by status
+	for _, tmpl := range templates {
+		var templateStatus aimv1alpha1.AIMTemplateStatusEnum
+		var templateName string
+
+		switch t := tmpl.(type) {
+		case *aimv1alpha1.AIMServiceTemplate:
+			templateStatus = t.Status.Status
+			templateName = t.Name
+		case *aimv1alpha1.AIMClusterServiceTemplate:
+			templateStatus = t.Status.Status
+			templateName = t.Name
+		default:
+			continue
+		}
+
+		switch templateStatus {
+		case aimv1alpha1.AIMTemplateStatusAvailable:
+			availableCount++
+		case aimv1alpha1.AIMTemplateStatusProgressing, aimv1alpha1.AIMTemplateStatusPending:
+			progressingCount++
+		case aimv1alpha1.AIMTemplateStatusDegraded:
+			degradedCount++
+			messages = append(messages, fmt.Sprintf("template %q is degraded", templateName))
+		case aimv1alpha1.AIMTemplateStatusFailed:
+			failedCount++
+			messages = append(messages, fmt.Sprintf("template %q has failed", templateName))
+		}
+	}
+
+	totalTemplates := len(templates)
+	problemCount := degradedCount + failedCount
+
+	// Determine overall status based on template states
+	if problemCount == totalTemplates {
+		// All templates are degraded or failed
+		status.Status = aimv1alpha1.AIMImageStatusFailed
+
+		msg := fmt.Sprintf("All %d template(s) are degraded or failed", totalTemplates)
+		if len(messages) > 0 {
+			msg = fmt.Sprintf("%s: %s", msg, strings.Join(messages, "; "))
+		}
+		setCondition(&status.Conditions, metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionFalse,
+			Reason:             "AllTemplatesFailed",
+			Message:            msg,
+			ObservedGeneration: observedGeneration,
+		})
+		setCondition(&status.Conditions, metav1.Condition{
+			Type:               "Degraded",
+			Status:             metav1.ConditionTrue,
+			Reason:             "AllTemplatesFailed",
+			Message:            msg,
+			ObservedGeneration: observedGeneration,
+		})
+	} else if problemCount > 0 {
+		// Some templates are degraded or failed
+		status.Status = aimv1alpha1.AIMImageStatusDegraded
+
+		msg := fmt.Sprintf("%d of %d template(s) are degraded or failed", problemCount, totalTemplates)
+		if len(messages) > 0 {
+			msg = fmt.Sprintf("%s: %s", msg, strings.Join(messages, "; "))
+		}
+		setCondition(&status.Conditions, metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionFalse,
+			Reason:             "SomeTemplatesDegraded",
+			Message:            msg,
+			ObservedGeneration: observedGeneration,
+		})
+		setCondition(&status.Conditions, metav1.Condition{
+			Type:               "Degraded",
+			Status:             metav1.ConditionTrue,
+			Reason:             "SomeTemplatesDegraded",
+			Message:            msg,
+			ObservedGeneration: observedGeneration,
+		})
+	} else if progressingCount > 0 {
+		// At least one template is progressing
+		status.Status = aimv1alpha1.AIMImageStatusProgressing
+
+		msg := fmt.Sprintf("%d of %d template(s) are progressing", progressingCount, totalTemplates)
+		setCondition(&status.Conditions, metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionFalse,
+			Reason:             "TemplatesProgressing",
+			Message:            msg,
+			ObservedGeneration: observedGeneration,
+		})
+		setCondition(&status.Conditions, metav1.Condition{
+			Type:               "Progressing",
+			Status:             metav1.ConditionTrue,
+			Reason:             "TemplatesProgressing",
+			Message:            msg,
+			ObservedGeneration: observedGeneration,
+		})
+		setCondition(&status.Conditions, metav1.Condition{
+			Type:               "Degraded",
+			Status:             metav1.ConditionFalse,
+			Reason:             "TemplatesProgressing",
+			Message:            "No templates are degraded",
+			ObservedGeneration: observedGeneration,
+		})
+	} else if availableCount == totalTemplates {
+		// All templates are available
+		status.Status = aimv1alpha1.AIMImageStatusReady
+
+		msg := fmt.Sprintf("All %d template(s) are available", totalTemplates)
+		setCondition(&status.Conditions, metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionTrue,
+			Reason:             "AllTemplatesReady",
+			Message:            msg,
+			ObservedGeneration: observedGeneration,
+		})
+		setCondition(&status.Conditions, metav1.Condition{
+			Type:               "Progressing",
+			Status:             metav1.ConditionFalse,
+			Reason:             "AllTemplatesReady",
+			Message:            "All templates have completed discovery",
+			ObservedGeneration: observedGeneration,
+		})
+		setCondition(&status.Conditions, metav1.Condition{
+			Type:               "Degraded",
+			Status:             metav1.ConditionFalse,
+			Reason:             "AllTemplatesReady",
+			Message:            "No templates are degraded",
+			ObservedGeneration: observedGeneration,
+		})
+	}
+}
+
+func markImageReady(status *aimv1alpha1.AIMImageStatus, reason, message string, observedGeneration int64) {
+	if status == nil {
+		return
+	}
+	status.Status = aimv1alpha1.AIMImageStatusReady
+	setCondition(&status.Conditions, metav1.Condition{
+		Type:               "Ready",
+		Status:             metav1.ConditionTrue,
+		Reason:             reason,
+		Message:            message,
+		ObservedGeneration: observedGeneration,
+	})
+	setCondition(&status.Conditions, metav1.Condition{
+		Type:               "Progressing",
+		Status:             metav1.ConditionFalse,
+		Reason:             reason,
+		Message:            message,
+		ObservedGeneration: observedGeneration,
+	})
+	setCondition(&status.Conditions, metav1.Condition{
+		Type:               "Degraded",
+		Status:             metav1.ConditionFalse,
+		Reason:             reason,
+		Message:            "No templates are degraded",
+		ObservedGeneration: observedGeneration,
+	})
+}
+
+func markImageProgressing(status *aimv1alpha1.AIMImageStatus, reason, message string, observedGeneration int64) {
+	if status == nil {
+		return
+	}
+	status.Status = aimv1alpha1.AIMImageStatusProgressing
+	setCondition(&status.Conditions, metav1.Condition{
+		Type:               "Ready",
+		Status:             metav1.ConditionFalse,
+		Reason:             reason,
+		Message:            message,
+		ObservedGeneration: observedGeneration,
+	})
+	setCondition(&status.Conditions, metav1.Condition{
+		Type:               "Progressing",
+		Status:             metav1.ConditionTrue,
+		Reason:             reason,
+		Message:            message,
+		ObservedGeneration: observedGeneration,
+	})
+	setCondition(&status.Conditions, metav1.Condition{
+		Type:               "Degraded",
+		Status:             metav1.ConditionFalse,
+		Reason:             reason,
+		Message:            "No templates are degraded",
+		ObservedGeneration: observedGeneration,
+	})
 }
 
 // setCondition adds or updates a condition in the conditions list.
