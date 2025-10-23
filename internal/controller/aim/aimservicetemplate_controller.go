@@ -193,13 +193,15 @@ func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *ai
 }
 
 // plan computes desired state (pure function)
-func (r *AIMServiceTemplateReconciler) plan(_ context.Context, template *aimv1alpha1.AIMServiceTemplate, obs *namespaceTemplateObservation) ([]client.Object, error) {
+func (r *AIMServiceTemplateReconciler) plan(ctx context.Context, template *aimv1alpha1.AIMServiceTemplate, obs *namespaceTemplateObservation) ([]client.Object, error) {
 	var observation *shared.TemplateObservation
 	if obs != nil {
 		observation = &obs.TemplateObservation
 	}
 
 	desired := shared.PlanTemplateResources(shared.TemplatePlanContext{
+		Ctx:         ctx,
+		Client:      r.Client,
 		Template:    template,
 		APIVersion:  template.APIVersion,
 		Kind:        template.Kind,

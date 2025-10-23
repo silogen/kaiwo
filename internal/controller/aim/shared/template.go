@@ -39,6 +39,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/record"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/silogen/kaiwo/internal/controller/aim/helpers"
@@ -141,6 +142,8 @@ func ObserveTemplate[R client.Object](ctx context.Context, opts TemplateObservat
 
 // TemplatePlanContext provides metadata needed during plan generation.
 type TemplatePlanContext struct {
+	Ctx         context.Context
+	Client      client.Client
 	Template    metav1.Object
 	APIVersion  string
 	Kind        string
@@ -161,11 +164,47 @@ type TemplatePlanBuilders struct {
 	BuildDiscoveryJob func(input TemplatePlanInput) client.Object
 }
 
+// CountActiveDiscoveryJobs counts the number of active (non-complete) discovery jobs across all namespaces.
+// A job is considered active if it exists and is not in a complete state (succeeded or failed).
+func CountActiveDiscoveryJobs(ctx context.Context, k8sClient client.Client) (int, error) {
+	logger := ctrl.LoggerFrom(ctx)
+
+	// List all jobs with discovery job labels across all namespaces
+	var jobs batchv1.JobList
+	if err := k8sClient.List(ctx, &jobs, client.MatchingLabels{
+		"app.kubernetes.io/component":  LabelValueDiscoveryComponent,
+		"app.kubernetes.io/managed-by": LabelValueManagedBy,
+	}); err != nil {
+		return 0, fmt.Errorf("failed to list discovery jobs: %w", err)
+	}
+
+	// Count jobs that are not complete (not succeeded and not failed)
+	activeCount := 0
+	for i := range jobs.Items {
+		job := &jobs.Items[i]
+		if !IsJobComplete(job) {
+			activeCount++
+			baseutils.Debug(logger, "Found active discovery job",
+				"namespace", job.Namespace,
+				"name", job.Name,
+				"active", job.Status.Active,
+				"succeeded", job.Status.Succeeded,
+				"failed", job.Status.Failed)
+		}
+	}
+
+	baseutils.Debug(logger, "Discovery job count", "active", activeCount, "total", len(jobs.Items))
+	return activeCount, nil
+}
+
 // PlanTemplateResources produces desired objects based on the observation and controller-provided builders.
+// It respects the global limit on concurrent discovery jobs (MaxConcurrentDiscoveryJobs).
 func PlanTemplateResources(ctx TemplatePlanContext, builders TemplatePlanBuilders) []client.Object {
 	if ctx.Observation == nil || ctx.Observation.Image == "" {
 		return nil
 	}
+
+	logger := ctrl.LoggerFrom(ctx.Ctx)
 
 	runtimeConfigSpec := aimv1alpha1.AIMRuntimeConfigSpec{}
 	if ctx.Observation.RuntimeConfig != nil {
@@ -200,6 +239,29 @@ func PlanTemplateResources(ctx TemplatePlanContext, builders TemplatePlanBuilder
 	if ctx.Status != aimv1alpha1.AIMTemplateStatusAvailable &&
 		builders.BuildDiscoveryJob != nil &&
 		(ctx.Observation.Job == nil || !IsJobComplete(ctx.Observation.Job)) {
+
+		// Check if we've reached the global limit for concurrent discovery jobs
+		if ctx.Client != nil {
+			activeJobCount, err := CountActiveDiscoveryJobs(ctx.Ctx, ctx.Client)
+			if err != nil {
+				baseutils.Debug(logger, "Failed to count active discovery jobs, proceeding anyway",
+					"error", err,
+					"template", ctx.Template.GetName())
+			} else if activeJobCount >= MaxConcurrentDiscoveryJobs {
+				baseutils.Debug(logger, "Discovery job limit reached, deferring job creation",
+					"template", ctx.Template.GetName(),
+					"activeJobs", activeJobCount,
+					"limit", MaxConcurrentDiscoveryJobs)
+				// Don't create the job - it will be retried on next reconciliation
+				return desired
+			} else {
+				baseutils.Debug(logger, "Discovery job limit not reached, proceeding with job creation",
+					"template", ctx.Template.GetName(),
+					"activeJobs", activeJobCount,
+					"limit", MaxConcurrentDiscoveryJobs)
+			}
+		}
+
 		if job := builders.BuildDiscoveryJob(input); job != nil {
 			desired = append(desired, job)
 		}

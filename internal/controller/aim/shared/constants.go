@@ -36,6 +36,9 @@ const (
 	// DefaultRuntimeConfigName is the name of the default AIM runtime config
 	DefaultRuntimeConfigName = "default"
 
+	// MaxConcurrentDiscoveryJobs is the global limit for concurrent discovery jobs across all namespaces
+	MaxConcurrentDiscoveryJobs = 10
+
 	// AimLabelDomain is the base domain used for AIM-specific labels.
 	AimLabelDomain = "aim.silogen.ai"
 

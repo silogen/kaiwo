@@ -192,16 +192,32 @@ func parseCommaSeparated(input string) []string {
 	return result
 }
 
-// parseRecommendedDeployments parses a JSON array of deployment configurations.
-// The input is expected to be a JSON array of objects like:
-// [{"gpuModel": "MI300X", "gpuCount": 1, "precision": "fp8", "metric": "latency", "description": "..."}]
+// parseRecommendedDeployments parses deployment configurations from a label value.
+// The input can be either:
+// - A JSON array: [{"gpuModel": "MI300X", "gpuCount": 1, ...}, {...}]
+// - Comma-separated objects: {"gpuModel": "MI300X", "gpuCount": 1, ...}, {...}
+// - Python-style dicts with single quotes: {'gpuModel': 'MI300X', 'gpuCount': 1, ...}
+//
+// This function normalizes Python-style notation to JSON before parsing.
 func parseRecommendedDeployments(jsonStr string) ([]aimv1alpha1.RecommendedDeployment, error) {
-	// The label might be formatted as a Python dict string, try to handle both JSON and Python-style
-	// For now, we'll parse it as JSON array
 	var deployments []aimv1alpha1.RecommendedDeployment
 
-	// Try to parse as JSON array
-	err := json.Unmarshal([]byte(jsonStr), &deployments)
+	// Normalize the input:
+	// 1. Replace single quotes with double quotes (Python -> JSON)
+	// 2. Wrap with brackets if it's comma-separated objects
+	trimmed := strings.TrimSpace(jsonStr)
+
+	// Replace single quotes with double quotes for Python-style dict notation
+	normalized := strings.ReplaceAll(trimmed, "'", "\"")
+
+	// If the string doesn't start with '[', assume it's comma-separated objects
+	// and wrap it with brackets to make it a valid JSON array
+	if !strings.HasPrefix(normalized, "[") {
+		normalized = "[" + normalized + "]"
+	}
+
+	// Parse as JSON array
+	err := json.Unmarshal([]byte(normalized), &deployments)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal deployments as JSON array: %w", err)
 	}

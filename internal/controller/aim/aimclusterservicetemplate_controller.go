@@ -197,7 +197,7 @@ func (r *AIMClusterServiceTemplateReconciler) observe(ctx context.Context, templ
 }
 
 // plan computes desired state (pure function)
-func (r *AIMClusterServiceTemplateReconciler) plan(_ context.Context, template *aimv1alpha1.AIMClusterServiceTemplate, obs *clusterTemplateObservation) ([]client.Object, error) {
+func (r *AIMClusterServiceTemplateReconciler) plan(ctx context.Context, template *aimv1alpha1.AIMClusterServiceTemplate, obs *clusterTemplateObservation) ([]client.Object, error) {
 	var observation *shared.TemplateObservation
 	if obs != nil {
 		observation = &obs.TemplateObservation
@@ -206,6 +206,8 @@ func (r *AIMClusterServiceTemplateReconciler) plan(_ context.Context, template *
 	operatorNamespace := shared.GetOperatorNamespace()
 
 	desired := shared.PlanTemplateResources(shared.TemplatePlanContext{
+		Ctx:         ctx,
+		Client:      r.Client,
 		Template:    template,
 		APIVersion:  template.APIVersion,
 		Kind:        template.Kind,

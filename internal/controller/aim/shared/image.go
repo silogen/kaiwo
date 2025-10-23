@@ -34,6 +34,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
@@ -218,6 +219,7 @@ type ImagePlanInput struct {
 // PlanImageResources plans the desired state for an image resource.
 // It performs metadata extraction if needed and creates ServiceTemplates based on recommendedDeployments.
 func PlanImageResources(ctx context.Context, input ImagePlanInput) ([]client.Object, *aimv1alpha1.ImageMetadata, error) {
+	logger := ctrl.LoggerFrom(ctx)
 	var desired []client.Object
 	var extractedMetadata *aimv1alpha1.ImageMetadata
 
@@ -225,6 +227,7 @@ func PlanImageResources(ctx context.Context, input ImagePlanInput) ([]client.Obj
 	shouldExtract := !input.Observation.MetadataAlreadyAttempted
 
 	if shouldExtract {
+		baseutils.Debug(logger, "Attempting metadata extraction for image", "image", input.ImageSpec.Image)
 		// Attempt to extract metadata
 		var imagePullSecrets []corev1.LocalObjectReference
 		var namespace string
@@ -250,13 +253,24 @@ func PlanImageResources(ctx context.Context, input ImagePlanInput) ([]client.Obj
 		)
 		if err != nil {
 			// Extraction failed - we'll track this but not block the reconciliation
+			baseutils.Debug(logger, "Metadata extraction failed", "error", err)
 			return desired, nil, fmt.Errorf("metadata extraction failed: %w", err)
 		}
 
 		extractedMetadata = metadata
+		if metadata.Model != nil {
+			baseutils.Debug(logger, "Metadata extraction succeeded",
+				"hasModel", true,
+				"recommendedDeployments", len(metadata.Model.RecommendedDeployments))
+		} else {
+			baseutils.Debug(logger, "Metadata extraction succeeded but no model metadata found")
+		}
 	} else if input.Observation.ImageMetadata != nil {
 		// Use existing metadata
+		baseutils.Debug(logger, "Using existing metadata from observation")
 		extractedMetadata = input.Observation.ImageMetadata
+	} else {
+		baseutils.Debug(logger, "Skipping metadata extraction (already attempted or skipped)")
 	}
 
 	// If we have metadata with recommended deployments, create templates
@@ -377,13 +391,18 @@ func ProjectImageStatus(
 ) {
 	status.ObservedGeneration = observedGeneration
 
-	// Update image metadata if extraction succeeded
+	// Update image metadata if we have extracted metadata
 	if extractedMetadata != nil {
 		status.ImageMetadata = extractedMetadata
-	}
-
-	// Update MetadataExtracted condition
-	if extractionErr != nil {
+		// Extraction succeeded - set condition
+		setCondition(&status.Conditions, metav1.Condition{
+			Type:               aimv1alpha1.AIMImageConditionMetadataExtracted,
+			Status:             metav1.ConditionTrue,
+			Reason:             aimv1alpha1.AIMImageReasonMetadataExtracted,
+			Message:            "Image metadata successfully extracted",
+			ObservedGeneration: observedGeneration,
+		})
+	} else if extractionErr != nil {
 		// Extraction failed
 		setCondition(&status.Conditions, metav1.Condition{
 			Type:               aimv1alpha1.AIMImageConditionMetadataExtracted,
@@ -392,16 +411,8 @@ func ProjectImageStatus(
 			Message:            fmt.Sprintf("Failed to extract metadata: %v", extractionErr),
 			ObservedGeneration: observedGeneration,
 		})
-	} else if extractedMetadata != nil {
-		// Extraction succeeded
-		setCondition(&status.Conditions, metav1.Condition{
-			Type:               aimv1alpha1.AIMImageConditionMetadataExtracted,
-			Status:             metav1.ConditionTrue,
-			Reason:             aimv1alpha1.AIMImageReasonMetadataExtracted,
-			Message:            "Image metadata successfully extracted",
-			ObservedGeneration: observedGeneration,
-		})
 	}
+	// If both are nil, don't set any condition (extraction not attempted or skipped)
 }
 
 // setCondition adds or updates a condition in the conditions list.
@@ -410,9 +421,22 @@ func setCondition(conditions *[]metav1.Condition, newCondition metav1.Condition)
 		return
 	}
 
+	// Set LastTransitionTime if not already set
+	now := metav1.Now()
+	if newCondition.LastTransitionTime.IsZero() {
+		newCondition.LastTransitionTime = now
+	}
+
 	// Find existing condition
 	for i := range *conditions {
 		if (*conditions)[i].Type == newCondition.Type {
+			// Only update LastTransitionTime if status changed
+			if (*conditions)[i].Status != newCondition.Status {
+				newCondition.LastTransitionTime = now
+			} else {
+				// Keep the original transition time if status didn't change
+				newCondition.LastTransitionTime = (*conditions)[i].LastTransitionTime
+			}
 			// Update existing condition
 			(*conditions)[i] = newCondition
 			return
