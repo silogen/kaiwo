@@ -18,21 +18,45 @@ spec:
           kind: AIMClusterServiceTemplate
           metadata:
             name: llama-3-8b-cluster-with-image-mi300x-x1-latency-fp8
+          spec:
+            metric: latency
+            precision: fp8
+            gpuSelector:
+              count: 1
+              model: MI300X
     - assert:
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
             name: llama-3-8b-cluster-with-image-mi300x-x1-throughput-fp8
+          spec:
+            metric: throughput
+            precision: fp8
+            gpuSelector:
+              count: 1
+              model: MI300X
     - assert:
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
             name: llama-3-8b-cluster-with-image-mi325x-x1-latency-fp8
+          spec:
+            metric: latency
+            precision: fp8
+            gpuSelector:
+              count: 1
+              model: MI325X
     - assert:
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
             name: llama-3-8b-cluster-with-image-mi325x-x1-throughput-fp8
+          spec:
+            metric: throughput
+            precision: fp8
+            gpuSelector:
+              count: 1
+              model: MI325X
