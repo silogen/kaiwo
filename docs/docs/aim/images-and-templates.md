@@ -25,6 +25,35 @@ An AIM Image uses its `metadata.name` as the canonical model identifier. The spe
 - **`runtimeConfigName`**: the runtime configuration that supplies registry credentials or storage defaults. When omitted, the operator resolves the `default` runtime config.
 - **`discovery`**: an optional block that controls metadata extraction and automatic template generation. Discovery is **opt-in**, images do not run inspection unless `spec.discovery.enabled` is set to `true`. When enabled, the controller extracts metadata and, if `autoCreateTemplates` (default `true`) remains enabled, it creates ServiceTemplates for each recommended deployment published by the image. Note that this assumes that the image is referencing an official AIM image which has the correct labels set on it.
 
+**Private registries**
+
+Image inspection uses an `AIMRuntimeConfig` (`name: default`). For cluster-scoped images the referenced `AIMRuntimeConfig` must exist and include an image pull secret, and the same secret must also exist in the operator namespace (default `kaiwo-system`) so discovery jobs can authenticate. Namespace-scoped images follow the same rule within their namespace: the `default` runtime config must reference a secret that exists alongside the image; otherwise inspection and auto-template creation will fail.
+
+Cluster-scoped example:
+
+```yaml
+# Secret that lives in the operator namespace (default: kaiwo-system)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ghcr-global-secret
+  namespace: kaiwo-system
+type: kubernetes.io/dockerconfigjson
+data:
+  .dockerconfigjson: BASE64_DOCKER_CONFIG
+---
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMRuntimeConfig
+metadata:
+  name: default
+  namespace: kaiwo-system
+spec:
+  serviceAccountName: aim-runtime
+  imagePullSecrets:
+  - name: ghcr-global-secret
+```
+
+
 ### Examples
 
 Here is a cluster-scoped image that makes a Llama 3.1 8B model available across the entire cluster:
