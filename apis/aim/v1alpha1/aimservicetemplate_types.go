@@ -25,59 +25,8 @@ package v1alpha1
 import (
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-// AIMMetric enumerates the targeted service characteristic
-// +kubebuilder:validation:Enum=latency;throughput
-type AIMMetric string
-
-const (
-	AIMMetricLatency    AIMMetric = "latency"
-	AIMMetricThroughput AIMMetric = "throughput"
-)
-
-// AIMPrecision enumerates supported numeric precisions
-// +kubebuilder:validation:Enum=bf16;fp16;fp8;int8
-type AIMPrecision string
-
-const (
-	AIMPrecisionAuto AIMPrecision = "auto"
-	AIMPrecisionFP4  AIMPrecision = "fp4"
-	AIMPrecisionFP8  AIMPrecision = "fp8"
-	AIMPrecisionFP16 AIMPrecision = "fp16"
-	AIMPrecisionFP32 AIMPrecision = "fp32"
-	AIMPrecisionBF16 AIMPrecision = "bf16"
-	AIMPrecisionInt4 AIMPrecision = "int4"
-	AIMPrecisionInt8 AIMPrecision = "int8"
-)
-
-// AIMRuntimeParameters contains the runtime configuration parameters shared
-// across templates and services. Fields use pointers to allow optional usage
-// in different contexts (required in templates, optional in service overrides).
-type AIMRuntimeParameters struct {
-	// Metric selects the optimization goal.
-	//
-	// - `latency`: prioritize low end‑to‑end latency
-	// - `throughput`: prioritize sustained requests/second
-	//
-	// +optional
-	// +kubebuilder:validation:Enum=latency;throughput
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="metric is immutable"
-	Metric *AIMMetric `json:"metric,omitempty"`
-
-	// Precision selects the numeric precision used by the runtime.
-	// +optional
-	// +kubebuilder:validation:Enum=auto;fp4;fp8;fp16;fp32;bf16;int4;int8
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="precision is immutable"
-	Precision *AIMPrecision `json:"precision,omitempty"`
-
-	// AimGpuSelector contains the strategy to choose the resources to give each replica
-	// +optional
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="gpuSelector is immutable"
-	GpuSelector *AimGpuSelector `json:"gpuSelector,omitempty"`
-}
 
 // AIMServiceTemplateSpecCommon contains the shared fields for both cluster-scoped
 // and namespace-scoped service templates.
@@ -150,28 +99,6 @@ type AIMClusterServiceTemplateSpec struct {
 	AIMServiceTemplateSpecCommon `json:",inline"`
 }
 
-type AimGpuSelector struct {
-	// Count is the number of the GPU resources requested per replica
-	// +kubebuilder:validation:Minimum=1
-	Count int32 `json:"count"`
-
-	// Model is the model name of the GPU that is supported by this template
-	// +kubebuilder:validation:MinLength=1
-	Model string `json:"model"`
-
-	// TODO re-enable partitioning once it is supported
-
-	//// ComputePartitioning mode.
-	//// +kubebuilder:default="spx"
-	//// +kubebuilder:validation:Enum=spx;cpx
-	//ComputePartitioning string `json:"computePartitioning,omitempty"`
-	//
-	//// ComputePartitioning mode
-	//// +kubebuilder:default:"nps1"
-	//// +kubebuilder:validation:Enum=nps1;nps4
-	//MemoryPartitioning string `json:"memoryPartitioning,omitempty"`
-}
-
 // AIMServiceTemplateStatus defines the observed state of AIMServiceTemplate.
 type AIMServiceTemplateStatus struct {
 	// ObservedGeneration is the most recent generation observed by the controller.
@@ -220,18 +147,6 @@ type AIMProfileMetadata struct {
 	GPUCount  int32        `json:"gpu_count,omitempty"`
 	Metric    AIMMetric    `json:"metric,omitempty"`
 	Precision AIMPrecision `json:"precision,omitempty"`
-}
-
-type AIMModelSource struct {
-	// Name is the name of the model
-	// +optional
-	Name string `json:"name,omitempty"`
-
-	// SourceURI is the source where the model should be downloaded from
-	SourceURI string `json:"sourceUri"`
-
-	// Size is the amount of storage that the source expects
-	Size resource.Quantity `json:"size"`
 }
 
 // AIMTemplateStatusEnum defines coarse-grained states for a template.

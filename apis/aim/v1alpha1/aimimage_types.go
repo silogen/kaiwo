@@ -48,14 +48,6 @@ type AIMImageSpec struct {
 	// +kubebuilder:validation:MinLength=1
 	Image string `json:"image"`
 
-	// DefaultServiceTemplate is the name of the default service template to use, if an
-	// AIMService is created without specifying a template name.
-	DefaultServiceTemplate string `json:"defaultServiceTemplate"`
-
-	// RuntimeConfigName references the AIM runtime configuration (by name) to use for this image.
-	// +kubebuilder:default=default
-	RuntimeConfigName string `json:"runtimeConfigName,omitempty"`
-
 	// Resources defines the default resource requirements for services using this image.
 	// Template- or service-level values override these defaults.
 	// +kubebuilder:validation:Required
@@ -79,6 +71,10 @@ type AIMImageStatus struct {
 	// ResolvedRuntimeConfig captures metadata about the runtime config that was resolved.
 	// +optional
 	ResolvedRuntimeConfig *AIMResolvedRuntimeConfig `json:"resolvedRuntimeConfig,omitempty"`
+
+	// ImageMetadata is the metadata extracted from an AIM image
+	// +optional
+	ImageMetadata *ImageMetadata `json:"imageMetadata,omitempty"`
 }
 
 // AIMClusterImage is the Schema for cluster-scoped AIM image catalog entries.
