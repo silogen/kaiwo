@@ -173,10 +173,12 @@ const (
 // Condition reasons for AIMService
 const (
 	// Resolution
-	AIMServiceReasonTemplateNotFound = "TemplateNotFound"
-	AIMServiceReasonModelNotFound    = "ModelNotFound"
-	AIMServiceReasonResolved         = "Resolved"
-	AIMServiceReasonValidationFailed = "ValidationFailed"
+	AIMServiceReasonTemplateNotFound           = "TemplateNotFound"
+	AIMServiceReasonModelNotFound              = "ModelNotFound"
+	AIMServiceReasonModelNotReady              = "ModelNotReady"
+	AIMServiceReasonResolved                   = "Resolved"
+	AIMServiceReasonValidationFailed           = "ValidationFailed"
+	AIMServiceReasonTemplateSelectionAmbiguous = "TemplateSelectionAmbiguous"
 
 	// Cache
 	AIMServiceReasonWaitingForCache = "WaitingForCache"

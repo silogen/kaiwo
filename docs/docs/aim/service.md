@@ -48,7 +48,7 @@ spec:
 | Field | Type | Description |
 | ----- | ---- | ----------- |
 | `aimImageName` | string | Canonical model identifier that maps to an `AIMImage` or `AIMClusterImage` resource. This identifies which model container image to deploy. |
-| `templateRef` | string | Name of an `AIMServiceTemplate` or `AIMClusterServiceTemplate` that defines the runtime profile. When omitted, the controller uses the image's `defaultServiceTemplate` field, falling back to the service name if no default is specified. |
+| `templateRef` | string | Name of an `AIMServiceTemplate` or `AIMClusterServiceTemplate` that defines the runtime profile. When omitted, the controller enumerates the templates that reference the selected image and automatically chooses the best candidate once they become Available. |
 | `runtimeConfigName` | string | Name of the `AIMRuntimeConfig` or `AIMClusterRuntimeConfig` to use for registry credentials, storage defaults, and routing configuration. Defaults to `default` when omitted. |
 | `replicas` | int32 | Number of inference service replicas to deploy. Defaults to 1. |
 | `resources` | ResourceRequirements | Container resource requirements. When specified, these override template and image defaults. See [Resource resolution](#resource-resolution) for the complete precedence order. |
@@ -105,7 +105,7 @@ After merging, if GPU resource requests or limits are still unset, the controlle
 
 ## Template resolution and derivation
 
-The template resolution process determines which template configuration the service will use. This process handles explicit template references, default template lookup, and automatic template derivation when overrides are specified.
+The template resolution process determines which template configuration the service will use. This process handles explicit template references, automatic template selection when `templateRef` is omitted, and template derivation when overrides are specified.
 
 ### Resolution process
 
@@ -113,11 +113,11 @@ When a service is created or updated, the controller follows this resolution seq
 
 1. **Explicit templateRef**: If `spec.templateRef` is specified, the controller searches for a template with that name (namespace-scoped first, then cluster-scoped). If the template is not found, the service enters a `Degraded` state.
 
-2. **Default template lookup**: If `templateRef` is omitted, the controller examines the referenced AIMImage (namespace-scoped first, then cluster-scoped) and uses its `defaultServiceTemplate` field. If no default template is configured, the service enters a `Degraded` state with an appropriate error message.
+2. **Automatic selection**: If `templateRef` is omitted, the controller inspects the referenced AIMImage (namespace-scoped first, then cluster-scoped) and waits for the templates that point to that image to become `Available`. It then filters candidates using any service overrides (metric, precision, GPU selector) and the GPUs currently present in the cluster. If exactly one candidate remains, that template is selected. If no candidates remain—or multiple viable templates remain after filtering—the service reports a failure condition explaining the issue.
 
 3. **Override handling**: If `spec.overrides` is specified, the controller modifies the template name by appending a hash suffix and creates a derived template. See [Template derivation](#template-derivation-and-overrides) below.
 
-The controller enforces explicit configuration: services must either reference an existing template via `spec.templateRef` or rely on a configured `defaultServiceTemplate` on the image. There is no automatic template creation unless `spec.overrides` is specified. This prevents unexpected behavior and ensures clear configuration management.
+Automatic selection allows services to omit `templateRef` while still producing deterministic results. Templates that remain in `NotAvailable` or `Degraded` state are excluded from consideration, ensuring the service only binds to healthy templates.
 
 The resolved template reference, including whether it is namespace-scoped or cluster-scoped, is recorded in `status.resolvedTemplate`.
 
@@ -279,24 +279,24 @@ status:
     message: Cannot proceed without template
 ```
 
-### Example status - no default template configured
+### Example status - no suitable template available
 
 ```yaml
 status:
-  status: Degraded
+  status: Failed
   conditions:
   - type: Failure
     status: "True"
     reason: TemplateNotFound
-    message: 'No template reference specified and no default template found on the image. Provide spec.templateRef or configure the image''s defaultServiceTemplate field.'
+    message: 'No available templates found for image "meta-llama-3-8b"'
   - type: Resolved
     status: "False"
     reason: TemplateNotFound
-    message: 'No template reference specified and no default template found on the image. Provide spec.templateRef or configure the image''s defaultServiceTemplate field.'
+    message: 'No available templates found for image "meta-llama-3-8b"'
   - type: RuntimeReady
     status: "False"
     reason: TemplateNotFound
-    message: Referenced template does not exist
+    message: Cannot proceed without template
 ```
 
 ## Events and debugging

@@ -35,6 +35,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -57,28 +59,47 @@ type TemplateResolution struct {
 	BaseName  string
 	FinalName string
 	Derived   bool
+	Scope     TemplateScope
+}
+
+// TemplateSelectionStatus captures metadata about automatic template selection.
+type TemplateSelectionStatus struct {
+	AutoSelected      bool
+	CandidateCount    int
+	SelectionReason   string
+	SelectionMessage  string
+	ImageReady        bool
+	ImageReadyReason  string
+	ImageReadyMessage string
 }
 
 // ServiceObservation holds observed state for an AIMService reconciliation.
 type ServiceObservation struct {
-	TemplateName           string
-	BaseTemplateName       string
-	Scope                  TemplateScope
-	TemplateAvailable      bool
-	TemplateOwnedByService bool
-	ShouldCreateTemplate   bool
-	RuntimeConfigSpec      aimv1alpha1.AIMRuntimeConfigSpec
-	ResolvedRuntimeConfig  *aimv1alpha1.AIMResolvedRuntimeConfig
-	ResolvedImage          *aimv1alpha1.AIMResolvedReference
-	RoutePath              string
-	RouteTemplateErr       error
-	RuntimeConfigErr       error
-	ImageErr               error
-	TemplateStatus         *aimv1alpha1.AIMServiceTemplateStatus
-	TemplateSpecCommon     aimv1alpha1.AIMServiceTemplateSpecCommon
-	TemplateSpec           *aimv1alpha1.AIMServiceTemplateSpec
-	TemplateNamespace      string
-	ImageResources         *corev1.ResourceRequirements
+	TemplateName             string
+	BaseTemplateName         string
+	Scope                    TemplateScope
+	AutoSelectedTemplate     bool
+	TemplateAvailable        bool
+	TemplateOwnedByService   bool
+	ShouldCreateTemplate     bool
+	RuntimeConfigSpec        aimv1alpha1.AIMRuntimeConfigSpec
+	ResolvedRuntimeConfig    *aimv1alpha1.AIMResolvedRuntimeConfig
+	ResolvedImage            *aimv1alpha1.AIMResolvedReference
+	RoutePath                string
+	RouteTemplateErr         error
+	RuntimeConfigErr         error
+	ImageErr                 error
+	TemplateStatus           *aimv1alpha1.AIMServiceTemplateStatus
+	TemplateSpecCommon       aimv1alpha1.AIMServiceTemplateSpecCommon
+	TemplateSpec             *aimv1alpha1.AIMServiceTemplateSpec
+	TemplateNamespace        string
+	ImageResources           *corev1.ResourceRequirements
+	TemplateSelectionReason  string
+	TemplateSelectionMessage string
+	TemplateSelectionCount   int
+	ImageReady               bool
+	ImageReadyReason         string
+	ImageReadyMessage        string
 }
 
 // TemplateFound returns true if a template was resolved (namespace or cluster scope).
@@ -98,35 +119,86 @@ func (o *ServiceObservation) RuntimeName() string {
 // It handles default template lookup, base template resolution, and derived template naming.
 // Returns an empty BaseName/FinalName if no template can be resolved, which indicates
 // the service should enter a degraded state.
-func ResolveTemplateNameForService(ctx context.Context, k8sClient client.Client, service *aimv1alpha1.AIMService) (TemplateResolution, error) {
+func ResolveTemplateNameForService(
+	ctx context.Context,
+	k8sClient client.Client,
+	service *aimv1alpha1.AIMService,
+) (TemplateResolution, TemplateSelectionStatus, error) {
 	var res TemplateResolution
+	status := TemplateSelectionStatus{ImageReady: true}
 
 	baseName := strings.TrimSpace(service.Spec.TemplateRef)
-	if baseName == "" {
-		defaultTemplate, err := LookupDefaultServiceTemplate(ctx, k8sClient, service)
-		if err != nil {
-			return res, err
-		}
-		baseName = defaultTemplate
-		// If no default template is found, baseName remains empty.
-		// The controller will handle this by entering a degraded state.
-	}
-
-	res.BaseName = baseName
-	res.Derived = service.Spec.Overrides != nil
-
-	if res.Derived && baseName != "" {
-		suffix := OverridesSuffix(service.Spec.Overrides)
-		if suffix != "" {
-			res.FinalName = DerivedTemplateName(baseName, suffix)
+	if baseName != "" {
+		res.BaseName = baseName
+		res.Derived = service.Spec.Overrides != nil
+		if res.Derived {
+			suffix := OverridesSuffix(service.Spec.Overrides)
+			if suffix != "" {
+				res.FinalName = DerivedTemplateName(baseName, suffix)
+			} else {
+				res.FinalName = baseName
+			}
 		} else {
 			res.FinalName = baseName
 		}
-	} else {
-		res.FinalName = baseName
+		return res, status, nil
 	}
 
-	return res, nil
+	status.AutoSelected = true
+
+	imageName := strings.TrimSpace(service.Spec.AIMImageName)
+	ready, _, reason, message, err := evaluateImageReadiness(ctx, k8sClient, service.Namespace, imageName)
+	if err != nil {
+		return res, status, err
+	}
+
+	status.ImageReady = ready
+	status.ImageReadyReason = reason
+	status.ImageReadyMessage = message
+
+	if !ready {
+		return res, status, nil
+	}
+
+	candidates, err := listTemplateCandidatesForImage(ctx, k8sClient, service.Namespace, imageName)
+	if err != nil {
+		return res, status, err
+	}
+
+	availableGPUs, err := ListAvailableGPUs(ctx, k8sClient)
+	if err != nil {
+		return res, status, fmt.Errorf("failed to list available GPUs: %w", err)
+	}
+
+	selected, count := SelectBestTemplate(candidates, service.Spec.Overrides, availableGPUs)
+	status.CandidateCount = count
+
+	if count != 1 {
+		if count == 0 {
+			status.SelectionReason = aimv1alpha1.AIMServiceReasonTemplateNotFound
+			status.SelectionMessage = fmt.Sprintf("No available templates found for image %q", imageName)
+		} else {
+			status.SelectionReason = aimv1alpha1.AIMServiceReasonTemplateSelectionAmbiguous
+			status.SelectionMessage = fmt.Sprintf("Multiple templates (%d) satisfy image %q", count, imageName)
+		}
+		return res, status, nil
+	}
+
+	res.BaseName = selected.Name
+	res.Scope = selected.Scope
+	res.Derived = service.Spec.Overrides != nil
+	if res.Derived {
+		suffix := OverridesSuffix(service.Spec.Overrides)
+		if suffix != "" {
+			res.FinalName = DerivedTemplateName(selected.Name, suffix)
+		} else {
+			res.FinalName = selected.Name
+		}
+	} else {
+		res.FinalName = selected.Name
+	}
+
+	return res, status, nil
 }
 
 // OverridesSuffix computes a hash suffix for service overrides.
@@ -168,34 +240,127 @@ func DerivedTemplateName(baseName, suffix string) string {
 	return fmt.Sprintf("%s%s", trimmed, extra)
 }
 
-// LookupDefaultServiceTemplate searches for a default template name from the service's AIMImage or AIMClusterImage.
-func LookupDefaultServiceTemplate(ctx context.Context, k8sClient client.Client, service *aimv1alpha1.AIMService) (string, error) {
-	imageName := strings.TrimSpace(service.Spec.AIMImageName)
+func evaluateImageReadiness(
+	ctx context.Context,
+	k8sClient client.Client,
+	namespace string,
+	imageName string,
+) (bool, TemplateScope, string, string, error) {
 	if imageName == "" {
-		return "", nil
+		return false, TemplateScopeNone, aimv1alpha1.AIMServiceReasonModelNotFound, "AIMService spec.aimImageName is empty", nil
 	}
 
-	if service.Namespace != "" {
+	if namespace != "" {
 		var nsImage aimv1alpha1.AIMImage
-		if err := k8sClient.Get(ctx, client.ObjectKey{Name: imageName, Namespace: service.Namespace}, &nsImage); err == nil {
-			if tpl := strings.TrimSpace(nsImage.Spec.DefaultServiceTemplate); tpl != "" {
-				return tpl, nil
+		err := k8sClient.Get(ctx, client.ObjectKey{Name: imageName, Namespace: namespace}, &nsImage)
+		switch {
+		case err == nil:
+			ready, reason, message := imageReadyStatus(nsImage.Status.Conditions)
+			if ready {
+				return true, TemplateScopeNamespace, "", "", nil
 			}
-		} else if !apierrors.IsNotFound(err) {
-			return "", fmt.Errorf("failed to get AIMImage %s/%s: %w", service.Namespace, imageName, err)
+			if reason == "" {
+				reason = aimv1alpha1.AIMServiceReasonModelNotReady
+			}
+			if message == "" {
+				message = fmt.Sprintf("AIMImage %s/%s is not ready", namespace, imageName)
+			}
+			return false, TemplateScopeNamespace, reason, message, nil
+		case apierrors.IsNotFound(err):
+			// fall through to cluster scope
+		default:
+			return false, TemplateScopeNone, "", "", fmt.Errorf("failed to get AIMImage %s/%s: %w", namespace, imageName, err)
 		}
 	}
 
 	var clusterImage aimv1alpha1.AIMClusterImage
-	if err := k8sClient.Get(ctx, client.ObjectKey{Name: imageName}, &clusterImage); err == nil {
-		if tpl := strings.TrimSpace(clusterImage.Spec.DefaultServiceTemplate); tpl != "" {
-			return tpl, nil
+	err := k8sClient.Get(ctx, client.ObjectKey{Name: imageName}, &clusterImage)
+	switch {
+	case err == nil:
+		ready, reason, message := imageReadyStatus(clusterImage.Status.Conditions)
+		if ready {
+			return true, TemplateScopeCluster, "", "", nil
 		}
-	} else if !apierrors.IsNotFound(err) {
-		return "", fmt.Errorf("failed to get AIMClusterImage %s: %w", imageName, err)
+		if reason == "" {
+			reason = aimv1alpha1.AIMServiceReasonModelNotReady
+		}
+		if message == "" {
+			message = fmt.Sprintf("AIMClusterImage %s is not ready", imageName)
+		}
+		return false, TemplateScopeCluster, reason, message, nil
+	case apierrors.IsNotFound(err):
+		return false, TemplateScopeNone, aimv1alpha1.AIMServiceReasonModelNotFound,
+			fmt.Sprintf("No AIMImage or AIMClusterImage found for %q", imageName), nil
+	default:
+		return false, TemplateScopeNone, "", "", fmt.Errorf("failed to get AIMClusterImage %s: %w", imageName, err)
+	}
+}
+
+func imageReadyStatus(conditions []metav1.Condition) (bool, string, string) {
+	if apimeta.IsStatusConditionTrue(conditions, aimv1alpha1.AIMImageConditionRuntimeResolved) {
+		return true, "", ""
 	}
 
-	return "", nil
+	condition := apimeta.FindStatusCondition(conditions, aimv1alpha1.AIMImageConditionRuntimeResolved)
+	if condition != nil {
+		return false, condition.Reason, condition.Message
+	}
+
+	return false, aimv1alpha1.AIMServiceReasonModelNotReady, "Image runtime configuration not yet resolved"
+}
+
+func listTemplateCandidatesForImage(
+	ctx context.Context,
+	k8sClient client.Client,
+	namespace string,
+	imageName string,
+) ([]TemplateCandidate, error) {
+	candidates := make([]TemplateCandidate, 0)
+
+	if namespace != "" {
+		var templateList aimv1alpha1.AIMServiceTemplateList
+		if err := k8sClient.List(ctx, &templateList, client.InNamespace(namespace)); err != nil {
+			return nil, fmt.Errorf("failed to list AIMServiceTemplates in namespace %q: %w", namespace, err)
+		}
+		for i := range templateList.Items {
+			tpl := &templateList.Items[i]
+			if tpl.Spec.AIMImageName != imageName {
+				continue
+			}
+			if IsDerivedTemplate(tpl.GetLabels()) {
+				continue
+			}
+			candidates = append(candidates, TemplateCandidate{
+				Name:      tpl.Name,
+				Namespace: tpl.Namespace,
+				Scope:     TemplateScopeNamespace,
+				Spec:      tpl.Spec.AIMServiceTemplateSpecCommon,
+				Status:    tpl.Status,
+			})
+		}
+	}
+
+	var clusterTemplateList aimv1alpha1.AIMClusterServiceTemplateList
+	if err := k8sClient.List(ctx, &clusterTemplateList); err != nil {
+		return nil, fmt.Errorf("failed to list AIMClusterServiceTemplates: %w", err)
+	}
+	for i := range clusterTemplateList.Items {
+		tpl := &clusterTemplateList.Items[i]
+		if tpl.Spec.AIMImageName != imageName {
+			continue
+		}
+		if IsDerivedTemplate(tpl.GetLabels()) {
+			continue
+		}
+		candidates = append(candidates, TemplateCandidate{
+			Name:   tpl.Name,
+			Scope:  TemplateScopeCluster,
+			Spec:   tpl.Spec.AIMServiceTemplateSpecCommon,
+			Status: tpl.Status,
+		})
+	}
+
+	return candidates, nil
 }
 
 // LoadBaseTemplateSpec fetches the base template spec for a derived template.
@@ -478,25 +643,40 @@ func ObserveNonDerivedTemplate(
 	k8sClient client.Client,
 	service *aimv1alpha1.AIMService,
 	templateName string,
+	preferredScope TemplateScope,
 	obs *ServiceObservation,
 ) error {
-	// Try namespace-scoped template first
-	var namespaceTemplate aimv1alpha1.AIMServiceTemplate
-	err := k8sClient.Get(ctx, types.NamespacedName{
-		Namespace: service.Namespace,
-		Name:      templateName,
-	}, &namespaceTemplate)
-
-	switch {
-	case err == nil:
-		return PopulateObservationFromNamespaceTemplate(ctx, k8sClient, service, &namespaceTemplate, obs)
-
-	case apierrors.IsNotFound(err):
-		// Fall back to cluster-scoped template
+	switch preferredScope {
+	case TemplateScopeNamespace:
+		var namespaceTemplate aimv1alpha1.AIMServiceTemplate
+		err := k8sClient.Get(ctx, types.NamespacedName{
+			Namespace: service.Namespace,
+			Name:      templateName,
+		}, &namespaceTemplate)
+		switch {
+		case err == nil:
+			return PopulateObservationFromNamespaceTemplate(ctx, k8sClient, service, &namespaceTemplate, obs)
+		case apierrors.IsNotFound(err):
+			return nil
+		default:
+			return fmt.Errorf("failed to get AIMServiceTemplate %s/%s: %w", service.Namespace, templateName, err)
+		}
+	case TemplateScopeCluster:
 		return observeClusterTemplate(ctx, k8sClient, service, templateName, obs)
-
 	default:
-		return fmt.Errorf("failed to get AIMServiceTemplate %s/%s: %w", service.Namespace, templateName, err)
+		var namespaceTemplate aimv1alpha1.AIMServiceTemplate
+		err := k8sClient.Get(ctx, types.NamespacedName{
+			Namespace: service.Namespace,
+			Name:      templateName,
+		}, &namespaceTemplate)
+		switch {
+		case err == nil:
+			return PopulateObservationFromNamespaceTemplate(ctx, k8sClient, service, &namespaceTemplate, obs)
+		case apierrors.IsNotFound(err):
+			return observeClusterTemplate(ctx, k8sClient, service, templateName, obs)
+		default:
+			return fmt.Errorf("failed to get AIMServiceTemplate %s/%s: %w", service.Namespace, templateName, err)
+		}
 	}
 }
 

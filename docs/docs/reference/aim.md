@@ -16,7 +16,7 @@ AIM provides a consistent way to deploy optimized LLM inference services on AMD 
 
 | Kind                        | Scope     | Purpose                                                                                                                          |
 | --------------------------- | --------- |----------------------------------------------------------------------------------------------------------------------------------|
-| `AIMClusterImage`           | Cluster   | Catalog entry: **modelId → container image**, with a **defaultServiceTemplate** name (advisory).                                 |
+| `AIMClusterImage`           | Cluster   | Catalog entry: **modelId → container image**. Templates referencing the image are discovered at runtime for automatic selection. |
 | `AIMImage`                  | Namespace | Namespace-scoped catalog entry (optional, for namespace-specific model overrides).                                               |
 | `AIMClusterServiceTemplate` | Cluster   | Cluster-wide runtime profile for one model (no caching field).                                                                   |
 | `AIMServiceTemplate`        | Namespace | Namespace runtime profile for one model; can enable caching via `spec.caching.enabled`.                                          |
@@ -39,14 +39,14 @@ kubectl apply -k https://example.org/aim-packs/catalogs/llama3
 
 These bundles typically include:
 
-* `AIMClusterImage` entries with `spec.modelId`, `spec.image`, and a `spec.defaultServiceTemplate` name.
+* `AIMClusterImage` entries with `spec.modelId` and `spec.image` for each model in the catalog.
 * Matching `AIMClusterServiceTemplate` objects for common runtime profiles (e.g., latency-optimized, throughput-optimized).
 
 ### 2) Deploy services — common patterns
 
 #### (a) Service with just the model ID (uses the pack’s default template)
 
-Use a service manifest provided by the pack; it already fills `templateRef` with the image’s default template. You typically only change `spec.aimModelId`.
+Use a service manifest provided by the pack; you typically only change `spec.aimModelId`. When `templateRef` is omitted, the controller waits for the cataloged templates that reference the image to become Ready and automatically selects the best match.
 
 ```yaml
 apiVersion: aim.silogen.ai/v1alpha1
@@ -59,7 +59,7 @@ spec:
   cacheModel: true                      # on-demand caching (default false)
 ```
 
-This picks the default template that is assigned to the corresponding `AIMClusterImage` resource.
+This relies on automatic template selection. If no template can be selected (for example, none are Available or multiple candidates remain after filtering), the service reports a failure condition.
 
 #### (b) Service that explicitly selects a namespace template
 
@@ -260,7 +260,7 @@ You can warm caches before deploying or scaling services:
 
 * **AIMServiceTemplate (namespace)**: Owned by tenants/users. Can enable caching (`spec.caching.enabled`). Discovery runs in the same namespace.
 
-* **Template resolution in AIMService**: `AIMService.spec.templateRef` is **optional**. When specified, it can reference either a namespace-scoped `AIMServiceTemplate` (checked first) or a cluster-scoped `AIMClusterServiceTemplate` (fallback). When omitted, the service uses the model's `defaultServiceTemplate` from the `AIMImage` catalog entry.
+* **Template resolution in AIMService**: `AIMService.spec.templateRef` is **optional**. When specified, it can reference either a namespace-scoped `AIMServiceTemplate` (checked first) or a cluster-scoped `AIMClusterServiceTemplate` (fallback). When omitted, the controller enumerates the templates that reference the selected image, waits for them to become Available, and chooses the best candidate using the profile selection heuristics. If no unique candidate remains, the service reports a failure condition.
 
 * **Cache warm resolution**: `AIMTemplateCache.spec.templateRef` resolves to a namespace template first; if none exists, it falls back to a cluster template with the same name.
 
@@ -276,7 +276,6 @@ metadata:
 spec:
   modelId: meta/llama-3-8b:1.1+20240915
   image: registry.example.com/aim/llama3-8b:1.1
-  defaultServiceTemplate: llama3-8b-latency-gpu1
   resources:
     limits:
       cpu: "8"

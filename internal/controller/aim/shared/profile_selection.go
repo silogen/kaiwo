@@ -30,7 +30,214 @@ import (
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 )
 
-// GPUPreferenceOrder defines the preference order for GPU models when selecting profiles.
+// TemplateCandidate captures the information needed to evaluate a template during selection.
+type TemplateCandidate struct {
+	Name      string
+	Namespace string
+	Scope     TemplateScope
+	Spec      aimv1alpha1.AIMServiceTemplateSpecCommon
+	Status    aimv1alpha1.AIMServiceTemplateStatus
+}
+
+// QualifiedName returns a human-readable identifier for logging/debugging.
+func (c TemplateCandidate) QualifiedName() string {
+	if c.Scope == TemplateScopeNamespace && c.Namespace != "" {
+		return c.Namespace + "/" + c.Name
+	}
+	return c.Name
+}
+
+// SelectBestTemplate selects the best template candidate from the provided list.
+// The heuristic is:
+// 1. Consider only templates that are Available.
+// 2. Filter by service overrides when provided.
+// 3. Filter by GPUs that exist in the cluster.
+// 4. Prefer higher-tier GPUs, then latency over throughput, then lower precision.
+// Returns nil if no candidate matches the criteria.
+func SelectBestTemplate(
+	candidates []TemplateCandidate,
+	overrides *aimv1alpha1.AIMServiceOverrides,
+	availableGPUs []string,
+) (*TemplateCandidate, int) {
+	filtered := filterAvailableTemplates(candidates)
+	if len(filtered) == 0 {
+		return nil, 0
+	}
+
+	filtered = filterTemplatesByOverrides(filtered, overrides)
+	if len(filtered) == 0 {
+		return nil, 0
+	}
+
+	filtered = filterTemplatesByGPUAvailability(filtered, availableGPUs)
+	if len(filtered) == 0 {
+		return nil, 0
+	}
+
+	if len(filtered) == 1 {
+		return &filtered[0], 1
+	}
+
+	selected := choosePreferredTemplate(filtered)
+	return selected, len(filtered)
+}
+
+func filterAvailableTemplates(candidates []TemplateCandidate) []TemplateCandidate {
+	result := make([]TemplateCandidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		if candidate.Status.Status == aimv1alpha1.AIMTemplateStatusAvailable {
+			result = append(result, candidate)
+		}
+	}
+	return result
+}
+
+func filterTemplatesByOverrides(candidates []TemplateCandidate, overrides *aimv1alpha1.AIMServiceOverrides) []TemplateCandidate {
+	if overrides == nil {
+		return candidates
+	}
+
+	result := make([]TemplateCandidate, 0, len(candidates))
+
+	for _, candidate := range candidates {
+		templateMetric := candidateMetric(candidate)
+		templatePrecision := candidatePrecision(candidate)
+		templateGPU := candidateGPUModel(candidate)
+
+		if overrides.Metric != nil && !strings.EqualFold(templateMetric, string(*overrides.Metric)) {
+			continue
+		}
+
+		if overrides.Precision != nil && !strings.EqualFold(templatePrecision, string(*overrides.Precision)) {
+			continue
+		}
+
+		if overrides.GpuSelector != nil {
+			overrideGPU := strings.TrimSpace(overrides.GpuSelector.Model)
+			if overrideGPU != "" && !strings.EqualFold(templateGPU, overrideGPU) {
+				continue
+			}
+		}
+
+		result = append(result, candidate)
+	}
+
+	return result
+}
+
+func filterTemplatesByGPUAvailability(candidates []TemplateCandidate, availableGPUs []string) []TemplateCandidate {
+	gpuMap := make(map[string]struct{}, len(availableGPUs))
+	for _, gpu := range availableGPUs {
+		normalized := normalizeGPUModel(strings.TrimSpace(gpu))
+		if normalized != "" {
+			gpuMap[normalized] = struct{}{}
+		}
+	}
+
+	result := make([]TemplateCandidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		model := strings.TrimSpace(candidateGPUModel(candidate))
+		if model == "" {
+			result = append(result, candidate)
+			continue
+		}
+
+		normalized := normalizeGPUModel(model)
+		if _, ok := gpuMap[normalized]; ok {
+			result = append(result, candidate)
+		}
+	}
+
+	return result
+}
+
+func choosePreferredTemplate(candidates []TemplateCandidate) *TemplateCandidate {
+	if len(candidates) == 0 {
+		return nil
+	}
+
+	if len(candidates) == 1 {
+		return &candidates[0]
+	}
+
+	gpuPref := makePreferenceMap(GPUPreferenceOrder)
+	metricPref := makePreferenceMap(MetricPreferenceOrder)
+	precisionPref := makePreferenceMap(PrecisionPreferenceOrder)
+
+	bestIndex := 0
+	bestGPUScore := getPreferenceScore(candidateGPUModel(candidates[0]), gpuPref)
+	bestMetricScore := getPreferenceScore(candidateMetric(candidates[0]), metricPref)
+	bestPrecisionScore := getPreferenceScore(candidatePrecision(candidates[0]), precisionPref)
+
+	for i := 1; i < len(candidates); i++ {
+		currentGPUScore := getPreferenceScore(candidateGPUModel(candidates[i]), gpuPref)
+		currentMetricScore := getPreferenceScore(candidateMetric(candidates[i]), metricPref)
+		currentPrecisionScore := getPreferenceScore(candidatePrecision(candidates[i]), precisionPref)
+
+		if currentGPUScore < bestGPUScore {
+			bestIndex = i
+			bestGPUScore = currentGPUScore
+			bestMetricScore = currentMetricScore
+			bestPrecisionScore = currentPrecisionScore
+			continue
+		}
+		if currentGPUScore > bestGPUScore {
+			continue
+		}
+
+		if currentMetricScore < bestMetricScore {
+			bestIndex = i
+			bestMetricScore = currentMetricScore
+			bestPrecisionScore = currentPrecisionScore
+			continue
+		}
+		if currentMetricScore > bestMetricScore {
+			continue
+		}
+
+		if currentPrecisionScore < bestPrecisionScore {
+			bestIndex = i
+			bestPrecisionScore = currentPrecisionScore
+		}
+	}
+
+	return &candidates[bestIndex]
+}
+
+func candidateMetric(candidate TemplateCandidate) string {
+	if metric := candidate.Status.Profile.Metadata.Metric; metric != "" {
+		return string(metric)
+	}
+	if candidate.Spec.Metric != nil {
+		return string(*candidate.Spec.Metric)
+	}
+	return ""
+}
+
+func candidatePrecision(candidate TemplateCandidate) string {
+	if precision := candidate.Status.Profile.Metadata.Precision; precision != "" {
+		return string(precision)
+	}
+	if candidate.Spec.Precision != nil {
+		return string(*candidate.Spec.Precision)
+	}
+	return ""
+}
+
+func candidateGPUModel(candidate TemplateCandidate) string {
+	if candidate.Spec.GpuSelector != nil {
+		model := strings.TrimSpace(candidate.Spec.GpuSelector.Model)
+		if model != "" {
+			return model
+		}
+	}
+	if gpu := strings.TrimSpace(candidate.Status.Profile.Metadata.GPU); gpu != "" {
+		return gpu
+	}
+	return ""
+}
+
+// GPUPreferenceOrder defines the preference order for GPU models when selecting templates.
 // GPUs earlier in the list are preferred over later ones.
 // TODO: Fill in the complete preference order based on performance characteristics.
 var GPUPreferenceOrder = []string{
@@ -59,176 +266,6 @@ var PrecisionPreferenceOrder = []string{
 	"fp32",
 }
 
-// SelectBestProfile selects the best profile from a list of discovered profiles
-// based on the following heuristic:
-// 1. Filter by user overrides (if provided)
-// 2. Filter by GPU availability in the cluster
-// 3. Apply preference heuristic: GPU model > metric > precision
-//
-// Returns nil if no suitable profile is found.
-func SelectBestProfile(
-	profiles []aimv1alpha1.ResolvedProfile,
-	overrides *aimv1alpha1.AIMServiceOverrides,
-	availableGPUs []string,
-) *aimv1alpha1.ResolvedProfile {
-	if len(profiles) == 0 {
-		return nil
-	}
-
-	// Step 1: Filter by user overrides
-	filtered := filterByOverrides(profiles, overrides)
-	if len(filtered) == 0 {
-		return nil
-	}
-
-	// Step 2: Filter by GPU availability
-	filtered = filterByGPUAvailability(filtered, availableGPUs)
-	if len(filtered) == 0 {
-		return nil
-	}
-
-	// Step 3: Apply preference heuristic
-	return applyPreferenceHeuristic(filtered)
-}
-
-// filterByOverrides filters profiles based on user-provided overrides.
-func filterByOverrides(profiles []aimv1alpha1.ResolvedProfile, overrides *aimv1alpha1.AIMServiceOverrides) []aimv1alpha1.ResolvedProfile {
-	if overrides == nil {
-		return profiles
-	}
-
-	var filtered []aimv1alpha1.ResolvedProfile
-
-	for _, profile := range profiles {
-		metric := resolvedProfileMetric(profile)
-		precision := resolvedProfilePrecision(profile)
-		gpuModel := resolvedProfileGPUModel(profile)
-
-		// Filter by metric if specified
-		if overrides.Metric != nil && !strings.EqualFold(metric, string(*overrides.Metric)) {
-			continue
-		}
-
-		// Filter by precision if specified
-		if overrides.Precision != nil && !strings.EqualFold(precision, string(*overrides.Precision)) {
-			continue
-		}
-
-		// Filter by GPU selector if specified
-		if overrides.GpuSelector != nil && !strings.EqualFold(gpuModel, overrides.GpuSelector.Model) {
-			continue
-		}
-
-		filtered = append(filtered, profile)
-	}
-
-	return filtered
-}
-
-// filterByGPUAvailability filters profiles to only include those with GPU models
-// available in the cluster.
-func filterByGPUAvailability(profiles []aimv1alpha1.ResolvedProfile, availableGPUs []string) []aimv1alpha1.ResolvedProfile {
-	if len(availableGPUs) == 0 {
-		// If no GPUs are available, return empty list
-		return nil
-	}
-
-	// Create a map for fast lookup
-	gpuMap := make(map[string]bool)
-	for _, gpu := range availableGPUs {
-		gpuMap[strings.ToUpper(gpu)] = true
-	}
-
-	var filtered []aimv1alpha1.ResolvedProfile
-	for _, profile := range profiles {
-		gpuModel := resolvedProfileGPUModel(profile)
-		if gpuModel == "" || gpuMap[strings.ToUpper(gpuModel)] {
-			filtered = append(filtered, profile)
-		}
-	}
-
-	return filtered
-}
-
-// applyPreferenceHeuristic selects the best profile based on preference ordering.
-// Preference order: GPU model > metric > precision
-func applyPreferenceHeuristic(profiles []aimv1alpha1.ResolvedProfile) *aimv1alpha1.ResolvedProfile {
-	if len(profiles) == 0 {
-		return nil
-	}
-
-	if len(profiles) == 1 {
-		return &profiles[0]
-	}
-
-	// Create preference maps for fast lookup
-	gpuPref := makePreferenceMap(GPUPreferenceOrder)
-	metricPref := makePreferenceMap(MetricPreferenceOrder)
-	precisionPref := makePreferenceMap(PrecisionPreferenceOrder)
-
-	best := &profiles[0]
-	bestGPUScore := getPreferenceScore(resolvedProfileGPUModel(*best), gpuPref)
-	bestMetricScore := getPreferenceScore(resolvedProfileMetric(*best), metricPref)
-	bestPrecisionScore := getPreferenceScore(resolvedProfilePrecision(*best), precisionPref)
-
-	for i := 1; i < len(profiles); i++ {
-		current := &profiles[i]
-		currentGPUScore := getPreferenceScore(resolvedProfileGPUModel(*current), gpuPref)
-		currentMetricScore := getPreferenceScore(resolvedProfileMetric(*current), metricPref)
-		currentPrecisionScore := getPreferenceScore(resolvedProfilePrecision(*current), precisionPref)
-
-		// Compare by GPU preference first
-		if currentGPUScore < bestGPUScore {
-			best = current
-			bestGPUScore = currentGPUScore
-			bestMetricScore = currentMetricScore
-			bestPrecisionScore = currentPrecisionScore
-			continue
-		} else if currentGPUScore > bestGPUScore {
-			continue
-		}
-
-		// GPU scores are equal, compare by metric
-		if currentMetricScore < bestMetricScore {
-			best = current
-			bestMetricScore = currentMetricScore
-			bestPrecisionScore = currentPrecisionScore
-			continue
-		} else if currentMetricScore > bestMetricScore {
-			continue
-		}
-
-		// Metric scores are equal, compare by precision
-		if currentPrecisionScore < bestPrecisionScore {
-			best = current
-			bestPrecisionScore = currentPrecisionScore
-		}
-	}
-
-	return best
-}
-
-func resolvedProfileMetric(profile aimv1alpha1.ResolvedProfile) string {
-	if profile.Runtime.Metric == nil {
-		return ""
-	}
-	return string(*profile.Runtime.Metric)
-}
-
-func resolvedProfilePrecision(profile aimv1alpha1.ResolvedProfile) string {
-	if profile.Runtime.Precision == nil {
-		return ""
-	}
-	return string(*profile.Runtime.Precision)
-}
-
-func resolvedProfileGPUModel(profile aimv1alpha1.ResolvedProfile) string {
-	if profile.Runtime.GpuSelector == nil {
-		return ""
-	}
-	return profile.Runtime.GpuSelector.Model
-}
-
 // makePreferenceMap creates a map from preference list to index (lower index = higher preference).
 func makePreferenceMap(preferences []string) map[string]int {
 	m := make(map[string]int)
@@ -244,6 +281,5 @@ func getPreferenceScore(value string, prefMap map[string]int) int {
 	if score, ok := prefMap[strings.ToUpper(value)]; ok {
 		return score
 	}
-	// Unknown values get lowest preference (highest score)
 	return len(prefMap) + 1000
 }
