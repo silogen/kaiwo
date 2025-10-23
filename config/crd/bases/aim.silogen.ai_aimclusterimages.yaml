@@ -56,9 +56,8 @@ spec:
             description: AIMImageSpec defines the desired state of AIMImage.
             properties:
               defaultServiceTemplate:
-                description: |-
-                  DefaultServiceTemplate is the name of the default service template to use, if an
-                  AIMService is created without specifying a template name.
+                description: DefaultServiceTemplate is the default template to use
+                  for this image, if the user does not provide any
                 type: string
               image:
                 description: |-
@@ -135,13 +134,7 @@ spec:
                     self.requests
                 - message: resources.limits must include memory
                   rule: has(self.limits) && 'memory' in self.limits
-              runtimeConfigName:
-                default: default
-                description: RuntimeConfigName references the AIM runtime configuration
-                  (by name) to use for this image.
-                type: string
             required:
-            - defaultServiceTemplate
             - image
             - resources
             type: object
@@ -209,6 +202,149 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              imageMetadata:
+                description: ImageMetadata is the metadata extracted from an AIM image
+                properties:
+                  model:
+                    description: Model contains AMD Silogen model-specific metadata.
+                    properties:
+                      canonicalName:
+                        description: |-
+                          CanonicalName is the canonical model identifier (e.g., mistralai/Mixtral-8x22B-Instruct-v0.1).
+                          Extracted from: org.amd.silogen.model.canonicalName
+                        type: string
+                      descriptionFull:
+                        description: |-
+                          DescriptionFull is the full description.
+                          Extracted from: org.amd.silogen.description.full
+                        type: string
+                      hfTokenRequired:
+                        description: |-
+                          HFTokenRequired indicates if a HuggingFace token is required.
+                          Extracted from: org.amd.silogen.hfToken.required
+                        type: boolean
+                      recommendedDeployments:
+                        description: |-
+                          RecommendedDeployments contains recommended deployment configurations.
+                          Extracted from: org.amd.silogen.model.recommendedDeployments (parsed from JSON array)
+                        items:
+                          description: RecommendedDeployment describes a recommended
+                            deployment configuration for a model.
+                          properties:
+                            description:
+                              description: Description provides additional context
+                                about this deployment configuration
+                              type: string
+                            gpuCount:
+                              description: GPUCount is the number of GPUs required
+                              format: int32
+                              type: integer
+                            gpuModel:
+                              description: GPUModel is the GPU model name (e.g., MI300X,
+                                MI325X)
+                              type: string
+                            metric:
+                              description: Metric is the optimization target (e.g.,
+                                latency, throughput)
+                              type: string
+                            precision:
+                              description: Precision is the recommended precision
+                                (e.g., fp8, fp16, bf16)
+                              type: string
+                          type: object
+                        type: array
+                      releaseNotes:
+                        description: |-
+                          ReleaseNotes contains release notes for this version.
+                          Extracted from: org.amd.silogen.release.notes
+                        type: string
+                      source:
+                        description: |-
+                          Source is the URL where the model can be found.
+                          Extracted from: org.amd.silogen.model.source
+                        type: string
+                      tags:
+                        description: |-
+                          Tags are descriptive tags (e.g., ["text-generation", "chat", "instruction"]).
+                          Extracted from: org.amd.silogen.model.tags (comma-separated)
+                        items:
+                          type: string
+                        type: array
+                      title:
+                        description: |-
+                          Title is the Silogen-specific title for the model.
+                          Extracted from: org.amd.silogen.title
+                        type: string
+                      variants:
+                        description: |-
+                          Variants lists model variants.
+                          Extracted from: org.amd.silogen.model.variants (comma-separated)
+                        items:
+                          type: string
+                        type: array
+                      versions:
+                        description: |-
+                          Versions lists available versions.
+                          Extracted from: org.amd.silogen.model.versions (comma-separated)
+                        items:
+                          type: string
+                        type: array
+                    type: object
+                  oci:
+                    description: OCI contains standard OCI image metadata.
+                    properties:
+                      authors:
+                        description: |-
+                          Authors is contact details of the authors.
+                          Extracted from: org.opencontainers.image.authors
+                        type: string
+                      created:
+                        description: |-
+                          Created is the creation timestamp.
+                          Extracted from: org.opencontainers.image.created
+                        type: string
+                      description:
+                        description: |-
+                          Description is a brief description.
+                          Extracted from: org.opencontainers.image.description
+                        type: string
+                      documentation:
+                        description: |-
+                          Documentation is the URL to documentation.
+                          Extracted from: org.opencontainers.image.documentation
+                        type: string
+                      licenses:
+                        description: |-
+                          Licenses is the SPDX license identifier(s).
+                          Extracted from: org.opencontainers.image.licenses
+                        type: string
+                      revision:
+                        description: |-
+                          Revision is the source control revision.
+                          Extracted from: org.opencontainers.image.revision
+                        type: string
+                      source:
+                        description: |-
+                          Source is the URL to the source code repository.
+                          Extracted from: org.opencontainers.image.source
+                        type: string
+                      title:
+                        description: |-
+                          Title is the human-readable title.
+                          Extracted from: org.opencontainers.image.title
+                        type: string
+                      vendor:
+                        description: |-
+                          Vendor is the organization that produced the image.
+                          Extracted from: org.opencontainers.image.vendor
+                        type: string
+                      version:
+                        description: |-
+                          Version is the image version.
+                          Extracted from: org.opencontainers.image.version
+                        type: string
+                    type: object
+                type: object
               observedGeneration:
                 description: ObservedGeneration is the most recent generation observed
                   by the controller

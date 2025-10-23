@@ -39,6 +39,15 @@ const (
 
 	// AIMImageReasonDefaultRuntimeConfigMissing indicates the implicit default runtime config was not found.
 	AIMImageReasonDefaultRuntimeConfigMissing = "DefaultRuntimeConfigMissing"
+
+	// AIMImageConditionMetadataExtracted captures whether image metadata extraction succeeded.
+	AIMImageConditionMetadataExtracted = "MetadataExtracted"
+
+	// AIMImageReasonMetadataExtracted indicates metadata extraction succeeded.
+	AIMImageReasonMetadataExtracted = "MetadataExtracted"
+
+	// AIMImageReasonMetadataExtractionFailed indicates metadata extraction failed (non-blocking, prevents retries).
+	AIMImageReasonMetadataExtractionFailed = "MetadataExtractionFailed"
 )
 
 // AIMImageSpec defines the desired state of AIMImage.
@@ -47,6 +56,9 @@ type AIMImageSpec struct {
 	// This image is inspected by the operator to select runtime profiles used by templates.
 	// +kubebuilder:validation:MinLength=1
 	Image string `json:"image"`
+
+	// DefaultServiceTemplate is the default template to use for this image, if the user does not provide any
+	DefaultServiceTemplate string `json:"defaultServiceTemplate,omitempty"`
 
 	// Resources defines the default resource requirements for services using this image.
 	// Template- or service-level values override these defaults.

@@ -28,13 +28,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
 // ErrImageNotFound is returned when an image is not found in the catalog
@@ -95,4 +98,315 @@ func LookupImageForNamespaceTemplate(ctx context.Context, k8sClient client.Clien
 
 	// Fall back to cluster-scoped namespace
 	return LookupImageForClusterTemplate(ctx, k8sClient, modelName)
+}
+
+// ImageObservation holds the observed state for an AIMImage or AIMClusterImage.
+type ImageObservation struct {
+	// MetadataAlreadyAttempted is true if we've already attempted metadata extraction.
+	MetadataAlreadyAttempted bool
+
+	// MetadataExtracted is true if metadata was successfully extracted.
+	MetadataExtracted bool
+
+	// ImageMetadata contains the extracted metadata (if extraction succeeded).
+	ImageMetadata *aimv1alpha1.ImageMetadata
+
+	// RuntimeConfigResolution contains the resolved runtime config (for image pull secrets).
+	RuntimeConfigResolution *RuntimeConfigResolution
+
+	// ExistingTemplates are the ServiceTemplates currently owned by this image.
+	ExistingTemplates []client.Object
+}
+
+// ImageObservationOptions provides callbacks for observing image state.
+type ImageObservationOptions struct {
+	// GetRuntimeConfig returns the runtime config for this scope (namespace or cluster).
+	GetRuntimeConfig func(ctx context.Context) (*RuntimeConfigResolution, error)
+
+	// ListOwnedTemplates returns templates owned by this image.
+	ListOwnedTemplates func(ctx context.Context) ([]client.Object, error)
+
+	// GetCurrentStatus returns the current status to check for existing conditions.
+	GetCurrentStatus func() *aimv1alpha1.AIMImageStatus
+
+	// GetImageSpec returns the image spec.
+	GetImageSpec func() aimv1alpha1.AIMImageSpec
+}
+
+// ObserveImage gathers the current state for an image resource.
+func ObserveImage(ctx context.Context, opts ImageObservationOptions) (*ImageObservation, error) {
+	obs := &ImageObservation{}
+
+	// Resolve runtime config for image pull secrets
+	if opts.GetRuntimeConfig != nil {
+		runtimeConfig, err := opts.GetRuntimeConfig(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve runtime config: %w", err)
+		}
+		obs.RuntimeConfigResolution = runtimeConfig
+	}
+
+	// Check if we've already attempted metadata extraction
+	if opts.GetCurrentStatus != nil {
+		status := opts.GetCurrentStatus()
+		obs.MetadataExtracted = status.ImageMetadata != nil
+
+		// Check conditions to see if we already attempted and failed
+		for _, cond := range status.Conditions {
+			if cond.Type == aimv1alpha1.AIMImageConditionMetadataExtracted {
+				obs.MetadataAlreadyAttempted = true
+				if cond.Status == "True" {
+					obs.MetadataExtracted = true
+				}
+				break
+			}
+		}
+
+		if status.ImageMetadata != nil {
+			obs.ImageMetadata = status.ImageMetadata.DeepCopy()
+		}
+	}
+
+	// List existing owned templates
+	if opts.ListOwnedTemplates != nil {
+		templates, err := opts.ListOwnedTemplates(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list owned templates: %w", err)
+		}
+		obs.ExistingTemplates = templates
+	}
+
+	return obs, nil
+}
+
+// ImagePlanInput provides the input for planning image resources.
+type ImagePlanInput struct {
+	// ImageName is the name of the image resource.
+	ImageName string
+
+	// Namespace is the namespace (empty for cluster-scoped).
+	Namespace string
+
+	// ImageSpec is the image specification.
+	ImageSpec aimv1alpha1.AIMImageSpec
+
+	// Observation is the observed state.
+	Observation *ImageObservation
+
+	// OwnerReference for created templates.
+	OwnerReference []metav1.OwnerReference
+
+	// Clientset for image inspection.
+	Clientset kubernetes.Interface
+
+	// IsClusterScoped indicates if this is a cluster-scoped image.
+	IsClusterScoped bool
+}
+
+// PlanImageResources plans the desired state for an image resource.
+// It performs metadata extraction if needed and creates ServiceTemplates based on recommendedDeployments.
+func PlanImageResources(ctx context.Context, input ImagePlanInput) ([]client.Object, *aimv1alpha1.ImageMetadata, error) {
+	var desired []client.Object
+	var extractedMetadata *aimv1alpha1.ImageMetadata
+
+	// Determine if we should attempt metadata extraction
+	shouldExtract := !input.Observation.MetadataAlreadyAttempted
+
+	if shouldExtract {
+		// Attempt to extract metadata
+		var imagePullSecrets []corev1.LocalObjectReference
+		var namespace string
+
+		if input.Observation.RuntimeConfigResolution != nil {
+			imagePullSecrets = input.Observation.RuntimeConfigResolution.EffectiveSpec.ImagePullSecrets
+		}
+
+		// For namespace-scoped images, use the image's namespace for secrets
+		// For cluster-scoped images, use the operator namespace
+		if input.IsClusterScoped {
+			namespace = GetOperatorNamespace()
+		} else {
+			namespace = input.Namespace
+		}
+
+		metadata, err := InspectImage(
+			ctx,
+			input.ImageSpec.Image,
+			imagePullSecrets,
+			input.Clientset,
+			namespace,
+		)
+		if err != nil {
+			// Extraction failed - we'll track this but not block the reconciliation
+			return desired, nil, fmt.Errorf("metadata extraction failed: %w", err)
+		}
+
+		extractedMetadata = metadata
+	} else if input.Observation.ImageMetadata != nil {
+		// Use existing metadata
+		extractedMetadata = input.Observation.ImageMetadata
+	}
+
+	// If we have metadata with recommended deployments, create templates
+	if extractedMetadata != nil && extractedMetadata.Model != nil && len(extractedMetadata.Model.RecommendedDeployments) > 0 {
+		for _, deployment := range extractedMetadata.Model.RecommendedDeployments {
+			template := buildServiceTemplateFromDeployment(
+				input.ImageName,
+				input.Namespace,
+				deployment,
+				input.OwnerReference,
+				input.IsClusterScoped,
+			)
+			desired = append(desired, template)
+		}
+	}
+
+	return desired, extractedMetadata, nil
+}
+
+// buildServiceTemplateFromDeployment creates a ServiceTemplate from a recommended deployment configuration.
+func buildServiceTemplateFromDeployment(
+	imageName string,
+	namespace string,
+	deployment aimv1alpha1.RecommendedDeployment,
+	ownerRefs []metav1.OwnerReference,
+	isClusterScoped bool,
+) client.Object {
+	// Generate template name using the specified format
+	templateName := generateTemplateName(imageName, deployment)
+
+	// Build common spec
+	commonSpec := aimv1alpha1.AIMServiceTemplateSpecCommon{
+		AIMImageName: imageName,
+	}
+
+	// Set runtime parameters from deployment
+	if deployment.Metric != "" {
+		metric := aimv1alpha1.AIMMetric(deployment.Metric)
+		commonSpec.Metric = &metric
+	}
+	if deployment.Precision != "" {
+		precision := aimv1alpha1.AIMPrecision(deployment.Precision)
+		commonSpec.Precision = &precision
+	}
+	if deployment.GPUModel != "" && deployment.GPUCount > 0 {
+		commonSpec.GpuSelector = &aimv1alpha1.AimGpuSelector{
+			Model: deployment.GPUModel,
+			Count: deployment.GPUCount,
+		}
+	}
+
+	// Common labels
+	labels := map[string]string{
+		LabelKeyAutoGenerated: LabelValueAutoGenerated,
+		LabelKeyImageName:     imageName,
+	}
+
+	if isClusterScoped {
+		// Create AIMClusterServiceTemplate
+		template := &aimv1alpha1.AIMClusterServiceTemplate{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            templateName,
+				Labels:          labels,
+				OwnerReferences: ownerRefs,
+			},
+			Spec: aimv1alpha1.AIMClusterServiceTemplateSpec{
+				AIMServiceTemplateSpecCommon: commonSpec,
+			},
+		}
+		return template
+	}
+
+	// Create namespace-scoped AIMServiceTemplate
+	template := &aimv1alpha1.AIMServiceTemplate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            templateName,
+			Namespace:       namespace,
+			Labels:          labels,
+			OwnerReferences: ownerRefs,
+		},
+		Spec: aimv1alpha1.AIMServiceTemplateSpec{
+			AIMServiceTemplateSpecCommon: commonSpec,
+		},
+	}
+	return template
+}
+
+// generateTemplateName creates an RFC1123-compliant name for a service template.
+// Format: {image-name}-{gpuModel}-x{gpuCount}-{metric}-{precision}
+func generateTemplateName(imageName string, deployment aimv1alpha1.RecommendedDeployment) string {
+	parts := []string{imageName}
+
+	if deployment.GPUModel != "" {
+		parts = append(parts, deployment.GPUModel)
+	}
+	if deployment.GPUCount > 0 {
+		parts = append(parts, fmt.Sprintf("x%d", deployment.GPUCount))
+	}
+	if deployment.Metric != "" {
+		parts = append(parts, deployment.Metric)
+	}
+	if deployment.Precision != "" {
+		parts = append(parts, deployment.Precision)
+	}
+
+	// Join with hyphens and make RFC1123 compliant
+	name := strings.Join(parts, "-")
+	return baseutils.MakeRFC1123Compliant(name)
+}
+
+// ProjectImageStatus updates the status of an image resource based on observation and errors.
+func ProjectImageStatus(
+	status *aimv1alpha1.AIMImageStatus,
+	observation *ImageObservation,
+	extractedMetadata *aimv1alpha1.ImageMetadata,
+	extractionErr error,
+	observedGeneration int64,
+) {
+	status.ObservedGeneration = observedGeneration
+
+	// Update image metadata if extraction succeeded
+	if extractedMetadata != nil {
+		status.ImageMetadata = extractedMetadata
+	}
+
+	// Update MetadataExtracted condition
+	if extractionErr != nil {
+		// Extraction failed
+		setCondition(&status.Conditions, metav1.Condition{
+			Type:               aimv1alpha1.AIMImageConditionMetadataExtracted,
+			Status:             metav1.ConditionFalse,
+			Reason:             aimv1alpha1.AIMImageReasonMetadataExtractionFailed,
+			Message:            fmt.Sprintf("Failed to extract metadata: %v", extractionErr),
+			ObservedGeneration: observedGeneration,
+		})
+	} else if extractedMetadata != nil {
+		// Extraction succeeded
+		setCondition(&status.Conditions, metav1.Condition{
+			Type:               aimv1alpha1.AIMImageConditionMetadataExtracted,
+			Status:             metav1.ConditionTrue,
+			Reason:             aimv1alpha1.AIMImageReasonMetadataExtracted,
+			Message:            "Image metadata successfully extracted",
+			ObservedGeneration: observedGeneration,
+		})
+	}
+}
+
+// setCondition adds or updates a condition in the conditions list.
+func setCondition(conditions *[]metav1.Condition, newCondition metav1.Condition) {
+	if conditions == nil {
+		return
+	}
+
+	// Find existing condition
+	for i := range *conditions {
+		if (*conditions)[i].Type == newCondition.Type {
+			// Update existing condition
+			(*conditions)[i] = newCondition
+			return
+		}
+	}
+
+	// Add new condition
+	*conditions = append(*conditions, newCondition)
 }
