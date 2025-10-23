@@ -226,6 +226,23 @@ _Appears in:_
 | `status` _[AIMImageStatus](#aimimagestatus)_ |  |  |  |
 
 
+#### AIMImageDiscoverySpec
+
+
+
+AIMImageDiscoverySpec configures metadata discovery and template generation for an image.
+
+
+
+_Appears in:_
+- [AIMImageSpec](#aimimagespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | Enabled toggles metadata discovery for this image. Disabled by default. |  |  |
+| `autoCreateTemplates` _boolean_ | AutoCreateTemplates controls whether recommended deployments from discovery<br />automatically create ServiceTemplates. Enabled by default when discovery runs. |  |  |
+
+
 #### AIMImageList
 
 
@@ -260,6 +277,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `image` _string_ | Image is the container image URI for this AIM model.<br />This image is inspected by the operator to select runtime profiles used by templates. |  | MinLength: 1 <br /> |
 | `defaultServiceTemplate` _string_ | DefaultServiceTemplate is the default template to use for this image, if the user does not provide any |  |  |
+| `discovery` _[AIMImageDiscoverySpec](#aimimagediscoveryspec)_ | Discovery controls metadata extraction and automatic template creation for this image. |  |  |
 | `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core)_ | Resources defines the default resource requirements for services using this image.<br />Template- or service-level values override these defaults.<br />Must have both cpu and memory in requests<br />Must have memory in limits |  | Required: \{\} <br /> |
 
 

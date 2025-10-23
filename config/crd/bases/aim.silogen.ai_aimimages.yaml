@@ -60,17 +60,17 @@ spec:
                   for this image, if the user does not provide any
                 type: string
               discovery:
-                default:
-                  autoCreateTemplates: true
                 description: Discovery controls metadata extraction and automatic
                   template creation for this image.
                 properties:
                   autoCreateTemplates:
-                    description: AutoCreateTemplates controls whether recommended
-                      deployments from discovery automatically create ServiceTemplates.
+                    description: |-
+                      AutoCreateTemplates controls whether recommended deployments from discovery
+                      automatically create ServiceTemplates. Enabled by default when discovery runs.
                     type: boolean
                   enabled:
                     description: Enabled toggles metadata discovery for this image.
+                      Disabled by default.
                     type: boolean
                 type: object
               image:

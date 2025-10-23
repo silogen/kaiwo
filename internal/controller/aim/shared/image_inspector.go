@@ -119,6 +119,29 @@ func InspectImage(
 	return metadata, nil
 }
 
+// MetadataFormatError indicates the image metadata is malformed and cannot be processed.
+type MetadataFormatError struct {
+	Reason  string
+	Message string
+}
+
+func (e *MetadataFormatError) Error() string {
+	if e.Message != "" {
+		return e.Message
+	}
+	return "image metadata malformed"
+}
+
+func newMetadataFormatError(reason, message string) *MetadataFormatError {
+	if reason == "" {
+		reason = "MetadataMalformed"
+	}
+	return &MetadataFormatError{
+		Reason:  reason,
+		Message: message,
+	}
+}
+
 // parseImageLabels extracts structured metadata from OCI and AMD Silogen image labels.
 func parseImageLabels(labels map[string]string) (*aimv1alpha1.ImageMetadata, error) {
 	if len(labels) == 0 {
@@ -175,6 +198,12 @@ func parseImageLabels(labels map[string]string) (*aimv1alpha1.ImageMetadata, err
 			return nil, fmt.Errorf("failed to parse recommended deployments: %w", err)
 		}
 		metadata.Model.RecommendedDeployments = deployments
+	}
+
+	if metadata.Model.CanonicalName == "" {
+		return nil, newMetadataFormatError(
+			"MetadataMissingLabel",
+			"missing required image label \"org.amd.silogen.model.canonicalName\"")
 	}
 
 	return metadata, nil

@@ -200,6 +200,10 @@ func (r *AIMImageReconciler) projectStatus(
 		extractionErr = errs.PlanErr
 	}
 
+	if obs != nil && obs.MetadataError != nil {
+		extractionErr = obs.MetadataError
+	}
+
 	// If we successfully extracted metadata in this reconciliation, use it
 	// Otherwise, use what's already in the observation
 	if obs != nil && obs.ImageMetadata != nil {
