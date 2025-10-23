@@ -121,15 +121,22 @@ func (r *AIMServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 }
 
 func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1.AIMService) (*shared.ServiceObservation, error) {
-	resolution, err := shared.ResolveTemplateNameForService(ctx, r.Client, service)
+	resolution, selectionStatus, err := shared.ResolveTemplateNameForService(ctx, r.Client, service)
 	if err != nil {
 		return nil, err
 	}
 
 	obs := &shared.ServiceObservation{
-		TemplateName:     resolution.FinalName,
-		BaseTemplateName: resolution.BaseName,
-		Scope:            shared.TemplateScopeNone,
+		TemplateName:             resolution.FinalName,
+		BaseTemplateName:         resolution.BaseName,
+		Scope:                    shared.TemplateScopeNone,
+		AutoSelectedTemplate:     selectionStatus.AutoSelected,
+		TemplateSelectionReason:  selectionStatus.SelectionReason,
+		TemplateSelectionMessage: selectionStatus.SelectionMessage,
+		TemplateSelectionCount:   selectionStatus.CandidateCount,
+		ImageReady:               selectionStatus.ImageReady,
+		ImageReadyReason:         selectionStatus.ImageReadyReason,
+		ImageReadyMessage:        selectionStatus.ImageReadyMessage,
 	}
 
 	// Observe template based on whether it's derived or not
@@ -139,7 +146,7 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 			return nil, err
 		}
 	} else if resolution.FinalName != "" {
-		if err := shared.ObserveNonDerivedTemplate(ctx, r.Client, service, resolution.FinalName, obs); err != nil {
+		if err := shared.ObserveNonDerivedTemplate(ctx, r.Client, service, resolution.FinalName, resolution.Scope, obs); err != nil {
 			return nil, err
 		}
 	}

@@ -31,6 +31,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 )
 
 // GPUResourceInfo contains aggregated GPU resource information for a specific GPU model.
@@ -216,4 +218,47 @@ func ListAvailableGPUs(ctx context.Context, k8sClient client.Client) ([]string, 
 	}
 
 	return gpuTypes, nil
+}
+
+// TemplateRequiresGPU returns true if the template spec declares a GPU selector with a model.
+func TemplateRequiresGPU(spec aimv1alpha1.AIMServiceTemplateSpecCommon) bool {
+	if spec.GpuSelector == nil {
+		return false
+	}
+	return strings.TrimSpace(spec.GpuSelector.Model) != ""
+}
+
+// UpdateTemplateGPUAvailability checks whether the GPU model declared by the template exists in the cluster.
+// It updates the provided TemplateObservation with the result of the check.
+func UpdateTemplateGPUAvailability(
+	ctx context.Context,
+	k8sClient client.Client,
+	spec aimv1alpha1.AIMServiceTemplateSpecCommon,
+	obs *TemplateObservation,
+) error {
+	if obs == nil {
+		return nil
+	}
+
+	obs.GPUModel = ""
+	obs.GPUAvailable = true
+	obs.GPUChecked = false
+
+	if !TemplateRequiresGPU(spec) {
+		obs.GPUChecked = true
+		return nil
+	}
+
+	model := strings.TrimSpace(spec.GpuSelector.Model)
+	obs.GPUModel = strings.ToUpper(model)
+
+	available, err := IsGPUAvailable(ctx, k8sClient, model)
+	if err != nil {
+		return err
+	}
+
+	obs.GPUChecked = true
+	obs.GPUAvailable = available
+
+	return nil
 }

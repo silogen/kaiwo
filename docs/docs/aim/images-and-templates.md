@@ -21,7 +21,6 @@ AIM provides two image resource types to accommodate different organizational ne
 An AIM Image uses its `metadata.name` as the canonical model identifier. The spec contains:
 
 - **`image`**: the container image URI that implements this model. The operator inspects the image during discovery to determine runtime requirements and model sources.
-- **`defaultServiceTemplate`**: an optional hint pointing to the template that should be used when services do not specify one.
 - **`runtimeConfigName`**: the runtime configuration that supplies registry credentials or storage defaults. When omitted, the operator resolves the `default` runtime config.
 - **`discovery`**: an optional block that controls metadata extraction and automatic template generation. Discovery is **opt-in**, images do not run inspection unless `spec.discovery.enabled` is set to `true`. When enabled, the controller extracts metadata and, if `autoCreateTemplates` (default `true`) remains enabled, it creates ServiceTemplates for each recommended deployment published by the image. Note that this assumes that the image is referencing an official AIM image which has the correct labels set on it.
 
@@ -54,6 +53,8 @@ spec:
 ```
 
 
+When services omit `spec.templateRef`, the controller examines templates that reference the image and selects the best match once they become Available. Ensure at least one template is published for each image that should support automatic selection.
+
 ### Examples
 
 Here is a cluster-scoped image that makes a Llama 3.1 8B model available across the entire cluster:
@@ -65,7 +66,6 @@ metadata:
   name: meta-llama-3-8b-instruct
 spec:
   image: ghcr.io/example/llama-3.1-8b-instruct:v1.2.0
-  defaultServiceTemplate: llama-3-8b-latency
   runtimeConfigName: platform-default
   discovery:
     enabled: true                # run metadata extraction
@@ -89,7 +89,6 @@ metadata:
   namespace: ml-team
 spec:
   image: ghcr.io/ml-team/llama-3.1-8b-instruct:dev-latest
-  defaultServiceTemplate: llama-3-8b-experimental
   runtimeConfigName: ml-team
   discovery:
     enabled: false               # opt out of metadata extraction (default)

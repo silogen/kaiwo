@@ -150,7 +150,7 @@ type AIMProfileMetadata struct {
 }
 
 // AIMTemplateStatusEnum defines coarse-grained states for a template.
-// +kubebuilder:validation:Enum=Pending;Progressing;Available;Degraded;Failed
+// +kubebuilder:validation:Enum=Pending;Progressing;NotAvailable;Available;Degraded;Failed
 type AIMTemplateStatusEnum string
 
 const (
@@ -158,6 +158,8 @@ const (
 	AIMTemplateStatusPending AIMTemplateStatusEnum = "Pending"
 	// AIMTemplateStatusProgressing denotes that discovery and/or cache warm is in progress.
 	AIMTemplateStatusProgressing AIMTemplateStatusEnum = "Progressing"
+	// AIMTemplateStatusNotAvailable denotes that the template cannot run because the required GPU resources are not present in the cluster.
+	AIMTemplateStatusNotAvailable AIMTemplateStatusEnum = "NotAvailable"
 	// AIMTemplateStatusAvailable denotes that discovery succeeded and, if requested, caches are warmed.
 	AIMTemplateStatusAvailable AIMTemplateStatusEnum = "Available"
 	// AIMTemplateStatusDegraded denotes that the template is non-functional for some reason, for example that the cluster doesn't have the resources specified.

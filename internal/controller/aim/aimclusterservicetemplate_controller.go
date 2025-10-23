@@ -33,12 +33,14 @@ import (
 
 	servingv1alpha1 "github.com/kserve/kserve/pkg/apis/serving/v1alpha1"
 	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -73,6 +75,7 @@ type AIMClusterServiceTemplateReconciler struct {
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
 
 func (r *AIMClusterServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -146,7 +149,7 @@ func requestsFromClusterTemplates(templates []aimv1alpha1.AIMClusterServiceTempl
 func (r *AIMClusterServiceTemplateReconciler) observe(ctx context.Context, template *aimv1alpha1.AIMClusterServiceTemplate) (*clusterTemplateObservation, error) {
 	logger := log.FromContext(ctx)
 	operatorNamespace := shared.GetOperatorNamespace()
-	return shared.ObserveTemplate(ctx, shared.TemplateObservationOptions[*servingv1alpha1.ClusterServingRuntime]{
+	observation, err := shared.ObserveTemplate(ctx, shared.TemplateObservationOptions[*servingv1alpha1.ClusterServingRuntime]{
 		K8sClient: r.Client,
 		GetRuntime: func(ctx context.Context) (*servingv1alpha1.ClusterServingRuntime, error) {
 			runtime, err := shared.GetClusterServingRuntime(ctx, r.Client, template.Name)
@@ -155,7 +158,8 @@ func (r *AIMClusterServiceTemplateReconciler) observe(ctx context.Context, templ
 			}
 			return runtime, err
 		},
-		ShouldCheckDiscoveryJob: template.Status.Status != aimv1alpha1.AIMTemplateStatusAvailable,
+		ShouldCheckDiscoveryJob: template.Status.Status != aimv1alpha1.AIMTemplateStatusAvailable &&
+			template.Status.Status != aimv1alpha1.AIMTemplateStatusNotAvailable,
 		GetDiscoveryJob: func(ctx context.Context) (*batchv1.Job, error) {
 			job, err := shared.GetDiscoveryJob(ctx, r.Client, operatorNamespace, template.Name)
 			if err != nil {
@@ -199,6 +203,17 @@ func (r *AIMClusterServiceTemplateReconciler) observe(ctx context.Context, templ
 				fmt.Sprintf("Using AIMRuntimeConfig %q from %s", resolution.Name, shared.JoinRuntimeConfigSources(resolution, operatorNamespace)))
 		},
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	if observation != nil {
+		if err := shared.UpdateTemplateGPUAvailability(ctx, r.Client, template.Spec.AIMServiceTemplateSpecCommon, &observation.TemplateObservation); err != nil {
+			return nil, fmt.Errorf("failed to validate GPU availability: %w", err)
+		}
+	}
+
+	return observation, nil
 }
 
 // plan computes desired state (pure function)
@@ -324,12 +339,35 @@ func (r *AIMClusterServiceTemplateReconciler) SetupWithManager(mgr ctrl.Manager)
 		return requestsFromClusterTemplates(templates.Items)
 	})
 
+	nodeHandler := handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+		_, ok := obj.(*corev1.Node)
+		if !ok {
+			return nil
+		}
+
+		var templates aimv1alpha1.AIMClusterServiceTemplateList
+		if err := r.List(ctx, &templates); err != nil {
+			ctrl.LoggerFrom(ctx).Error(err, "failed to list AIMClusterServiceTemplates for Node event")
+			return nil
+		}
+
+		filtered := make([]aimv1alpha1.AIMClusterServiceTemplate, 0, len(templates.Items))
+		for i := range templates.Items {
+			if shared.TemplateRequiresGPU(templates.Items[i].Spec.AIMServiceTemplateSpecCommon) {
+				filtered = append(filtered, templates.Items[i])
+			}
+		}
+
+		return requestsFromClusterTemplates(filtered)
+	})
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&aimv1alpha1.AIMClusterServiceTemplate{}).
 		Owns(&batchv1.Job{}).
 		Owns(&servingv1alpha1.ClusterServingRuntime{}).
 		Watches(&aimv1alpha1.AIMClusterRuntimeConfig{}, clusterRuntimeConfigHandler).
 		Watches(&aimv1alpha1.AIMRuntimeConfig{}, runtimeConfigHandler).
+		Watches(&corev1.Node{}, nodeHandler, builder.WithPredicates(shared.NodeGPUChangePredicate())).
 		Named("aim-cluster-template").
 		Complete(r)
 }

@@ -95,6 +95,9 @@ type AIMImageSpec struct {
 	// Discovery controls metadata extraction and automatic template creation for this image.
 	// +optional
 	Discovery AIMImageDiscoverySpec `json:"discovery,omitempty"`
+	// RuntimeConfigName references the AIM runtime configuration (by name) to use for this image.
+	// +kubebuilder:default=default
+	RuntimeConfigName string `json:"runtimeConfigName,omitempty"`
 
 	// Resources defines the default resource requirements for services using this image.
 	// Template- or service-level values override these defaults.
