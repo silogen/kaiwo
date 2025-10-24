@@ -68,11 +68,11 @@ Install from the OCI registry:
 
 ```bash
 # Install latest version to kaiwo-system namespace
-helm install kaiwo oci://ghcr.io/silogen/kaiwo-operator \
+helm install kaiwo oci://ghcr.io/silogen/charts/kaiwo-operator \
   --namespace kaiwo-system --create-namespace
 
 # Install a specific version
-helm install kaiwo oci://ghcr.io/silogen/kaiwo-operator \
+helm install kaiwo oci://ghcr.io/silogen/charts/kaiwo-operator \
   --version <version> \
   --namespace kaiwo-system --create-namespace
 ```
