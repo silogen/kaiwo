@@ -1,0 +1,109 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: partitioning-control-plane-toggle
+spec:
+  parallel: false
+  steps:
+  - name: discover-nodes
+    try:
+    - script:
+        content: kubectl get nodes -l 'amd.com/gpu' -o jsonpath="{.items[0].metadata.name}"
+        outputs:
+        - name: gpu_node
+          value: ($stdout)
+    - script:
+        content: kubectl get nodes -l 'node-role.kubernetes.io/control-plane' -o jsonpath="{.items[0].metadata.name}"
+        outputs:
+        - name: control_plane_node
+          value: ($stdout)
+
+  - name: apply-profile-and-exclude-plan
+    try:
+    - apply:
+        file: partitioning-profile.yaml
+    - apply:
+        file: partitioning-plan-exclude.yaml
+    - wait:
+        apiVersion: infrastructure.silogen.ai/v1alpha1
+        kind: PartitioningPlan
+        name: plan-toggle
+        timeout: 1m
+        for:
+          condition:
+            name: PlanReady
+            value: "True"
+    - wait:
+        apiVersion: infrastructure.silogen.ai/v1alpha1
+        kind: NodePartitioning
+        name: plan-toggle-($gpu_node)
+        timeout: 1m
+        for:
+          jsonPath:
+            path: .status.phase
+            value: Skipped
+    - error:
+        resource:
+          apiVersion: infrastructure.silogen.ai/v1alpha1
+          kind: NodePartitioning
+          metadata:
+            name: plan-toggle-($control_plane_node)
+
+  - name: include-control-plane
+    try:
+    - apply:
+        file: partitioning-plan-include.yaml
+    - wait:
+        apiVersion: infrastructure.silogen.ai/v1alpha1
+        kind: PartitioningPlan
+        name: plan-toggle
+        timeout: 1m
+        for:
+          jsonPath:
+            path: .status.summary.matchingNodes
+            value: "2"
+    - wait:
+        apiVersion: infrastructure.silogen.ai/v1alpha1
+        kind: NodePartitioning
+        name: plan-toggle-($control_plane_node)
+        timeout: 1m
+        for:
+          jsonPath:
+            path: .status.phase
+            value: Skipped
+
+  - name: exclude-control-plane-again
+    try:
+    - apply:
+        file: partitioning-plan-exclude.yaml
+    - wait:
+        apiVersion: infrastructure.silogen.ai/v1alpha1
+        kind: PartitioningPlan
+        name: plan-toggle
+        timeout: 1m
+        for:
+          jsonPath:
+            path: .status.summary.matchingNodes
+            value: "1"
+    - wait:
+        apiVersion: infrastructure.silogen.ai/v1alpha1
+        kind: NodePartitioning
+        name: plan-toggle-($gpu_node)
+        timeout: 1m
+        for:
+          jsonPath:
+            path: .status.phase
+            value: Skipped
+    - error:
+        resource:
+          apiVersion: infrastructure.silogen.ai/v1alpha1
+          kind: NodePartitioning
+          metadata:
+            name: plan-toggle-($control_plane_node)
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--print-level=$PRINT_LEVEL"]

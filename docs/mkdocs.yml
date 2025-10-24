@@ -38,6 +38,9 @@ nav:
   - "Installation": "admin/installation.md"
   - "Helm Installation": "admin/helm-installation.md"
   - "Configuration": "admin/configuration.md"
+  - "Infrastructure":
+      - "GPU Partitioning": "admin/infrastructure/gpu-partitioning.md"
+      - "Partition Profiles": "admin/infrastructure/partition-profiles.md"
   - "Maintenance": "admin/maintenance.md"
   - "Monitoring": "admin/monitoring.md"
   - "Resource monitoring": "admin/resource-monitoring.md"

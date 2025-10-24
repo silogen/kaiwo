@@ -1,0 +1,97 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: partitioning-dry-run
+spec:
+  parallel: false
+  steps:
+  - name: discover-nodes
+    try:
+    - script:
+        content: kubectl get nodes -l 'amd.com/gpu' -o jsonpath="{.items[0].metadata.name}"
+        outputs:
+        - name: gpu_node
+          value: ($stdout)
+
+  - name: apply-dry-run-plan
+    try:
+    - apply:
+        file: partitioning-profile.yaml
+    - apply:
+        file: partitioning-plan.yaml
+
+  - name: validate-dry-run-status
+    try:
+    - wait:
+        apiVersion: infrastructure.silogen.ai/v1alpha1
+        kind: PartitioningPlan
+        name: plan-dry-run
+        timeout: 1m
+        for:
+          condition:
+            name: PlanReady
+            value: "True"
+    - wait:
+        apiVersion: infrastructure.silogen.ai/v1alpha1
+        kind: PartitioningPlan
+        name: plan-dry-run
+        timeout: 1m
+        for:
+          jsonPath:
+            path: .status.summary.matchingNodes
+            value: "1"
+    - wait:
+        apiVersion: infrastructure.silogen.ai/v1alpha1
+        kind: NodePartitioning
+        name: plan-dry-run-($gpu_node)
+        timeout: 1m
+        for:
+          jsonPath:
+            path: .status.phase
+            value: Skipped
+    - assert:
+        resource:
+          apiVersion: infrastructure.silogen.ai/v1alpha1
+          kind: PartitioningPlan
+          metadata:
+            name: plan-dry-run
+          status:
+            summary:
+              skipped: 1
+    # Validate that all operational conditions are set to False with DryRunSkipped reason
+    - assert:
+        resource:
+          apiVersion: infrastructure.silogen.ai/v1alpha1
+          kind: NodePartitioning
+          metadata:
+            name: plan-dry-run-($gpu_node)
+          status:
+            conditions:
+            - type: DryRun
+              status: "True"
+              reason: DryRunEnabled
+            - type: NodeCordoned
+              status: "False"
+              reason: DryRunSkipped
+            - type: NodeTainted
+              status: "False"
+              reason: DryRunSkipped
+            - type: DrainCompleted
+              status: "False"
+              reason: DryRunSkipped
+            - type: ProfileApplied
+              status: "False"
+              reason: DryRunSkipped
+            - type: OperatorReady
+              status: "False"
+              reason: DryRunSkipped
+            - type: Verified
+              status: "False"
+              reason: DryRunSkipped
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--print-level=$PRINT_LEVEL"]

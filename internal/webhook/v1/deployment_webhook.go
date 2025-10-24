@@ -120,6 +120,6 @@ func (d *DeploymentCustomDefaulter) Default(ctx context.Context, obj runtime.Obj
 // 		}
 // 	}
 
-// 	joblog.Info("Job update validation passed", "JobName", newJob.Name)
+// 	joblog.Info("Job update validation passed", "JobName", newJob.Description)
 // 	return nil, nil
 // }

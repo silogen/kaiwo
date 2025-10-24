@@ -1,0 +1,95 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: partitioning-cross-plan-conflict
+spec:
+  parallel: false
+  steps:
+  - name: discover-gpu-node
+    try:
+    - script:
+        content: kubectl get nodes -l 'amd.com/gpu' -o jsonpath="{.items[0].metadata.name}"
+        outputs:
+        - name: gpu_node
+          value: ($stdout)
+
+  - name: apply-alpha-plan
+    try:
+    - apply:
+        file: partitioning-plan-alpha.yaml
+    - wait:
+        apiVersion: infrastructure.silogen.ai/v1alpha1
+        kind: PartitioningPlan
+        name: plan-conflict-alpha
+        timeout: 1m
+        for:
+          condition:
+            name: PlanReady
+            value: "True"
+
+  - name: detect-conflict-in-beta
+    try:
+    - apply:
+        file: partitioning-plan-beta.yaml
+    - assert:
+        resource:
+          apiVersion: infrastructure.silogen.ai/v1alpha1
+          kind: PartitioningPlan
+          metadata:
+            name: plan-conflict-beta
+          status:
+            phase: Degraded
+            (conditions[type? == 'PlanReady]):
+            - type: PlanReady
+              status: "False"
+              reason: PlanningFailed
+
+  - name: release-alpha
+    try:
+    - apply:
+        file: partitioning-plan-alpha-empty.yaml
+    - wait:
+        apiVersion: infrastructure.silogen.ai/v1alpha1
+        kind: PartitioningPlan
+        name: plan-conflict-alpha
+        timeout: 1m
+        for:
+          jsonPath:
+            path: .status.summary.matchingNodes
+            value: "0"
+    - error:
+        resource:
+          apiVersion: infrastructure.silogen.ai/v1alpha1
+          kind: NodePartitioning
+          metadata:
+            name: plan-conflict-alpha-($gpu_node)
+
+  - name: retry-beta-successfully
+    try:
+    - apply:
+        file: partitioning-plan-beta-retry.yaml
+    - wait:
+        apiVersion: infrastructure.silogen.ai/v1alpha1
+        kind: PartitioningPlan
+        name: plan-conflict-beta
+        timeout: 1m
+        for:
+          condition:
+            name: PlanReady
+            value: "True"
+    - wait:
+        apiVersion: infrastructure.silogen.ai/v1alpha1
+        kind: NodePartitioning
+        name: plan-conflict-beta-($gpu_node)
+        timeout: 1m
+        for:
+          jsonPath:
+            path: .status.phase
+            value: Skipped
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--print-level=$PRINT_LEVEL"]

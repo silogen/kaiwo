@@ -56,6 +56,9 @@ spec:
     # please set to true if you want to blacklist the inbox driver and use our-of-tree driver
     enableNodeLabeller: true
 
+    devicePluginArguments:
+      resource_naming_strategy: "mixed"
+
   # Specify the metrics exporter config
   metricsExporter:
     # To enable/disable the metrics exporter, disabled by default

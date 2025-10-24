@@ -8,6 +8,7 @@ hf_token_base64: "${HF_TOKEN_BASE64}"
 
 # AMD GPU configuration (must be set via env vars for GPU tests)
 amd_gpu_partitioning_node_name: "${AMD_GPU_PARTITIONING_NODE}"
+amd_gpu_control_plane_node_name: "${AMD_GPU_CONTROL_PLANE_NODE}"
 amd_gpu_unpartitioned_two_gpu_vram_request: "${AMD_GPU_UNPARTITIONED_VRAM}"
 amd_gpu_partitioned_two_gpu_vram_request: "${AMD_GPU_PARTITIONED_VRAM}"
 
