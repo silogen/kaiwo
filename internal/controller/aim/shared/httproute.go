@@ -107,6 +107,9 @@ func BuildInferenceServiceHTTPRoute(serviceState aimstate.ServiceState, ownerRef
 		},
 	}
 
+	// Set a longer timeout for inference requests (to handle JIT compilation on first request)
+	requestTimeout := gatewayapiv1.Duration("120s")
+
 	route.Spec.Rules = []gatewayapiv1.HTTPRouteRule{
 		{
 			Matches: []gatewayapiv1.HTTPRouteMatch{
@@ -129,6 +132,9 @@ func BuildInferenceServiceHTTPRoute(serviceState aimstate.ServiceState, ownerRef
 				},
 			},
 			BackendRefs: []gatewayapiv1.HTTPBackendRef{backend},
+			Timeouts: &gatewayapiv1.HTTPRouteTimeouts{
+				Request: &requestTimeout,
+			},
 		},
 	}
 
