@@ -8,3 +8,4 @@ spec:
   overrides:
     gpuSelector:
       model: MI300X
+      count: 1

@@ -53,7 +53,8 @@ func (c TemplateCandidate) QualifiedName() string {
 // 2. Filter by service overrides when provided.
 // 3. Filter by GPUs that exist in the cluster.
 // 4. Prefer higher-tier GPUs, then latency over throughput, then lower precision.
-// Returns nil if no candidate matches the criteria.
+// Returns (selected template, count of templates with identical preference scores).
+// If count > 1, the templates are ambiguous (identical in all preference dimensions).
 func SelectBestTemplate(
 	candidates []TemplateCandidate,
 	overrides *aimv1alpha1.AIMServiceOverrides,
@@ -78,8 +79,7 @@ func SelectBestTemplate(
 		return &filtered[0], 1
 	}
 
-	selected := choosePreferredTemplate(filtered)
-	return selected, len(filtered)
+	return choosePreferredTemplate(filtered)
 }
 
 func filterAvailableTemplates(candidates []TemplateCandidate) []TemplateCandidate {
@@ -151,13 +151,13 @@ func filterTemplatesByGPUAvailability(candidates []TemplateCandidate, availableG
 	return result
 }
 
-func choosePreferredTemplate(candidates []TemplateCandidate) *TemplateCandidate {
+func choosePreferredTemplate(candidates []TemplateCandidate) (*TemplateCandidate, int) {
 	if len(candidates) == 0 {
-		return nil
+		return nil, 0
 	}
 
 	if len(candidates) == 1 {
-		return &candidates[0]
+		return &candidates[0], 1
 	}
 
 	gpuPref := makePreferenceMap(GPUPreferenceOrder)
@@ -201,7 +201,20 @@ func choosePreferredTemplate(candidates []TemplateCandidate) *TemplateCandidate 
 		}
 	}
 
-	return &candidates[bestIndex]
+	// Count how many templates have the exact same preference scores as the best one
+	// If multiple templates have identical scores, they are ambiguous
+	identicalCount := 0
+	for i := range candidates {
+		gpuScore := getPreferenceScore(candidateGPUModel(candidates[i]), gpuPref)
+		metricScore := getPreferenceScore(candidateMetric(candidates[i]), metricPref)
+		precisionScore := getPreferenceScore(candidatePrecision(candidates[i]), precisionPref)
+
+		if gpuScore == bestGPUScore && metricScore == bestMetricScore && precisionScore == bestPrecisionScore {
+			identicalCount++
+		}
+	}
+
+	return &candidates[bestIndex], identicalCount
 }
 
 func candidateMetric(candidate TemplateCandidate) string {

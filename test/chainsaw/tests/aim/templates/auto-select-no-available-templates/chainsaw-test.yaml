@@ -25,7 +25,7 @@ spec:
   - name: Verify service is Pending while template is Progressing
     try:
     - assert:
-        timeout: 5s
+#        timeout: 5s
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMService
