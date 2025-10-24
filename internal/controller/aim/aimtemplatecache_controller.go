@@ -122,11 +122,10 @@ type templateCacheObservation struct {
 
 func cmpModelCacheStatus(a aimv1alpha1.AIMModelCacheStatusEnum, b aimv1alpha1.AIMModelCacheStatusEnum) int {
 	order := map[aimv1alpha1.AIMModelCacheStatusEnum]int{
-		aimv1alpha1.AIMModelCacheStatusEnum("NotFound"): -1,
-		aimv1alpha1.AIMModelCacheStatusFailed:           0,
-		aimv1alpha1.AIMModelCacheStatusPending:          1,
-		aimv1alpha1.AIMModelCacheStatusProgressing:      2,
-		aimv1alpha1.AIMModelCacheStatusAvailable:        3,
+		aimv1alpha1.AIMModelCacheStatusFailed:      0,
+		aimv1alpha1.AIMModelCacheStatusPending:     1,
+		aimv1alpha1.AIMModelCacheStatusProgressing: 2,
+		aimv1alpha1.AIMModelCacheStatusAvailable:   3,
 	}
 	if order[a] > order[b] {
 		return 1
@@ -147,7 +146,7 @@ func (r *AIMTemplateCacheReconciler) observe(ctx context.Context, tc *aimv1alpha
 	// Loop through our needed model sources and check with what's available in our namespace.
 	// If multiple are available, select the one
 	for _, model := range tc.Spec.ModelSources {
-		bestStatus := aimv1alpha1.AIMModelCacheStatusEnum("NotFound")
+		bestStatus := aimv1alpha1.AIMModelCacheStatusPending
 		for _, cached := range caches.Items {
 			if cached.Spec.SourceURI == model.SourceURI {
 				if cmpModelCacheStatus(bestStatus, cached.Status.Status) < 0 {
@@ -156,7 +155,7 @@ func (r *AIMTemplateCacheReconciler) observe(ctx context.Context, tc *aimv1alpha
 			}
 		}
 		obs.CacheStatus[model.Name] = bestStatus
-		if bestStatus == "NotFound" {
+		if bestStatus == aimv1alpha1.AIMModelCacheStatusPending {
 			obs.MissingCaches = append(obs.MissingCaches, model)
 		}
 
