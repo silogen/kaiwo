@@ -26,6 +26,7 @@ package shared
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -284,13 +285,15 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 }
 
 func resolveServiceResources(serviceState aimstate.ServiceState) corev1.ResourceRequirements {
-	var resolved corev1.ResourceRequirements
+	gpuCount := templateGPUCount(serviceState.Template)
+
+	resolved := defaultResourceRequirementsForGPU(gpuCount)
 
 	if serviceState.Resources != nil {
-		resolved = *serviceState.Resources.DeepCopy()
+		resolved = mergeResourceRequirements(resolved, serviceState.Resources)
 	}
 
-	if gpuCount := templateGPUCount(serviceState.Template); gpuCount > 0 {
+	if gpuCount > 0 {
 		if resolved.Requests == nil {
 			resolved.Requests = corev1.ResourceList{}
 		}
@@ -321,6 +324,63 @@ func templateGPUCount(template aimstate.TemplateState) int64 {
 		return 0
 	}
 	return int64(gpuCount)
+}
+
+func defaultResourceRequirementsForGPU(gpuCount int64) corev1.ResourceRequirements {
+	if gpuCount <= 0 {
+		return corev1.ResourceRequirements{}
+	}
+
+	requests := corev1.ResourceList{
+		corev1.ResourceCPU:    *resource.NewQuantity(gpuCount*4, resource.DecimalSI),
+		corev1.ResourceMemory: quantityGi(gpuCount * 32),
+	}
+
+	limits := corev1.ResourceList{
+		corev1.ResourceMemory: quantityGi(gpuCount * 48),
+	}
+
+	return corev1.ResourceRequirements{
+		Requests: requests,
+		Limits:   limits,
+	}
+}
+
+func mergeResourceRequirements(base corev1.ResourceRequirements, override *corev1.ResourceRequirements) corev1.ResourceRequirements {
+	if override == nil {
+		return base
+	}
+
+	if len(override.Requests) > 0 {
+		if base.Requests == nil {
+			base.Requests = corev1.ResourceList{}
+		}
+		for name, qty := range override.Requests {
+			base.Requests[name] = qty.DeepCopy()
+		}
+	}
+
+	if len(override.Limits) > 0 {
+		if base.Limits == nil {
+			base.Limits = corev1.ResourceList{}
+		}
+		for name, qty := range override.Limits {
+			base.Limits[name] = qty.DeepCopy()
+		}
+	}
+
+	if override.Claims != nil {
+		base.Claims = append([]corev1.ResourceClaim{}, override.Claims...)
+	}
+
+	return base
+}
+
+func quantityGi(value int64) resource.Quantity {
+	if value <= 0 {
+		return resource.Quantity{}
+	}
+	return resource.MustParse(fmt.Sprintf("%dGi", value))
 }
 
 // GetClusterServingRuntime fetches a ClusterServingRuntime by name
