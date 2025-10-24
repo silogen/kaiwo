@@ -5,9 +5,18 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/http/httputil"
 	"strings"
 	"time"
 )
+
+func printReqDebug(r *http.Request) {
+	reqDump, err := httputil.DumpRequest(r, true)
+	if err != nil {
+		fmt.Println("Failed to debug request", err)
+	}
+	fmt.Printf("REQUEST:\n%s\n", string(reqDump))
+}
 
 // OpenAI API Response Structures
 type ChatCompletionRequest struct {
@@ -69,11 +78,11 @@ func main() {
 
 	// Health check endpoint
 	http.HandleFunc("/health", healthHandler)
-	
+
 	// OpenAI API endpoints
 	http.HandleFunc("/v1/models", modelsHandler)
 	http.HandleFunc("/v1/chat/completions", chatCompletionsHandler)
-	
+
 	// Root endpoint
 	http.HandleFunc("/", rootHandler)
 
@@ -137,17 +146,22 @@ func modelsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func chatCompletionsHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("chat completion called")
+	printReqDebug(r)
+
 	if r.Method != http.MethodPost {
 		writeError(w, "Method not allowed", "method_not_allowed", "", http.StatusMethodNotAllowed)
 		return
 	}
 
 	// Check Authorization header
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
-		writeError(w, "Missing or invalid authorization header", "invalid_request_error", "invalid_api_key", http.StatusUnauthorized)
-		return
-	}
+	/*
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+			writeError(w, "Missing or invalid authorization header", "invalid_request_error", "invalid_api_key", http.StatusUnauthorized)
+			return
+		}
+	*/
 
 	var req ChatCompletionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -200,23 +214,23 @@ func chatCompletionsHandler(w http.ResponseWriter, r *http.Request) {
 func generateMockResponse(userMessage string) string {
 	// Simple mock responses based on keywords
 	lowerMsg := strings.ToLower(userMessage)
-	
+
 	if strings.Contains(lowerMsg, "hello") || strings.Contains(lowerMsg, "hi") {
 		return "Hello! I'm a mock OpenAI API server. How can I help you today?"
 	}
-	
+
 	if strings.Contains(lowerMsg, "weather") {
 		return "I'm a mock server, so I can't provide real weather data. But I can tell you it's always sunny in the world of mocks!"
 	}
-	
+
 	if strings.Contains(lowerMsg, "code") || strings.Contains(lowerMsg, "programming") {
 		return "Here's a simple example:\n\n```python\nprint('Hello from mock OpenAI API!')\n```\n\nThis is a mock response for programming-related queries."
 	}
-	
+
 	if strings.Contains(lowerMsg, "explain") || strings.Contains(lowerMsg, "what is") {
 		return "This is a mock explanation. In a real scenario, I would provide detailed information about your topic. Since this is a mock server, I'm giving you this generic response instead."
 	}
-	
+
 	// Default response
 	return fmt.Sprintf("Thank you for your message: '%s'. This is a mock response from the OpenAI API mock server. In a real implementation, this would be a sophisticated AI-generated response.", userMessage)
 }
@@ -229,7 +243,7 @@ func estimateTokens(text string) int {
 func writeError(w http.ResponseWriter, message, errorType, code string, statusCode int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	
+
 	errorResp := ErrorResponse{
 		Error: ErrorDetail{
 			Message: message,
@@ -237,6 +251,6 @@ func writeError(w http.ResponseWriter, message, errorType, code string, statusCo
 			Code:    code,
 		},
 	}
-	
+
 	json.NewEncoder(w).Encode(errorResp)
 }
