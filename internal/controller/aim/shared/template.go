@@ -54,6 +54,7 @@ type TemplateObservation struct {
 	ImageResources   *corev1.ResourceRequirements
 	ImagePullSecrets []corev1.LocalObjectReference
 	RuntimeConfig    *RuntimeConfigResolution
+	TemplateCaches   *aimv1alpha1.AIMTemplateCacheList
 }
 
 // TemplateSpec provides the common template specification
@@ -82,6 +83,7 @@ type TemplateObservationOptions[R client.Object] struct {
 	LookupImage             func(ctx context.Context) (*ImageLookupResult, error)
 	ResolveRuntimeConfig    func(ctx context.Context) (*RuntimeConfigResolution, error)
 	OnRuntimeConfigResolved func(resolution *RuntimeConfigResolution)
+	GetTemplateCaches       func(ctx context.Context) (*aimv1alpha1.AIMTemplateCacheList, error)
 }
 
 // ObserveTemplate gathers runtime, discovery job, image, and runtime config information with common error handling.
@@ -134,6 +136,14 @@ func ObserveTemplate[R client.Object](ctx context.Context, opts TemplateObservat
 				opts.OnRuntimeConfigResolved(resolution)
 			}
 		}
+	}
+
+	if opts.GetTemplateCaches != nil {
+		cache, err := opts.GetTemplateCaches(ctx)
+		if err != nil {
+			return nil, err
+		}
+		obs.TemplateCaches = cache
 	}
 
 	return obs, nil
