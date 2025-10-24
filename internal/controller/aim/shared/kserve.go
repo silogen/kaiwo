@@ -206,7 +206,6 @@ func buildServingRuntimeSpec(template aimstate.TemplateState) servingv1alpha1.Se
 
 // BuildInferenceService constructs a KServe InferenceService referencing a ServingRuntime or ClusterServingRuntime.
 func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.OwnerReference) *servingv1beta1.InferenceService {
-	
 	labels := make(map[string]string, 8)
 	if serviceState.Metadata.Labels != nil {
 		for k, v := range serviceState.Metadata.Labels {
@@ -232,9 +231,9 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 			Kind:       "InferenceService",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      serviceState.Name,
-			Namespace: serviceState.Namespace,
-			Annotations: serviceState.Metadata.Annotations,
+			Name:            serviceState.Name,
+			Namespace:       serviceState.Namespace,
+			Annotations:     serviceState.Metadata.Annotations,
 			Labels:          labels,
 			OwnerReferences: []metav1.OwnerReference{ownerRef},
 		},

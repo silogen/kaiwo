@@ -48,7 +48,6 @@ type ServiceState struct {
 	Template           TemplateState
 	ModelSource        *aimv1alpha1.AIMModelSource
 	Routing            ServiceRoutingState
-
 }
 
 // ServiceRoutingState carries routing configuration resolved for the service.
