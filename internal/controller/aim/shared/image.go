@@ -606,7 +606,7 @@ func ProjectImageStatus(
 
 // updateImageStatusFromTemplates aggregates template statuses and sets conditions on the image.
 // Logic:
-// - Ready: All templates are Available
+// - Ready: All templates are Available or NotAvailable (terminal non-problematic states)
 // - Progressing: At least one template is Progressing (and none are Failed/Degraded)
 // - Degraded: One or more templates are Degraded or Failed (but not all)
 // - Failed: All templates are Degraded or Failed
@@ -622,7 +622,7 @@ func updateImageStatusFromTemplates(status *aimv1alpha1.AIMImageStatus, template
 		return
 	}
 
-	var availableCount, progressingCount, degradedCount, failedCount int
+	var availableCount, notAvailableCount, progressingCount, degradedCount, failedCount int
 	var messages []string
 
 	// Count templates by status
@@ -644,6 +644,8 @@ func updateImageStatusFromTemplates(status *aimv1alpha1.AIMImageStatus, template
 		switch templateStatus {
 		case aimv1alpha1.AIMTemplateStatusAvailable:
 			availableCount++
+		case aimv1alpha1.AIMTemplateStatusNotAvailable:
+			notAvailableCount++
 		case aimv1alpha1.AIMTemplateStatusProgressing, aimv1alpha1.AIMTemplateStatusPending:
 			progressingCount++
 		case aimv1alpha1.AIMTemplateStatusDegraded:
@@ -657,6 +659,7 @@ func updateImageStatusFromTemplates(status *aimv1alpha1.AIMImageStatus, template
 
 	totalTemplates := len(templates)
 	problemCount := degradedCount + failedCount
+	readyCount := availableCount + notAvailableCount
 
 	// Determine overall status based on template states
 	if problemCount == totalTemplates {
@@ -729,11 +732,16 @@ func updateImageStatusFromTemplates(status *aimv1alpha1.AIMImageStatus, template
 			Message:            "No templates are degraded",
 			ObservedGeneration: observedGeneration,
 		})
-	} else if availableCount == totalTemplates {
-		// All templates are available
+	} else if readyCount == totalTemplates {
+		// All templates are in a ready state (available or not available due to missing GPU)
 		status.Status = aimv1alpha1.AIMImageStatusReady
 
-		msg := fmt.Sprintf("All %d template(s) are available", totalTemplates)
+		var msg string
+		if notAvailableCount > 0 {
+			msg = fmt.Sprintf("%d template(s) available, %d not available (GPU not in cluster)", availableCount, notAvailableCount)
+		} else {
+			msg = fmt.Sprintf("All %d template(s) are available", totalTemplates)
+		}
 		setCondition(&status.Conditions, metav1.Condition{
 			Type:               "Ready",
 			Status:             metav1.ConditionTrue,
