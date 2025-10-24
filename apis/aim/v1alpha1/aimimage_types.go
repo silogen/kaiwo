@@ -101,12 +101,8 @@ type AIMImageSpec struct {
 
 	// Resources defines the default resource requirements for services using this image.
 	// Template- or service-level values override these defaults.
-	// +kubebuilder:validation:Required
-	// Must have both cpu and memory in requests
-	// +kubebuilder:validation:XValidation:rule="has(self.requests) && 'cpu' in self.requests && 'memory' in self.requests",message="resources.requests must include cpu and memory"
-	// Must have memory in limits
-	// +kubebuilder:validation:XValidation:rule="has(self.limits) && 'memory' in self.limits",message="resources.limits must include memory"
-	Resources corev1.ResourceRequirements `json:"resources"`
+	// +Optional
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 // AIMImageStatus defines the observed state of AIMImage.
