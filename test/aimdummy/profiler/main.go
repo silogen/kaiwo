@@ -39,8 +39,8 @@ type discoveryModelResult struct {
 }
 
 func main() {
-	qwen := discoveryModelResult{Name: "smol2-135m", Source: "hf://HuggingFaceTB/SmolLM2-135M", SizeGB: 1}
-	fakeprofilemeta := profileMetadata{Engine: "vllm", GPU: "AMD", Precision: "bf16", GPUCount: 0, Metric: "latency"}
+	qwen := discoveryModelResult{Name: "smol2-135m", Source: "hf://HuggingFaceTB/SmolLM2-135M", SizeGB: 0.5}
+	fakeprofilemeta := profileMetadata{Engine: "vllm", GPU: "AMD", Precision: "fp8", GPUCount: 0, Metric: "latency"}
 	fakeprofileresult := discoveryProfileResult{
 		Model:          "smol2-135m",
 		QuantizedModel: "smol2-135m-bf16",

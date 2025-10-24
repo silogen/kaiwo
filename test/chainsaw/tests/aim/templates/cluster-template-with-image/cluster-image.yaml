@@ -3,7 +3,7 @@ kind: AIMClusterImage
 metadata:
   name: llama-3-8b-cluster-with-image
 spec:
-  image: ghcr.io/silogen/aim:0.5.0-meta-llama-llama-3.1-8b-instruct-v20251014
+  image: aimdummy:dev-latest
   defaultServiceTemplate: llama-3-8b-latency-with-image
   resources:
     limits:
