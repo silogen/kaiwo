@@ -14,13 +14,7 @@ spec:
     - apply:
         file: cluster-template.yaml
 
-  - name: Mark template as available with GPU metadata
-    try:
-    - script:
-        content: |
-          kubectl patch aimclusterservicetemplate gpu-defaults-template --type merge --subresource status -p '{"status":{"status":"Available","profile":{"metadata":{"gpu_count":1}}}}'
-
-  - name: Wait for template to become Available
+  - name: Wait for template discovery to complete
     try:
     - assert:
         resource:
@@ -30,9 +24,6 @@ spec:
             name: gpu-defaults-template
           status:
             status: Available
-            profile:
-              metadata:
-                gpu_count: 1
 
   - name: Create AIMService
     try:
@@ -42,7 +33,6 @@ spec:
   - name: Verify GPU defaults applied to InferenceService
     try:
     - assert:
-        timeout: 5m
         resource:
           apiVersion: serving.kserve.io/v1beta1
           kind: InferenceService
