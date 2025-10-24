@@ -39,15 +39,15 @@ type discoveryModelResult struct {
 }
 
 func main() {
-	qwen := discoveryModelResult{Name: "qwen", Source: "hf://Qwen/Qwen2.5-0.5b-Instruct", SizeGB: 1}
+	qwen := discoveryModelResult{Name: "smol2-135m", Source: "hf://HuggingFaceTB/SmolLM2-135M", SizeGB: 1}
 	fakeprofilemeta := profileMetadata{Engine: "vllm", GPU: "AMD", Precision: "bf16", GPUCount: 0, Metric: "latency"}
 	fakeprofileresult := discoveryProfileResult{
-		Model:          "qwen",
-		QuantizedModel: "qwen-4b",
+		Model:          "smol2-135m",
+		QuantizedModel: "smol2-135m-bf16",
 		Metadata:       fakeprofilemeta,
 		EngineArgs:     map[string]any{},
 		EnvVars:        map[string]string{}}
-	fakediscoveryresult := []discoveryResult{{Filename: "qwen", Profile: fakeprofileresult, Models: []discoveryModelResult{qwen}}}
+	fakediscoveryresult := []discoveryResult{{Filename: "smol2-135m", Profile: fakeprofileresult, Models: []discoveryModelResult{qwen}}}
 
 	discoveryJson, _ := json.Marshal(fakediscoveryresult)
 
