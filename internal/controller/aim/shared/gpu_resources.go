@@ -71,25 +71,24 @@ func GetClusterGPUResources(ctx context.Context, k8sClient client.Client) (map[s
 }
 
 // extractGPUModelFromNodeLabels extracts the GPU model from node labels.
-// AMD and NVIDIA use different label schemes:
-//   - AMD node labeller: amd.com/gpu.product-name (or beta.amd.com/...) and amd.com/gpu.device-id
-//   - NVIDIA GPU operator / GFD: nvidia.com/gpu.product or nvidia.com/gpu.family
+// Supports multiple label formats from AMD and NVIDIA GPU labellers:
+//   - AMD: amd.com/gpu.product-name, beta.amd.com/gpu.product-name, amd.com/gpu.device-id,
+//     amd.com/gpu.family, and count-encoded variants (e.g., amd.com/gpu.product-name.MI300X=4)
+//   - NVIDIA: nvidia.com/gpu.product, nvidia.com/mig.product, nvidia.com/gpu.family,
+//     and Node Feature Discovery labels (feature.node.kubernetes.io/nvidia-gpu-model)
+//
+// Returns a normalized GPU model name (e.g., "MI300X", "A100") or empty string if model cannot be determined.
+// Nodes with GPU resources but insufficient labels will be excluded from template matching.
 func extractGPUModelFromNodeLabels(labels map[string]string, resourceName string) string {
 	if strings.HasPrefix(resourceName, "amd.com/") {
-		if model := extractAMDModel(labels); model != "" {
-			return model
-		}
-		return "AMD-GPU"
+		return extractAMDModel(labels)
 	}
 
 	if strings.HasPrefix(resourceName, "nvidia.com/") {
-		if model := extractNvidiaModel(labels); model != "" {
-			return model
-		}
-		return "NVIDIA-GPU"
+		return extractNvidiaModel(labels)
 	}
 
-	return "Unknown-GPU"
+	return ""
 }
 
 // normalizeGPUModel normalizes GPU model names for consistency.
@@ -253,6 +252,7 @@ func pickGPUModelToken(tokens []string) string {
 }
 
 // aggregateNodeResources processes a single node's resources and adds them to the aggregate map.
+// Skips GPUs where the model cannot be determined from node labels (strict matching requirement).
 func aggregateNodeResources(node *corev1.Node, aggregate map[string]GPUResourceInfo) {
 	allocatable := node.Status.Allocatable
 	capacity := node.Status.Capacity
@@ -275,6 +275,11 @@ func aggregateNodeResources(node *corev1.Node, aggregate map[string]GPUResourceI
 
 		// Extract GPU model from node labels
 		gpuModel := extractGPUModelFromNodeLabels(node.Labels, resourceNameStr)
+
+		// Skip GPUs where model cannot be determined (insufficient node labels)
+		if gpuModel == "" {
+			continue
+		}
 
 		// Add to or update the aggregate
 		info, exists := aggregate[gpuModel]
@@ -303,14 +308,15 @@ func isGPUResource(resourceName string) bool {
 
 // IsGPUAvailable checks if a specific GPU model is available in the cluster.
 // The gpuModel parameter should be the GPU model name (e.g., "MI300X", "A100"), not the resource name.
+// The input is normalized to handle variants like "MI300X (rev 2)" or "Instinct MI300X".
 func IsGPUAvailable(ctx context.Context, k8sClient client.Client, gpuModel string) (bool, error) {
 	resources, err := GetClusterGPUResources(ctx, k8sClient)
 	if err != nil {
 		return false, err
 	}
 
-	// Normalize the input for comparison
-	normalizedModel := strings.ToUpper(gpuModel)
+	// Normalize the input for comparison (handles variants and extra tokens)
+	normalizedModel := normalizeGPUModel(gpuModel)
 
 	info, exists := resources[normalizedModel]
 	if !exists {
@@ -349,6 +355,7 @@ func TemplateRequiresGPU(spec aimv1alpha1.AIMServiceTemplateSpecCommon) bool {
 
 // UpdateTemplateGPUAvailability checks whether the GPU model declared by the template exists in the cluster.
 // It updates the provided TemplateObservation with the result of the check.
+// The GPU model is normalized to ensure consistent matching across different label formats.
 func UpdateTemplateGPUAvailability(
 	ctx context.Context,
 	k8sClient client.Client,
@@ -369,7 +376,8 @@ func UpdateTemplateGPUAvailability(
 	}
 
 	model := strings.TrimSpace(spec.GpuSelector.Model)
-	obs.GPUModel = strings.ToUpper(model)
+	// Normalize the model name for consistent storage and comparison
+	obs.GPUModel = normalizeGPUModel(model)
 
 	available, err := IsGPUAvailable(ctx, k8sClient, model)
 	if err != nil {
