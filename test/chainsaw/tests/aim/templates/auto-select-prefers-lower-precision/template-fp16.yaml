@@ -1,0 +1,11 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterServiceTemplate
+metadata:
+  name: test-latency-fp16-prec
+spec:
+  aimImageName: test-prefers-precision
+  metric: latency
+  precision: fp16
+  gpuSelector:
+    count: 1
+    model: MI300X

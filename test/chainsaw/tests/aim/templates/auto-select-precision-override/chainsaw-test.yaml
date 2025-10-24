@@ -1,0 +1,63 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: auto-select-precision-override
+spec:
+  description: Test that precision override filters templates correctly
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create cluster image
+    try:
+    - apply:
+        file: cluster-image.yaml
+
+  - name: Create both templates
+    try:
+    - apply:
+        file: template-fp8.yaml
+    - apply:
+        file: template-fp16.yaml
+
+  - name: Wait for both templates to become Available
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: test-precision-fp8
+          status:
+            status: Available
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: test-precision-fp16
+          status:
+            status: Available
+
+  - name: Create service with fp16 precision override
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service selected fp16 template
+    try:
+    - assert:
+        timeout: 10s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-precision-override-service
+          status:
+            resolvedTemplate:
+              name: test-precision-fp16
+              scope: Cluster
+            (conditions[?type == 'Resolved']):
+            - status: "True"
+              reason: Resolved

@@ -1,0 +1,63 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: auto-select-prefers-lower-precision
+spec:
+  description: Test that auto-selection prefers fp8 over fp16 when both templates are available
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create cluster image
+    try:
+    - apply:
+        file: cluster-image.yaml
+
+  - name: Create both templates
+    try:
+    - apply:
+        file: template-fp8.yaml
+    - apply:
+        file: template-fp16.yaml
+
+  - name: Wait for both templates to become Available
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: test-latency-fp8-prec
+          status:
+            status: Available
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: test-latency-fp16-prec
+          status:
+            status: Available
+
+  - name: Create service without templateRef or overrides
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service selected fp8 template
+    try:
+    - assert:
+        timeout: 10s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-prefers-precision-service
+          status:
+            resolvedTemplate:
+              name: test-latency-fp8-prec
+              scope: Cluster
+            (conditions[?type == 'Resolved']):
+            - status: "True"
+              reason: Resolved

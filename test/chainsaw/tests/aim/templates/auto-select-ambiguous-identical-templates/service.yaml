@@ -1,0 +1,7 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-ambiguous-service
+spec:
+  aimImageName: test-ambiguous
+  # No templateRef - should fail with TemplateSelectionAmbiguous

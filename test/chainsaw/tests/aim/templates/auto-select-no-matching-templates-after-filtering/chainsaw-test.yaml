@@ -1,0 +1,52 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: auto-select-no-matching-templates-after-filtering
+spec:
+  description: Test that service fails when override filters out all available templates
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create cluster image
+    try:
+    - apply:
+        file: cluster-image.yaml
+
+  - name: Create latency template
+    try:
+    - apply:
+        file: cluster-template.yaml
+
+  - name: Wait for template to become Available
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: test-no-match-latency
+          status:
+            status: Available
+
+  - name: Create service with throughput override (no throughput template exists)
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service failed (no templates match after filtering)
+    try:
+    - assert:
+        timeout: 10s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-no-match-service
+          status:
+            status: Degraded
+            (conditions[?type == 'Failure']):
+            - status: "True"
+              reason: TemplateNotFound
+            (conditions[?type == 'Resolved']):
+            - status: "False"

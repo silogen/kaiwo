@@ -1,0 +1,7 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-prefers-precision-service
+spec:
+  aimImageName: test-prefers-precision
+  # No templateRef and no overrides - should prefer fp8 over fp16

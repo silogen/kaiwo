@@ -1,0 +1,66 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: auto-select-no-available-templates
+spec:
+  description: Test that service waits when template is still Progressing (not yet Available)
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create cluster image
+    try:
+    - apply:
+        file: cluster-image.yaml
+
+  - name: Create template
+    try:
+    - apply:
+        file: cluster-template.yaml
+
+  - name: Create service immediately (before template is Available)
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service is Pending while template is Progressing
+    try:
+    - assert:
+        timeout: 5s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-no-available-service
+          status:
+            status: Pending
+            (conditions[?type == 'Progressing']):
+            - status: "True"
+
+  - name: Wait for template to become Available
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: test-no-available-template
+          status:
+            status: Available
+
+  - name: Verify service eventually resolves the template
+    try:
+    - assert:
+        timeout: 15s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-no-available-service
+          status:
+            resolvedTemplate:
+              name: test-no-available-template
+              scope: Cluster
+            (conditions[?type == 'Resolved']):
+            - status: "True"
+              reason: Resolved
