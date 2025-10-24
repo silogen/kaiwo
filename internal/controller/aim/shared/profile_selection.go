@@ -85,7 +85,7 @@ func SelectBestTemplate(
 func filterAvailableTemplates(candidates []TemplateCandidate) []TemplateCandidate {
 	result := make([]TemplateCandidate, 0, len(candidates))
 	for _, candidate := range candidates {
-		if candidate.Status.Status == aimv1alpha1.AIMTemplateStatusAvailable {
+		if candidate.Status.Status == aimv1alpha1.AIMTemplateStatusReady {
 			result = append(result, candidate)
 		}
 	}

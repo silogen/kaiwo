@@ -28,7 +28,7 @@ spec:
           metadata:
             name: test-latency-fp8-prec
           status:
-            status: Available
+            status: Ready
     - assert:
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
@@ -36,7 +36,7 @@ spec:
           metadata:
             name: test-latency-fp16-prec
           status:
-            status: Available
+            status: Ready
 
   - name: Create service without templateRef or overrides
     try:

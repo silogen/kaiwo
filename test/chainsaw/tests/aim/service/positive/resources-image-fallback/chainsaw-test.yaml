@@ -23,7 +23,7 @@ spec:
           metadata:
             name: image-fallback-template
           status:
-            status: Available
+            status: Ready
 
   - name: Create AIMService
     try:

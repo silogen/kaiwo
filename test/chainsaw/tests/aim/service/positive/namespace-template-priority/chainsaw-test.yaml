@@ -26,7 +26,7 @@ spec:
           metadata:
             name: llama-3-8b-latency-ns-priority
           status:
-            status: Available
+            status: Ready
     - assert:
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
@@ -34,7 +34,7 @@ spec:
           metadata:
             name: llama-3-8b-latency-ns-priority
           status:
-            status: Available
+            status: Ready
 
   - name: Create AIMService
     try:

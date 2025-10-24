@@ -27,7 +27,7 @@ spec:
           metadata:
             name: reused-cluster-template
           status:
-            status: Available
+            status: Ready
 
   - name: Create AIMService with matching overrides
     try:

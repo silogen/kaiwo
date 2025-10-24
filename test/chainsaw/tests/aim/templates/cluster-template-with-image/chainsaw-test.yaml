@@ -46,7 +46,7 @@ spec:
           metadata:
             name: llama-3-8b-latency-with-image
           status:
-            status: Available
+            status: Ready
             (conditions[?type == 'Discovered']):
             - status: "True"
               reason: Discovered
