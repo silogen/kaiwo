@@ -72,9 +72,11 @@ type AIMServiceReconciler struct {
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes/status,verbs=get
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
 
 func (r *AIMServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
+	logger.Info("Reconciling AIMService")
 
 	var service aimv1alpha1.AIMService
 	if err := r.Get(ctx, req.NamespacedName, &service); err != nil {
@@ -93,9 +95,17 @@ func (r *AIMServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		Recorder:   r.Recorder,
 		FieldOwner: aimServiceFieldOwner,
 		ObserveFn: func(ctx context.Context) (any, error) {
-			return r.observe(ctx, &service)
+			logger.Info("Starting observe phase")
+			obs, err := r.observe(ctx, &service)
+			if err != nil {
+				logger.Error(err, "Observe failed")
+			} else {
+				logger.Info("Observe completed")
+			}
+			return obs, err
 		},
 		PlanFn: func(ctx context.Context, obs any) ([]client.Object, error) {
+			logger.Info("Starting plan phase")
 			var observation *shared.ServiceObservation
 			if obs != nil {
 				var ok bool
@@ -104,9 +114,12 @@ func (r *AIMServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 					return nil, fmt.Errorf("unexpected observation type %T", obs)
 				}
 			}
-			return r.plan(ctx, &service, observation)
+			objs := r.plan(ctx, &service, observation)
+
+			return objs, nil
 		},
 		ProjectFn: func(ctx context.Context, obs any, errs controllerutils.ReconcileErrors) error {
+			logger.Info("Starting project phase")
 			var observation *shared.ServiceObservation
 			if obs != nil {
 				var ok bool
@@ -127,16 +140,17 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 	}
 
 	obs := &shared.ServiceObservation{
-		TemplateName:             resolution.FinalName,
-		BaseTemplateName:         resolution.BaseName,
-		Scope:                    shared.TemplateScopeNone,
-		AutoSelectedTemplate:     selectionStatus.AutoSelected,
-		TemplateSelectionReason:  selectionStatus.SelectionReason,
-		TemplateSelectionMessage: selectionStatus.SelectionMessage,
-		TemplateSelectionCount:   selectionStatus.CandidateCount,
-		ImageReady:               selectionStatus.ImageReady,
-		ImageReadyReason:         selectionStatus.ImageReadyReason,
-		ImageReadyMessage:        selectionStatus.ImageReadyMessage,
+		TemplateName:              resolution.FinalName,
+		BaseTemplateName:          resolution.BaseName,
+		Scope:                     shared.TemplateScopeNone,
+		AutoSelectedTemplate:      selectionStatus.AutoSelected,
+		TemplateSelectionReason:   selectionStatus.SelectionReason,
+		TemplateSelectionMessage:  selectionStatus.SelectionMessage,
+		TemplateSelectionCount:    selectionStatus.CandidateCount,
+		TemplatesExistButNotReady: selectionStatus.TemplatesExistButNotReady,
+		ImageReady:                selectionStatus.ImageReady,
+		ImageReadyReason:          selectionStatus.ImageReadyReason,
+		ImageReadyMessage:         selectionStatus.ImageReadyMessage,
 	}
 
 	// Observe template based on whether it's derived or not
@@ -176,11 +190,11 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 	return obs, nil
 }
 
-func (r *AIMServiceReconciler) plan(_ context.Context, service *aimv1alpha1.AIMService, obs *shared.ServiceObservation) ([]client.Object, error) {
+func (r *AIMServiceReconciler) plan(_ context.Context, service *aimv1alpha1.AIMService, obs *shared.ServiceObservation) []client.Object {
 	var desired []client.Object
 
 	if obs == nil {
-		return desired, nil
+		return desired
 	}
 
 	ownerRef := metav1.OwnerReference{
@@ -235,7 +249,7 @@ func (r *AIMServiceReconciler) plan(_ context.Context, service *aimv1alpha1.AIMS
 		// succeeded but produced no usable model sources.
 	}
 
-	return desired, nil
+	return desired
 }
 
 func (r *AIMServiceReconciler) projectStatus(

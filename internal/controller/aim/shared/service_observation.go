@@ -62,42 +62,44 @@ type TemplateResolution struct {
 
 // TemplateSelectionStatus captures metadata about automatic template selection.
 type TemplateSelectionStatus struct {
-	AutoSelected      bool
-	CandidateCount    int
-	SelectionReason   string
-	SelectionMessage  string
-	ImageReady        bool
-	ImageReadyReason  string
-	ImageReadyMessage string
+	AutoSelected              bool
+	CandidateCount            int
+	SelectionReason           string
+	SelectionMessage          string
+	TemplatesExistButNotReady bool
+	ImageReady                bool
+	ImageReadyReason          string
+	ImageReadyMessage         string
 }
 
 // ServiceObservation holds observed state for an AIMService reconciliation.
 type ServiceObservation struct {
-	TemplateName             string
-	BaseTemplateName         string
-	Scope                    TemplateScope
-	AutoSelectedTemplate     bool
-	TemplateAvailable        bool
-	TemplateOwnedByService   bool
-	ShouldCreateTemplate     bool
-	RuntimeConfigSpec        aimv1alpha1.AIMRuntimeConfigSpec
-	ResolvedRuntimeConfig    *aimv1alpha1.AIMResolvedRuntimeConfig
-	ResolvedImage            *aimv1alpha1.AIMResolvedReference
-	RoutePath                string
-	RouteTemplateErr         error
-	RuntimeConfigErr         error
-	ImageErr                 error
-	TemplateStatus           *aimv1alpha1.AIMServiceTemplateStatus
-	TemplateSpecCommon       aimv1alpha1.AIMServiceTemplateSpecCommon
-	TemplateSpec             *aimv1alpha1.AIMServiceTemplateSpec
-	TemplateNamespace        string
-	ImageResources           *corev1.ResourceRequirements
-	TemplateSelectionReason  string
-	TemplateSelectionMessage string
-	TemplateSelectionCount   int
-	ImageReady               bool
-	ImageReadyReason         string
-	ImageReadyMessage        string
+	TemplateName              string
+	BaseTemplateName          string
+	Scope                     TemplateScope
+	AutoSelectedTemplate      bool
+	TemplateAvailable         bool
+	TemplateOwnedByService    bool
+	ShouldCreateTemplate      bool
+	RuntimeConfigSpec         aimv1alpha1.AIMRuntimeConfigSpec
+	ResolvedRuntimeConfig     *aimv1alpha1.AIMResolvedRuntimeConfig
+	ResolvedImage             *aimv1alpha1.AIMResolvedReference
+	RoutePath                 string
+	RouteTemplateErr          error
+	RuntimeConfigErr          error
+	ImageErr                  error
+	TemplateStatus            *aimv1alpha1.AIMServiceTemplateStatus
+	TemplateSpecCommon        aimv1alpha1.AIMServiceTemplateSpecCommon
+	TemplateSpec              *aimv1alpha1.AIMServiceTemplateSpec
+	TemplateNamespace         string
+	ImageResources            *corev1.ResourceRequirements
+	TemplateSelectionReason   string
+	TemplateSelectionMessage  string
+	TemplateSelectionCount    int
+	TemplatesExistButNotReady bool // True when templates exist but aren't Available yet
+	ImageReady                bool
+	ImageReadyReason          string
+	ImageReadyMessage         string
 }
 
 // TemplateFound returns true if a template was resolved (namespace or cluster scope).
@@ -173,8 +175,33 @@ func ResolveTemplateNameForService(
 
 	if count != 1 {
 		if count == 0 {
-			status.SelectionReason = aimv1alpha1.AIMServiceReasonTemplateNotFound
-			status.SelectionMessage = fmt.Sprintf("No available templates found for image %q", imageName)
+			// Check if any templates exist at all (regardless of availability)
+			if len(candidates) == 0 {
+				// No templates exist at all - this is a failure
+				status.SelectionReason = aimv1alpha1.AIMServiceReasonTemplateNotFound
+				status.SelectionMessage = fmt.Sprintf("No templates found for image %q", imageName)
+				return res, status, nil
+			}
+
+			// Templates exist but selection returned 0 - check why
+			// Count how many are Available vs other statuses
+			availableCount := 0
+			for _, c := range candidates {
+				if c.Status.Status == aimv1alpha1.AIMTemplateStatusAvailable {
+					availableCount++
+				}
+			}
+
+			if availableCount == 0 {
+				// Templates exist but none are Available yet - service should wait
+				status.TemplatesExistButNotReady = true
+				status.SelectionReason = ""
+				status.SelectionMessage = ""
+			} else {
+				// Templates are Available but don't match overrides/GPU requirements
+				status.SelectionReason = aimv1alpha1.AIMServiceReasonTemplateNotFound
+				status.SelectionMessage = fmt.Sprintf("No available templates match the service requirements for image %q", imageName)
+			}
 		} else {
 			status.SelectionReason = aimv1alpha1.AIMServiceReasonTemplateSelectionAmbiguous
 			status.SelectionMessage = fmt.Sprintf("Multiple templates (%d) satisfy image %q", count, imageName)

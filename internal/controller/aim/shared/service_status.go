@@ -26,7 +26,6 @@ package shared
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/silogen/kaiwo/internal/controller/aim/routingconfig"
 
@@ -457,7 +456,7 @@ func setupCacheCondition(
 }
 
 // setupResolvedTemplate populates the resolved template reference in status.
-func setupResolvedTemplate(service *aimv1alpha1.AIMService, obs *ServiceObservation, status *aimv1alpha1.AIMServiceStatus) {
+func setupResolvedTemplate(obs *ServiceObservation, status *aimv1alpha1.AIMServiceStatus) {
 	status.ResolvedTemplate = nil
 	if obs != nil && obs.TemplateName != "" {
 		status.ResolvedTemplate = &aimv1alpha1.AIMServiceResolvedTemplate{
@@ -468,15 +467,8 @@ func setupResolvedTemplate(service *aimv1alpha1.AIMService, obs *ServiceObservat
 				Kind:      "AIMServiceTemplate",
 			},
 		}
-	} else if name := strings.TrimSpace(TemplateNameFromSpec(service)); name != "" {
-		status.ResolvedTemplate = &aimv1alpha1.AIMServiceResolvedTemplate{
-			AIMResolvedReference: aimv1alpha1.AIMResolvedReference{
-				Name:  name,
-				Scope: aimv1alpha1.AIMResolutionScopeUnknown,
-				Kind:  "AIMServiceTemplate",
-			},
-		}
 	}
+	// Don't set resolvedTemplate if no template was actually resolved
 }
 
 // evaluateHTTPRouteReadiness checks HTTP route status and updates routing conditions.
@@ -523,6 +515,13 @@ func handleTemplateNotFound(
 		setCondition(aimv1alpha1.AIMServiceConditionResolved, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonTemplateNotFound, message)
 		setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonCreatingRuntime, "Waiting for template creation")
 		setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonTemplateNotFound, "Waiting for template to be created")
+	} else if obs != nil && obs.TemplatesExistButNotReady {
+		// Templates exist but aren't Available yet - service should wait
+		status.Status = aimv1alpha1.AIMServiceStatusPending
+		message = "Waiting for templates to become Available"
+		setCondition(aimv1alpha1.AIMServiceConditionResolved, metav1.ConditionFalse, "TemplateNotAvailable", message)
+		setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, "TemplateNotAvailable", "Waiting for template discovery to complete")
+		setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionTrue, "TemplateNotAvailable", "Templates exist but are not yet Available")
 	} else {
 		// No template could be resolved and no derived template will be created.
 		// This is a degraded state - the service cannot proceed.
@@ -574,7 +573,7 @@ func ProjectServiceStatus(
 	}
 
 	setupCacheCondition(service, setCondition)
-	setupResolvedTemplate(service, obs, status)
+	setupResolvedTemplate(obs, status)
 
 	routingEnabled, routingReady, routingHasFatalError := EvaluateRoutingStatus(service, obs, status, setCondition)
 
