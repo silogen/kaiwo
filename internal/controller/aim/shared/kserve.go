@@ -147,10 +147,10 @@ func buildServingRuntimeSpec(template aimstate.TemplateState) servingv1alpha1.Se
 	dshmSizeLimit := resource.MustParse(DefaultSharedMemorySize)
 
 	// Determine model ID: prefer ModelSource.Name, fall back to AIMImageName
-	modelID := template.SpecCommon.AIMImageName
-	if template.ModelSource != nil {
-		modelID = template.ModelSource.Name
-	}
+	//modelID := template.SpecCommon.AIMImageName
+	//if template.ModelSource != nil {
+	//	modelID = template.ModelSource.Name
+	//}
 
 	// Get the GPU resource name from the template, or use the default
 	gpuResourceName := getGPUResourceName(template)
@@ -173,10 +173,10 @@ func buildServingRuntimeSpec(template aimstate.TemplateState) servingv1alpha1.Se
 					Name:  "kserve-container",
 					Image: template.Image,
 					Env: []corev1.EnvVar{
-						{
-							Name:  "AIM_MODEL_ID",
-							Value: modelID,
-						},
+						//{
+						//	Name:  "AIM_MODEL_ID",
+						//	Value: modelID,
+						//},
 						{
 							Name:  "VLLM_ENABLE_METRICS",
 							Value: "true",
