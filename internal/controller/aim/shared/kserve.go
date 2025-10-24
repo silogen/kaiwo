@@ -44,8 +44,8 @@ import (
 )
 
 const (
-	// amdGPUResourceName is the resource name for AMD GPUs in Kubernetes
-	amdGPUResourceName corev1.ResourceName = "amd.com/gpu"
+	// DefaultGPUResourceName is the default resource name for AMD GPUs in Kubernetes
+	DefaultGPUResourceName = "amd.com/gpu"
 
 	// DefaultSharedMemorySize is the default size allocated for /dev/shm in inference containers.
 	// This is required for efficient inter-process communication in model serving workloads.
@@ -133,6 +133,16 @@ func buildServingRuntimeObjectMeta(template aimstate.TemplateState, ownerRef met
 	return meta
 }
 
+// getGPUResourceName returns the GPU resource name from the template's gpuSelector.
+// If the ResourceName is specified in gpuSelector, it will be used.
+// Otherwise, the default value of "amd.com/gpu" is returned.
+func getGPUResourceName(template aimstate.TemplateState) corev1.ResourceName {
+	if template.SpecCommon.GpuSelector != nil && template.SpecCommon.GpuSelector.ResourceName != "" {
+		return corev1.ResourceName(template.SpecCommon.GpuSelector.ResourceName)
+	}
+	return corev1.ResourceName(DefaultGPUResourceName)
+}
+
 func buildServingRuntimeSpec(template aimstate.TemplateState) servingv1alpha1.ServingRuntimeSpec {
 	dshmSizeLimit := resource.MustParse(DefaultSharedMemorySize)
 
@@ -141,6 +151,9 @@ func buildServingRuntimeSpec(template aimstate.TemplateState) servingv1alpha1.Se
 	if template.ModelSource != nil {
 		modelID = template.ModelSource.Name
 	}
+
+	// Get the GPU resource name from the template, or use the default
+	gpuResourceName := getGPUResourceName(template)
 
 	return servingv1alpha1.ServingRuntimeSpec{
 		// The AIM containers handle downloading themselves
@@ -171,10 +184,10 @@ func buildServingRuntimeSpec(template aimstate.TemplateState) servingv1alpha1.Se
 					},
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
-							"amd.com/gpu": *resource.NewQuantity(int64(template.Status.Profile.Metadata.GPUCount), resource.DecimalSI),
+							gpuResourceName: *resource.NewQuantity(int64(template.Status.Profile.Metadata.GPUCount), resource.DecimalSI),
 						},
 						Limits: corev1.ResourceList{
-							"amd.com/gpu": *resource.NewQuantity(int64(template.Status.Profile.Metadata.GPUCount), resource.DecimalSI),
+							gpuResourceName: *resource.NewQuantity(int64(template.Status.Profile.Metadata.GPUCount), resource.DecimalSI),
 						},
 					},
 					Ports: []corev1.ContainerPort{
@@ -294,20 +307,21 @@ func resolveServiceResources(serviceState aimstate.ServiceState) corev1.Resource
 	}
 
 	if gpuCount > 0 {
+		gpuResourceName := getGPUResourceName(serviceState.Template)
 		if resolved.Requests == nil {
 			resolved.Requests = corev1.ResourceList{}
 		}
 		if resolved.Limits == nil {
 			resolved.Limits = corev1.ResourceList{}
 		}
-		if _, ok := resolved.Requests[amdGPUResourceName]; !ok {
+		if _, ok := resolved.Requests[gpuResourceName]; !ok {
 			if qty := resource.NewQuantity(gpuCount, resource.DecimalSI); qty != nil {
-				resolved.Requests[amdGPUResourceName] = *qty
+				resolved.Requests[gpuResourceName] = *qty
 			}
 		}
-		if _, ok := resolved.Limits[amdGPUResourceName]; !ok {
+		if _, ok := resolved.Limits[gpuResourceName]; !ok {
 			if qty := resource.NewQuantity(gpuCount, resource.DecimalSI); qty != nil {
-				resolved.Limits[amdGPUResourceName] = *qty
+				resolved.Limits[gpuResourceName] = *qty
 			}
 		}
 	}

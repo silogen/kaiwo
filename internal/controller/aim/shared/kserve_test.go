@@ -59,11 +59,11 @@ func TestResolveServiceResources_DefaultsFromTemplateGPU(t *testing.T) {
 		t.Fatalf("expected memory limit 96Gi, got %s", limitMem.String())
 	}
 
-	if gpu := resources.Requests[amdGPUResourceName]; gpu.Cmp(resource.MustParse("2")) != 0 {
+	if gpu := resources.Requests[corev1.ResourceName(DefaultGPUResourceName)]; gpu.Cmp(resource.MustParse("2")) != 0 {
 		t.Fatalf("expected GPU request 2, got %s", gpu.String())
 	}
 
-	if gpuLimit := resources.Limits[amdGPUResourceName]; gpuLimit.Cmp(resource.MustParse("2")) != 0 {
+	if gpuLimit := resources.Limits[corev1.ResourceName(DefaultGPUResourceName)]; gpuLimit.Cmp(resource.MustParse("2")) != 0 {
 		t.Fatalf("expected GPU limit 2, got %s", gpuLimit.String())
 	}
 }
@@ -105,11 +105,11 @@ func TestResolveServiceResources_OverridesApplied(t *testing.T) {
 		t.Fatalf("expected memory limit override 128Gi, got %s", limitMem.String())
 	}
 
-	if gpu := resources.Requests[amdGPUResourceName]; gpu.Cmp(resource.MustParse("2")) != 0 {
+	if gpu := resources.Requests[corev1.ResourceName(DefaultGPUResourceName)]; gpu.Cmp(resource.MustParse("2")) != 0 {
 		t.Fatalf("expected GPU request 2, got %s", gpu.String())
 	}
 
-	if gpuLimit := resources.Limits[amdGPUResourceName]; gpuLimit.Cmp(resource.MustParse("2")) != 0 {
+	if gpuLimit := resources.Limits[corev1.ResourceName(DefaultGPUResourceName)]; gpuLimit.Cmp(resource.MustParse("2")) != 0 {
 		t.Fatalf("expected GPU limit 2, got %s", gpuLimit.String())
 	}
 }

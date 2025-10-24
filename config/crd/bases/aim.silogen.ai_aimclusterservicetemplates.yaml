@@ -90,6 +90,11 @@ spec:
                       by this template
                     minLength: 1
                     type: string
+                  resourceName:
+                    default: amd.com/gpu
+                    description: ResourceName is the Kubernetes resource name for
+                      GPU resources
+                    type: string
                 required:
                 - count
                 - model
