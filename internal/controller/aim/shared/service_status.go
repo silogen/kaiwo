@@ -230,8 +230,8 @@ func HandleRouteTemplateError(
 	return true
 }
 
-// HandleTemplateDegraded checks if the template is degraded or failed and updates status.
-// Returns true if the template is degraded or failed.
+// HandleTemplateDegraded checks if the template is degraded, not available, or failed and updates status.
+// Returns true if the template is degraded, not available, or failed.
 func HandleTemplateDegraded(
 	status *aimv1alpha1.AIMServiceStatus,
 	obs *ServiceObservation,
@@ -241,13 +241,14 @@ func HandleTemplateDegraded(
 		return false
 	}
 
-	// Handle both Degraded and Failed template statuses
+	// Handle Degraded, NotAvailable, and Failed template statuses
 	if obs.TemplateStatus.Status != aimv1alpha1.AIMTemplateStatusDegraded &&
+		obs.TemplateStatus.Status != aimv1alpha1.AIMTemplateStatusNotAvailable &&
 		obs.TemplateStatus.Status != aimv1alpha1.AIMTemplateStatusFailed {
 		return false
 	}
 
-	// Use Failed for terminal failures, Degraded for recoverable issues
+	// Use Failed for terminal failures, Degraded for recoverable issues (including NotAvailable)
 	if obs.TemplateStatus.Status == aimv1alpha1.AIMTemplateStatusFailed {
 		status.Status = aimv1alpha1.AIMServiceStatusFailed
 	} else {

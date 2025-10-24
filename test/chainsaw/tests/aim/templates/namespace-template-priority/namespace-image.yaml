@@ -4,7 +4,6 @@ metadata:
   name: llama-3-8b-throughput-template-priority
 spec:
   image: busybox:latest-aim-namespace
-  defaultServiceTemplate: llama-3-8b-throughput
   resources:
     limits:
       memory: 48Gi

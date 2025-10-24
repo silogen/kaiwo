@@ -26,6 +26,7 @@ package shared
 
 import (
 	"context"
+	"regexp"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -71,31 +72,20 @@ func GetClusterGPUResources(ctx context.Context, k8sClient client.Client) (map[s
 
 // extractGPUModelFromNodeLabels extracts the GPU model from node labels.
 // AMD and NVIDIA use different label schemes:
-//   - AMD: amd.com/gpu.device.id (e.g., "0x74a1" for MI300X) or amd.com/gpu.product
-//   - NVIDIA: nvidia.com/gpu.product (e.g., "A100-SXM4-40GB") or nvidia.com/gpu.family
+//   - AMD node labeller: amd.com/gpu.product-name (or beta.amd.com/...) and amd.com/gpu.device-id
+//   - NVIDIA GPU operator / GFD: nvidia.com/gpu.product or nvidia.com/gpu.family
 func extractGPUModelFromNodeLabels(labels map[string]string, resourceName string) string {
 	if strings.HasPrefix(resourceName, "amd.com/") {
-		// Try AMD-specific labels
-		if product, ok := labels["amd.com/gpu.product"]; ok {
-			return normalizeGPUModel(product)
+		if model := extractAMDModel(labels); model != "" {
+			return model
 		}
-		if deviceID, ok := labels["amd.com/gpu.device.id"]; ok {
-			// Map device IDs to model names
-			return mapAMDDeviceIDToModel(deviceID)
-		}
-		// Fallback
 		return "AMD-GPU"
 	}
 
 	if strings.HasPrefix(resourceName, "nvidia.com/") {
-		// Try NVIDIA-specific labels
-		if product, ok := labels["nvidia.com/gpu.product"]; ok {
-			return normalizeGPUModel(product)
+		if model := extractNvidiaModel(labels); model != "" {
+			return model
 		}
-		if family, ok := labels["nvidia.com/gpu.family"]; ok {
-			return normalizeGPUModel(family)
-		}
-		// Fallback
 		return "NVIDIA-GPU"
 	}
 
@@ -105,11 +95,35 @@ func extractGPUModelFromNodeLabels(labels map[string]string, resourceName string
 // normalizeGPUModel normalizes GPU model names for consistency.
 // Examples:
 //   - "A100-SXM4-40GB" -> "A100"
-//   - "mi300x" -> "MI300X"
+//   - "MI300X (rev 2)" -> "MI300X"
+//   - "Tesla-T4-SHARED" -> "T4"
 func normalizeGPUModel(model string) string {
-	model = strings.ToUpper(model)
-	// Remove common suffixes
-	model = strings.Split(model, "-")[0]
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return ""
+	}
+
+	model = strings.ToUpper(strings.ReplaceAll(model, "_", "-"))
+
+	tokens := strings.FieldsFunc(model, func(r rune) bool {
+		switch r {
+		case '-', ' ', '/', ':':
+			return true
+		default:
+			return false
+		}
+	})
+
+	if token := pickGPUModelToken(tokens); token != "" {
+		return token
+	}
+
+	for _, token := range tokens {
+		if token != "" {
+			return token
+		}
+	}
+
 	return model
 }
 
@@ -123,6 +137,8 @@ func mapAMDDeviceIDToModel(deviceID string) string {
 		"74a1": "MI300X",
 		"740f": "MI210",
 		"7408": "MI250X",
+		"744c": "MI250",
+		"74e0": "MI300A",
 		// TODO: Add more mappings
 	}
 
@@ -131,6 +147,109 @@ func mapAMDDeviceIDToModel(deviceID string) string {
 	}
 
 	return "AMD-" + strings.ToUpper(deviceID)
+}
+
+func extractAMDModel(labels map[string]string) string {
+	// Preferred direct labels exposed by the AMD labeller
+	if product := labelValue(labels, "amd.com/gpu.product-name", "beta.amd.com/gpu.product-name"); product != "" {
+		return normalizeGPUModel(product)
+	}
+
+	// Labels with counts encoded in the key suffix
+	if productKey := extractLabelSuffix(labels, "amd.com/gpu.product-name.", "beta.amd.com/gpu.product-name."); productKey != "" {
+		return normalizeGPUModel(productKey)
+	}
+
+	// Fall back to device identifiers
+	if deviceID := labelValue(labels, "amd.com/gpu.device-id", "beta.amd.com/gpu.device-id"); deviceID != "" {
+		return mapAMDDeviceIDToModel(deviceID)
+	}
+	if deviceKey := extractLabelSuffix(labels, "amd.com/gpu.device-id.", "beta.amd.com/gpu.device-id."); deviceKey != "" {
+		return mapAMDDeviceIDToModel(deviceKey)
+	}
+
+	// GPU family (AI, NV, etc.) as a last resort
+	if family := labelValue(labels, "amd.com/gpu.family", "beta.amd.com/gpu.family"); family != "" {
+		return normalizeGPUModel(family)
+	}
+	if familyKey := extractLabelSuffix(labels, "amd.com/gpu.family.", "beta.amd.com/gpu.family."); familyKey != "" {
+		return normalizeGPUModel(familyKey)
+	}
+
+	return ""
+}
+
+func extractNvidiaModel(labels map[string]string) string {
+	if product := labelValue(labels, "nvidia.com/gpu.product", "nvidia.com/mig.product"); product != "" {
+		return normalizeGPUModel(product)
+	}
+	if productKey := extractLabelSuffix(labels, "nvidia.com/gpu.product.", "nvidia.com/mig.product."); productKey != "" {
+		return normalizeGPUModel(productKey)
+	}
+	if family := labelValue(labels, "nvidia.com/gpu.family"); family != "" {
+		return normalizeGPUModel(family)
+	}
+	if familyKey := extractLabelSuffix(labels, "nvidia.com/gpu.family."); familyKey != "" {
+		return normalizeGPUModel(familyKey)
+	}
+	// Node Feature Discovery publishes a descriptive label as well
+	if feature := labelValue(labels, "feature.node.kubernetes.io/nvidia-gpu-model"); feature != "" {
+		return normalizeGPUModel(feature)
+	}
+	return ""
+}
+
+func labelValue(labels map[string]string, keys ...string) string {
+	for _, key := range keys {
+		if value, ok := labels[key]; ok {
+			value = strings.TrimSpace(value)
+			if value != "" {
+				return value
+			}
+		}
+	}
+	return ""
+}
+
+func extractLabelSuffix(labels map[string]string, prefixes ...string) string {
+	for _, prefix := range prefixes {
+		for key, value := range labels {
+			if !strings.HasPrefix(key, prefix) {
+				continue
+			}
+			value = strings.TrimSpace(value)
+			if value == "" || value == "0" {
+				continue
+			}
+			suffix := strings.TrimPrefix(key, prefix)
+			if suffix != "" {
+				return suffix
+			}
+		}
+	}
+	return ""
+}
+
+var gpuModelTokenRegex = regexp.MustCompile(`^(MI|ME|RX|RTX|GTX|A|H|L|T|V|K|P|QUADRO|TESLA|GRID)?[A-Z]*[0-9]+[A-Z0-9]*$`)
+
+func pickGPUModelToken(tokens []string) string {
+	for _, token := range tokens {
+		token = strings.TrimSpace(token)
+		if token == "" {
+			continue
+		}
+
+		switch token {
+		case "AMD", "NVIDIA", "TESLA", "RTX", "INSTINCT":
+			continue
+		}
+
+		if gpuModelTokenRegex.MatchString(token) {
+			token = strings.TrimPrefix(token, "INSTINCT")
+			return token
+		}
+	}
+	return ""
 }
 
 // aggregateNodeResources processes a single node's resources and adds them to the aggregate map.
