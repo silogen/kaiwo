@@ -35,8 +35,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	apimeta "k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -255,17 +253,8 @@ func evaluateImageReadiness(
 		err := k8sClient.Get(ctx, client.ObjectKey{Name: imageName, Namespace: namespace}, &nsImage)
 		switch {
 		case err == nil:
-			ready, reason, message := imageReadyStatus(nsImage.Status.Conditions)
-			if ready {
-				return true, TemplateScopeNamespace, "", "", nil
-			}
-			if reason == "" {
-				reason = aimv1alpha1.AIMServiceReasonModelNotReady
-			}
-			if message == "" {
-				message = fmt.Sprintf("AIMImage %s/%s is not ready", namespace, imageName)
-			}
-			return false, TemplateScopeNamespace, reason, message, nil
+			// Image exists and is ready
+			return true, TemplateScopeNamespace, "", "", nil
 		case apierrors.IsNotFound(err):
 			// fall through to cluster scope
 		default:
@@ -277,36 +266,14 @@ func evaluateImageReadiness(
 	err := k8sClient.Get(ctx, client.ObjectKey{Name: imageName}, &clusterImage)
 	switch {
 	case err == nil:
-		ready, reason, message := imageReadyStatus(clusterImage.Status.Conditions)
-		if ready {
-			return true, TemplateScopeCluster, "", "", nil
-		}
-		if reason == "" {
-			reason = aimv1alpha1.AIMServiceReasonModelNotReady
-		}
-		if message == "" {
-			message = fmt.Sprintf("AIMClusterImage %s is not ready", imageName)
-		}
-		return false, TemplateScopeCluster, reason, message, nil
+		// Image exists and is ready
+		return true, TemplateScopeCluster, "", "", nil
 	case apierrors.IsNotFound(err):
 		return false, TemplateScopeNone, aimv1alpha1.AIMServiceReasonModelNotFound,
 			fmt.Sprintf("No AIMImage or AIMClusterImage found for %q", imageName), nil
 	default:
 		return false, TemplateScopeNone, "", "", fmt.Errorf("failed to get AIMClusterImage %s: %w", imageName, err)
 	}
-}
-
-func imageReadyStatus(conditions []metav1.Condition) (bool, string, string) {
-	if apimeta.IsStatusConditionTrue(conditions, aimv1alpha1.AIMImageConditionRuntimeResolved) {
-		return true, "", ""
-	}
-
-	condition := apimeta.FindStatusCondition(conditions, aimv1alpha1.AIMImageConditionRuntimeResolved)
-	if condition != nil {
-		return false, condition.Reason, condition.Message
-	}
-
-	return false, aimv1alpha1.AIMServiceReasonModelNotReady, "Image runtime configuration not yet resolved"
 }
 
 func listTemplateCandidatesForImage(

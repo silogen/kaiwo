@@ -592,17 +592,6 @@ func ProjectServiceStatus(
 		setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonResolved, "No active failures")
 	}
 
-	if handleTemplateNotFound(obs, status, setCondition) {
-		return
-	}
-
-	setCondition(aimv1alpha1.AIMServiceConditionResolved, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonResolved,
-		fmt.Sprintf("Resolved template %q", obs.TemplateName))
-
-	if HandleRuntimeConfigMissing(status, obs, setCondition) {
-		return
-	}
-
 	if HandleImageMissing(status, obs, setCondition) {
 		return
 	}
@@ -612,6 +601,17 @@ func ProjectServiceStatus(
 	}
 
 	if HandleTemplateSelectionFailure(status, obs, setCondition) {
+		return
+	}
+
+	if handleTemplateNotFound(obs, status, setCondition) {
+		return
+	}
+
+	setCondition(aimv1alpha1.AIMServiceConditionResolved, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonResolved,
+		fmt.Sprintf("Resolved template %q", obs.TemplateName))
+
+	if HandleRuntimeConfigMissing(status, obs, setCondition) {
 		return
 	}
 
