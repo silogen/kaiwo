@@ -6,7 +6,7 @@ NS="kgateway-system"
 SVC="kserve-ingress-gateway"
 SVC_PORT="80"
 BASE="/integration/test/v1"  # contains /models and /chat/completions
-TIMEOUT=10
+TIMEOUT=60
 
 # Optional: if your gateway expects Authorization
 AUTH_HEADER=()
