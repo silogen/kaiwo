@@ -3,14 +3,14 @@ kind: AIMClusterImage
 metadata:
   name: default-testing-llama-3-8b
 spec:
-  image: ghcr.io/silogen/aim:0.5.0-meta-llama-llama-3.1-8b-instruct-v20251014
+  image: aimdummy:dev-latest
   defaultServiceTemplate: default-testing-llama-3-8b
   resources:
     limits:
-      memory: 48Gi
-      amd.com/gpu: '1'
-      cpu: '6'
+      memory: 2Gi
+      #amd.com/gpu: '1'
+      cpu: '2'
     requests:
-      cpu: '4'
-      memory: 40Gi
-      amd.com/gpu: '1'
+      cpu: '100m'
+      memory: 1Gi
+      #amd.com/gpu: '1'
