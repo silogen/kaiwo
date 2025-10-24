@@ -540,7 +540,7 @@ _Underlying type:_ _string_
 AIMResolutionScope describes the scope of a resolved reference.
 
 _Validation:_
-- Enum: [Namespace Cluster Unknown]
+- Enum: [Namespace Cluster Merged Unknown]
 
 _Appears in:_
 - [AIMResolvedReference](#aimresolvedreference)
@@ -551,6 +551,7 @@ _Appears in:_
 | --- | --- |
 | `Namespace` | AIMResolutionScopeNamespace denotes a namespace-scoped resource.<br /> |
 | `Cluster` | AIMResolutionScopeCluster denotes a cluster-scoped resource.<br /> |
+| `Merged` | AIMResolutionScopeMerged denotes that both cluster and namespace configs were merged.<br /> |
 | `Unknown` | AIMResolutionScopeUnknown denotes that the scope could not be determined.<br /> |
 
 
@@ -572,7 +573,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `name` _string_ | Name is the resource name that satisfied the reference. |  |  |
 | `namespace` _string_ | Namespace identifies where the resource was found when namespace-scoped.<br />Empty indicates a cluster-scoped resource. |  |  |
-| `scope` _[AIMResolutionScope](#aimresolutionscope)_ | Scope indicates whether the resolved resource was namespace or cluster scoped. |  | Enum: [Namespace Cluster Unknown] <br /> |
+| `scope` _[AIMResolutionScope](#aimresolutionscope)_ | Scope indicates whether the resolved resource was namespace or cluster scoped. |  | Enum: [Namespace Cluster Merged Unknown] <br /> |
 | `kind` _string_ | Kind is the fully-qualified kind of the resolved reference, when known. |  |  |
 | `uid` _[UID](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#uid-types-pkg)_ | UID captures the unique identifier of the resolved reference, when known. |  |  |
 
@@ -596,7 +597,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `name` _string_ | Name is the resource name that satisfied the reference. |  |  |
 | `namespace` _string_ | Namespace identifies where the resource was found when namespace-scoped.<br />Empty indicates a cluster-scoped resource. |  |  |
-| `scope` _[AIMResolutionScope](#aimresolutionscope)_ | Scope indicates whether the resolved resource was namespace or cluster scoped. |  | Enum: [Namespace Cluster Unknown] <br /> |
+| `scope` _[AIMResolutionScope](#aimresolutionscope)_ | Scope indicates whether the resolved resource was namespace or cluster scoped. |  | Enum: [Namespace Cluster Merged Unknown] <br /> |
 | `kind` _string_ | Kind is the fully-qualified kind of the resolved reference, when known. |  |  |
 | `uid` _[UID](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#uid-types-pkg)_ | UID captures the unique identifier of the resolved reference, when known. |  |  |
 
@@ -827,7 +828,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `name` _string_ | Name is the resource name that satisfied the reference. |  |  |
 | `namespace` _string_ | Namespace identifies where the resource was found when namespace-scoped.<br />Empty indicates a cluster-scoped resource. |  |  |
-| `scope` _[AIMResolutionScope](#aimresolutionscope)_ | Scope indicates whether the resolved resource was namespace or cluster scoped. |  | Enum: [Namespace Cluster Unknown] <br /> |
+| `scope` _[AIMResolutionScope](#aimresolutionscope)_ | Scope indicates whether the resolved resource was namespace or cluster scoped. |  | Enum: [Namespace Cluster Merged Unknown] <br /> |
 | `kind` _string_ | Kind is the fully-qualified kind of the resolved reference, when known. |  |  |
 | `uid` _[UID](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#uid-types-pkg)_ | UID captures the unique identifier of the resolved reference, when known. |  |  |
 
