@@ -382,6 +382,7 @@ spec:
                     enum:
                     - Namespace
                     - Cluster
+                    - Merged
                     - Unknown
                     type: string
                   uid:

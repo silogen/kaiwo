@@ -361,6 +361,7 @@ spec:
                     enum:
                     - Namespace
                     - Cluster
+                    - Merged
                     - Unknown
                     type: string
                   uid:
@@ -390,6 +391,7 @@ spec:
                     enum:
                     - Namespace
                     - Cluster
+                    - Merged
                     - Unknown
                     type: string
                   uid:
