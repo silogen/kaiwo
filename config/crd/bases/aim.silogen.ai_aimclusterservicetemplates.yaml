@@ -90,6 +90,11 @@ spec:
                       by this template
                     minLength: 1
                     type: string
+                  resourceName:
+                    default: amd.com/gpu
+                    description: ResourceName is the Kubernetes resource name for
+                      GPU resources
+                    type: string
                 required:
                 - count
                 - model
@@ -356,6 +361,7 @@ spec:
                     enum:
                     - Namespace
                     - Cluster
+                    - Merged
                     - Unknown
                     type: string
                   uid:
@@ -385,6 +391,7 @@ spec:
                     enum:
                     - Namespace
                     - Cluster
+                    - Merged
                     - Unknown
                     type: string
                   uid:
@@ -396,11 +403,12 @@ spec:
                 default: Pending
                 description: |-
                   Status represents the current high‑level status of the template lifecycle.
-                  Values: `Pending`, `Progressing`, `Available`, `Failed`.
+                  Values: `Pending`, `Progressing`, `Ready`, `Failed`, `NotAvailable`.
                 enum:
                 - Pending
                 - Progressing
-                - Available
+                - NotAvailable
+                - Ready
                 - Degraded
                 - Failed
                 type: string

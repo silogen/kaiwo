@@ -55,6 +55,9 @@ type TemplateObservation struct {
 	ImageResources      *corev1.ResourceRequirements
 	ImagePullSecrets    []corev1.LocalObjectReference
 	RuntimeConfig       *RuntimeConfigResolution
+	GPUModel            string
+	GPUAvailable        bool
+	GPUChecked          bool
 	JobPodImagePullFail bool   // True if job pod is stuck in ImagePullBackOff
 	JobPodFailureReason string // Detailed reason if JobPodImagePullFail is true
 }
@@ -265,6 +268,10 @@ func checkJobPodImagePullStatus(ctx context.Context, k8sClient client.Client, jo
 // PlanTemplateResources produces desired objects based on the observation and controller-provided builders.
 // It respects the global limit on concurrent discovery jobs (MaxConcurrentDiscoveryJobs).
 func PlanTemplateResources(ctx TemplatePlanContext, builders TemplatePlanBuilders) []client.Object {
+	if ctx.Observation != nil && ctx.Observation.GPUChecked && !ctx.Observation.GPUAvailable {
+		return nil
+	}
+
 	if ctx.Observation == nil || ctx.Observation.Image == "" {
 		return nil
 	}
@@ -294,14 +301,14 @@ func PlanTemplateResources(ctx TemplatePlanContext, builders TemplatePlanBuilder
 	var desired []client.Object
 
 	// Only create the ServingRuntime after discovery has completed successfully
-	if ctx.Status == aimv1alpha1.AIMTemplateStatusAvailable && builders.BuildRuntime != nil {
+	if ctx.Status == aimv1alpha1.AIMTemplateStatusReady && builders.BuildRuntime != nil {
 		if runtime := builders.BuildRuntime(input); runtime != nil {
 			desired = append(desired, runtime)
 		}
 	}
 
 	// Create discovery job if template is not yet Available and job hasn't completed
-	if ctx.Status != aimv1alpha1.AIMTemplateStatusAvailable &&
+	if ctx.Status != aimv1alpha1.AIMTemplateStatusReady &&
 		builders.BuildDiscoveryJob != nil &&
 		(ctx.Observation.Job == nil || !IsJobComplete(ctx.Observation.Job)) {
 
@@ -455,6 +462,37 @@ func handleTemplateImagePullFailed(obs *TemplateObservation, recorder record.Eve
 	}
 }
 
+// handleTemplateGPUUnavailable handles the case where the required GPU is not available in the cluster.
+func handleTemplateGPUUnavailable(
+	obs *TemplateObservation,
+	currentStatus aimv1alpha1.AIMTemplateStatusEnum,
+	recorder record.EventRecorder,
+	template TemplateWithStatus,
+) *templateStatusResult {
+	if obs == nil || !obs.GPUChecked || obs.GPUAvailable {
+		return nil
+	}
+
+	message := "Required GPU model is not available in the cluster"
+	if obs.GPUModel != "" {
+		message = fmt.Sprintf("Required GPU model %q is not available in the cluster", obs.GPUModel)
+	}
+
+	if recorder != nil && currentStatus != aimv1alpha1.AIMTemplateStatusNotAvailable {
+		controllerutils.EmitWarningEvent(recorder, template, "GPUUnavailable", message)
+	}
+
+	return &templateStatusResult{
+		Status: aimv1alpha1.AIMTemplateStatusNotAvailable,
+		Conditions: []metav1.Condition{
+			controllerutils.NewCondition(controllerutils.ConditionTypeFailure, metav1.ConditionFalse, "GPUUnavailable", message),
+			controllerutils.NewCondition(controllerutils.ConditionTypeProgressing, metav1.ConditionFalse, "GPUUnavailable", "Waiting for required GPU resources"),
+			controllerutils.NewCondition(controllerutils.ConditionTypeReady, metav1.ConditionFalse, "GPUUnavailable", message),
+			controllerutils.NewCondition(controllerutils.ConditionTypeDiscovered, metav1.ConditionFalse, "GPUUnavailable", "Cannot run discovery without required GPU resources"),
+		},
+	}
+}
+
 // handleTemplateDiscoveryRunning handles the case where discovery job is running.
 func handleTemplateDiscoveryRunning(obs *TemplateObservation, currentStatus aimv1alpha1.AIMTemplateStatusEnum, recorder record.EventRecorder, template TemplateWithStatus) *templateStatusResult {
 	if obs.Job == nil || IsJobComplete(obs.Job) {
@@ -522,7 +560,7 @@ func handleTemplateDiscoverySucceeded(ctx context.Context, k8sClient client.Clie
 	}
 
 	return &templateStatusResult{
-		Status: aimv1alpha1.AIMTemplateStatusAvailable,
+		Status: aimv1alpha1.AIMTemplateStatusReady,
 		Conditions: []metav1.Condition{
 			controllerutils.NewCondition(controllerutils.ConditionTypeDiscovered, metav1.ConditionTrue, controllerutils.ReasonDiscovered, "Model sources discovered"),
 			controllerutils.NewCondition(controllerutils.ConditionTypeProgressing, metav1.ConditionFalse, controllerutils.ReasonAvailable, "Discovery complete"),
@@ -536,7 +574,7 @@ func handleTemplateDiscoverySucceeded(ctx context.Context, k8sClient client.Clie
 // handleTemplateInitialState handles the case where no discovery job exists yet.
 func handleTemplateInitialState(currentStatus aimv1alpha1.AIMTemplateStatusEnum) *templateStatusResult {
 	// Check if template is already Available (job lookup was skipped to prevent re-running discovery)
-	if currentStatus == aimv1alpha1.AIMTemplateStatusAvailable {
+	if currentStatus == aimv1alpha1.AIMTemplateStatusReady {
 		// Template is already Available, return nil to indicate no status changes needed
 		return nil
 	}
@@ -576,6 +614,9 @@ func ProjectTemplateStatus(
 	// Try each handler in order, applying the first one that returns a result
 	handlers := []func() *templateStatusResult{
 		func() *templateStatusResult { return handleTemplateReconcileErrors(errs, imageNotFoundMessage) },
+		func() *templateStatusResult {
+			return handleTemplateGPUUnavailable(obs, currentStatus, recorder, template)
+		},
 		func() *templateStatusResult { return handleTemplateMissingImage(obs, imageNotFoundMessage) },
 		func() *templateStatusResult { return handleTemplateImagePullFailed(obs, recorder, template) },
 		func() *templateStatusResult {

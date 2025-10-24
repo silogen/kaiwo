@@ -21,7 +21,6 @@ spec:
   - name: Verify service reports routing failure
     try:
     - assert:
-        timeout: 30s
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMService

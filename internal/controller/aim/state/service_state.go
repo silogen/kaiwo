@@ -125,9 +125,9 @@ func NewServiceState(service *aimv1alpha1.AIMService, template TemplateState, op
 		if resolvedRouting.GatewayRef != nil {
 			routing.GatewayRef = resolvedRouting.GatewayRef.DeepCopy()
 		}
-		if service.Spec.Routing != nil && len(service.Spec.Routing.Annotations) > 0 {
-			routing.Annotations = make(map[string]string, len(service.Spec.Routing.Annotations))
-			for k, v := range service.Spec.Routing.Annotations {
+		if len(resolvedRouting.Annotations) > 0 {
+			routing.Annotations = make(map[string]string, len(resolvedRouting.Annotations))
+			for k, v := range resolvedRouting.Annotations {
 				routing.Annotations[k] = v
 			}
 		}

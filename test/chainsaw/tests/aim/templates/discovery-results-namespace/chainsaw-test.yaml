@@ -20,14 +20,13 @@ spec:
   - name: Wait for template to become Available
     try:
     - assert:
-        timeout: 30s
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMServiceTemplate
           metadata:
             name: llama-3-8b-latency-discovery-namespace
           status:
-            status: Available
+            status: Ready
 
   - name: Verify profile is populated with expected fields
     try:
@@ -74,6 +73,6 @@ spec:
             name: llama-3-8b-latency-discovery-namespace
           spec:
             containers:
-            - image: ghcr.io/silogen/aim:0.4.0-meta-llama-llama-3.1-8b-instruct-v20251006
+            - image: ghcr.io/silogen/aim-meta-llama-llama-3-1-8b-instruct:0.7.0
             supportedModelFormats:
             - name: aim

@@ -1,0 +1,11 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterServiceTemplate
+metadata:
+  name: test-explicit-throughput
+spec:
+  aimImageName: test-explicit-ref
+  metric: throughput
+  precision: fp8
+  gpuSelector:
+    count: 1
+    model: MI300X

@@ -43,4 +43,4 @@ spec:
             metric: throughput
             precision: fp8
           status:
-            status: Available
+            status: Ready

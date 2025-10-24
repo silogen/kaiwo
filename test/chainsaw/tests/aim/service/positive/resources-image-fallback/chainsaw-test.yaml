@@ -17,14 +17,13 @@ spec:
   - name: Wait for template to become Available
     try:
     - assert:
-        timeout: 30s
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
             name: image-fallback-template
           status:
-            status: Available
+            status: Ready
 
   - name: Create AIMService
     try:
@@ -34,7 +33,6 @@ spec:
   - name: Verify image resources applied to InferenceService
     try:
     - assert:
-        timeout: 2m
         resource:
           apiVersion: serving.kserve.io/v1beta1
           kind: InferenceService

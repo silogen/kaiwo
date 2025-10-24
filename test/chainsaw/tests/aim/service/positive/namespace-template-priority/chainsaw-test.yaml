@@ -20,23 +20,21 @@ spec:
   - name: Wait for templates to become Available
     try:
     - assert:
-        timeout: 30s
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
             name: llama-3-8b-latency-ns-priority
           status:
-            status: Available
+            status: Ready
     - assert:
-        timeout: 30s
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMServiceTemplate
           metadata:
             name: llama-3-8b-latency-ns-priority
           status:
-            status: Available
+            status: Ready
 
   - name: Create AIMService
     try:
@@ -46,7 +44,6 @@ spec:
   - name: Verify namespace template was used
     try:
     - assert:
-        timeout: 30s
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMService

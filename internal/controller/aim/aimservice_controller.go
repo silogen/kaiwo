@@ -72,9 +72,11 @@ type AIMServiceReconciler struct {
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes/status,verbs=get
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
 
 func (r *AIMServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
+	logger.Info("Reconciling AIMService")
 
 	var service aimv1alpha1.AIMService
 	if err := r.Get(ctx, req.NamespacedName, &service); err != nil {
@@ -93,9 +95,17 @@ func (r *AIMServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		Recorder:   r.Recorder,
 		FieldOwner: aimServiceFieldOwner,
 		ObserveFn: func(ctx context.Context) (any, error) {
-			return r.observe(ctx, &service)
+			logger.Info("Starting observe phase")
+			obs, err := r.observe(ctx, &service)
+			if err != nil {
+				logger.Error(err, "Observe failed")
+			} else {
+				logger.Info("Observe completed")
+			}
+			return obs, err
 		},
 		PlanFn: func(ctx context.Context, obs any) ([]client.Object, error) {
+			logger.Info("Starting plan phase")
 			var observation *shared.ServiceObservation
 			if obs != nil {
 				var ok bool
@@ -104,9 +114,12 @@ func (r *AIMServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 					return nil, fmt.Errorf("unexpected observation type %T", obs)
 				}
 			}
-			return r.plan(ctx, &service, observation)
+			objs := r.plan(ctx, &service, observation)
+
+			return objs, nil
 		},
 		ProjectFn: func(ctx context.Context, obs any, errs controllerutils.ReconcileErrors) error {
+			logger.Info("Starting project phase")
 			var observation *shared.ServiceObservation
 			if obs != nil {
 				var ok bool
@@ -121,15 +134,23 @@ func (r *AIMServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 }
 
 func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1.AIMService) (*shared.ServiceObservation, error) {
-	resolution, err := shared.ResolveTemplateNameForService(ctx, r.Client, service)
+	resolution, selectionStatus, err := shared.ResolveTemplateNameForService(ctx, r.Client, service)
 	if err != nil {
 		return nil, err
 	}
 
 	obs := &shared.ServiceObservation{
-		TemplateName:     resolution.FinalName,
-		BaseTemplateName: resolution.BaseName,
-		Scope:            shared.TemplateScopeNone,
+		TemplateName:              resolution.FinalName,
+		BaseTemplateName:          resolution.BaseName,
+		Scope:                     shared.TemplateScopeNone,
+		AutoSelectedTemplate:      selectionStatus.AutoSelected,
+		TemplateSelectionReason:   selectionStatus.SelectionReason,
+		TemplateSelectionMessage:  selectionStatus.SelectionMessage,
+		TemplateSelectionCount:    selectionStatus.CandidateCount,
+		TemplatesExistButNotReady: selectionStatus.TemplatesExistButNotReady,
+		ImageReady:                selectionStatus.ImageReady,
+		ImageReadyReason:          selectionStatus.ImageReadyReason,
+		ImageReadyMessage:         selectionStatus.ImageReadyMessage,
 	}
 
 	// Observe template based on whether it's derived or not
@@ -139,7 +160,7 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 			return nil, err
 		}
 	} else if resolution.FinalName != "" {
-		if err := shared.ObserveNonDerivedTemplate(ctx, r.Client, service, resolution.FinalName, obs); err != nil {
+		if err := shared.ObserveNonDerivedTemplate(ctx, r.Client, service, resolution.FinalName, resolution.Scope, obs); err != nil {
 			return nil, err
 		}
 	}
@@ -169,11 +190,11 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 	return obs, nil
 }
 
-func (r *AIMServiceReconciler) plan(_ context.Context, service *aimv1alpha1.AIMService, obs *shared.ServiceObservation) ([]client.Object, error) {
+func (r *AIMServiceReconciler) plan(_ context.Context, service *aimv1alpha1.AIMService, obs *shared.ServiceObservation) []client.Object {
 	var desired []client.Object
 
 	if obs == nil {
-		return desired, nil
+		return desired
 	}
 
 	ownerRef := metav1.OwnerReference{
@@ -228,7 +249,7 @@ func (r *AIMServiceReconciler) plan(_ context.Context, service *aimv1alpha1.AIMS
 		// succeeded but produced no usable model sources.
 	}
 
-	return desired, nil
+	return desired
 }
 
 func (r *AIMServiceReconciler) projectStatus(
@@ -291,8 +312,9 @@ func (r *AIMServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			return nil
 		}
 
-		var services aimv1alpha1.AIMServiceList
-		if err := r.List(ctx, &services,
+		// Find services that reference this template by name (explicit templateRef or already resolved)
+		var servicesWithRef aimv1alpha1.AIMServiceList
+		if err := r.List(ctx, &servicesWithRef,
 			client.InNamespace(template.Namespace),
 			client.MatchingFields{aimServiceTemplateIndexKey: template.Name},
 		); err != nil {
@@ -300,7 +322,40 @@ func (r *AIMServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			return nil
 		}
 
-		return shared.RequestsForServices(services.Items)
+		// Also find services doing auto-selection with the same image name in the same namespace
+		var servicesWithImage aimv1alpha1.AIMServiceList
+		if err := r.List(ctx, &servicesWithImage, client.InNamespace(template.Namespace)); err != nil {
+			ctrl.LoggerFrom(ctx).Error(err, "failed to list AIMServices in namespace for image matching")
+			return nil
+		}
+
+		// Combine results, filtering for services with matching image that don't have explicit templateRef
+		serviceMap := make(map[string]aimv1alpha1.AIMService)
+		for _, svc := range servicesWithRef.Items {
+			serviceMap[svc.Namespace+"/"+svc.Name] = svc
+		}
+
+		for _, svc := range servicesWithImage.Items {
+			// Skip if already included via template name index
+			key := svc.Namespace + "/" + svc.Name
+			if _, exists := serviceMap[key]; exists {
+				continue
+			}
+
+			// Include if doing auto-selection (no templateRef) and matches image
+			if strings.TrimSpace(svc.Spec.TemplateRef) == "" &&
+				strings.TrimSpace(svc.Spec.AIMImageName) == strings.TrimSpace(template.Spec.AIMImageName) {
+				serviceMap[key] = svc
+			}
+		}
+
+		// Convert map to slice
+		services := make([]aimv1alpha1.AIMService, 0, len(serviceMap))
+		for _, svc := range serviceMap {
+			services = append(services, svc)
+		}
+
+		return shared.RequestsForServices(services)
 	})
 
 	clusterTemplateHandler := handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
@@ -309,15 +364,50 @@ func (r *AIMServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			return nil
 		}
 
-		var services aimv1alpha1.AIMServiceList
-		if err := r.List(ctx, &services,
+		// Find services that reference this template by name (explicit templateRef or already resolved)
+		var servicesWithRef aimv1alpha1.AIMServiceList
+		if err := r.List(ctx, &servicesWithRef,
 			client.MatchingFields{aimServiceTemplateIndexKey: clusterTemplate.Name},
 		); err != nil {
 			ctrl.LoggerFrom(ctx).Error(err, "failed to list AIMServices for AIMClusterServiceTemplate", "template", clusterTemplate.Name)
 			return nil
 		}
 
-		return shared.RequestsForServices(services.Items)
+		// Also find services doing auto-selection with the same image name
+		// These won't be in the index until they resolve a template
+		var servicesWithImage aimv1alpha1.AIMServiceList
+		if err := r.List(ctx, &servicesWithImage); err != nil {
+			ctrl.LoggerFrom(ctx).Error(err, "failed to list all AIMServices for image matching")
+			return nil
+		}
+
+		// Combine results, filtering for services with matching image that don't have explicit templateRef
+		serviceMap := make(map[string]aimv1alpha1.AIMService)
+		for _, svc := range servicesWithRef.Items {
+			serviceMap[svc.Namespace+"/"+svc.Name] = svc
+		}
+
+		for _, svc := range servicesWithImage.Items {
+			// Skip if already included via template name index
+			key := svc.Namespace + "/" + svc.Name
+			if _, exists := serviceMap[key]; exists {
+				continue
+			}
+
+			// Include if doing auto-selection (no templateRef) and matches image
+			if strings.TrimSpace(svc.Spec.TemplateRef) == "" &&
+				strings.TrimSpace(svc.Spec.AIMImageName) == strings.TrimSpace(clusterTemplate.Spec.AIMImageName) {
+				serviceMap[key] = svc
+			}
+		}
+
+		// Convert map to slice
+		services := make([]aimv1alpha1.AIMService, 0, len(serviceMap))
+		for _, svc := range serviceMap {
+			services = append(services, svc)
+		}
+
+		return shared.RequestsForServices(services)
 	})
 
 	return ctrl.NewControllerManagedBy(mgr).

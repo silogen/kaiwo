@@ -26,7 +26,6 @@ package shared
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/silogen/kaiwo/internal/controller/aim/routingconfig"
 
@@ -181,6 +180,30 @@ func HandleImageMissing(
 	return true
 }
 
+// HandleImageNotReady checks if the resolved image is not yet ready and updates status.
+// Returns true if the service should wait for the image to become ready.
+func HandleImageNotReady(
+	status *aimv1alpha1.AIMServiceStatus,
+	obs *ServiceObservation,
+	setCondition func(conditionType string, conditionStatus metav1.ConditionStatus, reason, message string),
+) bool {
+	if obs == nil || obs.ImageReady || obs.ImageReadyReason == "" {
+		return false
+	}
+
+	message := obs.ImageReadyMessage
+	if message == "" {
+		message = "Image is not ready"
+	}
+
+	status.Status = aimv1alpha1.AIMServiceStatusPending
+	setCondition(aimv1alpha1.AIMServiceConditionResolved, metav1.ConditionFalse, obs.ImageReadyReason, message)
+	setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, obs.ImageReadyReason, "Waiting for image readiness")
+	setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionTrue, obs.ImageReadyReason, "Awaiting image readiness")
+	setCondition(aimv1alpha1.AIMServiceConditionReady, metav1.ConditionFalse, obs.ImageReadyReason, message)
+	return true
+}
+
 // HandleRouteTemplateError checks for route template errors and updates status.
 // Returns true if there is a route template error.
 func HandleRouteTemplateError(
@@ -206,8 +229,8 @@ func HandleRouteTemplateError(
 	return true
 }
 
-// HandleTemplateDegraded checks if the template is degraded or failed and updates status.
-// Returns true if the template is degraded or failed.
+// HandleTemplateDegraded checks if the template is degraded, not available, or failed and updates status.
+// Returns true if the template is degraded, not available, or failed.
 func HandleTemplateDegraded(
 	status *aimv1alpha1.AIMServiceStatus,
 	obs *ServiceObservation,
@@ -217,13 +240,14 @@ func HandleTemplateDegraded(
 		return false
 	}
 
-	// Handle both Degraded and Failed template statuses
+	// Handle Degraded, NotAvailable, and Failed template statuses
 	if obs.TemplateStatus.Status != aimv1alpha1.AIMTemplateStatusDegraded &&
+		obs.TemplateStatus.Status != aimv1alpha1.AIMTemplateStatusNotAvailable &&
 		obs.TemplateStatus.Status != aimv1alpha1.AIMTemplateStatusFailed {
 		return false
 	}
 
-	// Use Failed for terminal failures, Degraded for recoverable issues
+	// Use Failed for terminal failures, Degraded for recoverable issues (including NotAvailable)
 	if obs.TemplateStatus.Status == aimv1alpha1.AIMTemplateStatusFailed {
 		status.Status = aimv1alpha1.AIMServiceStatusFailed
 	} else {
@@ -279,6 +303,31 @@ func HandleTemplateNotAvailable(
 		"Waiting for template discovery to complete")
 	setCondition(aimv1alpha1.AIMServiceConditionReady, metav1.ConditionFalse, reason,
 		"Template is not available")
+	return true
+}
+
+// HandleTemplateSelectionFailure reports failures during automatic template selection.
+func HandleTemplateSelectionFailure(
+	status *aimv1alpha1.AIMServiceStatus,
+	obs *ServiceObservation,
+	setCondition func(conditionType string, conditionStatus metav1.ConditionStatus, reason, message string),
+) bool {
+	if obs == nil || obs.TemplateSelectionReason == "" {
+		return false
+	}
+
+	message := obs.TemplateSelectionMessage
+	if message == "" {
+		message = "Template selection failed"
+	}
+
+	status.Status = aimv1alpha1.AIMServiceStatusFailed
+	reason := obs.TemplateSelectionReason
+	setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, reason, message)
+	setCondition(aimv1alpha1.AIMServiceConditionResolved, metav1.ConditionFalse, reason, message)
+	setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, reason, "Cannot proceed without a unique template")
+	setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionFalse, reason, "Template selection failed")
+	setCondition(aimv1alpha1.AIMServiceConditionReady, metav1.ConditionFalse, reason, message)
 	return true
 }
 
@@ -407,7 +456,7 @@ func setupCacheCondition(
 }
 
 // setupResolvedTemplate populates the resolved template reference in status.
-func setupResolvedTemplate(service *aimv1alpha1.AIMService, obs *ServiceObservation, status *aimv1alpha1.AIMServiceStatus) {
+func setupResolvedTemplate(obs *ServiceObservation, status *aimv1alpha1.AIMServiceStatus) {
 	status.ResolvedTemplate = nil
 	if obs != nil && obs.TemplateName != "" {
 		status.ResolvedTemplate = &aimv1alpha1.AIMServiceResolvedTemplate{
@@ -418,15 +467,8 @@ func setupResolvedTemplate(service *aimv1alpha1.AIMService, obs *ServiceObservat
 				Kind:      "AIMServiceTemplate",
 			},
 		}
-	} else if name := strings.TrimSpace(TemplateNameFromSpec(service)); name != "" {
-		status.ResolvedTemplate = &aimv1alpha1.AIMServiceResolvedTemplate{
-			AIMResolvedReference: aimv1alpha1.AIMResolvedReference{
-				Name:  name,
-				Scope: aimv1alpha1.AIMResolutionScopeUnknown,
-				Kind:  "AIMServiceTemplate",
-			},
-		}
 	}
+	// Don't set resolvedTemplate if no template was actually resolved
 }
 
 // evaluateHTTPRouteReadiness checks HTTP route status and updates routing conditions.
@@ -473,14 +515,26 @@ func handleTemplateNotFound(
 		setCondition(aimv1alpha1.AIMServiceConditionResolved, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonTemplateNotFound, message)
 		setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonCreatingRuntime, "Waiting for template creation")
 		setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonTemplateNotFound, "Waiting for template to be created")
+	} else if obs != nil && obs.TemplatesExistButNotReady {
+		// Templates exist but aren't Available yet - service should wait
+		status.Status = aimv1alpha1.AIMServiceStatusPending
+		message = "Waiting for templates to become Available"
+		setCondition(aimv1alpha1.AIMServiceConditionResolved, metav1.ConditionFalse, "TemplateNotAvailable", message)
+		setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, "TemplateNotAvailable", "Waiting for template discovery to complete")
+		setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionTrue, "TemplateNotAvailable", "Templates exist but are not yet Available")
 	} else {
 		// No template could be resolved and no derived template will be created.
 		// This is a degraded state - the service cannot proceed.
 		status.Status = aimv1alpha1.AIMServiceStatusDegraded
-		if obs != nil && obs.BaseTemplateName == "" {
-			message = "No template reference specified and no default template found on the image. Provide spec.templateRef or configure the image's defaultServiceTemplate field."
-		} else if obs != nil {
-			message = fmt.Sprintf("Template %q not found. Create the template or verify the template name.", obs.BaseTemplateName)
+		if obs != nil {
+			switch {
+			case obs.TemplateSelectionMessage != "":
+				message = obs.TemplateSelectionMessage
+			case obs.BaseTemplateName == "":
+				message = "No template reference specified and no templates are available for the selected image. Provide spec.templateRef or create templates for the image."
+			default:
+				message = fmt.Sprintf("Template %q not found. Create the template or verify the template name.", obs.BaseTemplateName)
+			}
 		} else {
 			message = "Template not found"
 		}
@@ -519,7 +573,7 @@ func ProjectServiceStatus(
 	}
 
 	setupCacheCondition(service, setCondition)
-	setupResolvedTemplate(service, obs, status)
+	setupResolvedTemplate(obs, status)
 
 	routingEnabled, routingReady, routingHasFatalError := EvaluateRoutingStatus(service, obs, status, setCondition)
 
@@ -537,6 +591,18 @@ func ProjectServiceStatus(
 		setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonResolved, "No active failures")
 	}
 
+	if HandleImageMissing(status, obs, setCondition) {
+		return
+	}
+
+	if HandleImageNotReady(status, obs, setCondition) {
+		return
+	}
+
+	if HandleTemplateSelectionFailure(status, obs, setCondition) {
+		return
+	}
+
 	if handleTemplateNotFound(obs, status, setCondition) {
 		return
 	}
@@ -545,10 +611,6 @@ func ProjectServiceStatus(
 		fmt.Sprintf("Resolved template %q", obs.TemplateName))
 
 	if HandleRuntimeConfigMissing(status, obs, setCondition) {
-		return
-	}
-
-	if HandleImageMissing(status, obs, setCondition) {
 		return
 	}
 

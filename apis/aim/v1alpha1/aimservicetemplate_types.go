@@ -118,7 +118,7 @@ type AIMServiceTemplateStatus struct {
 	ResolvedImage *AIMResolvedReference `json:"resolvedImage,omitempty"`
 
 	// Status represents the current high‑level status of the template lifecycle.
-	// Values: `Pending`, `Progressing`, `Available`, `Failed`.
+	// Values: `Pending`, `Progressing`, `Ready`, `Failed`, `NotAvailable`.
 	// +kubebuilder:default=Pending
 	Status AIMTemplateStatusEnum `json:"status,omitempty"`
 
@@ -150,7 +150,7 @@ type AIMProfileMetadata struct {
 }
 
 // AIMTemplateStatusEnum defines coarse-grained states for a template.
-// +kubebuilder:validation:Enum=Pending;Progressing;Available;Degraded;Failed
+// +kubebuilder:validation:Enum=Pending;Progressing;NotAvailable;Ready;Degraded;Failed
 type AIMTemplateStatusEnum string
 
 const (
@@ -158,8 +158,10 @@ const (
 	AIMTemplateStatusPending AIMTemplateStatusEnum = "Pending"
 	// AIMTemplateStatusProgressing denotes that discovery and/or cache warm is in progress.
 	AIMTemplateStatusProgressing AIMTemplateStatusEnum = "Progressing"
-	// AIMTemplateStatusAvailable denotes that discovery succeeded and, if requested, caches are warmed.
-	AIMTemplateStatusAvailable AIMTemplateStatusEnum = "Available"
+	// AIMTemplateStatusNotAvailable denotes that the template cannot run because the required GPU resources are not present in the cluster.
+	AIMTemplateStatusNotAvailable AIMTemplateStatusEnum = "NotAvailable"
+	// AIMTemplateStatusReady denotes that discovery succeeded and, if requested, caches are warmed.
+	AIMTemplateStatusReady AIMTemplateStatusEnum = "Ready"
 	// AIMTemplateStatusDegraded denotes that the template is non-functional for some reason, for example that the cluster doesn't have the resources specified.
 	AIMTemplateStatusDegraded AIMTemplateStatusEnum = "Degraded"
 	// AIMTemplateStatusFailed denotes a terminal failure for discovery or warm operations.
