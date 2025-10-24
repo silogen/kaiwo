@@ -1211,6 +1211,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `count` _integer_ | Count is the number of the GPU resources requested per replica |  | Minimum: 1 <br /> |
 | `model` _string_ | Model is the model name of the GPU that is supported by this template |  | MinLength: 1 <br /> |
+| `resourceName` _string_ | ResourceName is the Kubernetes resource name for GPU resources | amd.com/gpu |  |
 
 
 #### ImageMetadata
