@@ -189,7 +189,7 @@ func ResolveTemplateNameForService(
 			// Count how many are Available vs other statuses
 			availableCount := 0
 			for _, c := range candidates {
-				if c.Status.Status == aimv1alpha1.AIMTemplateStatusAvailable {
+				if c.Status.Status == aimv1alpha1.AIMTemplateStatusReady {
 					availableCount++
 				}
 			}
@@ -397,7 +397,7 @@ func PopulateObservationFromNamespaceTemplate(
 	obs *ServiceObservation,
 ) error {
 	obs.Scope = TemplateScopeNamespace
-	obs.TemplateAvailable = template.Status.Status == aimv1alpha1.AIMTemplateStatusAvailable
+	obs.TemplateAvailable = template.Status.Status == aimv1alpha1.AIMTemplateStatusReady
 	obs.TemplateOwnedByService = HasOwnerReference(template.GetOwnerReferences(), service.UID) ||
 		IsDerivedTemplate(template.GetLabels())
 	if template.Status.ResolvedRuntimeConfig != nil {
@@ -443,7 +443,7 @@ func PopulateObservationFromClusterTemplate(
 	obs *ServiceObservation,
 ) error {
 	obs.Scope = TemplateScopeCluster
-	obs.TemplateAvailable = template.Status.Status == aimv1alpha1.AIMTemplateStatusAvailable
+	obs.TemplateAvailable = template.Status.Status == aimv1alpha1.AIMTemplateStatusReady
 	if template.Status.ResolvedRuntimeConfig != nil {
 		obs.ResolvedRuntimeConfig = template.Status.ResolvedRuntimeConfig
 	}

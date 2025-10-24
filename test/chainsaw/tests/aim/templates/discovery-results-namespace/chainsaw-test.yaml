@@ -26,7 +26,7 @@ spec:
           metadata:
             name: llama-3-8b-latency-discovery-namespace
           status:
-            status: Available
+            status: Ready
 
   - name: Verify profile is populated with expected fields
     try:

@@ -27,7 +27,7 @@ spec:
           metadata:
             name: reused-namespace-template
           status:
-            status: Available
+            status: Ready
 
   - name: Create AIMService with matching overrides
     try:

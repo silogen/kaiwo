@@ -642,7 +642,7 @@ func updateImageStatusFromTemplates(status *aimv1alpha1.AIMImageStatus, template
 		}
 
 		switch templateStatus {
-		case aimv1alpha1.AIMTemplateStatusAvailable:
+		case aimv1alpha1.AIMTemplateStatusReady:
 			availableCount++
 		case aimv1alpha1.AIMTemplateStatusNotAvailable:
 			notAvailableCount++

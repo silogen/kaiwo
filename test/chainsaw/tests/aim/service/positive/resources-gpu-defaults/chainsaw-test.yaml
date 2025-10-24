@@ -23,7 +23,7 @@ spec:
           metadata:
             name: gpu-defaults-template
           status:
-            status: Available
+            status: Ready
 
   - name: Create AIMService
     try:

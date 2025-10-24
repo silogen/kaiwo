@@ -28,7 +28,7 @@ spec:
           metadata:
             name: test-gpu-mi300x
           status:
-            status: Available
+            status: Ready
 
   - name: Wait for MI250X template to become NotAvailable (GPU not in cluster)
     try:

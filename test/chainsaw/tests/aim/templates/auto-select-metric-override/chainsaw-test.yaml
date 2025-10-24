@@ -28,7 +28,7 @@ spec:
           metadata:
             name: test-metric-latency
           status:
-            status: Available
+            status: Ready
     - assert:
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
@@ -36,7 +36,7 @@ spec:
           metadata:
             name: test-metric-throughput
           status:
-            status: Available
+            status: Ready
 
   - name: Create service with throughput metric override
     try:

@@ -301,14 +301,14 @@ func PlanTemplateResources(ctx TemplatePlanContext, builders TemplatePlanBuilder
 	var desired []client.Object
 
 	// Only create the ServingRuntime after discovery has completed successfully
-	if ctx.Status == aimv1alpha1.AIMTemplateStatusAvailable && builders.BuildRuntime != nil {
+	if ctx.Status == aimv1alpha1.AIMTemplateStatusReady && builders.BuildRuntime != nil {
 		if runtime := builders.BuildRuntime(input); runtime != nil {
 			desired = append(desired, runtime)
 		}
 	}
 
 	// Create discovery job if template is not yet Available and job hasn't completed
-	if ctx.Status != aimv1alpha1.AIMTemplateStatusAvailable &&
+	if ctx.Status != aimv1alpha1.AIMTemplateStatusReady &&
 		builders.BuildDiscoveryJob != nil &&
 		(ctx.Observation.Job == nil || !IsJobComplete(ctx.Observation.Job)) {
 
@@ -560,7 +560,7 @@ func handleTemplateDiscoverySucceeded(ctx context.Context, k8sClient client.Clie
 	}
 
 	return &templateStatusResult{
-		Status: aimv1alpha1.AIMTemplateStatusAvailable,
+		Status: aimv1alpha1.AIMTemplateStatusReady,
 		Conditions: []metav1.Condition{
 			controllerutils.NewCondition(controllerutils.ConditionTypeDiscovered, metav1.ConditionTrue, controllerutils.ReasonDiscovered, "Model sources discovered"),
 			controllerutils.NewCondition(controllerutils.ConditionTypeProgressing, metav1.ConditionFalse, controllerutils.ReasonAvailable, "Discovery complete"),
@@ -574,7 +574,7 @@ func handleTemplateDiscoverySucceeded(ctx context.Context, k8sClient client.Clie
 // handleTemplateInitialState handles the case where no discovery job exists yet.
 func handleTemplateInitialState(currentStatus aimv1alpha1.AIMTemplateStatusEnum) *templateStatusResult {
 	// Check if template is already Available (job lookup was skipped to prevent re-running discovery)
-	if currentStatus == aimv1alpha1.AIMTemplateStatusAvailable {
+	if currentStatus == aimv1alpha1.AIMTemplateStatusReady {
 		// Template is already Available, return nil to indicate no status changes needed
 		return nil
 	}

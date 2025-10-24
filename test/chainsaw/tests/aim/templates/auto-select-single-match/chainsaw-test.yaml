@@ -26,7 +26,7 @@ spec:
           metadata:
             name: test-single-latency-fp8
           status:
-            status: Available
+            status: Ready
 
   - name: Create service without templateRef
     try:

@@ -28,7 +28,7 @@ spec:
           metadata:
             name: test-filter-mi300x
           status:
-            status: Available
+            status: Ready
 
   - name: Wait for H100 template to become NotAvailable
     try:
