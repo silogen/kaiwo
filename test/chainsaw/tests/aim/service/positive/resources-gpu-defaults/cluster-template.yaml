@@ -1,11 +1,10 @@
 apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMClusterServiceTemplate
 metadata:
-  name: test-multi-gpu-mi300x
+  name: gpu-defaults-template
 spec:
-  aimImageName: test-multi-gpu
+  aimImageName: gpu-defaults-image
   metric: latency
-  precision: fp8
   gpuSelector:
-    count: 2
+    count: 1
     model: MI300X
