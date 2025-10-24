@@ -3,9 +3,7 @@ kind: AIMClusterImage
 metadata:
   name: image-fallback
 spec:
-  image: ghcr.io/silogen/aim:0.4.0-meta-llama-llama-3.1-8b-instruct-v20251006
-  discovery:
-    enabled: true
+  image: aimdummy:dev-latest
   defaultServiceTemplate: image-fallback-template
   resources:
     limits:
