@@ -150,7 +150,7 @@ type AIMProfileMetadata struct {
 }
 
 // AIMTemplateStatusEnum defines coarse-grained states for a template.
-// +kubebuilder:validation:Enum=Pending;Progressing;NotAvailable;Available;Degraded;Failed
+// +kubebuilder:validation:Enum=Pending;Progressing;NotAvailable;Ready;Degraded;Failed
 type AIMTemplateStatusEnum string
 
 const (
