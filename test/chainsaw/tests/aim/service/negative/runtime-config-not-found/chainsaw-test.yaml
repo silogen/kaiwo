@@ -22,7 +22,6 @@ spec:
   - name: Verify service is degraded due to missing config
     try:
     - assert:
-        timeout: 30s
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMService

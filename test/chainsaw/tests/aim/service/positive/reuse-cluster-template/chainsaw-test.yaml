@@ -21,7 +21,6 @@ spec:
   - name: Wait for cluster template to become available
     try:
     - assert:
-        timeout: 60s
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
@@ -38,7 +37,6 @@ spec:
   - name: Verify existing cluster template was reused
     try:
     - assert:
-        timeout: 90s
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMService
@@ -52,7 +50,6 @@ spec:
             - status: "True"
               reason: Resolved
     - assert:
-        timeout: 30s
         resource:
           apiVersion: serving.kserve.io/v1beta1
           kind: InferenceService

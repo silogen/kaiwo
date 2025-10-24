@@ -39,7 +39,6 @@ spec:
   - name: Wait for template to become Available
     try:
     - assert:
-        timeout: 30s
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
@@ -51,7 +50,6 @@ spec:
   - name: Verify service eventually resolves the template
     try:
     - assert:
-        timeout: 15s
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMService

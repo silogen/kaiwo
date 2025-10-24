@@ -21,7 +21,6 @@ spec:
   - name: Verify InferenceService has env vars
     try:
     - assert:
-        timeout: 30s
         resource:
           apiVersion: serving.kserve.io/v1beta1
           kind: InferenceService

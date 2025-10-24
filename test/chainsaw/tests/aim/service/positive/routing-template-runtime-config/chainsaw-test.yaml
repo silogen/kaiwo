@@ -26,7 +26,6 @@ spec:
   - name: Verify service status exposes rendered route
     try:
     - assert:
-        timeout: 60s
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMService

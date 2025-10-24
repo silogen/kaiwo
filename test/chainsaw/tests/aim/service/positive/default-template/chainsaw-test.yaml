@@ -21,7 +21,6 @@ spec:
   - name: Verify resolved template recorded
     try:
     - assert:
-        timeout: 30s
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMService
@@ -35,7 +34,6 @@ spec:
   - name: Verify InferenceService created
     try:
     - assert:
-        timeout: 2m
         resource:
           apiVersion: serving.kserve.io/v1beta1
           kind: InferenceService

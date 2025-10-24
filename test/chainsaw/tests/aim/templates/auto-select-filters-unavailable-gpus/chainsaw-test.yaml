@@ -22,7 +22,6 @@ spec:
   - name: Wait for MI300X template to become Available
     try:
     - assert:
-        timeout: 30s
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
@@ -34,7 +33,6 @@ spec:
   - name: Wait for H100 template to become NotAvailable
     try:
     - assert:
-        timeout: 30s
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate

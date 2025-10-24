@@ -23,7 +23,6 @@ spec:
   - name: Verify HTTPRoute configured from runtime defaults
     try:
     - assert:
-        timeout: 30s
         resource:
           apiVersion: gateway.networking.k8s.io/v1
           kind: HTTPRoute

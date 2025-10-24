@@ -27,7 +27,6 @@ spec:
   - name: Verify InferenceService has custom serviceAccountName
     try:
     - assert:
-        timeout: 30s
         resource:
           apiVersion: serving.kserve.io/v1beta1
           kind: InferenceService

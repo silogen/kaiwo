@@ -26,7 +26,6 @@ spec:
   - name: Verify service reports template failure
     try:
     - assert:
-        timeout: 60s
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMService

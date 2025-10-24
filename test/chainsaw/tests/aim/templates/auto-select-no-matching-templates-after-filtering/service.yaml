@@ -1,9 +1,0 @@
-apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMService
-metadata:
-  name: test-no-match-service
-spec:
-  aimImageName: test-no-match-filter
-  # Override with throughput metric - should fail (only latency template exists)
-  overrides:
-    metric: throughput

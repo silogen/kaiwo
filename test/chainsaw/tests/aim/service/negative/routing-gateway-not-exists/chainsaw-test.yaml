@@ -21,7 +21,6 @@ spec:
   - name: Verify HTTPRoute is created
     try:
     - assert:
-        timeout: 30s
         resource:
           apiVersion: gateway.networking.k8s.io/v1
           kind: HTTPRoute

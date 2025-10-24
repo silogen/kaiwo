@@ -20,7 +20,6 @@ spec:
   - name: Verify service does not become ready
     try:
     - assert:
-        timeout: 30s
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMService

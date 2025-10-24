@@ -17,7 +17,6 @@ spec:
   - name: Wait for template to become Available
     try:
     - assert:
-        timeout: 30s
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
@@ -34,7 +33,6 @@ spec:
   - name: Verify service resources applied to InferenceService
     try:
     - assert:
-        timeout: 2m
         resource:
           apiVersion: serving.kserve.io/v1beta1
           kind: InferenceService

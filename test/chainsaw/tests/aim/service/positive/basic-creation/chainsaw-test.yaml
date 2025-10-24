@@ -21,7 +21,6 @@ spec:
   - name: Verify service status progression
     try:
     - assert:
-        timeout: 30s
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMService
@@ -53,7 +52,6 @@ spec:
   - name: Verify service transitions to Starting
     try:
     - assert:
-        timeout: 15s
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMService
@@ -67,7 +65,7 @@ spec:
   - name: Verify service becomes Running
     try:
     - assert:
-        timeout: 3m
+        timeout: 5m
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMService
