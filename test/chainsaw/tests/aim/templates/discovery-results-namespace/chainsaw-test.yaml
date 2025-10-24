@@ -73,6 +73,6 @@ spec:
             name: llama-3-8b-latency-discovery-namespace
           spec:
             containers:
-            - image: ghcr.io/silogen/aim:0.4.0-meta-llama-llama-3.1-8b-instruct-v20251006
+            - image: ghcr.io/silogen/aim-meta-llama-llama-3-1-8b-instruct:0.7.0
             supportedModelFormats:
             - name: aim
