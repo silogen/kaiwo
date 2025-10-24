@@ -4,7 +4,6 @@ metadata:
   name: llama-3-8b-cluster-priority
 spec:
   image: busybox:latest-aim-cluster
-  defaultServiceTemplate: llama-3-8b-latency-priority
   resources:
     limits:
       memory: 48Gi
