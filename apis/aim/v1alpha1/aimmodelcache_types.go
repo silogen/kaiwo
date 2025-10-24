@@ -143,7 +143,7 @@ const (
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:shortName=mc,categories=aim;all
+// +kubebuilder:resource:shortName=aimmc,categories=aim;all
 // +kubebuilder:printcolumn:name="Cache Size",type=string,JSONPath=`.spec.size`
 // +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.status`
 // +kubebuilder:printcolumn:name="PVC",type=string,JSONPath=`.status.persistentVolumeClaim`

@@ -69,6 +69,7 @@ type AIMServiceTemplateReconciler struct {
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimimages,verbs=get;list;watch
 // +kubebuilder:rbac:groups=serving.kserve.io,resources=servingruntimes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 func (r *AIMServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -148,6 +149,7 @@ func requestsFromNamespaceTemplates(templates []aimv1alpha1.AIMServiceTemplate) 
 func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *aimv1alpha1.AIMServiceTemplate) (*namespaceTemplateObservation, error) {
 	logger := log.FromContext(ctx)
 	return shared.ObserveTemplate(ctx, shared.TemplateObservationOptions[*servingv1alpha1.ServingRuntime]{
+		K8sClient: r.Client,
 		GetRuntime: func(ctx context.Context) (*servingv1alpha1.ServingRuntime, error) {
 			servingRuntime, err := shared.GetServingRuntime(ctx, r.Client, template.Namespace, template.Name)
 			if err != nil && !errors.IsNotFound(err) {
@@ -162,6 +164,9 @@ func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *ai
 				return nil, fmt.Errorf("failed to get discovery job: %w", err)
 			}
 			return job, nil
+		},
+		GetJobNamespace: func() string {
+			return template.Namespace
 		},
 		LookupImage: func(ctx context.Context) (*shared.ImageLookupResult, error) {
 			return shared.LookupImageForNamespaceTemplate(ctx, r.Client, template.Namespace, template.Spec.AIMImageName)
@@ -193,13 +198,15 @@ func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *ai
 }
 
 // plan computes desired state (pure function)
-func (r *AIMServiceTemplateReconciler) plan(_ context.Context, template *aimv1alpha1.AIMServiceTemplate, obs *namespaceTemplateObservation) ([]client.Object, error) {
+func (r *AIMServiceTemplateReconciler) plan(ctx context.Context, template *aimv1alpha1.AIMServiceTemplate, obs *namespaceTemplateObservation) ([]client.Object, error) {
 	var observation *shared.TemplateObservation
 	if obs != nil {
 		observation = &obs.TemplateObservation
 	}
 
 	desired := shared.PlanTemplateResources(shared.TemplatePlanContext{
+		Ctx:         ctx,
+		Client:      r.Client,
 		Template:    template,
 		APIVersion:  template.APIVersion,
 		Kind:        template.Kind,

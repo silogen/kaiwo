@@ -184,6 +184,28 @@ _Appears in:_
 | `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core)_ | Resources defines the default container resource requirements applied to services derived from this template.<br />Service-specific values override the template defaults. |  |  |
 
 
+
+
+#### AIMDiscoveryProfileMetadata
+
+
+
+
+
+
+
+_Appears in:_
+- [AIMDiscoveryProfile](#aimdiscoveryprofile)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `engine` _string_ |  |  |  |
+| `gpu` _string_ |  |  |  |
+| `gpu_count` _integer_ |  |  |  |
+| `metric` _[AIMMetric](#aimmetric)_ |  |  | Enum: [latency throughput] <br /> |
+| `precision` _[AIMPrecision](#aimprecision)_ |  |  | Enum: [bf16 fp16 fp8 int8] <br /> |
+
+
 #### AIMImage
 
 
@@ -202,6 +224,23 @@ _Appears in:_
 | `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
 | `spec` _[AIMImageSpec](#aimimagespec)_ |  |  |  |
 | `status` _[AIMImageStatus](#aimimagestatus)_ |  |  |  |
+
+
+#### AIMImageDiscoverySpec
+
+
+
+AIMImageDiscoverySpec configures metadata discovery and template generation for an image.
+
+
+
+_Appears in:_
+- [AIMImageSpec](#aimimagespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | Enabled toggles metadata discovery for this image. Disabled by default. |  |  |
+| `autoCreateTemplates` _boolean_ | AutoCreateTemplates controls whether recommended deployments from discovery<br />automatically create ServiceTemplates. Enabled by default when discovery runs. |  |  |
 
 
 #### AIMImageList
@@ -237,8 +276,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `image` _string_ | Image is the container image URI for this AIM model.<br />This image is inspected by the operator to select runtime profiles used by templates. |  | MinLength: 1 <br /> |
-| `defaultServiceTemplate` _string_ | DefaultServiceTemplate is the name of the default service template to use, if an<br />AIMService is created without specifying a template name. |  |  |
-| `runtimeConfigName` _string_ | RuntimeConfigName references the AIM runtime configuration (by name) to use for this image. | default |  |
+| `defaultServiceTemplate` _string_ | DefaultServiceTemplate is the default template to use for this image, if the user does not provide any |  |  |
+| `discovery` _[AIMImageDiscoverySpec](#aimimagediscoveryspec)_ | Discovery controls metadata extraction and automatic template creation for this image. |  |  |
 | `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core)_ | Resources defines the default resource requirements for services using this image.<br />Template- or service-level values override these defaults.<br />Must have both cpu and memory in requests<br />Must have memory in limits |  | Required: \{\} <br /> |
 
 
@@ -257,8 +296,31 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `observedGeneration` _integer_ | ObservedGeneration is the most recent generation observed by the controller |  |  |
+| `status` _[AIMImageStatusEnum](#aimimagestatusenum)_ | Status represents the overall status of the image based on its templates | Pending | Enum: [Pending Progressing Ready Degraded Failed] <br /> |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest available observations of the model's state |  |  |
 | `resolvedRuntimeConfig` _[AIMResolvedRuntimeConfig](#aimresolvedruntimeconfig)_ | ResolvedRuntimeConfig captures metadata about the runtime config that was resolved. |  |  |
+| `imageMetadata` _[ImageMetadata](#imagemetadata)_ | ImageMetadata is the metadata extracted from an AIM image |  |  |
+
+
+#### AIMImageStatusEnum
+
+_Underlying type:_ _string_
+
+AIMImageStatusEnum represents the overall status of an AIMImage.
+
+_Validation:_
+- Enum: [Pending Progressing Ready Degraded Failed]
+
+_Appears in:_
+- [AIMImageStatus](#aimimagestatus)
+
+| Field | Description |
+| --- | --- |
+| `Pending` | AIMImageStatusPending indicates the image has been created but template generation has not started.<br /> |
+| `Progressing` | AIMImageStatusProgressing indicates one or more templates are still being discovered.<br /> |
+| `Ready` | AIMImageStatusReady indicates all templates are available and ready.<br /> |
+| `Degraded` | AIMImageStatusDegraded indicates one or more templates are degraded or failed.<br /> |
+| `Failed` | AIMImageStatusFailed indicates all templates are degraded or failed.<br /> |
 
 
 #### AIMMetric
@@ -272,6 +334,7 @@ _Validation:_
 
 _Appears in:_
 - [AIMClusterServiceTemplateSpec](#aimclusterservicetemplatespec)
+- [AIMDiscoveryProfileMetadata](#aimdiscoveryprofilemetadata)
 - [AIMProfileMetadata](#aimprofilemetadata)
 - [AIMRuntimeParameters](#aimruntimeparameters)
 - [AIMServiceOverrides](#aimserviceoverrides)
@@ -412,6 +475,7 @@ _Validation:_
 
 _Appears in:_
 - [AIMClusterServiceTemplateSpec](#aimclusterservicetemplatespec)
+- [AIMDiscoveryProfileMetadata](#aimdiscoveryprofilemetadata)
 - [AIMProfileMetadata](#aimprofilemetadata)
 - [AIMRuntimeParameters](#aimruntimeparameters)
 - [AIMServiceOverrides](#aimserviceoverrides)
@@ -1145,5 +1209,94 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `count` _integer_ | Count is the number of the GPU resources requested per replica |  | Minimum: 1 <br /> |
 | `model` _string_ | Model is the model name of the GPU that is supported by this template |  | MinLength: 1 <br /> |
+
+
+#### ImageMetadata
+
+
+
+ImageMetadata contains metadata extracted from or provided for a container image.
+
+
+
+_Appears in:_
+- [AIMImageStatus](#aimimagestatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `model` _[ModelMetadata](#modelmetadata)_ | Model contains AMD Silogen model-specific metadata. |  |  |
+| `oci` _[OCIMetadata](#ocimetadata)_ | OCI contains standard OCI image metadata. |  |  |
+
+
+#### ModelMetadata
+
+
+
+ModelMetadata contains AMD Silogen model-specific metadata extracted from image labels.
+
+
+
+_Appears in:_
+- [ImageMetadata](#imagemetadata)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `canonicalName` _string_ | CanonicalName is the canonical model identifier (e.g., mistralai/Mixtral-8x22B-Instruct-v0.1).<br />Extracted from: org.amd.silogen.model.canonicalName |  |  |
+| `source` _string_ | Source is the URL where the model can be found.<br />Extracted from: org.amd.silogen.model.source |  |  |
+| `tags` _string array_ | Tags are descriptive tags (e.g., ["text-generation", "chat", "instruction"]).<br />Extracted from: org.amd.silogen.model.tags (comma-separated) |  |  |
+| `versions` _string array_ | Versions lists available versions.<br />Extracted from: org.amd.silogen.model.versions (comma-separated) |  |  |
+| `variants` _string array_ | Variants lists model variants.<br />Extracted from: org.amd.silogen.model.variants (comma-separated) |  |  |
+| `hfTokenRequired` _boolean_ | HFTokenRequired indicates if a HuggingFace token is required.<br />Extracted from: org.amd.silogen.hfToken.required |  |  |
+| `title` _string_ | Title is the Silogen-specific title for the model.<br />Extracted from: org.amd.silogen.title |  |  |
+| `descriptionFull` _string_ | DescriptionFull is the full description.<br />Extracted from: org.amd.silogen.description.full |  |  |
+| `releaseNotes` _string_ | ReleaseNotes contains release notes for this version.<br />Extracted from: org.amd.silogen.release.notes |  |  |
+| `recommendedDeployments` _[RecommendedDeployment](#recommendeddeployment) array_ | RecommendedDeployments contains recommended deployment configurations.<br />Extracted from: org.amd.silogen.model.recommendedDeployments (parsed from JSON array) |  |  |
+
+
+#### OCIMetadata
+
+
+
+OCIMetadata contains standard OCI image metadata extracted from image labels.
+
+
+
+_Appears in:_
+- [ImageMetadata](#imagemetadata)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `title` _string_ | Title is the human-readable title.<br />Extracted from: org.opencontainers.image.title |  |  |
+| `description` _string_ | Description is a brief description.<br />Extracted from: org.opencontainers.image.description |  |  |
+| `licenses` _string_ | Licenses is the SPDX license identifier(s).<br />Extracted from: org.opencontainers.image.licenses |  |  |
+| `vendor` _string_ | Vendor is the organization that produced the image.<br />Extracted from: org.opencontainers.image.vendor |  |  |
+| `authors` _string_ | Authors is contact details of the authors.<br />Extracted from: org.opencontainers.image.authors |  |  |
+| `source` _string_ | Source is the URL to the source code repository.<br />Extracted from: org.opencontainers.image.source |  |  |
+| `documentation` _string_ | Documentation is the URL to documentation.<br />Extracted from: org.opencontainers.image.documentation |  |  |
+| `created` _string_ | Created is the creation timestamp.<br />Extracted from: org.opencontainers.image.created |  |  |
+| `revision` _string_ | Revision is the source control revision.<br />Extracted from: org.opencontainers.image.revision |  |  |
+| `version` _string_ | Version is the image version.<br />Extracted from: org.opencontainers.image.version |  |  |
+
+
+
+
+#### RecommendedDeployment
+
+
+
+RecommendedDeployment describes a recommended deployment configuration for a model.
+
+
+
+_Appears in:_
+- [ModelMetadata](#modelmetadata)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `gpuModel` _string_ | GPUModel is the GPU model name (e.g., MI300X, MI325X) |  |  |
+| `gpuCount` _integer_ | GPUCount is the number of GPUs required |  |  |
+| `precision` _string_ | Precision is the recommended precision (e.g., fp8, fp16, bf16) |  |  |
+| `metric` _string_ | Metric is the optimization target (e.g., latency, throughput) |  |  |
+| `description` _string_ | Description provides additional context about this deployment configuration |  |  |
 
 
