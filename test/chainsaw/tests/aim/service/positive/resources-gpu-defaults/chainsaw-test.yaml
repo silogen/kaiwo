@@ -1,0 +1,62 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: resources-gpu-defaults
+spec:
+  description: GPU metadata from the template drives default CPU and memory resources when no overrides are provided
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create prerequisites
+    try:
+    - apply:
+        file: cluster-image.yaml
+    - apply:
+        file: cluster-template.yaml
+
+  - name: Mark template as available with GPU metadata
+    try:
+    - script:
+        content: |
+          kubectl patch aimclusterservicetemplate gpu-defaults-template --type merge --subresource status -p '{"status":{"status":"Available","profile":{"metadata":{"gpu_count":1}}}}'
+
+  - name: Wait for template to become Available
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: gpu-defaults-template
+          status:
+            status: Available
+            profile:
+              metadata:
+                gpu_count: 1
+
+  - name: Create AIMService
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify GPU defaults applied to InferenceService
+    try:
+    - assert:
+        timeout: 2m
+        resource:
+          apiVersion: serving.kserve.io/v1beta1
+          kind: InferenceService
+          metadata:
+            name: gpu-defaults-service
+          spec:
+            predictor:
+              model:
+                resources:
+                  requests:
+                    amd.com/gpu: "1"
+                    cpu: "4"
+                    memory: 32Gi
+                  limits:
+                    amd.com/gpu: "1"
+                    memory: 48Gi

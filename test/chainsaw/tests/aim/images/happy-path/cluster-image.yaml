@@ -9,12 +9,3 @@ spec:
     # default is true
     # autoCreateTemplates: true
   defaultServiceTemplate: llama-3-8b-latency-with-image
-  resources:
-    limits:
-      memory: 48Gi
-      amd.com/gpu: '1'
-      cpu: '6'
-    requests:
-      cpu: '4'
-      memory: 40Gi
-      amd.com/gpu: '1'

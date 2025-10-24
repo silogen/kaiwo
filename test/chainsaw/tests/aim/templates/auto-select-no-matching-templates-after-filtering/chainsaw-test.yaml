@@ -44,7 +44,7 @@ spec:
           metadata:
             name: test-no-match-service
           status:
-            status: Degraded
+            status: Failed
             (conditions[?type == 'Failure']):
             - status: "True"
               reason: TemplateNotFound

@@ -170,7 +170,9 @@ func ResolveTemplateNameForService(
 		return res, status, fmt.Errorf("failed to list available GPUs: %w", err)
 	}
 
-	selected, count := SelectBestTemplate(candidates, service.Spec.Overrides, availableGPUs)
+	// When auto-selecting, don't filter by overrides - we're selecting a base template
+	// to potentially derive from. The derived template will have the overrides applied.
+	selected, count := SelectBestTemplate(candidates, nil, availableGPUs)
 	status.CandidateCount = count
 
 	if count != 1 {

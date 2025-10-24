@@ -312,8 +312,9 @@ func (r *AIMServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			return nil
 		}
 
-		var services aimv1alpha1.AIMServiceList
-		if err := r.List(ctx, &services,
+		// Find services that reference this template by name (explicit templateRef or already resolved)
+		var servicesWithRef aimv1alpha1.AIMServiceList
+		if err := r.List(ctx, &servicesWithRef,
 			client.InNamespace(template.Namespace),
 			client.MatchingFields{aimServiceTemplateIndexKey: template.Name},
 		); err != nil {
@@ -321,7 +322,40 @@ func (r *AIMServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			return nil
 		}
 
-		return shared.RequestsForServices(services.Items)
+		// Also find services doing auto-selection with the same image name in the same namespace
+		var servicesWithImage aimv1alpha1.AIMServiceList
+		if err := r.List(ctx, &servicesWithImage, client.InNamespace(template.Namespace)); err != nil {
+			ctrl.LoggerFrom(ctx).Error(err, "failed to list AIMServices in namespace for image matching")
+			return nil
+		}
+
+		// Combine results, filtering for services with matching image that don't have explicit templateRef
+		serviceMap := make(map[string]aimv1alpha1.AIMService)
+		for _, svc := range servicesWithRef.Items {
+			serviceMap[svc.Namespace+"/"+svc.Name] = svc
+		}
+
+		for _, svc := range servicesWithImage.Items {
+			// Skip if already included via template name index
+			key := svc.Namespace + "/" + svc.Name
+			if _, exists := serviceMap[key]; exists {
+				continue
+			}
+
+			// Include if doing auto-selection (no templateRef) and matches image
+			if strings.TrimSpace(svc.Spec.TemplateRef) == "" &&
+				strings.TrimSpace(svc.Spec.AIMImageName) == strings.TrimSpace(template.Spec.AIMImageName) {
+				serviceMap[key] = svc
+			}
+		}
+
+		// Convert map to slice
+		services := make([]aimv1alpha1.AIMService, 0, len(serviceMap))
+		for _, svc := range serviceMap {
+			services = append(services, svc)
+		}
+
+		return shared.RequestsForServices(services)
 	})
 
 	clusterTemplateHandler := handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
@@ -330,15 +364,50 @@ func (r *AIMServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			return nil
 		}
 
-		var services aimv1alpha1.AIMServiceList
-		if err := r.List(ctx, &services,
+		// Find services that reference this template by name (explicit templateRef or already resolved)
+		var servicesWithRef aimv1alpha1.AIMServiceList
+		if err := r.List(ctx, &servicesWithRef,
 			client.MatchingFields{aimServiceTemplateIndexKey: clusterTemplate.Name},
 		); err != nil {
 			ctrl.LoggerFrom(ctx).Error(err, "failed to list AIMServices for AIMClusterServiceTemplate", "template", clusterTemplate.Name)
 			return nil
 		}
 
-		return shared.RequestsForServices(services.Items)
+		// Also find services doing auto-selection with the same image name
+		// These won't be in the index until they resolve a template
+		var servicesWithImage aimv1alpha1.AIMServiceList
+		if err := r.List(ctx, &servicesWithImage); err != nil {
+			ctrl.LoggerFrom(ctx).Error(err, "failed to list all AIMServices for image matching")
+			return nil
+		}
+
+		// Combine results, filtering for services with matching image that don't have explicit templateRef
+		serviceMap := make(map[string]aimv1alpha1.AIMService)
+		for _, svc := range servicesWithRef.Items {
+			serviceMap[svc.Namespace+"/"+svc.Name] = svc
+		}
+
+		for _, svc := range servicesWithImage.Items {
+			// Skip if already included via template name index
+			key := svc.Namespace + "/" + svc.Name
+			if _, exists := serviceMap[key]; exists {
+				continue
+			}
+
+			// Include if doing auto-selection (no templateRef) and matches image
+			if strings.TrimSpace(svc.Spec.TemplateRef) == "" &&
+				strings.TrimSpace(svc.Spec.AIMImageName) == strings.TrimSpace(clusterTemplate.Spec.AIMImageName) {
+				serviceMap[key] = svc
+			}
+		}
+
+		// Convert map to slice
+		services := make([]aimv1alpha1.AIMService, 0, len(serviceMap))
+		for _, svc := range serviceMap {
+			services = append(services, svc)
+		}
+
+		return shared.RequestsForServices(services)
 	})
 
 	return ctrl.NewControllerManagedBy(mgr).
