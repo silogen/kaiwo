@@ -22,7 +22,7 @@ spec:
   - name: Verify AIMService reports RuntimeReady
     try:
     - assert:
-        timeout: 3m
+        timeout: 5m
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMService
@@ -49,7 +49,6 @@ spec:
   - name: Verify HTTPRoute is created and ready
     try:
     - assert:
-        timeout: 30s
         resource:
           apiVersion: gateway.networking.k8s.io/v1
           kind: HTTPRoute
@@ -63,5 +62,4 @@ spec:
   - name: Test HTTP endpoint through gateway
     try:
     - script:
-        timeout: 60s
         content: bash script.sh

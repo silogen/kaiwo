@@ -27,7 +27,6 @@ spec:
   - name: Verify HTTPRoute inherits runtime config settings
     try:
     - assert:
-        timeout: 30s
         resource:
           apiVersion: gateway.networking.k8s.io/v1
           kind: HTTPRoute

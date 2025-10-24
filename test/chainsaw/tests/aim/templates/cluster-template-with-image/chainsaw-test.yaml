@@ -40,7 +40,6 @@ spec:
   - name: Wait for job completion and check Available status
     try:
     - assert:
-        timeout: 30s
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate

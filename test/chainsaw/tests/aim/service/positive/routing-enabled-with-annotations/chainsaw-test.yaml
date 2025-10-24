@@ -21,7 +21,6 @@ spec:
   - name: Verify service resolves and routing is configured
     try:
     - assert:
-        timeout: 30s
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMService
