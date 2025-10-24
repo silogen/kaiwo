@@ -111,6 +111,8 @@ update_env_var "KUBECONFIG" "$KUBECONFIG"
 
 #kubectl apply -f config/webhook_local_dev/webhooks.yaml
 
+sh test/aimdummy/populate_kind.sh
+
 echo "You can now run debugger in your IDE"
 
 echo "Cluster is ready!"
