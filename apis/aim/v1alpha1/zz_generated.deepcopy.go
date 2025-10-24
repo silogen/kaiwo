@@ -28,8 +28,8 @@ package v1alpha1
 
 import (
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	apisv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
@@ -248,7 +248,7 @@ func (in *AIMDiscoveryProfile) DeepCopyInto(out *AIMDiscoveryProfile) {
 	*out = *in
 	if in.EngineArgs != nil {
 		in, out := &in.EngineArgs, &out.EngineArgs
-		*out = new(v1.JSON)
+		*out = new(apiextensionsv1.JSON)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.EnvVars != nil {
@@ -387,7 +387,7 @@ func (in *AIMImageStatus) DeepCopyInto(out *AIMImageStatus) {
 	*out = *in
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = make([]metav1.Condition, len(*in))
+		*out = make([]v1.Condition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -506,7 +506,7 @@ func (in *AIMModelCacheStatus) DeepCopyInto(out *AIMModelCacheStatus) {
 	*out = *in
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = make([]metav1.Condition, len(*in))
+		*out = make([]v1.Condition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -548,7 +548,7 @@ func (in *AIMProfile) DeepCopyInto(out *AIMProfile) {
 	*out = *in
 	if in.EngineArgs != nil {
 		in, out := &in.EngineArgs, &out.EngineArgs
-		*out = new(v1.JSON)
+		*out = new(apiextensionsv1.JSON)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.EnvVars != nil {
@@ -738,7 +738,7 @@ func (in *AIMRuntimeConfigStatus) DeepCopyInto(out *AIMRuntimeConfigStatus) {
 	*out = *in
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = make([]metav1.Condition, len(*in))
+		*out = make([]v1.Condition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -995,7 +995,7 @@ func (in *AIMServiceStatus) DeepCopyInto(out *AIMServiceStatus) {
 	*out = *in
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = make([]metav1.Condition, len(*in))
+		*out = make([]v1.Condition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -1150,7 +1150,7 @@ func (in *AIMServiceTemplateStatus) DeepCopyInto(out *AIMServiceTemplateStatus) 
 	*out = *in
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = make([]metav1.Condition, len(*in))
+		*out = make([]v1.Condition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -1276,7 +1276,7 @@ func (in *AIMTemplateCacheStatus) DeepCopyInto(out *AIMTemplateCacheStatus) {
 	*out = *in
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = make([]metav1.Condition, len(*in))
+		*out = make([]v1.Condition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
