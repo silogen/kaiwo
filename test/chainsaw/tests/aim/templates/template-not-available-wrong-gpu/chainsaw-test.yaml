@@ -1,0 +1,30 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: template-not-available-wrong-gpu
+spec:
+  description: Test that template requiring unavailable GPU goes to NotAvailable status
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create cluster image
+    try:
+    - apply:
+        file: cluster-image.yaml
+
+  - name: Create template requiring H100 GPU (not in cluster)
+    try:
+    - apply:
+        file: cluster-template.yaml
+
+  - name: Verify template status is NotAvailable
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: test-wrong-gpu-h100
+          status:
+            status: NotAvailable

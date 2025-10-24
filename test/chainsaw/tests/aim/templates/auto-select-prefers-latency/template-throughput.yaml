@@ -1,0 +1,11 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterServiceTemplate
+metadata:
+  name: test-throughput-fp8
+spec:
+  aimImageName: test-prefers-latency
+  metric: throughput
+  precision: fp8
+  gpuSelector:
+    count: 1
+    model: MI300X

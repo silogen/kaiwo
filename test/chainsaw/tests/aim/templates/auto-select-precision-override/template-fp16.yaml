@@ -1,0 +1,11 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterServiceTemplate
+metadata:
+  name: test-precision-fp16
+spec:
+  aimImageName: test-precision-override
+  metric: latency
+  precision: fp16
+  gpuSelector:
+    count: 1
+    model: MI300X

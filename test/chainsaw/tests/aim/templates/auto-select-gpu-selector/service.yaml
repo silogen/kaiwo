@@ -1,0 +1,10 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-gpu-selector-service
+spec:
+  aimImageName: test-gpu-selector
+  # Override GPU selector to MI300X - should filter out MI250X template
+  overrides:
+    gpuSelector:
+      model: MI300X

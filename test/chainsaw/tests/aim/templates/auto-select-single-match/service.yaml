@@ -1,0 +1,7 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-single-service
+spec:
+  aimImageName: test-auto-select-single
+  # No templateRef - should auto-select the only available template

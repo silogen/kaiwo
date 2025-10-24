@@ -1,0 +1,11 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterServiceTemplate
+metadata:
+  name: test-filter-mi300x
+spec:
+  aimImageName: test-filters-unavailable
+  metric: latency
+  precision: fp8
+  gpuSelector:
+    count: 1
+    model: MI300X

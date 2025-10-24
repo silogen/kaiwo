@@ -1,0 +1,63 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: auto-select-prefers-latency
+spec:
+  description: Test that auto-selection prefers latency over throughput when both templates are available
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create cluster image
+    try:
+    - apply:
+        file: cluster-image.yaml
+
+  - name: Create both templates
+    try:
+    - apply:
+        file: template-latency.yaml
+    - apply:
+        file: template-throughput.yaml
+
+  - name: Wait for both templates to become Available
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: test-latency-fp8
+          status:
+            status: Available
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: test-throughput-fp8
+          status:
+            status: Available
+
+  - name: Create service without templateRef or overrides
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service selected latency template
+    try:
+    - assert:
+        timeout: 10s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-prefers-latency-service
+          status:
+            resolvedTemplate:
+              name: test-latency-fp8
+              scope: Cluster
+            (conditions[?type == 'Resolved']):
+            - status: "True"
+              reason: Resolved

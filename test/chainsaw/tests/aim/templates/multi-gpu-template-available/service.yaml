@@ -1,0 +1,7 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-multi-gpu-service
+spec:
+  aimImageName: test-multi-gpu
+  # No templateRef - should auto-select the 2x MI300X template
