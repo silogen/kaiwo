@@ -83,8 +83,6 @@ spec:
                 description: |-
                   Resources defines the default resource requirements for services using this image.
                   Template- or service-level values override these defaults.
-                  Must have both cpu and memory in requests
-                  Must have memory in limits
                 properties:
                   claims:
                     description: |-
@@ -142,15 +140,13 @@ spec:
                       More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                     type: object
                 type: object
-                x-kubernetes-validations:
-                - message: resources.requests must include cpu and memory
-                  rule: has(self.requests) && 'cpu' in self.requests && 'memory' in
-                    self.requests
-                - message: resources.limits must include memory
-                  rule: has(self.limits) && 'memory' in self.limits
+              runtimeConfigName:
+                default: default
+                description: RuntimeConfigName references the AIM runtime configuration
+                  (by name) to use for this image.
+                type: string
             required:
             - image
-            - resources
             type: object
           status:
             description: AIMImageStatus defines the observed state of AIMImage.

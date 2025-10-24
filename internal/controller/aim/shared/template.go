@@ -50,14 +50,14 @@ import (
 
 // TemplateObservation holds the common observed state for both template types
 type TemplateObservation struct {
-	Job              *batchv1.Job
-	Image            string
-	ImageResources   *corev1.ResourceRequirements
-	ImagePullSecrets []corev1.LocalObjectReference
-	RuntimeConfig    *RuntimeConfigResolution
-	GPUModel         string
-	GPUAvailable     bool
-	GPUChecked       bool
+	Job                 *batchv1.Job
+	Image               string
+	ImageResources      *corev1.ResourceRequirements
+	ImagePullSecrets    []corev1.LocalObjectReference
+	RuntimeConfig       *RuntimeConfigResolution
+	GPUModel            string
+	GPUAvailable        bool
+	GPUChecked          bool
 	JobPodImagePullFail bool   // True if job pod is stuck in ImagePullBackOff
 	JobPodFailureReason string // Detailed reason if JobPodImagePullFail is true
 }
