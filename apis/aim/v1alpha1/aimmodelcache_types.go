@@ -100,45 +100,42 @@ func (m *AIMModelCache) GetStatus() *AIMModelCacheStatus {
 	return &m.Status
 }
 
-// Condition types
+// Condition types for AIMModelCache
 const (
-	// ConditionProgressing is True when the cache is actively being prepared (PVC being bound, job running, etc.)
-	ConditionProgressing = "Progressing"
+	// AIMModelCacheConditionProgressing is True when the cache is actively being prepared (PVC being bound, job running, etc.)
+	AIMModelCacheConditionProgressing = "Progressing"
 
-	// ConditionReady is True when the cache is present and usable (PVC Bound & content populated)
-	ConditionReady = "Ready"
+	// AIMModelCacheConditionReady is True when the cache is present and usable (PVC Bound & content populated)
+	AIMModelCacheConditionReady = "Ready"
 
-	// ConditionStorageReady is True when storage backing the cache is provisioned and mounted (PVC Bound)
-	ConditionStorageReady = "StorageReady"
+	// AIMModelCacheConditionStorageReady is True when storage backing the cache is provisioned and mounted (PVC Bound)
+	AIMModelCacheConditionStorageReady = "StorageReady"
 
-	// ConditionFailure is True when the last warm/fill attempt has reached a terminal failure
-	ConditionFailure = "Failure"
+	// AIMModelCacheConditionFailure is True when the last warm/fill attempt has reached a terminal failure
+	AIMModelCacheConditionFailure = "Failure"
 )
 
-// Condition reasons
+// Condition reasons for AIMModelCache
 const (
-	// StorageReady
+	// StorageReady-related reasons
+	AIMModelCacheReasonPVCProvisioning      = "PVCProvisioning"
+	AIMModelCacheReasonPVCBound             = "PVCBound"
+	AIMModelCacheReasonPVCPending           = "PVCPending"
+	AIMModelCacheReasonPVCLost              = "PVCLost"
+	AIMModelCacheReasonStorageClassMissing  = "StorageClassMissing"
+	AIMModelCacheReasonInsufficientCapacity = "InsufficientCapacity"
 
-	ReasonPVCProvisioning      = "PVCProvisioning"
-	ReasonPVCBound             = "PVCBound"
-	ReasonPVCPending           = "PVCPending"
-	ReasonPVCLost              = "PVCLost"
-	ReasonStorageClassMissing  = "StorageClassMissing"
-	ReasonInsufficientCapacity = "InsufficientCapacity"
+	// Progressing-related reasons
+	AIMModelCacheReasonWaitingForPVC = "WaitingForPVC"
+	AIMModelCacheReasonDownloading   = "Downloading"
+	AIMModelCacheReasonRetryBackoff  = "RetryBackoff"
 
-	// Progressing
+	// Ready-related reasons
+	AIMModelCacheReasonWarm = "Warm"
 
-	ReasonWaitingForPVC = "WaitingForPVC"
-	ReasonDownloading   = "Downloading"
-	ReasonRetryBackoff  = "RetryBackoff"
-
-	// Ready
-
-	ReasonWarm = "Warm"
-
-	// Failure
-	NoFailure            = "NoFailure"
-	ReasonDownloadFailed = "DownloadFailed"
+	// Failure-related reasons
+	AIMModelCacheReasonNoFailure      = "NoFailure"
+	AIMModelCacheReasonDownloadFailed = "DownloadFailed"
 )
 
 // +kubebuilder:object:root=true

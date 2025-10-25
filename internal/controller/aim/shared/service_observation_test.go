@@ -64,7 +64,7 @@ func TestFindMatchingTemplateForDerivedSpecNamespaceMatch(t *testing.T) {
 			AIMImageName:      "example-image",
 			RuntimeConfigName: "default",
 			AIMRuntimeParameters: aimv1alpha1.AIMRuntimeParameters{
-				GpuSelector: &aimv1alpha1.AimGpuSelector{
+				GpuSelector: &aimv1alpha1.AIMGpuSelector{
 					Model: "mi300",
 					Count: 1,
 				},

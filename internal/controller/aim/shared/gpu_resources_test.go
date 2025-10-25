@@ -163,7 +163,7 @@ func TestUpdateTemplateGPUAvailabilityNormalization(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			spec := aimv1alpha1.AIMServiceTemplateSpecCommon{
 				AIMRuntimeParameters: aimv1alpha1.AIMRuntimeParameters{
-					GpuSelector: &aimv1alpha1.AimGpuSelector{
+					GpuSelector: &aimv1alpha1.AIMGpuSelector{
 						Model: tt.templateGPUModel,
 						Count: 1,
 					},

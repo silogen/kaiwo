@@ -131,21 +131,54 @@ type AIMServiceTemplateStatus struct {
 	Profile AIMProfile `json:"profile,omitempty"`
 }
 
+// AIMProfile contains the cached discovery results for a template.
+// This is the processed and validated version of AIMDiscoveryProfile that is stored
+// in the template's status after successful discovery.
+//
+// The profile serves as a cache of runtime configuration, eliminating the need to
+// re-run discovery for each service that uses this template. Services and caching
+// mechanisms reference this cached profile for deployment parameters and model sources.
+//
+// See discovery.go for AIMDiscoveryProfile (the raw discovery output) and the
+// relationship between these types.
 type AIMProfile struct {
+	// EngineArgs contains runtime-specific engine configuration as a free-form JSON object.
+	// The structure depends on the inference engine being used (e.g., vLLM, TGI).
+	// These arguments are passed to the runtime container to configure model loading and inference.
 	// +kubebuilder:pruning:PreserveUnknownFields
 	// +kubebuilder:validation:Schemaless
 	EngineArgs *apiextensionsv1.JSON `json:"engine_args,omitempty"`
 
+	// EnvVars contains environment variables required by the runtime for this profile.
+	// These may include engine-specific settings, optimization flags, or hardware configuration.
+	// +optional
 	EnvVars map[string]string `json:"env_vars,omitempty"`
 
+	// Metadata provides structured information about this deployment profile's characteristics.
 	Metadata AIMProfileMetadata `json:"metadata,omitempty"`
 }
 
+// AIMProfileMetadata describes the characteristics of a cached deployment profile.
+// This is identical to AIMDiscoveryProfileMetadata but exists in the template status namespace.
 type AIMProfileMetadata struct {
-	Engine    string       `json:"engine,omitempty"`
-	GPU       string       `json:"gpu,omitempty"`
-	GPUCount  int32        `json:"gpu_count,omitempty"`
-	Metric    AIMMetric    `json:"metric,omitempty"`
+	// Engine identifies the inference engine used for this profile (e.g., "vllm", "tgi").
+	// +optional
+	Engine string `json:"engine,omitempty"`
+
+	// GPU specifies the GPU model this profile is optimized for (e.g., "MI300X", "MI325X").
+	// +optional
+	GPU string `json:"gpu,omitempty"`
+
+	// GPUCount indicates how many GPUs are required per replica for this profile.
+	// +optional
+	GPUCount int32 `json:"gpu_count,omitempty"`
+
+	// Metric indicates the optimization goal for this profile ("latency" or "throughput").
+	// +optional
+	Metric AIMMetric `json:"metric,omitempty"`
+
+	// Precision specifies the numeric precision used in this profile (e.g., "fp16", "fp8").
+	// +optional
 	Precision AIMPrecision `json:"precision,omitempty"`
 }
 

@@ -29,24 +29,41 @@ import (
 )
 
 // AIMRuntimeConfigCommon captures configuration fields shared across cluster and namespace scopes.
+// These settings apply to both AIMRuntimeConfig (namespace-scoped) and AIMClusterRuntimeConfig (cluster-scoped).
 type AIMRuntimeConfigCommon struct {
-	// DefaultStorageClassName is the storage class used for model caches when one is not
-	// specified directly on the consumer resource.
+	// DefaultStorageClassName specifies the storage class to use for model caches and PVCs
+	// when the consuming resource (AIMModelCache, AIMTemplateCache, AIMServiceTemplate) does not
+	// specify a storage class. If this field is empty, the cluster's default storage class is used.
+	// +optional
 	DefaultStorageClassName string `json:"defaultStorageClassName,omitempty"`
 
 	// Routing controls HTTP routing defaults applied to AIM resources.
+	// When set, these defaults are used for AIMService resources that enable routing
+	// but do not specify their own routing configuration.
 	// +optional
 	Routing *AIMRuntimeRoutingConfig `json:"routing,omitempty"`
 }
 
-// AIMRuntimeConfigCredentials captures namespace-scoped authentication knobs.
+// AIMRuntimeConfigCredentials captures namespace-scoped authentication configuration.
+// These fields are only available in namespace-scoped AIMRuntimeConfig resources.
 type AIMRuntimeConfigCredentials struct {
-	// ServiceAccountName is the service account used for discovery jobs, cache warmers,
-	// and any other workloads spawned by the operator on behalf of this runtime config.
+	// ServiceAccountName specifies the Kubernetes service account to use for workloads
+	// created by the operator, including:
+	// - Discovery jobs that inspect container images
+	// - Cache warmer jobs that download model artifacts
+	// - Any other operator-managed pods in this namespace
+	// If empty, the default service account for the namespace is used.
+	// +optional
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 
-	// ImagePullSecrets are merged with controller defaults when creating pods that need
-	// to pull model or runtime images.
+	// ImagePullSecrets lists secrets containing credentials for pulling private container images.
+	// These secrets are used when:
+	// - Pulling AIM model container images for discovery
+	// - Pulling runtime images for inference services
+	// - Pulling utility images for cache warming
+	// The secrets are merged with any cluster-level defaults configured on the operator.
+	// Each secret must exist in the same namespace as this runtime config.
+	// +optional
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 }
 
@@ -61,18 +78,40 @@ type AIMRuntimeConfigSpec struct {
 	AIMRuntimeConfigCredentials `json:",inline"`
 }
 
-// AIMRuntimeRoutingConfig configures routing defaults applied during inference service creation.
+// AIMRuntimeRoutingConfig configures HTTP routing defaults for inference services.
+// These settings control how Gateway API HTTPRoutes are created and configured.
 type AIMRuntimeRoutingConfig struct {
-	// Enabled toggles HTTP routing management for consumers of this runtime config.
+	// Enabled controls whether HTTP routing is managed for inference services using this config.
+	// When true, the operator creates HTTPRoute resources for services that reference this config.
+	// When false or unset, routing must be explicitly enabled on each service.
+	// This provides a namespace or cluster-wide default that individual services can override.
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
 
-	// GatewayRef identifies the Gateway parent that should receive HTTPRoutes for consumers.
+	// GatewayRef specifies the Gateway API Gateway resource that should receive HTTPRoutes.
+	// This identifies the parent gateway for routing traffic to inference services.
+	// The gateway can be in any namespace (cross-namespace references are supported).
+	// If routing is enabled but GatewayRef is not specified, service reconciliation will fail
+	// with a validation error.
 	// +optional
 	GatewayRef *gatewayapiv1.ParentReference `json:"gatewayRef,omitempty"`
 
-	// RouteTemplate renders a HTTP path prefix using the AIMService as context.
-	// Example: `/{.metadata.namespace}/{.metadata.labels['team']}/{.spec.model}/`
+	// RouteTemplate defines the HTTP path template for routes, evaluated using JSONPath expressions.
+	// The template is rendered against the AIMService object to generate unique paths.
+	//
+	// Example templates:
+	// - `/{.metadata.namespace}/{.metadata.name}` - namespace and service name
+	// - `/{.metadata.namespace}/{.metadata.labels['team']}/inference` - with label
+	// - `/models/{.spec.aimImageName}` - based on model name
+	//
+	// The template must:
+	// - Use valid JSONPath expressions wrapped in {...}
+	// - Reference fields that exist on the service
+	// - Produce a path ≤ 200 characters after rendering
+	// - Result in valid URL path segments (lowercase, RFC 1123 compliant)
+	//
+	// If evaluation fails, the service enters Degraded state with RouteTemplateInvalid reason.
+	// Individual services can override this template via spec.routing.routeTemplate.
 	// +optional
 	RouteTemplate string `json:"routeTemplate,omitempty"`
 }

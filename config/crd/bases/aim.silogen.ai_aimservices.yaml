@@ -231,24 +231,29 @@ spec:
                   When specified, these values take precedence over the template values.
                 properties:
                   gpuSelector:
-                    description: AimGpuSelector contains the strategy to choose the
-                      resources to give each replica
+                    description: |-
+                      GpuSelector specifies GPU requirements for each replica.
+                      Defines the GPU count and model type required for deployment.
+                      This field is immutable after creation.
                     properties:
                       count:
-                        description: Count is the number of the GPU resources requested
-                          per replica
+                        description: |-
+                          Count is the number of GPU resources requested per replica.
+                          Must be at least 1.
                         format: int32
                         minimum: 1
                         type: integer
                       model:
-                        description: Model is the model name of the GPU that is supported
-                          by this template
+                        description: |-
+                          Model is the GPU model name required for this deployment.
+                          Examples: "MI300X", "MI325X"
                         minLength: 1
                         type: string
                       resourceName:
                         default: amd.com/gpu
-                        description: ResourceName is the Kubernetes resource name
-                          for GPU resources
+                        description: |-
+                          ResourceName is the Kubernetes resource name for GPU resources.
+                          Defaults to "amd.com/gpu" if not specified.
                         type: string
                     required:
                     - count

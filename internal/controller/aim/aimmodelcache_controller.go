@@ -300,23 +300,23 @@ func (r *AIMModelCacheReconciler) projectStatus(_ context.Context, mc *aimv1alph
 }
 
 func (r *AIMModelCacheReconciler) buildStorageReadyCondition(ob observation) metav1.Condition {
-	cond := metav1.Condition{Type: aimv1alpha1.ConditionStorageReady}
+	cond := metav1.Condition{Type: aimv1alpha1.AIMModelCacheConditionStorageReady}
 
 	switch {
 	case !ob.pvcFound:
 		cond.Status = metav1.ConditionFalse
-		cond.Reason = aimv1alpha1.ReasonPVCPending
+		cond.Reason = aimv1alpha1.AIMModelCacheReasonPVCPending
 		cond.Message = "PVC not created yet"
 	case ob.pvc.Status.Phase == corev1.ClaimBound:
 		cond.Status = metav1.ConditionTrue
-		cond.Reason = aimv1alpha1.ReasonPVCBound
+		cond.Reason = aimv1alpha1.AIMModelCacheReasonPVCBound
 	case ob.pvc.Status.Phase == corev1.ClaimPending:
 		cond.Status = metav1.ConditionFalse
-		cond.Reason = aimv1alpha1.ReasonPVCProvisioning
+		cond.Reason = aimv1alpha1.AIMModelCacheReasonPVCProvisioning
 		cond.Message = "PVC is provisioning"
 	case ob.pvc.Status.Phase == corev1.ClaimLost:
 		cond.Status = metav1.ConditionFalse
-		cond.Reason = aimv1alpha1.ReasonPVCLost
+		cond.Reason = aimv1alpha1.AIMModelCacheReasonPVCLost
 		cond.Message = "PVC lost"
 	default:
 		cond.Status = metav1.ConditionUnknown
@@ -327,16 +327,16 @@ func (r *AIMModelCacheReconciler) buildStorageReadyCondition(ob observation) met
 }
 
 func (r *AIMModelCacheReconciler) buildReadyCondition(sf stateFlags) metav1.Condition {
-	cond := metav1.Condition{Type: aimv1alpha1.ConditionReady}
+	cond := metav1.Condition{Type: aimv1alpha1.AIMModelCacheConditionReady}
 	if sf.ready {
 		cond.Status = metav1.ConditionTrue
-		cond.Reason = aimv1alpha1.ReasonWarm
+		cond.Reason = aimv1alpha1.AIMModelCacheReasonWarm
 	} else {
 		cond.Status = metav1.ConditionFalse
 		if !sf.canCreateJob {
-			cond.Reason = aimv1alpha1.ReasonWaitingForPVC
+			cond.Reason = aimv1alpha1.AIMModelCacheReasonWaitingForPVC
 		} else {
-			cond.Reason = aimv1alpha1.ReasonDownloading
+			cond.Reason = aimv1alpha1.AIMModelCacheReasonDownloading
 		}
 	}
 
@@ -344,32 +344,32 @@ func (r *AIMModelCacheReconciler) buildReadyCondition(sf stateFlags) metav1.Cond
 }
 
 func (r *AIMModelCacheReconciler) buildProgressingCondition(ob observation, sf stateFlags) metav1.Condition {
-	cond := metav1.Condition{Type: aimv1alpha1.ConditionProgressing}
+	cond := metav1.Condition{Type: aimv1alpha1.AIMModelCacheConditionProgressing}
 	cond.Status = boolToCondition(sf.progressing)
 
 	if !ob.storageReady && !sf.canCreateJob {
-		cond.Reason = aimv1alpha1.ReasonWaitingForPVC
+		cond.Reason = aimv1alpha1.AIMModelCacheReasonWaitingForPVC
 	} else if ob.jobPendingOrRunning || (!ob.jobFound && sf.canCreateJob) {
-		cond.Reason = aimv1alpha1.ReasonDownloading
+		cond.Reason = aimv1alpha1.AIMModelCacheReasonDownloading
 	} else {
-		cond.Reason = aimv1alpha1.ReasonRetryBackoff
+		cond.Reason = aimv1alpha1.AIMModelCacheReasonRetryBackoff
 	}
 
 	return cond
 }
 
 func (r *AIMModelCacheReconciler) buildFailureCondition(ob observation, sf stateFlags) metav1.Condition {
-	cond := metav1.Condition{Type: aimv1alpha1.ConditionFailure}
+	cond := metav1.Condition{Type: aimv1alpha1.AIMModelCacheConditionFailure}
 	cond.Status = boolToCondition(sf.failure)
-	cond.Reason = aimv1alpha1.NoFailure // Ensure Reason is always non-empty to satisfy schema
+	cond.Reason = aimv1alpha1.AIMModelCacheReasonNoFailure // Ensure Reason is always non-empty to satisfy schema
 
 	if ob.applyErrorReason != "" {
 		cond.Reason = ob.applyErrorReason
 		cond.Message = ob.applyErrorMessage
 	} else if ob.storageLost {
-		cond.Reason = aimv1alpha1.ReasonPVCLost
+		cond.Reason = aimv1alpha1.AIMModelCacheReasonPVCLost
 	} else if ob.jobFailed {
-		cond.Reason = aimv1alpha1.ReasonDownloadFailed
+		cond.Reason = aimv1alpha1.AIMModelCacheReasonDownloadFailed
 	}
 
 	return cond

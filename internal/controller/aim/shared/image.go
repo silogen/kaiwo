@@ -394,7 +394,7 @@ func buildServiceTemplateFromDeployment(
 		commonSpec.Precision = &precision
 	}
 	if deployment.GPUModel != "" && deployment.GPUCount > 0 {
-		commonSpec.GpuSelector = &aimv1alpha1.AimGpuSelector{
+		commonSpec.GpuSelector = &aimv1alpha1.AIMGpuSelector{
 			Model: deployment.GPUModel,
 			Count: deployment.GPUCount,
 		}

@@ -76,24 +76,29 @@ spec:
                 - message: image name is immutable
                   rule: self == oldSelf
               gpuSelector:
-                description: AimGpuSelector contains the strategy to choose the resources
-                  to give each replica
+                description: |-
+                  GpuSelector specifies GPU requirements for each replica.
+                  Defines the GPU count and model type required for deployment.
+                  This field is immutable after creation.
                 properties:
                   count:
-                    description: Count is the number of the GPU resources requested
-                      per replica
+                    description: |-
+                      Count is the number of GPU resources requested per replica.
+                      Must be at least 1.
                     format: int32
                     minimum: 1
                     type: integer
                   model:
-                    description: Model is the model name of the GPU that is supported
-                      by this template
+                    description: |-
+                      Model is the GPU model name required for this deployment.
+                      Examples: "MI300X", "MI325X"
                     minLength: 1
                     type: string
                   resourceName:
                     default: amd.com/gpu
-                    description: ResourceName is the Kubernetes resource name for
-                      GPU resources
+                    description: |-
+                      ResourceName is the Kubernetes resource name for GPU resources.
+                      Defaults to "amd.com/gpu" if not specified.
                     type: string
                 required:
                 - count
@@ -278,20 +283,31 @@ spec:
                   ModelSources list the models that this template requires to run. These are the models that will be
                   cached, if this template is cached.
                 items:
+                  description: |-
+                    AIMModelSource describes a model artifact that must be downloaded for inference.
+                    Discovery extracts these from the container's configuration to enable caching and validation.
                   properties:
                     name:
-                      description: Name is the name of the model
+                      description: |-
+                        Name is a human-readable identifier for this model artifact.
+                        May be empty if the source represents the primary model.
                       type: string
                     size:
                       anyOf:
                       - type: integer
                       - type: string
-                      description: Size is the amount of storage that the source expects
+                      description: |-
+                        Size is the expected storage space required for this model artifact.
+                        Used for PVC sizing and capacity planning during cache creation.
                       pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                       x-kubernetes-int-or-string: true
                     sourceUri:
-                      description: SourceURI is the source where the model should
-                        be downloaded from
+                      description: |-
+                        SourceURI is the location from which the model should be downloaded.
+                        Supported schemes:
+                        - hf://org/model - Hugging Face Hub model
+                        - s3://bucket/key - S3-compatible storage
+                      pattern: ^(hf|s3)://[^ \t\r\n]+$
                       type: string
                   required:
                   - size
@@ -309,28 +325,45 @@ spec:
                   This includes metadata, engine args, environment variables, and model details.
                 properties:
                   engine_args:
+                    description: |-
+                      EngineArgs contains runtime-specific engine configuration as a free-form JSON object.
+                      The structure depends on the inference engine being used (e.g., vLLM, TGI).
+                      These arguments are passed to the runtime container to configure model loading and inference.
                     x-kubernetes-preserve-unknown-fields: true
                   env_vars:
                     additionalProperties:
                       type: string
+                    description: |-
+                      EnvVars contains environment variables required by the runtime for this profile.
+                      These may include engine-specific settings, optimization flags, or hardware configuration.
                     type: object
                   metadata:
+                    description: Metadata provides structured information about this
+                      deployment profile's characteristics.
                     properties:
                       engine:
+                        description: Engine identifies the inference engine used for
+                          this profile (e.g., "vllm", "tgi").
                         type: string
                       gpu:
+                        description: GPU specifies the GPU model this profile is optimized
+                          for (e.g., "MI300X", "MI325X").
                         type: string
                       gpu_count:
+                        description: GPUCount indicates how many GPUs are required
+                          per replica for this profile.
                         format: int32
                         type: integer
                       metric:
-                        description: AIMMetric enumerates the targeted service characteristic
+                        description: Metric indicates the optimization goal for this
+                          profile ("latency" or "throughput").
                         enum:
                         - latency
                         - throughput
                         type: string
                       precision:
-                        description: AIMPrecision enumerates supported numeric precisions
+                        description: Precision specifies the numeric precision used
+                          in this profile (e.g., "fp16", "fp8").
                         enum:
                         - bf16
                         - fp16
