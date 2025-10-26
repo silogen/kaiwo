@@ -1,0 +1,9 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMModel
+metadata:
+  name: llama-3-8b-ns
+spec:
+  image: ghcr.io/silogen/aim-meta-llama-llama-3-1-8b-instruct:0.7.0
+  discovery:
+    enabled: true
+    autoCreateTemplates: true

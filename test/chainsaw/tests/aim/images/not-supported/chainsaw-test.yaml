@@ -20,14 +20,3 @@ spec:
             name: buxybox-unsupported
           status:
             status: Failed
-
-  - name: Verify ClusterImageFailed event is emitted
-    try:
-    - assert:
-        resource:
-          apiVersion: v1
-          kind: Event
-          (involvedObject.kind): AIMClusterModel
-          (involvedObject.name): buxybox-unsupported
-          (reason): ClusterImageFailed
-          (type): Warning

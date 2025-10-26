@@ -1,0 +1,14 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-service
+  labels:
+    team: Data-Team
+spec:
+  aimModelName: default-testing-llama-3-8b
+  runtimeConfigName: routing-template-config
+  routing:
+    enabled: true
+    gatewayRef:
+      name: kserve-ingress-gateway
+      namespace: kgateway-system

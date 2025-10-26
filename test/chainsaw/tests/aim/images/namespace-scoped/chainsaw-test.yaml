@@ -1,0 +1,88 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: namespace-scoped-image
+spec:
+  description: Test namespace-scoped AIMModel with discovery and template auto-generation
+  timeouts:
+    assert: 90s
+  steps:
+  - name: Create runtime config for image pull secrets
+    try:
+    - apply:
+        file: runtime-config.yaml
+    - apply:
+        file: secret.yaml
+
+  - name: Create namespace-scoped AIMModel
+    try:
+    - apply:
+        file: namespace-image.yaml
+
+  - name: Verify AIMModel status becomes Ready
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMModel
+          metadata:
+            name: llama-3-8b-ns
+            namespace: ($namespace)
+          status:
+            status: Ready
+
+  - name: Verify namespace-scoped templates are created
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMServiceTemplate
+          metadata:
+            name: llama-3-8b-ns-mi300x-x1-latency-fp8
+            namespace: ($namespace)
+          spec:
+            aimModelName: llama-3-8b-ns
+            metric: latency
+            precision: fp8
+            gpuSelector:
+              count: 1
+              model: MI300X
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMServiceTemplate
+          metadata:
+            name: llama-3-8b-ns-mi300x-x1-throughput-fp8
+            namespace: ($namespace)
+          spec:
+            aimModelName: llama-3-8b-ns
+            metric: throughput
+            precision: fp8
+
+  - name: Verify templates inherit image metadata
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMServiceTemplate
+          metadata:
+            name: llama-3-8b-ns-mi300x-x1-latency-fp8
+            namespace: ($namespace)
+          status:
+            status: Ready
+            (modelSources[0].sourceUri): hf://amd/Llama-3.1-8B-Instruct-FP8-KV
+
+  - name: Verify AIMModel has imageMetadata populated
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMModel
+          metadata:
+            name: llama-3-8b-ns
+            namespace: ($namespace)
+          status:
+            imageMetadata:
+              model:
+                canonicalName: meta-llama/Llama-3.1-8B-Instruct
+                (recommendedDeployments != null): true
