@@ -3,8 +3,7 @@ kind: AIMClusterServiceTemplate
 metadata:
   name: service-override-template
 spec:
-  model:
-    ref: service-override-image
+  modelName: service-override-image
   metric: latency
   resources:
     limits:

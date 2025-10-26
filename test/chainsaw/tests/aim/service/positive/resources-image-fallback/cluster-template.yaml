@@ -3,8 +3,7 @@ kind: AIMClusterServiceTemplate
 metadata:
   name: image-fallback-template
 spec:
-  model:
-    ref: image-fallback
+  modelName: image-fallback
   metric: latency
   gpuSelector:
     count: 1

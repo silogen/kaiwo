@@ -76,7 +76,6 @@ type AIMServiceReconciler struct {
 
 func (r *AIMServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
-	logger.Info("Reconciling AIMService")
 
 	var service aimv1alpha1.AIMService
 	if err := r.Get(ctx, req.NamespacedName, &service); err != nil {
@@ -95,7 +94,6 @@ func (r *AIMServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		Recorder:   r.Recorder,
 		FieldOwner: aimServiceFieldOwner,
 		ObserveFn: func(ctx context.Context) (any, error) {
-			logger.Info("Starting observe phase")
 			obs, err := r.observe(ctx, &service)
 			if err != nil {
 				logger.Error(err, "Observe failed")
@@ -105,7 +103,6 @@ func (r *AIMServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return obs, err
 		},
 		PlanFn: func(ctx context.Context, obs any) ([]client.Object, error) {
-			logger.Info("Starting plan phase")
 			var observation *shared.ServiceObservation
 			if obs != nil {
 				var ok bool
@@ -119,7 +116,6 @@ func (r *AIMServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return objs, nil
 		},
 		ProjectFn: func(ctx context.Context, obs any, errs controllerutils.ReconcileErrors) error {
-			logger.Info("Starting project phase")
 			var observation *shared.ServiceObservation
 			if obs != nil {
 				var ok bool
@@ -388,7 +384,7 @@ func (r *AIMServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				}
 				// Note: model.image case won't match until first reconciliation resolves the model
 
-				if modelName != "" && modelName == strings.TrimSpace(template.Spec.AIMModelName) {
+				if modelName != "" && modelName == strings.TrimSpace(template.Spec.ModelName) {
 					serviceMap[key] = svc
 				}
 			}
@@ -451,7 +447,7 @@ func (r *AIMServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				}
 				// Note: model.image case won't match until first reconciliation resolves the model
 
-				if modelName != "" && modelName == strings.TrimSpace(clusterTemplate.Spec.AIMModelName) {
+				if modelName != "" && modelName == strings.TrimSpace(clusterTemplate.Spec.ModelName) {
 					serviceMap[key] = svc
 				}
 			}

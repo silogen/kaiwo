@@ -121,7 +121,7 @@ func buildServingRuntimeObjectMeta(template aimstate.TemplateState, ownerRef met
 			"app.kubernetes.io/name":       LabelValueRuntimeName,
 			"app.kubernetes.io/component":  LabelValueRuntimeComponent,
 			"app.kubernetes.io/managed-by": LabelValueManagedBy,
-			LabelKeyModelID:                sanitizeLabelValue(template.SpecCommon.AIMModelName),
+			LabelKeyModelID:                sanitizeLabelValue(template.SpecCommon.ModelName),
 		},
 		OwnerReferences: []metav1.OwnerReference{ownerRef},
 	}
@@ -146,8 +146,8 @@ func getGPUResourceName(template aimstate.TemplateState) corev1.ResourceName {
 func buildServingRuntimeSpec(template aimstate.TemplateState) servingv1alpha1.ServingRuntimeSpec {
 	dshmSizeLimit := resource.MustParse(DefaultSharedMemorySize)
 
-	// Determine model ID: prefer ModelSource.Name, fall back to AIMModelName
-	//modelID := template.SpecCommon.AIMModelName
+	// Determine model ID: prefer ModelSource.Name, fall back to ModelName
+	//modelID := template.SpecCommon.ModelName
 	//if template.ModelSource != nil {
 	//	modelID = template.ModelSource.Name
 	//}
@@ -237,7 +237,7 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 		"app.kubernetes.io/managed-by": LabelValueManagedBy,
 		LabelKeyTemplate:               serviceState.Template.Name,
 		LabelKeyModelID:                sanitizeLabelValue(serviceState.ModelID),
-		LabelKeyImageName:              sanitizeLabelValue(serviceState.Template.SpecCommon.AIMModelName),
+		LabelKeyImageName:              sanitizeLabelValue(serviceState.Template.SpecCommon.ModelName),
 	}
 	for k, v := range systemLabels {
 		labels[k] = v

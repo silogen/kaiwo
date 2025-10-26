@@ -65,16 +65,6 @@ spec:
 
               A cluster-scoped template that selects a runtime profile for a given AIM model.
             properties:
-              aimModelName:
-                description: |-
-                  AIMModelName is the AIM image name. Matches `metadata.name` of an AIMModel. Immutable.
-
-                  Example: `meta/llama-3-8b:1.1+20240915`
-                minLength: 1
-                type: string
-                x-kubernetes-validations:
-                - message: model name is immutable
-                  rule: self == oldSelf
               gpuSelector:
                 description: |-
                   GpuSelector specifies GPU requirements for each replica.
@@ -123,6 +113,16 @@ spec:
                 type: string
                 x-kubernetes-validations:
                 - message: metric is immutable
+                  rule: self == oldSelf
+              modelName:
+                description: |-
+                  ModelName is the model name. Matches `metadata.name` of an AIMModel or AIMClusterModel. Immutable.
+
+                  Example: `meta/llama-3-8b:1.1+20240915`
+                minLength: 1
+                type: string
+                x-kubernetes-validations:
+                - message: model name is immutable
                   rule: self == oldSelf
               precision:
                 allOf:
@@ -212,7 +212,7 @@ spec:
                   (by name) to use for this template.
                 type: string
             required:
-            - aimModelName
+            - modelName
             type: object
           status:
             description: AIMServiceTemplateStatus defines the observed state of AIMServiceTemplate.

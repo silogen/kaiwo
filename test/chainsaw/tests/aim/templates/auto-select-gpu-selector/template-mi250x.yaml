@@ -3,8 +3,7 @@ kind: AIMClusterServiceTemplate
 metadata:
   name: test-gpu-mi250x
 spec:
-  model:
-    ref: test-gpu-selector
+  modelName: test-gpu-selector
   metric: latency
   precision: fp8
   gpuSelector:

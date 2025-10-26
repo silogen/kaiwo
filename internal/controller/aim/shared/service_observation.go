@@ -375,7 +375,7 @@ func listTemplateCandidatesForImage(
 		}
 		for i := range templateList.Items {
 			tpl := &templateList.Items[i]
-			if tpl.Spec.AIMModelName != imageName {
+			if tpl.Spec.ModelName != imageName {
 				continue
 			}
 			if IsDerivedTemplate(tpl.GetLabels()) {
@@ -397,7 +397,7 @@ func listTemplateCandidatesForImage(
 	}
 	for i := range clusterTemplateList.Items {
 		tpl := &clusterTemplateList.Items[i]
-		if tpl.Spec.AIMModelName != imageName {
+		if tpl.Spec.ModelName != imageName {
 			continue
 		}
 		if IsDerivedTemplate(tpl.GetLabels()) {
@@ -479,12 +479,12 @@ func PopulateObservationFromNamespaceTemplate(
 		}
 	}
 	obs.TemplateNamespace = template.Namespace
-	if image, imageErr := LookupImageForNamespaceTemplate(ctx, k8sClient, template.Namespace, template.Spec.AIMModelName); imageErr == nil {
+	if image, imageErr := LookupImageForNamespaceTemplate(ctx, k8sClient, template.Namespace, template.Spec.ModelName); imageErr == nil {
 		obs.ImageResources = image.Resources.DeepCopy()
 	} else if errors.Is(imageErr, ErrImageNotFound) {
-		obs.ImageErr = fmt.Errorf("AIMModel %q not found in namespace %q", template.Spec.AIMModelName, template.Namespace)
+		obs.ImageErr = fmt.Errorf("AIMModel %q not found in namespace %q", template.Spec.ModelName, template.Namespace)
 	} else {
-		return fmt.Errorf("failed to lookup AIMModel %q in namespace %q: %w", template.Spec.AIMModelName, template.Namespace, imageErr)
+		return fmt.Errorf("failed to lookup AIMModel %q in namespace %q: %w", template.Spec.ModelName, template.Namespace, imageErr)
 	}
 	return nil
 }
@@ -522,12 +522,12 @@ func PopulateObservationFromClusterTemplate(
 	} else {
 		return fmt.Errorf("failed to resolve AIMRuntimeConfig %q in namespace %q: %w", runtimeConfigName, service.Namespace, resolveErr)
 	}
-	if image, imageErr := LookupImageForClusterTemplate(ctx, k8sClient, template.Spec.AIMModelName); imageErr == nil {
+	if image, imageErr := LookupImageForClusterTemplate(ctx, k8sClient, template.Spec.ModelName); imageErr == nil {
 		obs.ImageResources = image.Resources.DeepCopy()
 	} else if errors.Is(imageErr, ErrImageNotFound) {
-		obs.ImageErr = fmt.Errorf("AIMClusterModel %q not found", template.Spec.AIMModelName)
+		obs.ImageErr = fmt.Errorf("AIMClusterModel %q not found", template.Spec.ModelName)
 	} else {
-		return fmt.Errorf("failed to lookup AIMClusterModel %q: %w", template.Spec.AIMModelName, imageErr)
+		return fmt.Errorf("failed to lookup AIMClusterModel %q: %w", template.Spec.ModelName, imageErr)
 	}
 	return nil
 }
@@ -629,7 +629,7 @@ func prepareObservationForDerivedCreation(
 	}
 
 	// Lookup image resources based on base scope
-	if err := lookupImageResourcesForScope(ctx, k8sClient, service.Namespace, baseSpec.AIMModelName, baseScope, obs); err != nil {
+	if err := lookupImageResourcesForScope(ctx, k8sClient, service.Namespace, baseSpec.ModelName, baseScope, obs); err != nil {
 		return err
 	}
 
@@ -659,7 +659,7 @@ func findMatchingTemplateForDerivedSpec(
 		}
 		for i := range templateList.Items {
 			template := &templateList.Items[i]
-			if template.Spec.AIMModelName != expectedSpec.AIMModelName {
+			if template.Spec.ModelName != expectedSpec.ModelName {
 				continue
 			}
 			if !apiequality.Semantic.DeepEqual(template.Spec, expectedSpec) {
@@ -680,7 +680,7 @@ func findMatchingTemplateForDerivedSpec(
 	}
 	for i := range clusterTemplateList.Items {
 		template := &clusterTemplateList.Items[i]
-		if template.Spec.AIMModelName != expectedSpec.AIMModelName {
+		if template.Spec.ModelName != expectedSpec.ModelName {
 			continue
 		}
 		if !apiequality.Semantic.DeepEqual(template.Spec.AIMServiceTemplateSpecCommon, expectedSpec.AIMServiceTemplateSpecCommon) {

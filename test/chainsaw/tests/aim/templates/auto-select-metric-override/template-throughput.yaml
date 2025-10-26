@@ -3,8 +3,7 @@ kind: AIMClusterServiceTemplate
 metadata:
   name: test-metric-throughput
 spec:
-  model:
-    ref: test-metric-override
+  modelName: test-metric-override
   metric: throughput
   precision: fp8
   gpuSelector:

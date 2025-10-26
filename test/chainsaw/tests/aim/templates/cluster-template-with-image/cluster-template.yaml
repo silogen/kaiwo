@@ -3,8 +3,7 @@ kind: AIMClusterServiceTemplate
 metadata:
   name: llama-3-8b-latency-with-image
 spec:
-  model:
-    ref: llama-3-8b-cluster-with-image
+  modelName: llama-3-8b-cluster-with-image
   metric: latency
   gpuSelector:
     count: 1

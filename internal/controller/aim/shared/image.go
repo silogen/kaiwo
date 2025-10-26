@@ -385,7 +385,7 @@ func buildServiceTemplateFromDeployment(
 
 	// Build common spec
 	commonSpec := aimv1alpha1.AIMServiceTemplateSpecCommon{
-		AIMModelName: imageName,
+		ModelName: imageName,
 	}
 
 	// Set runtime parameters from deployment

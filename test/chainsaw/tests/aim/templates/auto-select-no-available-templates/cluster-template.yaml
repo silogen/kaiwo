@@ -3,8 +3,7 @@ kind: AIMClusterServiceTemplate
 metadata:
   name: test-no-available-template
 spec:
-  model:
-    ref: test-no-available
+  modelName: test-no-available
   metric: latency
   precision: fp8
   gpuSelector:

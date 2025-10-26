@@ -177,7 +177,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `aimModelName` _string_ | AIMModelName is the AIM image name. Matches `metadata.name` of an AIMModel. Immutable.<br />Example: `meta/llama-3-8b:1.1+20240915` |  | MinLength: 1 <br /> |
+| `modelName` _string_ | ModelName is the model name. Matches `metadata.name` of an AIMModel or AIMClusterModel. Immutable.<br />Example: `meta/llama-3-8b:1.1+20240915` |  | MinLength: 1 <br /> |
 | `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
 | `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. |  | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
 | `gpuSelector` _[AIMGpuSelector](#aimgpuselector)_ | GpuSelector specifies GPU requirements for each replica.<br />Defines the GPU count and model type required for deployment.<br />This field is immutable after creation. |  |  |
@@ -1057,7 +1057,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `aimModelName` _string_ | AIMModelName is the AIM image name. Matches `metadata.name` of an AIMModel. Immutable.<br />Example: `meta/llama-3-8b:1.1+20240915` |  | MinLength: 1 <br /> |
+| `modelName` _string_ | ModelName is the model name. Matches `metadata.name` of an AIMModel or AIMClusterModel. Immutable.<br />Example: `meta/llama-3-8b:1.1+20240915` |  | MinLength: 1 <br /> |
 | `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
 | `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. |  | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
 | `gpuSelector` _[AIMGpuSelector](#aimgpuselector)_ | GpuSelector specifies GPU requirements for each replica.<br />Defines the GPU count and model type required for deployment.<br />This field is immutable after creation. |  |  |
@@ -1083,7 +1083,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `aimModelName` _string_ | AIMModelName is the AIM image name. Matches `metadata.name` of an AIMModel. Immutable.<br />Example: `meta/llama-3-8b:1.1+20240915` |  | MinLength: 1 <br /> |
+| `modelName` _string_ | ModelName is the model name. Matches `metadata.name` of an AIMModel or AIMClusterModel. Immutable.<br />Example: `meta/llama-3-8b:1.1+20240915` |  | MinLength: 1 <br /> |
 | `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
 | `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. |  | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
 | `gpuSelector` _[AIMGpuSelector](#aimgpuselector)_ | GpuSelector specifies GPU requirements for each replica.<br />Defines the GPU count and model type required for deployment.<br />This field is immutable after creation. |  |  |

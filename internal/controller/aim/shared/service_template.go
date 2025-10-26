@@ -48,8 +48,8 @@ func BuildDerivedTemplate(
 
 	specCommon := spec.AIMServiceTemplateSpecCommon
 
-	if specCommon.AIMModelName == "" {
-		specCommon.AIMModelName = resolvedModelName
+	if specCommon.ModelName == "" {
+		specCommon.ModelName = resolvedModelName
 	}
 
 	if rc := strings.TrimSpace(service.Spec.RuntimeConfigName); rc != "" {

@@ -3,8 +3,7 @@ kind: AIMClusterServiceTemplate
 metadata:
   name: llama-3-8b-latency-routing-no-gateway
 spec:
-  model:
-    ref: llama-3-8b-routing-no-gateway
+  modelName: llama-3-8b-routing-no-gateway
   metric: latency
   gpuSelector:
     count: 1

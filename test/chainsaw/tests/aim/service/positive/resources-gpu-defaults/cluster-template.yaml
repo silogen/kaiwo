@@ -3,8 +3,7 @@ kind: AIMClusterServiceTemplate
 metadata:
   name: gpu-defaults-template
 spec:
-  model:
-    ref: gpu-defaults-image
+  modelName: gpu-defaults-image
   metric: latency
   gpuSelector:
     count: 1

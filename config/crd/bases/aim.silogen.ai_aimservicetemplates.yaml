@@ -71,16 +71,6 @@ spec:
               narrow: they describe runtime selection knobs for the AIM container and do
               not redefine the full Kubernetes deployment shape.
             properties:
-              aimModelName:
-                description: |-
-                  AIMModelName is the AIM image name. Matches `metadata.name` of an AIMModel. Immutable.
-
-                  Example: `meta/llama-3-8b:1.1+20240915`
-                minLength: 1
-                type: string
-                x-kubernetes-validations:
-                - message: model name is immutable
-                  rule: self == oldSelf
               caching:
                 description: |-
                   Caching configures model caching behavior for this namespace-scoped template.
@@ -409,6 +399,16 @@ spec:
                 x-kubernetes-validations:
                 - message: metric is immutable
                   rule: self == oldSelf
+              modelName:
+                description: |-
+                  ModelName is the model name. Matches `metadata.name` of an AIMModel or AIMClusterModel. Immutable.
+
+                  Example: `meta/llama-3-8b:1.1+20240915`
+                minLength: 1
+                type: string
+                x-kubernetes-validations:
+                - message: model name is immutable
+                  rule: self == oldSelf
               precision:
                 allOf:
                 - enum:
@@ -497,7 +497,7 @@ spec:
                   (by name) to use for this template.
                 type: string
             required:
-            - aimModelName
+            - modelName
             type: object
           status:
             description: AIMServiceTemplateStatus defines the observed state of AIMServiceTemplate.

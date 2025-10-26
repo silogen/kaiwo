@@ -41,7 +41,7 @@ spec:
             name: llama-3-8b-ns-mi300x-x1-latency-fp8
             namespace: ($namespace)
           spec:
-            aimModelName: llama-3-8b-ns
+            modelName: llama-3-8b-ns
             metric: latency
             precision: fp8
             gpuSelector:
@@ -55,7 +55,7 @@ spec:
             name: llama-3-8b-ns-mi300x-x1-throughput-fp8
             namespace: ($namespace)
           spec:
-            aimModelName: llama-3-8b-ns
+            modelName: llama-3-8b-ns
             metric: throughput
             precision: fp8
 

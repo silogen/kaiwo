@@ -62,7 +62,7 @@ func TestFindMatchingTemplateForDerivedSpecNamespaceMatch(t *testing.T) {
 
 	baseSpec := &aimv1alpha1.AIMServiceTemplateSpec{
 		AIMServiceTemplateSpecCommon: aimv1alpha1.AIMServiceTemplateSpecCommon{
-			AIMModelName:      "example-image",
+			ModelName:         "example-image",
 			RuntimeConfigName: "default",
 			AIMRuntimeParameters: aimv1alpha1.AIMRuntimeParameters{
 				GpuSelector: &aimv1alpha1.AIMGpuSelector{
@@ -117,7 +117,7 @@ func TestFindMatchingTemplateForDerivedSpecClusterMatch(t *testing.T) {
 
 	baseSpec := &aimv1alpha1.AIMServiceTemplateSpec{
 		AIMServiceTemplateSpecCommon: aimv1alpha1.AIMServiceTemplateSpecCommon{
-			AIMModelName:      "cluster-image",
+			ModelName:         "cluster-image",
 			RuntimeConfigName: "default",
 			AIMRuntimeParameters: aimv1alpha1.AIMRuntimeParameters{
 				Metric: ptr.To(aimv1alpha1.AIMMetricLatency),
@@ -176,7 +176,7 @@ func TestFindMatchingTemplateForDerivedSpecNoMatch(t *testing.T) {
 
 	baseSpec := &aimv1alpha1.AIMServiceTemplateSpec{
 		AIMServiceTemplateSpecCommon: aimv1alpha1.AIMServiceTemplateSpecCommon{
-			AIMModelName:      "original-image",
+			ModelName:         "original-image",
 			RuntimeConfigName: "default",
 		},
 	}
@@ -188,7 +188,7 @@ func TestFindMatchingTemplateForDerivedSpecNoMatch(t *testing.T) {
 		},
 		Spec: aimv1alpha1.AIMServiceTemplateSpec{
 			AIMServiceTemplateSpecCommon: aimv1alpha1.AIMServiceTemplateSpecCommon{
-				AIMModelName:      "original-image",
+				ModelName:         "original-image",
 				RuntimeConfigName: "default",
 			},
 		},

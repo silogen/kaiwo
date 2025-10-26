@@ -3,8 +3,7 @@ kind: AIMClusterServiceTemplate
 metadata:
   name: test-explicit-throughput
 spec:
-  model:
-    ref: test-explicit-ref
+  modelName: test-explicit-ref
   metric: throughput
   precision: fp8
   gpuSelector:

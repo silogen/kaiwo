@@ -3,8 +3,7 @@ kind: AIMClusterServiceTemplate
 metadata:
   name: test-explicit-latency
 spec:
-  model:
-    ref: test-explicit-ref
+  modelName: test-explicit-ref
   metric: latency
   precision: fp8
   gpuSelector:

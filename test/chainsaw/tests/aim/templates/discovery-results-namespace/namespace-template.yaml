@@ -3,8 +3,7 @@ kind: AIMServiceTemplate
 metadata:
   name: llama-3-8b-latency-discovery-namespace
 spec:
-  model:
-    ref: llama-3-8b-namespace-discovery
+  modelName: llama-3-8b-namespace-discovery
   gpuSelector:
     count: 1
     model: MI300X
