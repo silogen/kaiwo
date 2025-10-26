@@ -68,7 +68,7 @@ type ServiceStateOptions struct {
 func NewServiceState(service *aimv1alpha1.AIMService, template TemplateState, opts ServiceStateOptions) ServiceState {
 	// TODO handle caching
 
-	modelID := template.SpecCommon.AIMImageName
+	modelID := template.SpecCommon.AIMModelName
 	if template.ModelSource != nil {
 		modelID = template.ModelSource.Name
 	}
@@ -104,7 +104,7 @@ func NewServiceState(service *aimv1alpha1.AIMService, template TemplateState, op
 	}
 
 	if state.ModelID == "" {
-		state.ModelID = template.SpecCommon.AIMImageName
+		state.ModelID = template.SpecCommon.AIMModelName
 	}
 
 	if service.Spec.Replicas != nil {

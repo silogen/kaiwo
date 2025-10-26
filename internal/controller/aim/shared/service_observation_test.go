@@ -49,7 +49,7 @@ func TestFindMatchingTemplateForDerivedSpecNamespaceMatch(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: aimv1alpha1.AIMServiceSpec{
-			AIMImageName: "example-image",
+			AIMModelName: "example-image",
 			Overrides: &aimv1alpha1.AIMServiceOverrides{
 				AIMRuntimeParameters: aimv1alpha1.AIMRuntimeParameters{
 					Metric:    ptr.To(aimv1alpha1.AIMMetricThroughput),
@@ -61,7 +61,7 @@ func TestFindMatchingTemplateForDerivedSpecNamespaceMatch(t *testing.T) {
 
 	baseSpec := &aimv1alpha1.AIMServiceTemplateSpec{
 		AIMServiceTemplateSpecCommon: aimv1alpha1.AIMServiceTemplateSpecCommon{
-			AIMImageName:      "example-image",
+			AIMModelName:      "example-image",
 			RuntimeConfigName: "default",
 			AIMRuntimeParameters: aimv1alpha1.AIMRuntimeParameters{
 				GpuSelector: &aimv1alpha1.AIMGpuSelector{
@@ -105,7 +105,7 @@ func TestFindMatchingTemplateForDerivedSpecClusterMatch(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: aimv1alpha1.AIMServiceSpec{
-			AIMImageName: "cluster-image",
+			AIMModelName: "cluster-image",
 			Overrides: &aimv1alpha1.AIMServiceOverrides{
 				AIMRuntimeParameters: aimv1alpha1.AIMRuntimeParameters{
 					Metric: ptr.To(aimv1alpha1.AIMMetricLatency),
@@ -116,7 +116,7 @@ func TestFindMatchingTemplateForDerivedSpecClusterMatch(t *testing.T) {
 
 	baseSpec := &aimv1alpha1.AIMServiceTemplateSpec{
 		AIMServiceTemplateSpecCommon: aimv1alpha1.AIMServiceTemplateSpecCommon{
-			AIMImageName:      "cluster-image",
+			AIMModelName:      "cluster-image",
 			RuntimeConfigName: "default",
 			AIMRuntimeParameters: aimv1alpha1.AIMRuntimeParameters{
 				Metric: ptr.To(aimv1alpha1.AIMMetricLatency),
@@ -164,7 +164,7 @@ func TestFindMatchingTemplateForDerivedSpecNoMatch(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: aimv1alpha1.AIMServiceSpec{
-			AIMImageName: "original-image",
+			AIMModelName: "original-image",
 			Overrides: &aimv1alpha1.AIMServiceOverrides{
 				AIMRuntimeParameters: aimv1alpha1.AIMRuntimeParameters{
 					Precision: ptr.To(aimv1alpha1.AIMPrecisionBF16),
@@ -175,7 +175,7 @@ func TestFindMatchingTemplateForDerivedSpecNoMatch(t *testing.T) {
 
 	baseSpec := &aimv1alpha1.AIMServiceTemplateSpec{
 		AIMServiceTemplateSpecCommon: aimv1alpha1.AIMServiceTemplateSpecCommon{
-			AIMImageName:      "original-image",
+			AIMModelName:      "original-image",
 			RuntimeConfigName: "default",
 		},
 	}
@@ -187,7 +187,7 @@ func TestFindMatchingTemplateForDerivedSpecNoMatch(t *testing.T) {
 		},
 		Spec: aimv1alpha1.AIMServiceTemplateSpec{
 			AIMServiceTemplateSpecCommon: aimv1alpha1.AIMServiceTemplateSpecCommon{
-				AIMImageName:      "original-image",
+				AIMModelName:      "original-image",
 				RuntimeConfigName: "default",
 			},
 		},

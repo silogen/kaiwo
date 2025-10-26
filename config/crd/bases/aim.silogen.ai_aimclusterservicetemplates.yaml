@@ -67,7 +67,7 @@ spec:
             properties:
               aimImageName:
                 description: |-
-                  AIMImageName is the AIM image name. Matches `metadata.name` of an AIMImage. Immutable.
+                  AIMModelName is the AIM image name. Matches `metadata.name` of an AIMModel. Immutable.
 
                   Example: `meta/llama-3-8b:1.1+20240915`
                 minLength: 1

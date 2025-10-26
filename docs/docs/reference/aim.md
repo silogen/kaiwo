@@ -6,8 +6,8 @@ AIM provides a consistent way to deploy optimized LLM inference services on AMD 
 
 | Role                                 | Responsibilities                                                                                                                                                                 |
 |--------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Model publisher**                  | Publishes models as cluster-scoped catalog entries (`AIMClusterImage`) and cluster-wide templates (`AIMClusterServiceTemplate`), makes them available in a public or private repository. |
-| **Cluster administrator**            | Installs cluster-scoped catalog entries (`AIMClusterImage`) and cluster-wide templates (`AIMClusterServiceTemplate`), enables storage and other dependencies.                           |
+| **Model publisher**                  | Publishes models as cluster-scoped catalog entries (`AIMClusterModel`) and cluster-wide templates (`AIMClusterServiceTemplate`), makes them available in a public or private repository. |
+| **Cluster administrator**            | Installs cluster-scoped catalog entries (`AIMClusterModel`) and cluster-wide templates (`AIMClusterServiceTemplate`), enables storage and other dependencies.                           |
 | **Tenant administrator**             | Prepares namespaces and optional namespace-scoped `AIMServiceTemplate` resources.                                                                                                |
 | **Application user / ML engineer**   | Creates namespace templates (`AIMServiceTemplate`), optionally pre-warms caches (`AIMTemplateCache`), deploys services (`AIMService`).                                           |
 | **Kubernetes operator (controller)** | Reconciles AIM resources: discovers model sources for templates, warms caches, creates KServe artifacts and routes, and updates status/conditions.                               |
@@ -16,8 +16,8 @@ AIM provides a consistent way to deploy optimized LLM inference services on AMD 
 
 | Kind                        | Scope     | Purpose                                                                                                                          |
 | --------------------------- | --------- |----------------------------------------------------------------------------------------------------------------------------------|
-| `AIMClusterImage`           | Cluster   | Catalog entry: **modelId → container image**. Templates referencing the image are discovered at runtime for automatic selection. |
-| `AIMImage`                  | Namespace | Namespace-scoped catalog entry (optional, for namespace-specific model overrides).                                               |
+| `AIMClusterModel`           | Cluster   | Catalog entry: **modelId → container image**. Templates referencing the image are discovered at runtime for automatic selection. |
+| `AIMModel`                  | Namespace | Namespace-scoped catalog entry (optional, for namespace-specific model overrides).                                               |
 | `AIMClusterServiceTemplate` | Cluster   | Cluster-wide runtime profile for one model (no caching field).                                                                   |
 | `AIMServiceTemplate`        | Namespace | Namespace runtime profile for one model; can enable caching via `spec.caching.enabled`.                                          |
 | `AIMTemplateCache`          | Namespace | Pre-warms caches into a namespace for a named template (resolves namespace-scoped first, then cluster).                          |
@@ -30,7 +30,7 @@ AIM provides a consistent way to deploy optimized LLM inference services on AMD 
 
 ### 1) Install a predefined catalog (images + cluster templates)
 
-In most environments you will consume a curated set of **AIMClusterImage** objects (model IDs and images) and **AIMClusterServiceTemplate** objects from an **external repo** packaged with Kustomize or Helm.
+In most environments you will consume a curated set of **AIMClusterModel** objects (model IDs and images) and **AIMClusterServiceTemplate** objects from an **external repo** packaged with Kustomize or Helm.
 
 ```bash
 # Example: install a predefined catalog bundle (models + cluster templates)
@@ -39,7 +39,7 @@ kubectl apply -k https://example.org/aim-packs/catalogs/llama3
 
 These bundles typically include:
 
-* `AIMClusterImage` entries with `spec.modelId` and `spec.image` for each model in the catalog.
+* `AIMClusterModel` entries with `spec.modelId` and `spec.image` for each model in the catalog.
 * Matching `AIMClusterServiceTemplate` objects for common runtime profiles (e.g., latency-optimized, throughput-optimized).
 
 ### 2) Deploy services — common patterns
@@ -270,7 +270,7 @@ You can warm caches before deploying or scaling services:
 
 ```yaml
 apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMClusterImage
+kind: AIMClusterModel
 metadata:
   name: meta-llama-3-8b
 spec:
@@ -285,7 +285,7 @@ spec:
       memory: 32Gi
 ```
 
-A namespace-scoped `AIMImage` variant is also available for namespace-specific model overrides. The controller merges resource requirements in the order **service → template → image**, so platform teams can publish sensible defaults in the catalog while allowing templates or individual services to tighten CPU/memory requests when needed. If no GPU quantity is present after this merge, the operator uses the template discovery metadata to request the expected number of accelerators automatically.
+A namespace-scoped `AIMModel` variant is also available for namespace-specific model overrides. The controller merges resource requirements in the order **service → template → image**, so platform teams can publish sensible defaults in the catalog while allowing templates or individual services to tighten CPU/memory requests when needed. If no GPU quantity is present after this merge, the operator uses the template discovery metadata to request the expected number of accelerators automatically.
 
 (Optional) provide a cluster template:
 
@@ -367,7 +367,7 @@ kubectl -n team-a get aimtemplatecache
 
 ## Summary
 
-* Install a **catalog pack** (`AIMClusterImage` + cluster templates) via `kubectl apply -k …`.
+* Install a **catalog pack** (`AIMClusterModel` + cluster templates) via `kubectl apply -k …`.
 * Deploy services using one of the four common patterns:
     1. **Just the model ID** (pack pre-fills `templateRef` to the default).
     2. **Explicit namespace template**.

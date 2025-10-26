@@ -63,10 +63,10 @@ func (r *ImageLookupResult) DeepCopy() *ImageLookupResult {
 }
 
 // LookupImageForClusterTemplate looks up the container image for a cluster-scoped template.
-// It searches only in AIMClusterImage resources.
+// It searches only in AIMClusterModel resources.
 // Returns ErrImageNotFound if no image is found in the catalog.
 func LookupImageForClusterTemplate(ctx context.Context, k8sClient client.Client, modelName string) (*ImageLookupResult, error) {
-	clusterImage := &aimv1alpha1.AIMClusterImage{}
+	clusterImage := &aimv1alpha1.AIMClusterModel{}
 
 	if err := k8sClient.Get(ctx, client.ObjectKey{Name: modelName}, clusterImage); err == nil {
 		return &ImageLookupResult{
@@ -74,19 +74,19 @@ func LookupImageForClusterTemplate(ctx context.Context, k8sClient client.Client,
 			Resources: *clusterImage.Spec.Resources.DeepCopy(),
 		}, nil
 	} else if !apierrors.IsNotFound(err) {
-		return nil, fmt.Errorf("failed to lookup AIMClusterImage: %w", err)
+		return nil, fmt.Errorf("failed to lookup AIMClusterModel: %w", err)
 	}
 
 	return nil, ErrImageNotFound
 }
 
 // LookupImageForNamespaceTemplate looks up the container image for a namespace-scoped template.
-// It searches AIMImage resources in the specified namespace first, then falls back to
-// cluster-scoped AIMClusterImage resources.
+// It searches AIMModel resources in the specified namespace first, then falls back to
+// cluster-scoped AIMClusterModel resources.
 // Returns ErrImageNotFound if no image is found in either location.
 func LookupImageForNamespaceTemplate(ctx context.Context, k8sClient client.Client, namespace, modelName string) (*ImageLookupResult, error) {
-	// Try namespace-scoped AIMImage first
-	nsImage := &aimv1alpha1.AIMImage{}
+	// Try namespace-scoped AIMModel first
+	nsImage := &aimv1alpha1.AIMModel{}
 
 	if err := k8sClient.Get(ctx, client.ObjectKey{Name: modelName, Namespace: namespace}, nsImage); err == nil {
 		return &ImageLookupResult{
@@ -94,14 +94,14 @@ func LookupImageForNamespaceTemplate(ctx context.Context, k8sClient client.Clien
 			Resources: *nsImage.Spec.Resources.DeepCopy(),
 		}, nil
 	} else if !apierrors.IsNotFound(err) {
-		return nil, fmt.Errorf("failed to lookup AIMImage: %w", err)
+		return nil, fmt.Errorf("failed to lookup AIMModel: %w", err)
 	}
 
 	// Fall back to cluster-scoped namespace
 	return LookupImageForClusterTemplate(ctx, k8sClient, modelName)
 }
 
-// ImageObservation holds the observed state for an AIMImage or AIMClusterImage.
+// ImageObservation holds the observed state for an AIMModel or AIMClusterModel.
 type ImageObservation struct {
 	// MetadataAlreadyAttempted is true if we've already attempted metadata extraction.
 	MetadataAlreadyAttempted bool
@@ -143,10 +143,10 @@ type ImageObservationOptions struct {
 	ListOwnedTemplates func(ctx context.Context) ([]client.Object, error)
 
 	// GetCurrentStatus returns the current status to check for existing conditions.
-	GetCurrentStatus func() *aimv1alpha1.AIMImageStatus
+	GetCurrentStatus func() *aimv1alpha1.AIMModelStatus
 
 	// GetImageSpec returns the image spec.
-	GetImageSpec func() aimv1alpha1.AIMImageSpec
+	GetImageSpec func() aimv1alpha1.AIMModelSpec
 }
 
 // ObserveImage gathers the current state for an image resource.
@@ -169,7 +169,7 @@ func ObserveImage(ctx context.Context, opts ImageObservationOptions) (*ImageObse
 
 		// Check conditions to see if we already attempted and failed
 		for _, cond := range status.Conditions {
-			if cond.Type == aimv1alpha1.AIMImageConditionMetadataExtracted {
+			if cond.Type == aimv1alpha1.AIMModelConditionMetadataExtracted {
 				obs.MetadataAlreadyAttempted = true
 				if cond.Status == "True" {
 					obs.MetadataExtracted = true
@@ -214,7 +214,7 @@ type ImagePlanInput struct {
 	Namespace string
 
 	// ImageSpec is the image specification.
-	ImageSpec aimv1alpha1.AIMImageSpec
+	ImageSpec aimv1alpha1.AIMModelSpec
 
 	// Observation is the observed state.
 	Observation *ImageObservation
@@ -381,7 +381,7 @@ func buildServiceTemplateFromDeployment(
 
 	// Build common spec
 	commonSpec := aimv1alpha1.AIMServiceTemplateSpecCommon{
-		AIMImageName: imageName,
+		AIMModelName: imageName,
 	}
 
 	// Set runtime parameters from deployment
@@ -461,8 +461,8 @@ func generateTemplateName(imageName string, deployment aimv1alpha1.RecommendedDe
 
 // ProjectImageStatus updates the status of an image resource based on observation and errors.
 func ProjectImageStatus(
-	status *aimv1alpha1.AIMImageStatus,
-	spec aimv1alpha1.AIMImageSpec,
+	status *aimv1alpha1.AIMModelStatus,
+	spec aimv1alpha1.AIMModelSpec,
 	observation *ImageObservation,
 	extractedMetadata *aimv1alpha1.ImageMetadata,
 	extractionErr error,
@@ -485,16 +485,16 @@ func ProjectImageStatus(
 	if extractedMetadata != nil {
 		status.ImageMetadata = extractedMetadata
 		setCondition(&status.Conditions, metav1.Condition{
-			Type:               aimv1alpha1.AIMImageConditionMetadataExtracted,
+			Type:               aimv1alpha1.AIMModelConditionMetadataExtracted,
 			Status:             metav1.ConditionTrue,
-			Reason:             aimv1alpha1.AIMImageReasonMetadataExtracted,
+			Reason:             aimv1alpha1.AIMModelReasonMetadataExtracted,
 			Message:            "Image metadata successfully extracted",
 			ObservedGeneration: observedGeneration,
 		})
 	} else if extractionErr != nil {
 		if errors.As(extractionErr, &metadataFormatErr) {
 			setCondition(&status.Conditions, metav1.Condition{
-				Type:               aimv1alpha1.AIMImageConditionMetadataExtracted,
+				Type:               aimv1alpha1.AIMModelConditionMetadataExtracted,
 				Status:             metav1.ConditionFalse,
 				Reason:             metadataFormatErr.Reason,
 				Message:            metadataFormatErr.Error(),
@@ -502,9 +502,9 @@ func ProjectImageStatus(
 			})
 		} else {
 			setCondition(&status.Conditions, metav1.Condition{
-				Type:               aimv1alpha1.AIMImageConditionMetadataExtracted,
+				Type:               aimv1alpha1.AIMModelConditionMetadataExtracted,
 				Status:             metav1.ConditionFalse,
-				Reason:             aimv1alpha1.AIMImageReasonMetadataExtractionFailed,
+				Reason:             aimv1alpha1.AIMModelReasonMetadataExtractionFailed,
 				Message:            fmt.Sprintf("Failed to extract metadata: %v", extractionErr),
 				ObservedGeneration: observedGeneration,
 			})
@@ -514,7 +514,7 @@ func ProjectImageStatus(
 	if metadataFormatErr == nil && observation != nil && observation.MetadataError != nil {
 		metadataFormatErr = observation.MetadataError
 		setCondition(&status.Conditions, metav1.Condition{
-			Type:               aimv1alpha1.AIMImageConditionMetadataExtracted,
+			Type:               aimv1alpha1.AIMModelConditionMetadataExtracted,
 			Status:             metav1.ConditionFalse,
 			Reason:             metadataFormatErr.Reason,
 			Message:            metadataFormatErr.Error(),
@@ -610,13 +610,13 @@ func ProjectImageStatus(
 // - Progressing: At least one template is Progressing (and none are Failed/Degraded)
 // - Degraded: One or more templates are Degraded or Failed (but not all)
 // - Failed: All templates are Degraded or Failed
-func updateImageStatusFromTemplates(status *aimv1alpha1.AIMImageStatus, templates []client.Object, observedGeneration int64) {
+func updateImageStatusFromTemplates(status *aimv1alpha1.AIMModelStatus, templates []client.Object, observedGeneration int64) {
 	if status == nil {
 		return
 	}
 
 	// Default to Pending when no templates exist or none provide a definitive state.
-	status.Status = aimv1alpha1.AIMImageStatusPending
+	status.Status = aimv1alpha1.AIMModelStatusPending
 
 	if len(templates) == 0 {
 		return
@@ -664,7 +664,7 @@ func updateImageStatusFromTemplates(status *aimv1alpha1.AIMImageStatus, template
 	// Determine overall status based on template states
 	if problemCount == totalTemplates {
 		// All templates are degraded or failed
-		status.Status = aimv1alpha1.AIMImageStatusFailed
+		status.Status = aimv1alpha1.AIMModelStatusFailed
 
 		msg := fmt.Sprintf("All %d template(s) are degraded or failed", totalTemplates)
 		if len(messages) > 0 {
@@ -686,7 +686,7 @@ func updateImageStatusFromTemplates(status *aimv1alpha1.AIMImageStatus, template
 		})
 	} else if problemCount > 0 {
 		// Some templates are degraded or failed
-		status.Status = aimv1alpha1.AIMImageStatusDegraded
+		status.Status = aimv1alpha1.AIMModelStatusDegraded
 
 		msg := fmt.Sprintf("%d of %d template(s) are degraded or failed", problemCount, totalTemplates)
 		if len(messages) > 0 {
@@ -708,7 +708,7 @@ func updateImageStatusFromTemplates(status *aimv1alpha1.AIMImageStatus, template
 		})
 	} else if progressingCount > 0 {
 		// At least one template is progressing
-		status.Status = aimv1alpha1.AIMImageStatusProgressing
+		status.Status = aimv1alpha1.AIMModelStatusProgressing
 
 		msg := fmt.Sprintf("%d of %d template(s) are progressing", progressingCount, totalTemplates)
 		setCondition(&status.Conditions, metav1.Condition{
@@ -734,7 +734,7 @@ func updateImageStatusFromTemplates(status *aimv1alpha1.AIMImageStatus, template
 		})
 	} else if readyCount == totalTemplates {
 		// All templates are in a ready state (available or not available due to missing GPU)
-		status.Status = aimv1alpha1.AIMImageStatusReady
+		status.Status = aimv1alpha1.AIMModelStatusReady
 
 		var msg string
 		if notAvailableCount > 0 {
@@ -766,11 +766,11 @@ func updateImageStatusFromTemplates(status *aimv1alpha1.AIMImageStatus, template
 	}
 }
 
-func markImageReady(status *aimv1alpha1.AIMImageStatus, reason, message string, observedGeneration int64) {
+func markImageReady(status *aimv1alpha1.AIMModelStatus, reason, message string, observedGeneration int64) {
 	if status == nil {
 		return
 	}
-	status.Status = aimv1alpha1.AIMImageStatusReady
+	status.Status = aimv1alpha1.AIMModelStatusReady
 	setCondition(&status.Conditions, metav1.Condition{
 		Type:               "Ready",
 		Status:             metav1.ConditionTrue,
@@ -794,11 +794,11 @@ func markImageReady(status *aimv1alpha1.AIMImageStatus, reason, message string, 
 	})
 }
 
-func markImageProgressing(status *aimv1alpha1.AIMImageStatus, reason, message string, observedGeneration int64) {
+func markImageProgressing(status *aimv1alpha1.AIMModelStatus, reason, message string, observedGeneration int64) {
 	if status == nil {
 		return
 	}
-	status.Status = aimv1alpha1.AIMImageStatusProgressing
+	status.Status = aimv1alpha1.AIMModelStatusProgressing
 	setCondition(&status.Conditions, metav1.Condition{
 		Type:               "Ready",
 		Status:             metav1.ConditionFalse,
@@ -822,11 +822,11 @@ func markImageProgressing(status *aimv1alpha1.AIMImageStatus, reason, message st
 	})
 }
 
-func markImageFailed(status *aimv1alpha1.AIMImageStatus, reason, message string, observedGeneration int64) {
+func markImageFailed(status *aimv1alpha1.AIMModelStatus, reason, message string, observedGeneration int64) {
 	if status == nil {
 		return
 	}
-	status.Status = aimv1alpha1.AIMImageStatusFailed
+	status.Status = aimv1alpha1.AIMModelStatusFailed
 	setCondition(&status.Conditions, metav1.Condition{
 		Type:               "Ready",
 		Status:             metav1.ConditionFalse,

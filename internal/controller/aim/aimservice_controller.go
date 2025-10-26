@@ -344,7 +344,7 @@ func (r *AIMServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 			// Include if doing auto-selection (no templateRef) and matches image
 			if strings.TrimSpace(svc.Spec.TemplateRef) == "" &&
-				strings.TrimSpace(svc.Spec.AIMImageName) == strings.TrimSpace(template.Spec.AIMImageName) {
+				strings.TrimSpace(svc.Spec.AIMModelName) == strings.TrimSpace(template.Spec.AIMModelName) {
 				serviceMap[key] = svc
 			}
 		}
@@ -396,7 +396,7 @@ func (r *AIMServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 			// Include if doing auto-selection (no templateRef) and matches image
 			if strings.TrimSpace(svc.Spec.TemplateRef) == "" &&
-				strings.TrimSpace(svc.Spec.AIMImageName) == strings.TrimSpace(clusterTemplate.Spec.AIMImageName) {
+				strings.TrimSpace(svc.Spec.AIMModelName) == strings.TrimSpace(clusterTemplate.Spec.AIMModelName) {
 				serviceMap[key] = svc
 			}
 		}

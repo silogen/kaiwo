@@ -47,7 +47,7 @@ spec:
 
 | Field | Type | Description |
 | ----- | ---- | ----------- |
-| `aimImageName` | string | Canonical model identifier that maps to an `AIMImage` or `AIMClusterImage` resource. This identifies which model container image to deploy. |
+| `aimImageName` | string | Canonical model identifier that maps to an `AIMModel` or `AIMClusterModel` resource. This identifies which model container image to deploy. |
 | `templateRef` | string | Name of an `AIMServiceTemplate` or `AIMClusterServiceTemplate` that defines the runtime profile. When omitted, the controller enumerates the templates that reference the selected image and automatically chooses the best candidate once they become Available. |
 | `runtimeConfigName` | string | Name of the `AIMRuntimeConfig` or `AIMClusterRuntimeConfig` to use for registry credentials, storage defaults, and routing configuration. Defaults to `default` when omitted. |
 | `replicas` | int32 | Number of inference service replicas to deploy. Defaults to 1. |
@@ -99,7 +99,7 @@ The controller merges resource requirements from three tiers, with higher tiers 
 
 1. **Service-level**: `spec.resources` on the AIMService (highest precedence).
 2. **Template-level**: `spec.resources` on the resolved AIMServiceTemplate.
-3. **Image-level**: `spec.resources` on the AIMImage or AIMClusterImage (lowest precedence).
+3. **Image-level**: `spec.resources` on the AIMModel or AIMClusterModel (lowest precedence).
 
 After merging, if GPU resource requests or limits are still unset, the controller populates them from the discovery metadata stored in the template's status (`status.profile.metadata.gpu_count`). This ensures the resulting KServe InferenceService always requests the appropriate number of GPU devices unless explicitly overridden.
 
@@ -113,7 +113,7 @@ When a service is created or updated, the controller follows this resolution seq
 
 1. **Explicit templateRef**: If `spec.templateRef` is specified, the controller searches for a template with that name (namespace-scoped first, then cluster-scoped). If the template is not found, the service enters a `Degraded` state.
 
-2. **Automatic selection**: If `templateRef` is omitted, the controller inspects the referenced AIMImage (namespace-scoped first, then cluster-scoped) and waits for the templates that point to that image to become `Available`. It then filters candidates using any service overrides (metric, precision, GPU selector) and the GPUs currently present in the cluster. If exactly one candidate remains, that template is selected. If no candidates remain—or multiple viable templates remain after filtering—the service reports a failure condition explaining the issue.
+2. **Automatic selection**: If `templateRef` is omitted, the controller inspects the referenced AIMModel (namespace-scoped first, then cluster-scoped) and waits for the templates that point to that image to become `Available`. It then filters candidates using any service overrides (metric, precision, GPU selector) and the GPUs currently present in the cluster. If exactly one candidate remains, that template is selected. If no candidates remain—or multiple viable templates remain after filtering—the service reports a failure condition explaining the issue.
 
 3. **Override handling**: If `spec.overrides` is specified, the controller modifies the template name by appending a hash suffix and creates a derived template. See [Template derivation](#template-derivation-and-overrides) below.
 
@@ -203,7 +203,7 @@ The `status` field reflects reconciliation progress and provides observability i
 | `observedGeneration` | int64 | Most recent generation observed by the controller. |
 | `conditions` | []Condition | Detailed conditions including `Resolved`, `RuntimeReady`, `RoutingReady`, `CacheReady`, `Ready`, `Progressing`, `Failure`. |
 | `resolvedRuntimeConfig` | AIMResolvedRuntimeConfig | Reference to the runtime config used (namespace or cluster scope) and a hash of its spec. |
-| `resolvedImage` | AIMResolvedReference | Reference to the AIMImage or AIMClusterImage resolved for this service. |
+| `resolvedImage` | AIMResolvedReference | Reference to the AIMModel or AIMClusterModel resolved for this service. |
 | `resolvedTemplate` | AIMServiceResolvedTemplate | Reference to the template used, including its name, namespace (if applicable), scope, and UID. Shows derived template names when overrides are applied. |
 | `routing` | AIMServiceRoutingStatus | Contains the resolved HTTP `path` when routing is enabled and successfully configured. |
 
@@ -343,5 +343,5 @@ kubectl -n kaiwo-system logs -l app=aim-controller -f
 ## Related documentation
 
 - [Runtime Configuration](./config.md) - Details on AIMRuntimeConfig resolution and configuration options
-- [Images and Templates](./images-and-templates.md) - Understanding AIMImage and AIMServiceTemplate resources
+- [Images and Templates](./images-and-templates.md) - Understanding AIMModel and AIMServiceTemplate resources
 - [Template Caching](./caching.md) - Model artifact caching and pre-warming (if available)

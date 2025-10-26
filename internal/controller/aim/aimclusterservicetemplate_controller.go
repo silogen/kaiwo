@@ -171,7 +171,7 @@ func (r *AIMClusterServiceTemplateReconciler) observe(ctx context.Context, templ
 			return operatorNamespace
 		},
 		LookupImage: func(ctx context.Context) (*shared.ImageLookupResult, error) {
-			return shared.LookupImageForClusterTemplate(ctx, r.Client, template.Spec.AIMImageName)
+			return shared.LookupImageForClusterTemplate(ctx, r.Client, template.Spec.AIMModelName)
 		},
 		ResolveRuntimeConfig: func(ctx context.Context) (*shared.RuntimeConfigResolution, error) {
 			resolution, err := shared.ResolveRuntimeConfig(ctx, r.Client, operatorNamespace, template.Spec.RuntimeConfigName)
@@ -253,7 +253,7 @@ func (r *AIMClusterServiceTemplateReconciler) plan(ctx context.Context, template
 			return shared.BuildDiscoveryJob(shared.DiscoveryJobSpec{
 				TemplateName:     template.Name,
 				Namespace:        operatorNamespace,
-				ModelID:          template.Spec.AIMImageName,
+				ModelID:          template.Spec.AIMModelName,
 				Image:            input.Observation.Image,
 				TemplateSpec:     template.Spec.AIMServiceTemplateSpecCommon,
 				ImagePullSecrets: input.Observation.ImagePullSecrets,
@@ -273,7 +273,7 @@ func (r *AIMClusterServiceTemplateReconciler) projectStatus(
 	obs *clusterTemplateObservation,
 	errs controllerutils.ReconcileErrors,
 ) error {
-	imageNotFoundMsg := fmt.Sprintf("No AIMClusterImage found for image name %q", template.Spec.AIMImageName)
+	imageNotFoundMsg := fmt.Sprintf("No AIMClusterModel found for image name %q", template.Spec.AIMModelName)
 	var templateObs *shared.TemplateObservation
 	if obs != nil {
 		templateObs = &obs.TemplateObservation

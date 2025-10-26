@@ -3,7 +3,7 @@ kind: Test
 metadata:
   name: image-not-found
 spec:
-  description: Test that service fails when AIMImage does not exist
+  description: Test that service fails when AIMModel does not exist
   timeouts:
     assert: 60s
   steps:

@@ -165,7 +165,7 @@ func newTestService() *aimv1alpha1.AIMService {
 			},
 		},
 		Spec: aimv1alpha1.AIMServiceSpec{
-			AIMImageName: "Meta/Llama-3-8B",
+			AIMModelName: "Meta/Llama-3-8B",
 			TemplateRef:  "demo-template",
 		},
 	}

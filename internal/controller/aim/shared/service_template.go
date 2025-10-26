@@ -47,8 +47,8 @@ func BuildDerivedTemplate(
 
 	specCommon := spec.AIMServiceTemplateSpecCommon
 
-	if specCommon.AIMImageName == "" {
-		specCommon.AIMImageName = service.Spec.AIMImageName
+	if specCommon.AIMModelName == "" {
+		specCommon.AIMModelName = service.Spec.AIMModelName
 	}
 
 	if rc := strings.TrimSpace(service.Spec.RuntimeConfigName); rc != "" {

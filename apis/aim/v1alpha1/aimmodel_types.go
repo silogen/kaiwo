@@ -28,51 +28,51 @@ import (
 )
 
 const (
-	// AIMImageConditionRuntimeResolved captures whether runtime config resolution succeeded.
-	AIMImageConditionRuntimeResolved = "RuntimeResolved"
+	// AIMModelConditionRuntimeResolved captures whether runtime config resolution succeeded.
+	AIMModelConditionRuntimeResolved = "RuntimeResolved"
 
-	// AIMImageReasonRuntimeResolved indicates resolution succeeded.
-	AIMImageReasonRuntimeResolved = "RuntimeResolved"
+	// AIMModelReasonRuntimeResolved indicates resolution succeeded.
+	AIMModelReasonRuntimeResolved = "RuntimeResolved"
 
-	// AIMImageReasonRuntimeConfigMissing is set when the referenced runtime config cannot be found.
-	AIMImageReasonRuntimeConfigMissing = "RuntimeConfigMissing"
+	// AIMModelReasonRuntimeConfigMissing is set when the referenced runtime config cannot be found.
+	AIMModelReasonRuntimeConfigMissing = "RuntimeConfigMissing"
 
-	// AIMImageReasonDefaultRuntimeConfigMissing indicates the implicit default runtime config was not found.
-	AIMImageReasonDefaultRuntimeConfigMissing = "DefaultRuntimeConfigMissing"
+	// AIMModelReasonDefaultRuntimeConfigMissing indicates the implicit default runtime config was not found.
+	AIMModelReasonDefaultRuntimeConfigMissing = "DefaultRuntimeConfigMissing"
 
-	// AIMImageConditionMetadataExtracted captures whether image metadata extraction succeeded.
-	AIMImageConditionMetadataExtracted = "MetadataExtracted"
+	// AIMModelConditionMetadataExtracted captures whether image metadata extraction succeeded.
+	AIMModelConditionMetadataExtracted = "MetadataExtracted"
 
-	// AIMImageReasonMetadataExtracted indicates metadata extraction succeeded.
-	AIMImageReasonMetadataExtracted = "MetadataExtracted"
+	// AIMModelReasonMetadataExtracted indicates metadata extraction succeeded.
+	AIMModelReasonMetadataExtracted = "MetadataExtracted"
 
-	// AIMImageReasonMetadataExtractionFailed indicates metadata extraction failed (non-blocking, prevents retries).
-	AIMImageReasonMetadataExtractionFailed = "MetadataExtractionFailed"
+	// AIMModelReasonMetadataExtractionFailed indicates metadata extraction failed (non-blocking, prevents retries).
+	AIMModelReasonMetadataExtractionFailed = "MetadataExtractionFailed"
 )
 
-// AIMImageStatusEnum represents the overall status of an AIMImage.
+// AIMModelStatusEnum represents the overall status of an AIMModel.
 // +kubebuilder:validation:Enum=Pending;Progressing;Ready;Degraded;Failed
-type AIMImageStatusEnum string
+type AIMModelStatusEnum string
 
 const (
-	// AIMImageStatusPending indicates the image has been created but template generation has not started.
-	AIMImageStatusPending AIMImageStatusEnum = "Pending"
+	// AIMModelStatusPending indicates the image has been created but template generation has not started.
+	AIMModelStatusPending AIMModelStatusEnum = "Pending"
 
-	// AIMImageStatusProgressing indicates one or more templates are still being discovered.
-	AIMImageStatusProgressing AIMImageStatusEnum = "Progressing"
+	// AIMModelStatusProgressing indicates one or more templates are still being discovered.
+	AIMModelStatusProgressing AIMModelStatusEnum = "Progressing"
 
-	// AIMImageStatusReady indicates all templates are available and ready.
-	AIMImageStatusReady AIMImageStatusEnum = "Ready"
+	// AIMModelStatusReady indicates all templates are available and ready.
+	AIMModelStatusReady AIMModelStatusEnum = "Ready"
 
-	// AIMImageStatusDegraded indicates one or more templates are degraded or failed.
-	AIMImageStatusDegraded AIMImageStatusEnum = "Degraded"
+	// AIMModelStatusDegraded indicates one or more templates are degraded or failed.
+	AIMModelStatusDegraded AIMModelStatusEnum = "Degraded"
 
-	// AIMImageStatusFailed indicates all templates are degraded or failed.
-	AIMImageStatusFailed AIMImageStatusEnum = "Failed"
+	// AIMModelStatusFailed indicates all templates are degraded or failed.
+	AIMModelStatusFailed AIMModelStatusEnum = "Failed"
 )
 
-// AIMImageDiscoverySpec configures metadata discovery and template generation for an image.
-type AIMImageDiscoverySpec struct {
+// AIMModelDiscoverySpec configures metadata discovery and template generation for an image.
+type AIMModelDiscoverySpec struct {
 	// Enabled toggles metadata discovery for this image. Disabled by default.
 	Enabled bool `json:"enabled,omitempty"`
 
@@ -82,8 +82,8 @@ type AIMImageDiscoverySpec struct {
 	AutoCreateTemplates *bool `json:"autoCreateTemplates,omitempty"`
 }
 
-// AIMImageSpec defines the desired state of AIMImage.
-type AIMImageSpec struct {
+// AIMModelSpec defines the desired state of AIMModel.
+type AIMModelSpec struct {
 	// Image is the container image URI for this AIM model.
 	// This image is inspected by the operator to select runtime profiles used by templates.
 	// +kubebuilder:validation:MinLength=1
@@ -94,7 +94,7 @@ type AIMImageSpec struct {
 
 	// Discovery controls metadata extraction and automatic template creation for this image.
 	// +optional
-	Discovery AIMImageDiscoverySpec `json:"discovery,omitempty"`
+	Discovery AIMModelDiscoverySpec `json:"discovery,omitempty"`
 	// RuntimeConfigName references the AIM runtime configuration (by name) to use for this image.
 	// +kubebuilder:default=default
 	RuntimeConfigName string `json:"runtimeConfigName,omitempty"`
@@ -105,14 +105,14 @@ type AIMImageSpec struct {
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-// AIMImageStatus defines the observed state of AIMImage.
-type AIMImageStatus struct {
+// AIMModelStatus defines the observed state of AIMModel.
+type AIMModelStatus struct {
 	// ObservedGeneration is the most recent generation observed by the controller
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
 	// Status represents the overall status of the image based on its templates
 	// +kubebuilder:default=Pending
-	Status AIMImageStatusEnum `json:"status,omitempty"`
+	Status AIMModelStatusEnum `json:"status,omitempty"`
 
 	// Conditions represent the latest available observations of the model's state
 	// +listType=map
@@ -128,74 +128,74 @@ type AIMImageStatus struct {
 	ImageMetadata *ImageMetadata `json:"imageMetadata,omitempty"`
 }
 
-// AIMClusterImage is the Schema for cluster-scoped AIM image catalog entries.
+// AIMClusterModel is the Schema for cluster-scoped AIM model catalog entries.
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:scope=Cluster,shortName=aimclimg,categories=aim;all
+// +kubebuilder:resource:scope=Cluster,shortName=aimclmdl,categories=aim;all
 // +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.status`
 // +kubebuilder:printcolumn:name="Image",type=string,JSONPath=`.spec.image`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
-type AIMClusterImage struct {
+type AIMClusterModel struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   AIMImageSpec   `json:"spec,omitempty"`
-	Status AIMImageStatus `json:"status,omitempty"`
+	Spec   AIMModelSpec   `json:"spec,omitempty"`
+	Status AIMModelStatus `json:"status,omitempty"`
 }
 
-// AIMClusterImageList contains a list of AIMClusterImage.
+// AIMClusterModelList contains a list of AIMClusterModel.
 // +kubebuilder:object:root=true
-type AIMClusterImageList struct {
+type AIMClusterModelList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []AIMClusterImage `json:"items"`
+	Items           []AIMClusterModel `json:"items"`
 }
 
-// AIMImage is the Schema for namespace-scoped AIM image catalog entries.
+// AIMModel is the Schema for namespace-scoped AIM model catalog entries.
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:shortName=aimimg,categories=aim;all
+// +kubebuilder:resource:shortName=aimmdl,categories=aim;all
 // +kubebuilder:printcolumn:name="Model ID",type=string,JSONPath=`.spec.modelId`
 // +kubebuilder:printcolumn:name="Image",type=string,JSONPath=`.spec.image`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
-type AIMImage struct {
+type AIMModel struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   AIMImageSpec   `json:"spec,omitempty"`
-	Status AIMImageStatus `json:"status,omitempty"`
+	Spec   AIMModelSpec   `json:"spec,omitempty"`
+	Status AIMModelStatus `json:"status,omitempty"`
 }
 
-// AIMImageList contains a list of AIMImage.
+// AIMModelList contains a list of AIMModel.
 // +kubebuilder:object:root=true
-type AIMImageList struct {
+type AIMModelList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []AIMImage `json:"items"`
+	Items           []AIMModel `json:"items"`
 }
 
-// GetStatus returns a pointer to the AIMImage status.
-func (img *AIMImage) GetStatus() *AIMImageStatus {
+// GetStatus returns a pointer to the AIMModel status.
+func (img *AIMModel) GetStatus() *AIMModelStatus {
 	return &img.Status
 }
 
-// GetStatus returns a pointer to the AIMClusterImage status.
-func (img *AIMClusterImage) GetStatus() *AIMImageStatus {
+// GetStatus returns a pointer to the AIMClusterModel status.
+func (img *AIMClusterModel) GetStatus() *AIMModelStatus {
 	return &img.Status
 }
 
 func init() {
-	SchemeBuilder.Register(&AIMClusterImage{}, &AIMClusterImageList{}, &AIMImage{}, &AIMImageList{})
+	SchemeBuilder.Register(&AIMClusterModel{}, &AIMClusterModelList{}, &AIMModel{}, &AIMModelList{})
 }
 
 // IsEnabled returns true when discovery is enabled.
-func (d *AIMImageDiscoverySpec) IsEnabled() bool {
+func (d *AIMModelDiscoverySpec) IsEnabled() bool {
 	return d != nil && d.Enabled
 }
 
 // AutoCreateTemplatesEnabled returns true when auto template creation should run.
 // Defaults to true when unset.
-func (d *AIMImageDiscoverySpec) AutoCreateTemplatesEnabled() bool {
+func (d *AIMModelDiscoverySpec) AutoCreateTemplatesEnabled() bool {
 	if d == nil || d.AutoCreateTemplates == nil {
 		return true
 	}
@@ -203,7 +203,7 @@ func (d *AIMImageDiscoverySpec) AutoCreateTemplatesEnabled() bool {
 }
 
 // DiscoveryEnabled reports whether discovery is enabled on the image spec.
-func (spec *AIMImageSpec) DiscoveryEnabled() bool {
+func (spec *AIMModelSpec) DiscoveryEnabled() bool {
 	if spec == nil {
 		return false
 	}
@@ -211,7 +211,7 @@ func (spec *AIMImageSpec) DiscoveryEnabled() bool {
 }
 
 // AutoCreateTemplatesEnabled reports whether auto template creation is enabled on the image spec.
-func (spec *AIMImageSpec) AutoCreateTemplatesEnabled() bool {
+func (spec *AIMModelSpec) AutoCreateTemplatesEnabled() bool {
 	if spec == nil {
 		return true
 	}

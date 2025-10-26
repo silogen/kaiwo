@@ -74,7 +74,7 @@ spec:
 
 The following AIM resources accept the `runtimeConfigName` field:
 
-- `AIMImage` / `AIMClusterImage`
+- `AIMModel` / `AIMClusterModel`
 - `AIMServiceTemplate` / `AIMClusterServiceTemplate`
 - `AIMService`
 - `AIMTemplateCache`

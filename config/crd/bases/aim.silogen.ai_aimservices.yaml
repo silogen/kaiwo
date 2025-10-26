@@ -69,8 +69,8 @@ spec:
             properties:
               aimImageName:
                 description: |-
-                  AIMImageName is the canonical model name (including version/revision) to deploy.
-                  Expected to match the `spec.metadata.name` of an AIMImage. Example:
+                  AIMModelName is the canonical model name (including version/revision) to deploy.
+                  Expected to match the `spec.metadata.name` of an AIMModel. Example:
                   `meta-llama-3-8b-1-1-20240915`.
                 minLength: 1
                 type: string

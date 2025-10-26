@@ -45,8 +45,8 @@ const (
 	aimClusterImageFieldOwner = "aim-cluster-image-controller"
 )
 
-// AIMClusterImageReconciler reconciles an AIMClusterImage object
-type AIMClusterImageReconciler struct {
+// AIMClusterModelReconciler reconciles an AIMClusterModel object
+type AIMClusterModelReconciler struct {
 	client.Client
 	Scheme    *runtime.Scheme
 	Clientset kubernetes.Interface
@@ -60,11 +60,11 @@ type AIMClusterImageReconciler struct {
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclusterservicetemplates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 
-func (r *AIMClusterImageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *AIMClusterModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
 	// Fetch the cluster image
-	var image aimv1alpha1.AIMClusterImage
+	var image aimv1alpha1.AIMClusterModel
 	if err := r.Get(ctx, req.NamespacedName, &image); err != nil {
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -72,10 +72,10 @@ func (r *AIMClusterImageReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 
-	baseutils.Debug(logger, "Reconciling AIMClusterImage", "name", image.Name)
+	baseutils.Debug(logger, "Reconciling AIMClusterModel", "name", image.Name)
 
 	// Use framework orchestrator
-	return controllerutils.Reconcile(ctx, controllerutils.ReconcileSpec[*aimv1alpha1.AIMClusterImage, aimv1alpha1.AIMImageStatus]{
+	return controllerutils.Reconcile(ctx, controllerutils.ReconcileSpec[*aimv1alpha1.AIMClusterModel, aimv1alpha1.AIMModelStatus]{
 		Client:     r.Client,
 		Scheme:     r.Scheme,
 		Object:     &image,
@@ -114,7 +114,7 @@ func (r *AIMClusterImageReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 }
 
 // observe gathers current cluster state (read-only)
-func (r *AIMClusterImageReconciler) observe(ctx context.Context, image *aimv1alpha1.AIMClusterImage) (*shared.ImageObservation, error) {
+func (r *AIMClusterModelReconciler) observe(ctx context.Context, image *aimv1alpha1.AIMClusterModel) (*shared.ImageObservation, error) {
 	return shared.ObserveImage(ctx, shared.ImageObservationOptions{
 		GetRuntimeConfig: func(ctx context.Context) (*shared.RuntimeConfigResolution, error) {
 			// Look for AIMRuntimeConfig named "default" in kaiwo-system namespace
@@ -146,18 +146,18 @@ func (r *AIMClusterImageReconciler) observe(ctx context.Context, image *aimv1alp
 			return objects, nil
 		},
 
-		GetCurrentStatus: func() *aimv1alpha1.AIMImageStatus {
+		GetCurrentStatus: func() *aimv1alpha1.AIMModelStatus {
 			return &image.Status
 		},
 
-		GetImageSpec: func() aimv1alpha1.AIMImageSpec {
+		GetImageSpec: func() aimv1alpha1.AIMModelSpec {
 			return image.Spec
 		},
 	})
 }
 
 // plan computes desired state (pure function)
-func (r *AIMClusterImageReconciler) plan(ctx context.Context, image *aimv1alpha1.AIMClusterImage, obs *shared.ImageObservation) ([]client.Object, error) {
+func (r *AIMClusterModelReconciler) plan(ctx context.Context, image *aimv1alpha1.AIMClusterModel, obs *shared.ImageObservation) ([]client.Object, error) {
 	// Build owner reference
 	ownerRef := []metav1.OwnerReference{
 		{
@@ -185,9 +185,9 @@ func (r *AIMClusterImageReconciler) plan(ctx context.Context, image *aimv1alpha1
 }
 
 // projectStatus computes status from observation + errors (modifies image.Status directly)
-func (r *AIMClusterImageReconciler) projectStatus(
+func (r *AIMClusterModelReconciler) projectStatus(
 	ctx context.Context,
-	image *aimv1alpha1.AIMClusterImage,
+	image *aimv1alpha1.AIMClusterModel,
 	obs *shared.ImageObservation,
 	errs controllerutils.ReconcileErrors,
 ) error {
@@ -256,9 +256,9 @@ func (r *AIMClusterImageReconciler) projectStatus(
 	return nil
 }
 
-func (r *AIMClusterImageReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *AIMClusterModelReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&aimv1alpha1.AIMClusterImage{}).
+		For(&aimv1alpha1.AIMClusterModel{}).
 		Owns(&aimv1alpha1.AIMClusterServiceTemplate{}).
 		Named("aim-cluster-image").
 		Complete(r)

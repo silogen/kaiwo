@@ -42,11 +42,11 @@ type AIMServiceOverrides struct {
 // runtime selection knobs, while the overrides field allows service-specific
 // customization.
 type AIMServiceSpec struct {
-	// AIMImageName is the canonical model name (including version/revision) to deploy.
-	// Expected to match the `spec.metadata.name` of an AIMImage. Example:
+	// AIMModelName is the canonical model name (including version/revision) to deploy.
+	// Expected to match the `spec.metadata.name` of an AIMModel. Example:
 	// `meta-llama-3-8b-1-1-20240915`.
 	// +kubebuilder:validation:MinLength=1
-	AIMImageName string `json:"aimImageName"`
+	AIMModelName string `json:"aimImageName"`
 
 	// TemplateRef is the name of the AIMServiceTemplate or AIMClusterServiceTemplate to use.
 	// The template selects the runtime profile and GPU parameters.

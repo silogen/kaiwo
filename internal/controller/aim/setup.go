@@ -75,8 +75,8 @@ func SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
-	// Setup AIMImage controller
-	if err := (&AIMImageReconciler{
+	// Setup AIMModel controller
+	if err := (&AIMModelReconciler{
 		Client:    mgr.GetClient(),
 		Scheme:    mgr.GetScheme(),
 		Clientset: clientset,
@@ -84,8 +84,8 @@ func SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
-	// Setup AIMClusterImage controller
-	if err := (&AIMClusterImageReconciler{
+	// Setup AIMClusterModel controller
+	if err := (&AIMClusterModelReconciler{
 		Client:    mgr.GetClient(),
 		Scheme:    mgr.GetScheme(),
 		Clientset: clientset,

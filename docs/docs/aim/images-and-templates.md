@@ -12,9 +12,9 @@ AIM Images form a catalog that maps logical model identifiers to specific contai
 
 AIM provides two image resource types to accommodate different organizational needs and deployment patterns.
 
-**AIMClusterImage** resources are cluster-scoped and typically installed by cluster administrators. These resources usually come from external sources through GitOps workflows or Helm installations, representing curated model catalogs maintained by platform teams or model publishers. Cluster images provide a consistent baseline across all namespaces, ensuring that teams share common model definitions unless explicitly overridden.
+**AIMClusterModel** resources are cluster-scoped and typically installed by cluster administrators. These resources usually come from external sources through GitOps workflows or Helm installations, representing curated model catalogs maintained by platform teams or model publishers. Cluster images provide a consistent baseline across all namespaces, ensuring that teams share common model definitions unless explicitly overridden.
 
-**AIMImage** resources are namespace-scoped and allow individual teams to define namespace-specific model variants or override cluster-level definitions. These are less commonly used but valuable when a team needs to test a different version of a model image or provide team-specific model access. When both cluster and namespace images exist for the same model ID, the namespace-scoped resource takes precedence within that namespace.
+**AIMModel** resources are namespace-scoped and allow individual teams to define namespace-specific model variants or override cluster-level definitions. These are less commonly used but valuable when a team needs to test a different version of a model image or provide team-specific model access. When both cluster and namespace images exist for the same model ID, the namespace-scoped resource takes precedence within that namespace.
 
 ### Anatomy of an Image
 
@@ -61,7 +61,7 @@ Here is a cluster-scoped image that makes a Llama 3.1 8B model available across 
 
 ```yaml
 apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMClusterImage
+kind: AIMClusterModel
 metadata:
   name: meta-llama-3-8b-instruct
 spec:
@@ -83,7 +83,7 @@ Namespace-scoped images follow the same structure but include a namespace and al
 
 ```yaml
 apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMImage
+kind: AIMModel
 metadata:
   name: meta-llama-3-8b-instruct-dev
   namespace: ml-team
@@ -103,11 +103,11 @@ spec:
 
 ### Behind the Scenes
 
-When templates or services reference a model ID, the operator looks up the corresponding image from the catalog. For namespace-scoped lookups, the operator checks for an `AIMImage` in the same namespace first, then falls back to cluster-scoped `AIMClusterImage` resources. The resolved image contributes both the container reference and its default `resources`. During reconciliation the controller merges resources in this order:
+When templates or services reference a model ID, the operator looks up the corresponding image from the catalog. For namespace-scoped lookups, the operator checks for an `AIMModel` in the same namespace first, then falls back to cluster-scoped `AIMClusterModel` resources. The resolved image contributes both the container reference and its default `resources`. During reconciliation the controller merges resources in this order:
 
 1. `AIMService.spec.resources` (service-level override).
 2. `AIMServiceTemplate.spec.resources` (template default).
-3. `AIMImage.spec.resources` (catalog default).
+3. `AIMModel.spec.resources` (catalog default).
 
 If GPU quantities are still unset after the merge, the controller copies them from discovery metadata recorded on the template.
 

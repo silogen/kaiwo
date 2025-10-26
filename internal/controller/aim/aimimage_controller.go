@@ -45,8 +45,8 @@ const (
 	aimImageFieldOwner = "aim-image-controller"
 )
 
-// AIMImageReconciler reconciles an AIMImage object
-type AIMImageReconciler struct {
+// AIMModelReconciler reconciles an AIMModel object
+type AIMModelReconciler struct {
 	client.Client
 	Scheme    *runtime.Scheme
 	Clientset kubernetes.Interface
@@ -60,11 +60,11 @@ type AIMImageReconciler struct {
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimservicetemplates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 
-func (r *AIMImageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *AIMModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
 	// Fetch the image
-	var image aimv1alpha1.AIMImage
+	var image aimv1alpha1.AIMModel
 	if err := r.Get(ctx, req.NamespacedName, &image); err != nil {
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -72,10 +72,10 @@ func (r *AIMImageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, err
 	}
 
-	baseutils.Debug(logger, "Reconciling AIMImage", "name", image.Name, "namespace", image.Namespace)
+	baseutils.Debug(logger, "Reconciling AIMModel", "name", image.Name, "namespace", image.Namespace)
 
 	// Use framework orchestrator
-	return controllerutils.Reconcile(ctx, controllerutils.ReconcileSpec[*aimv1alpha1.AIMImage, aimv1alpha1.AIMImageStatus]{
+	return controllerutils.Reconcile(ctx, controllerutils.ReconcileSpec[*aimv1alpha1.AIMModel, aimv1alpha1.AIMModelStatus]{
 		Client:     r.Client,
 		Scheme:     r.Scheme,
 		Object:     &image,
@@ -114,7 +114,7 @@ func (r *AIMImageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 }
 
 // observe gathers current cluster state (read-only)
-func (r *AIMImageReconciler) observe(ctx context.Context, image *aimv1alpha1.AIMImage) (*shared.ImageObservation, error) {
+func (r *AIMModelReconciler) observe(ctx context.Context, image *aimv1alpha1.AIMModel) (*shared.ImageObservation, error) {
 	return shared.ObserveImage(ctx, shared.ImageObservationOptions{
 		GetRuntimeConfig: func(ctx context.Context) (*shared.RuntimeConfigResolution, error) {
 			// Look for AIMRuntimeConfig named "default" in the same namespace
@@ -146,18 +146,18 @@ func (r *AIMImageReconciler) observe(ctx context.Context, image *aimv1alpha1.AIM
 			return objects, nil
 		},
 
-		GetCurrentStatus: func() *aimv1alpha1.AIMImageStatus {
+		GetCurrentStatus: func() *aimv1alpha1.AIMModelStatus {
 			return &image.Status
 		},
 
-		GetImageSpec: func() aimv1alpha1.AIMImageSpec {
+		GetImageSpec: func() aimv1alpha1.AIMModelSpec {
 			return image.Spec
 		},
 	})
 }
 
 // plan computes desired state (pure function)
-func (r *AIMImageReconciler) plan(ctx context.Context, image *aimv1alpha1.AIMImage, obs *shared.ImageObservation) ([]client.Object, error) {
+func (r *AIMModelReconciler) plan(ctx context.Context, image *aimv1alpha1.AIMModel, obs *shared.ImageObservation) ([]client.Object, error) {
 	// Build owner reference
 	ownerRef := []metav1.OwnerReference{
 		{
@@ -185,9 +185,9 @@ func (r *AIMImageReconciler) plan(ctx context.Context, image *aimv1alpha1.AIMIma
 }
 
 // projectStatus computes status from observation + errors (modifies image.Status directly)
-func (r *AIMImageReconciler) projectStatus(
+func (r *AIMModelReconciler) projectStatus(
 	ctx context.Context,
-	image *aimv1alpha1.AIMImage,
+	image *aimv1alpha1.AIMModel,
 	obs *shared.ImageObservation,
 	errs controllerutils.ReconcileErrors,
 ) error {
@@ -256,9 +256,9 @@ func (r *AIMImageReconciler) projectStatus(
 	return nil
 }
 
-func (r *AIMImageReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *AIMModelReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&aimv1alpha1.AIMImage{}).
+		For(&aimv1alpha1.AIMModel{}).
 		Owns(&aimv1alpha1.AIMServiceTemplate{}).
 		Named("aim-image").
 		Complete(r)

@@ -7,8 +7,8 @@ resources:
 - bases/kaiwo.silogen.ai_kaiwoqueueconfigs.yaml
 - bases/config.kaiwo.silogen.ai_kaiwoconfigs.yaml
 - bases/config.kaiwo.silogen.ai_aimnamespaceconfigs.yaml
-- bases/aim.silogen.ai_aimimages.yaml
-- bases/aim.silogen.ai_aimclusterimages.yaml
+- bases/aim.silogen.ai_aimmodels.yaml
+- bases/aim.silogen.ai_aimclustermodels.yaml
 - bases/aim.silogen.ai_aimclusterservicetemplates.yaml
 - bases/aim.silogen.ai_aimservicetemplates.yaml
 - bases/aim.silogen.ai_aimservices.yaml

@@ -37,7 +37,7 @@ func TestBuildDerivedTemplateAddsDerivedLabelAndClearsOwners(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: aimv1alpha1.AIMServiceSpec{
-			AIMImageName: "image",
+			AIMModelName: "image",
 		},
 	}
 

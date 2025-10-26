@@ -15,7 +15,7 @@ spec:
     - assert:
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMClusterImage
+          kind: AIMClusterModel
           metadata:
             name: buxybox-unsupported
           status:

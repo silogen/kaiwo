@@ -4,19 +4,19 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.1
-  name: aimclusterimages.aim.silogen.ai
+  name: aimclustermodels.aim.silogen.ai
 spec:
   group: aim.silogen.ai
   names:
     categories:
     - aim
     - all
-    kind: AIMClusterImage
-    listKind: AIMClusterImageList
-    plural: aimclusterimages
+    kind: AIMClusterModel
+    listKind: AIMClusterModelList
+    plural: aimclustermodels
     shortNames:
-    - aimclimg
-    singular: aimclusterimage
+    - aimclmdl
+    singular: aimclustermodel
   scope: Cluster
   versions:
   - additionalPrinterColumns:
@@ -32,7 +32,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: AIMClusterImage is the Schema for cluster-scoped AIM image catalog
+        description: AIMClusterModel is the Schema for cluster-scoped AIM model catalog
           entries.
         properties:
           apiVersion:
@@ -53,7 +53,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: AIMImageSpec defines the desired state of AIMImage.
+            description: AIMModelSpec defines the desired state of AIMModel.
             properties:
               defaultServiceTemplate:
                 description: DefaultServiceTemplate is the default template to use
@@ -149,7 +149,7 @@ spec:
             - image
             type: object
           status:
-            description: AIMImageStatus defines the observed state of AIMImage.
+            description: AIMModelStatus defines the observed state of AIMModel.
             properties:
               conditions:
                 description: Conditions represent the latest available observations
