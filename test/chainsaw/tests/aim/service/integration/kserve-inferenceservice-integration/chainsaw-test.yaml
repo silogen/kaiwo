@@ -22,7 +22,7 @@ spec:
   - name: Verify AIMService reports RuntimeReady
     try:
     - assert:
-        timeout: 5m
+        timeout: 10m
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMService

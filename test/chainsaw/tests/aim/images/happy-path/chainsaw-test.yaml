@@ -17,7 +17,7 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterModel
           metadata:
-            name: llama-3-8b-cluster-with-image
+            name: llama-3-8b-happy-path
           status:
             status: Ready
 
@@ -28,7 +28,7 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
-            name: llama-3-8b-cluster-with-image-mi300x-x1-latency-fp8
+            name: llama-3-8b-happy-path-mi300x-x1-latency-fp8
           spec:
             metric: latency
             precision: fp8
@@ -40,7 +40,7 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
-            name: llama-3-8b-cluster-with-image-mi300x-x1-throughput-fp8
+            name: llama-3-8b-happy-path-mi300x-x1-throughput-fp8
           spec:
             metric: throughput
             precision: fp8
@@ -52,7 +52,7 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
-            name: llama-3-8b-cluster-with-image-mi325x-x1-latency-fp8
+            name: llama-3-8b-happy-path-mi325x-x1-latency-fp8
           spec:
             metric: latency
             precision: fp8
@@ -64,7 +64,7 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
-            name: llama-3-8b-cluster-with-image-mi325x-x1-throughput-fp8
+            name: llama-3-8b-happy-path-mi325x-x1-throughput-fp8
           spec:
             metric: throughput
             precision: fp8
