@@ -44,6 +44,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
@@ -70,11 +71,15 @@ const (
 )
 
 func (r *AIMModelCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
 	// Fetch CR
 	var mc aimv1alpha1.AIMModelCache
 	if err := r.Get(ctx, req.NamespacedName, &mc); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+
+	baseutils.Debug(logger, "Reconciling AIMModelCache", "name", mc.Name, "namespace", mc.Namespace)
 
 	return controllerutils.Reconcile(ctx, controllerutils.ReconcileSpec[*aimv1alpha1.AIMModelCache, aimv1alpha1.AIMModelCacheStatus]{
 		Client:   r.Client,
@@ -136,6 +141,7 @@ type observation struct {
 }
 
 func (r *AIMModelCacheReconciler) observe(ctx context.Context, mc *aimv1alpha1.AIMModelCache) (*observation, error) {
+	logger := log.FromContext(ctx)
 	ob := &observation{}
 	// PVC
 	pvcName := r.pvcName(mc)
@@ -144,9 +150,11 @@ func (r *AIMModelCacheReconciler) observe(ctx context.Context, mc *aimv1alpha1.A
 			return ob, fmt.Errorf("get pvc: %w", err)
 		}
 		ob.pvcFound = false
+		baseutils.Debug(logger, "PVC not found", "pvcName", pvcName)
 	} else {
 		ob.pvcFound = true
 		ob.pvcBound = ob.pvc.Status.Phase == corev1.ClaimBound
+		baseutils.Debug(logger, "PVC observed", "pvcName", pvcName, "phase", ob.pvc.Status.Phase, "bound", ob.pvcBound)
 
 		// Get StorageClass to check binding mode
 		if ob.pvc.Spec.StorageClassName != nil && *ob.pvc.Spec.StorageClassName != "" {
@@ -171,6 +179,7 @@ func (r *AIMModelCacheReconciler) observe(ctx context.Context, mc *aimv1alpha1.A
 			return ob, fmt.Errorf("get job: %w", err)
 		}
 		ob.jobFound = false
+		baseutils.Debug(logger, "Download job not found", "jobName", jobName)
 	} else {
 		ob.jobFound = true
 		for _, c := range ob.job.Status.Conditions {
@@ -187,6 +196,8 @@ func (r *AIMModelCacheReconciler) observe(ctx context.Context, mc *aimv1alpha1.A
 		if ob.job.Status.Active > 0 || baseutils.ValueOrDefault(ob.job.Status.Ready) > 0 {
 			ob.jobPendingOrRunning = true
 		}
+		baseutils.Debug(logger, "Download job observed", "jobName", jobName,
+			"succeeded", ob.jobSucceeded, "failed", ob.jobFailed, "running", ob.jobPendingOrRunning)
 	}
 
 	// derived storage flags
@@ -195,7 +206,8 @@ func (r *AIMModelCacheReconciler) observe(ctx context.Context, mc *aimv1alpha1.A
 	return ob, nil
 }
 
-func (r *AIMModelCacheReconciler) plan(_ context.Context, mc *aimv1alpha1.AIMModelCache, ob *observation) ([]client.Object, error) {
+func (r *AIMModelCacheReconciler) plan(ctx context.Context, mc *aimv1alpha1.AIMModelCache, ob *observation) ([]client.Object, error) {
+	logger := log.FromContext(ctx)
 	var desired []client.Object
 
 	if ob == nil {
@@ -211,13 +223,19 @@ func (r *AIMModelCacheReconciler) plan(_ context.Context, mc *aimv1alpha1.AIMMod
 	// Include Job when storage is ready OR when PVC is pending with WaitForFirstConsumer
 	canCreateJob := ob.storageReady || (ob.pvcFound && ob.pvc.Status.Phase == corev1.ClaimPending && ob.waitForFirstConsumer)
 	if canCreateJob && !ob.jobFound {
+		baseutils.Debug(logger, "Planning to create download job",
+			"storageReady", ob.storageReady,
+			"waitForFirstConsumer", ob.waitForFirstConsumer)
 
 		job := r.buildDownloadJob(mc, r.jobName(mc), r.pvcName(mc))
 		if err := ctrl.SetControllerReference(mc, job, r.Scheme); err != nil {
 			return desired, fmt.Errorf("owner job: %w", err)
 		}
 		desired = append(desired, job)
-
+	} else if !canCreateJob {
+		baseutils.Debug(logger, "Waiting for storage to be ready before creating job",
+			"pvcFound", ob.pvcFound,
+			"pvcPhase", ob.pvc.Status.Phase)
 	}
 
 	return desired, nil
@@ -244,7 +262,8 @@ func (r *AIMModelCacheReconciler) calculateStateFlags(ob observation) stateFlags
 	}
 }
 
-func (r *AIMModelCacheReconciler) projectStatus(_ context.Context, mc *aimv1alpha1.AIMModelCache, ob *observation, errs controllerutils.ReconcileErrors) error {
+func (r *AIMModelCacheReconciler) projectStatus(ctx context.Context, mc *aimv1alpha1.AIMModelCache, ob *observation, errs controllerutils.ReconcileErrors) error {
+	logger := log.FromContext(ctx)
 	status := mc.Status
 	var conditions []metav1.Condition
 
@@ -273,6 +292,8 @@ func (r *AIMModelCacheReconciler) projectStatus(_ context.Context, mc *aimv1alph
 		for _, cond := range conditions {
 			meta.SetStatusCondition(&mc.Status.Conditions, cond)
 		}
+		logger.Error(nil, "Model cache reconciliation failed", "status", mc.Status.Status)
+		controllerutils.EmitWarningEvent(r.Recorder, mc, "ReconcileFailed", "Failed to reconcile model cache")
 		return nil
 	}
 
@@ -291,10 +312,38 @@ func (r *AIMModelCacheReconciler) projectStatus(_ context.Context, mc *aimv1alph
 	for _, cond := range status.Conditions {
 		meta.SetStatusCondition(&mc.Status.Conditions, cond)
 	}
-	mc.Status.Status = r.determineOverallStatus(stateFlags, *ob)
+	newStatus := r.determineOverallStatus(stateFlags, *ob)
 
-	// fmt.Printf("%v\n", newStatus)
-	// r.Recorder
+	// Log and emit events for status transitions
+	if mc.Status.Status != newStatus {
+		logger.Info("Model cache status changed",
+			"previousStatus", mc.Status.Status,
+			"newStatus", newStatus,
+			"pvcName", mc.Status.PersistentVolumeClaim)
+
+		switch newStatus {
+		case aimv1alpha1.AIMModelCacheStatusAvailable:
+			controllerutils.EmitNormalEvent(r.Recorder, mc, "CacheReady",
+				fmt.Sprintf("Model cache is available at PVC %s", mc.Status.PersistentVolumeClaim))
+		case aimv1alpha1.AIMModelCacheStatusFailed:
+			var reason string
+			if ob.storageLost {
+				reason = "PVC lost"
+			} else if ob.jobFailed {
+				reason = "Download job failed"
+			} else {
+				reason = "Unknown failure"
+			}
+			controllerutils.EmitWarningEvent(r.Recorder, mc, "CacheFailed",
+				fmt.Sprintf("Model cache failed: %s", reason))
+		case aimv1alpha1.AIMModelCacheStatusProgressing:
+			baseutils.Debug(logger, "Model cache progressing",
+				"pvcBound", ob.pvcBound,
+				"jobRunning", ob.jobPendingOrRunning)
+		}
+	}
+
+	mc.Status.Status = newStatus
 
 	return nil
 }

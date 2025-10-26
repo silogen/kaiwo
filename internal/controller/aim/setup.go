@@ -79,6 +79,7 @@ func SetupWithManager(mgr ctrl.Manager) error {
 	if err := (&AIMModelReconciler{
 		Client:    mgr.GetClient(),
 		Scheme:    mgr.GetScheme(),
+		Recorder:  mgr.GetEventRecorderFor("aim-image-controller"),
 		Clientset: clientset,
 	}).SetupWithManager(mgr); err != nil {
 		return err
@@ -88,6 +89,7 @@ func SetupWithManager(mgr ctrl.Manager) error {
 	if err := (&AIMClusterModelReconciler{
 		Client:    mgr.GetClient(),
 		Scheme:    mgr.GetScheme(),
+		Recorder:  mgr.GetEventRecorderFor("aim-cluster-image-controller"),
 		Clientset: clientset,
 	}).SetupWithManager(mgr); err != nil {
 		return err

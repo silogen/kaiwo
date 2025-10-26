@@ -134,10 +134,18 @@ func (r *AIMServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 }
 
 func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1.AIMService) (*shared.ServiceObservation, error) {
+	logger := log.FromContext(ctx)
 	resolution, selectionStatus, err := shared.ResolveTemplateNameForService(ctx, r.Client, service)
 	if err != nil {
 		return nil, err
 	}
+
+	baseutils.Debug(logger, "Template resolution complete",
+		"finalName", resolution.FinalName,
+		"baseName", resolution.BaseName,
+		"derived", resolution.Derived,
+		"autoSelected", selectionStatus.AutoSelected,
+		"candidateCount", selectionStatus.CandidateCount)
 
 	obs := &shared.ServiceObservation{
 		TemplateName:              resolution.FinalName,
@@ -156,10 +164,12 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 	// Observe template based on whether it's derived or not
 	if resolution.Derived {
 		obs.TemplateNamespace = service.Namespace
+		baseutils.Debug(logger, "Observing derived template", "templateName", resolution.FinalName)
 		if err := shared.ObserveDerivedTemplate(ctx, r.Client, service, resolution, obs); err != nil {
 			return nil, err
 		}
 	} else if resolution.FinalName != "" {
+		baseutils.Debug(logger, "Observing non-derived template", "templateName", resolution.FinalName, "scope", resolution.Scope)
 		if err := shared.ObserveNonDerivedTemplate(ctx, r.Client, service, resolution.FinalName, resolution.Scope, obs); err != nil {
 			return nil, err
 		}
@@ -175,22 +185,27 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 	// This prevents magic template creation and enforces explicit configuration.
 	if !obs.TemplateFound() && resolution.Derived {
 		obs.ShouldCreateTemplate = true
+		baseutils.Debug(logger, "Will create derived template", "templateName", obs.TemplateName)
 	}
 
 	// Resolve route path if routing is enabled via service or runtime defaults
 	routingConfig := routingconfig.Resolve(service, obs.RuntimeConfigSpec.Routing)
 	if routingConfig.Enabled && obs.TemplateFound() {
+		baseutils.Debug(logger, "Routing is enabled, resolving route path")
 		if routePath, err := shared.ResolveServiceRoutePath(service, obs.RuntimeConfigSpec); err != nil {
 			obs.RouteTemplateErr = err
+			baseutils.Debug(logger, "Route path resolution failed", "error", err)
 		} else {
 			obs.RoutePath = routePath
+			baseutils.Debug(logger, "Route path resolved", "path", routePath)
 		}
 	}
 
 	return obs, nil
 }
 
-func (r *AIMServiceReconciler) plan(_ context.Context, service *aimv1alpha1.AIMService, obs *shared.ServiceObservation) []client.Object {
+func (r *AIMServiceReconciler) plan(ctx context.Context, service *aimv1alpha1.AIMService, obs *shared.ServiceObservation) []client.Object {
+	logger := log.FromContext(ctx)
 	var desired []client.Object
 
 	if obs == nil {
@@ -208,8 +223,11 @@ func (r *AIMServiceReconciler) plan(_ context.Context, service *aimv1alpha1.AIMS
 
 	// Manage namespace-scoped template if we created it or need to create it.
 	if obs.ShouldCreateTemplate || (obs.Scope == shared.TemplateScopeNamespace && obs.TemplateOwnedByService) {
+		baseutils.Debug(logger, "Planning to manage derived template",
+			"shouldCreate", obs.ShouldCreateTemplate,
+			"ownedByService", obs.TemplateOwnedByService)
 		var baseSpec *aimv1alpha1.AIMServiceTemplateSpec
-		if obs != nil && obs.TemplateSpec != nil {
+		if obs.TemplateSpec != nil {
 			baseSpec = obs.TemplateSpec.DeepCopy()
 		}
 		template := shared.BuildDerivedTemplate(service, obs.TemplateName, baseSpec)
@@ -218,6 +236,7 @@ func (r *AIMServiceReconciler) plan(_ context.Context, service *aimv1alpha1.AIMS
 
 	// Only create/update the InferenceService once the template is available.
 	if obs.TemplateAvailable && obs.RuntimeConfigErr == nil {
+		baseutils.Debug(logger, "Template is available, planning InferenceService")
 		routePath := shared.DefaultRoutePath(service)
 		if obs.RouteTemplateErr == nil && obs.RoutePath != "" {
 			routePath = obs.RoutePath
@@ -233,6 +252,7 @@ func (r *AIMServiceReconciler) plan(_ context.Context, service *aimv1alpha1.AIMS
 
 		// Only proceed if we have a model source (discovery must have succeeded and populated ModelSources)
 		if templateState.ModelSource != nil {
+			baseutils.Debug(logger, "Model source available, building InferenceService")
 			serviceState := aimstate.NewServiceState(service, templateState, aimstate.ServiceStateOptions{
 				RuntimeName: obs.RuntimeName(),
 				RoutePath:   routePath,
@@ -241,12 +261,21 @@ func (r *AIMServiceReconciler) plan(_ context.Context, service *aimv1alpha1.AIMS
 			desired = append(desired, inferenceService)
 
 			if serviceState.Routing.Enabled && serviceState.Routing.GatewayRef != nil && obs.RouteTemplateErr == nil {
+				baseutils.Debug(logger, "Routing enabled, building HTTPRoute",
+					"gateway", serviceState.Routing.GatewayRef.Name,
+					"path", routePath)
 				route := shared.BuildInferenceServiceHTTPRoute(serviceState, ownerRef)
 				desired = append(desired, route)
 			}
+		} else {
+			baseutils.Debug(logger, "Model source not available, skipping InferenceService creation")
 		}
 		// If ModelSource is nil, the status projection will handle showing that discovery
 		// succeeded but produced no usable model sources.
+	} else {
+		baseutils.Debug(logger, "Template not available or runtime config error, skipping InferenceService",
+			"templateAvailable", obs.TemplateAvailable,
+			"hasRuntimeConfigErr", obs.RuntimeConfigErr != nil)
 	}
 
 	return desired
