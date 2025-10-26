@@ -204,9 +204,9 @@ func HandleImageNotReady(
 	return true
 }
 
-// HandleRouteTemplateError checks for route template errors and updates status.
-// Returns true if there is a route template error.
-func HandleRouteTemplateError(
+// HandlePathTemplateError checks for path template errors and updates status.
+// Returns true if there is a path template error.
+func HandlePathTemplateError(
 	status *aimv1alpha1.AIMServiceStatus,
 	service *aimv1alpha1.AIMService,
 	obs *ServiceObservation,
@@ -215,16 +215,16 @@ func HandleRouteTemplateError(
 	if service.Spec.Routing == nil || !service.Spec.Routing.Enabled {
 		return false
 	}
-	if obs == nil || obs.RouteTemplateErr == nil {
+	if obs == nil || obs.PathTemplateErr == nil {
 		return false
 	}
 
 	status.Status = aimv1alpha1.AIMServiceStatusDegraded
-	message := obs.RouteTemplateErr.Error()
-	reason := aimv1alpha1.AIMServiceReasonRouteTemplateInvalid
+	message := obs.PathTemplateErr.Error()
+	reason := aimv1alpha1.AIMServiceReasonPathTemplateInvalid
 	setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, reason, message)
 	setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, reason, "Cannot configure HTTP routing")
-	setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionFalse, reason, "Routing template is invalid")
+	setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionFalse, reason, "Path template is invalid")
 	setCondition(aimv1alpha1.AIMServiceConditionReady, metav1.ConditionFalse, reason, message)
 	return true
 }
@@ -614,7 +614,7 @@ func ProjectServiceStatus(
 		return
 	}
 
-	if HandleRouteTemplateError(status, service, obs, setCondition) {
+	if HandlePathTemplateError(status, service, obs, setCondition) {
 		return
 	}
 

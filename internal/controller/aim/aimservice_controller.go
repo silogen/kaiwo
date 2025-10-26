@@ -193,7 +193,7 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 	if routingConfig.Enabled && obs.TemplateFound() {
 		baseutils.Debug(logger, "Routing is enabled, resolving route path")
 		if routePath, err := shared.ResolveServiceRoutePath(service, obs.RuntimeConfigSpec); err != nil {
-			obs.RouteTemplateErr = err
+			obs.PathTemplateErr = err
 			baseutils.Debug(logger, "Route path resolution failed", "error", err)
 		} else {
 			obs.RoutePath = routePath
@@ -238,7 +238,7 @@ func (r *AIMServiceReconciler) plan(ctx context.Context, service *aimv1alpha1.AI
 	if obs.TemplateAvailable && obs.RuntimeConfigErr == nil {
 		baseutils.Debug(logger, "Template is available, planning InferenceService")
 		routePath := shared.DefaultRoutePath(service)
-		if obs.RouteTemplateErr == nil && obs.RoutePath != "" {
+		if obs.PathTemplateErr == nil && obs.RoutePath != "" {
 			routePath = obs.RoutePath
 		}
 		templateState := aimstate.NewTemplateState(aimstate.TemplateState{
@@ -260,7 +260,7 @@ func (r *AIMServiceReconciler) plan(ctx context.Context, service *aimv1alpha1.AI
 			inferenceService := shared.BuildInferenceService(serviceState, ownerRef)
 			desired = append(desired, inferenceService)
 
-			if serviceState.Routing.Enabled && serviceState.Routing.GatewayRef != nil && obs.RouteTemplateErr == nil {
+			if serviceState.Routing.Enabled && serviceState.Routing.GatewayRef != nil && obs.PathTemplateErr == nil {
 				baseutils.Debug(logger, "Routing enabled, building HTTPRoute",
 					"gateway", serviceState.Routing.GatewayRef.Name,
 					"path", routePath)

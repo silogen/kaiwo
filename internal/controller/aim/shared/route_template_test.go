@@ -36,8 +36,8 @@ func TestResolveServiceRoutePath_ServiceOverride(t *testing.T) {
 	svc := newTestService()
 	svc.Labels["aim.silogen.ai/workload-id"] = "Workload-42"
 	svc.Spec.Routing = &aimv1alpha1.AIMServiceRouting{
-		Enabled:       true,
-		RouteTemplate: "/{.metadata.namespace}/{.metadata.labels['aim.silogen.ai/workload-id']}/",
+		Enabled:      true,
+		PathTemplate: "/{.metadata.namespace}/{.metadata.labels['aim.silogen.ai/workload-id']}/",
 	}
 
 	path, err := ResolveServiceRoutePath(svc, aimv1alpha1.AIMRuntimeConfigSpec{})
@@ -55,7 +55,7 @@ func TestResolveServiceRoutePath_RuntimeConfigFallback(t *testing.T) {
 	runtimeCfg := aimv1alpha1.AIMRuntimeConfigSpec{
 		AIMRuntimeConfigCommon: aimv1alpha1.AIMRuntimeConfigCommon{
 			Routing: &aimv1alpha1.AIMRuntimeRoutingConfig{
-				RouteTemplate: "/{.metadata.namespace}/{.spec.aimImageName}",
+				PathTemplate: "/{.metadata.namespace}/{.spec.aimImageName}",
 			},
 		},
 	}
@@ -75,8 +75,8 @@ func TestResolveServiceRoutePath_Annotation(t *testing.T) {
 		"route.suffix": "Team-A/B",
 	}
 	svc.Spec.Routing = &aimv1alpha1.AIMServiceRouting{
-		Enabled:       true,
-		RouteTemplate: "/{.metadata.annotations['route.suffix']}",
+		Enabled:      true,
+		PathTemplate: "/{.metadata.annotations['route.suffix']}",
 	}
 
 	path, err := ResolveServiceRoutePath(svc, aimv1alpha1.AIMRuntimeConfigSpec{})
@@ -104,8 +104,8 @@ func TestResolveServiceRoutePath_DefaultFallback(t *testing.T) {
 func TestResolveServiceRoutePath_MissingLabel(t *testing.T) {
 	svc := newTestService()
 	svc.Spec.Routing = &aimv1alpha1.AIMServiceRouting{
-		Enabled:       true,
-		RouteTemplate: "/{.metadata.labels['missing']}",
+		Enabled:      true,
+		PathTemplate: "/{.metadata.labels['missing']}",
 	}
 
 	_, err := ResolveServiceRoutePath(svc, aimv1alpha1.AIMRuntimeConfigSpec{})
@@ -125,8 +125,8 @@ func TestResolveServiceRoutePath_PathTooLong(t *testing.T) {
 	svc.Labels["segment-c"] = segment
 	svc.Labels["segment-d"] = segment
 	svc.Spec.Routing = &aimv1alpha1.AIMServiceRouting{
-		Enabled:       true,
-		RouteTemplate: "/{.metadata.labels['segment-a']}/{.metadata.labels['segment-b']}/{.metadata.labels['segment-c']}/{.metadata.labels['segment-d']}",
+		Enabled:      true,
+		PathTemplate: "/{.metadata.labels['segment-a']}/{.metadata.labels['segment-b']}/{.metadata.labels['segment-c']}/{.metadata.labels['segment-d']}",
 	}
 
 	_, err := ResolveServiceRoutePath(svc, aimv1alpha1.AIMRuntimeConfigSpec{})
@@ -141,8 +141,8 @@ func TestResolveServiceRoutePath_PathTooLong(t *testing.T) {
 func TestResolveServiceRoutePath_InvalidExpression(t *testing.T) {
 	svc := newTestService()
 	svc.Spec.Routing = &aimv1alpha1.AIMServiceRouting{
-		Enabled:       true,
-		RouteTemplate: "/{.metadata[}",
+		Enabled:      true,
+		PathTemplate: "/{.metadata[}",
 	}
 
 	_, err := ResolveServiceRoutePath(svc, aimv1alpha1.AIMRuntimeConfigSpec{})

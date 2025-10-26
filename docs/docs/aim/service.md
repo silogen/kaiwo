@@ -37,7 +37,7 @@ spec:
     gatewayRef:
       name: inference-gateway
       namespace: gateways
-    routeTemplate: "/{.metadata.namespace}/{.metadata.labels['team']}/chat"
+    pathTemplate: "/{.metadata.namespace}/{.metadata.labels['team']}/chat"
 ```
 
 ## Fields
@@ -77,7 +77,7 @@ The `routing` field controls HTTP exposure through Gateway API:
 | `enabled` | bool | Enables HTTP routing management. When true, the controller creates an HTTPRoute resource. |
 | `gatewayRef` | ParentReference | Identifies the Gateway parent for the HTTPRoute. Required when routing is enabled. |
 | `annotations` | map[string]string | Annotations to apply to the created HTTPRoute resource. |
-| `routeTemplate` | string | HTTP path template rendered using JSONPath expressions. See [Routing templates](#routing-templates) for details. |
+| `pathTemplate` | string | HTTP path template rendered using JSONPath expressions. See [Routing templates](#routing-templates) for details. |
 
 ## Runtime configuration resolution
 
@@ -149,8 +149,8 @@ When `spec.routing.enabled` is true, the controller creates an HTTPRoute resourc
 
 Route templates use JSONPath expressions wrapped in `{...}` and are rendered against the entire AIMService object. The controller evaluates templates in this precedence order:
 
-1. `spec.routing.routeTemplate` on the service (highest precedence).
-2. `spec.routing.routeTemplate` from the resolved runtime config.
+1. `spec.routing.pathTemplate` on the service (highest precedence).
+2. `spec.routing.pathTemplate` from the resolved runtime config.
 3. Default: `/<namespace>/<service-uid>`.
 
 During rendering, the controller:
@@ -160,7 +160,7 @@ During rendering, the controller:
 - Trims duplicate slashes and the trailing slash.
 - Validates that the final path is ≤ 200 characters.
 
-If template evaluation fails (invalid JSONPath syntax, missing label/annotation, multi-value result, or path exceeds 200 characters), the service enters a `Degraded` state with condition reason `RouteTemplateInvalid`. The controller creates/updates the InferenceService but skips HTTPRoute creation until the template issue is resolved.
+If template evaluation fails (invalid JSONPath syntax, missing label/annotation, multi-value result, or path exceeds 200 characters), the service enters a `Degraded` state with condition reason `PathTemplateInvalid`. The controller creates/updates the InferenceService but skips HTTPRoute creation until the template issue is resolved.
 
 ### Routing template examples
 
@@ -168,23 +168,23 @@ Valid template expressions:
 
 ```yaml
 # Namespace-based path
-routeTemplate: "/{.metadata.namespace}/{.metadata.name}"
+pathTemplate: "/{.metadata.namespace}/{.metadata.name}"
 
 # Label-based path (label must exist)
-routeTemplate: "/team/{.metadata.labels['team']}/{.metadata.name}"
+pathTemplate: "/team/{.metadata.labels['team']}/{.metadata.name}"
 
 # Static path with namespace
-routeTemplate: "/inference/{.metadata.namespace}/llm"
+pathTemplate: "/inference/{.metadata.namespace}/llm"
 ```
 
 Invalid template expressions:
 
 ```yaml
 # Field doesn't exist - will degrade service
-routeTemplate: "/{.spec.model}"
+pathTemplate: "/{.spec.model}"
 
 # Missing label - will degrade service if label absent
-routeTemplate: "/{.metadata.labels['nonexistent']}"
+pathTemplate: "/{.metadata.labels['nonexistent']}"
 ```
 
 The resolved HTTP path is published in `status.routing.path` for reference. To inspect the generated HTTPRoute, use:
@@ -243,7 +243,7 @@ status:
   conditions:
   - type: Failure
     status: "True"
-    reason: RouteTemplateInvalid
+    reason: PathTemplateInvalid
     message: 'failed to evaluate route template "{.metadata.labels[''team'']}": label "team" not found'
   - type: RuntimeReady
     status: "True"
@@ -251,7 +251,7 @@ status:
     message: InferenceService is ready
   - type: RoutingReady
     status: "False"
-    reason: RouteTemplateInvalid
+    reason: PathTemplateInvalid
     message: HTTPRoute creation skipped due to invalid route template
 ```
 
@@ -308,7 +308,7 @@ The controller emits Kubernetes events on the AIMService object to provide visib
 | Normal | RuntimeConfigResolved | Runtime config successfully resolved and applied. |
 | Warning | DefaultRuntimeConfigNotFound | The implicit `default` runtime config was not found (non-fatal). |
 | Warning | RuntimeConfigMissing | An explicitly referenced runtime config does not exist (fatal). |
-| Warning | RouteTemplateInvalid | Route template evaluation failed. Includes the specific error. |
+| Warning | PathTemplateInvalid | Route template evaluation failed. Includes the specific error. |
 | Normal | TemplateResolved | Template successfully resolved or created. |
 | Normal | InferenceServiceCreated | KServe InferenceService created. |
 | Normal | InferenceServiceUpdated | KServe InferenceService updated. |

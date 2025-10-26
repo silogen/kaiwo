@@ -234,11 +234,11 @@ The `modelSources` array is the primary output of the discovery cache. Each entr
 
 When `spec.routing.enabled` is true on an `AIMService`, the operator creates an HTTPRoute that forwards traffic through Gateway API. The HTTP path prefix is computed in three steps:
 
-1. Use `spec.routing.routeTemplate` on the service if present.
-2. Otherwise fall back to the resolved runtime config’s `spec.routing.routeTemplate`.
+1. Use `spec.routing.pathTemplate` on the service if present.
+2. Otherwise fall back to the resolved runtime config’s `spec.routing.pathTemplate`.
 3. If neither is set, default to `/<namespace>/<service-uid>`.
 
-Route templates accept JSONPath fragments wrapped in `{…}` and are rendered against the full `AIMService` object. Every segment is lowercased, RFC 3986 encoded, and de-duplicated; the trailing slash is trimmed and the final string must stay under 200 characters. Invalid expressions, missing data, or a path that exceeds the limit degrade the service with reason `RouteTemplateInvalid`, and the controller skips HTTPRoute creation while leaving the ServingRuntime intact.
+Route templates accept JSONPath fragments wrapped in `{…}` and are rendered against the full `AIMService` object. Every segment is lowercased, RFC 3986 encoded, and de-duplicated; the trailing slash is trimmed and the final string must stay under 200 characters. Invalid expressions, missing data, or a path that exceeds the limit degrade the service with reason `PathTemplateInvalid`, and the controller skips HTTPRoute creation while leaving the ServingRuntime intact.
 
 Example override on the service:
 
@@ -249,7 +249,7 @@ spec:
     gatewayRef:
       name: inference-gateway
       namespace: gateways
-    routeTemplate: "/{.metadata.namespace}/{.metadata.labels['team']}/{.spec.model}/"
+    pathTemplate: "/{.metadata.namespace}/{.metadata.labels['team']}/{.spec.model}/"
 ```
 
-Namespace administrators can define the same `routeTemplate` field inside runtime configs to establish tenant-wide defaults, while individual services can provide more specific overrides when necessary. See [AIMService routing](./service.md#routing-templates) for the full behaviour.
+Namespace administrators can define the same `pathTemplate` field inside runtime configs to establish tenant-wide defaults, while individual services can provide more specific overrides when necessary. See [AIMService routing](./service.md#routing-templates) for the full behaviour.

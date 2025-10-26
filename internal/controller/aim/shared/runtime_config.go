@@ -180,9 +180,9 @@ func mergeRoutingConfig(clusterRouting, namespaceRouting *aimv1alpha1.AIMRuntime
 
 	// Both exist: merge with namespace taking precedence
 	merged := &aimv1alpha1.AIMRuntimeRoutingConfig{
-		Enabled:       clusterRouting.Enabled,
-		GatewayRef:    clusterRouting.GatewayRef,
-		RouteTemplate: clusterRouting.RouteTemplate,
+		Enabled:      clusterRouting.Enabled,
+		GatewayRef:   clusterRouting.GatewayRef,
+		PathTemplate: clusterRouting.PathTemplate,
 	}
 
 	// Override with namespace values if set
@@ -192,8 +192,8 @@ func mergeRoutingConfig(clusterRouting, namespaceRouting *aimv1alpha1.AIMRuntime
 	if namespaceRouting.GatewayRef != nil {
 		merged.GatewayRef = namespaceRouting.GatewayRef
 	}
-	if namespaceRouting.RouteTemplate != "" {
-		merged.RouteTemplate = namespaceRouting.RouteTemplate
+	if namespaceRouting.PathTemplate != "" {
+		merged.PathTemplate = namespaceRouting.PathTemplate
 	}
 
 	return merged

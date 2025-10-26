@@ -96,7 +96,7 @@ type AIMRuntimeRoutingConfig struct {
 	// +optional
 	GatewayRef *gatewayapiv1.ParentReference `json:"gatewayRef,omitempty"`
 
-	// RouteTemplate defines the HTTP path template for routes, evaluated using JSONPath expressions.
+	// PathTemplate defines the HTTP path template for routes, evaluated using JSONPath expressions.
 	// The template is rendered against the AIMService object to generate unique paths.
 	//
 	// Example templates:
@@ -110,10 +110,10 @@ type AIMRuntimeRoutingConfig struct {
 	// - Produce a path ≤ 200 characters after rendering
 	// - Result in valid URL path segments (lowercase, RFC 1123 compliant)
 	//
-	// If evaluation fails, the service enters Degraded state with RouteTemplateInvalid reason.
-	// Individual services can override this template via spec.routing.routeTemplate.
+	// If evaluation fails, the service enters Degraded state with PathTemplateInvalid reason.
+	// Individual services can override this template via spec.routing.pathTemplate.
 	// +optional
-	RouteTemplate string `json:"routeTemplate,omitempty"`
+	PathTemplate string `json:"pathTemplate,omitempty"`
 }
 
 // AIMRuntimeConfigStatus records the resolved config reference surfaced to consumers.

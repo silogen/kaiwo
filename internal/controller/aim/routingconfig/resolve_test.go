@@ -118,15 +118,15 @@ func TestResolveMergesAnnotations(t *testing.T) {
 	}
 }
 
-func TestResolveMergesRouteTemplate(t *testing.T) {
+func TestResolveMergesPathTemplate(t *testing.T) {
 	service := &aimv1alpha1.AIMService{}
 	service.Spec.Routing = &aimv1alpha1.AIMServiceRouting{
-		Enabled:       true,
-		RouteTemplate: "/custom/{.metadata.name}",
+		Enabled:      true,
+		PathTemplate: "/custom/{.metadata.name}",
 	}
 	runtimeCfg := &aimv1alpha1.AIMRuntimeRoutingConfig{
-		Enabled:       boolPtr(true),
-		RouteTemplate: "/default/{.metadata.name}",
+		Enabled:      boolPtr(true),
+		PathTemplate: "/default/{.metadata.name}",
 	}
 
 	result := Resolve(service, runtimeCfg)
@@ -134,19 +134,19 @@ func TestResolveMergesRouteTemplate(t *testing.T) {
 	if !result.Enabled {
 		t.Fatalf("expected routing to be enabled")
 	}
-	if result.RouteTemplate != "/custom/{.metadata.name}" {
-		t.Fatalf("expected service route template to override runtime, got %s", result.RouteTemplate)
+	if result.PathTemplate != "/custom/{.metadata.name}" {
+		t.Fatalf("expected service route template to override runtime, got %s", result.PathTemplate)
 	}
 }
 
-func TestResolveUsesRuntimeRouteTemplateWhenServiceEmpty(t *testing.T) {
+func TestResolveUsesRuntimePathTemplateWhenServiceEmpty(t *testing.T) {
 	service := &aimv1alpha1.AIMService{}
 	service.Spec.Routing = &aimv1alpha1.AIMServiceRouting{
 		Enabled: true,
 	}
 	runtimeCfg := &aimv1alpha1.AIMRuntimeRoutingConfig{
-		Enabled:       boolPtr(true),
-		RouteTemplate: "/default/{.metadata.name}",
+		Enabled:      boolPtr(true),
+		PathTemplate: "/default/{.metadata.name}",
 	}
 
 	result := Resolve(service, runtimeCfg)
@@ -154,8 +154,8 @@ func TestResolveUsesRuntimeRouteTemplateWhenServiceEmpty(t *testing.T) {
 	if !result.Enabled {
 		t.Fatalf("expected routing to be enabled")
 	}
-	if result.RouteTemplate != "/default/{.metadata.name}" {
-		t.Fatalf("expected runtime route template when service doesn't specify one, got %s", result.RouteTemplate)
+	if result.PathTemplate != "/default/{.metadata.name}" {
+		t.Fatalf("expected runtime route template when service doesn't specify one, got %s", result.PathTemplate)
 	}
 }
 
@@ -186,18 +186,18 @@ func TestResolveServiceOverridesGatewayRef(t *testing.T) {
 func TestResolveCompleteServiceOverride(t *testing.T) {
 	service := &aimv1alpha1.AIMService{}
 	service.Spec.Routing = &aimv1alpha1.AIMServiceRouting{
-		Enabled:       false,
-		GatewayRef:    &gatewayapiv1.ParentReference{Name: "service-gateway"},
-		RouteTemplate: "/service/{.metadata.name}",
+		Enabled:      false,
+		GatewayRef:   &gatewayapiv1.ParentReference{Name: "service-gateway"},
+		PathTemplate: "/service/{.metadata.name}",
 		Annotations: map[string]string{
 			"key1": "value1",
 			"key2": "value2",
 		},
 	}
 	runtimeCfg := &aimv1alpha1.AIMRuntimeRoutingConfig{
-		Enabled:       boolPtr(true),
-		GatewayRef:    &gatewayapiv1.ParentReference{Name: "runtime-gateway"},
-		RouteTemplate: "/runtime/{.metadata.name}",
+		Enabled:      boolPtr(true),
+		GatewayRef:   &gatewayapiv1.ParentReference{Name: "runtime-gateway"},
+		PathTemplate: "/runtime/{.metadata.name}",
 	}
 
 	result := Resolve(service, runtimeCfg)
@@ -209,8 +209,8 @@ func TestResolveCompleteServiceOverride(t *testing.T) {
 	if result.GatewayRef.Name != "service-gateway" {
 		t.Fatalf("expected service gateway ref, got %s", result.GatewayRef.Name)
 	}
-	if result.RouteTemplate != "/service/{.metadata.name}" {
-		t.Fatalf("expected service route template, got %s", result.RouteTemplate)
+	if result.PathTemplate != "/service/{.metadata.name}" {
+		t.Fatalf("expected service route template, got %s", result.PathTemplate)
 	}
 	if len(result.Annotations) != 2 {
 		t.Fatalf("expected 2 annotations, got %d", len(result.Annotations))

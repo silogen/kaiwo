@@ -193,10 +193,10 @@ const (
 	AIMServiceReasonRuntimeConfigMissing = "RuntimeConfigMissing"
 
 	// Routing
-	AIMServiceReasonConfiguringRoute     = "ConfiguringRoute"
-	AIMServiceReasonRouteReady           = "RouteReady"
-	AIMServiceReasonRouteFailed          = "RouteFailed"
-	AIMServiceReasonRouteTemplateInvalid = "RouteTemplateInvalid"
+	AIMServiceReasonConfiguringRoute    = "ConfiguringRoute"
+	AIMServiceReasonRouteReady          = "RouteReady"
+	AIMServiceReasonRouteFailed         = "RouteFailed"
+	AIMServiceReasonPathTemplateInvalid = "PathTemplateInvalid"
 )
 
 // AIMService manages a KServe-based AIM inference service for the selected model and template.
@@ -239,10 +239,10 @@ type AIMServiceRouting struct {
 	// +optional
 	Annotations map[string]string `json:"annotations,omitempty"`
 
-	// RouteTemplate overrides the HTTP path template used for routing.
+	// PathTemplate overrides the HTTP path template used for routing.
 	// The value is rendered against the AIMService object using JSONPath expressions.
 	// +optional
-	RouteTemplate string `json:"routeTemplate,omitempty"`
+	PathTemplate string `json:"pathTemplate,omitempty"`
 }
 
 // AIMServiceRoutingStatus captures observed routing details.

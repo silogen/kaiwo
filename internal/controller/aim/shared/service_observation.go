@@ -85,7 +85,7 @@ type ServiceObservation struct {
 	ResolvedRuntimeConfig     *aimv1alpha1.AIMResolvedRuntimeConfig
 	ResolvedImage             *aimv1alpha1.AIMResolvedReference
 	RoutePath                 string
-	RouteTemplateErr          error
+	PathTemplateErr           error
 	RuntimeConfigErr          error
 	ImageErr                  error
 	TemplateStatus            *aimv1alpha1.AIMServiceTemplateStatus

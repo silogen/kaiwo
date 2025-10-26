@@ -66,7 +66,7 @@ spec:
 | `imagePullSecrets` | Registry credentials added to pod specs. |
 | `routing.enabled` | Enable or disable HTTP routing for services using this config. |
 | `routing.gatewayRef` | Gateway parent for HTTPRoute resources. |
-| `routing.routeTemplate` | Optional HTTP path template applied to services in the namespace. See [Routing templates](#routing-templates) for details. |
+| `routing.pathTemplate` | Optional HTTP path template applied to services in the namespace. See [Routing templates](#routing-templates) for details. |
 
 **Note**: If you want cluster-wide defaults for fields like `defaultStorageClassName` or `routing`, you must explicitly specify them in each namespace config. There is no automatic inheritance from cluster configs.
 
@@ -133,12 +133,12 @@ The AIM controllers determine the operator namespace from the `AIM_OPERATOR_NAME
 
 ## Routing templates
 
-Runtime configs can supply a reusable HTTP route template via `spec.routing.routeTemplate`. The template is rendered against the `AIMService` object using JSONPath expressions wrapped in `{…}`:
+Runtime configs can supply a reusable HTTP route template via `spec.routing.pathTemplate`. The template is rendered against the `AIMService` object using JSONPath expressions wrapped in `{…}`:
 
 ```yaml
 spec:
   routing:
-    routeTemplate: "/{.metadata.namespace}/{.metadata.labels['team']}/{.spec.model}/"
+    pathTemplate: "/{.metadata.namespace}/{.metadata.labels['team']}/{.spec.model}/"
 ```
 
 During reconciliation the controller:
@@ -147,6 +147,6 @@ During reconciliation the controller:
 - Lowercases and RFC 3986–encodes every path segment.
 - Trims duplicate slashes and the trailing slash, enforcing a 200-character maximum.
 
-A rendered path longer than 200 characters, an invalid JSONPath, or missing data degrades the `AIMService` with reason `RouteTemplateInvalid` and skips HTTPRoute creation.  
+A rendered path longer than 200 characters, an invalid JSONPath, or missing data degrades the `AIMService` with reason `PathTemplateInvalid` and skips HTTPRoute creation.  
 
-Services may override the runtime config by setting `spec.routing.routeTemplate`; if omitted, the runtime config (or the built-in namespace/UID default) is used. The service-level behaviour is described in [AIMService routing](./service.md#routing-templates).
+Services may override the runtime config by setting `spec.routing.pathTemplate`; if omitted, the runtime config (or the built-in namespace/UID default) is used. The service-level behaviour is described in [AIMService routing](./service.md#routing-templates).

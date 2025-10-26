@@ -31,10 +31,10 @@ import (
 // ResolvedRouting captures the effective routing configuration after applying service overrides
 // on top of runtime defaults.
 type ResolvedRouting struct {
-	Enabled       bool
-	GatewayRef    *gatewayapiv1.ParentReference
-	Annotations   map[string]string
-	RouteTemplate string
+	Enabled      bool
+	GatewayRef   *gatewayapiv1.ParentReference
+	Annotations  map[string]string
+	PathTemplate string
 }
 
 // Resolve determines the effective routing configuration by merging runtime config defaults
@@ -55,7 +55,7 @@ func Resolve(service *aimv1alpha1.AIMService, runtime *aimv1alpha1.AIMRuntimeRou
 		if runtime.GatewayRef != nil {
 			resolved.GatewayRef = runtime.GatewayRef.DeepCopy()
 		}
-		resolved.RouteTemplate = runtime.RouteTemplate
+		resolved.PathTemplate = runtime.PathTemplate
 	}
 
 	// Override with service-level config when present
@@ -76,9 +76,9 @@ func Resolve(service *aimv1alpha1.AIMService, runtime *aimv1alpha1.AIMRuntimeRou
 			}
 		}
 
-		// Override RouteTemplate if service specifies one
-		if serviceRouting.RouteTemplate != "" {
-			resolved.RouteTemplate = serviceRouting.RouteTemplate
+		// Override PathTemplate if service specifies one
+		if serviceRouting.PathTemplate != "" {
+			resolved.PathTemplate = serviceRouting.PathTemplate
 		}
 	}
 

@@ -10,6 +10,28 @@ spec:
     - apply:
         file: cluster-image.yaml
 
+  - name: Verify image status becomes Ready
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterModel
+          metadata:
+            name: llama-3-8b-cluster-with-image
+          status:
+            status: Ready
+
+  - name: Verify ClusterImageReady event is emitted
+    try:
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Event
+          (involvedObject.kind): AIMClusterModel
+          (involvedObject.name): llama-3-8b-cluster-with-image
+          (reason): ClusterImageReady
+          (type): Normal
+
   - name: Ensure templates are created
     try:
     - assert:
@@ -60,3 +82,18 @@ spec:
             gpuSelector:
               count: 1
               model: MI325X
+
+  - name: Verify image metadata is populated
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterModel
+          metadata:
+            name: llama-3-8b-cluster-with-image
+          status:
+            imageMetadata:
+              model:
+                canonicalName: meta-llama/Llama-3.1-8B-Instruct
+                (recommendedDeployments != null): true
+                (recommendedDeployments | length(@) >= `2`): true

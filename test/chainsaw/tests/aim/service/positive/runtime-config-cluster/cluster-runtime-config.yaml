@@ -9,4 +9,4 @@ spec:
     gatewayRef:
       name: kserve-ingress-gateway
       namespace: kgateway-system
-    routeTemplate: "/cluster/{.metadata.name}"
+    pathTemplate: "/cluster/{.metadata.name}"

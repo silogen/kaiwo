@@ -1,7 +1,0 @@
-apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMRuntimeConfig
-metadata:
-  name: routing-template-service
-spec:
-  routing:
-    routeTemplate: "/default/{.metadata.namespace}/"

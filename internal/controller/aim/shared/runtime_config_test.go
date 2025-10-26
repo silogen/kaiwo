@@ -46,9 +46,9 @@ func TestMergeRuntimeConfigSpecs_OnlyCluster(t *testing.T) {
 		AIMRuntimeConfigCommon: aimv1alpha1.AIMRuntimeConfigCommon{
 			DefaultStorageClassName: "cluster-storage",
 			Routing: &aimv1alpha1.AIMRuntimeRoutingConfig{
-				Enabled:       boolPtr(true),
-				GatewayRef:    &gatewayapiv1.ParentReference{Name: testClusterGateway},
-				RouteTemplate: testClusterRouteTemplate,
+				Enabled:      boolPtr(true),
+				GatewayRef:   &gatewayapiv1.ParentReference{Name: testClusterGateway},
+				PathTemplate: testClusterRouteTemplate,
 			},
 		},
 	}
@@ -95,9 +95,9 @@ func TestMergeRuntimeConfigSpecs_MergesRouting(t *testing.T) {
 	clusterSpec := aimv1alpha1.AIMClusterRuntimeConfigSpec{
 		AIMRuntimeConfigCommon: aimv1alpha1.AIMRuntimeConfigCommon{
 			Routing: &aimv1alpha1.AIMRuntimeRoutingConfig{
-				Enabled:       boolPtr(true),
-				GatewayRef:    &gatewayapiv1.ParentReference{Name: testClusterGateway},
-				RouteTemplate: testClusterRouteTemplate,
+				Enabled:      boolPtr(true),
+				GatewayRef:   &gatewayapiv1.ParentReference{Name: testClusterGateway},
+				PathTemplate: testClusterRouteTemplate,
 			},
 		},
 	}
@@ -105,7 +105,7 @@ func TestMergeRuntimeConfigSpecs_MergesRouting(t *testing.T) {
 	namespaceSpec := aimv1alpha1.AIMRuntimeConfigSpec{
 		AIMRuntimeConfigCommon: aimv1alpha1.AIMRuntimeConfigCommon{
 			Routing: &aimv1alpha1.AIMRuntimeRoutingConfig{
-				RouteTemplate: testNsRouteTemplate,
+				PathTemplate: testNsRouteTemplate,
 			},
 		},
 	}
@@ -124,21 +124,21 @@ func TestMergeRuntimeConfigSpecs_MergesRouting(t *testing.T) {
 		t.Error("expected gateway from cluster config")
 	}
 	// RouteTemplate should come from namespace (override)
-	if merged.Routing.RouteTemplate != testNsRouteTemplate {
-		t.Errorf("expected namespace route template, got %s", merged.Routing.RouteTemplate)
+	if merged.Routing.PathTemplate != testNsRouteTemplate {
+		t.Errorf("expected namespace route template, got %s", merged.Routing.PathTemplate)
 	}
 }
 
 func TestMergeRoutingConfig_BothPresent(t *testing.T) {
 	clusterRouting := &aimv1alpha1.AIMRuntimeRoutingConfig{
-		Enabled:       boolPtr(true),
-		GatewayRef:    &gatewayapiv1.ParentReference{Name: testClusterGateway},
-		RouteTemplate: testClusterRouteTemplate,
+		Enabled:      boolPtr(true),
+		GatewayRef:   &gatewayapiv1.ParentReference{Name: testClusterGateway},
+		PathTemplate: testClusterRouteTemplate,
 	}
 
 	namespaceRouting := &aimv1alpha1.AIMRuntimeRoutingConfig{
-		Enabled:       boolPtr(false),
-		RouteTemplate: testNsRouteTemplate,
+		Enabled:      boolPtr(false),
+		PathTemplate: testNsRouteTemplate,
 	}
 
 	merged := mergeRoutingConfig(clusterRouting, namespaceRouting)
@@ -155,8 +155,8 @@ func TestMergeRoutingConfig_BothPresent(t *testing.T) {
 		t.Errorf("expected cluster gateway to remain, got %s", merged.GatewayRef.Name)
 	}
 	// Namespace route template overrides
-	if merged.RouteTemplate != testNsRouteTemplate {
-		t.Errorf("expected namespace route template, got %s", merged.RouteTemplate)
+	if merged.PathTemplate != testNsRouteTemplate {
+		t.Errorf("expected namespace route template, got %s", merged.PathTemplate)
 	}
 }
 
@@ -187,9 +187,9 @@ func TestMergeRoutingConfig_NamespaceOverridesGateway(t *testing.T) {
 
 func TestMergeRoutingConfig_OnlyCluster(t *testing.T) {
 	clusterRouting := &aimv1alpha1.AIMRuntimeRoutingConfig{
-		Enabled:       boolPtr(true),
-		GatewayRef:    &gatewayapiv1.ParentReference{Name: testClusterGateway},
-		RouteTemplate: testClusterRouteTemplate,
+		Enabled:      boolPtr(true),
+		GatewayRef:   &gatewayapiv1.ParentReference{Name: testClusterGateway},
+		PathTemplate: testClusterRouteTemplate,
 	}
 
 	merged := mergeRoutingConfig(clusterRouting, nil)
@@ -210,8 +210,8 @@ func TestMergeRoutingConfig_OnlyCluster(t *testing.T) {
 
 func TestMergeRoutingConfig_OnlyNamespace(t *testing.T) {
 	namespaceRouting := &aimv1alpha1.AIMRuntimeRoutingConfig{
-		Enabled:       boolPtr(false),
-		RouteTemplate: testNsRouteTemplate,
+		Enabled:      boolPtr(false),
+		PathTemplate: testNsRouteTemplate,
 	}
 
 	merged := mergeRoutingConfig(nil, namespaceRouting)
@@ -225,8 +225,8 @@ func TestMergeRoutingConfig_OnlyNamespace(t *testing.T) {
 	if *merged.Enabled != false {
 		t.Error("expected namespace enabled value")
 	}
-	if merged.RouteTemplate != testNsRouteTemplate {
-		t.Errorf("expected namespace route template, got %s", merged.RouteTemplate)
+	if merged.PathTemplate != testNsRouteTemplate {
+		t.Errorf("expected namespace route template, got %s", merged.PathTemplate)
 	}
 }
 

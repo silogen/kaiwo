@@ -190,9 +190,9 @@ spec:
                     required:
                     - name
                     type: object
-                  routeTemplate:
+                  pathTemplate:
                     description: |-
-                      RouteTemplate defines the HTTP path template for routes, evaluated using JSONPath expressions.
+                      PathTemplate defines the HTTP path template for routes, evaluated using JSONPath expressions.
                       The template is rendered against the AIMService object to generate unique paths.
 
                       Example templates:

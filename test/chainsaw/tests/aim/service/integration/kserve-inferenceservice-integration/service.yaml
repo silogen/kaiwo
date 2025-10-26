@@ -9,4 +9,4 @@ spec:
     gatewayRef:
       name: kserve-ingress-gateway
       namespace: kgateway-system
-    routeTemplate: "/integration/test"
+    pathTemplate: "/integration/test"
