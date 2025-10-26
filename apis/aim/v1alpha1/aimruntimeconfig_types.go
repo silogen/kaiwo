@@ -28,6 +28,25 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
+// AIMModelConfig controls model creation and discovery behavior.
+type AIMModelConfig struct {
+	// CreationScope controls the scope of models auto-created from AIMService resources
+	// that specify `spec.model.image` directly. When a service references an image URI and no
+	// matching model exists, the controller creates one. This field determines whether the new
+	// model is cluster-scoped (AIMClusterModel) or namespace-scoped (AIMModel).
+	// +kubebuilder:validation:Enum=Cluster;Namespace
+	// +kubebuilder:default=Cluster
+	// +optional
+	CreationScope string `json:"creationScope,omitempty"`
+
+	// AutoDiscovery controls whether models run discovery by default.
+	// When true, models run discovery jobs to extract metadata and auto-create templates.
+	// When false, discovery is skipped. Discovery failures are non-fatal and reported via conditions.
+	// +kubebuilder:default=true
+	// +optional
+	AutoDiscovery *bool `json:"autoDiscovery,omitempty"`
+}
+
 // AIMRuntimeConfigCommon captures configuration fields shared across cluster and namespace scopes.
 // These settings apply to both AIMRuntimeConfig (namespace-scoped) and AIMClusterRuntimeConfig (cluster-scoped).
 type AIMRuntimeConfigCommon struct {
@@ -36,6 +55,10 @@ type AIMRuntimeConfigCommon struct {
 	// specify a storage class. If this field is empty, the cluster's default storage class is used.
 	// +optional
 	DefaultStorageClassName string `json:"defaultStorageClassName,omitempty"`
+
+	// Model controls model creation and discovery defaults.
+	// +optional
+	Model *AIMModelConfig `json:"model,omitempty"`
 
 	// Routing controls HTTP routing defaults applied to AIM resources.
 	// When set, these defaults are used for AIMService resources that enable routing

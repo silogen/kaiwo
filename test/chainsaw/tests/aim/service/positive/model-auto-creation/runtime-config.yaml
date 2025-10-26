@@ -1,0 +1,10 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMRuntimeConfig
+metadata:
+  name: auto-creation-config
+spec:
+  model:
+    creationScope: Namespace
+    autoDiscovery: true
+  routing:
+    enabled: false

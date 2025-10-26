@@ -71,31 +71,19 @@ const (
 	AIMModelStatusFailed AIMModelStatusEnum = "Failed"
 )
 
-// AIMModelDiscoverySpec configures metadata discovery and template generation for an image.
-type AIMModelDiscoverySpec struct {
-	// Enabled toggles metadata discovery for this image. Disabled by default.
-	Enabled bool `json:"enabled,omitempty"`
-
-	// AutoCreateTemplates controls whether recommended deployments from discovery
-	// automatically create ServiceTemplates. Enabled by default when discovery runs.
-	// +optional
-	AutoCreateTemplates *bool `json:"autoCreateTemplates,omitempty"`
-}
-
 // AIMModelSpec defines the desired state of AIMModel.
 type AIMModelSpec struct {
 	// Image is the container image URI for this AIM model.
 	// This image is inspected by the operator to select runtime profiles used by templates.
+	// Discovery is always attempted, controlled by the runtime config's AutoDiscovery setting.
 	// +kubebuilder:validation:MinLength=1
 	Image string `json:"image"`
 
 	// DefaultServiceTemplate is the default template to use for this image, if the user does not provide any
 	DefaultServiceTemplate string `json:"defaultServiceTemplate,omitempty"`
 
-	// Discovery controls metadata extraction and automatic template creation for this image.
-	// +optional
-	Discovery AIMModelDiscoverySpec `json:"discovery,omitempty"`
 	// RuntimeConfigName references the AIM runtime configuration (by name) to use for this image.
+	// The runtime config controls discovery behavior and model creation scope.
 	// +kubebuilder:default=default
 	RuntimeConfigName string `json:"runtimeConfigName,omitempty"`
 
@@ -186,34 +174,4 @@ func (img *AIMClusterModel) GetStatus() *AIMModelStatus {
 
 func init() {
 	SchemeBuilder.Register(&AIMClusterModel{}, &AIMClusterModelList{}, &AIMModel{}, &AIMModelList{})
-}
-
-// IsEnabled returns true when discovery is enabled.
-func (d *AIMModelDiscoverySpec) IsEnabled() bool {
-	return d != nil && d.Enabled
-}
-
-// AutoCreateTemplatesEnabled returns true when auto template creation should run.
-// Defaults to true when unset.
-func (d *AIMModelDiscoverySpec) AutoCreateTemplatesEnabled() bool {
-	if d == nil || d.AutoCreateTemplates == nil {
-		return true
-	}
-	return *d.AutoCreateTemplates
-}
-
-// DiscoveryEnabled reports whether discovery is enabled on the image spec.
-func (spec *AIMModelSpec) DiscoveryEnabled() bool {
-	if spec == nil {
-		return false
-	}
-	return spec.Discovery.IsEnabled()
-}
-
-// AutoCreateTemplatesEnabled reports whether auto template creation is enabled on the image spec.
-func (spec *AIMModelSpec) AutoCreateTemplatesEnabled() bool {
-	if spec == nil {
-		return true
-	}
-	return spec.Discovery.AutoCreateTemplatesEnabled()
 }

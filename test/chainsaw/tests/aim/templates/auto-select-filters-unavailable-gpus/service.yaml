@@ -3,5 +3,6 @@ kind: AIMService
 metadata:
   name: test-filters-unavailable-service
 spec:
-  aimModelName: test-filters-unavailable
+  model:
+    ref: test-filters-unavailable
   # No templateRef - should auto-select MI300X template (H100 template is NotAvailable)

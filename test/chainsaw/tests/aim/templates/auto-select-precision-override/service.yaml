@@ -3,7 +3,8 @@ kind: AIMService
 metadata:
   name: test-precision-override-service
 spec:
-  aimModelName: test-precision-override
+  model:
+    ref: test-precision-override
   # Override precision to fp16 - should filter out fp8 template
   overrides:
     precision: fp16

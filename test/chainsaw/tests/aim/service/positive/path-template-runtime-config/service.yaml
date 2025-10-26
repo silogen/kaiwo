@@ -5,7 +5,8 @@ metadata:
   labels:
     team: Data-Team
 spec:
-  aimModelName: default-testing-llama-3-8b
+  model:
+    ref: default-testing-llama-3-8b
   runtimeConfigName: routing-template-config
   routing:
     enabled: true

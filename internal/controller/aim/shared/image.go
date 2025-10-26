@@ -118,11 +118,9 @@ type ImageObservation struct {
 	// ExistingTemplates are the ServiceTemplates currently owned by this image.
 	ExistingTemplates []client.Object
 
-	// DiscoveryEnabled reflects whether discovery is enabled on the image spec.
+	// DiscoveryEnabled reflects whether discovery is enabled from runtime config.
+	// Discovery is now always attempted unless disabled by runtime config.
 	DiscoveryEnabled bool
-
-	// AutoCreateTemplates indicates if template auto-creation is configured.
-	AutoCreateTemplates bool
 
 	// MetadataError captures the latest metadata format issue encountered during extraction.
 	MetadataError *MetadataFormatError
@@ -183,14 +181,16 @@ func ObserveImage(ctx context.Context, opts ImageObservationOptions) (*ImageObse
 		}
 	}
 
-	// Apply discovery configuration from the spec
-	if opts.GetImageSpec != nil {
-		spec := opts.GetImageSpec()
-		obs.DiscoveryEnabled = spec.DiscoveryEnabled()
-		obs.AutoCreateTemplates = spec.AutoCreateTemplatesEnabled()
-		if !obs.DiscoveryEnabled {
-			obs.MetadataAlreadyAttempted = true
+	// Apply discovery configuration from runtime config
+	// Discovery is always attempted by default, controlled by runtime config AutoDiscovery setting
+	obs.DiscoveryEnabled = true // default to true
+	if obs.RuntimeConfigResolution != nil && obs.RuntimeConfigResolution.EffectiveSpec.Model != nil {
+		if obs.RuntimeConfigResolution.EffectiveSpec.Model.AutoDiscovery != nil {
+			obs.DiscoveryEnabled = *obs.RuntimeConfigResolution.EffectiveSpec.Model.AutoDiscovery
 		}
+	}
+	if !obs.DiscoveryEnabled {
+		obs.MetadataAlreadyAttempted = true
 	}
 
 	// List existing owned templates
@@ -245,19 +245,22 @@ func PlanImageResources(ctx context.Context, input ImagePlanInput) ([]client.Obj
 
 	spec := input.ImageSpec
 	if input.Observation == nil {
-		observation.DiscoveryEnabled = spec.DiscoveryEnabled()
-		observation.AutoCreateTemplates = spec.AutoCreateTemplatesEnabled()
+		// Default discovery to enabled (controlled by runtime config)
+		observation.DiscoveryEnabled = true
+		if observation.RuntimeConfigResolution != nil && observation.RuntimeConfigResolution.EffectiveSpec.Model != nil {
+			if observation.RuntimeConfigResolution.EffectiveSpec.Model.AutoDiscovery != nil {
+				observation.DiscoveryEnabled = *observation.RuntimeConfigResolution.EffectiveSpec.Model.AutoDiscovery
+			}
+		}
 		if !observation.DiscoveryEnabled {
 			observation.MetadataAlreadyAttempted = true
 		}
 	}
 
 	discoveryEnabled := observation.DiscoveryEnabled
-	autoCreateTemplates := observation.AutoCreateTemplates
 	if input.Observation == nil {
-		// When observation was synthesized locally, fall back to spec defaults.
-		discoveryEnabled = spec.DiscoveryEnabled()
-		autoCreateTemplates = spec.AutoCreateTemplatesEnabled()
+		// When observation was synthesized locally, use the value we just set
+		discoveryEnabled = observation.DiscoveryEnabled
 	}
 
 	// Determine if we should attempt metadata extraction
@@ -330,7 +333,8 @@ func PlanImageResources(ctx context.Context, input ImagePlanInput) ([]client.Obj
 		baseutils.Debug(logger, "Skipping metadata extraction (already attempted or skipped)")
 	}
 
-	if discoveryEnabled && autoCreateTemplates {
+	// When discovery is enabled, templates are always auto-created if recommended deployments exist
+	if discoveryEnabled {
 		if extractedMetadata == nil || extractedMetadata.Model == nil || len(extractedMetadata.Model.RecommendedDeployments) == 0 {
 			formatErr := newMetadataFormatError(
 				"MetadataMissingRecommendedDeployments",
@@ -347,7 +351,7 @@ func PlanImageResources(ctx context.Context, input ImagePlanInput) ([]client.Obj
 	}
 
 	// If we have metadata with recommended deployments, create templates
-	if discoveryEnabled && autoCreateTemplates {
+	if discoveryEnabled {
 		createdTemplates := false
 		for _, deployment := range extractedMetadata.Model.RecommendedDeployments {
 			template := buildServiceTemplateFromDeployment(
@@ -532,11 +536,10 @@ func ProjectImageStatus(
 		return
 	}
 
-	discoveryEnabled := spec.DiscoveryEnabled()
-	autoCreateTemplates := spec.AutoCreateTemplatesEnabled()
+	// Discovery is now controlled by runtime config, defaults to true
+	discoveryEnabled := true
 	if observation != nil {
 		discoveryEnabled = observation.DiscoveryEnabled
-		autoCreateTemplates = observation.AutoCreateTemplates
 	}
 
 	metadataCompleted := extractedMetadata != nil
@@ -560,19 +563,8 @@ func ProjectImageStatus(
 		return
 	}
 
-	if !autoCreateTemplates {
-		if generatedAutoTemplates {
-			setAutoCondition(metav1.ConditionTrue, "RecommendedDeploymentsApplied", "Auto-generated templates from image recommended deployments")
-		} else {
-			setAutoCondition(metav1.ConditionFalse, "AutoTemplateCreationDisabled", "Auto template creation disabled")
-		}
-		if metadataCompleted {
-			markImageReady(status, "AutoTemplateCreationDisabled", "Auto template creation disabled; discovery complete", observedGeneration)
-		} else {
-			markImageProgressing(status, "DiscoveryInProgress", "Discovery enabled; awaiting metadata extraction", observedGeneration)
-		}
-		return
-	}
+	// Templates are always auto-created when discovery is enabled and recommended deployments exist
+	// This block is no longer needed since autoCreateTemplates is not a separate option
 
 	if !metadataCompleted {
 		setAutoCondition(metav1.ConditionFalse, "AutoTemplateCreationPending", "Auto template creation awaiting metadata extraction")

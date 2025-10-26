@@ -1,0 +1,8 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: cluster-auto-creation-service
+spec:
+  model:
+    image: ghcr.io/amd/mistral-7b-instruct:latest
+  runtimeConfigName: cluster-auto-creation-config

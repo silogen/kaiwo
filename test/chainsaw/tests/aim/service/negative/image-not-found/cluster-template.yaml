@@ -3,7 +3,8 @@ kind: AIMClusterServiceTemplate
 metadata:
   name: llama-3-8b-latency-image-missing
 spec:
-  aimModelName: non-existent-image
+  model:
+    ref: non-existent-image
   metric: latency
   gpuSelector:
     count: 1

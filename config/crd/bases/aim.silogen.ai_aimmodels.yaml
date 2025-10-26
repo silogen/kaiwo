@@ -59,24 +59,11 @@ spec:
                 description: DefaultServiceTemplate is the default template to use
                   for this image, if the user does not provide any
                 type: string
-              discovery:
-                description: Discovery controls metadata extraction and automatic
-                  template creation for this image.
-                properties:
-                  autoCreateTemplates:
-                    description: |-
-                      AutoCreateTemplates controls whether recommended deployments from discovery
-                      automatically create ServiceTemplates. Enabled by default when discovery runs.
-                    type: boolean
-                  enabled:
-                    description: Enabled toggles metadata discovery for this image.
-                      Disabled by default.
-                    type: boolean
-                type: object
               image:
                 description: |-
                   Image is the container image URI for this AIM model.
                   This image is inspected by the operator to select runtime profiles used by templates.
+                  Discovery is always attempted, controlled by the runtime config's AutoDiscovery setting.
                 minLength: 1
                 type: string
               resources:
@@ -142,8 +129,9 @@ spec:
                 type: object
               runtimeConfigName:
                 default: default
-                description: RuntimeConfigName references the AIM runtime configuration
-                  (by name) to use for this image.
+                description: |-
+                  RuntimeConfigName references the AIM runtime configuration (by name) to use for this image.
+                  The runtime config controls discovery behavior and model creation scope.
                 type: string
             required:
             - image

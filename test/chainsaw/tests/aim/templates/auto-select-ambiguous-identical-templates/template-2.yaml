@@ -3,7 +3,8 @@ kind: AIMClusterServiceTemplate
 metadata:
   name: test-ambiguous-template-2
 spec:
-  aimModelName: test-ambiguous
+  model:
+    ref: test-ambiguous
   metric: latency
   precision: fp8
   gpuSelector:

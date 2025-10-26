@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
 func TestFindMatchingTemplateForDerivedSpecNamespaceMatch(t *testing.T) {
@@ -49,7 +50,7 @@ func TestFindMatchingTemplateForDerivedSpecNamespaceMatch(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: aimv1alpha1.AIMServiceSpec{
-			AIMModelName: "example-image",
+			Model: aimv1alpha1.AIMServiceModel{Ref: baseutils.Pointer("example-image")},
 			Overrides: &aimv1alpha1.AIMServiceOverrides{
 				AIMRuntimeParameters: aimv1alpha1.AIMRuntimeParameters{
 					Metric:    ptr.To(aimv1alpha1.AIMMetricThroughput),
@@ -72,14 +73,14 @@ func TestFindMatchingTemplateForDerivedSpecNamespaceMatch(t *testing.T) {
 		},
 	}
 
-	existing := BuildDerivedTemplate(service, "existing-derived", baseSpec)
+	existing := BuildDerivedTemplate(service, "existing-derived", "example-image", baseSpec)
 
 	k8sClient := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(existing).
 		Build()
 
-	match, err := findMatchingTemplateForDerivedSpec(context.Background(), k8sClient, service, baseSpec)
+	match, err := findMatchingTemplateForDerivedSpec(context.Background(), k8sClient, service, "example-image", baseSpec)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -105,7 +106,7 @@ func TestFindMatchingTemplateForDerivedSpecClusterMatch(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: aimv1alpha1.AIMServiceSpec{
-			AIMModelName: "cluster-image",
+			Model: aimv1alpha1.AIMServiceModel{Ref: baseutils.Pointer("cluster-image")},
 			Overrides: &aimv1alpha1.AIMServiceOverrides{
 				AIMRuntimeParameters: aimv1alpha1.AIMRuntimeParameters{
 					Metric: ptr.To(aimv1alpha1.AIMMetricLatency),
@@ -138,7 +139,7 @@ func TestFindMatchingTemplateForDerivedSpecClusterMatch(t *testing.T) {
 		WithObjects(clusterTemplate).
 		Build()
 
-	match, err := findMatchingTemplateForDerivedSpec(context.Background(), k8sClient, service, baseSpec)
+	match, err := findMatchingTemplateForDerivedSpec(context.Background(), k8sClient, service, "cluster-image", baseSpec)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -164,7 +165,7 @@ func TestFindMatchingTemplateForDerivedSpecNoMatch(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: aimv1alpha1.AIMServiceSpec{
-			AIMModelName: "original-image",
+			Model: aimv1alpha1.AIMServiceModel{Ref: baseutils.Pointer("original-image")},
 			Overrides: &aimv1alpha1.AIMServiceOverrides{
 				AIMRuntimeParameters: aimv1alpha1.AIMRuntimeParameters{
 					Precision: ptr.To(aimv1alpha1.AIMPrecisionBF16),
@@ -198,7 +199,7 @@ func TestFindMatchingTemplateForDerivedSpecNoMatch(t *testing.T) {
 		WithObjects(otherTemplate).
 		Build()
 
-	match, err := findMatchingTemplateForDerivedSpec(context.Background(), k8sClient, service, baseSpec)
+	match, err := findMatchingTemplateForDerivedSpec(context.Background(), k8sClient, service, "original-image", baseSpec)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

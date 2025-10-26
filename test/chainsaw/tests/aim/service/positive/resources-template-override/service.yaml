@@ -3,5 +3,6 @@ kind: AIMService
 metadata:
   name: template-override-service
 spec:
-  aimModelName: template-override-image
+  model:
+    ref: template-override-image
   templateRef: template-override-template

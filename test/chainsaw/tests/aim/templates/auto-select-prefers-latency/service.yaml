@@ -3,5 +3,6 @@ kind: AIMService
 metadata:
   name: test-prefers-latency-service
 spec:
-  aimModelName: test-prefers-latency
+  model:
+    ref: test-prefers-latency
   # No templateRef and no overrides - should prefer latency over throughput

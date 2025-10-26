@@ -28,6 +28,23 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
+// AIMServiceModel specifies which model to deploy. Exactly one field must be set.
+// +kubebuilder:validation:XValidation:rule="(has(self.ref) && !has(self.image)) || (!has(self.ref) && has(self.image))",message="exactly one of ref or image must be specified"
+type AIMServiceModel struct {
+	// Ref references an existing AIMModel or AIMClusterModel by metadata.name.
+	// The controller looks for a namespace-scoped AIMModel first, then falls back to cluster-scoped AIMClusterModel.
+	// Example: `meta-llama-3-8b`.
+	// +optional
+	Ref *string `json:"ref,omitempty"`
+
+	// Image specifies a container image URI directly.
+	// The controller searches for an existing model with this image, or creates one if none exists.
+	// The scope of the created model is controlled by the runtime config's ModelCreationScope field.
+	// Example: `ghcr.io/silogen/llama-3-8b:v1.2.0`.
+	// +optional
+	Image *string `json:"image,omitempty"`
+}
+
 // AIMServiceOverrides allows overriding template parameters at the service level.
 // All fields are optional. When specified, they override the corresponding values
 // from the referenced AIMServiceTemplate.
@@ -42,11 +59,10 @@ type AIMServiceOverrides struct {
 // runtime selection knobs, while the overrides field allows service-specific
 // customization.
 type AIMServiceSpec struct {
-	// AIMModelName is the canonical model name (including version/revision) to deploy.
-	// Expected to match the `spec.metadata.name` of an AIMModel. Example:
-	// `meta-llama-3-8b-1-1-20240915`.
-	// +kubebuilder:validation:MinLength=1
-	AIMModelName string `json:"aimModelName"`
+	// Model specifies which model to deploy using one of the available reference methods.
+	// Use `ref` to reference an existing AIMModel/AIMClusterModel by name, or use `image`
+	// to specify a container image URI directly (which will auto-create a model if needed).
+	Model AIMServiceModel `json:"model"`
 
 	// TemplateRef is the name of the AIMServiceTemplate or AIMClusterServiceTemplate to use.
 	// The template selects the runtime profile and GPU parameters.
@@ -176,6 +192,7 @@ const (
 	AIMServiceReasonTemplateNotFound           = "TemplateNotFound"
 	AIMServiceReasonModelNotFound              = "ModelNotFound"
 	AIMServiceReasonModelNotReady              = "ModelNotReady"
+	AIMServiceReasonMultipleModelsFound        = "MultipleModelsFound"
 	AIMServiceReasonResolved                   = "Resolved"
 	AIMServiceReasonValidationFailed           = "ValidationFailed"
 	AIMServiceReasonTemplateSelectionAmbiguous = "TemplateSelectionAmbiguous"
@@ -204,8 +221,8 @@ const (
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=aimsvc,categories=aim;all
 // +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.status`
-// +kubebuilder:printcolumn:name="Image",type=string,JSONPath=`.spec.aimImageName`
-// +kubebuilder:printcolumn:name="Template",type=string,JSONPath=`.status.resolvedTemplateRef`
+// +kubebuilder:printcolumn:name="Model",type=string,JSONPath=`.status.resolvedImage.name`
+// +kubebuilder:printcolumn:name="Template",type=string,JSONPath=`.status.resolvedTemplate.name`
 // +kubebuilder:printcolumn:name="Replicas",type=integer,JSONPath=`.spec.replicas`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 type AIMService struct {

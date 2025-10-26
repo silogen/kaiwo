@@ -3,7 +3,8 @@ kind: AIMService
 metadata:
   name: test-service
 spec:
-  aimModelName: default-testing-llama-3-8b
+  model:
+    ref: default-testing-llama-3-8b
   replicas: 1
   routing:
     enabled: false

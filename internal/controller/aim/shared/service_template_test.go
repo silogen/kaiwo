@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
 func TestBuildDerivedTemplateAddsDerivedLabelAndClearsOwners(t *testing.T) {
@@ -37,11 +38,11 @@ func TestBuildDerivedTemplateAddsDerivedLabelAndClearsOwners(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: aimv1alpha1.AIMServiceSpec{
-			AIMModelName: "image",
+			Model: aimv1alpha1.AIMServiceModel{Ref: baseutils.Pointer("image")},
 		},
 	}
 
-	template := BuildDerivedTemplate(service, "example-ovr-12345678", nil)
+	template := BuildDerivedTemplate(service, "example-ovr-12345678", "image", nil)
 
 	if template == nil {
 		t.Fatal("expected template to be constructed")

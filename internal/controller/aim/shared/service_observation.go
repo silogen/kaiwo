@@ -146,7 +146,19 @@ func ResolveTemplateNameForService(
 
 	status.AutoSelected = true
 
-	imageName := strings.TrimSpace(service.Spec.AIMModelName)
+	// Resolve model name from service.Spec.Model (ref or image)
+	imageName, err := resolveModelNameFromService(ctx, k8sClient, service)
+	if err != nil {
+		return res, status, fmt.Errorf("failed to resolve model: %w", err)
+	}
+
+	if imageName == "" {
+		status.ImageReady = false
+		status.ImageReadyReason = aimv1alpha1.AIMServiceReasonModelNotFound
+		status.ImageReadyMessage = "No model specified in service spec"
+		return res, status, nil
+	}
+
 	ready, _, reason, message, err := evaluateImageReadiness(ctx, k8sClient, service.Namespace, imageName)
 	if err != nil {
 		return res, status, err
@@ -267,6 +279,49 @@ func DerivedTemplateName(baseName, suffix string) string {
 	return fmt.Sprintf("%s%s", trimmed, extra)
 }
 
+// resolveModelNameFromService resolves the model name from service.Spec.Model
+// If Model.Ref is specified, returns it directly.
+// If Model.Image is specified, searches for or creates a model with that image.
+func resolveModelNameFromService(
+	ctx context.Context,
+	k8sClient client.Client,
+	service *aimv1alpha1.AIMService,
+) (string, error) {
+	// Check Model.Ref
+	if service.Spec.Model.Ref != nil && *service.Spec.Model.Ref != "" {
+		return strings.TrimSpace(*service.Spec.Model.Ref), nil
+	}
+
+	// Check Model.Image
+	if service.Spec.Model.Image != nil && *service.Spec.Model.Image != "" {
+		imageURI := strings.TrimSpace(*service.Spec.Model.Image)
+
+		// Resolve runtime config to get model creation settings
+		runtimeConfigResolution, err := ResolveRuntimeConfig(ctx, k8sClient, service.Namespace, service.Spec.RuntimeConfigName)
+		if err != nil {
+			// If runtime config resolution fails, use defaults
+			// This allows services to work without a runtime config present
+			runtimeConfigResolution = nil
+		}
+
+		var runtimeConfig *aimv1alpha1.AIMRuntimeConfigSpec
+		if runtimeConfigResolution != nil {
+			runtimeConfig = &runtimeConfigResolution.EffectiveSpec
+		}
+
+		// Resolve or create model from image
+		modelName, _, err := ResolveOrCreateModelFromImage(ctx, k8sClient, service.Namespace, imageURI, runtimeConfig)
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve/create model from image %q: %w", imageURI, err)
+		}
+
+		return modelName, nil
+	}
+
+	// Neither ref nor image specified (should be caught by CEL validation)
+	return "", nil
+}
+
 func evaluateImageReadiness(
 	ctx context.Context,
 	k8sClient client.Client,
@@ -274,7 +329,7 @@ func evaluateImageReadiness(
 	imageName string,
 ) (bool, TemplateScope, string, string, error) {
 	if imageName == "" {
-		return false, TemplateScopeNone, aimv1alpha1.AIMServiceReasonModelNotFound, "AIMService spec.aimImageName is empty", nil
+		return false, TemplateScopeNone, aimv1alpha1.AIMServiceReasonModelNotFound, "Model name is empty", nil
 	}
 
 	if namespace != "" {
@@ -512,7 +567,13 @@ func ObserveDerivedTemplate(
 			return err
 		}
 
-		match, matchErr := findMatchingTemplateForDerivedSpec(ctx, k8sClient, service, baseSpec)
+		// Resolve model name from service for derived template matching
+		resolvedModelName, err := resolveModelNameFromService(ctx, k8sClient, service)
+		if err != nil {
+			return fmt.Errorf("failed to resolve model name: %w", err)
+		}
+
+		match, matchErr := findMatchingTemplateForDerivedSpec(ctx, k8sClient, service, resolvedModelName, baseSpec)
 		if matchErr != nil {
 			return matchErr
 		}
@@ -581,13 +642,14 @@ func findMatchingTemplateForDerivedSpec(
 	ctx context.Context,
 	k8sClient client.Client,
 	service *aimv1alpha1.AIMService,
+	resolvedModelName string,
 	baseSpec *aimv1alpha1.AIMServiceTemplateSpec,
 ) (*templateMatch, error) {
 	if service == nil || service.Spec.Overrides == nil {
 		return nil, nil
 	}
 
-	expectedTemplate := BuildDerivedTemplate(service, "placeholder", baseSpec)
+	expectedTemplate := BuildDerivedTemplate(service, "placeholder", resolvedModelName, baseSpec)
 	expectedSpec := expectedTemplate.Spec
 
 	if service.Namespace != "" {

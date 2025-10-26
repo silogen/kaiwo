@@ -3,7 +3,8 @@ kind: AIMClusterServiceTemplate
 metadata:
   name: test-filter-h100
 spec:
-  aimModelName: test-filters-unavailable
+  model:
+    ref: test-filters-unavailable
   metric: latency
   precision: fp8
   gpuSelector:

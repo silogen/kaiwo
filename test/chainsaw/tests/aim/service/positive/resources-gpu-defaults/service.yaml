@@ -3,5 +3,6 @@ kind: AIMService
 metadata:
   name: gpu-defaults-service
 spec:
-  aimModelName: gpu-defaults-image
+  model:
+    ref: gpu-defaults-image
   templateRef: gpu-defaults-template

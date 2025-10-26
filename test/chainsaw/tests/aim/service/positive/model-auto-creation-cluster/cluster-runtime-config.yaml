@@ -1,0 +1,10 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterRuntimeConfig
+metadata:
+  name: cluster-auto-creation-config
+spec:
+  model:
+    creationScope: Cluster
+    autoDiscovery: true
+  routing:
+    enabled: false

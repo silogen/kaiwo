@@ -3,7 +3,8 @@ kind: AIMClusterServiceTemplate
 metadata:
   name: test-single-latency-fp8
 spec:
-  aimModelName: test-auto-select-single
+  model:
+    ref: test-auto-select-single
   metric: latency
   precision: fp8
   gpuSelector:

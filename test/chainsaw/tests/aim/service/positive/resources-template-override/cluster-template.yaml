@@ -3,7 +3,8 @@ kind: AIMClusterServiceTemplate
 metadata:
   name: template-override-template
 spec:
-  aimModelName: template-override-image
+  model:
+    ref: template-override-image
   metric: throughput
   resources:
     limits:

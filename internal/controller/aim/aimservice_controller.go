@@ -230,7 +230,12 @@ func (r *AIMServiceReconciler) plan(ctx context.Context, service *aimv1alpha1.AI
 		if obs.TemplateSpec != nil {
 			baseSpec = obs.TemplateSpec.DeepCopy()
 		}
-		template := shared.BuildDerivedTemplate(service, obs.TemplateName, baseSpec)
+		// Get resolved model name from observation
+		resolvedModelName := ""
+		if obs.ResolvedImage != nil {
+			resolvedModelName = obs.ResolvedImage.Name
+		}
+		template := shared.BuildDerivedTemplate(service, obs.TemplateName, resolvedModelName, baseSpec)
 		desired = append(desired, template)
 	}
 
@@ -371,10 +376,21 @@ func (r *AIMServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				continue
 			}
 
-			// Include if doing auto-selection (no templateRef) and matches image
-			if strings.TrimSpace(svc.Spec.TemplateRef) == "" &&
-				strings.TrimSpace(svc.Spec.AIMModelName) == strings.TrimSpace(template.Spec.AIMModelName) {
-				serviceMap[key] = svc
+			// Include if doing auto-selection (no templateRef) and matches resolved image
+			if strings.TrimSpace(svc.Spec.TemplateRef) == "" {
+				// Try to get model name from status (if already resolved)
+				var modelName string
+				if svc.Status.ResolvedImage != nil {
+					modelName = svc.Status.ResolvedImage.Name
+				} else if svc.Spec.Model.Ref != nil {
+					// Use ref directly if specified
+					modelName = strings.TrimSpace(*svc.Spec.Model.Ref)
+				}
+				// Note: model.image case won't match until first reconciliation resolves the model
+
+				if modelName != "" && modelName == strings.TrimSpace(template.Spec.AIMModelName) {
+					serviceMap[key] = svc
+				}
 			}
 		}
 
@@ -423,10 +439,21 @@ func (r *AIMServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				continue
 			}
 
-			// Include if doing auto-selection (no templateRef) and matches image
-			if strings.TrimSpace(svc.Spec.TemplateRef) == "" &&
-				strings.TrimSpace(svc.Spec.AIMModelName) == strings.TrimSpace(clusterTemplate.Spec.AIMModelName) {
-				serviceMap[key] = svc
+			// Include if doing auto-selection (no templateRef) and matches resolved image
+			if strings.TrimSpace(svc.Spec.TemplateRef) == "" {
+				// Try to get model name from status (if already resolved)
+				var modelName string
+				if svc.Status.ResolvedImage != nil {
+					modelName = svc.Status.ResolvedImage.Name
+				} else if svc.Spec.Model.Ref != nil {
+					// Use ref directly if specified
+					modelName = strings.TrimSpace(*svc.Spec.Model.Ref)
+				}
+				// Note: model.image case won't match until first reconciliation resolves the model
+
+				if modelName != "" && modelName == strings.TrimSpace(clusterTemplate.Spec.AIMModelName) {
+					serviceMap[key] = svc
+				}
 			}
 		}
 

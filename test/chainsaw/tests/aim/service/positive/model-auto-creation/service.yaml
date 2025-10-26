@@ -1,0 +1,8 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: auto-creation-service
+spec:
+  model:
+    image: ghcr.io/amd/llama-3-8b-instruct:latest
+  runtimeConfigName: auto-creation-config

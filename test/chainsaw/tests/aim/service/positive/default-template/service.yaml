@@ -3,4 +3,5 @@ kind: AIMService
 metadata:
   name: default-template-service
 spec:
-  aimModelName: default-testing-llama-3-8b
+  model:
+    ref: default-testing-llama-3-8b

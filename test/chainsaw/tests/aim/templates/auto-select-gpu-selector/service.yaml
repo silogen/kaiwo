@@ -3,7 +3,8 @@ kind: AIMService
 metadata:
   name: test-gpu-selector-service
 spec:
-  aimModelName: test-gpu-selector
+  model:
+    ref: test-gpu-selector
   # Override GPU selector to MI300X - should filter out MI250X template
   overrides:
     gpuSelector:

@@ -1,0 +1,61 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: model-auto-creation-cluster
+spec:
+  description: Test automatic model creation from spec.model.image with cluster scope
+  concurrent: false
+  timeouts:
+    assert: 90s
+  steps:
+  - name: Create cluster runtime config for cluster-scoped model creation
+    try:
+    - apply:
+        file: cluster-runtime-config.yaml
+
+  - name: Create service with model.image (cluster scope)
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify auto-created cluster model exists
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterModel
+          metadata:
+            labels:
+              aim.silogen.ai/auto-created: "true"
+          spec:
+            image: ghcr.io/amd/mistral-7b-instruct:latest
+
+  - name: Verify service resolves to auto-created cluster model
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: cluster-auto-creation-service
+            namespace: ($namespace)
+          status:
+            (resolvedImage != null): true
+            resolvedImage:
+              (name != null): true
+
+  - name: Verify model is cluster-scoped (not namespace-scoped)
+    try:
+    - script:
+        content: |
+          set -e
+          ns_count=$(kubectl get aimmodels -n $NAMESPACE --selector=aim.silogen.ai/auto-created=true -o json | jq '.items | length')
+          if [ "$ns_count" -ne 0 ]; then
+            echo "Expected 0 namespace-scoped models, found $ns_count"
+            exit 1
+          fi
+          cluster_count=$(kubectl get aimclustermodels --selector=aim.silogen.ai/auto-created=true -o json | jq '.items | length')
+          if [ "$cluster_count" -ne 1 ]; then
+            echo "Expected 1 cluster-scoped model, found $cluster_count"
+            exit 1
+          fi

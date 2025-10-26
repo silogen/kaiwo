@@ -3,5 +3,6 @@ kind: AIMService
 metadata:
   name: image-fallback-service
 spec:
-  aimModelName: image-fallback
+  model:
+    ref: image-fallback
   templateRef: image-fallback-template

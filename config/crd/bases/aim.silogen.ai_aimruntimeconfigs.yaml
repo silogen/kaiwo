@@ -88,6 +88,28 @@ spec:
                   type: object
                   x-kubernetes-map-type: atomic
                 type: array
+              model:
+                description: Model controls model creation and discovery defaults.
+                properties:
+                  autoDiscovery:
+                    default: true
+                    description: |-
+                      AutoDiscovery controls whether models run discovery by default.
+                      When true, models run discovery jobs to extract metadata and auto-create templates.
+                      When false, discovery is skipped. Discovery failures are non-fatal and reported via conditions.
+                    type: boolean
+                  creationScope:
+                    default: Cluster
+                    description: |-
+                      CreationScope controls the scope of models auto-created from AIMService resources
+                      that specify `spec.model.image` directly. When a service references an image URI and no
+                      matching model exists, the controller creates one. This field determines whether the new
+                      model is cluster-scoped (AIMClusterModel) or namespace-scoped (AIMModel).
+                    enum:
+                    - Cluster
+                    - Namespace
+                    type: string
+                type: object
               routing:
                 description: |-
                   Routing controls HTTP routing defaults applied to AIM resources.

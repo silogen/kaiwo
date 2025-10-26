@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
 func TestResolveServiceRoutePath_ServiceOverride(t *testing.T) {
@@ -52,10 +53,13 @@ func TestResolveServiceRoutePath_ServiceOverride(t *testing.T) {
 func TestResolveServiceRoutePath_RuntimeConfigFallback(t *testing.T) {
 	svc := newTestService()
 	svc.Spec.Routing = &aimv1alpha1.AIMServiceRouting{Enabled: true}
+	svc.Status.ResolvedImage = &aimv1alpha1.AIMResolvedReference{
+		Name: "Meta/Llama-3-8B",
+	}
 	runtimeCfg := aimv1alpha1.AIMRuntimeConfigSpec{
 		AIMRuntimeConfigCommon: aimv1alpha1.AIMRuntimeConfigCommon{
 			Routing: &aimv1alpha1.AIMRuntimeRoutingConfig{
-				PathTemplate: "/{.metadata.namespace}/{.spec.aimImageName}",
+				PathTemplate: "/{.metadata.namespace}/{.status.resolvedImage.name}",
 			},
 		},
 	}
@@ -165,8 +169,8 @@ func newTestService() *aimv1alpha1.AIMService {
 			},
 		},
 		Spec: aimv1alpha1.AIMServiceSpec{
-			AIMModelName: "Meta/Llama-3-8B",
-			TemplateRef:  "demo-template",
+			Model:       aimv1alpha1.AIMServiceModel{Ref: baseutils.Pointer("Meta/Llama-3-8B")},
+			TemplateRef: "demo-template",
 		},
 	}
 }
