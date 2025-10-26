@@ -3,7 +3,7 @@ kind: AIMService
 metadata:
   name: service-override-service
 spec:
-  aimImageName: service-override-image
+  aimModelName: service-override-image
   templateRef: service-override-template
   resources:
     limits:

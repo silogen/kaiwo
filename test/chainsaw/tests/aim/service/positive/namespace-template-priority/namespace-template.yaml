@@ -3,7 +3,7 @@ kind: AIMServiceTemplate
 metadata:
   name: llama-3-8b-latency-ns-priority
 spec:
-  aimImageName: default-testing-llama-3-8b
+  aimModelName: default-testing-llama-3-8b
   metric: latency
   precision: fp8
   gpuSelector:

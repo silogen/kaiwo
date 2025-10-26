@@ -71,7 +71,7 @@ spec:
               narrow: they describe runtime selection knobs for the AIM container and do
               not redefine the full Kubernetes deployment shape.
             properties:
-              aimImageName:
+              aimModelName:
                 description: |-
                   AIMModelName is the AIM image name. Matches `metadata.name` of an AIMModel. Immutable.
 
@@ -79,7 +79,7 @@ spec:
                 minLength: 1
                 type: string
                 x-kubernetes-validations:
-                - message: image name is immutable
+                - message: model name is immutable
                   rule: self == oldSelf
               caching:
                 description: |-
@@ -497,7 +497,7 @@ spec:
                   (by name) to use for this template.
                 type: string
             required:
-            - aimImageName
+            - aimModelName
             type: object
           status:
             description: AIMServiceTemplateStatus defines the observed state of AIMServiceTemplate.

@@ -3,7 +3,7 @@ kind: AIMClusterServiceTemplate
 metadata:
   name: service-override-template
 spec:
-  aimImageName: service-override-image
+  aimModelName: service-override-image
   metric: latency
   resources:
     limits:

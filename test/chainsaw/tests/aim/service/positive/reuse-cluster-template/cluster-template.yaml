@@ -3,7 +3,7 @@ kind: AIMClusterServiceTemplate
 metadata:
   name: reused-cluster-template
 spec:
-  aimImageName: default-testing-llama-3-8b
+  aimModelName: default-testing-llama-3-8b
   runtimeConfigName: default
   metric: throughput
   precision: fp16

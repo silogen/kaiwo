@@ -9,4 +9,4 @@ metadata:
     example.com/note: "propagate to ISVC"
     example.com/release: "canary"
 spec:
-  aimImageName: default-testing-llama-3-8b
+  aimModelName: default-testing-llama-3-8b

@@ -67,7 +67,7 @@ spec:
               runtime selection knobs, while the overrides field allows service-specific
               customization.
             properties:
-              aimImageName:
+              aimModelName:
                 description: |-
                   AIMModelName is the canonical model name (including version/revision) to deploy.
                   Expected to match the `spec.metadata.name` of an AIMModel. Example:
@@ -486,7 +486,7 @@ spec:
                   The template selects the runtime profile and GPU parameters.
                 type: string
             required:
-            - aimImageName
+            - aimModelName
             type: object
           status:
             description: AIMServiceStatus defines the observed state of AIMService.

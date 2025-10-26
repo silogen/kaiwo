@@ -3,7 +3,7 @@ kind: AIMClusterServiceTemplate
 metadata:
   name: test-throughput-fp8
 spec:
-  aimImageName: test-prefers-latency
+  aimModelName: test-prefers-latency
   metric: throughput
   precision: fp8
   gpuSelector:

@@ -3,7 +3,7 @@ kind: AIMClusterServiceTemplate
 metadata:
   name: test-wrong-gpu-h100
 spec:
-  aimImageName: test-wrong-gpu
+  aimModelName: test-wrong-gpu
   metric: latency
   precision: fp8
   gpuSelector:

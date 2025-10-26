@@ -3,7 +3,7 @@ kind: AIMServiceTemplate
 metadata:
   name: llama-3-8b-throughput
 spec:
-  aimImageName: llama-3-8b-throughput-template-priority
+  aimModelName: llama-3-8b-throughput-template-priority
   metric: throughput
   gpuSelector:
     count: 1

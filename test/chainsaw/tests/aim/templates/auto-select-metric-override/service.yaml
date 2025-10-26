@@ -3,7 +3,7 @@ kind: AIMService
 metadata:
   name: test-metric-override-service
 spec:
-  aimImageName: test-metric-override
+  aimModelName: test-metric-override
   # Override metric to throughput - should filter out latency template
   overrides:
     metric: throughput

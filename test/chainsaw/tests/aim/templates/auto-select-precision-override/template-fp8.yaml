@@ -3,7 +3,7 @@ kind: AIMClusterServiceTemplate
 metadata:
   name: test-precision-fp8
 spec:
-  aimImageName: test-precision-override
+  aimModelName: test-precision-override
   metric: latency
   precision: fp8
   gpuSelector:

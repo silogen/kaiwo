@@ -46,7 +46,7 @@ type AIMServiceSpec struct {
 	// Expected to match the `spec.metadata.name` of an AIMModel. Example:
 	// `meta-llama-3-8b-1-1-20240915`.
 	// +kubebuilder:validation:MinLength=1
-	AIMModelName string `json:"aimImageName"`
+	AIMModelName string `json:"aimModelName"`
 
 	// TemplateRef is the name of the AIMServiceTemplate or AIMClusterServiceTemplate to use.
 	// The template selects the runtime profile and GPU parameters.

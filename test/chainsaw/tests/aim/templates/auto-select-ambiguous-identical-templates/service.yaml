@@ -3,5 +3,5 @@ kind: AIMService
 metadata:
   name: test-ambiguous-service
 spec:
-  aimImageName: test-ambiguous
+  aimModelName: test-ambiguous
   # No templateRef - should fail with TemplateSelectionAmbiguous

@@ -36,8 +36,8 @@ type AIMServiceTemplateSpecCommon struct {
 	// Example: `meta/llama-3-8b:1.1+20240915`
 	//
 	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="image name is immutable"
-	AIMModelName string `json:"aimImageName"`
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="model name is immutable"
+	AIMModelName string `json:"aimModelName"`
 
 	AIMRuntimeParameters `json:",inline"`
 

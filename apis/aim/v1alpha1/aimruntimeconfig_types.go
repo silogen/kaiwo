@@ -102,7 +102,7 @@ type AIMRuntimeRoutingConfig struct {
 	// Example templates:
 	// - `/{.metadata.namespace}/{.metadata.name}` - namespace and service name
 	// - `/{.metadata.namespace}/{.metadata.labels['team']}/inference` - with label
-	// - `/models/{.spec.aimImageName}` - based on model name
+	// - `/models/{.spec.aimModelName}` - based on model name
 	//
 	// The template must:
 	// - Use valid JSONPath expressions wrapped in {...}

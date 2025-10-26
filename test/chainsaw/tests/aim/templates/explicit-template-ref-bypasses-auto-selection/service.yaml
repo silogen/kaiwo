@@ -3,6 +3,6 @@ kind: AIMService
 metadata:
   name: test-explicit-ref-service
 spec:
-  aimImageName: test-explicit-ref
+  aimModelName: test-explicit-ref
   # Explicit templateRef - should use this even though latency would be preferred
   templateRef: test-explicit-throughput

@@ -3,5 +3,5 @@ kind: AIMService
 metadata:
   name: test-no-available-service
 spec:
-  aimImageName: test-no-available
+  aimModelName: test-no-available
   # No templateRef - should wait for template to become Available
