@@ -179,7 +179,17 @@ func BuildDiscoveryJob(spec DiscoveryJobSpec) *batchv1.Job {
 
 	// Add AIM environmental variables
 
-	var env []corev1.EnvVar
+	// Silence logging to produce clean JSON output
+	env := []corev1.EnvVar{
+		{
+			Name:  "AIM_LOG_LEVEL_ROOT",
+			Value: "CRITICAL",
+		},
+		{
+			Name:  "AIM_LOG_LEVEL",
+			Value: "CRITICAL",
+		},
+	}
 	env = append(env, spec.Env...)
 
 	if spec.TemplateSpec.Metric != nil {
