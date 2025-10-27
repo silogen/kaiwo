@@ -97,8 +97,6 @@ func (r *AIMServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			obs, err := r.observe(ctx, &service)
 			if err != nil {
 				logger.Error(err, "Observe failed")
-			} else {
-				logger.Info("Observe completed")
 			}
 			return obs, err
 		},
@@ -155,6 +153,7 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 		ImageReady:                selectionStatus.ImageReady,
 		ImageReadyReason:          selectionStatus.ImageReadyReason,
 		ImageReadyMessage:         selectionStatus.ImageReadyMessage,
+		ModelResolutionErr:        selectionStatus.ModelResolutionErr,
 	}
 
 	// Observe template based on whether it's derived or not

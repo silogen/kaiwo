@@ -159,6 +159,28 @@ func HandleRuntimeConfigMissing(
 	return true
 }
 
+// HandleModelResolutionFailure checks for model resolution failures and updates status.
+// Returns true if model resolution failed.
+func HandleModelResolutionFailure(
+	status *aimv1alpha1.AIMServiceStatus,
+	obs *ServiceObservation,
+	setCondition func(conditionType string, conditionStatus metav1.ConditionStatus, reason, message string),
+) bool {
+	if obs.ModelResolutionErr == nil {
+		return false
+	}
+
+	status.Status = aimv1alpha1.AIMServiceStatusFailed
+	message := obs.ModelResolutionErr.Error()
+	reason := "ModelResolutionFailed"
+	setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, reason, message)
+	setCondition(aimv1alpha1.AIMServiceConditionResolved, metav1.ConditionFalse, reason, "Cannot resolve model for service")
+	setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, reason, "Cannot proceed without resolved model")
+	setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionFalse, reason, "Model resolution failed")
+	setCondition(aimv1alpha1.AIMServiceConditionReady, metav1.ConditionFalse, reason, message)
+	return true
+}
+
 // HandleImageMissing checks for missing image and updates status.
 // Returns true if the image is missing.
 func HandleImageMissing(
@@ -589,6 +611,10 @@ func ProjectServiceStatus(
 	// Clear failure condition when reconciliation succeeds and there are no routing errors.
 	if !routingEnabled || (routingReady && !routingHasFatalError) {
 		setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonResolved, "No active failures")
+	}
+
+	if HandleModelResolutionFailure(status, obs, setCondition) {
+		return
 	}
 
 	if HandleImageMissing(status, obs, setCondition) {

@@ -70,6 +70,7 @@ type TemplateSelectionStatus struct {
 	ImageReady                bool
 	ImageReadyReason          string
 	ImageReadyMessage         string
+	ModelResolutionErr        error
 }
 
 // ServiceObservation holds observed state for an AIMService reconciliation.
@@ -88,6 +89,7 @@ type ServiceObservation struct {
 	PathTemplateErr           error
 	RuntimeConfigErr          error
 	ImageErr                  error
+	ModelResolutionErr        error
 	TemplateStatus            *aimv1alpha1.AIMServiceTemplateStatus
 	TemplateSpecCommon        aimv1alpha1.AIMServiceTemplateSpecCommon
 	TemplateSpec              *aimv1alpha1.AIMServiceTemplateSpec
@@ -149,7 +151,8 @@ func ResolveTemplateNameForService(
 	// Resolve model name from service.Spec.Model (ref or image)
 	imageName, err := resolveModelNameFromService(ctx, k8sClient, service)
 	if err != nil {
-		return res, status, fmt.Errorf("failed to resolve model: %w", err)
+		status.ModelResolutionErr = err
+		return res, status, nil
 	}
 
 	if imageName == "" {
