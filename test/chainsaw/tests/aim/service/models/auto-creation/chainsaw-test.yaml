@@ -12,6 +12,11 @@ spec:
     - apply:
         file: runtime-config.yaml
 
+  - name: Create template for the model
+    try:
+    - apply:
+        file: template.yaml
+
   - name: Create service with model.image (no pre-existing model)
     try:
     - apply:

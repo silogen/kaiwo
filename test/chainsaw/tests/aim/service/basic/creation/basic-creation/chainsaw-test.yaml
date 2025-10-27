@@ -11,7 +11,7 @@ spec:
     try:
     - assert:
         timeout: 5s
-        file: ../../_shared/template-available.yaml
+        file: ../../../_shared/template-available.yaml
 
   - name: Create AIMService
     try:

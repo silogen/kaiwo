@@ -41,4 +41,4 @@ spec:
             - type: Ready
               status: "False"
               reason: MultipleModelsFound
-              (message =~ 'multiple models.*same image'): true
+              (contains(message, 'multiple models')): true
