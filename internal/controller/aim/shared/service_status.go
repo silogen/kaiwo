@@ -25,6 +25,7 @@ SOFTWARE.
 package shared
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/silogen/kaiwo/internal/controller/aim/routingconfig"
@@ -176,6 +177,12 @@ func HandleModelResolutionFailure(
 	status.Status = aimv1alpha1.AIMServiceStatusFailed
 	message := obs.ModelResolutionErr.Error()
 	reason := "ModelResolutionFailed"
+
+	// Check if the error is due to multiple models being found
+	if errors.Is(obs.ModelResolutionErr, ErrMultipleModelsFound) {
+		reason = "MultipleModelsFound"
+	}
+
 	setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, reason, message)
 	setCondition(aimv1alpha1.AIMServiceConditionResolved, metav1.ConditionFalse, reason, "Cannot resolve model for service")
 	setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, reason, "Cannot proceed without resolved model")

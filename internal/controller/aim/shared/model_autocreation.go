@@ -27,6 +27,7 @@ package shared
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -52,6 +53,9 @@ var (
 	invalidNameChars = regexp.MustCompile(`[^a-z0-9-]`)
 	// multiDashes matches multiple consecutive dashes
 	multiDashes = regexp.MustCompile(`-+`)
+
+	// ErrMultipleModelsFound is returned when multiple models exist with the same image URI
+	ErrMultipleModelsFound = errors.New("multiple models found with the same image")
 )
 
 // ResolveOrCreateModelFromImage searches for existing models matching the image URI,
@@ -90,7 +94,7 @@ func ResolveOrCreateModelFromImage(
 				names[i] = fmt.Sprintf("%s (cluster)", m.Name)
 			}
 		}
-		return "", TemplateScopeNone, fmt.Errorf("multiple models found with image %q: %s", imageURI, strings.Join(names, ", "))
+		return "", TemplateScopeNone, fmt.Errorf("%w with image %q: %s", ErrMultipleModelsFound, imageURI, strings.Join(names, ", "))
 	}
 }
 
