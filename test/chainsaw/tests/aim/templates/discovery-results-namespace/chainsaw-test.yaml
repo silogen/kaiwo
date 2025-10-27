@@ -41,7 +41,7 @@ spec:
             profile:
               metadata:
                 engine: vllm
-                gpu: MI300X
+                gpu: AMD
                 precision: fp8
                 gpu_count: 1
                 metric: latency
@@ -60,9 +60,9 @@ spec:
                 VLLM_USE_TRITON_FLASH_ATTN: "0"
                 VLLM_USE_V1: "0"
             modelSources:
-            - name: amd/Llama-3.1-8B-Instruct-FP8-KV
-              sourceUri: hf://amd/Llama-3.1-8B-Instruct-FP8-KV
-              size: "9094593249"
+            - name: smol2-135m
+              sourceUri: hf://HuggingFaceTB/SmolLM2-135M
+              size: "512Mi"
 
   - name: Verify the serving runtime was created
     try:
