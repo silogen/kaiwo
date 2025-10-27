@@ -300,7 +300,13 @@ func (r *AIMServiceReconciler) projectStatus(
 	}
 
 	var httpRoute *gatewayapiv1.HTTPRoute
-	if service.Spec.Routing != nil && service.Spec.Routing.Enabled {
+	// Check if routing is enabled via service spec or runtime config
+	var runtimeRouting *aimv1alpha1.AIMRuntimeRoutingConfig
+	if obs != nil {
+		runtimeRouting = obs.RuntimeConfigSpec.Routing
+	}
+	routingConfig := routingconfig.Resolve(service, runtimeRouting)
+	if routingConfig.Enabled {
 		routeName := shared.InferenceServiceRouteName(service.Name)
 		var route gatewayapiv1.HTTPRoute
 		if err := r.Get(ctx, types.NamespacedName{Name: routeName, Namespace: service.Namespace}, &route); err == nil {

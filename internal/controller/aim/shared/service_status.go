@@ -48,18 +48,21 @@ func EvaluateHTTPRouteStatus(route *gatewayapiv1.HTTPRoute) (bool, string, strin
 		return false, aimv1alpha1.AIMServiceReasonConfiguringRoute, "HTTPRoute has no parent status"
 	}
 	for _, parent := range status.Parents {
-		for _, condition := range parent.Conditions {
-			if condition.Status == metav1.ConditionFalse {
-				reason := condition.Reason
-				if reason == "" {
-					reason = aimv1alpha1.AIMServiceReasonRouteFailed
-				}
-				message := condition.Message
-				if message == "" {
-					message = "Gateway reported HTTPRoute condition false"
-				}
-				return false, reason, message
+		// Check if the HTTPRoute is accepted by this parent gateway
+		acceptedCond := meta.FindStatusCondition(parent.Conditions, string(gatewayapiv1.RouteConditionAccepted))
+		if acceptedCond == nil {
+			return false, aimv1alpha1.AIMServiceReasonConfiguringRoute, "HTTPRoute Accepted condition not found"
+		}
+		if acceptedCond.Status != metav1.ConditionTrue {
+			reason := acceptedCond.Reason
+			if reason == "" {
+				reason = aimv1alpha1.AIMServiceReasonRouteFailed
 			}
+			message := acceptedCond.Message
+			if message == "" {
+				message = "HTTPRoute not accepted by gateway"
+			}
+			return false, reason, message
 		}
 	}
 	return true, aimv1alpha1.AIMServiceReasonRouteReady, "HTTPRoute is ready"

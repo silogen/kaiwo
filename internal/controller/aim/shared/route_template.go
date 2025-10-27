@@ -159,6 +159,14 @@ func evaluateJSONPath(expr string, obj interface{}) (string, error) {
 		return "", fmt.Errorf("jsonpath returned nil value")
 	}
 
+	// Dereference pointers to get the actual value
+	for val.Kind() == reflect.Ptr {
+		val = val.Elem()
+		if !val.IsValid() {
+			return "", fmt.Errorf("jsonpath returned nil pointer")
+		}
+	}
+
 	value := val.Interface()
 	switch typed := value.(type) {
 	case string:
