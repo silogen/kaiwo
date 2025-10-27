@@ -40,13 +40,24 @@ type discoveryModelResult struct {
 
 func main() {
 	qwen := discoveryModelResult{Name: "smol2-135m", Source: "hf://HuggingFaceTB/SmolLM2-135M", SizeGB: 0.5}
-	fakeprofilemeta := profileMetadata{Engine: "vllm", GPU: "AMD", Precision: "fp8", GPUCount: 0, Metric: "latency"}
+	fakeprofilemeta := profileMetadata{Engine: "vllm", GPU: "AMD", Precision: "fp8", GPUCount: 1, Metric: "latency"}
+	engine_args := map[string]any{"distributed_executor_backend": "mp", "gpu-memory-utilization": 0.95, "tensor-parallel-size": 1}
 	fakeprofileresult := discoveryProfileResult{
 		Model:          "smol2-135m",
 		QuantizedModel: "smol2-135m-bf16",
 		Metadata:       fakeprofilemeta,
-		EngineArgs:     map[string]any{},
-		EnvVars:        map[string]string{}}
+		EngineArgs:     engine_args,
+		EnvVars: map[string]string{
+			"HIP_FORCE_DEV_KERNARG":       "1",
+			"NCCL_MIN_NCHANNELS":          "112",
+			"PYTORCH_TUNABLEOP_ENABLED":   "1",
+			"PYTORCH_TUNABLEOP_TUNING":    "0",
+			"PYTORCH_TUNABLEOP_VERBOSE":   "1",
+			"TORCH_BLAS_PREFER_HIPBLASLT": "1",
+			"VLLM_DO_NOT_TRACK":           "1",
+			"VLLM_USE_TRITON_FLASH_ATTN":  "0",
+			"VLLM_USE_V1":                 "0",
+		}}
 	fakediscoveryresult := []discoveryResult{{Filename: "smol2-135m", Profile: fakeprofileresult, Models: []discoveryModelResult{qwen}}}
 
 	discoveryJson, _ := json.Marshal(fakediscoveryresult)
