@@ -50,6 +50,23 @@ const (
 	AIMModelReasonMetadataExtractionFailed = "MetadataExtractionFailed"
 )
 
+// AIMModelDiscoveryConfig controls discovery behavior for a model.
+type AIMModelDiscoveryConfig struct {
+	// Enabled controls whether discovery runs for this model.
+	// When unset (nil), uses the runtime config's model.autoDiscovery setting.
+	// When true, discovery always runs regardless of runtime config.
+	// When false, discovery never runs regardless of runtime config.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// AutoCreateTemplates controls whether templates are auto-created from discovery results.
+	// When unset, templates are created if discovery succeeds and returns recommended deployments.
+	// When false, discovery runs but templates are not created (metadata extraction only).
+	// When true, templates are always created from discovery results.
+	// +optional
+	AutoCreateTemplates *bool `json:"autoCreateTemplates,omitempty"`
+}
+
 // AIMModelStatusEnum represents the overall status of an AIMModel.
 // +kubebuilder:validation:Enum=Pending;Progressing;Ready;Degraded;Failed
 type AIMModelStatusEnum string
@@ -75,9 +92,14 @@ const (
 type AIMModelSpec struct {
 	// Image is the container image URI for this AIM model.
 	// This image is inspected by the operator to select runtime profiles used by templates.
-	// Discovery is always attempted, controlled by the runtime config's AutoDiscovery setting.
+	// Discovery behavior is controlled by the discovery field and runtime config's AutoDiscovery setting.
 	// +kubebuilder:validation:MinLength=1
 	Image string `json:"image"`
+
+	// Discovery controls discovery behavior for this model.
+	// When unset, uses runtime config defaults.
+	// +optional
+	Discovery *AIMModelDiscoveryConfig `json:"discovery,omitempty"`
 
 	// DefaultServiceTemplate is the default template to use for this image, if the user does not provide any
 	DefaultServiceTemplate string `json:"defaultServiceTemplate,omitempty"`

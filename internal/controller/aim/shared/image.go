@@ -181,14 +181,24 @@ func ObserveImage(ctx context.Context, opts ImageObservationOptions) (*ImageObse
 		}
 	}
 
-	// Apply discovery configuration from runtime config
-	// Discovery is always attempted by default, controlled by runtime config AutoDiscovery setting
+	// Apply discovery configuration from model spec and runtime config
+	// Priority: model.spec.discovery.enabled → runtime config AutoDiscovery → true (default)
+	spec := opts.GetImageSpec()
 	obs.DiscoveryEnabled = true // default to true
-	if obs.RuntimeConfigResolution != nil && obs.RuntimeConfigResolution.EffectiveSpec.Model != nil {
-		if obs.RuntimeConfigResolution.EffectiveSpec.Model.AutoDiscovery != nil {
-			obs.DiscoveryEnabled = *obs.RuntimeConfigResolution.EffectiveSpec.Model.AutoDiscovery
+
+	// Check model-level discovery config first
+	if spec.Discovery != nil && spec.Discovery.Enabled != nil {
+		// Model-level setting overrides runtime config
+		obs.DiscoveryEnabled = *spec.Discovery.Enabled
+	} else {
+		// No model-level override, use runtime config
+		if obs.RuntimeConfigResolution != nil && obs.RuntimeConfigResolution.EffectiveSpec.Model != nil {
+			if obs.RuntimeConfigResolution.EffectiveSpec.Model.AutoDiscovery != nil {
+				obs.DiscoveryEnabled = *obs.RuntimeConfigResolution.EffectiveSpec.Model.AutoDiscovery
+			}
 		}
 	}
+
 	if !obs.DiscoveryEnabled {
 		obs.MetadataAlreadyAttempted = true
 	}
@@ -351,7 +361,14 @@ func PlanImageResources(ctx context.Context, input ImagePlanInput) ([]client.Obj
 	}
 
 	// If we have metadata with recommended deployments, create templates
-	if discoveryEnabled {
+	// Check both discoveryEnabled and autoCreateTemplates setting
+	shouldCreateTemplates := discoveryEnabled
+	if spec.Discovery != nil && spec.Discovery.AutoCreateTemplates != nil {
+		// Explicit autoCreateTemplates setting overrides discoveryEnabled
+		shouldCreateTemplates = *spec.Discovery.AutoCreateTemplates
+	}
+
+	if shouldCreateTemplates {
 		createdTemplates := false
 		for _, deployment := range extractedMetadata.Model.RecommendedDeployments {
 			template := buildServiceTemplateFromDeployment(

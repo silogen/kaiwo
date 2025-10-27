@@ -4,3 +4,5 @@ metadata:
   name: llama-3-8b-cluster-priority
 spec:
   image: busybox:latest-aim-cluster
+  discovery:
+    enabled: false

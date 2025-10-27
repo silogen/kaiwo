@@ -392,6 +392,23 @@ _Appears in:_
 | `autoDiscovery` _boolean_ | AutoDiscovery controls whether models run discovery by default.<br />When true, models run discovery jobs to extract metadata and auto-create templates.<br />When false, discovery is skipped. Discovery failures are non-fatal and reported via conditions. | true |  |
 
 
+#### AIMModelDiscoveryConfig
+
+
+
+AIMModelDiscoveryConfig controls discovery behavior for a model.
+
+
+
+_Appears in:_
+- [AIMModelSpec](#aimmodelspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | Enabled controls whether discovery runs for this model.<br />When unset (nil), uses the runtime config's model.autoDiscovery setting.<br />When true, discovery always runs regardless of runtime config.<br />When false, discovery never runs regardless of runtime config. |  |  |
+| `autoCreateTemplates` _boolean_ | AutoCreateTemplates controls whether templates are auto-created from discovery results.<br />When unset, templates are created if discovery succeeds and returns recommended deployments.<br />When false, discovery runs but templates are not created (metadata extraction only).<br />When true, templates are always created from discovery results. |  |  |
+
+
 #### AIMModelList
 
 
@@ -443,7 +460,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `image` _string_ | Image is the container image URI for this AIM model.<br />This image is inspected by the operator to select runtime profiles used by templates.<br />Discovery is always attempted, controlled by the runtime config's AutoDiscovery setting. |  | MinLength: 1 <br /> |
+| `image` _string_ | Image is the container image URI for this AIM model.<br />This image is inspected by the operator to select runtime profiles used by templates.<br />Discovery behavior is controlled by the discovery field and runtime config's AutoDiscovery setting. |  | MinLength: 1 <br /> |
+| `discovery` _[AIMModelDiscoveryConfig](#aimmodeldiscoveryconfig)_ | Discovery controls discovery behavior for this model.<br />When unset, uses runtime config defaults. |  |  |
 | `defaultServiceTemplate` _string_ | DefaultServiceTemplate is the default template to use for this image, if the user does not provide any |  |  |
 | `runtimeConfigName` _string_ | RuntimeConfigName references the AIM runtime configuration (by name) to use for this image.<br />The runtime config controls discovery behavior and model creation scope. | default |  |
 | `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core)_ | Resources defines the default resource requirements for services using this image.<br />Template- or service-level values override these defaults. |  |  |
