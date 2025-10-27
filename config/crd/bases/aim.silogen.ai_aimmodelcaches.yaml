@@ -15,7 +15,7 @@ spec:
     listKind: AIMModelCacheList
     plural: aimmodelcaches
     shortNames:
-    - mc
+    - aimmc
     singular: aimmodelcache
   scope: Namespaced
   versions:
