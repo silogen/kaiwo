@@ -1,3 +1,4 @@
+# Skipped as we only have a single public image and testing this is hard with just one
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
@@ -11,11 +12,6 @@ spec:
     try:
     - apply:
         file: runtime-config.yaml
-
-  - name: Create template for the model
-    try:
-    - apply:
-        file: template.yaml
 
   - name: Create first service with model.image
     try:
@@ -86,3 +82,21 @@ spec:
           fi
 
           echo "Both services successfully reuse the same auto-created model: $service1_model"
+
+    catch:
+    - script:
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        content: |-
+          echo "== MODELS =="
+          kubectl get aimmodels -n $NAMESPACE -o json
+          echo ""
+
+          echo "== SERVICE TEMPLATES =="
+          kubectl get aimservicetemplates -n $NAMESPACE -o json
+          echo ""
+
+          echo "== SERVICES =="
+          kubectl get aimservices -n $NAMESPACE -o json
+          echo ""

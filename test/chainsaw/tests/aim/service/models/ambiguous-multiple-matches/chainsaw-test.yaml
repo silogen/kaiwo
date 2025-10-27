@@ -36,7 +36,6 @@ spec:
           metadata:
             name: ambiguous-service
           status:
-            conditions:
-            - type: Ready
-              status: "False"
+            (conditions[?type == 'Ready']):
+            - status: "False"
               reason: MultipleModelsFound

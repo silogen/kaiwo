@@ -6,5 +6,3 @@ spec:
   model:
     creationScope: Namespace
     autoDiscovery: true
-  routing:
-    enabled: false

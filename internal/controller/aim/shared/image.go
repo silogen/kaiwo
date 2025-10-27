@@ -549,7 +549,9 @@ func ProjectImageStatus(
 	if metadataFormatErr != nil {
 		setAutoCondition(metav1.ConditionFalse, metadataFormatErr.Reason, metadataFormatErr.Error())
 		status.ImageMetadata = nil
-		markImageFailed(status, metadataFormatErr.Reason, metadataFormatErr.Error(), observedGeneration)
+		// Mark as Ready with a warning condition instead of Failed
+		// This allows the model to be used even without metadata
+		markImageReady(status, metadataFormatErr.Reason, metadataFormatErr.Error(), observedGeneration)
 		return
 	}
 
@@ -827,34 +829,6 @@ func markImageProgressing(status *aimv1alpha1.AIMModelStatus, reason, message st
 		Status:             metav1.ConditionFalse,
 		Reason:             reason,
 		Message:            "No templates are degraded",
-		ObservedGeneration: observedGeneration,
-	})
-}
-
-func markImageFailed(status *aimv1alpha1.AIMModelStatus, reason, message string, observedGeneration int64) {
-	if status == nil {
-		return
-	}
-	status.Status = aimv1alpha1.AIMModelStatusFailed
-	setCondition(&status.Conditions, metav1.Condition{
-		Type:               "Ready",
-		Status:             metav1.ConditionFalse,
-		Reason:             reason,
-		Message:            message,
-		ObservedGeneration: observedGeneration,
-	})
-	setCondition(&status.Conditions, metav1.Condition{
-		Type:               "Progressing",
-		Status:             metav1.ConditionFalse,
-		Reason:             reason,
-		Message:            message,
-		ObservedGeneration: observedGeneration,
-	})
-	setCondition(&status.Conditions, metav1.Condition{
-		Type:               "Degraded",
-		Status:             metav1.ConditionTrue,
-		Reason:             reason,
-		Message:            message,
 		ObservedGeneration: observedGeneration,
 	})
 }

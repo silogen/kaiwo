@@ -1,12 +1,14 @@
 apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMClusterRuntimeConfig
 metadata:
-  name: cluster-runtime-config
+  name: default
 spec:
-  defaultStorageClassName: fast-storage
+#  defaultStorageClassName: fast-storage
   routing:
     enabled: true
     gatewayRef:
-      name: kserve-ingress-gateway
+      group: gateway.networking.k8s.io
+      kind: Gateway
+      name: https
       namespace: kgateway-system
-    pathTemplate: "/cluster/{.metadata.name}"
+    pathTemplate: "{.metadata.namespace}/{.metadata.labels['aim.silogen.ai/workload-id']}"
