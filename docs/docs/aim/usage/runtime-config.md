@@ -47,16 +47,29 @@ spec:
     - name: ghcr-secret
 ```
 
+### Model Creation Scope
+
+Control whether auto-created models (from `spec.model.image` in AIMService) are cluster-scoped or namespace-scoped:
+
+```yaml
+spec:
+  model:
+    creationScope: Cluster  # or "Namespace"
+    autoDiscovery: true     # enable discovery for auto-created models
+```
+
+When a service uses `spec.model.image` directly and no matching AIMModel/AIMClusterModel exists, the controller creates one automatically. The `creationScope` field determines whether it creates an AIMModel (namespace-scoped) or AIMClusterModel (cluster-scoped).
+
 ### Storage Class
 
-Set the default storage class for model caches:
+Set the default storage class:
 
 ```yaml
 spec:
   defaultStorageClassName: fast-nvme
 ```
 
-This storage class is used when services or templates request model caching but don't specify a storage class.
+This storage class is used when caching is requested but no storage class is specified.
 
 ### Service Account
 
@@ -69,7 +82,6 @@ spec:
 
 This account needs permissions to:
 - Pull container images (via imagePullSecrets)
-- Access model storage buckets (if applicable)
 - Create and manage pods
 
 ### HTTP Routing Defaults
@@ -144,7 +156,8 @@ metadata:
   name: llama-chat
   namespace: ml-team
 spec:
-  aimImageName: meta-llama-3-8b
+  model:
+    ref: meta-llama-3-8b
   runtimeConfigName: team-config
 ```
 
@@ -157,7 +170,8 @@ metadata:
   name: llama-chat
   namespace: ml-team
 spec:
-  aimImageName: meta-llama-3-8b
+  model:
+    ref: meta-llama-3-8b
   # runtimeConfigName defaults to 'default'
 ```
 
@@ -200,7 +214,8 @@ Services select the appropriate config:
 
 ```yaml
 spec:
-  aimImageName: meta-llama-3-8b
+  model:
+    ref: meta-llama-3-8b
   runtimeConfigName: production  # or 'development'
 ```
 
@@ -232,6 +247,9 @@ spec:
   serviceAccountName: aim-runtime
   imagePullSecrets:
     - name: registry-creds
+  model:
+    creationScope: Cluster
+    autoDiscovery: true
   routing:
     enabled: true
     gatewayRef:

@@ -20,8 +20,8 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.modelId
-      name: Model ID
+    - jsonPath: .status.status
+      name: Status
       type: string
     - jsonPath: .spec.image
       name: Image

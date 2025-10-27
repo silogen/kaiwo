@@ -233,7 +233,7 @@ const (
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=aimst,categories=aim;all
 // +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.status`
-// +kubebuilder:printcolumn:name="Model",type=string,JSONPath=`.spec.modelId`
+// +kubebuilder:printcolumn:name="Model",type=string,JSONPath=`.spec.modelName`
 // +kubebuilder:printcolumn:name="Engine",type=string,JSONPath=`.status.profile.metadata.engine`
 // +kubebuilder:printcolumn:name="Metric",type=string,JSONPath=`.status.profile.metadata.metric`
 // +kubebuilder:printcolumn:name="Precision",type=string,JSONPath=`.status.profile.metadata.precision`

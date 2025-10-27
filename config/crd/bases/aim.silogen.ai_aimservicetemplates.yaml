@@ -23,7 +23,7 @@ spec:
     - jsonPath: .status.status
       name: Status
       type: string
-    - jsonPath: .spec.modelId
+    - jsonPath: .spec.modelName
       name: Model
       type: string
     - jsonPath: .status.profile.metadata.engine

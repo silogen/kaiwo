@@ -165,7 +165,7 @@ type AIMClusterModelList struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=aimmdl,categories=aim;all
-// +kubebuilder:printcolumn:name="Model ID",type=string,JSONPath=`.spec.modelId`
+// +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.status`
 // +kubebuilder:printcolumn:name="Image",type=string,JSONPath=`.spec.image`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 type AIMModel struct {

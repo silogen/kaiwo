@@ -4,7 +4,7 @@
 
 ## Quick Start
 
-The minimal service requires only a model identifier:
+The minimal service requires only a model reference:
 
 ```yaml
 apiVersion: aim.silogen.ai/v1alpha1
@@ -13,10 +13,24 @@ metadata:
   name: llama-chat
   namespace: ml-team
 spec:
-  aimImageName: meta-llama-3-8b
+  model:
+    ref: meta-llama-3-8b
 ```
 
 This creates an inference service using the default runtime configuration and automatically selected template.
+
+Alternatively, you can specify a container image directly, and AIM will auto-create a model resource if one doesn't exist:
+
+```yaml
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: llama-chat
+  namespace: ml-team
+spec:
+  model:
+    image: ghcr.io/example/llama-3.1-8b-instruct:v1.2.0
+```
 
 ## Common Configuration
 
@@ -26,7 +40,8 @@ Control the number of replicas:
 
 ```yaml
 spec:
-  aimImageName: meta-llama-3-8b
+  model:
+    ref: meta-llama-3-8b
   replicas: 3
 ```
 
@@ -36,7 +51,8 @@ Override default resource allocations:
 
 ```yaml
 spec:
-  aimImageName: meta-llama-3-8b
+  model:
+    ref: meta-llama-3-8b
   resources:
     limits:
       cpu: "8"
@@ -52,7 +68,8 @@ Customize optimization settings without creating templates:
 
 ```yaml
 spec:
-  aimImageName: meta-llama-3-8b
+  model:
+    ref: meta-llama-3-8b
   overrides:
     metric: throughput      # or 'latency' for interactive workloads
     precision: fp16         # fp4, fp8, fp16, bf16, int4, int8, auto
@@ -69,15 +86,16 @@ Reference a specific runtime configuration for credentials and defaults:
 
 ```yaml
 spec:
-  aimImageName: meta-llama-3-8b
+  model:
+    ref: meta-llama-3-8b
   runtimeConfigName: team-config  # defaults to 'default' if omitted
 ```
 
 Runtime configurations provide:
 - Image pull secrets for private registries
-- Storage class defaults for model caching
 - Service account configuration
 - Routing defaults
+- Model creation scope (when using `spec.model.image`)
 
 See [Runtime Configuration](runtime-config.md) for details.
 
@@ -87,7 +105,8 @@ Enable external HTTP access through Gateway API:
 
 ```yaml
 spec:
-  aimImageName: meta-llama-3-8b
+  model:
+    ref: meta-llama-3-8b
   routing:
     enabled: true
     gatewayRef:
@@ -101,6 +120,8 @@ Override the default path using templates:
 
 ```yaml
 spec:
+  model:
+    ref: meta-llama-3-8b
   routing:
     enabled: true
     gatewayRef:
@@ -124,16 +145,17 @@ Templates define runtime profiles (optimization goals, GPU requirements, precisi
 
 ### Automatic Selection
 
-When `templateRef` is omitted, the controller finds available templates for your model (via `aimImageName`) and selects the best match:
+When `templateRef` is omitted, the controller finds available templates for your model and selects the best match:
 
 ```yaml
 spec:
-  aimImageName: meta-llama-3-8b
+  model:
+    ref: meta-llama-3-8b
   # templateRef omitted - automatic selection
 ```
 
 Templates are filtered by:
-- Model identifier (`aimImageName`)
+- Model identifier (from `spec.model.ref` or matched via `spec.model.image`)
 - Availability status (only healthy templates)
 - GPU availability in the cluster
 - Service overrides (if specified)
@@ -144,23 +166,12 @@ Reference a specific template by name:
 
 ```yaml
 spec:
-  aimImageName: meta-llama-3-8b
+  model:
+    ref: meta-llama-3-8b
   templateRef: llama-3-8b-latency
 ```
 
 The controller searches namespace-scoped templates first, then cluster-scoped templates.
-
-## Model Caching
-
-Request model artifact pre-warming for faster startup:
-
-```yaml
-spec:
-  aimImageName: meta-llama-3-8b
-  cacheModel: true
-```
-
-This ensures model artifacts are downloaded before the service starts. Caching is namespace-specific.
 
 ## Authentication
 
@@ -168,7 +179,8 @@ For models requiring authentication (e.g., gated Hugging Face models):
 
 ```yaml
 spec:
-  aimImageName: meta-llama-3-8b
+  model:
+    ref: meta-llama-3-8b
   env:
     - name: HF_TOKEN
       valueFrom:
@@ -181,7 +193,8 @@ For private container registries:
 
 ```yaml
 spec:
-  aimImageName: meta-llama-3-8b
+  model:
+    ref: meta-llama-3-8b
   imagePullSecrets:
     - name: registry-credentials
 ```
@@ -218,7 +231,8 @@ metadata:
   labels:
     team: research
 spec:
-  aimImageName: meta-llama-3-8b
+  model:
+    ref: meta-llama-3-8b
   templateRef: llama-3-8b-latency
   runtimeConfigName: team-config
   replicas: 2
@@ -238,7 +252,6 @@ spec:
       name: inference-gateway
       namespace: gateways
     pathTemplate: "/team/{.metadata.labels['team']}/chat"
-  cacheModel: true
   env:
     - name: HF_TOKEN
       valueFrom:
@@ -278,12 +291,14 @@ kubectl -n <namespace> get aimservice <name> -o jsonpath='{.status.conditions[?(
 
 Verify the model exists:
 ```bash
-kubectl -n <namespace> get aimmodel <image-name>
-kubectl get aimclustermodel <image-name>
+kubectl -n <namespace> get aimmodel <model-name>
+kubectl get aimclustermodel <model-name>
 ```
+
+If using `spec.model.image` directly, verify the image URI is accessible and the runtime config is properly configured for model creation.
 
 ## Related Documentation
 
 - [Runtime Configuration](runtime-config.md) - Configure runtime settings and credentials
-- [Models](../concepts/images.md) - Understanding the model catalog
+- [Models](../concepts/models.md) - Understanding the model catalog
 - [Templates](../concepts/templates.md) - Deep dive on templates and discovery

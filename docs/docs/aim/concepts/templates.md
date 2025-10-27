@@ -42,15 +42,13 @@ metadata:
   name: llama-3-8b-throughput
   namespace: ml-research
 spec:
-  aimImageName: meta-llama-3-8b-instruct
+  modelName: meta-llama-3-8b-instruct
   runtimeConfigName: ml-research
   metric: throughput
   precision: fp8
   gpuSelector:
     count: 2
     model: MI300X
-  caching:
-    enabled: true
   env:
     - name: HF_TOKEN
       valueFrom:
@@ -65,7 +63,7 @@ spec:
 
 | Field | Description |
 | ----- | ----------- |
-| `aimImageName` | Model identifier referencing an `AIMModel` or `AIMClusterModel`. **Immutable** after creation. |
+| `modelName` | Model identifier referencing an `AIMModel` or `AIMClusterModel` by `metadata.name`. **Immutable** after creation. |
 | `runtimeConfigName` | Runtime configuration for credentials and defaults. Defaults to `default`. |
 | `metric` | Optimization goal: `latency` (interactive) or `throughput` (batch processing). |
 | `precision` | Numeric precision: `auto`, `fp4`, `fp8`, `fp16`, `fp32`, `bf16`, `int4`, `int8`. |
@@ -77,7 +75,6 @@ spec:
 
 | Field | Description |
 | ----- | ----------- |
-| `caching.enabled` | Pre-warm model downloads. Creates an `AIMTemplateCache` automatically. |
 | `env` | Environment variables for model downloads (typically authentication tokens). |
 | `imagePullSecrets` | Secrets for pulling private container images. |
 
@@ -87,7 +84,7 @@ spec:
 
 When a template is created or its spec changes:
 
-1. **Job Creation**: The controller creates a Kubernetes Job using the container image referenced by `aimImageName` (resolved via `AIMModel` or `AIMClusterModel`)
+1. **Job Creation**: The controller creates a Kubernetes Job using the container image referenced by `modelName` (resolved via `AIMModel` or `AIMClusterModel`)
 
 2. **Dry-Run Inspection**: The job runs the container in dry-run mode, examining model requirements without downloading large files
 
@@ -98,7 +95,7 @@ When a template is created or its spec changes:
 
 4. **Status Update**: Discovered information is written to `status.modelSources[]` and `status.profile`
 
-Discovery completes in seconds. The cached metadata remains available for all services and caches referencing this template.
+Discovery completes in seconds. The cached metadata remains available for all services referencing this template.
 
 ### Discovery Location
 
@@ -122,7 +119,7 @@ status:
       sizeBytes: 2097152
 ```
 
-Services and template caches reference this array to determine what to download and where to find it.
+Services reference this array when determining runtime requirements.
 
 ## Template Derivation
 
@@ -159,7 +156,8 @@ metadata:
   name: chat-service
   namespace: ml-team
 spec:
-  aimImageName: meta-llama-3-8b
+  model:
+    ref: meta-llama-3-8b
   templateRef: base-template
   overrides:
     metric: throughput
@@ -178,7 +176,7 @@ metadata:
     app.kubernetes.io/managed-by: aim
     aim.silogen.ai/derived-template: "true"
 spec:
-  aimImageName: meta-llama-3-8b
+  modelName: meta-llama-3-8b
   metric: throughput     # from override
   precision: fp16        # from override
   # other fields copied from base template
@@ -226,42 +224,11 @@ These auto-created templates:
 - Undergo discovery like manually created templates
 - Are managed by the model controller
 
-## Caching Integration
-
-### Namespace Template Caching
-
-Enable caching on namespace templates:
-
-```yaml
-spec:
-  caching:
-    enabled: true
-```
-
-The controller creates an `AIMTemplateCache` resource that:
-- Downloads model artifacts listed in `status.modelSources[]`
-- Stores them in a PersistentVolume
-- Makes them available to services using this template
-
-### Cluster Template Caching
-
-Cluster templates cannot enable caching directly. To cache a cluster template into a namespace:
-
-```yaml
-apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMTemplateCache
-metadata:
-  name: cache-cluster-template
-  namespace: ml-team
-spec:
-  templateRef: cluster-template-name  # references AIMClusterServiceTemplate
-```
-
 ## Template Selection
 
 When `AIMService.spec.templateRef` is omitted, the controller automatically selects a template:
 
-1. **Enumeration**: Find all templates referencing the service's `aimImageName`
+1. **Enumeration**: Find all templates referencing the model (either by `spec.model.ref` or matching the auto-created model from `spec.model.image`)
 2. **Filtering**: Exclude templates not in `Available` status
 3. **GPU Filtering**: Exclude templates requiring GPUs not present in the cluster
 4. **Override Matching**: If service specifies overrides, filter by matching metric/precision/GPU selector
@@ -279,7 +246,7 @@ kind: AIMClusterServiceTemplate
 metadata:
   name: llama-3-8b-latency
 spec:
-  aimImageName: meta-llama-3-8b-instruct
+  modelName: meta-llama-3-8b-instruct
   runtimeConfigName: platform-default
   metric: latency
   precision: fp16
@@ -288,7 +255,7 @@ spec:
     model: MI300X
 ```
 
-### Namespace Template with Caching
+### Namespace Template
 
 ```yaml
 apiVersion: aim.silogen.ai/v1alpha1
@@ -297,15 +264,13 @@ metadata:
   name: llama-3-8b-throughput
   namespace: ml-research
 spec:
-  aimImageName: meta-llama-3-8b-instruct
+  modelName: meta-llama-3-8b-instruct
   runtimeConfigName: ml-research
   metric: throughput
   precision: fp8
   gpuSelector:
     count: 2
     model: MI300X
-  caching:
-    enabled: true
   env:
     - name: HF_TOKEN
       valueFrom:
@@ -320,7 +285,8 @@ Service:
 
 ```yaml
 spec:
-  aimImageName: meta-llama-3-8b
+  model:
+    ref: meta-llama-3-8b
   overrides:
     metric: throughput
     gpuSelector:
@@ -339,7 +305,7 @@ metadata:
   labels:
     aim.silogen.ai/derived-template: "true"
 spec:
-  aimImageName: meta-llama-3-8b
+  modelName: meta-llama-3-8b
   metric: throughput
   gpuSelector:
     count: 4
@@ -397,6 +363,6 @@ Ensure the base template exists and is available.
 
 ## Related Documentation
 
-- [Models](images.md) - Understanding the model catalog and discovery
+- [Models](models.md) - Understanding the model catalog and discovery
 - [Runtime Config Concepts](runtime-config.md) - Resolution algorithm
 - [Services Usage](../usage/services.md) - Deploying services with templates

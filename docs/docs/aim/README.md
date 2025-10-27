@@ -23,7 +23,8 @@ metadata:
   name: llama-chat
   namespace: ml-team
 spec:
-  aimImageName: meta-llama-3-8b
+  model:
+    ref: meta-llama-3-8b
   replicas: 2
   routing:
     enabled: true
@@ -43,8 +44,8 @@ AIM Engine automatically:
     - [Runtime Configuration](usage/runtime-config.md) - Configure credentials and settings
 
 - **[Concepts](concepts/)**: Deep dive into AIM Engine architecture and internals
-    - [Models](concepts/images.md) - Model catalog and discovery mechanism
-    - [Templates](concepts/templates.md) - Runtime profiles and discovery cache
+    - [Models](concepts/models.md) - Model catalog and discovery mechanism
+    - [Templates](concepts/templates.md) - Runtime profiles and discovery
     - [Runtime Config](concepts/runtime-config.md) - Resolution algorithm and architecture
 
 ## Getting Started

@@ -161,7 +161,9 @@ spec:
 
 | Field | Scope | Description |
 | ----- | ----- | ----------- |
-| `defaultStorageClassName` | Both | Storage class for model caches when workloads don't specify one |
+| `defaultStorageClassName` | Both | Storage class used when caching is requested but no class is specified |
+| `model.creationScope` | Both | Controls whether auto-created models (from `spec.model.image`) are `Cluster` or `Namespace` scoped |
+| `model.autoDiscovery` | Both | Controls whether auto-created models run discovery and create templates |
 
 ### Namespace-Only Fields
 
@@ -249,7 +251,8 @@ metadata:
   labels:
     project: conversational-ai
 spec:
-  aimImageName: meta-llama-3-8b
+  model:
+    ref: meta-llama-3-8b
   # routing.pathTemplate omitted - uses runtime config template
 ```
 
@@ -259,7 +262,8 @@ Service with override:
 
 ```yaml
 spec:
-  aimImageName: meta-llama-3-8b
+  model:
+    ref: meta-llama-3-8b
   routing:
     pathTemplate: "/custom/{.metadata.name}"
 ```
@@ -392,7 +396,8 @@ Services select configs explicitly:
 
 ```yaml
 spec:
-  aimImageName: meta-llama-3-8b
+  model:
+    ref: meta-llama-3-8b
   runtimeConfigName: production  # or 'development'
 ```
 
@@ -432,9 +437,79 @@ The `hash` field in `status.effectiveRuntimeConfig` is a hash of the runtime con
 
 This enables efficient change detection without deep spec comparisons.
 
+## Model Auto-Creation
+
+When a service uses `spec.model.image` directly (instead of `spec.model.ref`), the runtime config controls the behavior:
+
+### Creation Scope
+
+The `model.creationScope` field determines whether auto-created models are cluster-scoped or namespace-scoped:
+
+```yaml
+spec:
+  model:
+    creationScope: Cluster  # creates AIMClusterModel (default)
+    # OR
+    creationScope: Namespace  # creates AIMModel in service's namespace
+```
+
+### Auto-Discovery
+
+The `model.autoDiscovery` field controls whether auto-created models run discovery:
+
+```yaml
+spec:
+  model:
+    autoDiscovery: true  # auto-created models run discovery (default)
+    autoDiscovery: false  # skip discovery for auto-created models
+```
+
+### Example
+
+Service using direct image:
+
+```yaml
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: my-service
+  namespace: ml-team
+spec:
+  model:
+    image: ghcr.io/example/my-model:v1.0.0
+```
+
+With runtime config:
+
+```yaml
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMRuntimeConfig
+metadata:
+  name: default
+  namespace: ml-team
+spec:
+  model:
+    creationScope: Cluster
+    autoDiscovery: true
+```
+
+AIM creates:
+
+```yaml
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterModel
+metadata:
+  name: auto-<hash>
+spec:
+  image: ghcr.io/example/my-model:v1.0.0
+  discovery:
+    enabled: true
+    autoCreateTemplates: true
+```
+
 ## Related Documentation
 
-- [Images](models.md) - How images use runtime configs for discovery
+- [Models](models.md) - How models use runtime configs for discovery and auto-creation
 - [Templates](templates.md) - Template discovery and runtime config resolution
 - [Services Usage](../usage/services.md) - Practical service configuration
 - [Runtime Config Usage](../usage/runtime-config.md) - Configuration guide

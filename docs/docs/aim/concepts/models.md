@@ -61,6 +61,7 @@ spec:
 | `runtimeConfigName` | Runtime configuration supplying registry credentials or storage defaults. Defaults to `default` when omitted. |
 | `discovery` | Controls metadata extraction and automatic template generation. Discovery is **opt-in** via `discovery.enabled: true`. |
 | `discovery.autoCreateTemplates` | When true (default), creates ServiceTemplates from recommended deployments published by the image. |
+| `defaultServiceTemplate` | Default template name to use when services reference this model without specifying a template. Optional. |
 | `resources` | Default resource requirements. These serve as baseline values that templates and services can override. |
 
 ## Discovery Mechanism
@@ -236,6 +237,7 @@ metadata:
 spec:
   image: ghcr.io/ml-team/llama-dev:latest
   runtimeConfigName: ml-team
+  defaultServiceTemplate: custom-template-name
   discovery:
     enabled: false  # skip discovery and auto-templates
   resources:
@@ -330,12 +332,69 @@ docker pull <image>
 docker inspect <image> --format='{{json .Config.Labels}}'
 ```
 
+## Auto-Creation from Services
+
+When a service uses `spec.model.image` directly (instead of `spec.model.ref`), AIM automatically creates a model resource if one doesn't already exist with that image URI.
+
+### Creation Scope
+
+The runtime config's `spec.model.creationScope` field controls whether the auto-created model is cluster-scoped or namespace-scoped:
+
+```yaml
+# In runtime config
+spec:
+  model:
+    creationScope: Cluster  # creates AIMClusterModel
+    # OR
+    creationScope: Namespace  # creates AIMModel in service's namespace
+```
+
+### Discovery for Auto-Created Models
+
+The runtime config's `spec.model.autoDiscovery` field controls whether auto-created models run discovery:
+
+```yaml
+spec:
+  model:
+    autoDiscovery: true  # auto-created models run discovery and create templates
+```
+
+### Example
+
+Service using direct image reference:
+
+```yaml
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: my-service
+  namespace: ml-team
+spec:
+  model:
+    image: ghcr.io/example/my-model:v1.0.0
+  runtimeConfigName: default
+```
+
+If the runtime config has `creationScope: Cluster` and `autoDiscovery: true`, AIM creates:
+
+```yaml
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterModel
+metadata:
+  name: auto-<hash-of-image>
+spec:
+  image: ghcr.io/example/my-model:v1.0.0
+  discovery:
+    enabled: true
+    autoCreateTemplates: true
+```
+
 ## Related Documentation
 
-- [Templates](templates.md) - Understanding ServiceTemplates and discovery cache
-- [Runtime Config Concepts](runtime-config.md) - Resolution details
+- [Templates](templates.md) - Understanding ServiceTemplates and discovery
+- [Runtime Config Concepts](runtime-config.md) - Resolution details including model creation
 - [Services Usage](../usage/services.md) - Deploying services
 
 ## Note on Terminology
 
-AIM Model resources (`AIMModel` and `AIMClusterModel`) define the mapping between model identifiers and container images. While we sometimes refer to the "model catalog" or "image catalog" conceptually, the Kubernetes resources are always `AIMModel` and `AIMClusterModel`.
+AIM Model resources (`AIMModel` and `AIMClusterModel`) define the mapping between model identifiers and container images. While we sometimes refer to the "model catalog" conceptually, the Kubernetes resources are always `AIMModel` and `AIMClusterModel`.
