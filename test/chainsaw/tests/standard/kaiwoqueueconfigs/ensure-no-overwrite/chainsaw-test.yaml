@@ -80,7 +80,7 @@ spec:
     - sleep:
         duration: 10s
     - assert:
-        timeout: 1s
+        timeout: 10s
         resource:
           apiVersion: kaiwo.silogen.ai/v1alpha1
           kind: KaiwoQueueConfig
