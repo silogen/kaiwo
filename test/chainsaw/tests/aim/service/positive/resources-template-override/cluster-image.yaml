@@ -8,9 +8,9 @@ spec:
   resources:
     limits:
       cpu: '4'
-      memory: 24Gi
-      amd.com/gpu: '1'
+      memory: 4Gi
+      #amd.com/gpu: '1'
     requests:
       cpu: '2'
-      memory: 12Gi
-      amd.com/gpu: '1'
+      memory: 2Gi
+      #amd.com/gpu: '1'

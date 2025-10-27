@@ -7,11 +7,13 @@ spec:
   metric: throughput
   resources:
     limits:
-      cpu: "8"
-      memory: 64Gi
+      cpu: "2"
+      memory: 2Gi
+      amd.com/gpu: '0'
     requests:
-      cpu: "6"
-      memory: 48Gi
+      cpu: "1"
+      memory: 1Gi
+      amd.com/gpu: '0'
   gpuSelector:
     count: 1
-    model: MI300X
+    model: AMD
