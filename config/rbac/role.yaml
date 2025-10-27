@@ -34,8 +34,8 @@ rules:
 
 - apiGroups: ["aim.silogen.ai"]
   resources:
-  - "aimimages"
-  - "aimclusterimages"
+  - "aimmodels"
+  - "aimclustermodels"
   - "aimruntimeconfigs"
   - "aimclusterruntimeconfigs"
   - "aimservicetemplates"
