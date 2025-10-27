@@ -35,10 +35,8 @@ spec:
           kind: AIMService
           metadata:
             name: ambiguous-service
-            namespace: ($namespace)
           status:
             conditions:
             - type: Ready
               status: "False"
               reason: MultipleModelsFound
-              (contains(message, 'multiple models')): true

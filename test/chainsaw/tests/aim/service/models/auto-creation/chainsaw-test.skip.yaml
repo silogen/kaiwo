@@ -29,7 +29,7 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMModel
           metadata:
-            namespace: ($namespace)
+
             labels:
               aim.silogen.ai/auto-created: "true"
           spec:
@@ -43,7 +43,6 @@ spec:
           kind: AIMService
           metadata:
             name: auto-creation-service
-            namespace: ($namespace)
           status:
             (resolvedImage != null): true
             resolvedImage:

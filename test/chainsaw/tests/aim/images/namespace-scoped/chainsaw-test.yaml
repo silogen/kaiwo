@@ -27,7 +27,7 @@ spec:
           kind: AIMModel
           metadata:
             name: llama-3-8b-ns
-            namespace: ($namespace)
+
           status:
             status: Ready
 
@@ -39,7 +39,7 @@ spec:
           kind: AIMServiceTemplate
           metadata:
             name: llama-3-8b-ns-mi300x-x1-latency-fp8
-            namespace: ($namespace)
+
           spec:
             modelName: llama-3-8b-ns
             metric: latency
@@ -53,7 +53,7 @@ spec:
           kind: AIMServiceTemplate
           metadata:
             name: llama-3-8b-ns-mi300x-x1-throughput-fp8
-            namespace: ($namespace)
+
           spec:
             modelName: llama-3-8b-ns
             metric: throughput
@@ -67,7 +67,7 @@ spec:
           kind: AIMServiceTemplate
           metadata:
             name: llama-3-8b-ns-mi300x-x1-latency-fp8
-            namespace: ($namespace)
+
           status:
             status: Ready
             (modelSources[0].sourceUri): hf://amd/Llama-3.1-8B-Instruct-FP8-KV
@@ -80,7 +80,7 @@ spec:
           kind: AIMModel
           metadata:
             name: llama-3-8b-ns
-            namespace: ($namespace)
+
           status:
             imageMetadata:
               model:

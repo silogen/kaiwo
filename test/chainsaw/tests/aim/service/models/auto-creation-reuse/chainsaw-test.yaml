@@ -29,7 +29,7 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMModel
           metadata:
-            namespace: ($namespace)
+
             labels:
               aim.silogen.ai/auto-created: "true"
           spec:
@@ -48,7 +48,7 @@ spec:
           kind: AIMService
           metadata:
             name: reuse-service-1
-            namespace: ($namespace)
+
           status:
             (resolvedImage != null): true
             resolvedImage:
@@ -59,7 +59,7 @@ spec:
           kind: AIMService
           metadata:
             name: reuse-service-2
-            namespace: ($namespace)
+
           status:
             (resolvedImage != null): true
             resolvedImage:

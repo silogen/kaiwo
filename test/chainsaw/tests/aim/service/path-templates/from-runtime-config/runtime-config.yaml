@@ -4,4 +4,4 @@ metadata:
   name: routing-template-config
 spec:
   routing:
-    pathTemplate: "/{.metadata.namespace}/{.metadata.labels['team']}/{.spec.aimModelName}/"
+    pathTemplate: "/{.metadata.namespace}/{.metadata.labels['team']}/{.spec.model.ref}/"

@@ -35,7 +35,7 @@ spec:
           kind: AIMServiceTemplate
           metadata:
             name: non-existent-template
-            namespace: ($namespace)
+
 
   - name: Verify no InferenceService was created
     try:
