@@ -36,6 +36,7 @@ manifests: controller-gen
 		paths=./apis/kaiwo/v1alpha1/... \
 		paths=./apis/config/v1alpha1/... \
 		paths=./apis/aim/v1alpha1/... \
+		paths=./apis/infrastructure/v1alpha1/... \
 		output:crd:artifacts:config=config/crd/bases
 
 .PHONY: generate
@@ -44,7 +45,8 @@ generate: controller-gen
 	$(CONTROLLER_GEN) object:headerFile=".copyright-template.goheader" \
 		paths=./apis/kaiwo/v1alpha1/... \
 		paths=./apis/aim/v1alpha1/... \
-		paths=./apis/config/v1alpha1/...
+		paths=./apis/config/v1alpha1/... \
+		paths=./apis/infrastructure/v1alpha1/...
 	@rm .copyright-template.goheader
 	
 .PHONY: fmt
@@ -277,6 +279,9 @@ generate-crd-docs:
 	#sed -i '1i---\nhide:\n  - navigation\n---\n' docs/docs/reference/crds/config.kaiwo.silogen.ai.md
 
 	crd-ref-docs --source-path apis/aim/v1alpha1/ --renderer=markdown --output-path=docs/docs/reference/crds/aim.silogen.ai.md --config docs/crd-ref-cocs-config.yaml
+
+	crd-ref-docs --source-path apis/infrastructure/v1alpha1/ --renderer=markdown --output-path=docs/docs/reference/crds/infrastructure.silogen.ai.md --config docs/crd-ref-cocs-config.yaml
+
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary

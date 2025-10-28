@@ -1,0 +1,35 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: partitioning-rule-overlap
+spec:
+  concurrent: false
+  steps:
+  - name: apply-plan-with-overlap
+    try:
+    - apply:
+        file: partitioning-plan.yaml
+
+  - name: verify-overlap-error
+    try:
+    - wait:
+        apiVersion: infrastructure.silogen.ai/v1alpha1
+        kind: PartitioningPlan
+        name: plan-rule-overlap
+        timeout: 5s
+        for:
+          jsonPath:
+            path: .status.phase
+            value: Degraded
+    - assert:
+        timeout: 5s
+        resource:
+          apiVersion: infrastructure.silogen.ai/v1alpha1
+          kind: PartitioningPlan
+          metadata:
+            name: plan-rule-overlap
+          status:
+            conditions:
+            - type: PlanReady
+              status: "False"
+              reason: PlanningFailed

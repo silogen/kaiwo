@@ -1,0 +1,31 @@
+apiVersion: infrastructure.silogen.ai/v1alpha1
+kind: PartitioningPlan
+metadata:
+  name: plan-rule-overlap
+spec:
+  dryRun: true
+  rollout:
+    maxParallel: 1
+    maxUnavailable: 1
+    excludeControlPlane: true
+  rules:
+  - description: first rule
+    selector:
+      matchExpressions:
+      - key: node-role.kubernetes.io/control-plane
+        operator: DoesNotExist
+      - key: feature.node.kubernetes.io/amd-gpu
+        operator: Exists
+    profile:
+      description: Chainsaw profile for rule overlap test
+      dcmProfileName: default
+  - description: second rule duplicates selection
+    selector:
+      matchExpressions:
+      - key: node-role.kubernetes.io/control-plane
+        operator: DoesNotExist
+      - key: feature.node.kubernetes.io/amd-gpu
+        operator: Exists
+    profile:
+      description: Chainsaw profile for rule overlap test
+      dcmProfileName: default

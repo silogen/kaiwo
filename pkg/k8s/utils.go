@@ -76,17 +76,17 @@ type EnvVarInput struct {
 //		if input.Value != "" {
 //			// Normal environment variable
 //			envVars = append(envVars, corev1.EnvVar{
-//				Name:  input.Name,
+//				Description:  input.Description,
 //				Value: input.Value,
 //			})
 //		} else if input.FromSecret != nil {
 //			// Secret-based environment variable
 //			envVars = append(envVars, corev1.EnvVar{
-//				Name: input.FromSecret.Name,
+//				Description: input.FromSecret.Description,
 //				ValueFrom: &corev1.EnvVarSource{
 //					SecretKeyRef: &corev1.SecretKeySelector{
 //						LocalObjectReference: corev1.LocalObjectReference{
-//							Name: input.FromSecret.Secret,
+//							Description: input.FromSecret.Secret,
 //						},
 //						Key: input.FromSecret.Key,
 //					},
@@ -95,14 +95,14 @@ type EnvVarInput struct {
 //		} else if input.MountSecret != nil {
 //			// Secret-based volume mount
 //			secretVolumes = append(secretVolumes, SecretVolume{
-//				Name:       fmt.Sprintf("%s-volume", input.MountSecret.Secret),
+//				Description:       fmt.Sprintf("%s-volume", input.MountSecret.Secret),
 //				SecretName: input.MountSecret.Secret,
 //				Key:        input.MountSecret.Key,
 //				SubPath:    filepath.Base(input.MountSecret.Path), // File name to mount
 //				MountPath:  input.MountSecret.Path,
 //			})
 //			envVars = append(envVars, corev1.EnvVar{
-//				Name:  input.MountSecret.Name,
+//				Description:  input.MountSecret.Description,
 //				Value: input.MountSecret.Path, // Set the mount path as an environment variable
 //			})
 //		}

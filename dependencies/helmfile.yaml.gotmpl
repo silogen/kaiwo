@@ -9,7 +9,7 @@ releases:
   - name: amd-gpu-operator
     namespace: kube-amd-gpu
     chart: rocm/gpu-operator-charts
-    version: v1.3.0
+    version: v1.4.0
     createNamespace: false
     # install only if gpuType == "amd" in the state-values file and not in vcluster
     installed: {{ and (eq .Values.gpuType "amd") (not .Values.vcluster) }}

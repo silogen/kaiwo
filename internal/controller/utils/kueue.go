@@ -479,11 +479,11 @@ func CreateLocalQueue(ctx context.Context, c client.Client, name string, namespa
 	// Create the LocalQueue
 	err = c.Create(ctx, localQueue)
 	if err != nil {
-		logger.Error(err, "Failed to create LocalQueue", "Name", name, "Namespace", namespace)
+		logger.Error(err, "Failed to create LocalQueue", "Description", name, "Namespace", namespace)
 		return fmt.Errorf("failed to create LocalQueue %s in namespace %s: %w", name, namespace, err)
 	}
 
-	logger.Info("Successfully created LocalQueue", "Name", name, "Namespace", namespace)
+	logger.Info("Successfully created LocalQueue", "Description", name, "Namespace", namespace)
 	return nil
 }
 

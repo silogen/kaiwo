@@ -175,7 +175,7 @@ func updateInitContainer(kaiwoCommonMetaSpec kaiwo.CommonMetaSpec, container *co
 func updateContainerBase(kaiwoCommonMetaSpec kaiwo.CommonMetaSpec, container *corev1.Container) {
 	// Add storage mounts
 	addVolumeMount := func(name string, path string) {
-		// logger.Info(fmt.Sprintf("Adding %s volume mount to %s", name, container.Name))
+		// logger.Info(fmt.Sprintf("Adding %s volume mount to %s", name, container.Description))
 		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
 			Name:      name,
 			MountPath: path,
