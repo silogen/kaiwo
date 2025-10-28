@@ -37,6 +37,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
+	ctrl "sigs.k8s.io/controller-runtime"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 )
@@ -124,9 +125,13 @@ func InspectImage(
 	clientset kubernetes.Interface,
 	namespace string,
 ) (*aimv1alpha1.ImageMetadata, error) {
+	logger := ctrl.LoggerFrom(ctx)
+	logger.Info("Inspecting image", "imageURI", imageURI)
+
 	// Parse the image reference
 	ref, err := name.ParseReference(imageURI)
 	if err != nil {
+		logger.Error(err, "Failed to parse image reference", "imageURI", imageURI)
 		return nil, fmt.Errorf("failed to parse image reference %q: %w", imageURI, err)
 	}
 
@@ -139,6 +144,8 @@ func InspectImage(
 			secretNames[i] = secret.Name
 		}
 
+		logger.Info("Using image pull secrets", "secrets", secretNames, "namespace", namespace)
+
 		// Create k8s keychain with the provided secrets
 		kc, err := k8schain.New(ctx, clientset, k8schain.Options{
 			Namespace:          namespace,
@@ -150,36 +157,46 @@ func InspectImage(
 		}
 		keychain = kc
 	} else {
+		logger.Info("Using default keychain (no image pull secrets provided)")
 		// Fall back to default keychain (uses docker config, etc.)
 		keychain = authn.DefaultKeychain
 	}
 
 	// Fetch the image descriptor
+	logger.Info("Fetching image descriptor from registry", "imageURI", imageURI)
 	desc, err := remote.Get(ref, remote.WithAuthFromKeychain(keychain), remote.WithContext(ctx))
 	if err != nil {
 		errType := categorizeRegistryError(err)
+		logger.Error(err, "Failed to fetch image descriptor",
+			"imageURI", imageURI,
+			"errorType", errType,
+			"errorMessage", err.Error())
 		return nil, &ImageRegistryError{
 			Type:    errType,
 			Message: fmt.Sprintf("failed to fetch image %q: %v", imageURI, err),
 			Cause:   err,
 		}
 	}
+	logger.Info("Successfully fetched image descriptor", "imageURI", imageURI, "digest", desc.Digest.String())
 
 	// Get the image
 	img, err := desc.Image()
 	if err != nil {
 		errType := categorizeRegistryError(err)
+		logger.Error(err, "Failed to get image from descriptor", "imageURI", imageURI, "errorType", errType)
 		return nil, &ImageRegistryError{
 			Type:    errType,
 			Message: fmt.Sprintf("failed to get image from descriptor: %v", err),
 			Cause:   err,
 		}
 	}
+	logger.Info("Successfully retrieved image", "imageURI", imageURI)
 
 	// Get the config file which contains labels
 	configFile, err := img.ConfigFile()
 	if err != nil {
 		errType := categorizeRegistryError(err)
+		logger.Error(err, "Failed to get image config file", "imageURI", imageURI, "errorType", errType)
 		return nil, &ImageRegistryError{
 			Type:    errType,
 			Message: fmt.Sprintf("failed to get image config: %v", err),
@@ -187,11 +204,28 @@ func InspectImage(
 		}
 	}
 
+	labelCount := len(configFile.Config.Labels)
+	logger.Info("Successfully retrieved image config", "imageURI", imageURI, "labelCount", labelCount)
+
+	// Log some key labels for debugging
+	if labelCount > 0 {
+		logger.Info("Image labels found",
+			"canonicalName", configFile.Config.Labels["org.amd.silogen.model.canonicalName"],
+			"hasRecommendedDeployments", configFile.Config.Labels["org.amd.silogen.model.recommendedDeployments"] != "")
+	} else {
+		logger.Info("No labels found in image config", "imageURI", imageURI)
+	}
+
 	// Extract metadata from labels
 	metadata, err := parseImageLabels(configFile.Config.Labels)
 	if err != nil {
+		logger.Error(err, "Failed to parse image labels", "imageURI", imageURI, "labelCount", labelCount)
 		return nil, fmt.Errorf("failed to parse image labels: %w", err)
 	}
+
+	logger.Info("Successfully extracted image metadata", "imageURI", imageURI,
+		"canonicalName", metadata.Model.CanonicalName,
+		"recommendedDeploymentCount", len(metadata.Model.RecommendedDeployments))
 
 	return metadata, nil
 }

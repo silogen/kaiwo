@@ -823,7 +823,7 @@ func ProjectTemplateStatus(
 
 	// Set resolved runtime config and image
 	templateStatus.ResolvedRuntimeConfig = nil
-	templateStatus.ResolvedImage = nil
+	templateStatus.ResolvedModel = nil
 	if obs != nil && obs.RuntimeConfig != nil {
 		templateStatus.ResolvedRuntimeConfig = obs.RuntimeConfig.ResolvedRef
 	}

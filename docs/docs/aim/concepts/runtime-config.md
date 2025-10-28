@@ -1,13 +1,13 @@
 # Runtime Configuration Architecture
 
-Runtime configurations provide credentials, storage defaults, and routing parameters. This document explains the resolution algorithm, inheritance model, and status tracking.
+Runtime configurations provide storage defaults and routing parameters. This document explains the resolution algorithm, inheritance model, and status tracking.
 
 ## Resolution Model
 
 The AIM operator resolves runtime settings from two Custom Resource Definitions:
 
-- **`AIMClusterRuntimeConfig`**: Cluster-wide defaults that apply across namespaces
-- **`AIMRuntimeConfig`**: Namespace-scoped configuration including authentication secrets
+- **`AIMClusterRuntimeConfig`**: Cluster-wide defaults that apply across namespaces, useful for single-tenant clusters
+- **`AIMRuntimeConfig`**: Namespace-scoped configuration including authentication secrets, useful for multi-tenant clusters
 
 ### Resolution Algorithm
 
@@ -18,46 +18,7 @@ When a workload references `runtimeConfigName: my-config`:
 3. If not found, the controller falls back to `AIMClusterRuntimeConfig` named `my-config`
 4. The resolved configuration is published in the consumer's `status.effectiveRuntimeConfig`
 
-When `runtimeConfigName` is omitted, the controller resolves a config named `default`.
-
-### No Field-Level Merging
-
-**Critical**: When both namespace and cluster configs exist with the same name, the namespace config **completely replaces** the cluster config. There is no field-level merging or inheritance.
-
-This ensures predictable behavior: what you write is what you get. If you want cluster defaults to apply to a namespace, you must explicitly include those fields in the namespace config.
-
-### Example Resolution
-
-Given:
-
-```yaml
-# Cluster config
-apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMClusterRuntimeConfig
-metadata:
-  name: default
-spec:
-  defaultStorageClassName: standard-ssd
-  routing:
-    enabled: true
----
-# Namespace config
-apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMRuntimeConfig
-metadata:
-  name: default
-  namespace: ml-team
-spec:
-  imagePullSecrets:
-    - name: private-registry
-```
-
-A service in `ml-team` namespace referencing `runtimeConfigName: default` gets:
-- `imagePullSecrets: [private-registry]` (from namespace config)
-- **No** `defaultStorageClassName` (namespace config doesn't include it)
-- **No** `routing.enabled` (namespace config doesn't include it)
-
-The cluster config fields are **not merged** into the namespace config.
+When `runtimeConfigName` is omitted, the controller resolves a config named `default`. If this is not found, no error is raised. However, if a config that is not named `default` is specified, it must exist, otherwise an error is raised.
 
 ## Effective Runtime Config Tracking
 
@@ -123,7 +84,6 @@ spec:
 - Shared routing configurations for clusters without multi-tenancy
 
 **Limitations**:
-- Cannot contain secrets (no `imagePullSecrets` or `serviceAccountName`)
 - Cannot enforce namespace-specific policies
 
 ### Namespace Runtime Configuration
@@ -138,9 +98,6 @@ metadata:
   namespace: ml-team
 spec:
   defaultStorageClassName: team-ssd
-  serviceAccountName: aim-runtime
-  imagePullSecrets:
-    - name: ghcr-team-secret
   routing:
     enabled: true
     gatewayRef:
@@ -150,30 +107,8 @@ spec:
 ```
 
 **Use cases**:
-- Team-specific registry credentials
 - Namespace-level routing policies
 - Custom storage classes per team
-- Service account configuration for discovery jobs
-
-## Field Reference
-
-### Common Fields
-
-| Field | Scope | Description |
-| ----- | ----- | ----------- |
-| `defaultStorageClassName` | Both | Storage class used when caching is requested but no class is specified |
-| `model.creationScope` | Both | Controls whether auto-created models (from `spec.model.image`) are `Cluster` or `Namespace` scoped |
-| `model.autoDiscovery` | Both | Controls whether auto-created models run discovery and create templates |
-
-### Namespace-Only Fields
-
-| Field | Description |
-| ----- | ----------- |
-| `serviceAccountName` | ServiceAccount used by discovery jobs and supporting pods |
-| `imagePullSecrets` | Registry credentials added to pod specs |
-| `routing.enabled` | Enable/disable HTTP routing for services using this config |
-| `routing.gatewayRef` | Gateway parent for HTTPRoute resources |
-| `routing.pathTemplate` | HTTP path template for services. See [Routing Templates](#routing-templates) |
 
 ## Routing Templates
 
@@ -203,11 +138,12 @@ During reconciliation:
 ### Rendering Failures
 
 A rendered path that:
+
 - Exceeds 200 characters
 - Contains invalid JSONPath
 - References missing labels/fields
 
-...degrades the `AIMService` with reason `PathTemplateInvalid` and skips HTTPRoute creation. The ServingRuntime remains intact.
+...degrades the `AIMService` with reason `PathTemplateInvalid` and skips HTTPRoute creation. The InferenceService remains intact.
 
 ### Precedence
 
@@ -218,6 +154,7 @@ Services evaluate path templates in this order:
 3. Default: `/<namespace>/<service-uid>`
 
 This allows:
+
 - **Runtime configs**: Set namespace-wide path conventions
 - **Services**: Override with specific paths when needed
 
@@ -297,19 +234,6 @@ Result:
 
 This allows workloads without special requirements to proceed even when no default config exists.
 
-### Authentication Expectations
-
-Discovery jobs and cluster-scoped operations run in the operator namespace and use the ServiceAccount/imagePullSecrets from the resolved runtime config.
-
-For **cluster images** and **cluster templates**:
-- Resolution happens in the operator namespace
-- The `default` runtime config must exist in the operator namespace
-- Secrets must exist in the operator namespace
-
-For **namespace images** and **namespace templates**:
-- Resolution happens in the resource's namespace
-- Secrets must exist in that namespace
-
 ## Operator Namespace
 
 The AIM controllers determine the operator namespace from the `AIM_OPERATOR_NAMESPACE` environment variable (default: `kaiwo-system`).
@@ -320,192 +244,6 @@ Cluster-scoped workflows such as:
 - Auto-generated cluster templates
 
 ...run auxiliary pods in this namespace and resolve namespaced runtime configs there.
-
-## Examples
-
-### Cluster Config for Storage Defaults
-
-```yaml
-apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMClusterRuntimeConfig
-metadata:
-  name: default
-spec:
-  defaultStorageClassName: fast-nvme
-```
-
-### Namespace Config with Credentials
-
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: ghcr-team-secret
-  namespace: ml-team
-type: kubernetes.io/dockerconfigjson
-data:
-  .dockerconfigjson: BASE64_DOCKER_CONFIG
----
-apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMRuntimeConfig
-metadata:
-  name: default
-  namespace: ml-team
-spec:
-  serviceAccountName: aim-runtime
-  imagePullSecrets:
-    - name: ghcr-team-secret
-  defaultStorageClassName: team-ssd
-```
-
-### Multiple Named Configs
-
-```yaml
-# Production config
-apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMRuntimeConfig
-metadata:
-  name: production
-  namespace: ml-team
-spec:
-  serviceAccountName: production-sa
-  imagePullSecrets:
-    - name: prod-registry
-  defaultStorageClassName: premium-ssd
-  routing:
-    enabled: true
-    gatewayRef:
-      name: production-gateway
-      namespace: gateways
-    pathTemplate: "/prod/{.metadata.namespace}/{.metadata.name}"
----
-# Development config
-apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMRuntimeConfig
-metadata:
-  name: development
-  namespace: ml-team
-spec:
-  serviceAccountName: dev-sa
-  defaultStorageClassName: standard
-  routing:
-    enabled: false
-```
-
-Services select configs explicitly:
-
-```yaml
-spec:
-  model:
-    ref: meta-llama-3-8b
-  runtimeConfigName: production  # or 'development'
-```
-
-### Operator Namespace Config for Cluster Resources
-
-```yaml
-# In operator namespace (e.g., kaiwo-system)
-apiVersion: v1
-kind: Secret
-metadata:
-  name: global-registry
-  namespace: kaiwo-system
-type: kubernetes.io/dockerconfigjson
-data:
-  .dockerconfigjson: BASE64_CONFIG
----
-apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMRuntimeConfig
-metadata:
-  name: default
-  namespace: kaiwo-system
-spec:
-  serviceAccountName: aim-runtime
-  imagePullSecrets:
-    - name: global-registry
-```
-
-This config is used for cluster-scoped image discovery and template operations.
-
-## Hash-Based Change Detection
-
-The `hash` field in `status.effectiveRuntimeConfig` is a hash of the runtime config's spec. Controllers use this to detect configuration changes:
-
-1. Controller reads workload's `status.effectiveRuntimeConfig.hash`
-2. Re-resolves runtime config and computes new hash
-3. If hashes differ, the config changed and workload needs reconciliation
-
-This enables efficient change detection without deep spec comparisons.
-
-## Model Auto-Creation
-
-When a service uses `spec.model.image` directly (instead of `spec.model.ref`), the runtime config controls the behavior:
-
-### Creation Scope
-
-The `model.creationScope` field determines whether auto-created models are cluster-scoped or namespace-scoped:
-
-```yaml
-spec:
-  model:
-    creationScope: Cluster  # creates AIMClusterModel (default)
-    # OR
-    creationScope: Namespace  # creates AIMModel in service's namespace
-```
-
-### Auto-Discovery
-
-The `model.autoDiscovery` field controls whether auto-created models run discovery:
-
-```yaml
-spec:
-  model:
-    autoDiscovery: true  # auto-created models run discovery (default)
-    autoDiscovery: false  # skip discovery for auto-created models
-```
-
-### Example
-
-Service using direct image:
-
-```yaml
-apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMService
-metadata:
-  name: my-service
-  namespace: ml-team
-spec:
-  model:
-    image: ghcr.io/example/my-model:v1.0.0
-```
-
-With runtime config:
-
-```yaml
-apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMRuntimeConfig
-metadata:
-  name: default
-  namespace: ml-team
-spec:
-  model:
-    creationScope: Cluster
-    autoDiscovery: true
-```
-
-AIM creates:
-
-```yaml
-apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMClusterModel
-metadata:
-  name: auto-<hash>
-spec:
-  image: ghcr.io/example/my-model:v1.0.0
-  discovery:
-    enabled: true
-    autoCreateTemplates: true
-```
 
 ## Related Documentation
 

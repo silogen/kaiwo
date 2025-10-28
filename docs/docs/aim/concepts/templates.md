@@ -18,6 +18,7 @@ The discovery cache function is critical. When a template is created, the operat
 Cluster-scoped templates are typically installed by administrators as part of model catalog bundles. They arrive through GitOps workflows, Helm installations, or operator bundles.
 
 **Key characteristics**:
+
 - Cannot enable caching directly (caching is namespace-specific)
 - Can be cached into namespaces using `AIMTemplateCache` resources
 - Discovery runs in the operator namespace (default: `kaiwo-system`)
@@ -28,6 +29,7 @@ Cluster-scoped templates are typically installed by administrators as part of mo
 Namespace-scoped templates are created by ML engineers and data scientists for custom runtime profiles.
 
 **Key characteristics**:
+
 - Can enable model caching via `spec.caching.enabled`
 - Support namespace-specific secrets and authentication
 - Discovery runs in the template's namespace
@@ -92,9 +94,10 @@ When a template is created or its spec changes:
 2. **Dry-Run Inspection**: The job runs the container in dry-run mode, examining model requirements without downloading large files
 
 3. **Metadata Extraction**: The job outputs:
-   - Model source URIs (often Hugging Face Hub references)
-   - Expected sizes in bytes
-   - Engine arguments and environment variables
+
+    - Model source URIs (often Hugging Face Hub references)
+    - Expected sizes in bytes
+    - Engine arguments and environment variables
 
 4. **Status Update**: Discovered information is written to `status.modelSources[]` and `status.profile`
 
@@ -134,6 +137,7 @@ Templates can optionally provide static model sources in `spec.modelSources` ins
 4. **Manual maintenance**: Sources must be updated manually when the model changes
 
 This is useful when:
+
 - Discovery is not available or not needed
 - Model sources are already known and stable
 - You want to avoid the discovery job overhead
@@ -170,11 +174,13 @@ When `spec.modelSources` is provided, the template moves directly to `Ready` sta
 The AIM operator enforces a global limit of **10 concurrent discovery jobs** across the entire cluster. This prevents resource exhaustion when many templates are created simultaneously.
 
 When this limit is reached:
+
 - New templates wait in `Pending` status with reason `AwaitingDiscovery`
 - Discovery jobs are queued and run as existing jobs complete
 - Services referencing waiting templates remain in `Starting` status
 
 To avoid delays:
+
 - Use static model sources when discovery is not needed
 - Stagger template creation when deploying many models at once
 - Consider whether cluster-scoped templates can be shared across namespaces
@@ -277,25 +283,30 @@ Services wait for templates to reach `Ready` before deploying.
 ### Conditions
 
 **Discovered**: Reports discovery status. Reasons:
+
 - `ProfilesDiscovered`: Discovery completed successfully and runtime profiles were extracted
 - `AwaitingDiscovery`: Discovery job has been created and is waiting to run
 - `DiscoveryFailed`: Discovery job failed (check job logs for details)
 
 **CacheWarm**: Reports caching status (namespace-scoped templates only). Reasons:
+
 - `Warm`: All model sources have been cached successfully
 - `WarmRequested`: Caching has been enabled but not yet started
 - `Warming`: Cache warming is in progress
 - `WarmFailed`: Cache warming failed
 
 **Ready**: Reports overall readiness
+
 - `True` when template is ready for use (discovered and, if requested, cache warmed)
 - `False` during discovery, cache warming, or after failures
 
 **Progressing**: Indicates active reconciliation
+
 - `True` when the controller is actively processing discovery or cache operations
 - `False` when template has reached a stable state
 
 **Failure**: Reports terminal failures
+
 - `True` when an unrecoverable error has occurred
 - Includes detailed reason and message
 
@@ -304,6 +315,7 @@ Services wait for templates to reach `Ready` before deploying.
 When AIM Models have `spec.discovery.enabled: true` and `spec.discovery.autoCreateTemplates: true`, the controller creates templates from the model's recommended deployments.
 
 These auto-created templates:
+
 - Use naming from the recommended deployment metadata
 - Include preset metric, precision, and GPU requirements
 - Undergo discovery like manually created templates
@@ -418,6 +430,7 @@ kubectl -n <namespace> logs job/<job-name>
 ```
 
 Common issues:
+
 - Image pull failures (missing/invalid imagePullSecrets)
 - Container crashes during dry-run
 - Runtime config missing
@@ -441,6 +454,7 @@ kubectl -n <namespace> get aimservice <name> -o yaml
 ```
 
 Look for:
+
 - Failure conditions explaining why derivation failed
 - `resolvedTemplate` showing which template was selected
 

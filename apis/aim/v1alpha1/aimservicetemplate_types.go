@@ -132,9 +132,9 @@ type AIMServiceTemplateStatus struct {
 	// +optional
 	ResolvedRuntimeConfig *AIMResolvedRuntimeConfig `json:"resolvedRuntimeConfig,omitempty"`
 
-	// ResolvedImage captures metadata about the image that was resolved.
+	// ResolvedModel captures metadata about the image that was resolved.
 	// +optional
-	ResolvedImage *AIMResolvedReference `json:"resolvedImage,omitempty"`
+	ResolvedModel *AIMResolvedReference `json:"resolvedModel,omitempty"`
 
 	// Status represents the current high‑level status of the template lifecycle.
 	// Values: `Pending`, `Progressing`, `Ready`, `Failed`, `NotAvailable`.

@@ -707,8 +707,8 @@ spec:
                         type: string
                     type: object
                 type: object
-              resolvedImage:
-                description: ResolvedImage captures metadata about the image that
+              resolvedModel:
+                description: ResolvedModel captures metadata about the image that
                   was resolved.
                 properties:
                   kind:

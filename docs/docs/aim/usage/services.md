@@ -4,7 +4,7 @@
 
 ## Quick Start
 
-The minimal service requires only a model reference:
+The minimal service requires just an AIM container image:
 
 ```yaml
 apiVersion: aim.silogen.ai/v1alpha1
@@ -14,23 +14,11 @@ metadata:
   namespace: ml-team
 spec:
   model:
-    ref: meta-llama-3-8b
+    image: ghcr.io/silogen/aim-meta-llama-llama-3-1-8b-instruct:0.7.0
 ```
 
-This creates an inference service using the default runtime configuration and automatically selected template.
+This creates an inference service using the default runtime configuration and automatically selected profile.
 
-Alternatively, you can specify a container image directly, and AIM will auto-create a model resource if one doesn't exist:
-
-```yaml
-apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMService
-metadata:
-  name: llama-chat
-  namespace: ml-team
-spec:
-  model:
-    image: ghcr.io/example/llama-3.1-8b-instruct:v1.2.0
-```
 
 ## Common Configuration
 
@@ -41,7 +29,7 @@ Control the number of replicas:
 ```yaml
 spec:
   model:
-    ref: meta-llama-3-8b
+    image: ghcr.io/silogen/aim-meta-llama-llama-3-1-8b-instruct:0.7.0
   replicas: 3
 ```
 
@@ -52,7 +40,7 @@ Override default resource allocations:
 ```yaml
 spec:
   model:
-    ref: meta-llama-3-8b
+    image: ghcr.io/silogen/aim-meta-llama-llama-3-1-8b-instruct:0.7.0
   resources:
     limits:
       cpu: "8"
@@ -64,12 +52,12 @@ spec:
 
 ### Runtime Overrides
 
-Customize optimization settings without creating templates:
+Customize optimization settings:
 
 ```yaml
 spec:
   model:
-    ref: meta-llama-3-8b
+    image: ghcr.io/silogen/aim-meta-llama-llama-3-1-8b-instruct:0.7.0
   overrides:
     metric: throughput      # or 'latency' for interactive workloads
     precision: fp16         # fp4, fp8, fp16, bf16, int4, int8, auto
@@ -78,7 +66,7 @@ spec:
       model: MI300X
 ```
 
-The controller automatically creates a template incorporating these overrides.
+Please note that not all configurations may be supported on each AIM image.
 
 ## Runtime Configuration
 
@@ -87,15 +75,12 @@ Reference a specific runtime configuration for credentials and defaults:
 ```yaml
 spec:
   model:
-    ref: meta-llama-3-8b
+    image: ghcr.io/silogen/aim-meta-llama-llama-3-1-8b-instruct:0.7.0
   runtimeConfigName: team-config  # defaults to 'default' if omitted
 ```
 
 Runtime configurations provide:
-- Image pull secrets for private registries
-- Service account configuration
 - Routing defaults
-- Model creation scope (when using `spec.model.image`)
 
 See [Runtime Configuration](runtime-config.md) for details.
 
@@ -106,7 +91,7 @@ Enable external HTTP access through Gateway API:
 ```yaml
 spec:
   model:
-    ref: meta-llama-3-8b
+    image: ghcr.io/silogen/aim-meta-llama-llama-3-1-8b-instruct:0.7.0
   routing:
     enabled: true
     gatewayRef:
@@ -121,7 +106,7 @@ Override the default path using templates:
 ```yaml
 spec:
   model:
-    ref: meta-llama-3-8b
+    image: ghcr.io/silogen/aim-meta-llama-llama-3-1-8b-instruct:0.7.0
   routing:
     enabled: true
     gatewayRef:
@@ -139,40 +124,6 @@ The final path is lowercased, URL-encoded, and limited to 200 characters.
 
 **Note**: If a label or field doesn't exist, the service will enter a degraded state. Ensure all referenced fields are present.
 
-## Templates
-
-Templates define runtime profiles (optimization goals, GPU requirements, precision). The controller can select templates automatically or you can reference them explicitly.
-
-### Automatic Selection
-
-When `templateRef` is omitted, the controller finds available templates for your model and selects the best match:
-
-```yaml
-spec:
-  model:
-    ref: meta-llama-3-8b
-  # templateRef omitted - automatic selection
-```
-
-Templates are filtered by:
-- Model identifier (from `spec.model.ref` or matched via `spec.model.image`)
-- Availability status (only healthy templates)
-- GPU availability in the cluster
-- Service overrides (if specified)
-
-### Explicit Reference
-
-Reference a specific template by name:
-
-```yaml
-spec:
-  model:
-    ref: meta-llama-3-8b
-  templateRef: llama-3-8b-latency
-```
-
-The controller searches namespace-scoped templates first, then cluster-scoped templates.
-
 ## Authentication
 
 For models requiring authentication (e.g., gated Hugging Face models):
@@ -180,7 +131,7 @@ For models requiring authentication (e.g., gated Hugging Face models):
 ```yaml
 spec:
   model:
-    ref: meta-llama-3-8b
+    image: ghcr.io/silogen/aim-meta-llama-llama-3-1-8b-instruct:0.7.0
   env:
     - name: HF_TOKEN
       valueFrom:
@@ -194,7 +145,7 @@ For private container registries:
 ```yaml
 spec:
   model:
-    ref: meta-llama-3-8b
+    image: ghcr.io/silogen/aim-meta-llama-llama-3-1-8b-instruct:0.7.0
   imagePullSecrets:
     - name: registry-credentials
 ```

@@ -1226,8 +1226,8 @@ func (in *AIMServiceTemplateStatus) DeepCopyInto(out *AIMServiceTemplateStatus) 
 		*out = new(AIMResolvedRuntimeConfig)
 		**out = **in
 	}
-	if in.ResolvedImage != nil {
-		in, out := &in.ResolvedImage, &out.ResolvedImage
+	if in.ResolvedModel != nil {
+		in, out := &in.ResolvedModel, &out.ResolvedModel
 		*out = new(AIMResolvedReference)
 		**out = **in
 	}

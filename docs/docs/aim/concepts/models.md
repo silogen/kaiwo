@@ -5,6 +5,7 @@ AIM Model resources form a catalog that maps logical model identifiers to specif
 ## Overview
 
 Model resources serve two purposes:
+
 1. **Registry**: Translate abstract model references into concrete container images
 2. **Version control**: Update which container serves a model without changing service configurations
 
@@ -21,6 +22,7 @@ Cluster models provide a consistent baseline across all namespaces. Any namespac
 ### AIMModel
 
 Namespace-scoped models allow teams to:
+
 - Define team-specific model variants
 - Override cluster-level definitions for testing
 - Control model access at the namespace level
@@ -39,8 +41,7 @@ kind: AIMClusterModel
 metadata:
   name: meta-llama-3-8b-instruct
 spec:
-  image: ghcr.io/example/llama-3.1-8b-instruct:v1.2.0
-  runtimeConfigName: platform-default
+  image: ghcr.io/silogen/aim-meta-llama-llama-3-1-8b-instruct:0.7.0
   discovery:
     enabled: true
     autoCreateTemplates: true
@@ -55,33 +56,19 @@ spec:
 
 ### Fields
 
-| Field | Purpose |
-| ----- | ------- |
-| `image` | Container image URI implementing this model. The operator inspects this image during discovery. |
-| `runtimeConfigName` | Runtime configuration supplying storage defaults and discovery settings. Defaults to `default` when omitted. |
-| `discovery` | Controls metadata extraction and automatic template generation. Discovery is **opt-in** via `discovery.enabled: true`. |
-| `discovery.autoCreateTemplates` | When true (default), creates ServiceTemplates from recommended deployments published by the image. |
-| `defaultServiceTemplate` | Default template name to use when services reference this model without specifying a template. Optional. |
+| Field | Purpose                                                                                                                                                           |
+| ----- |-------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `image` | Container image URI implementing this model. The operator inspects this image during discovery.                                                                   |
+| `discovery` | Controls metadata extraction and automatic template generation. Discovery is attempted automatically.                                                             |
+| `discovery.autoCreateTemplates` | When true (default), creates ServiceTemplates from recommended deployments published by the image.                                                                |
+| `defaultServiceTemplate` | Default template name to use when services reference this model without specifying a template. Optional.                                                          |
 | `imagePullSecrets` | Secrets for pulling the container image during discovery and inference. Must exist in the same namespace as the model (or operator namespace for cluster models). |
-| `serviceAccountName` | Service account to use for discovery jobs and metadata extraction. If empty, uses the default service account. |
-| `resources` | Default resource requirements. These serve as baseline values that templates and services can override. |
+| `serviceAccountName` | Service account to use for discovery jobs and metadata extraction. If empty, uses the default service account.                                                    |
+| `resources` | Default resource requirements. These serve as baseline values that templates and services can override.                                                           |
 
 ## Discovery Mechanism
 
-Discovery is an opt-in process that extracts metadata from container images and optionally creates templates.
-
-### Enabling Discovery
-
-Set `spec.discovery.enabled: true` to trigger inspection:
-
-```yaml
-spec:
-  discovery:
-    enabled: true                # run metadata extraction
-    autoCreateTemplates: true    # generate templates (default)
-```
-
-When disabled (default), the operator skips inspection and template generation entirely.
+Discovery is an automatic process that extracts metadata from container images and creates templates.
 
 ### Discovery Process
 
@@ -90,9 +77,10 @@ When discovery is enabled:
 1. **Job Creation**: The controller creates a Kubernetes Job in the appropriate namespace (operator namespace for cluster images, image namespace for namespace images)
 
 2. **Image Inspection**: The job pulls the container image using credentials from the referenced runtime config and extracts:
-   - Required model artifact sources (Hugging Face Hub references, etc.)
-   - GPU requirements and recommended deployment configurations
-   - Runtime metadata from container labels
+
+    - Required model artifact sources (Hugging Face Hub references, etc.)
+    - GPU requirements and recommended deployment configurations
+    - Runtime metadata from container labels
 
 3. **Metadata Storage**: Extracted metadata is written to `status.discoveredMetadata`
 
@@ -106,34 +94,6 @@ AIM discovery expects container images to include specific labels. Official AIM 
 - `org.amd.silogen.model.deployments`: JSON array of recommended deployment configurations
 
 Missing required labels causes the `MetadataExtracted` condition to flip to `False` and marks the model resource `Failed`.
-
-### Private Registries
-
-Discovery jobs authenticate using the runtime config referenced by `runtimeConfigName`. For cluster models:
-
-```yaml
-# In operator namespace (e.g., kaiwo-system)
-apiVersion: v1
-kind: Secret
-metadata:
-  name: ghcr-secret
-  namespace: kaiwo-system
-type: kubernetes.io/dockerconfigjson
-data:
-  .dockerconfigjson: BASE64_DOCKER_CONFIG
----
-apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMRuntimeConfig
-metadata:
-  name: default
-  namespace: kaiwo-system
-spec:
-  serviceAccountName: aim-runtime
-  imagePullSecrets:
-    - name: ghcr-secret
-```
-
-The secret must exist in the same namespace where discovery runs (operator namespace for cluster models, model's namespace for namespace models).
 
 ## Lifecycle and Status
 
@@ -159,11 +119,13 @@ The `status` field tracks discovery progress:
 ### Conditions
 
 **RuntimeResolved**: Reports whether runtime config resolution succeeded. Reasons:
+
 - `RuntimeResolved`: Runtime configuration was successfully resolved
 - `RuntimeConfigMissing`: The explicitly referenced runtime config was not found
 - `DefaultRuntimeConfigMissing`: The implicit default runtime config was not found (warning, allows reconciliation to continue)
 
 **MetadataExtracted**: Reports whether image inspection succeeded. Reasons:
+
 - `MetadataExtracted`: Discovery completed successfully
 - `MetadataExtractionFailed`: Discovery job failed or required labels missing from image
 
@@ -297,6 +259,7 @@ kubectl -n <namespace> logs -l job-name=<image-name>-discovery
 ```
 
 Common causes:
+
 - Missing or invalid imagePullSecrets
 - Image doesn't exist or tag is invalid
 - Required labels missing from image
@@ -312,6 +275,7 @@ kubectl -n <namespace> get aimmodel <name> -o yaml
 ```
 
 Look for:
+
 - `discovery.enabled: false` - discovery is disabled
 - `discovery.autoCreateTemplates: false` - auto-creation disabled
 - `TemplatesAutoGenerated` condition with reason `NoRecommendedTemplates`

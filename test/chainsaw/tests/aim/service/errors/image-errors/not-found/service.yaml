@@ -4,4 +4,5 @@ metadata:
   name: test-service-image-not-found
 spec:
   model:
-    image: ghcr.io/silogen/this-image-does-not-exist:v999.999.999
+    # Use the same repo but with a tag that definitely doesn't exist
+    image: ghcr.io/silogen/aim-qwen-qwen3-32b:this-tag-absolutely-does-not-exist-404

@@ -24,10 +24,14 @@ metadata:
   namespace: ml-team
 spec:
   model:
-    ref: meta-llama-3-8b
+    image: ghcr.io/silogen/aim-meta-llama-llama-3-1-8b-instruct:0.7.0
   replicas: 2
   routing:
     enabled: true
+    gatewayRef:
+      name: inference-gateway
+      namespace: gateways
+    pathTemplate: "{.metadata.namespace}/{.metadata.name}"
 ```
 
 AIM Engine automatically:
@@ -35,7 +39,7 @@ AIM Engine automatically:
 - Resolves the model container image
 - Selects an appropriate runtime configuration
 - Deploys a KServe InferenceService
-- Creates HTTP routing through Gateway API
+- Creates HTTP routing through Gateway API via the path `ml-team/llama-chat`
 
 ## Documentation
 

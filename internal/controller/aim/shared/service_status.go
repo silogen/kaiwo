@@ -228,11 +228,18 @@ func HandleImageNotReady(
 		message = "Image is not ready"
 	}
 
-	// Set status based on the reason - Degraded if model is degraded/failed, otherwise Pending
-	if obs.ImageReadyReason == "ModelDegraded" || obs.ImageReadyReason == "ModelFailed" {
+	// Set status based on the reason
+	// ModelFailed is a terminal error (e.g., image not found 404) - cascade to Failed
+	// ModelDegraded is a recoverable error (e.g., auth issues) - cascade to Degraded
+	// Other reasons (e.g., model pending) - set to Pending
+	switch obs.ImageReadyReason {
+	case "ModelFailed":
+		status.Status = aimv1alpha1.AIMServiceStatusFailed
+		setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, obs.ImageReadyReason, message)
+	case "ModelDegraded":
 		status.Status = aimv1alpha1.AIMServiceStatusDegraded
 		setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, obs.ImageReadyReason, message)
-	} else {
+	default:
 		status.Status = aimv1alpha1.AIMServiceStatusPending
 	}
 

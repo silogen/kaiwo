@@ -519,8 +519,8 @@ func PopulateObservationFromNamespaceTemplate(
 	if template.Status.ResolvedRuntimeConfig != nil {
 		obs.ResolvedRuntimeConfig = template.Status.ResolvedRuntimeConfig
 	}
-	if template.Status.ResolvedImage != nil {
-		obs.ResolvedImage = template.Status.ResolvedImage
+	if template.Status.ResolvedModel != nil {
+		obs.ResolvedImage = template.Status.ResolvedModel
 	}
 	obs.TemplateStatus = template.Status.DeepCopy()
 	obs.TemplateSpecCommon = template.Spec.AIMServiceTemplateSpecCommon
@@ -563,8 +563,8 @@ func PopulateObservationFromClusterTemplate(
 	if template.Status.ResolvedRuntimeConfig != nil {
 		obs.ResolvedRuntimeConfig = template.Status.ResolvedRuntimeConfig
 	}
-	if template.Status.ResolvedImage != nil {
-		obs.ResolvedImage = template.Status.ResolvedImage
+	if template.Status.ResolvedModel != nil {
+		obs.ResolvedImage = template.Status.ResolvedModel
 	}
 	obs.TemplateStatus = template.Status.DeepCopy()
 	obs.TemplateSpecCommon = template.Spec.AIMServiceTemplateSpecCommon

@@ -17,11 +17,14 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMModel
           metadata:
-            name: aim-qwen-qwen3-32b-0-7-0-preview-0c176004
+            name: aim-qwen-qwen3-this-tag-absolutely-does-not-exist-404-fe47ee1e
           status:
             status: Failed
+            (conditions[?type == 'MetadataExtracted']):
+            - status: "False"
+              reason: "ImageNotFound"
 
-  - name: Verify service shows template is degraded
+  - name: Verify service shows model is failed
     try:
     - assert:
         resource:
@@ -31,3 +34,5 @@ spec:
             name: test-service-image-not-found
           status:
             status: Failed
+            (conditions[?type == 'Ready']):
+            - status: "False"
