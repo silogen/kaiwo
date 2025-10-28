@@ -377,6 +377,7 @@ func PlanImageResources(ctx context.Context, input ImagePlanInput) ([]client.Obj
 				input.OwnerReference,
 				input.IsClusterScoped,
 				input.ImageSpec.ImagePullSecrets,
+				input.ImageSpec.ServiceAccountName,
 			)
 			desired = append(desired, template)
 			createdTemplates = true
@@ -397,14 +398,16 @@ func buildServiceTemplateFromDeployment(
 	ownerRefs []metav1.OwnerReference,
 	isClusterScoped bool,
 	imagePullSecrets []corev1.LocalObjectReference,
+	serviceAccountName string,
 ) client.Object {
 	// Generate template name using the specified format
 	templateName := generateTemplateName(imageName, deployment)
 
 	// Build common spec
 	commonSpec := aimv1alpha1.AIMServiceTemplateSpecCommon{
-		ModelName:        imageName,
-		ImagePullSecrets: imagePullSecrets,
+		ModelName:          imageName,
+		ImagePullSecrets:   imagePullSecrets,
+		ServiceAccountName: serviceAccountName,
 	}
 
 	// Set runtime parameters from deployment

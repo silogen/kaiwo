@@ -144,11 +144,7 @@ func ResolveRuntimeConfig(ctx context.Context, k8sClient client.Client, namespac
 // mergeRuntimeConfigSpecs merges cluster and namespace runtime config specs.
 // Cluster config is the base, namespace config fields override.
 func mergeRuntimeConfigSpecs(clusterSpec aimv1alpha1.AIMClusterRuntimeConfigSpec, namespaceSpec aimv1alpha1.AIMRuntimeConfigSpec) aimv1alpha1.AIMRuntimeConfigSpec {
-	merged := aimv1alpha1.AIMRuntimeConfigSpec{
-		AIMRuntimeConfigCommon: clusterSpec.AIMRuntimeConfigCommon,
-		// Start with namespace credentials (cluster configs don't have credentials)
-		AIMRuntimeConfigCredentials: namespaceSpec.AIMRuntimeConfigCredentials,
-	}
+	merged := aimv1alpha1.AIMRuntimeConfigSpec(clusterSpec)
 
 	// Override common fields from namespace config if set
 	if namespaceSpec.DefaultStorageClassName != "" {

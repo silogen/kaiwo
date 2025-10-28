@@ -57,19 +57,6 @@ type AIMRuntimeConfigCommon struct {
 	Routing *AIMRuntimeRoutingConfig `json:"routing,omitempty"`
 }
 
-// AIMRuntimeConfigCredentials captures namespace-scoped authentication configuration.
-// These fields are only available in namespace-scoped AIMRuntimeConfig resources.
-type AIMRuntimeConfigCredentials struct {
-	// ServiceAccountName specifies the Kubernetes service account to use for workloads
-	// created by the operator, including:
-	// - Discovery jobs that inspect container images
-	// - Cache warmer jobs that download model artifacts
-	// - Any other operator-managed pods in this namespace
-	// If empty, the default service account for the namespace is used.
-	// +optional
-	ServiceAccountName string `json:"serviceAccountName,omitempty"`
-}
-
 // AIMClusterRuntimeConfigSpec defines cluster-wide defaults for AIM resources.
 type AIMClusterRuntimeConfigSpec struct {
 	AIMRuntimeConfigCommon `json:",inline"`
@@ -77,8 +64,7 @@ type AIMClusterRuntimeConfigSpec struct {
 
 // AIMRuntimeConfigSpec defines namespace-scoped overrides for AIM resources.
 type AIMRuntimeConfigSpec struct {
-	AIMRuntimeConfigCommon      `json:",inline"`
-	AIMRuntimeConfigCredentials `json:",inline"`
+	AIMRuntimeConfigCommon `json:",inline"`
 }
 
 // AIMRuntimeRoutingConfig configures HTTP routing defaults for inference services.

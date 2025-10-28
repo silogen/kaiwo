@@ -497,6 +497,12 @@ spec:
                 description: RuntimeConfigName references the AIM runtime configuration
                   (by name) to use for this service.
                 type: string
+              serviceAccountName:
+                description: |-
+                  ServiceAccountName specifies the Kubernetes service account to use for the inference workload.
+                  This service account is used by the deployed inference pods.
+                  If empty, the default service account for the namespace is used.
+                type: string
               templateRef:
                 description: |-
                   TemplateRef is the name of the AIMServiceTemplate or AIMClusterServiceTemplate to use.

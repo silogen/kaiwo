@@ -55,6 +55,12 @@ type AIMServiceTemplateSpecCommon struct {
 	// +optional
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 
+	// ServiceAccountName specifies the Kubernetes service account to use for workloads related to this template.
+	// This includes discovery dry-run jobs and inference services created from this template.
+	// If empty, the default service account for the namespace is used.
+	// +optional
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+
 	// Resources defines the default container resource requirements applied to services derived from this template.
 	// Service-specific values override the template defaults.
 	// +optional

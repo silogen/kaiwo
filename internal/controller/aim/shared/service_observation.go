@@ -312,11 +312,12 @@ func resolveModelNameFromService(
 			runtimeConfig = &runtimeConfigResolution.EffectiveSpec
 		}
 
-		// Use service's imagePullSecrets for auto-created model
+		// Use service's imagePullSecrets and serviceAccountName for auto-created model
 		imagePullSecrets := service.Spec.ImagePullSecrets
+		serviceAccountName := service.Spec.ServiceAccountName
 
 		// Resolve or create model from image
-		modelName, _, err := ResolveOrCreateModelFromImage(ctx, k8sClient, service.Namespace, imageURI, runtimeConfig, imagePullSecrets)
+		modelName, _, err := ResolveOrCreateModelFromImage(ctx, k8sClient, service.Namespace, imageURI, runtimeConfig, imagePullSecrets, serviceAccountName)
 		if err != nil {
 			return "", fmt.Errorf("failed to resolve/create model from image %q: %w", imageURI, err)
 		}

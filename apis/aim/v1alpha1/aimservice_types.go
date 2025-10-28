@@ -105,6 +105,12 @@ type AIMServiceSpec struct {
 	// +optional
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 
+	// ServiceAccountName specifies the Kubernetes service account to use for the inference workload.
+	// This service account is used by the deployed inference pods.
+	// If empty, the default service account for the namespace is used.
+	// +optional
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+
 	// Routing enables HTTP routing through Gateway API for this service.
 	// +optional
 	Routing *AIMServiceRouting `json:"routing,omitempty"`

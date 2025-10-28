@@ -179,6 +179,12 @@ spec:
                   RuntimeConfigName references the AIM runtime configuration (by name) to use for this image.
                   The runtime config controls discovery behavior and model creation scope.
                 type: string
+              serviceAccountName:
+                description: |-
+                  ServiceAccountName specifies the Kubernetes service account to use for workloads related to this model.
+                  This includes metadata extraction jobs and any other model-related operations.
+                  If empty, the default service account for the namespace is used.
+                type: string
             required:
             - image
             type: object

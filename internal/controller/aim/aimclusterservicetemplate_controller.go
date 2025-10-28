@@ -205,6 +205,9 @@ func (r *AIMClusterServiceTemplateReconciler) observe(ctx context.Context, templ
 		GetImagePullSecrets: func() []corev1.LocalObjectReference {
 			return template.Spec.ImagePullSecrets
 		},
+		GetServiceAccountName: func() string {
+			return template.Spec.ServiceAccountName
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -260,7 +263,7 @@ func (r *AIMClusterServiceTemplateReconciler) plan(ctx context.Context, template
 				Image:            input.Observation.Image,
 				TemplateSpec:     template.Spec.AIMServiceTemplateSpecCommon,
 				ImagePullSecrets: input.Observation.ImagePullSecrets,
-				ServiceAccount:   input.RuntimeConfigSpec.ServiceAccountName,
+				ServiceAccount:   input.Observation.ServiceAccountName,
 				OwnerRef:         input.OwnerReference,
 			})
 		},

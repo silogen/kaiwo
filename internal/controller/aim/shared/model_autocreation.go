@@ -67,6 +67,7 @@ func ResolveOrCreateModelFromImage(
 	imageURI string,
 	runtimeConfig *aimv1alpha1.AIMRuntimeConfigSpec,
 	imagePullSecrets []corev1.LocalObjectReference,
+	serviceAccountName string,
 ) (modelName string, scope TemplateScope, err error) {
 	if imageURI == "" {
 		return "", TemplateScopeNone, fmt.Errorf("image URI is empty")
@@ -81,7 +82,7 @@ func ResolveOrCreateModelFromImage(
 	switch len(models) {
 	case 0:
 		// No models found - create one
-		return createModelForImage(ctx, k8sClient, serviceNamespace, imageURI, runtimeConfig, imagePullSecrets)
+		return createModelForImage(ctx, k8sClient, serviceNamespace, imageURI, runtimeConfig, imagePullSecrets, serviceAccountName)
 	case 1:
 		// Single match - use it
 		return models[0].Name, models[0].Scope, nil
@@ -156,6 +157,7 @@ func createModelForImage(
 	imageURI string,
 	runtimeConfig *aimv1alpha1.AIMRuntimeConfigSpec,
 	imagePullSecrets []corev1.LocalObjectReference,
+	serviceAccountName string,
 ) (modelName string, scope TemplateScope, err error) {
 	// Generate model name from image URI
 	modelName = generateModelName(imageURI)
@@ -178,10 +180,11 @@ func createModelForImage(
 			},
 		},
 		Spec: aimv1alpha1.AIMModelSpec{
-			Image:             imageURI,
-			RuntimeConfigName: runtimeConfigName,
-			ImagePullSecrets:  imagePullSecrets,
-			Resources:         corev1.ResourceRequirements{},
+			Image:              imageURI,
+			RuntimeConfigName:  runtimeConfigName,
+			ImagePullSecrets:   imagePullSecrets,
+			ServiceAccountName: serviceAccountName,
+			Resources:          corev1.ResourceRequirements{},
 		},
 	}
 

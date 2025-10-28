@@ -275,6 +275,12 @@ spec:
                 description: RuntimeConfigName references the AIM runtime configuration
                   (by name) to use for this template.
                 type: string
+              serviceAccountName:
+                description: |-
+                  ServiceAccountName specifies the Kubernetes service account to use for workloads related to this template.
+                  This includes discovery dry-run jobs and inference services created from this template.
+                  If empty, the default service account for the namespace is used.
+                type: string
             required:
             - modelName
             type: object

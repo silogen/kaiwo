@@ -119,6 +119,12 @@ type AIMModelSpec struct {
 	// +optional
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 
+	// ServiceAccountName specifies the Kubernetes service account to use for workloads related to this model.
+	// This includes metadata extraction jobs and any other model-related operations.
+	// If empty, the default service account for the namespace is used.
+	// +optional
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+
 	// Resources defines the default resource requirements for services using this image.
 	// Template- or service-level values override these defaults.
 	// +Optional

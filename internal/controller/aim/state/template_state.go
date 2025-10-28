@@ -65,7 +65,7 @@ func NewTemplateState(base TemplateState) TemplateState {
 
 // ServiceAccountName returns the resolved service account for resources derived from this template.
 func (s TemplateState) ServiceAccountName() string {
-	return s.RuntimeConfigSpec.ServiceAccountName
+	return s.SpecCommon.ServiceAccountName
 }
 
 // ExtractPrimaryModelSource returns the first non-empty model source from the template status.

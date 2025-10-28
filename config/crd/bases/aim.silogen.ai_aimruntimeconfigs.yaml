@@ -189,15 +189,6 @@ spec:
                       - Use valid JSONPath expressions wrapped in {...
                     type: string
                 type: object
-              serviceAccountName:
-                description: |-
-                  ServiceAccountName specifies the Kubernetes service account to use for workloads
-                  created by the operator, including:
-                  - Discovery jobs that inspect container images
-                  - Cache warmer jobs that download model artifacts
-                  - Any other operator-managed pods in this namespace
-                  If empty, the default service account for the namespace is used.
-                type: string
             type: object
           status:
             description: AIMRuntimeConfigStatus records the resolved config reference
