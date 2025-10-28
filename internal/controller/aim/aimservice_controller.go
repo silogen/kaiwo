@@ -250,25 +250,27 @@ func (r *AIMServiceReconciler) plan(ctx context.Context, service *aimv1alpha1.AI
 			Status:            obs.TemplateStatus,
 		})
 
-		// Only proceed if we have a model source (discovery must have succeeded and populated ModelSources)
+		serviceState := aimstate.NewServiceState(service, templateState, aimstate.ServiceStateOptions{
+			RuntimeName: obs.RuntimeName(),
+			RoutePath:   routePath,
+		})
+
+		// Only create InferenceService if we have a model source (discovery must have succeeded and populated ModelSources)
 		if templateState.ModelSource != nil {
 			baseutils.Debug(logger, "Model source available, building InferenceService")
-			serviceState := aimstate.NewServiceState(service, templateState, aimstate.ServiceStateOptions{
-				RuntimeName: obs.RuntimeName(),
-				RoutePath:   routePath,
-			})
 			inferenceService := shared.BuildInferenceService(serviceState, ownerRef)
 			desired = append(desired, inferenceService)
-
-			if serviceState.Routing.Enabled && serviceState.Routing.GatewayRef != nil && obs.PathTemplateErr == nil {
-				baseutils.Debug(logger, "Routing enabled, building HTTPRoute",
-					"gateway", serviceState.Routing.GatewayRef.Name,
-					"path", routePath)
-				route := shared.BuildInferenceServiceHTTPRoute(serviceState, ownerRef)
-				desired = append(desired, route)
-			}
 		} else {
 			baseutils.Debug(logger, "Model source not available, skipping InferenceService creation")
+		}
+
+		// Create HTTPRoute if routing is enabled, regardless of model source availability
+		if serviceState.Routing.Enabled && serviceState.Routing.GatewayRef != nil && obs.PathTemplateErr == nil {
+			baseutils.Debug(logger, "Routing enabled, building HTTPRoute",
+				"gateway", serviceState.Routing.GatewayRef.Name,
+				"path", routePath)
+			route := shared.BuildInferenceServiceHTTPRoute(serviceState, ownerRef)
+			desired = append(desired, route)
 		}
 		// If ModelSource is nil, the status projection will handle showing that discovery
 		// succeeded but produced no usable model sources.

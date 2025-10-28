@@ -3,7 +3,7 @@ kind: Test
 metadata:
   name: image-discovery-happy-path
 spec:
-  description: Ensure that an official AIM image can be succesfully discovered
+  description: Ensure that an official AIM image can be successfully discovered
   steps:
   - name: Create image
     try:
@@ -17,7 +17,7 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterModel
           metadata:
-            name: llama-3-8b-happy-path
+            name: qwen3-preview-happy-path
           status:
             status: Ready
 
@@ -28,10 +28,10 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
-            name: llama-3-8b-happy-path-mi300x-x1-latency-fp8
+            name: qwen3-preview-happy-path-mi300x-x1-latency-fp16
           spec:
             metric: latency
-            precision: fp8
+            precision: fp16
             gpuSelector:
               count: 1
               model: MI300X
@@ -40,10 +40,10 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
-            name: llama-3-8b-happy-path-mi300x-x1-throughput-fp8
+            name: qwen3-preview-happy-path-mi300x-x1-throughput-fp16
           spec:
             metric: throughput
-            precision: fp8
+            precision: fp16
             gpuSelector:
               count: 1
               model: MI300X
@@ -52,10 +52,10 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
-            name: llama-3-8b-happy-path-mi325x-x1-latency-fp8
+            name: qwen3-preview-happy-path-mi325x-x1-latency-fp16
           spec:
             metric: latency
-            precision: fp8
+            precision: fp16
             gpuSelector:
               count: 1
               model: MI325X
@@ -64,10 +64,10 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
-            name: llama-3-8b-happy-path-mi325x-x1-throughput-fp8
+            name: qwen3-preview-happy-path-mi325x-x1-throughput-fp16
           spec:
             metric: throughput
-            precision: fp8
+            precision: fp16
             gpuSelector:
               count: 1
               model: MI325X

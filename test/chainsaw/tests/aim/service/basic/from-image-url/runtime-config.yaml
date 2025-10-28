@@ -1,0 +1,8 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMRuntimeConfig
+metadata:
+  name: from-image-url-creation
+spec:
+  model:
+    creationScope: Namespace
+    autoDiscovery: true

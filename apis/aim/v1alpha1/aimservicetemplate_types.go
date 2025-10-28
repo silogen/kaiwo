@@ -49,6 +49,13 @@ type AIMServiceTemplateSpecCommon struct {
 	// Service-specific values override the template defaults.
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// ModelSources specifies the model artifacts required to run this template.
+	// When provided, the discovery dry-run will be skipped and these sources will be used directly.
+	// This allows users to explicitly declare model dependencies without requiring a discovery job.
+	// If omitted, a discovery job will be run to automatically determine the required model sources.
+	// +optional
+	ModelSources []AIMModelSource `json:"modelSources,omitempty"`
 }
 
 // AIMTemplateCachingConfig configures model caching behavior for namespace-scoped templates.
@@ -289,6 +296,11 @@ func (t *AIMServiceTemplate) GetStatus() *AIMServiceTemplateStatus {
 	return &t.Status
 }
 
+// GetSpecModelSources returns the model sources from the template spec
+func (t *AIMServiceTemplate) GetSpecModelSources() []AIMModelSource {
+	return t.Spec.ModelSources
+}
+
 // GetModelID returns the model ID from the cluster template spec
 func (t *AIMClusterServiceTemplate) GetModelName() string {
 	return t.Spec.ModelName
@@ -297,6 +309,11 @@ func (t *AIMClusterServiceTemplate) GetModelName() string {
 // GetStatus returns a pointer to the cluster template status
 func (t *AIMClusterServiceTemplate) GetStatus() *AIMServiceTemplateStatus {
 	return &t.Status
+}
+
+// GetSpecModelSources returns the model sources from the template spec
+func (t *AIMClusterServiceTemplate) GetSpecModelSources() []AIMModelSource {
+	return t.Spec.ModelSources
 }
 
 func init() {

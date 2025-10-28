@@ -1,0 +1,81 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: inline-modelsources-namespace
+spec:
+  description: Test that providing modelSources in-line skips discovery and template becomes ready immediately
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create namespace image
+    try:
+    - apply:
+        file: namespace-image.yaml
+
+  - name: Create template with inline modelSources
+    try:
+    - apply:
+        file: namespace-template.yaml
+
+  - name: Wait for template to become Ready
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMServiceTemplate
+          metadata:
+            name: llama-3-8b-inline-modelsources
+          status:
+            status: Ready
+
+  - name: Verify modelSources were copied from spec to status
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMServiceTemplate
+          metadata:
+            name: llama-3-8b-inline-modelsources
+          status:
+            modelSources:
+            - name: amd/Llama-3.1-8B-Instruct-FP8-KV
+              sourceUri: hf://amd/Llama-3.1-8B-Instruct-FP8-KV
+              size: "9094593249"
+
+  - name: Verify Discovered condition shows inline sources
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMServiceTemplate
+          metadata:
+            name: llama-3-8b-inline-modelsources
+          status:
+            (conditions[?type == 'Discovered']):
+            - status: "True"
+              reason: InlineModelSources
+              message: Model sources provided in-line in spec
+
+  - name: Verify no discovery job was created
+    try:
+    - error:
+        resource:
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            labels:
+              kaiwo.io/template: llama-3-8b-inline-modelsources
+
+  - name: Verify the serving runtime was created
+    try:
+    - assert:
+        resource:
+          apiVersion: serving.kserve.io/v1alpha1
+          kind: ServingRuntime
+          metadata:
+            name: llama-3-8b-inline-modelsources
+          spec:
+            containers:
+            - image: ghcr.io/silogen/aim-meta-llama-llama-3-1-8b-instruct:0.7.0
+            supportedModelFormats:
+            - name: aim

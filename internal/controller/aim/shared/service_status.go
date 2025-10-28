@@ -238,16 +238,25 @@ func HandleImageNotReady(
 
 // HandlePathTemplateError checks for path template errors and updates status.
 // Returns true if there is a path template error.
+// This can occur when routing is enabled (via service spec or runtime config) but the path template is invalid.
 func HandlePathTemplateError(
 	status *aimv1alpha1.AIMServiceStatus,
 	service *aimv1alpha1.AIMService,
 	obs *ServiceObservation,
 	setCondition func(conditionType string, conditionStatus metav1.ConditionStatus, reason, message string),
 ) bool {
-	if service.Spec.Routing == nil || !service.Spec.Routing.Enabled {
+	if obs == nil || obs.PathTemplateErr == nil {
 		return false
 	}
-	if obs == nil || obs.PathTemplateErr == nil {
+
+	// Check if routing is enabled (via service spec or runtime config)
+	var runtimeRouting *aimv1alpha1.AIMRuntimeRoutingConfig
+	if obs != nil {
+		runtimeRouting = obs.RuntimeConfigSpec.Routing
+	}
+	resolved := routingconfig.Resolve(service, runtimeRouting)
+	if !resolved.Enabled {
+		// Path template error doesn't matter if routing is disabled
 		return false
 	}
 

@@ -160,7 +160,8 @@ func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *ai
 			}
 			return servingRuntime, err
 		},
-		ShouldCheckDiscoveryJob: template.Status.Status != aimv1alpha1.AIMTemplateStatusReady &&
+		ShouldCheckDiscoveryJob: len(template.Spec.ModelSources) == 0 &&
+			template.Status.Status != aimv1alpha1.AIMTemplateStatusReady &&
 			template.Status.Status != aimv1alpha1.AIMTemplateStatusNotAvailable,
 		GetDiscoveryJob: func(ctx context.Context) (*batchv1.Job, error) {
 			job, err := shared.GetDiscoveryJob(ctx, r.Client, template.Namespace, template.Name)

@@ -124,6 +124,44 @@ spec:
                 x-kubernetes-validations:
                 - message: model name is immutable
                   rule: self == oldSelf
+              modelSources:
+                description: |-
+                  ModelSources specifies the model artifacts required to run this template.
+                  When provided, the discovery dry-run will be skipped and these sources will be used directly.
+                  This allows users to explicitly declare model dependencies without requiring a discovery job.
+                  If omitted, a discovery job will be run to automatically determine the required model sources.
+                items:
+                  description: |-
+                    AIMModelSource describes a model artifact that must be downloaded for inference.
+                    Discovery extracts these from the container's configuration to enable caching and validation.
+                  properties:
+                    name:
+                      description: |-
+                        Name is a human-readable identifier for this model artifact.
+                        May be empty if the source represents the primary model.
+                      type: string
+                    size:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      description: |-
+                        Size is the expected storage space required for this model artifact.
+                        Used for PVC sizing and capacity planning during cache creation.
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    sourceUri:
+                      description: |-
+                        SourceURI is the location from which the model should be downloaded.
+                        Supported schemes:
+                        - hf://org/model - Hugging Face Hub model
+                        - s3://bucket/key - S3-compatible storage
+                      pattern: ^(hf|s3)://[^ \t\r\n]+$
+                      type: string
+                  required:
+                  - size
+                  - sourceUri
+                  type: object
+                type: array
               precision:
                 allOf:
                 - enum:

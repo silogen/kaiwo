@@ -1,7 +1,7 @@
 apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMClusterRuntimeConfig
+kind: AIMRuntimeConfig
 metadata:
-  name: cluster-runtime-config
+  name: invalid-path-template-config
 spec:
   routing:
     enabled: true
@@ -10,4 +10,5 @@ spec:
       kind: Gateway
       name: kserve-ingress-gateway
       namespace: kgateway-system
-    pathTemplate: "cluster/{.metadata.name}"
+    # This path template references a label that doesn't exist
+    pathTemplate: "{.metadata.namespace}/{.metadata.labels['aim.silogen.ai/non-existent-label']}"

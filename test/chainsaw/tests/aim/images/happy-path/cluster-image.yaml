@@ -1,9 +1,9 @@
 apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMClusterModel
 metadata:
-  name: llama-3-8b-happy-path
+  name: qwen3-preview-happy-path
 spec:
-  image: ghcr.io/silogen/aim-meta-llama-llama-3-1-8b-instruct:0.7.0
+  image: ghcr.io/silogen/aim-qwen-qwen3-4b:0.7.0-preview
   discovery:
     enabled: true
     # default is true

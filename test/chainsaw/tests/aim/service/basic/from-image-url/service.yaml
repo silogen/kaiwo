@@ -1,0 +1,9 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-service
+spec:
+  model:
+    image: ghcr.io/silogen/aim-qwen-qwen3-4b:0.7.0-preview
+  # Provide the runtime config reference to ensure image is created in namespace
+  runtimeConfigName: from-image-url-creation

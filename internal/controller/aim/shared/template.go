@@ -65,6 +65,7 @@ type TemplateObservation struct {
 // TemplateSpec provides the common template specification
 type TemplateSpec interface {
 	GetModelName() string
+	GetSpecModelSources() []aimv1alpha1.AIMModelSource
 }
 
 // TemplateWithStatus extends TemplateSpec with status access
@@ -571,6 +572,29 @@ func handleTemplateDiscoverySucceeded(ctx context.Context, k8sClient client.Clie
 	}
 }
 
+// handleTemplateWithInlineModelSources handles the case where modelSources are provided in-line in the spec.
+// When modelSources are provided, discovery is skipped and the template is marked as Ready immediately.
+func handleTemplateWithInlineModelSources(specModelSources []aimv1alpha1.AIMModelSource, currentStatus aimv1alpha1.AIMTemplateStatusEnum, recorder record.EventRecorder, template TemplateWithStatus) *templateStatusResult {
+	if len(specModelSources) == 0 {
+		return nil
+	}
+
+	// Emit event if transitioning to Ready for the first time
+	if currentStatus != aimv1alpha1.AIMTemplateStatusReady {
+		controllerutils.EmitNormalEvent(recorder, template, "ModelSourcesProvided", "Using in-line model sources, skipping discovery")
+	}
+
+	return &templateStatusResult{
+		Status: aimv1alpha1.AIMTemplateStatusReady,
+		Conditions: []metav1.Condition{
+			controllerutils.NewCondition(controllerutils.ConditionTypeDiscovered, metav1.ConditionTrue, "InlineModelSources", "Model sources provided in-line in spec"),
+			controllerutils.NewCondition(controllerutils.ConditionTypeProgressing, metav1.ConditionFalse, controllerutils.ReasonAvailable, "No discovery needed"),
+			controllerutils.NewCondition(controllerutils.ConditionTypeReady, metav1.ConditionTrue, controllerutils.ReasonAvailable, "Template is ready"),
+		},
+		ModelSources: specModelSources,
+	}
+}
+
 // handleTemplateInitialState handles the case where no discovery job exists yet.
 func handleTemplateInitialState(currentStatus aimv1alpha1.AIMTemplateStatusEnum) *templateStatusResult {
 	// Check if template is already Available (job lookup was skipped to prevent re-running discovery)
@@ -614,6 +638,9 @@ func ProjectTemplateStatus(
 	// Try each handler in order, applying the first one that returns a result
 	handlers := []func() *templateStatusResult{
 		func() *templateStatusResult { return handleTemplateReconcileErrors(errs, imageNotFoundMessage) },
+		func() *templateStatusResult {
+			return handleTemplateWithInlineModelSources(template.GetSpecModelSources(), currentStatus, recorder, template)
+		},
 		func() *templateStatusResult {
 			return handleTemplateGPUUnavailable(obs, currentStatus, recorder, template)
 		},
