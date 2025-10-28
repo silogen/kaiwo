@@ -182,6 +182,7 @@ _Appears in:_
 | `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. |  | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
 | `gpuSelector` _[AIMGpuSelector](#aimgpuselector)_ | GpuSelector specifies GPU requirements for each replica.<br />Defines the GPU count and model type required for deployment.<br />This field is immutable after creation. |  |  |
 | `runtimeConfigName` _string_ | RuntimeConfigName references the AIM runtime configuration (by name) to use for this template. | default |  |
+| `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets lists secrets containing credentials for pulling container images.<br />These secrets are used for:<br />- Discovery dry-run jobs that inspect the model container<br />- Pulling the image for inference services<br />The secrets are merged with any model or runtime config defaults.<br />For namespace-scoped templates, secrets must exist in the same namespace.<br />For cluster-scoped templates, secrets must exist in the operator namespace. |  |  |
 | `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core)_ | Resources defines the default container resource requirements applied to services derived from this template.<br />Service-specific values override the template defaults. |  |  |
 | `modelSources` _[AIMModelSource](#aimmodelsource) array_ | ModelSources specifies the model artifacts required to run this template.<br />When provided, the discovery dry-run will be skipped and these sources will be used directly.<br />This allows users to explicitly declare model dependencies without requiring a discovery job.<br />If omitted, a discovery job will be run to automatically determine the required model sources. |  |  |
 
@@ -389,7 +390,6 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `creationScope` _string_ | CreationScope controls the scope of models auto-created from AIMService resources<br />that specify `spec.model.image` directly. When a service references an image URI and no<br />matching model exists, the controller creates one. This field determines whether the new<br />model is cluster-scoped (AIMClusterModel) or namespace-scoped (AIMModel). | Cluster | Enum: [Cluster Namespace] <br /> |
 | `autoDiscovery` _boolean_ | AutoDiscovery controls whether models run discovery by default.<br />When true, models run discovery jobs to extract metadata and auto-create templates.<br />When false, discovery is skipped. Discovery failures are non-fatal and reported via conditions. | true |  |
 
 
@@ -468,6 +468,7 @@ _Appears in:_
 | `discovery` _[AIMModelDiscoveryConfig](#aimmodeldiscoveryconfig)_ | Discovery controls discovery behavior for this model.<br />When unset, uses runtime config defaults. |  |  |
 | `defaultServiceTemplate` _string_ | DefaultServiceTemplate is the default template to use for this image, if the user does not provide any |  |  |
 | `runtimeConfigName` _string_ | RuntimeConfigName references the AIM runtime configuration (by name) to use for this image.<br />The runtime config controls discovery behavior and model creation scope. | default |  |
+| `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets lists secrets containing credentials for pulling the model container image.<br />These secrets are used for:<br />- OCI registry metadata extraction during discovery<br />- Pulling the image for inference services<br />The secrets are merged with any runtime config defaults.<br />For namespace-scoped models, secrets must exist in the same namespace.<br />For cluster-scoped models, secrets must exist in the operator namespace. |  |  |
 | `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core)_ | Resources defines the default resource requirements for services using this image.<br />Template- or service-level values override these defaults. |  |  |
 
 
@@ -715,7 +716,6 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `serviceAccountName` _string_ | ServiceAccountName specifies the Kubernetes service account to use for workloads<br />created by the operator, including:<br />- Discovery jobs that inspect container images<br />- Cache warmer jobs that download model artifacts<br />- Any other operator-managed pods in this namespace<br />If empty, the default service account for the namespace is used. |  |  |
-| `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets lists secrets containing credentials for pulling private container images.<br />These secrets are used when:<br />- Pulling AIM model container images for discovery<br />- Pulling runtime images for inference services<br />- Pulling utility images for cache warming<br />The secrets are merged with any cluster-level defaults configured on the operator.<br />Each secret must exist in the same namespace as this runtime config. |  |  |
 
 
 #### AIMRuntimeConfigList
@@ -753,7 +753,6 @@ _Appears in:_
 | `model` _[AIMModelConfig](#aimmodelconfig)_ | Model controls model creation and discovery defaults. |  |  |
 | `routing` _[AIMRuntimeRoutingConfig](#aimruntimeroutingconfig)_ | Routing controls HTTP routing defaults applied to AIM resources.<br />When set, these defaults are used for AIMService resources that enable routing<br />but do not specify their own routing configuration. |  |  |
 | `serviceAccountName` _string_ | ServiceAccountName specifies the Kubernetes service account to use for workloads<br />created by the operator, including:<br />- Discovery jobs that inspect container images<br />- Cache warmer jobs that download model artifacts<br />- Any other operator-managed pods in this namespace<br />If empty, the default service account for the namespace is used. |  |  |
-| `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets lists secrets containing credentials for pulling private container images.<br />These secrets are used when:<br />- Pulling AIM model container images for discovery<br />- Pulling runtime images for inference services<br />- Pulling utility images for cache warming<br />The secrets are merged with any cluster-level defaults configured on the operator.<br />Each secret must exist in the same namespace as this runtime config. |  |  |
 
 
 #### AIMRuntimeConfigStatus
@@ -1084,6 +1083,7 @@ _Appears in:_
 | `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. |  | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
 | `gpuSelector` _[AIMGpuSelector](#aimgpuselector)_ | GpuSelector specifies GPU requirements for each replica.<br />Defines the GPU count and model type required for deployment.<br />This field is immutable after creation. |  |  |
 | `runtimeConfigName` _string_ | RuntimeConfigName references the AIM runtime configuration (by name) to use for this template. | default |  |
+| `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets lists secrets containing credentials for pulling container images.<br />These secrets are used for:<br />- Discovery dry-run jobs that inspect the model container<br />- Pulling the image for inference services<br />The secrets are merged with any model or runtime config defaults.<br />For namespace-scoped templates, secrets must exist in the same namespace.<br />For cluster-scoped templates, secrets must exist in the operator namespace. |  |  |
 | `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core)_ | Resources defines the default container resource requirements applied to services derived from this template.<br />Service-specific values override the template defaults. |  |  |
 | `modelSources` _[AIMModelSource](#aimmodelsource) array_ | ModelSources specifies the model artifacts required to run this template.<br />When provided, the discovery dry-run will be skipped and these sources will be used directly.<br />This allows users to explicitly declare model dependencies without requiring a discovery job.<br />If omitted, a discovery job will be run to automatically determine the required model sources. |  |  |
 | `caching` _[AIMTemplateCachingConfig](#aimtemplatecachingconfig)_ | Caching configures model caching behavior for this namespace-scoped template.<br />When enabled, models will be cached using the specified environment variables<br />during download. |  |  |
@@ -1111,6 +1111,7 @@ _Appears in:_
 | `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. |  | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
 | `gpuSelector` _[AIMGpuSelector](#aimgpuselector)_ | GpuSelector specifies GPU requirements for each replica.<br />Defines the GPU count and model type required for deployment.<br />This field is immutable after creation. |  |  |
 | `runtimeConfigName` _string_ | RuntimeConfigName references the AIM runtime configuration (by name) to use for this template. | default |  |
+| `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets lists secrets containing credentials for pulling container images.<br />These secrets are used for:<br />- Discovery dry-run jobs that inspect the model container<br />- Pulling the image for inference services<br />The secrets are merged with any model or runtime config defaults.<br />For namespace-scoped templates, secrets must exist in the same namespace.<br />For cluster-scoped templates, secrets must exist in the operator namespace. |  |  |
 | `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core)_ | Resources defines the default container resource requirements applied to services derived from this template.<br />Service-specific values override the template defaults. |  |  |
 | `modelSources` _[AIMModelSource](#aimmodelsource) array_ | ModelSources specifies the model artifacts required to run this template.<br />When provided, the discovery dry-run will be skipped and these sources will be used directly.<br />This allows users to explicitly declare model dependencies without requiring a discovery job.<br />If omitted, a discovery job will be run to automatically determine the required model sources. |  |  |
 

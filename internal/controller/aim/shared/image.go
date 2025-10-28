@@ -280,12 +280,10 @@ func PlanImageResources(ctx context.Context, input ImagePlanInput) ([]client.Obj
 	if shouldExtract {
 		baseutils.Debug(logger, "Attempting metadata extraction for image", "image", spec.Image)
 		// Attempt to extract metadata
-		var imagePullSecrets []corev1.LocalObjectReference
 		var namespace string
 
-		if observation.RuntimeConfigResolution != nil {
-			imagePullSecrets = observation.RuntimeConfigResolution.EffectiveSpec.ImagePullSecrets
-		}
+		// Use the model's imagePullSecrets for metadata extraction
+		imagePullSecrets := input.ImageSpec.ImagePullSecrets
 
 		// For namespace-scoped images, use the image's namespace for secrets
 		// For cluster-scoped images, use the operator namespace
@@ -378,6 +376,7 @@ func PlanImageResources(ctx context.Context, input ImagePlanInput) ([]client.Obj
 				deployment,
 				input.OwnerReference,
 				input.IsClusterScoped,
+				input.ImageSpec.ImagePullSecrets,
 			)
 			desired = append(desired, template)
 			createdTemplates = true
@@ -397,13 +396,15 @@ func buildServiceTemplateFromDeployment(
 	deployment aimv1alpha1.RecommendedDeployment,
 	ownerRefs []metav1.OwnerReference,
 	isClusterScoped bool,
+	imagePullSecrets []corev1.LocalObjectReference,
 ) client.Object {
 	// Generate template name using the specified format
 	templateName := generateTemplateName(imageName, deployment)
 
 	// Build common spec
 	commonSpec := aimv1alpha1.AIMServiceTemplateSpecCommon{
-		ModelName: imageName,
+		ModelName:        imageName,
+		ImagePullSecrets: imagePullSecrets,
 	}
 
 	// Set runtime parameters from deployment

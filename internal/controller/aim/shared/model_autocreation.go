@@ -66,6 +66,7 @@ func ResolveOrCreateModelFromImage(
 	serviceNamespace string,
 	imageURI string,
 	runtimeConfig *aimv1alpha1.AIMRuntimeConfigSpec,
+	imagePullSecrets []corev1.LocalObjectReference,
 ) (modelName string, scope TemplateScope, err error) {
 	if imageURI == "" {
 		return "", TemplateScopeNone, fmt.Errorf("image URI is empty")
@@ -80,7 +81,7 @@ func ResolveOrCreateModelFromImage(
 	switch len(models) {
 	case 0:
 		// No models found - create one
-		return createModelForImage(ctx, k8sClient, serviceNamespace, imageURI, runtimeConfig)
+		return createModelForImage(ctx, k8sClient, serviceNamespace, imageURI, runtimeConfig, imagePullSecrets)
 	case 1:
 		// Single match - use it
 		return models[0].Name, models[0].Scope, nil
@@ -146,22 +147,18 @@ func findModelsWithImage(
 	return results, nil
 }
 
-// createModelForImage creates a new AIMModel or AIMClusterModel for the given image
+// createModelForImage creates a new namespace-scoped AIMModel for the given image.
+// Models are always created in the same namespace as the requesting AIMService.
 func createModelForImage(
 	ctx context.Context,
 	k8sClient client.Client,
 	namespace string,
 	imageURI string,
 	runtimeConfig *aimv1alpha1.AIMRuntimeConfigSpec,
+	imagePullSecrets []corev1.LocalObjectReference,
 ) (modelName string, scope TemplateScope, err error) {
 	// Generate model name from image URI
 	modelName = generateModelName(imageURI)
-
-	// Determine scope from runtime config
-	creationScope := "Cluster" // default
-	if runtimeConfig != nil && runtimeConfig.Model != nil && runtimeConfig.Model.CreationScope != "" {
-		creationScope = runtimeConfig.Model.CreationScope
-	}
 
 	// Set runtime config name (use default if not specified)
 	runtimeConfigName := "default"
@@ -171,38 +168,11 @@ func createModelForImage(
 		runtimeConfigName = "default"
 	}
 
-	if creationScope == "Namespace" {
-		// Create namespace-scoped model
-		model := &aimv1alpha1.AIMModel{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      modelName,
-				Namespace: namespace,
-				Labels: map[string]string{
-					LabelAutoCreated: "true",
-				},
-			},
-			Spec: aimv1alpha1.AIMModelSpec{
-				Image:             imageURI,
-				RuntimeConfigName: runtimeConfigName,
-				Resources:         corev1.ResourceRequirements{},
-			},
-		}
-
-		if err := k8sClient.Create(ctx, model); err != nil {
-			if apierrors.IsAlreadyExists(err) {
-				// Race condition - another controller created it
-				return modelName, TemplateScopeNamespace, nil
-			}
-			return "", TemplateScopeNone, fmt.Errorf("failed to create AIMModel: %w", err)
-		}
-
-		return modelName, TemplateScopeNamespace, nil
-	}
-
-	// Create cluster-scoped model (default)
-	clusterModel := &aimv1alpha1.AIMClusterModel{
+	// Create namespace-scoped model
+	model := &aimv1alpha1.AIMModel{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: modelName,
+			Name:      modelName,
+			Namespace: namespace,
 			Labels: map[string]string{
 				LabelAutoCreated: "true",
 			},
@@ -210,19 +180,20 @@ func createModelForImage(
 		Spec: aimv1alpha1.AIMModelSpec{
 			Image:             imageURI,
 			RuntimeConfigName: runtimeConfigName,
+			ImagePullSecrets:  imagePullSecrets,
 			Resources:         corev1.ResourceRequirements{},
 		},
 	}
 
-	if err := k8sClient.Create(ctx, clusterModel); err != nil {
+	if err := k8sClient.Create(ctx, model); err != nil {
 		if apierrors.IsAlreadyExists(err) {
 			// Race condition - another controller created it
-			return modelName, TemplateScopeCluster, nil
+			return modelName, TemplateScopeNamespace, nil
 		}
-		return "", TemplateScopeNone, fmt.Errorf("failed to create AIMClusterModel: %w", err)
+		return "", TemplateScopeNone, fmt.Errorf("failed to create AIMModel: %w", err)
 	}
 
-	return modelName, TemplateScopeCluster, nil
+	return modelName, TemplateScopeNamespace, nil
 }
 
 // generateModelName creates a Kubernetes-valid name from an image URI.

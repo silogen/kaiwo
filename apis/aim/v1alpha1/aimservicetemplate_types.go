@@ -45,6 +45,16 @@ type AIMServiceTemplateSpecCommon struct {
 	// +kubebuilder:default=default
 	RuntimeConfigName string `json:"runtimeConfigName,omitempty"`
 
+	// ImagePullSecrets lists secrets containing credentials for pulling container images.
+	// These secrets are used for:
+	// - Discovery dry-run jobs that inspect the model container
+	// - Pulling the image for inference services
+	// The secrets are merged with any model or runtime config defaults.
+	// For namespace-scoped templates, secrets must exist in the same namespace.
+	// For cluster-scoped templates, secrets must exist in the operator namespace.
+	// +optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
 	// Resources defines the default container resource requirements applied to services derived from this template.
 	// Service-specific values override the template defaults.
 	// +optional

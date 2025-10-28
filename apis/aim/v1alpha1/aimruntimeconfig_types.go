@@ -23,22 +23,12 @@
 package v1alpha1
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 // AIMModelConfig controls model creation and discovery behavior.
 type AIMModelConfig struct {
-	// CreationScope controls the scope of models auto-created from AIMService resources
-	// that specify `spec.model.image` directly. When a service references an image URI and no
-	// matching model exists, the controller creates one. This field determines whether the new
-	// model is cluster-scoped (AIMClusterModel) or namespace-scoped (AIMModel).
-	// +kubebuilder:validation:Enum=Cluster;Namespace
-	// +kubebuilder:default=Cluster
-	// +optional
-	CreationScope string `json:"creationScope,omitempty"`
-
 	// AutoDiscovery controls whether models run discovery by default.
 	// When true, models run discovery jobs to extract metadata and auto-create templates.
 	// When false, discovery is skipped. Discovery failures are non-fatal and reported via conditions.
@@ -78,16 +68,6 @@ type AIMRuntimeConfigCredentials struct {
 	// If empty, the default service account for the namespace is used.
 	// +optional
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
-
-	// ImagePullSecrets lists secrets containing credentials for pulling private container images.
-	// These secrets are used when:
-	// - Pulling AIM model container images for discovery
-	// - Pulling runtime images for inference services
-	// - Pulling utility images for cache warming
-	// The secrets are merged with any cluster-level defaults configured on the operator.
-	// Each secret must exist in the same namespace as this runtime config.
-	// +optional
-	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 }
 
 // AIMClusterRuntimeConfigSpec defines cluster-wide defaults for AIM resources.

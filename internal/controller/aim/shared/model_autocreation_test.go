@@ -53,13 +53,11 @@ func TestResolveOrCreateModelFromImage_CreatesNamespaceModel(t *testing.T) {
 
 	runtimeConfig := &aimv1alpha1.AIMRuntimeConfigSpec{
 		AIMRuntimeConfigCommon: aimv1alpha1.AIMRuntimeConfigCommon{
-			Model: &aimv1alpha1.AIMModelConfig{
-				CreationScope: "Namespace",
-			},
+			Model: &aimv1alpha1.AIMModelConfig{},
 		},
 	}
 
-	modelName, scope, err := ResolveOrCreateModelFromImage(context.Background(), k8sClient, testNamespace, testImageURI, runtimeConfig)
+	modelName, scope, err := ResolveOrCreateModelFromImage(context.Background(), k8sClient, testNamespace, testImageURI, runtimeConfig, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -87,52 +85,6 @@ func TestResolveOrCreateModelFromImage_CreatesNamespaceModel(t *testing.T) {
 	}
 }
 
-func TestResolveOrCreateModelFromImage_CreatesClusterModel(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := aimv1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("failed to add scheme: %v", err)
-	}
-
-	k8sClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		Build()
-
-	runtimeConfig := &aimv1alpha1.AIMRuntimeConfigSpec{
-		AIMRuntimeConfigCommon: aimv1alpha1.AIMRuntimeConfigCommon{
-			Model: &aimv1alpha1.AIMModelConfig{
-				CreationScope: "Cluster",
-			},
-		},
-	}
-
-	modelName, scope, err := ResolveOrCreateModelFromImage(context.Background(), k8sClient, testNamespace, testImageURI, runtimeConfig)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if scope != TemplateScopeCluster {
-		t.Fatalf("expected cluster scope, got %v", scope)
-	}
-
-	if modelName == "" {
-		t.Fatal("expected non-empty model name")
-	}
-
-	// Verify the cluster model was created
-	var clusterModel aimv1alpha1.AIMClusterModel
-	if err := k8sClient.Get(context.Background(), client.ObjectKey{Name: modelName}, &clusterModel); err != nil {
-		t.Fatalf("failed to get created cluster model: %v", err)
-	}
-
-	if clusterModel.Spec.Image != testImageURI {
-		t.Fatalf("expected image %q, got %q", testImageURI, clusterModel.Spec.Image)
-	}
-
-	if clusterModel.Labels[LabelAutoCreated] != "true" {
-		t.Fatalf("expected auto-created label to be %q, got %q", "true", clusterModel.Labels[LabelAutoCreated])
-	}
-}
-
 func TestResolveOrCreateModelFromImage_FindsExistingModel(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := aimv1alpha1.AddToScheme(scheme); err != nil {
@@ -156,13 +108,11 @@ func TestResolveOrCreateModelFromImage_FindsExistingModel(t *testing.T) {
 
 	runtimeConfig := &aimv1alpha1.AIMRuntimeConfigSpec{
 		AIMRuntimeConfigCommon: aimv1alpha1.AIMRuntimeConfigCommon{
-			Model: &aimv1alpha1.AIMModelConfig{
-				CreationScope: "Namespace",
-			},
+			Model: &aimv1alpha1.AIMModelConfig{},
 		},
 	}
 
-	modelName, scope, err := ResolveOrCreateModelFromImage(context.Background(), k8sClient, testNamespace, testImageURI, runtimeConfig)
+	modelName, scope, err := ResolveOrCreateModelFromImage(context.Background(), k8sClient, testNamespace, testImageURI, runtimeConfig, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -209,13 +159,11 @@ func TestResolveOrCreateModelFromImage_ErrorOnMultipleModels(t *testing.T) {
 
 	runtimeConfig := &aimv1alpha1.AIMRuntimeConfigSpec{
 		AIMRuntimeConfigCommon: aimv1alpha1.AIMRuntimeConfigCommon{
-			Model: &aimv1alpha1.AIMModelConfig{
-				CreationScope: "Namespace",
-			},
+			Model: &aimv1alpha1.AIMModelConfig{},
 		},
 	}
 
-	_, _, err := ResolveOrCreateModelFromImage(context.Background(), k8sClient, testNamespace, testImageURI, runtimeConfig)
+	_, _, err := ResolveOrCreateModelFromImage(context.Background(), k8sClient, testNamespace, testImageURI, runtimeConfig, nil)
 	if err == nil {
 		t.Fatal("expected error when multiple models match the same image")
 	}

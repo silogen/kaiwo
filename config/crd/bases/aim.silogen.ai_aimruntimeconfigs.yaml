@@ -62,32 +62,6 @@ spec:
                   when the consuming resource (AIMModelCache, AIMTemplateCache, AIMServiceTemplate) does not
                   specify a storage class. If this field is empty, the cluster's default storage class is used.
                 type: string
-              imagePullSecrets:
-                description: |-
-                  ImagePullSecrets lists secrets containing credentials for pulling private container images.
-                  These secrets are used when:
-                  - Pulling AIM model container images for discovery
-                  - Pulling runtime images for inference services
-                  - Pulling utility images for cache warming
-                  The secrets are merged with any cluster-level defaults configured on the operator.
-                  Each secret must exist in the same namespace as this runtime config.
-                items:
-                  description: |-
-                    LocalObjectReference contains enough information to let you locate the
-                    referenced object inside the same namespace.
-                  properties:
-                    name:
-                      default: ""
-                      description: |-
-                        Name of the referent.
-                        This field is effectively required, but due to backwards compatibility is
-                        allowed to be empty. Instances of this type with an empty value here are
-                        almost certainly wrong.
-                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                      type: string
-                  type: object
-                  x-kubernetes-map-type: atomic
-                type: array
               model:
                 description: Model controls model creation and discovery defaults.
                 properties:
@@ -98,17 +72,6 @@ spec:
                       When true, models run discovery jobs to extract metadata and auto-create templates.
                       When false, discovery is skipped. Discovery failures are non-fatal and reported via conditions.
                     type: boolean
-                  creationScope:
-                    default: Cluster
-                    description: |-
-                      CreationScope controls the scope of models auto-created from AIMService resources
-                      that specify `spec.model.image` directly. When a service references an image URI and no
-                      matching model exists, the controller creates one. This field determines whether the new
-                      model is cluster-scoped (AIMClusterModel) or namespace-scoped (AIMModel).
-                    enum:
-                    - Cluster
-                    - Namespace
-                    type: string
                 type: object
               routing:
                 description: |-

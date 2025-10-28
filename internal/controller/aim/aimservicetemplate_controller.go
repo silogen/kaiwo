@@ -193,11 +193,13 @@ func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *ai
 
 			baseutils.Debug(logger, "Resolved AIMRuntimeConfig",
 				"name", resolution.Name,
-				"sources", shared.JoinRuntimeConfigSources(resolution, template.Namespace),
-				"imagePullSecrets", len(resolution.EffectiveSpec.ImagePullSecrets))
+				"sources", shared.JoinRuntimeConfigSources(resolution, template.Namespace))
 
 			controllerutils.EmitNormalEvent(r.Recorder, template, "RuntimeConfigResolved",
 				fmt.Sprintf("Using AIMRuntimeConfig %q from %s", resolution.Name, shared.JoinRuntimeConfigSources(resolution, template.Namespace)))
+		},
+		GetImagePullSecrets: func() []corev1.LocalObjectReference {
+			return template.Spec.ImagePullSecrets
 		},
 	})
 	if err != nil {

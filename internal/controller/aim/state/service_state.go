@@ -86,8 +86,8 @@ func NewServiceState(service *aimv1alpha1.AIMService, template TemplateState, op
 		ModelSource:        template.ModelSource,
 	}
 
-	if len(template.RuntimeConfigSpec.ImagePullSecrets) > 0 {
-		state.ImagePullSecrets = mergePullSecretRefs(state.ImagePullSecrets, template.RuntimeConfigSpec.ImagePullSecrets)
+	if len(template.ImagePullSecrets) > 0 {
+		state.ImagePullSecrets = mergePullSecretRefs(state.ImagePullSecrets, template.ImagePullSecrets)
 	}
 
 	switch {

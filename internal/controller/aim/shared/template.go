@@ -42,7 +42,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/silogen/kaiwo/internal/controller/aim/helpers"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
@@ -91,6 +90,7 @@ type TemplateObservationOptions[R client.Object] struct {
 	LookupImage             func(ctx context.Context) (*ImageLookupResult, error)
 	ResolveRuntimeConfig    func(ctx context.Context) (*RuntimeConfigResolution, error)
 	OnRuntimeConfigResolved func(resolution *RuntimeConfigResolution)
+	GetImagePullSecrets     func() []corev1.LocalObjectReference // Template's imagePullSecrets
 }
 
 // ObserveTemplate gathers runtime, discovery job, image, and runtime config information with common error handling.
@@ -145,11 +145,15 @@ func ObserveTemplate[R client.Object](ctx context.Context, opts TemplateObservat
 		}
 		if resolution != nil {
 			obs.RuntimeConfig = resolution
-			obs.ImagePullSecrets = helpers.CopyPullSecrets(resolution.EffectiveSpec.ImagePullSecrets)
 			if opts.OnRuntimeConfigResolved != nil {
 				opts.OnRuntimeConfigResolved(resolution)
 			}
 		}
+	}
+
+	// Get template's imagePullSecrets
+	if opts.GetImagePullSecrets != nil {
+		obs.ImagePullSecrets = opts.GetImagePullSecrets()
 	}
 
 	return obs, nil

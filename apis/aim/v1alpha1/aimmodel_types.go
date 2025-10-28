@@ -109,6 +109,16 @@ type AIMModelSpec struct {
 	// +kubebuilder:default=default
 	RuntimeConfigName string `json:"runtimeConfigName,omitempty"`
 
+	// ImagePullSecrets lists secrets containing credentials for pulling the model container image.
+	// These secrets are used for:
+	// - OCI registry metadata extraction during discovery
+	// - Pulling the image for inference services
+	// The secrets are merged with any runtime config defaults.
+	// For namespace-scoped models, secrets must exist in the same namespace.
+	// For cluster-scoped models, secrets must exist in the operator namespace.
+	// +optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
 	// Resources defines the default resource requirements for services using this image.
 	// Template- or service-level values override these defaults.
 	// +Optional
