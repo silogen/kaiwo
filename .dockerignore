@@ -1,5 +1,44 @@
 # More info: https://docs.docker.com/engine/reference/builder/#dockerignore-file
-# Ignore build and test binaries.
+
+# Build artifacts and binaries
 bin/
 builds/
-python/.venv
+dist/
+
+# Local development caches (not used by Docker build)
+.cache/
+.gocache/
+.gomod/
+.gomodcache/
+.golangci-lint-cache/
+
+# Test artifacts
+*.log
+lint.log
+
+# Documentation and playground (not needed for operator image)
+docs/
+playground/
+python/
+
+# Git
+.git/
+.gitignore
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# CI/CD
+.github/
+automation/
+
+# Examples and scripts (not needed for runtime)
+examples/
+scripts/
+
+# Kubernetes test resources
+test/

@@ -49,17 +49,16 @@ import (
 
 // TemplateObservation holds the common observed state for both template types
 type TemplateObservation struct {
-	Job                 *batchv1.Job
-	Image               string
-	ImageResources      *corev1.ResourceRequirements
-	ImagePullSecrets    []corev1.LocalObjectReference
-	ServiceAccountName  string
-	RuntimeConfig       *RuntimeConfigResolution
-	GPUModel            string
-	GPUAvailable        bool
-	GPUChecked          bool
-	JobPodImagePullFail bool   // True if job pod is stuck in ImagePullBackOff
-	JobPodFailureReason string // Detailed reason if JobPodImagePullFail is true
+	Job                *batchv1.Job
+	Image              string
+	ImageResources     *corev1.ResourceRequirements
+	ImagePullSecrets   []corev1.LocalObjectReference
+	ServiceAccountName string
+	RuntimeConfig      *RuntimeConfigResolution
+	GPUModel           string
+	GPUAvailable       bool
+	GPUChecked         bool
+	JobPodImageError   *ImagePullError // Categorized image pull error if job pod is stuck
 }
 
 // TemplateSpec provides the common template specification
@@ -119,9 +118,7 @@ func ObserveTemplate[R client.Object](ctx context.Context, opts TemplateObservat
 
 		// If we have a job and it's not complete, check if its pod is stuck in ImagePullBackOff
 		if job != nil && !IsJobComplete(job) && opts.GetJobNamespace != nil && opts.K8sClient != nil {
-			isImagePullFail, reason := checkJobPodImagePullStatus(ctx, opts.K8sClient, job, opts.GetJobNamespace)
-			obs.JobPodImagePullFail = isImagePullFail
-			obs.JobPodFailureReason = reason
+			obs.JobPodImageError = checkJobPodImagePullStatus(ctx, opts.K8sClient, job, opts.GetJobNamespace)
 		}
 	}
 
@@ -223,9 +220,74 @@ func CountActiveDiscoveryJobs(ctx context.Context, k8sClient client.Client) (int
 	return activeCount, nil
 }
 
+// ImagePullErrorType categorizes image pull errors
+type ImagePullErrorType string
+
+const (
+	ImagePullErrorAuth     ImagePullErrorType = "auth"
+	ImagePullErrorNotFound ImagePullErrorType = "not-found"
+	ImagePullErrorGeneric  ImagePullErrorType = "generic"
+)
+
+// Kubernetes container status reasons
+const (
+	containerStatusReasonImagePullBackOff = "ImagePullBackOff"
+	containerStatusReasonErrImagePull     = "ErrImagePull"
+	containerStatusReasonImageNotFound    = "ImageNotFound"
+)
+
+// ImagePullError contains categorized information about an image pull failure
+type ImagePullError struct {
+	Type            ImagePullErrorType
+	Container       string
+	Reason          string // e.g., "ImagePullBackOff", "ErrImagePull"
+	Message         string // Full error message from Kubernetes
+	IsInitContainer bool
+}
+
+// categorizeImagePullError analyzes an error message to determine if it's auth-related or not-found
+func categorizeImagePullError(message string) ImagePullErrorType {
+	lowerMsg := strings.ToLower(message)
+
+	// Check for authentication/authorization errors
+	authIndicators := []string{
+		"unauthorized",
+		"authentication required",
+		"authentication failed",
+		"401",
+		"403",
+		"forbidden",
+		"denied",
+		"permission denied",
+		"access denied",
+		"credentials",
+	}
+	for _, indicator := range authIndicators {
+		if strings.Contains(lowerMsg, indicator) {
+			return ImagePullErrorAuth
+		}
+	}
+
+	// Check for not-found errors
+	notFoundIndicators := []string{
+		"not found",
+		"404",
+		"manifest unknown",
+		"name unknown",
+		"image not found",
+	}
+	for _, indicator := range notFoundIndicators {
+		if strings.Contains(lowerMsg, indicator) {
+			return ImagePullErrorNotFound
+		}
+	}
+
+	return ImagePullErrorGeneric
+}
+
 // checkJobPodImagePullStatus checks if a job's pod is stuck in ImagePullBackOff or ErrImagePull state.
-// Returns true and a reason string if the pod is stuck pulling images, false otherwise.
-func checkJobPodImagePullStatus(ctx context.Context, k8sClient client.Client, job *batchv1.Job, getNamespace func() string) (bool, string) {
+// Returns the image pull error details if found, or nil otherwise.
+func checkJobPodImagePullStatus(ctx context.Context, k8sClient client.Client, job *batchv1.Job, getNamespace func() string) *ImagePullError {
 	logger := ctrl.LoggerFrom(ctx)
 	namespace := getNamespace()
 
@@ -240,7 +302,81 @@ func checkJobPodImagePullStatus(ctx context.Context, k8sClient client.Client, jo
 			"job", job.Name,
 			"namespace", namespace,
 			"error", err)
-		return false, ""
+		return nil
+	}
+
+	// Check each pod for ImagePullBackOff or ErrImagePull status
+	for i := range pods.Items {
+		pod := &pods.Items[i]
+
+		// Check init container statuses
+		for _, containerStatus := range pod.Status.InitContainerStatuses {
+			if containerStatus.State.Waiting != nil {
+				reason := containerStatus.State.Waiting.Reason
+				if reason == containerStatusReasonImagePullBackOff || reason == containerStatusReasonErrImagePull {
+					message := containerStatus.State.Waiting.Message
+					pullError := &ImagePullError{
+						Type:            categorizeImagePullError(message),
+						Container:       containerStatus.Name,
+						Reason:          reason,
+						Message:         message,
+						IsInitContainer: true,
+					}
+					baseutils.Debug(logger, "Found image pull failure",
+						"pod", pod.Name,
+						"container", containerStatus.Name,
+						"reason", reason,
+						"errorType", pullError.Type)
+					return pullError
+				}
+			}
+		}
+
+		// Check main container statuses
+		for _, containerStatus := range pod.Status.ContainerStatuses {
+			if containerStatus.State.Waiting != nil {
+				reason := containerStatus.State.Waiting.Reason
+				if reason == containerStatusReasonImagePullBackOff || reason == containerStatusReasonErrImagePull {
+					message := containerStatus.State.Waiting.Message
+					pullError := &ImagePullError{
+						Type:            categorizeImagePullError(message),
+						Container:       containerStatus.Name,
+						Reason:          reason,
+						Message:         message,
+						IsInitContainer: false,
+					}
+					baseutils.Debug(logger, "Found image pull failure",
+						"pod", pod.Name,
+						"container", containerStatus.Name,
+						"reason", reason,
+						"errorType", pullError.Type)
+					return pullError
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// CheckInferenceServicePodImagePullStatus checks if an InferenceService's pods are stuck in ImagePullBackOff or ErrImagePull state.
+// It looks for pods with the isvc.serving.kserve.io/inferenceservice label matching the InferenceService name.
+// Returns the image pull error details if found, or nil otherwise.
+func CheckInferenceServicePodImagePullStatus(ctx context.Context, k8sClient client.Client, inferenceServiceName, namespace string) *ImagePullError {
+	logger := ctrl.LoggerFrom(ctx)
+
+	// List pods owned by this InferenceService
+	var pods corev1.PodList
+	if err := k8sClient.List(ctx, &pods,
+		client.InNamespace(namespace),
+		client.MatchingLabels{
+			"serving.kserve.io/inferenceservice": inferenceServiceName,
+		}); err != nil {
+		baseutils.Debug(logger, "Failed to list pods for InferenceService",
+			"inferenceService", inferenceServiceName,
+			"namespace", namespace,
+			"error", err)
+		return nil
 	}
 
 	// Check each pod for ImagePullBackOff or ErrImagePull status
@@ -252,10 +388,21 @@ func checkJobPodImagePullStatus(ctx context.Context, k8sClient client.Client, jo
 			if containerStatus.State.Waiting != nil {
 				reason := containerStatus.State.Waiting.Reason
 				if reason == "ImagePullBackOff" || reason == "ErrImagePull" {
-					msg := fmt.Sprintf("Init container %q is stuck in %s: %s",
-						containerStatus.Name, reason, containerStatus.State.Waiting.Message)
-					baseutils.Debug(logger, "Found image pull failure", "pod", pod.Name, "container", containerStatus.Name, "reason", reason)
-					return true, msg
+					message := containerStatus.State.Waiting.Message
+					pullError := &ImagePullError{
+						Type:            categorizeImagePullError(message),
+						Container:       containerStatus.Name,
+						Reason:          reason,
+						Message:         message,
+						IsInitContainer: true,
+					}
+					baseutils.Debug(logger, "Found image pull failure in InferenceService pod",
+						"inferenceService", inferenceServiceName,
+						"pod", pod.Name,
+						"container", containerStatus.Name,
+						"reason", reason,
+						"errorType", pullError.Type)
+					return pullError
 				}
 			}
 		}
@@ -265,16 +412,27 @@ func checkJobPodImagePullStatus(ctx context.Context, k8sClient client.Client, jo
 			if containerStatus.State.Waiting != nil {
 				reason := containerStatus.State.Waiting.Reason
 				if reason == "ImagePullBackOff" || reason == "ErrImagePull" {
-					msg := fmt.Sprintf("Container %q is stuck in %s: %s",
-						containerStatus.Name, reason, containerStatus.State.Waiting.Message)
-					baseutils.Debug(logger, "Found image pull failure", "pod", pod.Name, "container", containerStatus.Name, "reason", reason)
-					return true, msg
+					message := containerStatus.State.Waiting.Message
+					pullError := &ImagePullError{
+						Type:            categorizeImagePullError(message),
+						Container:       containerStatus.Name,
+						Reason:          reason,
+						Message:         message,
+						IsInitContainer: false,
+					}
+					baseutils.Debug(logger, "Found image pull failure in InferenceService pod",
+						"inferenceService", inferenceServiceName,
+						"pod", pod.Name,
+						"container", containerStatus.Name,
+						"reason", reason,
+						"errorType", pullError.Type)
+					return pullError
 				}
 			}
 		}
 	}
 
-	return false, ""
+	return nil
 }
 
 // PlanTemplateResources produces desired objects based on the observation and controller-provided builders.
@@ -445,30 +603,54 @@ func handleTemplateMissingImage(obs *TemplateObservation, imageNotFoundMessage s
 	return &templateStatusResult{
 		Status: aimv1alpha1.AIMTemplateStatusDegraded,
 		Conditions: []metav1.Condition{
-			controllerutils.NewCondition(controllerutils.ConditionTypeFailure, metav1.ConditionTrue, "ImageNotFound", imageNotFoundMessage),
-			controllerutils.NewCondition(controllerutils.ConditionTypeReady, metav1.ConditionFalse, "ImageNotFound", "Cannot proceed without image"),
+			controllerutils.NewCondition(controllerutils.ConditionTypeFailure, metav1.ConditionTrue, containerStatusReasonImageNotFound, imageNotFoundMessage),
+			controllerutils.NewCondition(controllerutils.ConditionTypeReady, metav1.ConditionFalse, containerStatusReasonImageNotFound, "Cannot proceed without image"),
 		},
 	}
 }
 
 // handleTemplateImagePullFailed handles the case where the discovery job pod is stuck in ImagePullBackOff.
 func handleTemplateImagePullFailed(obs *TemplateObservation, recorder record.EventRecorder, template TemplateWithStatus) *templateStatusResult {
-	if obs == nil || !obs.JobPodImagePullFail {
+	if obs == nil || obs.JobPodImageError == nil {
 		return nil
 	}
 
+	pullErr := obs.JobPodImageError
+
+	// Determine the condition reason based on error type
+	var conditionReason string
+	var eventReason string
+	switch pullErr.Type {
+	case ImagePullErrorAuth:
+		conditionReason = "ImagePullAuthFailure"
+		eventReason = "ImagePullAuthFailed"
+	case ImagePullErrorNotFound:
+		conditionReason = containerStatusReasonImageNotFound
+		eventReason = containerStatusReasonImageNotFound
+	default:
+		conditionReason = containerStatusReasonImagePullBackOff
+		eventReason = "ImagePullFailed"
+	}
+
+	// Format detailed message
+	containerType := "Container"
+	if pullErr.IsInitContainer {
+		containerType = "Init container"
+	}
+	detailedMessage := fmt.Sprintf("%s %q is stuck in %s: %s", containerType, pullErr.Container, pullErr.Reason, pullErr.Message)
+
 	// Emit warning event about image pull failure
-	controllerutils.EmitWarningEvent(recorder, template, "ImagePullFailed",
-		fmt.Sprintf("Discovery job pod cannot pull image: %s", obs.JobPodFailureReason))
+	controllerutils.EmitWarningEvent(recorder, template, eventReason,
+		fmt.Sprintf("Discovery job pod cannot pull image: %s", detailedMessage))
 
 	return &templateStatusResult{
 		Status: aimv1alpha1.AIMTemplateStatusDegraded,
 		Conditions: []metav1.Condition{
-			controllerutils.NewCondition(controllerutils.ConditionTypeFailure, metav1.ConditionTrue, "ImagePullBackOff",
-				fmt.Sprintf("Discovery job pod stuck pulling image: %s", obs.JobPodFailureReason)),
-			controllerutils.NewCondition(controllerutils.ConditionTypeProgressing, metav1.ConditionFalse, "ImagePullBackOff",
+			controllerutils.NewCondition(controllerutils.ConditionTypeFailure, metav1.ConditionTrue, conditionReason,
+				fmt.Sprintf("Discovery job pod stuck pulling image: %s", detailedMessage)),
+			controllerutils.NewCondition(controllerutils.ConditionTypeProgressing, metav1.ConditionFalse, conditionReason,
 				"Discovery cannot proceed due to image pull failure"),
-			controllerutils.NewCondition(controllerutils.ConditionTypeReady, metav1.ConditionFalse, "ImagePullBackOff",
+			controllerutils.NewCondition(controllerutils.ConditionTypeReady, metav1.ConditionFalse, conditionReason,
 				"Template is not ready due to image pull failure"),
 		},
 	}

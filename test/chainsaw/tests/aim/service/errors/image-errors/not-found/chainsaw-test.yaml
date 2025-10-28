@@ -1,0 +1,33 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: image-not-found-error
+spec:
+  description: Test that when a service is created with a non-existent image.
+  steps:
+  - name: Create AIMService with non-existent image
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify auto-created model is degraded with ImageNotFound
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMModel
+          metadata:
+            name: aim-qwen-qwen3-32b-0-7-0-preview-0c176004
+          status:
+            status: Failed
+
+  - name: Verify service shows template is degraded
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-service-image-not-found
+          status:
+            status: Failed

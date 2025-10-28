@@ -241,6 +241,11 @@ const (
 	AIMTemplateReasonProfilesDiscovered = "ProfilesDiscovered"
 	AIMTemplateReasonDiscoveryFailed    = "DiscoveryFailed"
 
+	// Image pull related
+	AIMTemplateReasonImagePullAuthFailure = "ImagePullAuthFailure"
+	AIMTemplateReasonImageNotFound        = "ImageNotFound"
+	AIMTemplateReasonImagePullBackOff     = "ImagePullBackOff"
+
 	// Cache warm related
 	AIMTemplateReasonWarmRequested = "WarmRequested"
 	AIMTemplateReasonWarming       = "Warming"

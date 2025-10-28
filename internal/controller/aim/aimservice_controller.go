@@ -201,6 +201,20 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 		}
 	}
 
+	// Check InferenceService pods for image pull errors
+	// Only check if we have a valid runtime name (template resolution succeeded)
+	if obs.RuntimeName() != "" {
+		baseutils.Debug(logger, "Checking InferenceService pods for image pull errors",
+			"serviceName", service.Name)
+		obs.InferenceServicePodImageError = shared.CheckInferenceServicePodImagePullStatus(
+			ctx, r.Client, service.Name, service.Namespace)
+		if obs.InferenceServicePodImageError != nil {
+			baseutils.Debug(logger, "Found InferenceService pod image pull error",
+				"errorType", obs.InferenceServicePodImageError.Type,
+				"container", obs.InferenceServicePodImageError.Container)
+		}
+	}
+
 	return obs, nil
 }
 

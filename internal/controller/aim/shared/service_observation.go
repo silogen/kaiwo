@@ -76,33 +76,34 @@ type TemplateSelectionStatus struct {
 
 // ServiceObservation holds observed state for an AIMService reconciliation.
 type ServiceObservation struct {
-	TemplateName              string
-	BaseTemplateName          string
-	Scope                     TemplateScope
-	AutoSelectedTemplate      bool
-	TemplateAvailable         bool
-	TemplateOwnedByService    bool
-	ShouldCreateTemplate      bool
-	RuntimeConfigSpec         aimv1alpha1.AIMRuntimeConfigSpec
-	ResolvedRuntimeConfig     *aimv1alpha1.AIMResolvedRuntimeConfig
-	ResolvedImage             *aimv1alpha1.AIMResolvedReference
-	RoutePath                 string
-	PathTemplateErr           error
-	RuntimeConfigErr          error
-	ImageErr                  error
-	ModelResolutionErr        error
-	TemplateStatus            *aimv1alpha1.AIMServiceTemplateStatus
-	TemplateSpecCommon        aimv1alpha1.AIMServiceTemplateSpecCommon
-	TemplateSpec              *aimv1alpha1.AIMServiceTemplateSpec
-	TemplateNamespace         string
-	ImageResources            *corev1.ResourceRequirements
-	TemplateSelectionReason   string
-	TemplateSelectionMessage  string
-	TemplateSelectionCount    int
-	TemplatesExistButNotReady bool // True when templates exist but aren't Available yet
-	ImageReady                bool
-	ImageReadyReason          string
-	ImageReadyMessage         string
+	TemplateName                  string
+	BaseTemplateName              string
+	Scope                         TemplateScope
+	AutoSelectedTemplate          bool
+	TemplateAvailable             bool
+	TemplateOwnedByService        bool
+	ShouldCreateTemplate          bool
+	RuntimeConfigSpec             aimv1alpha1.AIMRuntimeConfigSpec
+	ResolvedRuntimeConfig         *aimv1alpha1.AIMResolvedRuntimeConfig
+	ResolvedImage                 *aimv1alpha1.AIMResolvedReference
+	RoutePath                     string
+	PathTemplateErr               error
+	RuntimeConfigErr              error
+	ImageErr                      error
+	ModelResolutionErr            error
+	TemplateStatus                *aimv1alpha1.AIMServiceTemplateStatus
+	TemplateSpecCommon            aimv1alpha1.AIMServiceTemplateSpecCommon
+	TemplateSpec                  *aimv1alpha1.AIMServiceTemplateSpec
+	TemplateNamespace             string
+	ImageResources                *corev1.ResourceRequirements
+	TemplateSelectionReason       string
+	TemplateSelectionMessage      string
+	TemplateSelectionCount        int
+	TemplatesExistButNotReady     bool // True when templates exist but aren't Available yet
+	ImageReady                    bool
+	ImageReadyReason              string
+	ImageReadyMessage             string
+	InferenceServicePodImageError *ImagePullError // Categorized image pull error from InferenceService pods
 }
 
 // TemplateFound returns true if a template was resolved (namespace or cluster scope).

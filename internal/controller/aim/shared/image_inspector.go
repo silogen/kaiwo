@@ -41,6 +41,67 @@ import (
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 )
 
+// ImageRegistryError wraps registry access errors with categorization
+type ImageRegistryError struct {
+	Type    ImagePullErrorType // From template.go
+	Message string
+	Cause   error
+}
+
+func (e *ImageRegistryError) Error() string {
+	return e.Message
+}
+
+func (e *ImageRegistryError) Unwrap() error {
+	return e.Cause
+}
+
+// categorizeRegistryError analyzes a registry error to determine its type
+func categorizeRegistryError(err error) ImagePullErrorType {
+	if err == nil {
+		return ImagePullErrorGeneric
+	}
+
+	errMsg := strings.ToLower(err.Error())
+
+	// Check for authentication/authorization errors
+	authIndicators := []string{
+		"unauthorized",
+		"authentication required",
+		"authentication failed",
+		"401",
+		"403",
+		"forbidden",
+		"denied",
+		"permission denied",
+		"access denied",
+		"credentials",
+		"authentication",
+	}
+	for _, indicator := range authIndicators {
+		if strings.Contains(errMsg, indicator) {
+			return ImagePullErrorAuth
+		}
+	}
+
+	// Check for not-found errors
+	notFoundIndicators := []string{
+		"not found",
+		"404",
+		"manifest unknown",
+		"name unknown",
+		"image not found",
+		"no such",
+	}
+	for _, indicator := range notFoundIndicators {
+		if strings.Contains(errMsg, indicator) {
+			return ImagePullErrorNotFound
+		}
+	}
+
+	return ImagePullErrorGeneric
+}
+
 // InspectImage extracts metadata from a container image using the provided image pull secrets.
 // It uses go-containerregistry to authenticate and fetch image labels, then parses them into
 // the ImageMetadata structure.
@@ -55,6 +116,7 @@ import (
 // Returns:
 //   - *ImageMetadata: Extracted metadata if successful
 //   - error: Any error encountered during inspection (authentication, network, parsing, etc.)
+//     Registry access errors are wrapped in ImageRegistryError for categorization.
 func InspectImage(
 	ctx context.Context,
 	imageURI string,
@@ -95,19 +157,34 @@ func InspectImage(
 	// Fetch the image descriptor
 	desc, err := remote.Get(ref, remote.WithAuthFromKeychain(keychain), remote.WithContext(ctx))
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch image %q: %w", imageURI, err)
+		errType := categorizeRegistryError(err)
+		return nil, &ImageRegistryError{
+			Type:    errType,
+			Message: fmt.Sprintf("failed to fetch image %q: %v", imageURI, err),
+			Cause:   err,
+		}
 	}
 
 	// Get the image
 	img, err := desc.Image()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get image from descriptor: %w", err)
+		errType := categorizeRegistryError(err)
+		return nil, &ImageRegistryError{
+			Type:    errType,
+			Message: fmt.Sprintf("failed to get image from descriptor: %v", err),
+			Cause:   err,
+		}
 	}
 
 	// Get the config file which contains labels
 	configFile, err := img.ConfigFile()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get image config: %w", err)
+		errType := categorizeRegistryError(err)
+		return nil, &ImageRegistryError{
+			Type:    errType,
+			Message: fmt.Sprintf("failed to get image config: %v", err),
+			Cause:   err,
+		}
 	}
 
 	// Extract metadata from labels

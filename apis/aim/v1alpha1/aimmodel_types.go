@@ -48,6 +48,12 @@ const (
 
 	// AIMModelReasonMetadataExtractionFailed indicates metadata extraction failed (non-blocking, prevents retries).
 	AIMModelReasonMetadataExtractionFailed = "MetadataExtractionFailed"
+
+	// AIMModelReasonImagePullAuthFailure indicates the image could not be pulled due to authentication/authorization failure.
+	AIMModelReasonImagePullAuthFailure = "ImagePullAuthFailure"
+
+	// AIMModelReasonImageNotFound indicates the image was not found in the registry.
+	AIMModelReasonImageNotFound = "ImageNotFound"
 )
 
 // AIMModelDiscoveryConfig controls discovery behavior for a model.

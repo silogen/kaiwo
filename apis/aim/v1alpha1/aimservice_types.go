@@ -215,6 +215,11 @@ const (
 	AIMServiceReasonRuntimeFailed        = "RuntimeFailed"
 	AIMServiceReasonRuntimeConfigMissing = "RuntimeConfigMissing"
 
+	// Image pull related
+	AIMServiceReasonImagePullAuthFailure = "ImagePullAuthFailure"
+	AIMServiceReasonImageNotFound        = "ImageNotFound"
+	AIMServiceReasonImagePullBackOff     = "ImagePullBackOff"
+
 	// Routing
 	AIMServiceReasonConfiguringRoute    = "ConfiguringRoute"
 	AIMServiceReasonRouteReady          = "RouteReady"

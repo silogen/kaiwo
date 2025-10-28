@@ -1,0 +1,7 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-service-image-not-found
+spec:
+  model:
+    image: ghcr.io/silogen/this-image-does-not-exist:v999.999.999

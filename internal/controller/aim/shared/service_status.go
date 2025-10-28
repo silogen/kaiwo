@@ -228,7 +228,14 @@ func HandleImageNotReady(
 		message = "Image is not ready"
 	}
 
-	status.Status = aimv1alpha1.AIMServiceStatusPending
+	// Set status based on the reason - Degraded if model is degraded/failed, otherwise Pending
+	if obs.ImageReadyReason == "ModelDegraded" || obs.ImageReadyReason == "ModelFailed" {
+		status.Status = aimv1alpha1.AIMServiceStatusDegraded
+		setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, obs.ImageReadyReason, message)
+	} else {
+		status.Status = aimv1alpha1.AIMServiceStatusPending
+	}
+
 	setCondition(aimv1alpha1.AIMServiceConditionResolved, metav1.ConditionFalse, obs.ImageReadyReason, message)
 	setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, obs.ImageReadyReason, "Waiting for image readiness")
 	setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionTrue, obs.ImageReadyReason, "Awaiting image readiness")
@@ -400,6 +407,49 @@ func HandleMissingModelSource(
 		"Service is degraded due to missing model sources")
 	setCondition(aimv1alpha1.AIMServiceConditionReady, metav1.ConditionFalse, reason,
 		"Service cannot be ready without model sources")
+	return true
+}
+
+// HandleInferenceServicePodImageError checks for image pull errors in InferenceService pods.
+// Returns true if an image pull error was detected.
+func HandleInferenceServicePodImageError(
+	status *aimv1alpha1.AIMServiceStatus,
+	obs *ServiceObservation,
+	setCondition func(conditionType string, conditionStatus metav1.ConditionStatus, reason, message string),
+) bool {
+	if obs == nil || obs.InferenceServicePodImageError == nil {
+		return false
+	}
+
+	pullErr := obs.InferenceServicePodImageError
+
+	// Determine the condition reason based on error type
+	var conditionReason string
+	switch pullErr.Type {
+	case ImagePullErrorAuth:
+		conditionReason = aimv1alpha1.AIMServiceReasonImagePullAuthFailure
+	case ImagePullErrorNotFound:
+		conditionReason = aimv1alpha1.AIMServiceReasonImageNotFound
+	default:
+		conditionReason = aimv1alpha1.AIMServiceReasonImagePullBackOff
+	}
+
+	// Format detailed message
+	containerType := "Container"
+	if pullErr.IsInitContainer {
+		containerType = "Init container"
+	}
+	detailedMessage := fmt.Sprintf("InferenceService pod %s %q is stuck in %s: %s",
+		containerType, pullErr.Container, pullErr.Reason, pullErr.Message)
+
+	status.Status = aimv1alpha1.AIMServiceStatusDegraded
+	setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, conditionReason, detailedMessage)
+	setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, conditionReason,
+		"InferenceService cannot run due to image pull failure")
+	setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionFalse, conditionReason,
+		"Service is degraded due to image pull failure")
+	setCondition(aimv1alpha1.AIMServiceConditionReady, metav1.ConditionFalse, conditionReason,
+		"Service cannot be ready due to image pull failure")
 	return true
 }
 
@@ -672,6 +722,11 @@ func ProjectServiceStatus(
 	}
 
 	if HandleMissingModelSource(status, obs, setCondition) {
+		return
+	}
+
+	// Check for image pull errors in InferenceService pods
+	if HandleInferenceServicePodImageError(status, obs, setCondition) {
 		return
 	}
 
