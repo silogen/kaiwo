@@ -3,6 +3,7 @@ kind: Configuration
 metadata:
   name: ci-config
 spec:
+  parallel: 2
   discovery:
     fullName: true
   timeouts:
