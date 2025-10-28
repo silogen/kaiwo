@@ -225,43 +225,90 @@ func createModelForImage(
 	return modelName, TemplateScopeCluster, nil
 }
 
-// generateModelName creates a Kubernetes-valid name from an image URI
-// Format: <sanitized-image-name>-<hash>
+// generateModelName creates a Kubernetes-valid name from an image URI.
+// Format: <truncated-image-name>-<tag>-<hash>
+//
+// The name is constructed to ensure uniqueness while preserving readability:
+// - Image name and tag are included for human readability
+// - If the combined name would exceed 63 characters, the image name is truncated
+// - A hash suffix ensures uniqueness even when truncation occurs
+//
+// Examples:
+//
+//	ghcr.io/silogen/llama-3-8b:v1.2.0 -> llama-3-8b-v1.2.0-a1b2c3d4
+//	registry.example.com/models/mistral:latest -> mistral-latest-e5f6g7h8
 func generateModelName(imageURI string) string {
-	// Extract image name from URI
-	// Examples:
-	//   ghcr.io/silogen/llama-3-8b:v1.2.0 -> llama-3-8b
-	//   registry.example.com/models/mistral:latest -> mistral
+	const hashLength = 8
+
+	// Extract image name and tag from URI
+	// Example: ghcr.io/silogen/llama-3-8b:v1.2.0
 	parts := strings.Split(imageURI, "/")
 	lastPart := parts[len(parts)-1]
 
-	// Remove tag/digest
-	imageName := strings.Split(lastPart, ":")[0]
-	imageName = strings.Split(imageName, "@")[0]
+	var imageName, imageTag string
 
-	// Sanitize: lowercase, replace invalid chars with dashes
-	imageName = strings.ToLower(imageName)
-	imageName = invalidNameChars.ReplaceAllString(imageName, "-")
-	imageName = multiDashes.ReplaceAllString(imageName, "-")
-	imageName = strings.Trim(imageName, "-")
+	// Handle digest-based references (@sha256:...)
+	if strings.Contains(lastPart, "@") {
+		imageName = strings.Split(lastPart, "@")[0]
+		// For digest references, use a short digest portion as "tag"
+		digestParts := strings.Split(lastPart, "@")
+		if len(digestParts) > 1 {
+			digest := digestParts[1]
+			// Extract just the hash algorithm and first few chars (e.g., sha256:abc...)
+			if colonIdx := strings.Index(digest, ":"); colonIdx != -1 && colonIdx+7 <= len(digest) {
+				imageTag = digest[colonIdx+1 : colonIdx+7] // First 6 chars of digest
+			}
+		}
+	} else if strings.Contains(lastPart, ":") {
+		// Handle tag-based references (:tag)
+		tagParts := strings.Split(lastPart, ":")
+		imageName = tagParts[0]
+		imageTag = tagParts[1]
+	} else {
+		// No tag specified
+		imageName = lastPart
+		imageTag = "latest" // Implicit latest tag
+	}
+
+	// Sanitize image name and tag
+	imageName = sanitizeNameComponent(imageName)
+	imageTag = sanitizeNameComponent(imageTag)
 
 	// If empty after sanitization, use generic name
 	if imageName == "" {
 		imageName = "model"
 	}
+	if imageTag == "" {
+		imageTag = "notag"
+	}
 
 	// Compute hash of full URI for uniqueness
 	hash := sha256.Sum256([]byte(imageURI))
-	hashSuffix := fmt.Sprintf("%x", hash[:])[:hashSuffixLength]
+	hashSuffix := fmt.Sprintf("%x", hash[:])[:hashLength]
 
-	// Combine: <sanitized-name>-<hash>
-	suffix := "-" + hashSuffix
-	maxBaseLength := maxModelNameLength - len(suffix)
+	// Build suffix: -<tag>-<hash>
+	suffix := "-" + imageTag + "-" + hashSuffix
 
-	if len(imageName) > maxBaseLength {
-		imageName = imageName[:maxBaseLength]
+	// Calculate how much space is available for the image name
+	maxImageNameLength := maxModelNameLength - len(suffix)
+	if maxImageNameLength < 1 {
+		maxImageNameLength = 1
+	}
+
+	// Truncate image name if needed
+	if len(imageName) > maxImageNameLength {
+		imageName = imageName[:maxImageNameLength]
 		imageName = strings.TrimRight(imageName, "-")
 	}
 
 	return imageName + suffix
+}
+
+// sanitizeNameComponent sanitizes a name component for Kubernetes resource names
+func sanitizeNameComponent(s string) string {
+	s = strings.ToLower(s)
+	s = invalidNameChars.ReplaceAllString(s, "-")
+	s = multiDashes.ReplaceAllString(s, "-")
+	s = strings.Trim(s, "-")
+	return s
 }
