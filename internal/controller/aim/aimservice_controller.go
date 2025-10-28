@@ -219,10 +219,24 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 		}
 	}
 
-	// If caching is enabled, observe available model caches
+	//
+
+	// If caching is enabled, observe template cache and available model caches for mounting
 	if service.Spec.CacheModel {
+		var templateCaches = aimv1alpha1.AIMTemplateCacheList{}
+		err := r.Client.List(ctx, &templateCaches)
+		if err != nil {
+			return nil, err
+		}
+		for _, templateCache := range templateCaches.Items {
+			if templateCache.Name == obs.TemplateName+"-tc" {
+				obs.TemplateCache = &templateCache
+				break
+			}
+		}
+
 		var modelCaches = aimv1alpha1.AIMModelCacheList{}
-		err := r.Client.List(ctx, &modelCaches)
+		err = r.Client.List(ctx, &modelCaches)
 		if err != nil {
 			return nil, err
 		}
@@ -289,8 +303,10 @@ func (r *AIMServiceReconciler) plan(ctx context.Context, service *aimv1alpha1.AI
 		})
 
 		var modelsReady = templateState.ModelSource != nil
+		var templateCacheReady = obs.TemplateCache != nil && obs.TemplateCache.Status.Status == aimv1alpha1.AIMTemplateCacheStatusAvailable
+
 		var modelCachesToMount = []aimv1alpha1.AIMModelCache{}
-		if modelsReady && service.Spec.CacheModel {
+		if modelsReady && service.Spec.CacheModel && templateCacheReady {
 			// We know our models, verify that they are cached
 		SEARCH:
 			for _, model := range templateState.Status.ModelSources {
@@ -307,8 +323,10 @@ func (r *AIMServiceReconciler) plan(ctx context.Context, service *aimv1alpha1.AI
 
 		}
 
-		// Only create InferenceService if we have a model source if we have a model source (discovery must have succeeded and populated ModelSources)
-		if modelsReady {
+		var serviceReady = modelsReady && (!service.Spec.CacheModel || templateCacheReady)
+
+		// Only create InferenceService if we have a model source and cache (discovery must have succeeded and populated ModelSources)
+		if serviceReady {
 			serviceState := aimstate.NewServiceState(service, templateState, aimstate.ServiceStateOptions{
 				RuntimeName: obs.RuntimeName(),
 				RoutePath:   routePath,
@@ -499,6 +517,27 @@ func (r *AIMServiceReconciler) clusterTemplateHandlerFunc() handler.MapFunc {
 
 		services := r.findServicesByTemplate(ctx, clusterTemplate.Name, "", clusterTemplate.Spec.ModelName, true)
 		return shared.RequestsForServices(services)
+	}
+}
+
+func (r *AIMServiceReconciler) templateCacheHandlerFunc() handler.MapFunc {
+
+	return func(ctx context.Context, obj client.Object) []reconcile.Request {
+		templateCache, ok := obj.(*aimv1alpha1.AIMTemplateCache)
+		if !ok {
+			return nil
+		}
+
+		var services aimv1alpha1.AIMServiceList
+		if err := r.List(ctx, &services,
+			client.InNamespace(templateCache.Namespace),
+			client.MatchingFields{aimServiceTemplateIndexKey: templateCache.Spec.TemplateRef},
+		); err != nil {
+			ctrl.LoggerFrom(ctx).Error(err, "failed to list AIMServices for AIMServiceTemplate", "template", templateCache.Name)
+			return nil
+		}
+
+		return shared.RequestsForServices(services.Items)
 	}
 }
 
@@ -724,6 +763,7 @@ func (r *AIMServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&aimv1alpha1.AIMClusterServiceTemplate{}, handler.EnqueueRequestsFromMapFunc(r.clusterTemplateHandlerFunc())).
 		Watches(&aimv1alpha1.AIMModel{}, handler.EnqueueRequestsFromMapFunc(r.modelHandlerFunc()), builder.WithPredicates(r.modelPredicate())).
 		Watches(&aimv1alpha1.AIMClusterModel{}, handler.EnqueueRequestsFromMapFunc(r.clusterModelHandlerFunc()), builder.WithPredicates(r.clusterModelPredicate())).
+		Watches(&aimv1alpha1.AIMTemplateCache{}, handler.EnqueueRequestsFromMapFunc(r.templateCacheHandlerFunc())).
 		Named("aim-service").
 		Complete(r)
 }

@@ -287,7 +287,7 @@ func (r *AIMServiceTemplateReconciler) plan(ctx context.Context, template *aimv1
 
 		//Caching is enabled, and didn't find ours - create one
 		if !cacheFound {
-			newCache := buildTemplateCache(template)
+			newCache := buildTemplateCache(template, obs.RuntimeConfig)
 			desired = append(desired, newCache)
 		}
 
@@ -296,7 +296,7 @@ func (r *AIMServiceTemplateReconciler) plan(ctx context.Context, template *aimv1
 	return desired, nil
 }
 
-func buildTemplateCache(template *aimv1alpha1.AIMServiceTemplate) *aimv1alpha1.AIMTemplateCache {
+func buildTemplateCache(template *aimv1alpha1.AIMServiceTemplate, runtimeConfigResolution *shared.RuntimeConfigResolution) *aimv1alpha1.AIMTemplateCache {
 	cBool := true
 	return &aimv1alpha1.AIMTemplateCache{
 		TypeMeta: metav1.TypeMeta{APIVersion: "aimv1alpha1", Kind: "AIMModelCache"},
@@ -304,7 +304,7 @@ func buildTemplateCache(template *aimv1alpha1.AIMServiceTemplate) *aimv1alpha1.A
 			Name:      template.Name + "-tc",
 			Namespace: template.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
-				metav1.OwnerReference{
+				{
 					APIVersion: template.APIVersion,
 					Kind:       template.Kind,
 					Name:       template.Name,
@@ -315,7 +315,7 @@ func buildTemplateCache(template *aimv1alpha1.AIMServiceTemplate) *aimv1alpha1.A
 		},
 		Spec: aimv1alpha1.AIMTemplateCacheSpec{
 			TemplateRef:      template.Name,
-			StorageClassName: "", // TODO: add field to template: template.Spec.Caching.StorageClass
+			StorageClassName: runtimeConfigResolution.EffectiveSpec.DefaultStorageClassName,
 			ModelSources:     template.Status.ModelSources,
 			Env:              template.Spec.Caching.Env,
 		},

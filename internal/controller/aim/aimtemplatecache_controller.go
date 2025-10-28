@@ -42,6 +42,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // AIMModelCacheReconciler reconciles a AIMModelCache object
@@ -60,20 +61,6 @@ func (r *AIMTemplateCacheReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// Fetch CR
 	var tc aimv1alpha1.AIMTemplateCache
 	if err := r.Get(ctx, req.NamespacedName, &tc); err != nil {
-		// Check if this is a ModelCache event, and if so, re-run reconciler for each templatecache in the namespace
-		var mc aimv1alpha1.AIMModelCache
-		if err := r.Get(ctx, req.NamespacedName, &mc); err != nil {
-			return ctrl.Result{}, client.IgnoreNotFound(err)
-		}
-
-		var templateCaches = aimv1alpha1.AIMTemplateCacheList{}
-		if err := r.List(ctx, &templateCaches, client.InNamespace(req.Namespace)); err != nil {
-			return ctrl.Result{}, client.IgnoreNotFound(err)
-		}
-		for _, tc := range templateCaches.Items {
-			req.NamespacedName = types.NamespacedName{Namespace: req.Namespace, Name: tc.Name}
-			r.Reconcile(ctx, req)
-		}
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
@@ -148,7 +135,10 @@ func (r *AIMTemplateCacheReconciler) observe(ctx context.Context, tc *aimv1alpha
 	for _, model := range tc.Spec.ModelSources {
 		bestStatus := aimv1alpha1.AIMModelCacheStatusPending
 		for _, cached := range caches.Items {
-			if cached.Spec.SourceURI == model.SourceURI {
+
+			// ModelCache is a match if it has the same SourceURI and a StorageClass matching our config
+			if cached.Spec.SourceURI == model.SourceURI &&
+				(tc.Spec.StorageClassName == "" || tc.Spec.StorageClassName == cached.Spec.StorageClassName) {
 				if cmpModelCacheStatus(bestStatus, cached.Status.Status) < 0 {
 					bestStatus = cached.Status.Status
 				}
@@ -232,11 +222,46 @@ func (r *AIMTemplateCacheReconciler) projectStatus(_ context.Context, tc *aimv1a
 	return
 }
 
+func requestsFromTemplateCaches(templateCaches []aimv1alpha1.AIMTemplateCache) []reconcile.Request {
+	if len(templateCaches) == 0 {
+		return nil
+	}
+	requests := make([]reconcile.Request, 0, len(templateCaches))
+	for _, tc := range templateCaches {
+		requests = append(requests, reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Namespace: tc.Namespace,
+				Name:      tc.Name,
+			},
+		})
+	}
+	return requests
+}
+
 func (r *AIMTemplateCacheReconciler) SetupWithManager(mgr ctrl.Manager) error {
+
+	modelCacheHandler := handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+		modelCache, ok := obj.(*aimv1alpha1.AIMModelCache)
+		if !ok {
+			return nil
+		}
+
+		var templateCaches aimv1alpha1.AIMTemplateCacheList
+		if err := r.List(ctx, &templateCaches,
+			client.InNamespace(modelCache.Namespace),
+		); err != nil {
+			ctrl.LoggerFrom(ctx).Error(err, "failed to list AIMTemplateCaches for AIMModelCaches",
+				"runtimeConfig", modelCache.Name, "namespace", modelCache.Namespace)
+			return nil
+		}
+
+		return requestsFromTemplateCaches(templateCaches.Items)
+	})
+
 	r.Recorder = mgr.GetEventRecorderFor("aimtemplatecache-controller")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&aimv1alpha1.AIMTemplateCache{}).
-		Watches(&aimv1alpha1.AIMModelCache{}, &handler.EnqueueRequestForObject{}).
+		Watches(&aimv1alpha1.AIMModelCache{}, modelCacheHandler).
 		WithOptions(controller.Options{MaxConcurrentReconciles: 2}).
 		Named("aimtemplatecache-controller").
 		Complete(r)

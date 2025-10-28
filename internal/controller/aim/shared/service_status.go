@@ -738,7 +738,11 @@ func ProjectServiceStatus(
 	}
 
 	if service.Spec.CacheModel {
-		setCondition(aimv1alpha1.AIMServiceConditionCacheReady, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonCacheWarm, "Template caching enabled")
+		if obs.TemplateCache != nil && obs.TemplateCache.Status.Status == aimv1alpha1.AIMTemplateCacheStatusAvailable {
+			setCondition(aimv1alpha1.AIMServiceConditionCacheReady, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonCacheWarm, "Template cache is warm")
+		} else {
+			setCondition(aimv1alpha1.AIMServiceConditionCacheReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonCacheWarm, "Template caching is enabled")
+		}
 	}
 
 	EvaluateInferenceServiceStatus(status, obs, inferenceService, httpRoute, routingEnabled, routingReady, setCondition)
