@@ -26,6 +26,7 @@ package shared
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"strings"
@@ -457,26 +458,99 @@ func buildServiceTemplateFromDeployment(
 	return template
 }
 
-// generateTemplateName creates an RFC1123-compliant name for a service template.
-// Format: {image-name}-{gpuModel}-x{gpuCount}-{metric}-{precision}
-func generateTemplateName(imageName string, deployment aimv1alpha1.RecommendedDeployment) string {
-	parts := []string{imageName}
+// metricShorthand maps metric values to their abbreviated forms for template naming
+var metricShorthand = map[string]string{
+	"latency":    "lat",
+	"throughput": "thr",
+}
 
+// getMetricShorthand returns the abbreviated form of a metric, or the original if no mapping exists
+func getMetricShorthand(metric string) string {
+	if shorthand, ok := metricShorthand[metric]; ok {
+		return shorthand
+	}
+	return metric
+}
+
+// generateTemplateName creates an RFC1123-compliant name for a service template.
+// Format: {truncated-image}-{count}x-{gpu}-{metric-shorthand}-{precision}-{hash4}
+//
+// The name is constructed to ensure uniqueness while preserving readability:
+// - Image name is truncated to fit within the 63-character Kubernetes limit
+// - Profile parameters (GPU count, model, metric, precision) are always preserved
+// - A 4-character hash suffix ensures uniqueness even when truncation occurs
+//
+// Example: llama-3-1-70b-instruct-1x-mi300x-lat-fp8-a7f3
+func generateTemplateName(imageName string, deployment aimv1alpha1.RecommendedDeployment) string {
+	const (
+		maxLen         = 63
+		hashLength     = 4
+		separatorCount = 5 // hyphens between components
+	)
+
+	// Build the distinguishing suffix components
+	var suffixParts []string
+
+	// Format: {count}x-{gpu}
+	if deployment.GPUCount > 0 && deployment.GPUModel != "" {
+		suffixParts = append(suffixParts, fmt.Sprintf("%dx-%s", deployment.GPUCount, deployment.GPUModel))
+	} else if deployment.GPUModel != "" {
+		suffixParts = append(suffixParts, deployment.GPUModel)
+	} else if deployment.GPUCount > 0 {
+		suffixParts = append(suffixParts, fmt.Sprintf("x%d", deployment.GPUCount))
+	}
+
+	// Add metric with shorthand
+	if deployment.Metric != "" {
+		suffixParts = append(suffixParts, getMetricShorthand(deployment.Metric))
+	}
+
+	// Add precision
+	if deployment.Precision != "" {
+		suffixParts = append(suffixParts, deployment.Precision)
+	}
+
+	// Create deterministic hash from all components for uniqueness
+	hashInput := imageName
 	if deployment.GPUModel != "" {
-		parts = append(parts, deployment.GPUModel)
+		hashInput += "-" + deployment.GPUModel
 	}
 	if deployment.GPUCount > 0 {
-		parts = append(parts, fmt.Sprintf("x%d", deployment.GPUCount))
+		hashInput += fmt.Sprintf("-x%d", deployment.GPUCount)
 	}
 	if deployment.Metric != "" {
-		parts = append(parts, deployment.Metric)
+		hashInput += "-" + deployment.Metric
 	}
 	if deployment.Precision != "" {
-		parts = append(parts, deployment.Precision)
+		hashInput += "-" + deployment.Precision
 	}
 
-	// Join with hyphens and make RFC1123 compliant
-	name := strings.Join(parts, "-")
+	hash := sha256.Sum256([]byte(hashInput))
+	hashSuffix := fmt.Sprintf("%x", hash[:])[:hashLength]
+	suffixParts = append(suffixParts, hashSuffix)
+
+	// Build the complete suffix
+	suffix := strings.Join(suffixParts, "-")
+
+	// Calculate how much space is available for the image name
+	// Account for the hyphen between image name and suffix
+	reservedLen := len(suffix) + 1 // +1 for hyphen separator
+	maxImageLen := maxLen - reservedLen
+
+	if maxImageLen < 1 {
+		maxImageLen = 1
+	}
+
+	// Truncate image name to fit
+	truncatedImage := imageName
+	if len(truncatedImage) > maxImageLen {
+		truncatedImage = truncatedImage[:maxImageLen]
+	}
+
+	// Combine image name and suffix
+	name := truncatedImage + "-" + suffix
+
+	// Make RFC1123 compliant (lowercase, valid chars, trim invalid endings)
 	return baseutils.MakeRFC1123Compliant(name)
 }
 
