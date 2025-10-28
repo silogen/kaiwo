@@ -45,7 +45,6 @@ spec:
                 engine: vllm
                 gpu: AMD
                 precision: fp8
-                gpu_count: 1
                 metric: latency
               engine_args:
                 distributed_executor_backend: mp
