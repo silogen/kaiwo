@@ -40,7 +40,6 @@ spec:
               value: "7"
             resources:
               limits:
-                cpu: "2"
                 memory: 1Gi
               requests:
                 cpu: "2"

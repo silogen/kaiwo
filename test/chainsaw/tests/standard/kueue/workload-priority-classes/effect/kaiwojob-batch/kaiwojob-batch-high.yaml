@@ -11,7 +11,6 @@ spec:
       cpu: "100m"
       memory: "1.5Gi"
     limits:
-      cpu: "100m"
       memory: "1.5Gi"
   image: busybox:latest
   entrypoint: |

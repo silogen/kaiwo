@@ -6,8 +6,12 @@ IMG ?= ghcr.io/silogen/kaiwo-operator:${TAG}
 
 # Helm chart configuration
 CHART_DIR ?= chart
+CHART_NAME ?= kaiwo-operator
 CHART_VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "0.1.0")
 APP_VERSION ?= ${TAG}
+CHART_OCI_REGISTRY ?= $(shell echo $(IMG) | cut -d'/' -f1)
+CHART_OCI_OWNER ?= $(shell echo $(IMG) | cut -d'/' -f2)
+CHART_OCI_REPO ?= oci://$(CHART_OCI_REGISTRY)/$(CHART_OCI_OWNER)/charts
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -168,7 +172,7 @@ helm-package: build-installer ## Package the Helm chart
 .PHONY: helm-install
 helm-install: helm-package ## Install the Helm chart locally
 	@echo "Installing Helm chart to kaiwo-system namespace..."
-	helm upgrade --install kaiwo dist/kaiwo-operator-$(CHART_VERSION).tgz --namespace kaiwo-system --create-namespace
+	helm upgrade --install kaiwo dist/$(CHART_NAME)-$(CHART_VERSION).tgz --namespace kaiwo-system --create-namespace
 
 .PHONY: helm-uninstall
 helm-uninstall: ## Uninstall the Helm chart
@@ -185,11 +189,11 @@ helm-template: build-installer ## Generate Helm templates for inspection
 .PHONY: helm-push-oci
 helm-push-oci: helm-package ## Push Helm chart to OCI registry
 	@echo "Pushing Helm chart to OCI registry..."
-	helm push dist/kaiwo-$(CHART_VERSION).tgz oci://ghcr.io/$(shell echo $(IMG) | cut -d'/' -f2 | cut -d':' -f1)
+	helm push dist/$(CHART_NAME)-$(CHART_VERSION).tgz $(CHART_OCI_REPO)
 
 .PHONY: helm-release
 helm-release: helm-package ## Package chart for release (used by CI)
-	@echo "Helm chart packaged for release: dist/kaiwo-operator-$(CHART_VERSION).tgz"
+	@echo "Helm chart packaged for release: dist/$(CHART_NAME)-$(CHART_VERSION).tgz"
 
 
 ##@ Deployment

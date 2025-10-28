@@ -10,7 +10,6 @@ spec:
       cpu: "100m"
       memory: "1Gi"
     limits:
-      cpu: "100m"
       memory: "1Gi"
   entrypoint: |
     trap "echo 'Termination signal received. Exiting...'; exit" SIGTERM

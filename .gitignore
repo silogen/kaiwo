@@ -36,4 +36,3 @@ dist/*
 
 # local kubeconfigs
 *kubeconfig*.yaml
-
