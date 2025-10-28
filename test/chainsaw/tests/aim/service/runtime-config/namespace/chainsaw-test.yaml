@@ -36,17 +36,3 @@ spec:
             (parentRefs[0].name == 'kserve-ingress-gateway'): true
             (parentRefs[0].namespace == 'kgateway-system'): true
             (rules[0].matches[0].path.value == join('', ['/ns/', $namespace, '/test-service'])): true
-
-  - name: Verify InferenceService has serviceAccountName and imagePullSecrets
-    try:
-    - assert:
-        resource:
-          apiVersion: serving.kserve.io/v1beta1
-          kind: InferenceService
-          metadata:
-            name: test-service
-          spec:
-            predictor:
-              serviceAccountName: test-service-account
-              (imagePullSecrets[?name == 'test-pull-secret']):
-              - name: test-pull-secret

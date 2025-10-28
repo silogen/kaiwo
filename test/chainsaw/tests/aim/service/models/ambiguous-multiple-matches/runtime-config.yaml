@@ -3,8 +3,5 @@ kind: AIMRuntimeConfig
 metadata:
   name: ambiguous-config
 spec:
-  model:
-    creationScope: Namespace
-    autoDiscovery: true
   routing:
     enabled: false

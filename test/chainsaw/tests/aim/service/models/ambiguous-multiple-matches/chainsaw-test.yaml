@@ -7,11 +7,6 @@ spec:
   timeouts:
     assert: 90s
   steps:
-  - name: Create runtime config
-    try:
-    - apply:
-        file: runtime-config.yaml
-
   - name: Create first model with specific image
     try:
     - apply:

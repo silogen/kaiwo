@@ -3,9 +3,6 @@ kind: AIMRuntimeConfig
 metadata:
   name: test-runtime-config
 spec:
-  serviceAccountName: test-service-account
-  imagePullSecrets:
-  - name: test-pull-secret
   routing:
     enabled: true
     gatewayRef:

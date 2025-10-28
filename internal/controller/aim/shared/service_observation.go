@@ -37,6 +37,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 )
@@ -329,37 +330,89 @@ func resolveModelNameFromService(
 	return "", nil
 }
 
+// checkModelStatus evaluates a model's status and returns readiness information
+func checkModelStatus(status aimv1alpha1.AIMModelStatusEnum, scope TemplateScope, kind, imageName string) (bool, TemplateScope, string, string) {
+	switch status {
+	case aimv1alpha1.AIMModelStatusReady:
+		return true, scope, "", ""
+	case aimv1alpha1.AIMModelStatusPending:
+		return false, scope, "ModelPending",
+			fmt.Sprintf("%s %q is pending discovery", kind, imageName)
+	case aimv1alpha1.AIMModelStatusProgressing:
+		return false, scope, "ModelProgressing",
+			fmt.Sprintf("%s %q is running discovery", kind, imageName)
+	case aimv1alpha1.AIMModelStatusFailed:
+		return false, scope, "ModelFailed",
+			fmt.Sprintf("%s %q failed discovery", kind, imageName)
+	case aimv1alpha1.AIMModelStatusDegraded:
+		return false, scope, "ModelDegraded",
+			fmt.Sprintf("%s %q is degraded", kind, imageName)
+	case "":
+		// Model status not yet initialized - treat as pending
+		return false, scope, "ModelPending",
+			fmt.Sprintf("%s %q status not yet initialized", kind, imageName)
+	default:
+		return false, scope, "ModelNotReady",
+			fmt.Sprintf("%s %q is %s", kind, imageName, status)
+	}
+}
+
 func evaluateImageReadiness(
 	ctx context.Context,
 	k8sClient client.Client,
 	namespace string,
 	imageName string,
 ) (bool, TemplateScope, string, string, error) {
+	logger := log.FromContext(ctx)
+
 	if imageName == "" {
 		return false, TemplateScopeNone, aimv1alpha1.AIMServiceReasonModelNotFound, "Model name is empty", nil
 	}
 
 	if namespace != "" {
-		var nsImage aimv1alpha1.AIMModel
-		err := k8sClient.Get(ctx, client.ObjectKey{Name: imageName, Namespace: namespace}, &nsImage)
+		var nsModel aimv1alpha1.AIMModel
+		err := k8sClient.Get(ctx, client.ObjectKey{Name: imageName, Namespace: namespace}, &nsModel)
 		switch {
 		case err == nil:
-			// Image exists and is ready
-			return true, TemplateScopeNamespace, "", "", nil
+			logger.Info("Found AIMModel",
+				"model", imageName,
+				"namespace", namespace,
+				"status", nsModel.Status.Status,
+				"generation", nsModel.Generation,
+				"observedGeneration", nsModel.Status.ObservedGeneration)
+			ready, scope, reason, message := checkModelStatus(nsModel.Status.Status, TemplateScopeNamespace, "AIMModel", imageName)
+			logger.Info("Model readiness check result",
+				"model", imageName,
+				"ready", ready,
+				"reason", reason,
+				"message", message)
+			return ready, scope, reason, message, nil
 		case apierrors.IsNotFound(err):
+			logger.V(1).Info("AIMModel not found, checking cluster scope", "model", imageName, "namespace", namespace)
 			// fall through to cluster scope
 		default:
 			return false, TemplateScopeNone, "", "", fmt.Errorf("failed to get AIMModel %s/%s: %w", namespace, imageName, err)
 		}
 	}
 
-	var clusterImage aimv1alpha1.AIMClusterModel
-	err := k8sClient.Get(ctx, client.ObjectKey{Name: imageName}, &clusterImage)
+	var clusterModel aimv1alpha1.AIMClusterModel
+	err := k8sClient.Get(ctx, client.ObjectKey{Name: imageName}, &clusterModel)
 	switch {
 	case err == nil:
-		// Image exists and is ready
-		return true, TemplateScopeCluster, "", "", nil
+		logger.Info("Found AIMClusterModel",
+			"model", imageName,
+			"status", clusterModel.Status.Status,
+			"generation", clusterModel.Generation,
+			"observedGeneration", clusterModel.Status.ObservedGeneration)
+		ready, scope, reason, message := checkModelStatus(clusterModel.Status.Status, TemplateScopeCluster, "AIMClusterModel", imageName)
+		logger.Info("Model readiness check result",
+			"model", imageName,
+			"ready", ready,
+			"reason", reason,
+			"message", message)
+		return ready, scope, reason, message, nil
 	case apierrors.IsNotFound(err):
+		logger.Info("Model not found", "model", imageName)
 		return false, TemplateScopeNone, aimv1alpha1.AIMServiceReasonModelNotFound,
 			fmt.Sprintf("No AIMModel or AIMClusterModel found for %q", imageName), nil
 	default:

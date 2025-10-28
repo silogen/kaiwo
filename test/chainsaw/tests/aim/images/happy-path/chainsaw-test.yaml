@@ -28,7 +28,7 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
-            name: qwen3-preview-happy-path-mi300x-x1-latency-fp16
+            name: qwen3-preview-happy-path-1x-mi300x-lat-fp16-cbbb
           spec:
             metric: latency
             precision: fp16
@@ -40,7 +40,7 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
-            name: qwen3-preview-happy-path-mi300x-x1-throughput-fp16
+            name: qwen3-preview-happy-path-1x-mi300x-thr-fp16-4439
           spec:
             metric: throughput
             precision: fp16
@@ -52,7 +52,7 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
-            name: qwen3-preview-happy-path-mi325x-x1-latency-fp16
+            name: qwen3-preview-happy-path-1x-mi325x-lat-fp16-3f68
           spec:
             metric: latency
             precision: fp16
@@ -64,7 +64,7 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
-            name: qwen3-preview-happy-path-mi325x-x1-throughput-fp16
+            name: qwen3-preview-happy-path-1x-mi325x-thr-fp16-dcba
           spec:
             metric: throughput
             precision: fp16

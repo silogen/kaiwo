@@ -1,0 +1,10 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: credentials-test
+spec:
+  model:
+    image: ghcr.io/silogen/aim-google-gemma-3-1b-it:0.7.0-preview
+  imagePullSecrets:
+  - name: test-registry-secret
+  serviceAccountName: test-inference-sa

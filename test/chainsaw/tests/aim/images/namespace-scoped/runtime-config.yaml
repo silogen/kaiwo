@@ -1,7 +1,0 @@
-apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMRuntimeConfig
-metadata:
-  name: default
-spec:
-  imagePullSecrets:
-  - name: test-pull-secret
