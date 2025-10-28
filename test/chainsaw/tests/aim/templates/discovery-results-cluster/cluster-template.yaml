@@ -6,4 +6,4 @@ spec:
   aimImageName: llama-3-8b-cluster-discovery
   gpuSelector:
     count: 1
-    model: MI300X
+    model: AMD

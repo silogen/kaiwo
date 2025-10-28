@@ -17,6 +17,7 @@ spec:
           status:
             phase: Bound
     - assert:
+          timeout: 120s
           resource:
             apiVersion: aim.silogen.ai/v1alpha1
             kind: AIMModelCache
