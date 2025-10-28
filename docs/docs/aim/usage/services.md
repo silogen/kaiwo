@@ -213,12 +213,112 @@ View detailed status:
 kubectl -n <namespace> describe aimservice <name>
 ```
 
-The `status` field shows:
-- **Pending**: Initial state, resolving resources
-- **Starting**: Creating infrastructure
+### Status Values
+
+The `status` field shows the overall service state:
+
+- **Pending**: Initial state, resolving model and template references
+- **Starting**: Creating infrastructure (InferenceService, routing, caches)
 - **Running**: Service is ready and serving traffic
-- **Degraded**: Service is running but has warnings (e.g., routing issues)
-- **Failed**: Service cannot start
+- **Degraded**: Service is running but has warnings (e.g., routing issues, template not optimal)
+- **Failed**: Service cannot start due to terminal errors
+
+### Status Fields
+
+| Field | Description |
+| ----- | ----------- |
+| `status` | Overall service status (Pending, Starting, Running, Degraded, Failed) |
+| `observedGeneration` | Most recent generation observed by the controller |
+| `conditions` | Detailed conditions tracking different aspects of service lifecycle |
+| `resolvedRuntimeConfig` | Metadata about the runtime config that was resolved (name, namespace, scope, UID) |
+| `resolvedImage` | Metadata about the model image that was resolved (name, namespace, scope, UID) |
+| `resolvedTemplate` | Metadata about the template that was selected (name, namespace, scope, UID) |
+| `routing` | Observed routing configuration including the rendered HTTP path |
+
+### Conditions
+
+Services track detailed conditions to help diagnose issues:
+
+**Resolved**: Model and template validation
+- `True`: Model and template have been validated and a runtime profile has been selected
+- `False`: Model or template not found, or validation failed
+- Reasons: `Resolved`, `TemplateNotFound`, `ModelNotFound`, `ModelNotReady`, `TemplateSelectionAmbiguous`
+
+**CacheReady**: Model caching status
+- `True`: Required caches are present or warmed as requested
+- `False`: Caches are not ready
+- Reasons: `CacheWarm`, `WaitingForCache`, `CacheWarming`, `CacheFailed`
+
+**RuntimeReady**: KServe InferenceService status
+- `True`: The underlying KServe InferenceService is ready and serving traffic
+- `False`: InferenceService is not ready
+- Reasons: `RuntimeReady`, `CreatingRuntime`, `RuntimeFailed`
+
+**RoutingReady**: HTTP routing status
+- `True`: HTTPRoute has been created and routing is configured
+- `False`: Routing is not ready or disabled
+- Reasons: `RouteReady`, `ConfiguringRoute`, `RouteFailed`, `PathTemplateInvalid`
+
+**Ready**: Overall readiness
+- `True`: Service is fully ready to serve traffic (all other conditions are True)
+- `False`: Service is not ready
+
+**Progressing**: Active reconciliation
+- `True`: Controller is actively reconciling towards readiness
+- `False`: Service has reached a stable state
+
+**Failure**: Terminal failures
+- `True`: An unrecoverable error has occurred
+- Includes detailed reason and message
+
+### Example Status
+
+```bash
+$ kubectl -n ml-team get aimservice llama-chat -o yaml
+```
+
+```yaml
+status:
+  status: Running
+  observedGeneration: 1
+  conditions:
+    - type: Resolved
+      status: "True"
+      reason: Resolved
+      message: "Model and template resolved successfully"
+    - type: CacheReady
+      status: "True"
+      reason: CacheWarm
+      message: "Model sources cached"
+    - type: RuntimeReady
+      status: "True"
+      reason: RuntimeReady
+      message: "InferenceService is ready"
+    - type: RoutingReady
+      status: "True"
+      reason: RouteReady
+      message: "HTTPRoute configured"
+    - type: Ready
+      status: "True"
+      reason: Ready
+      message: "Service is ready"
+  resolvedRuntimeConfig:
+    name: default
+    namespace: ml-team
+    scope: Namespace
+    kind: aim.silogen.ai/v1alpha1/AIMRuntimeConfig
+  resolvedImage:
+    name: meta-llama-3-8b
+    namespace: ml-team
+    scope: Namespace
+    kind: aim.silogen.ai/v1alpha1/AIMModel
+  resolvedTemplate:
+    name: llama-3-8b-latency
+    scope: Cluster
+    kind: aim.silogen.ai/v1alpha1/AIMClusterServiceTemplate
+  routing:
+    path: /ml-team/llama-chat
+```
 
 ## Complete Example
 
