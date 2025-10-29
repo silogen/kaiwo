@@ -3,7 +3,7 @@ kind: AIMClusterModel
 metadata:
   name: qwen3-preview-happy-path
 spec:
-  image: ghcr.io/silogen/aim-qwen-qwen3-4b:0.7.0-preview
+  image: ghcr.io/silogen/aim-dummy:0.1.1-2
   discovery:
     enabled: true
     # default is true

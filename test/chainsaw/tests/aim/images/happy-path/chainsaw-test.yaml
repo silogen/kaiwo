@@ -29,10 +29,11 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
-            name: qwen3-preview-happy-path-1x-mi300x-lat-fp16-cbbb
+            ownerReferences:
+            - name: qwen3-preview-happy-path
           spec:
             metric: latency
-            precision: fp16
+            precision: fp8
             gpuSelector:
               count: 1
               model: MI300X
@@ -41,10 +42,11 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
-            name: qwen3-preview-happy-path-1x-mi300x-thr-fp16-4439
+            ownerReferences:
+            - name: qwen3-preview-happy-path
           spec:
             metric: throughput
-            precision: fp16
+            precision: fp8
             gpuSelector:
               count: 1
               model: MI300X
@@ -53,10 +55,11 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
-            name: qwen3-preview-happy-path-1x-mi325x-lat-fp16-3f68
+            ownerReferences:
+            - name: qwen3-preview-happy-path
           spec:
             metric: latency
-            precision: fp16
+            precision: fp8
             gpuSelector:
               count: 1
               model: MI325X
@@ -65,10 +68,11 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
-            name: qwen3-preview-happy-path-1x-mi325x-thr-fp16-dcba
+            ownerReferences:
+            - name: qwen3-preview-happy-path
           spec:
             metric: throughput
-            precision: fp16
+            precision: fp8
             gpuSelector:
               count: 1
               model: MI325X
