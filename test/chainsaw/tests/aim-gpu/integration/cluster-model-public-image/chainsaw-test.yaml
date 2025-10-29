@@ -71,10 +71,9 @@ spec:
               - path:
                   value: /integration/custom-path/integration-cluster-model-public-image
           status:
-            parents:
-              (conditions[?type == 'ResolvedRefs']):
+            (parents[0].conditions[?type == 'ResolvedRefs']):
               - status: "True"
-              (conditions[?type == 'Accepted']):
+            (parents[0].conditions[?type == 'Accepted']):
               - status: "True"
 
   - name: Verify the service responds
