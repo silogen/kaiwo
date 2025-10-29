@@ -397,8 +397,11 @@ spec:
                     description: Annotations to add to the HTTPRoute resource.
                     type: object
                   enabled:
-                    default: false
-                    description: Enabled toggles HTTP routing management.
+                    description: |-
+                      Enabled toggles HTTP routing management.
+                      When nil, inherits the enabled state from the runtime configuration.
+                      When false, explicitly disables routing regardless of runtime config.
+                      When true, explicitly enables routing regardless of runtime config.
                     type: boolean
                   gatewayRef:
                     description: |-

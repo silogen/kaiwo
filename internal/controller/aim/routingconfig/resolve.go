@@ -60,15 +60,18 @@ func Resolve(service *aimv1alpha1.AIMService, runtime *aimv1alpha1.AIMRuntimeRou
 
 	// Override with service-level config when present
 	if serviceRouting != nil {
-		// Service Enabled always takes precedence (even if false)
-		resolved.Enabled = serviceRouting.Enabled
+		// Only override enabled if explicitly set (non-nil)
+		// nil means inherit from runtime config
+		if serviceRouting.Enabled != nil {
+			resolved.Enabled = *serviceRouting.Enabled
+		}
 
 		// Override GatewayRef if service specifies one
 		if serviceRouting.GatewayRef != nil {
 			resolved.GatewayRef = serviceRouting.GatewayRef.DeepCopy()
 		}
 
-		// Service annotations (no merging, just use service annotations)
+		// Service annotations (only service level has annotations)
 		if len(serviceRouting.Annotations) > 0 {
 			resolved.Annotations = make(map[string]string, len(serviceRouting.Annotations))
 			for k, v := range serviceRouting.Annotations {
