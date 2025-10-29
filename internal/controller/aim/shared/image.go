@@ -810,35 +810,6 @@ func ProjectImageStatus(
 	extractionErr error,
 	observedGeneration int64,
 ) {
-	logger := ctrl.Log.WithName("ProjectImageStatus")
-
-	// Debug logging to understand what we're receiving
-	logger.Info("ProjectImageStatus called",
-		"image", spec.Image,
-		"hasExtractedMetadata", extractedMetadata != nil,
-		"hasExtractionErr", extractionErr != nil,
-		"hasObservation", observation != nil)
-
-	if observation != nil {
-		logger.Info("Observation state",
-			"hasRegistryError", observation.RegistryError != nil,
-			"hasMetadataError", observation.MetadataError != nil,
-			"hasMetadataExtractionErr", observation.MetadataExtractionErr != nil,
-			"metadataExtracted", observation.MetadataExtracted,
-			"metadataAlreadyAttempted", observation.MetadataAlreadyAttempted)
-
-		if observation.RegistryError != nil {
-			logger.Info("Registry error present in observation",
-				"errorType", observation.RegistryError.Type,
-				"message", observation.RegistryError.Message)
-		}
-		if observation.MetadataError != nil {
-			logger.Info("Metadata error present in observation",
-				"reason", observation.MetadataError.Reason,
-				"message", observation.MetadataError.Message)
-		}
-	}
-
 	status.ObservedGeneration = observedGeneration
 
 	setAutoCondition := func(condStatus metav1.ConditionStatus, reason, message string) {
@@ -853,17 +824,6 @@ func ProjectImageStatus(
 
 	// Handle metadata extraction and get any errors
 	_, registryErr, metadataFormatErr := handleMetadataExtraction(status, extractedMetadata, extractionErr, observation, observedGeneration)
-
-	logger.Info("After handleMetadataExtraction",
-		"hasRegistryErr", registryErr != nil,
-		"hasMetadataFormatErr", metadataFormatErr != nil)
-
-	if registryErr != nil {
-		logger.Info("Registry error detected", "type", registryErr.Type, "message", registryErr.Message)
-	}
-	if metadataFormatErr != nil {
-		logger.Info("Metadata format error detected", "reason", metadataFormatErr.Reason, "message", metadataFormatErr.Message)
-	}
 
 	// Handle metadata format errors
 	if metadataFormatErr != nil {

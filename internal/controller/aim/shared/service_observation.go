@@ -375,18 +375,7 @@ func evaluateImageReadiness(
 		err := k8sClient.Get(ctx, client.ObjectKey{Name: imageName, Namespace: namespace}, &nsModel)
 		switch {
 		case err == nil:
-			logger.Info("Found AIMModel",
-				"model", imageName,
-				"namespace", namespace,
-				"status", nsModel.Status.Status,
-				"generation", nsModel.Generation,
-				"observedGeneration", nsModel.Status.ObservedGeneration)
 			ready, scope, reason, message := checkModelStatus(nsModel.Status.Status, TemplateScopeNamespace, "AIMModel", imageName)
-			logger.Info("Model readiness check result",
-				"model", imageName,
-				"ready", ready,
-				"reason", reason,
-				"message", message)
 			return ready, scope, reason, message, nil
 		case apierrors.IsNotFound(err):
 			logger.V(1).Info("AIMModel not found, checking cluster scope", "model", imageName, "namespace", namespace)
@@ -400,20 +389,10 @@ func evaluateImageReadiness(
 	err := k8sClient.Get(ctx, client.ObjectKey{Name: imageName}, &clusterModel)
 	switch {
 	case err == nil:
-		logger.Info("Found AIMClusterModel",
-			"model", imageName,
-			"status", clusterModel.Status.Status,
-			"generation", clusterModel.Generation,
-			"observedGeneration", clusterModel.Status.ObservedGeneration)
 		ready, scope, reason, message := checkModelStatus(clusterModel.Status.Status, TemplateScopeCluster, "AIMClusterModel", imageName)
-		logger.Info("Model readiness check result",
-			"model", imageName,
-			"ready", ready,
-			"reason", reason,
-			"message", message)
 		return ready, scope, reason, message, nil
 	case apierrors.IsNotFound(err):
-		logger.Info("Model not found", "model", imageName)
+		logger.V(1).Info("Model not found", "model", imageName)
 		return false, TemplateScopeNone, aimv1alpha1.AIMServiceReasonModelNotFound,
 			fmt.Sprintf("No AIMModel or AIMClusterModel found for %q", imageName), nil
 	default:

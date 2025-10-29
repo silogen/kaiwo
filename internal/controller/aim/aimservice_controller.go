@@ -465,7 +465,6 @@ func (r *AIMServiceReconciler) findServicesByModel(ctx context.Context, model *a
 		}
 	}
 
-	logger.Info("AIMModel watch completed", "model", model.Name, "matchingServices", len(matchingServices))
 	return matchingServices
 }
 
@@ -474,12 +473,10 @@ func (r *AIMServiceReconciler) serviceUsesModel(svc *aimv1alpha1.AIMService, mod
 	// Check if service uses this model by:
 	// 1. Explicit ref (spec.model.ref)
 	if svc.Spec.Model.Ref != nil && *svc.Spec.Model.Ref == model.Name {
-		logger.Info("Found matching service by ref", "service", svc.Name, "model", model.Name)
 		return true
 	}
 	// 2. Image URL that resolves to this model (check status)
 	if svc.Status.ResolvedImage != nil && svc.Status.ResolvedImage.Name == model.Name {
-		logger.Info("Found matching service by resolved image", "service", svc.Name, "model", model.Name)
 		return true
 	}
 	// 3. Image URL in spec (need to check if it would resolve to this model)
@@ -499,17 +496,10 @@ func (r *AIMServiceReconciler) serviceUsesModel(svc *aimv1alpha1.AIMService, mod
 // modelHandlerFunc returns a handler function for AIMModel watches
 func (r *AIMServiceReconciler) modelHandlerFunc() handler.MapFunc {
 	return func(ctx context.Context, obj client.Object) []reconcile.Request {
-		logger := ctrl.LoggerFrom(ctx)
 		model, ok := obj.(*aimv1alpha1.AIMModel)
 		if !ok {
 			return nil
 		}
-
-		logger.Info("AIMModel watch triggered",
-			"model", model.Name,
-			"namespace", model.Namespace,
-			"status", model.Status.Status,
-			"labels", model.Labels)
 
 		matchingServices := r.findServicesByModel(ctx, model)
 		return shared.RequestsForServices(matchingServices)
