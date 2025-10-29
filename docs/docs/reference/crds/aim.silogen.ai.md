@@ -909,7 +909,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `enabled` _boolean_ | Enabled toggles HTTP routing management. | false |  |
+| `enabled` _boolean_ | Enabled toggles HTTP routing management.<br />When nil, inherits the enabled state from the runtime configuration.<br />When false, explicitly disables routing regardless of runtime config.<br />When true, explicitly enables routing regardless of runtime config. |  |  |
 | `gatewayRef` _[ParentReference](#parentreference)_ | GatewayRef identifies the Gateway parent that should receive the HTTPRoute.<br />When omitted while routing is enabled, reconciliation will report a failure. |  |  |
 | `annotations` _object (keys:string, values:string)_ | Annotations to add to the HTTPRoute resource. |  |  |
 | `pathTemplate` _string_ | PathTemplate overrides the HTTP path template used for routing.<br />The value is rendered against the AIMService object using JSONPath expressions. |  |  |

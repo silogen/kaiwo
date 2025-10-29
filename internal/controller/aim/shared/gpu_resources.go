@@ -268,40 +268,6 @@ func filterdGPULabelResources(node *corev1.Node, aggregate map[string]GPUResourc
 	}
 }
 
-// aggregateNodeResources processes a single node's resources and adds them to the aggregate map.
-// Skips GPUs where the model cannot be determined from node labels (strict matching requirement).
-func aggregateNodeResources(node *corev1.Node, aggregate map[string]GPUResourceInfo) {
-	allocatable := node.Status.Allocatable
-
-	// Process all resources in the node
-	for resourceName := range allocatable {
-		resourceNameStr := string(resourceName)
-
-		// Filter for GPU resources (amd.com/* or nvidia.com/*)
-		if !isGPUResource(resourceNameStr) {
-			continue
-		}
-
-		// Extract GPU model from node labels
-		gpuModel := extractGPUModelFromNodeLabels(node.Labels, resourceNameStr)
-
-		// Skip GPUs where model cannot be determined (insufficient node labels)
-		if gpuModel == "" {
-			continue
-		}
-
-		// Add to or update the aggregate
-		info, exists := aggregate[gpuModel]
-		if !exists {
-			info = GPUResourceInfo{
-				ResourceName: resourceNameStr,
-			}
-		}
-
-		aggregate[gpuModel] = info
-	}
-}
-
 // isGPUResource checks if a resource name represents a GPU resource.
 // Returns true if the resource name starts with "amd.com/" or "nvidia.com/".
 func isGPUResource(resourceName string) bool {

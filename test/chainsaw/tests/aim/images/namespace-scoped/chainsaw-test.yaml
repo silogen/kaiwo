@@ -43,7 +43,7 @@ spec:
           kind: AIMServiceTemplate
           metadata:
             ownerReferences:
-            - name: llama-3-8b-ns          
+            - name: llama-3-8b-ns
           spec:
             modelName: llama-3-8b-ns
             metric: throughput
@@ -73,5 +73,5 @@ spec:
           status:
             imageMetadata:
               model:
-                canonicalName:  HuggingFaceTB/SmolLM2-135M
+                canonicalName: HuggingFaceTB/SmolLM2-135M
                 (recommendedDeployments != null): true
