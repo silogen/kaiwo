@@ -1,13 +1,11 @@
 apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMService
+kind: AIMRuntimeConfig
 metadata:
-  name: test-service
+  name: integration-service-image-private-hf
 spec:
-  model:
-    ref: default-testing-llama-3-8b
   routing:
     enabled: true
     gatewayRef:
       name: kserve-ingress-gateway
       namespace: kgateway-system
-    pathTemplate: "/integration/test"
+    pathTemplate: "/integration/custom-path/{.metadata.name}"

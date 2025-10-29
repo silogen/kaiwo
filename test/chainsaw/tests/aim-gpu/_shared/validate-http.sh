@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
+# Reusable HTTP validation script for AIM integration tests
+# Validates both /v1/models and /v1/chat/completions endpoints
 set -euo pipefail
 
-# ---- hard-coded bits you gave ----
-NS="kgateway-system"
-SVC="kserve-ingress-gateway"
-SVC_PORT="80"
-BASE="/integration/test/v1"  # contains /models and /chat/completions
-TIMEOUT=60
+# Configuration (can be overridden via environment)
+NS="${HTTP_NS:-kgateway-system}"
+SVC="${HTTP_SVC:-kserve-ingress-gateway}"
+SVC_PORT="${HTTP_PORT:-80}"
+BASE_PATH="${HTTP_BASE_PATH:-/integration/test/v1}"  # contains /models and /chat/completions
+TIMEOUT="${HTTP_TIMEOUT:-60}"
 
 # Optional: if your gateway expects Authorization
 AUTH_HEADER=()
@@ -38,7 +40,8 @@ echo "Starting kubectl proxy…"
 start_proxy
 echo "kubectl proxy on 127.0.0.1:${PROXY_PORT}"
 
-MODELS_URL="http://127.0.0.1:${PROXY_PORT}/api/v1/namespaces/${NS}/services/${SVC}:${SVC_PORT}/proxy${BASE}/models"
+# Test /v1/models endpoint
+MODELS_URL="http://127.0.0.1:${PROXY_PORT}/api/v1/namespaces/${NS}/services/${SVC}:${SVC_PORT}/proxy${BASE_PATH}/models"
 echo "GET $MODELS_URL"
 
 RESP="$(curl -sS -w '\n%{http_code}' --max-time "$TIMEOUT" "${AUTH_HEADER[@]}" "$MODELS_URL")"
@@ -58,8 +61,8 @@ MODEL_ID="$(echo "$BODY" | jq -r '.data[0].id // empty')"
 [[ -z "$MODEL_ID" || "$MODEL_ID" == "null" ]] && { echo "ERROR: no model id found in /models response"; exit 1; }
 echo "Using model: $MODEL_ID"
 
-# ---- OpenAI-compatible Chat Completions request ----
-CHAT_URL="http://127.0.0.1:${PROXY_PORT}/api/v1/namespaces/${NS}/services/${SVC}:${SVC_PORT}/proxy${BASE}/chat/completions"
+# Test /v1/chat/completions endpoint
+CHAT_URL="http://127.0.0.1:${PROXY_PORT}/api/v1/namespaces/${NS}/services/${SVC}:${SVC_PORT}/proxy${BASE_PATH}/chat/completions"
 echo "POST $CHAT_URL"
 
 PAYLOAD="$(jq -n --arg model "$MODEL_ID" '

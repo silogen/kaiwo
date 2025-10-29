@@ -1,0 +1,65 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: integration-service-image-private-hf
+spec:
+  description: Test that an AIMService can be started by directly specifying the AIM image, using a private AIM image and a gated HF model.
+  steps:
+  - name: Create runtime config
+    try:
+    - apply:
+        file: runtime-config.yaml
+
+      # Must exist in this folder, and contain the image pull secret and hf token specified below
+  - name: Create secrets
+    try:
+    - apply:
+        file: secrets.yaml
+
+  - name: Create service
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service becomes ready
+    try:
+    - assert:
+        timeout: 10m
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: integration-service-image-private-hf
+          status:
+            status: Running
+            (conditions[?type == 'RuntimeReady']):
+            - status: "True"
+
+  - name: Verify the HTTP route was created
+    try:
+    - assert:
+        resource:
+          apiVersion: gateway.networking.k8s.io/v1
+          kind: HTTPRoute
+          metadata:
+            name: integration-service-image-private-hf
+            annotations:
+              my-annotation: my-value
+          spec:
+            rules:
+            - matches:
+              - path:
+                  value: /integration/custom-path/integration-service-image-private-hf
+          status:
+            (parents[0].conditions[?type == 'ResolvedRefs']):
+            - status: "True"
+            (parents[0].conditions[?type == 'Accepted']):
+            - status: "True"
+
+  - name: Verify the service responds
+    try:
+    - script:
+        env:
+        - name: HTTP_BASE_PATH
+          value: /integration/custom-path/integration-service-image-private-hf/v1
+        content: bash ../../_shared/validate-http.sh
