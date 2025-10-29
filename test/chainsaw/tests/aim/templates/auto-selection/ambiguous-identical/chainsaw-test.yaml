@@ -3,6 +3,7 @@ kind: Test
 metadata:
   name: auto-select-ambiguous-identical-templates
 spec:
+  concurrent: false
   description: Test that auto-selection fails when multiple identical templates exist
   timeouts:
     assert: 60s
