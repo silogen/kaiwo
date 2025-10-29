@@ -3,6 +3,6 @@ kind: AIMClusterModel
 metadata:
   name: test-explicit-ref
 spec:
-  image: ghcr.io/silogen/aim-meta-llama-llama-3-1-8b-instruct:0.7.0
+  image: ghcr.io/silogen/aim-dummy:0.1.1-2
   discovery:
     enabled: false
