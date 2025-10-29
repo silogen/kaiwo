@@ -59,6 +59,7 @@ spec:
   - name: Verify the service responds
     try:
     - script:
+        timeout: 2m
         env:
         - name: HTTP_BASE_PATH
           value: /integration/custom-path/integration-service-image-private-hf/v1
