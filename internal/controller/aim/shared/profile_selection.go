@@ -52,7 +52,8 @@ func (c TemplateCandidate) QualifiedName() string {
 // 1. Consider only templates that are Available.
 // 2. Filter by service overrides when provided.
 // 3. Filter by GPUs that exist in the cluster.
-// 4. Prefer higher-tier GPUs, then latency over throughput, then lower precision.
+// 4. Prefer namespace-scoped templates over cluster-scoped templates.
+// 5. Prefer higher-tier GPUs, then latency over throughput, then lower precision.
 // Returns (selected template, count of templates with identical preference scores).
 // If count > 1, the templates are ambiguous (identical in all preference dimensions).
 func SelectBestTemplate(
@@ -74,6 +75,9 @@ func SelectBestTemplate(
 	if len(filtered) == 0 {
 		return nil, 0
 	}
+
+	// Prefer namespace-scoped templates over cluster-scoped templates
+	filtered = preferNamespaceTemplates(filtered)
 
 	if len(filtered) == 1 {
 		return &filtered[0], 1
@@ -122,6 +126,30 @@ func filterTemplatesByOverrides(candidates []TemplateCandidate, overrides *aimv1
 		result = append(result, candidate)
 	}
 
+	return result
+}
+
+func preferNamespaceTemplates(candidates []TemplateCandidate) []TemplateCandidate {
+	// If there are any namespace-scoped templates, filter out cluster-scoped ones
+	hasNamespaceTemplate := false
+	for _, candidate := range candidates {
+		if candidate.Scope == TemplateScopeNamespace {
+			hasNamespaceTemplate = true
+			break
+		}
+	}
+
+	if !hasNamespaceTemplate {
+		return candidates
+	}
+
+	// Return only namespace-scoped templates
+	result := make([]TemplateCandidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		if candidate.Scope == TemplateScopeNamespace {
+			result = append(result, candidate)
+		}
+	}
 	return result
 }
 

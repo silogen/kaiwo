@@ -11,3 +11,4 @@ metadata:
 spec:
   model:
     ref: default-testing-llama-3-8b
+#    image: ghcr.io/silogen/aim-dummy:0.1.1

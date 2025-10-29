@@ -16,4 +16,4 @@ spec:
       amd.com/gpu: '0'
   gpuSelector:
     count: 1
-    model: AMD
+    model: MI300X

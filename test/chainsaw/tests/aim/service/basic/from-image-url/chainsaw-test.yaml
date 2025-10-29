@@ -12,7 +12,7 @@ spec:
     - apply:
         file: service.yaml
 
-  - name: Verify the image was created and is ready
+  - name: Verify the model was created and is ready
     try:
     - assert:
         resource:

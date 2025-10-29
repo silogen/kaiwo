@@ -3,7 +3,7 @@ kind: AIMClusterModel
 metadata:
   name: image-fallback
 spec:
-  image: aimdummy:dev-latest
+  image: ghcr.io/silogen/aim-dummy:0.1.1
   defaultServiceTemplate: image-fallback-template
   resources:
     limits:

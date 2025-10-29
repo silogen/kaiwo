@@ -3,14 +3,11 @@ kind: AIMClusterModel
 metadata:
   name: llama-3-8b-cluster-with-image
 spec:
-  image: aimdummy:dev-latest
+  image: ghcr.io/silogen/aim-dummy:0.1.1-2
   defaultServiceTemplate: llama-3-8b-latency-with-image
   resources:
     limits:
-      memory: 48Gi
-      amd.com/gpu: '1'
-      cpu: '6'
+      memory: 1Gi
     requests:
-      cpu: '4'
-      memory: 40Gi
-      amd.com/gpu: '1'
+      memory: 100Mi
+      cpu: 100m

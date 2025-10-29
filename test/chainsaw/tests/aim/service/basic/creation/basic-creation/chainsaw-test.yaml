@@ -4,13 +4,10 @@ metadata:
   name: basic-creation
 spec:
   description: Test that AIMService creates InferenceService successfully
-  timeouts:
-    assert: 60s
   steps:
   - name: Ensure template is available
     try:
     - assert:
-        timeout: 5s
         file: ../../../_shared/template-available.yaml
 
   - name: Create AIMService

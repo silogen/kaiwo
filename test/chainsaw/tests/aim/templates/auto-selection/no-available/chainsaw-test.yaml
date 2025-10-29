@@ -4,8 +4,6 @@ metadata:
   name: auto-select-no-available-templates
 spec:
   description: Test that service waits when template is still Progressing (not yet Available)
-  timeouts:
-    assert: 60s
   steps:
   - name: Create cluster image
     try:
