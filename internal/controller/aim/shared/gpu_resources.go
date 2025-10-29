@@ -64,7 +64,9 @@ func GetClusterGPUResources(ctx context.Context, k8sClient client.Client) (map[s
 
 	for _, node := range nodes.Items {
 		// Process GPU resources on this node
-		aggregateNodeResources(&node, gpuResources)
+
+		// Temporarily skip aggregateNodeResources(...) and do GPU searching based on Labels
+		filterdGPULabelResources(&node, gpuResources)
 	}
 
 	return gpuResources, nil
@@ -251,6 +253,41 @@ func pickGPUModelToken(tokens []string) string {
 	return ""
 }
 
+// GPU discovery on labels only - capacity will be set to 0
+// Skips GPUs where the model cannot be determined from node labels (strict matching requirement).
+func filterdGPULabelResources(node *corev1.Node, aggregate map[string]GPUResourceInfo) {
+	for _, label := range []string{"amd.com/", "nvidia.com/"} {
+
+		// Extract GPU model from node labels
+		gpuModel := extractGPUModelFromNodeLabels(node.Labels, label)
+
+		// Skip GPUs where model cannot be determined (insufficient node labels)
+		if gpuModel == "" {
+			continue
+		}
+
+		var zero = resource.Quantity{}
+		zero.Set(0)
+
+		// Add to or update the aggregate
+		info, exists := aggregate[gpuModel]
+		if !exists {
+			info = GPUResourceInfo{
+				ResourceName: label,
+				Allocatable:  zero.DeepCopy(),
+				Capacity:     zero.DeepCopy(),
+			}
+		} else {
+			// Add the quantities
+			info.Allocatable.Add(zero.DeepCopy())
+			info.Capacity.Add(zero.DeepCopy())
+		}
+
+		aggregate[gpuModel] = info
+	}
+
+}
+
 // aggregateNodeResources processes a single node's resources and adds them to the aggregate map.
 // Skips GPUs where the model cannot be determined from node labels (strict matching requirement).
 func aggregateNodeResources(node *corev1.Node, aggregate map[string]GPUResourceInfo) {
@@ -324,13 +361,13 @@ func IsGPUAvailable(ctx context.Context, k8sClient client.Client, gpuModel strin
 	// Normalize the input for comparison (handles variants and extra tokens)
 	normalizedModel := normalizeGPUModel(gpuModel)
 
-	info, exists := resources[normalizedModel]
+	_, exists := resources[normalizedModel]
 	if !exists {
 		return false, nil
 	}
 
-	// GPU is available if there's any capacity
-	return !info.Capacity.IsZero(), nil
+	// GPU is available even if there's no capacity
+	return true, nil
 }
 
 // ListAvailableGPUs returns a list of all GPU resource types available in the cluster.
