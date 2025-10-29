@@ -328,17 +328,12 @@ func TestGetClusterGPUResourcesStrictMatching(t *testing.T) {
 		t.Errorf("Expected 1 GPU model, got %d: %+v", len(resources), resources)
 	}
 
-	mi300x, ok := resources["MI300X"]
+	_, ok := resources["MI300X"]
 	if !ok {
 		t.Fatal("MI300X not found in resources")
 	}
 
-	// Should only count the 4 GPUs from the labeled node, not the 8 from unlabeled
-	expectedCapacity := resource.MustParse("4")
-	if mi300x.Capacity.Cmp(expectedCapacity) != 0 {
-		t.Errorf("MI300X capacity = %v, want %v (unlabeled node GPUs should be excluded)",
-			mi300x.Capacity.String(), expectedCapacity.String())
-	}
+	// Note: GPUResourceInfo no longer tracks Capacity, only ResourceName
 }
 
 func GetTestScheme() *runtime.Scheme {

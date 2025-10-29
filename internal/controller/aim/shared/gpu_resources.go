@@ -30,28 +30,21 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 )
 
-// GPUResourceInfo contains aggregated GPU resource information for a specific GPU model.
+// GPUResourceInfo contains GPU resource information for a specific GPU model.
 type GPUResourceInfo struct {
 	// ResourceName is the full Kubernetes resource name (e.g., "amd.com/gpu").
 	ResourceName string
-
-	// Allocatable is the total allocatable GPU resources across all nodes.
-	Allocatable resource.Quantity
-
-	// Capacity is the total GPU capacity across all nodes.
-	Capacity resource.Quantity
 }
 
 // GetClusterGPUResources returns an aggregated view of all GPU resources in the cluster.
 // It scans all nodes and aggregates resources that start with "amd.com/" or "nvidia.com/".
 // Returns a map where keys are GPU models (e.g., "MI300X", "A100") extracted from node labels,
-// and values contain the resource name and total allocatable/capacity across all nodes.
+// and values contain the resource name.
 func GetClusterGPUResources(ctx context.Context, k8sClient client.Client) (map[string]GPUResourceInfo, error) {
 	// List all nodes in the cluster
 	var nodes corev1.NodeList
@@ -253,68 +246,41 @@ func pickGPUModelToken(tokens []string) string {
 	return ""
 }
 
-// GPU discovery on labels only - capacity will be set to 0
+// GPU discovery on labels only
 // Skips GPUs where the model cannot be determined from node labels (strict matching requirement).
 func filterdGPULabelResources(node *corev1.Node, aggregate map[string]GPUResourceInfo) {
-	for _, label := range []string{"amd.com/", "nvidia.com/"} {
+	for _, resourcePrefix := range []string{"amd.com/", "nvidia.com/"} {
 
 		// Extract GPU model from node labels
-		gpuModel := extractGPUModelFromNodeLabels(node.Labels, label)
+		gpuModel := extractGPUModelFromNodeLabels(node.Labels, resourcePrefix)
 
 		// Skip GPUs where model cannot be determined (insufficient node labels)
 		if gpuModel == "" {
 			continue
 		}
 
-		var zero = resource.Quantity{}
-		zero.Set(0)
-
-		// Add to or update the aggregate
-		info, exists := aggregate[gpuModel]
-		if !exists {
-			info = GPUResourceInfo{
-				ResourceName: label,
-				Allocatable:  zero.DeepCopy(),
-				Capacity:     zero.DeepCopy(),
+		// Add to the aggregate if not already present
+		if _, exists := aggregate[gpuModel]; !exists {
+			aggregate[gpuModel] = GPUResourceInfo{
+				ResourceName: resourcePrefix + "gpu",
 			}
-		} else {
-			// Add the quantities
-			info.Allocatable.Add(zero.DeepCopy())
-			info.Capacity.Add(zero.DeepCopy())
 		}
-
-		aggregate[gpuModel] = info
 	}
-
 }
 
 // aggregateNodeResources processes a single node's resources and adds them to the aggregate map.
 // Skips GPUs where the model cannot be determined from node labels (strict matching requirement).
 func aggregateNodeResources(node *corev1.Node, aggregate map[string]GPUResourceInfo) {
 	allocatable := node.Status.Allocatable
-	capacity := node.Status.Capacity
 
 	// Process all resources in the node
-	for resourceName, allocatableQty := range allocatable {
+	for resourceName := range allocatable {
 		resourceNameStr := string(resourceName)
 
 		// Filter for GPU resources (amd.com/* or nvidia.com/*)
 		if !isGPUResource(resourceNameStr) {
 			continue
 		}
-
-		// Get the corresponding capacity
-		capacityQty, hasCapacity := capacity[resourceName]
-		// TEMPORARILY DISABLED: Skip checking actual node capacity for amd.com/gpu
-		// and rely on labels only
-		if !hasCapacity {
-			// Use allocatable as capacity if capacity is not defined
-			capacityQty = allocatableQty.DeepCopy()
-		}
-		// if !hasCapacity {
-		// 	// If no capacity is defined, skip this resource
-		// 	continue
-		// }
 
 		// Extract GPU model from node labels
 		gpuModel := extractGPUModelFromNodeLabels(node.Labels, resourceNameStr)
@@ -329,13 +295,7 @@ func aggregateNodeResources(node *corev1.Node, aggregate map[string]GPUResourceI
 		if !exists {
 			info = GPUResourceInfo{
 				ResourceName: resourceNameStr,
-				Allocatable:  allocatableQty.DeepCopy(),
-				Capacity:     capacityQty.DeepCopy(),
 			}
-		} else {
-			// Add the quantities
-			info.Allocatable.Add(allocatableQty)
-			info.Capacity.Add(capacityQty)
 		}
 
 		aggregate[gpuModel] = info
@@ -378,11 +338,8 @@ func ListAvailableGPUs(ctx context.Context, k8sClient client.Client) ([]string, 
 	}
 
 	gpuTypes := make([]string, 0, len(resources))
-	for resourceName, info := range resources {
-		// Only include GPUs with non-zero capacity
-		if !info.Capacity.IsZero() {
-			gpuTypes = append(gpuTypes, resourceName)
-		}
+	for gpuModel := range resources {
+		gpuTypes = append(gpuTypes, gpuModel)
 	}
 
 	return gpuTypes, nil
