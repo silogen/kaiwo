@@ -64,6 +64,8 @@ func BuildInferenceServiceHTTPRoute(serviceState aimstate.ServiceState, ownerRef
 				"app.kubernetes.io/managed-by": LabelValueManagedBy,
 				LabelKeyTemplate:               serviceState.Template.Name,
 				LabelKeyModelID:                sanitizeLabelValue(serviceState.ModelID),
+				LabelKeyImageName:              sanitizeLabelValue(serviceState.Template.SpecCommon.ModelName),
+				LabelKeyServiceName:            sanitizeLabelValue(serviceState.Name),
 			},
 			Annotations:     annotations,
 			OwnerReferences: []metav1.OwnerReference{ownerRef},
@@ -96,11 +98,15 @@ func BuildInferenceServiceHTTPRoute(serviceState aimstate.ServiceState, ownerRef
 	}
 
 	port := gatewayapiv1.PortNumber(constants.CommonDefaultHttpPort)
+
+	// Use the generated InferenceService name (which may be shortened for DNS compliance)
+	isvcName := GenerateInferenceServiceName(serviceState.Name, serviceState.Namespace)
+
 	backend := gatewayapiv1.HTTPBackendRef{
 		BackendRef: gatewayapiv1.BackendRef{
 			BackendObjectReference: gatewayapiv1.BackendObjectReference{
 				Kind:      ptr.To(gatewayapiv1.Kind(constants.ServiceKind)),
-				Name:      gatewayapiv1.ObjectName(constants.PredictorServiceName(serviceState.Name)),
+				Name:      gatewayapiv1.ObjectName(constants.PredictorServiceName(isvcName)),
 				Namespace: (*gatewayapiv1.Namespace)(&serviceState.Namespace),
 				Port:      &port,
 			},

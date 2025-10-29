@@ -37,7 +37,7 @@ func TestResolveServiceRoutePath_ServiceOverride(t *testing.T) {
 	svc := newTestService()
 	svc.Labels["aim.silogen.ai/workload-id"] = "Workload-42"
 	svc.Spec.Routing = &aimv1alpha1.AIMServiceRouting{
-		Enabled:      true,
+		Enabled:      boolPtr(true),
 		PathTemplate: "/{.metadata.namespace}/{.metadata.labels['aim.silogen.ai/workload-id']}/",
 	}
 
@@ -52,7 +52,7 @@ func TestResolveServiceRoutePath_ServiceOverride(t *testing.T) {
 
 func TestResolveServiceRoutePath_RuntimeConfigFallback(t *testing.T) {
 	svc := newTestService()
-	svc.Spec.Routing = &aimv1alpha1.AIMServiceRouting{Enabled: true}
+	svc.Spec.Routing = &aimv1alpha1.AIMServiceRouting{Enabled: boolPtr(true)}
 	svc.Status.ResolvedImage = &aimv1alpha1.AIMResolvedReference{
 		Name: "Meta/Llama-3-8B",
 	}
@@ -79,7 +79,7 @@ func TestResolveServiceRoutePath_Annotation(t *testing.T) {
 		"route.suffix": "Team-A/B",
 	}
 	svc.Spec.Routing = &aimv1alpha1.AIMServiceRouting{
-		Enabled:      true,
+		Enabled:      boolPtr(true),
 		PathTemplate: "/{.metadata.annotations['route.suffix']}",
 	}
 
@@ -108,7 +108,7 @@ func TestResolveServiceRoutePath_DefaultFallback(t *testing.T) {
 func TestResolveServiceRoutePath_MissingLabel(t *testing.T) {
 	svc := newTestService()
 	svc.Spec.Routing = &aimv1alpha1.AIMServiceRouting{
-		Enabled:      true,
+		Enabled:      boolPtr(true),
 		PathTemplate: "/{.metadata.labels['missing']}",
 	}
 
@@ -129,7 +129,7 @@ func TestResolveServiceRoutePath_PathTooLong(t *testing.T) {
 	svc.Labels["segment-c"] = segment
 	svc.Labels["segment-d"] = segment
 	svc.Spec.Routing = &aimv1alpha1.AIMServiceRouting{
-		Enabled:      true,
+		Enabled:      boolPtr(true),
 		PathTemplate: "/{.metadata.labels['segment-a']}/{.metadata.labels['segment-b']}/{.metadata.labels['segment-c']}/{.metadata.labels['segment-d']}",
 	}
 
@@ -145,7 +145,7 @@ func TestResolveServiceRoutePath_PathTooLong(t *testing.T) {
 func TestResolveServiceRoutePath_InvalidExpression(t *testing.T) {
 	svc := newTestService()
 	svc.Spec.Routing = &aimv1alpha1.AIMServiceRouting{
-		Enabled:      true,
+		Enabled:      boolPtr(true),
 		PathTemplate: "/{.metadata[}",
 	}
 
