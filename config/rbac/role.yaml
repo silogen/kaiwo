@@ -65,8 +65,8 @@ rules:
 
 - apiGroups: ["aim.silogen.ai"]
   resources:
-  - "aimimages/status"
-  - "aimclusterimages/status"
+  - "aimmodels/status"
+  - "aimclustermodels/status"
   - "aimservicetemplates/status"
   - "aimclusterservicetemplates/status"
   - "aimtemplatecaches/status"
