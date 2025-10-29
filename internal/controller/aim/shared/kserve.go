@@ -26,6 +26,8 @@ package shared
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"regexp"
 	"strings"
@@ -84,6 +86,61 @@ func sanitizeLabelValue(s string) string {
 	}
 
 	return sanitized
+}
+
+// GenerateInferenceServiceName creates a KServe InferenceService name that fits DNS label constraints.
+// KServe creates hostnames in the format: {isvc-name}-predictor-{namespace}
+// These hostnames must be ≤ 63 characters to comply with DNS label limits.
+//
+// If the original name would exceed the limit, this function:
+// 1. Truncates the base name
+// 2. Appends an 8-character hash of the full original name
+// 3. Ensures the result is RFC1123 compliant
+//
+// The hash ensures uniqueness while keeping names deterministic and short.
+func GenerateInferenceServiceName(serviceName, namespace string) string {
+	const (
+		// DNS label maximum length per RFC1123
+		maxDNSLabelLength = 63
+		// KServe adds "-predictor" to the ISVC name
+		kserveSuffix = "-predictor"
+		// Length of hash suffix we'll use (8 chars + 1 for hyphen)
+		hashSuffixLength = 9
+	)
+
+	// Calculate how much space we have for the ISVC name
+	// Format: {isvc-name}-predictor-{namespace}
+	maxISVCNameLength := maxDNSLabelLength - len(kserveSuffix) - len(namespace) - 1 // -1 for the hyphen before namespace
+
+	// If the service name fits, use it as-is
+	if len(serviceName) <= maxISVCNameLength {
+		return serviceName
+	}
+
+	// Otherwise, truncate and add a hash suffix for uniqueness
+	// Reserve space for the hash suffix
+	maxPrefixLength := maxISVCNameLength - hashSuffixLength
+	if maxPrefixLength < 1 {
+		// Edge case: namespace is so long we can barely fit anything
+		// Use just the hash
+		maxPrefixLength = 1
+	}
+
+	// Truncate the service name
+	prefix := serviceName
+	if len(prefix) > maxPrefixLength {
+		prefix = prefix[:maxPrefixLength]
+	}
+
+	// Generate a deterministic hash from the full service name
+	hash := sha256.Sum256([]byte(serviceName))
+	hashStr := hex.EncodeToString(hash[:])[:8]
+
+	// Combine prefix and hash
+	result := fmt.Sprintf("%s-%s", prefix, hashStr)
+
+	// Ensure RFC1123 compliance (handles edge cases like trailing hyphens)
+	return baseutils.MakeRFC1123Compliant(result)
 }
 
 // BuildClusterServingRuntime creates a KServe ClusterServingRuntime for a cluster-scoped template.
@@ -249,7 +306,7 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 			Kind:       "InferenceService",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            serviceState.Name,
+			Name:            GenerateInferenceServiceName(serviceState.Name, serviceState.Namespace),
 			Namespace:       serviceState.Namespace,
 			Annotations:     serviceState.Metadata.Annotations,
 			Labels:          labels,

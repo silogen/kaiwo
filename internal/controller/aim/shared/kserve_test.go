@@ -113,3 +113,117 @@ func TestResolveServiceResources_OverridesApplied(t *testing.T) {
 		t.Fatalf("expected GPU limit 2, got %s", gpuLimit.String())
 	}
 }
+
+func TestGenerateInferenceServiceName(t *testing.T) {
+	tests := []struct {
+		name        string
+		serviceName string
+		namespace   string
+		wantMaxLen  int
+		wantPrefix  string
+	}{
+		{
+			name:        "short name fits as-is",
+			serviceName: "simple",
+			namespace:   "default",
+			wantMaxLen:  6, // should be exactly "simple"
+			wantPrefix:  "simple",
+		},
+		{
+			name:        "long name with short namespace gets truncated",
+			serviceName: "integration-cluster-model-public-image",
+			namespace:   "chainsaw-keen-kit",
+			wantMaxLen:  63,
+			wantPrefix:  "integration-cluster-model-public",
+		},
+		{
+			name:        "very long name gets hash suffix",
+			serviceName: "very-long-service-name-that-exceeds-the-kubernetes-dns-label-limit",
+			namespace:   "short",
+			wantMaxLen:  63,
+			wantPrefix:  "very-long-service-name-that-exceeds-the-kubernetes-dns-label",
+		},
+		{
+			name:        "name at boundary",
+			serviceName: "exactly-at-the-limit-for-name",
+			namespace:   "ns",
+			wantMaxLen:  63,
+			wantPrefix:  "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GenerateInferenceServiceName(tt.serviceName, tt.namespace)
+
+			// Verify the generated name length
+			if len(result) > tt.wantMaxLen {
+				t.Errorf("GenerateInferenceServiceName() generated name too long: got %d chars, want max %d", len(result), tt.wantMaxLen)
+			}
+
+			// Verify the full hostname that KServe will create
+			hostname := result + "-predictor-" + tt.namespace
+			if len(hostname) > 63 {
+				t.Errorf("GenerateInferenceServiceName() hostname exceeds 63 chars: %s (len=%d)", hostname, len(hostname))
+			}
+
+			// Verify RFC1123 compliance (lowercase alphanumeric plus hyphens)
+			if result != "" && !isRFC1123Compliant(result) {
+				t.Errorf("GenerateInferenceServiceName() result is not RFC1123 compliant: %s", result)
+			}
+
+			// For truncated names, verify prefix is present and hash is appended
+			if tt.wantPrefix != "" && len(tt.serviceName) > len(result) {
+				// Should have the prefix followed by a hash
+				if len(result) < 9 { // at least 1 char prefix + "-" + 8 char hash
+					t.Errorf("GenerateInferenceServiceName() truncated result too short: %s", result)
+				}
+			}
+
+			// Verify determinism: same inputs should always produce same output
+			result2 := GenerateInferenceServiceName(tt.serviceName, tt.namespace)
+			if result != result2 {
+				t.Errorf("GenerateInferenceServiceName() not deterministic: first=%s, second=%s", result, result2)
+			}
+		})
+	}
+}
+
+func TestGenerateInferenceServiceName_RealWorldCase(t *testing.T) {
+	// The actual failing case from the error message
+	serviceName := "integration-cluster-model-public-image"
+	namespace := "chainsaw-keen-kit"
+
+	result := GenerateInferenceServiceName(serviceName, namespace)
+	hostname := result + "-predictor-" + namespace
+
+	if len(hostname) > 63 {
+		t.Errorf("Real-world case failed: hostname %s exceeds 63 chars (len=%d)", hostname, len(hostname))
+	}
+
+	t.Logf("Input: serviceName=%s, namespace=%s", serviceName, namespace)
+	t.Logf("Output: isvcName=%s (len=%d)", result, len(result))
+	t.Logf("Full hostname: %s (len=%d)", hostname, len(hostname))
+}
+
+// isRFC1123Compliant checks if a string is a valid RFC1123 DNS label
+func isRFC1123Compliant(s string) bool {
+	if len(s) == 0 || len(s) > 63 {
+		return false
+	}
+	// Must start and end with alphanumeric
+	if !isAlphanumeric(s[0]) || !isAlphanumeric(s[len(s)-1]) {
+		return false
+	}
+	// Can only contain lowercase alphanumeric and hyphens
+	for _, ch := range s {
+		if !isAlphanumeric(byte(ch)) && ch != '-' {
+			return false
+		}
+	}
+	return true
+}
+
+func isAlphanumeric(ch byte) bool {
+	return (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')
+}
