@@ -206,8 +206,10 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 	if obs.RuntimeName() != "" {
 		baseutils.Debug(logger, "Checking InferenceService pods for image pull errors",
 			"serviceName", service.Name)
+		// Use the same naming function that we use when creating the InferenceService
+		isvcName := shared.GenerateInferenceServiceName(service.Name, service.Namespace)
 		obs.InferenceServicePodImageError = shared.CheckInferenceServicePodImagePullStatus(
-			ctx, r.Client, service.Name, service.Namespace)
+			ctx, r.Client, isvcName, service.Namespace)
 		if obs.InferenceServicePodImageError != nil {
 			baseutils.Debug(logger, "Found InferenceService pod image pull error",
 				"errorType", obs.InferenceServicePodImageError.Type,
@@ -312,9 +314,11 @@ func (r *AIMServiceReconciler) projectStatus(
 	var inferenceService *servingv1beta1.InferenceService
 	{
 		var is servingv1beta1.InferenceService
+		// Use the same naming function that we use when creating the InferenceService
+		isvcName := shared.GenerateInferenceServiceName(service.Name, service.Namespace)
 		if err := r.Get(ctx, types.NamespacedName{
 			Namespace: service.Namespace,
-			Name:      service.Name,
+			Name:      isvcName,
 		}, &is); err == nil {
 			inferenceService = &is
 		}
@@ -545,6 +549,107 @@ func (r *AIMServiceReconciler) modelPredicate() predicate.Funcs {
 	}
 }
 
+// findServicesByClusterModel finds services that reference a cluster model
+func (r *AIMServiceReconciler) findServicesByClusterModel(ctx context.Context, clusterModel *aimv1alpha1.AIMClusterModel) []aimv1alpha1.AIMService {
+	logger := ctrl.LoggerFrom(ctx)
+
+	// Note: Unlike namespace-scoped models, cluster models are never auto-created by the system.
+	// They are manually created infrastructure resources, so we reconcile services for all cluster model changes.
+
+	// Find services across all namespaces using this cluster model
+	var services aimv1alpha1.AIMServiceList
+	if err := r.List(ctx, &services); err != nil {
+		logger.Error(err, "failed to list AIMServices for AIMClusterModel", "model", clusterModel.Name)
+		return nil
+	}
+
+	var matchingServices []aimv1alpha1.AIMService
+	for i := range services.Items {
+		svc := &services.Items[i]
+		if r.serviceUsesClusterModel(svc, clusterModel, logger) {
+			matchingServices = append(matchingServices, *svc)
+		}
+	}
+
+	return matchingServices
+}
+
+// serviceUsesClusterModel checks if a service uses the specified cluster model
+func (r *AIMServiceReconciler) serviceUsesClusterModel(svc *aimv1alpha1.AIMService, clusterModel *aimv1alpha1.AIMClusterModel, logger logr.Logger) bool {
+	// Check if service uses this cluster model by:
+	// 1. Explicit ref (spec.model.ref)
+	if svc.Spec.Model.Ref != nil && *svc.Spec.Model.Ref == clusterModel.Name {
+		return true
+	}
+	// 2. Image URL that resolves to this cluster model (check status)
+	if svc.Status.ResolvedImage != nil && svc.Status.ResolvedImage.Name == clusterModel.Name {
+		return true
+	}
+	// 3. Image URL in spec (need to check if it would resolve to this cluster model)
+	// This is the case when service was just created and status not yet set
+	if svc.Spec.Model.Image != nil {
+		logger.V(1).Info("Service has image URL but no resolved image yet",
+			"service", svc.Name,
+			"namespace", svc.Namespace,
+			"image", *svc.Spec.Model.Image,
+			"clusterModel", clusterModel.Name)
+		// For cluster models, add all services with image URLs across all namespaces
+		// The service reconciliation will properly resolve and filter
+		return true
+	}
+	return false
+}
+
+func (r *AIMServiceReconciler) clusterModelHandlerFunc() handler.MapFunc {
+	return func(ctx context.Context, obj client.Object) []reconcile.Request {
+		clusterModel, ok := obj.(*aimv1alpha1.AIMClusterModel)
+		if !ok {
+			return nil
+		}
+
+		matchingServices := r.findServicesByClusterModel(ctx, clusterModel)
+		return shared.RequestsForServices(matchingServices)
+	}
+}
+
+// clusterModelPredicate returns a predicate for AIMClusterModel watches
+func (r *AIMServiceReconciler) clusterModelPredicate() predicate.Funcs {
+	return predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			// Don't trigger on creation - model status is empty initially
+			ctrl.Log.V(1).Info("AIMClusterModel create event (skipped)", "model", e.Object.GetName())
+			return false
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldModel, ok := e.ObjectOld.(*aimv1alpha1.AIMClusterModel)
+			if !ok {
+				return false
+			}
+			newModel, ok := e.ObjectNew.(*aimv1alpha1.AIMClusterModel)
+			if !ok {
+				return false
+			}
+			// Trigger if status changed
+			statusChanged := oldModel.Status.Status != newModel.Status.Status
+			if statusChanged {
+				ctrl.Log.Info("AIMClusterModel status changed - triggering reconciliation",
+					"model", newModel.Name,
+					"oldStatus", oldModel.Status.Status,
+					"newStatus", newModel.Status.Status)
+			} else {
+				ctrl.Log.V(1).Info("AIMClusterModel update (no status change)",
+					"model", newModel.Name,
+					"status", newModel.Status.Status)
+			}
+			return statusChanged
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			ctrl.Log.V(1).Info("AIMClusterModel delete event (skipped)", "model", e.Object.GetName())
+			return false
+		},
+	}
+}
+
 func (r *AIMServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	ctx := context.Background()
 
@@ -560,6 +665,7 @@ func (r *AIMServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&aimv1alpha1.AIMServiceTemplate{}, handler.EnqueueRequestsFromMapFunc(r.templateHandlerFunc())).
 		Watches(&aimv1alpha1.AIMClusterServiceTemplate{}, handler.EnqueueRequestsFromMapFunc(r.clusterTemplateHandlerFunc())).
 		Watches(&aimv1alpha1.AIMModel{}, handler.EnqueueRequestsFromMapFunc(r.modelHandlerFunc()), builder.WithPredicates(r.modelPredicate())).
+		Watches(&aimv1alpha1.AIMClusterModel{}, handler.EnqueueRequestsFromMapFunc(r.clusterModelHandlerFunc()), builder.WithPredicates(r.clusterModelPredicate())).
 		Named("aim-service").
 		Complete(r)
 }

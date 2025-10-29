@@ -50,6 +50,7 @@ const (
 	LabelKeyImageName       = AimLabelDomain + "/aim-image"
 	LabelKeyMetric          = AimLabelDomain + "/template.metric"
 	LabelKeyPrecision       = AimLabelDomain + "/template.precision"
+	LabelKeyServiceName     = AimLabelDomain + "/service-name"
 
 	// AIM label values.
 	LabelValueRuntimeName        = "aim-runtime"

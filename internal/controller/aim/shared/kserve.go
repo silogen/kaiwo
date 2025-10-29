@@ -295,6 +295,7 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 		LabelKeyTemplate:               serviceState.Template.Name,
 		LabelKeyModelID:                sanitizeLabelValue(serviceState.ModelID),
 		LabelKeyImageName:              sanitizeLabelValue(serviceState.Template.SpecCommon.ModelName),
+		LabelKeyServiceName:            sanitizeLabelValue(serviceState.Name),
 	}
 	for k, v := range systemLabels {
 		labels[k] = v
