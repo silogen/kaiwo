@@ -268,10 +268,16 @@ func aggregateNodeResources(node *corev1.Node, aggregate map[string]GPUResourceI
 
 		// Get the corresponding capacity
 		capacityQty, hasCapacity := capacity[resourceName]
+		// TEMPORARILY DISABLED: Skip checking actual node capacity for amd.com/gpu
+		// and rely on labels only
 		if !hasCapacity {
-			// If no capacity is defined, skip this resource
-			continue
+			// Use allocatable as capacity if capacity is not defined
+			capacityQty = allocatableQty.DeepCopy()
 		}
+		// if !hasCapacity {
+		// 	// If no capacity is defined, skip this resource
+		// 	continue
+		// }
 
 		// Extract GPU model from node labels
 		gpuModel := extractGPUModelFromNodeLabels(node.Labels, resourceNameStr)
