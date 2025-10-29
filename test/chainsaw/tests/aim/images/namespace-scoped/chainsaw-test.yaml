@@ -28,7 +28,8 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMServiceTemplate
           metadata:
-            name: llama-3-8b-ns-1x-mi300x-lat-fp8-c3d6
+            ownerReferences:
+            - name: llama-3-8b-ns
           spec:
             modelName: llama-3-8b-ns
             metric: latency
@@ -41,7 +42,8 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMServiceTemplate
           metadata:
-            name: llama-3-8b-ns-1x-mi300x-thr-fp8-c4e4
+            ownerReferences:
+            - name: llama-3-8b-ns          
           spec:
             modelName: llama-3-8b-ns
             metric: throughput
@@ -54,10 +56,11 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMServiceTemplate
           metadata:
-            name: llama-3-8b-ns-1x-mi300x-lat-fp8-c3d6
+            ownerReferences:
+            - name: llama-3-8b-ns
           status:
             status: Ready
-            (modelSources[0].sourceUri): hf://amd/Llama-3.1-8B-Instruct-FP8-KV
+            (modelSources[0].sourceUri): hf://HuggingFaceTB/SmolLM2-135M
 
   - name: Verify AIMModel has imageMetadata populated
     try:
@@ -70,5 +73,5 @@ spec:
           status:
             imageMetadata:
               model:
-                canonicalName: meta-llama/Llama-3.1-8B-Instruct
+                canonicalName:  HuggingFaceTB/SmolLM2-135M
                 (recommendedDeployments != null): true
