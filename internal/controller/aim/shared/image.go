@@ -865,8 +865,18 @@ func ProjectImageStatus(
 		logger.Info("Metadata format error detected", "reason", metadataFormatErr.Reason, "message", metadataFormatErr.Message)
 	}
 
-	// Handle metadata format errors - mark as Failed since we can't use the image
+	// Handle metadata format errors
 	if metadataFormatErr != nil {
+		// MetadataMissingRecommendedDeployments is a non-fatal error
+		// The image was successfully inspected, but can't auto-generate templates
+		// The model should be Ready so manual templates can be created
+		if metadataFormatErr.Reason == "MetadataMissingRecommendedDeployments" {
+			setAutoCondition(metav1.ConditionFalse, metadataFormatErr.Reason, metadataFormatErr.Error())
+			markImageReady(status, metadataFormatErr.Reason, metadataFormatErr.Error(), observedGeneration)
+			return
+		}
+
+		// Other metadata format errors are fatal - mark as Failed
 		setAutoCondition(metav1.ConditionFalse, metadataFormatErr.Reason, metadataFormatErr.Error())
 		status.ImageMetadata = nil
 		status.Status = aimv1alpha1.AIMModelStatusFailed

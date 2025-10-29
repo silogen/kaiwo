@@ -255,9 +255,8 @@ func newMetadataFormatError(reason, message string) *MetadataFormatError {
 
 // parseImageLabels extracts structured metadata from OCI and AMD Silogen image labels.
 func parseImageLabels(labels map[string]string) (*aimv1alpha1.ImageMetadata, error) {
-	if len(labels) == 0 {
-		return nil, fmt.Errorf("no labels found in image")
-	}
+	// Allow images with no labels - metadata will be minimal but valid
+	// Downstream logic will detect missing recommendedDeployments if needed
 
 	metadata := &aimv1alpha1.ImageMetadata{
 		OCI:   &aimv1alpha1.OCIMetadata{},
@@ -311,11 +310,8 @@ func parseImageLabels(labels map[string]string) (*aimv1alpha1.ImageMetadata, err
 		metadata.Model.RecommendedDeployments = deployments
 	}
 
-	if metadata.Model.CanonicalName == "" {
-		return nil, newMetadataFormatError(
-			"MetadataMissingLabel",
-			"missing required image label \"org.amd.silogen.model.canonicalName\"")
-	}
+	// Note: canonicalName is optional. If missing, downstream logic will handle it.
+	// This allows images without full metadata to be processed gracefully.
 
 	return metadata, nil
 }
