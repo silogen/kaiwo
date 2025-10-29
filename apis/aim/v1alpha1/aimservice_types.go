@@ -255,8 +255,11 @@ type AIMServiceList struct {
 // AIMServiceRouting configures optional HTTP routing for the service.
 type AIMServiceRouting struct {
 	// Enabled toggles HTTP routing management.
-	// +kubebuilder:default=false
-	Enabled bool `json:"enabled,omitempty"`
+	// When nil, inherits the enabled state from the runtime configuration.
+	// When false, explicitly disables routing regardless of runtime config.
+	// When true, explicitly enables routing regardless of runtime config.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
 
 	// GatewayRef identifies the Gateway parent that should receive the HTTPRoute.
 	// When omitted while routing is enabled, reconciliation will report a failure.
