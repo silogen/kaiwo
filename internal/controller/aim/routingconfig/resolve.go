@@ -31,12 +31,14 @@ import (
 // ResolvedRouting captures the effective routing configuration after applying service overrides
 // on top of runtime defaults.
 type ResolvedRouting struct {
-	Enabled    bool
-	GatewayRef *gatewayapiv1.ParentReference
+	Enabled      bool
+	GatewayRef   *gatewayapiv1.ParentReference
+	Annotations  map[string]string
+	PathTemplate string
 }
 
-// Resolve determines the effective routing configuration by overlaying the AIMService spec
-// on top of the runtime config defaults. The service always takes precedence when set.
+// Resolve determines the effective routing configuration by merging runtime config defaults
+// with service-level overrides. Service fields take precedence when explicitly set.
 func Resolve(service *aimv1alpha1.AIMService, runtime *aimv1alpha1.AIMRuntimeRoutingConfig) ResolvedRouting {
 	var resolved ResolvedRouting
 	var serviceRouting *aimv1alpha1.AIMServiceRouting
@@ -45,20 +47,41 @@ func Resolve(service *aimv1alpha1.AIMService, runtime *aimv1alpha1.AIMRuntimeRou
 		serviceRouting = service.Spec.Routing
 	}
 
+	// Start with runtime config defaults
+	if runtime != nil {
+		if runtime.Enabled != nil {
+			resolved.Enabled = *runtime.Enabled
+		}
+		if runtime.GatewayRef != nil {
+			resolved.GatewayRef = runtime.GatewayRef.DeepCopy()
+		}
+		resolved.PathTemplate = runtime.PathTemplate
+	}
+
+	// Override with service-level config when present
 	if serviceRouting != nil {
-		resolved.Enabled = serviceRouting.Enabled
+		// Only override enabled if explicitly set (non-nil)
+		// nil means inherit from runtime config
+		if serviceRouting.Enabled != nil {
+			resolved.Enabled = *serviceRouting.Enabled
+		}
+
+		// Override GatewayRef if service specifies one
 		if serviceRouting.GatewayRef != nil {
 			resolved.GatewayRef = serviceRouting.GatewayRef.DeepCopy()
 		}
-	}
 
-	if runtime != nil {
-		if serviceRouting == nil && runtime.Enabled != nil {
-			resolved.Enabled = *runtime.Enabled
+		// Service annotations (only service level has annotations)
+		if len(serviceRouting.Annotations) > 0 {
+			resolved.Annotations = make(map[string]string, len(serviceRouting.Annotations))
+			for k, v := range serviceRouting.Annotations {
+				resolved.Annotations[k] = v
+			}
 		}
 
-		if resolved.GatewayRef == nil && runtime.GatewayRef != nil {
-			resolved.GatewayRef = runtime.GatewayRef.DeepCopy()
+		// Override PathTemplate if service specifies one
+		if serviceRouting.PathTemplate != "" {
+			resolved.PathTemplate = serviceRouting.PathTemplate
 		}
 	}
 

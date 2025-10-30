@@ -1,0 +1,12 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMServiceTemplate
+metadata:
+  name: reused-namespace-template
+spec:
+  modelName: default-testing-llama-3-8b
+  runtimeConfigName: default
+  metric: throughput
+  precision: fp16
+  gpuSelector:
+    count: 1
+    model: MI300X

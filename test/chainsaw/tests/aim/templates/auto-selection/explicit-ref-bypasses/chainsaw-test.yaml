@@ -1,0 +1,61 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: explicit-template-ref-bypasses-auto-selection
+spec:
+  description: Test that explicit templateRef bypasses auto-selection logic
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create cluster image
+    try:
+    - apply:
+        file: cluster-image.yaml
+
+  - name: Create both templates
+    try:
+    - apply:
+        file: template-latency.yaml
+    - apply:
+        file: template-throughput.yaml
+
+  - name: Wait for both templates to become Available
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: test-explicit-latency
+          status:
+            status: Ready
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: test-explicit-throughput
+          status:
+            status: Ready
+
+  - name: Create service with explicit templateRef to throughput
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service used explicit template (not latency preference)
+    try:
+    - assert:
+        timeout: 10s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-explicit-ref-service
+          status:
+            resolvedTemplate:
+              name: test-explicit-throughput
+              scope: Cluster
+            (conditions[?type == 'Resolved']):
+            - status: "True"
+              reason: Resolved

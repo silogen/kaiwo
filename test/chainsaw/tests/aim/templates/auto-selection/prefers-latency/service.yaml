@@ -1,0 +1,8 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-prefers-latency-service
+spec:
+  model:
+    ref: test-prefers-latency
+  # No templateRef and no overrides - should prefer latency over throughput

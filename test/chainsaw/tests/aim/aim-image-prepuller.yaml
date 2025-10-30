@@ -25,7 +25,7 @@ spec:
       - name: ghcr-pull-secret
       initContainers:
       - name: pull-ray-test
-        image: aimdummy:dev-latest
+        image: ghcr.io/silogen/aim-dummy:0.1.1
         command: ["sh", "-c", "echo warmed"]
       containers:
       - name: hold

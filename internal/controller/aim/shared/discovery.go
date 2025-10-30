@@ -157,8 +157,32 @@ const (
 
 // BuildDiscoveryJob creates a Job that runs model discovery dry-run
 func BuildDiscoveryJob(spec DiscoveryJobSpec) *batchv1.Job {
-	// Create deterministic job name with hash of key parameters
-	hash := sha256.Sum256([]byte(spec.ModelID + spec.Image))
+	// Create deterministic job name with hash of ALL parameters that affect the Job spec
+	// This ensures that any change to the spec results in a new Job instead of an update attempt
+	hashInput := spec.ModelID + spec.Image + spec.ServiceAccount
+
+	// Include env vars in hash (sorted for determinism)
+	for _, env := range spec.Env {
+		hashInput += env.Name + env.Value
+	}
+
+	// Include image pull secrets in hash
+	for _, secret := range spec.ImagePullSecrets {
+		hashInput += secret.Name
+	}
+
+	// Include template spec fields that affect env vars
+	if spec.TemplateSpec.Metric != nil {
+		hashInput += string(*spec.TemplateSpec.Metric)
+	}
+	if spec.TemplateSpec.Precision != nil {
+		hashInput += string(*spec.TemplateSpec.Precision)
+	}
+	if spec.TemplateSpec.GpuSelector != nil {
+		hashInput += spec.TemplateSpec.GpuSelector.Model + strconv.Itoa(int(spec.TemplateSpec.GpuSelector.Count))
+	}
+
+	hash := sha256.Sum256([]byte(hashInput))
 	hashHex := fmt.Sprintf("%x", hash[:discoveryJobHashLength])
 
 	// Calculate max template name length to keep total <= 63 chars
@@ -179,7 +203,17 @@ func BuildDiscoveryJob(spec DiscoveryJobSpec) *batchv1.Job {
 
 	// Add AIM environmental variables
 
-	var env []corev1.EnvVar
+	// Silence logging to produce clean JSON output
+	env := []corev1.EnvVar{
+		{
+			Name:  "AIM_LOG_LEVEL_ROOT",
+			Value: "CRITICAL",
+		},
+		{
+			Name:  "AIM_LOG_LEVEL",
+			Value: "CRITICAL",
+		},
+	}
 	env = append(env, spec.Env...)
 
 	if spec.TemplateSpec.Metric != nil {

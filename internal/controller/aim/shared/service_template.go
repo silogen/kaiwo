@@ -38,6 +38,7 @@ import (
 func BuildDerivedTemplate(
 	service *aimv1alpha1.AIMService,
 	templateName string,
+	resolvedModelName string,
 	baseSpec *aimv1alpha1.AIMServiceTemplateSpec,
 ) *aimv1alpha1.AIMServiceTemplate {
 	spec := aimv1alpha1.AIMServiceTemplateSpec{}
@@ -47,8 +48,8 @@ func BuildDerivedTemplate(
 
 	specCommon := spec.AIMServiceTemplateSpecCommon
 
-	if specCommon.AIMImageName == "" {
-		specCommon.AIMImageName = service.Spec.AIMImageName
+	if specCommon.ModelName == "" {
+		specCommon.ModelName = resolvedModelName
 	}
 
 	if rc := strings.TrimSpace(service.Spec.RuntimeConfigName); rc != "" {

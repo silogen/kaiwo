@@ -1,0 +1,6 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMModel
+metadata:
+  name: gemma-model-2
+spec:
+  image: ghcr.io/amd/gemma-2b:latest

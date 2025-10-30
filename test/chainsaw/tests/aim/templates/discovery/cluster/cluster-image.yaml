@@ -1,0 +1,15 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterModel
+metadata:
+  name: llama-3-8b-cluster-discovery
+spec:
+  image: ghcr.io/silogen/aim-dummy:0.1.1-2
+  defaultServiceTemplate: llama-3-8b-latency-discovery-cluster
+  discovery:
+    enabled: false
+  resources:
+    limits:
+      memory: 1Gi
+    requests:
+      memory: 100Mi
+      cpu: 100m

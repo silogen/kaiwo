@@ -1,0 +1,8 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: reuse-service-1
+spec:
+  model:
+    image: ghcr.io/amd/phi-3-mini:latest
+  runtimeConfigName: reuse-config

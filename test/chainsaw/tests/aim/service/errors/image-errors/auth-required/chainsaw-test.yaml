@@ -1,0 +1,58 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: image-auth-error
+spec:
+  description: |
+    Test that when a service is created with a private image (without credentials):
+    1. Auto-created AIMModel shows ImagePullAuthFailure error
+    2. Auto-created AIMServiceTemplate shows ImagePullAuthFailure error
+    3. AIMService propagates the error from template
+  steps:
+  - name: Create AIMService with private image (no credentials)
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify auto-created model is degraded with auth error
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMModel
+          metadata:
+            name: aim-qwen-qwen3-32b-0-7-0-preview-0c176004
+          status:
+            status: Degraded
+            (conditions[?type == 'MetadataExtracted']):
+            - status: "True"
+            (conditions[?type == 'Ready']):
+            - status: "False"
+              reason: "SomeTemplatesDegraded"
+
+  - name: Verify auto-created template is degraded with auth error
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMServiceTemplate
+          metadata:
+            name: aim-qwen-qwen3-32b-0-7-0-preview-0c17600-1x-mi300x-lat-fp8-72a2
+          status:
+            status: Degraded
+            (conditions[?type == 'Failure']):
+            - status: "True"
+              reason: "ImagePullAuthFailure"
+
+  - name: Verify service shows template is degraded
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-service-auth-required
+          status:
+            (conditions[?type == 'Ready']):
+            - status: "False"
+              reason: "ModelDegraded"

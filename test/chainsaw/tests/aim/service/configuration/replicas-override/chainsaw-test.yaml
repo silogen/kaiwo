@@ -1,0 +1,31 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: replicas-override
+spec:
+  description: Test that service can specify custom replica count
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Ensure template is available
+    try:
+    - assert:
+        timeout: 5s
+        file: ../../_shared/template-available.yaml
+
+  - name: Create AIMService with 3 replicas
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify InferenceService has 3 replicas
+    try:
+    - assert:
+        resource:
+          apiVersion: serving.kserve.io/v1beta1
+          kind: InferenceService
+          metadata:
+            name: test-service
+          spec:
+            predictor:
+              minReplicas: 3

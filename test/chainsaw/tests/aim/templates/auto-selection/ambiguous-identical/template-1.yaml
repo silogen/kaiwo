@@ -1,0 +1,11 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterServiceTemplate
+metadata:
+  name: test-ambiguous-template-1
+spec:
+  modelName: test-ambiguous
+  metric: latency
+  precision: fp8
+  gpuSelector:
+    count: 1
+    model: MI300X

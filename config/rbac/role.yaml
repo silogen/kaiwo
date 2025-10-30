@@ -34,8 +34,8 @@ rules:
 
 - apiGroups: ["aim.silogen.ai"]
   resources:
-  - "aimimages"
-  - "aimclusterimages"
+  - "aimmodels"
+  - "aimclustermodels"
   - "aimruntimeconfigs"
   - "aimclusterruntimeconfigs"
   - "aimservicetemplates"
@@ -65,8 +65,8 @@ rules:
 
 - apiGroups: ["aim.silogen.ai"]
   resources:
-  - "aimimages/status"
-  - "aimclusterimages/status"
+  - "aimmodels/status"
+  - "aimclustermodels/status"
   - "aimservicetemplates/status"
   - "aimclusterservicetemplates/status"
   - "aimtemplatecaches/status"
@@ -144,4 +144,4 @@ rules:
 # Validate storageclass
 - apiGroups: ["storage.k8s.io"]
   resources: ["storageclasses"]
-  verbs: ["get","list","watch"]
+  verbs: ["get", "list", "watch"]

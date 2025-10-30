@@ -1,10 +1,13 @@
 apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMClusterImage
+kind: AIMClusterModel
 metadata:
   name: default-testing-llama-3-8b
 spec:
-  image: aimdummy:dev-latest
+  image: ghcr.io/silogen/aim-dummy:0.1.1
   defaultServiceTemplate: default-testing-llama-3-8b
+  # Don't auto-generate templates, since we just need a single manual one
+  discovery:
+    enabled: false
   resources:
     limits:
       memory: 2Gi

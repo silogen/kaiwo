@@ -9,16 +9,16 @@
 Package v1alpha1 contains API Schema definitions for the AIM v1alpha1 API group.
 
 ### Resource Types
-- [AIMClusterImage](#aimclusterimage)
-- [AIMClusterImageList](#aimclusterimagelist)
+- [AIMClusterModel](#aimclustermodel)
+- [AIMClusterModelList](#aimclustermodellist)
 - [AIMClusterRuntimeConfig](#aimclusterruntimeconfig)
 - [AIMClusterRuntimeConfigList](#aimclusterruntimeconfiglist)
 - [AIMClusterServiceTemplate](#aimclusterservicetemplate)
 - [AIMClusterServiceTemplateList](#aimclusterservicetemplatelist)
-- [AIMImage](#aimimage)
-- [AIMImageList](#aimimagelist)
+- [AIMModel](#aimmodel)
 - [AIMModelCache](#aimmodelcache)
 - [AIMModelCacheList](#aimmodelcachelist)
+- [AIMModelList](#aimmodellist)
 - [AIMRuntimeConfig](#aimruntimeconfig)
 - [AIMRuntimeConfigList](#aimruntimeconfiglist)
 - [AIMService](#aimservice)
@@ -30,31 +30,31 @@ Package v1alpha1 contains API Schema definitions for the AIM v1alpha1 API group.
 
 
 
-#### AIMClusterImage
+#### AIMClusterModel
 
 
 
-AIMClusterImage is the Schema for cluster-scoped AIM image catalog entries.
+AIMClusterModel is the Schema for cluster-scoped AIM model catalog entries.
 
 
 
 _Appears in:_
-- [AIMClusterImageList](#aimclusterimagelist)
+- [AIMClusterModelList](#aimclustermodellist)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
-| `kind` _string_ | `AIMClusterImage` | | |
+| `kind` _string_ | `AIMClusterModel` | | |
 | `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
-| `spec` _[AIMImageSpec](#aimimagespec)_ |  |  |  |
-| `status` _[AIMImageStatus](#aimimagestatus)_ |  |  |  |
+| `spec` _[AIMModelSpec](#aimmodelspec)_ |  |  |  |
+| `status` _[AIMModelStatus](#aimmodelstatus)_ |  |  |  |
 
 
-#### AIMClusterImageList
+#### AIMClusterModelList
 
 
 
-AIMClusterImageList contains a list of AIMClusterImage.
+AIMClusterModelList contains a list of AIMClusterModel.
 
 
 
@@ -63,9 +63,9 @@ AIMClusterImageList contains a list of AIMClusterImage.
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
-| `kind` _string_ | `AIMClusterImageList` | | |
+| `kind` _string_ | `AIMClusterModelList` | | |
 | `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
-| `items` _[AIMClusterImage](#aimclusterimage) array_ |  |  |  |
+| `items` _[AIMClusterModel](#aimclustermodel) array_ |  |  |  |
 
 
 #### AIMClusterRuntimeConfig
@@ -119,8 +119,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `defaultStorageClassName` _string_ | DefaultStorageClassName is the storage class used for model caches when one is not<br />specified directly on the consumer resource. |  |  |
-| `routing` _[AIMRuntimeRoutingConfig](#aimruntimeroutingconfig)_ | Routing controls HTTP routing defaults applied to AIM resources. |  |  |
+| `defaultStorageClassName` _string_ | DefaultStorageClassName specifies the storage class to use for model caches and PVCs<br />when the consuming resource (AIMModelCache, AIMTemplateCache, AIMServiceTemplate) does not<br />specify a storage class. If this field is empty, the cluster's default storage class is used. |  |  |
+| `model` _[AIMModelConfig](#aimmodelconfig)_ | Model controls model creation and discovery defaults. |  |  |
+| `routing` _[AIMRuntimeRoutingConfig](#aimruntimeroutingconfig)_ | Routing controls HTTP routing defaults applied to AIM resources.<br />When set, these defaults are used for AIMService resources that enable routing<br />but do not specify their own routing configuration. |  |  |
 
 
 #### AIMClusterServiceTemplate
@@ -176,12 +177,15 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `aimImageName` _string_ | AIMImageName is the AIM image name. Matches `metadata.name` of an AIMImage. Immutable.<br />Example: `meta/llama-3-8b:1.1+20240915` |  | MinLength: 1 <br /> |
+| `modelName` _string_ | ModelName is the model name. Matches `metadata.name` of an AIMModel or AIMClusterModel. Immutable.<br />Example: `meta/llama-3-8b:1.1+20240915` |  | MinLength: 1 <br /> |
 | `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
 | `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. |  | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
-| `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
+| `gpuSelector` _[AIMGpuSelector](#aimgpuselector)_ | GpuSelector specifies GPU requirements for each replica.<br />Defines the GPU count and model type required for deployment.<br />This field is immutable after creation. |  |  |
 | `runtimeConfigName` _string_ | RuntimeConfigName references the AIM runtime configuration (by name) to use for this template. | default |  |
+| `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets lists secrets containing credentials for pulling container images.<br />These secrets are used for:<br />- Discovery dry-run jobs that inspect the model container<br />- Pulling the image for inference services<br />The secrets are merged with any model or runtime config defaults.<br />For namespace-scoped templates, secrets must exist in the same namespace.<br />For cluster-scoped templates, secrets must exist in the operator namespace. |  |  |
+| `serviceAccountName` _string_ | ServiceAccountName specifies the Kubernetes service account to use for workloads related to this template.<br />This includes discovery dry-run jobs and inference services created from this template.<br />If empty, the default service account for the namespace is used. |  |  |
 | `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core)_ | Resources defines the default container resource requirements applied to services derived from this template.<br />Service-specific values override the template defaults. |  |  |
+| `modelSources` _[AIMModelSource](#aimmodelsource) array_ | ModelSources specifies the model artifacts required to run this template.<br />When provided, the discovery dry-run will be skipped and these sources will be used directly.<br />This allows users to explicitly declare model dependencies without requiring a discovery job.<br />If omitted, a discovery job will be run to automatically determine the required model sources. |  |  |
 
 
 
@@ -190,7 +194,7 @@ _Appears in:_
 
 
 
-
+AIMDiscoveryProfileMetadata describes the characteristics of a discovered deployment profile.
 
 
 
@@ -199,128 +203,34 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `engine` _string_ |  |  |  |
-| `gpu` _string_ |  |  |  |
-| `gpu_count` _integer_ |  |  |  |
-| `metric` _[AIMMetric](#aimmetric)_ |  |  | Enum: [latency throughput] <br /> |
-| `precision` _[AIMPrecision](#aimprecision)_ |  |  | Enum: [bf16 fp16 fp8 int8] <br /> |
+| `engine` _string_ | Engine identifies the inference engine used for this profile (e.g., "vllm", "tgi"). |  |  |
+| `gpu` _string_ | GPU specifies the GPU model this profile is optimized for (e.g., "MI300X", "MI325X"). |  |  |
+| `gpu_count` _integer_ | GPUCount indicates how many GPUs are required per replica for this profile. |  |  |
+| `metric` _[AIMMetric](#aimmetric)_ | Metric indicates the optimization goal for this profile ("latency" or "throughput"). |  | Enum: [latency throughput] <br /> |
+| `precision` _[AIMPrecision](#aimprecision)_ | Precision specifies the numeric precision used in this profile (e.g., "fp16", "fp8"). |  | Enum: [bf16 fp16 fp8 int8] <br /> |
 
 
-#### AIMImage
-
-
-
-AIMImage is the Schema for namespace-scoped AIM image catalog entries.
+#### AIMGpuSelector
 
 
 
-_Appears in:_
-- [AIMImageList](#aimimagelist)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
-| `kind` _string_ | `AIMImage` | | |
-| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
-| `spec` _[AIMImageSpec](#aimimagespec)_ |  |  |  |
-| `status` _[AIMImageStatus](#aimimagestatus)_ |  |  |  |
-
-
-#### AIMImageDiscoverySpec
-
-
-
-AIMImageDiscoverySpec configures metadata discovery and template generation for an image.
+AIMGpuSelector specifies GPU requirements for a deployment.
+It defines the number and type of GPUs needed for each replica.
 
 
 
 _Appears in:_
-- [AIMImageSpec](#aimimagespec)
+- [AIMClusterServiceTemplateSpec](#aimclusterservicetemplatespec)
+- [AIMRuntimeParameters](#aimruntimeparameters)
+- [AIMServiceOverrides](#aimserviceoverrides)
+- [AIMServiceTemplateSpec](#aimservicetemplatespec)
+- [AIMServiceTemplateSpecCommon](#aimservicetemplatespeccommon)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `enabled` _boolean_ | Enabled toggles metadata discovery for this image. Disabled by default. |  |  |
-| `autoCreateTemplates` _boolean_ | AutoCreateTemplates controls whether recommended deployments from discovery<br />automatically create ServiceTemplates. Enabled by default when discovery runs. |  |  |
-
-
-#### AIMImageList
-
-
-
-AIMImageList contains a list of AIMImage.
-
-
-
-
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
-| `kind` _string_ | `AIMImageList` | | |
-| `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
-| `items` _[AIMImage](#aimimage) array_ |  |  |  |
-
-
-#### AIMImageSpec
-
-
-
-AIMImageSpec defines the desired state of AIMImage.
-
-
-
-_Appears in:_
-- [AIMClusterImage](#aimclusterimage)
-- [AIMImage](#aimimage)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `image` _string_ | Image is the container image URI for this AIM model.<br />This image is inspected by the operator to select runtime profiles used by templates. |  | MinLength: 1 <br /> |
-| `defaultServiceTemplate` _string_ | DefaultServiceTemplate is the default template to use for this image, if the user does not provide any |  |  |
-| `discovery` _[AIMImageDiscoverySpec](#aimimagediscoveryspec)_ | Discovery controls metadata extraction and automatic template creation for this image. |  |  |
-| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core)_ | Resources defines the default resource requirements for services using this image.<br />Template- or service-level values override these defaults.<br />Must have both cpu and memory in requests<br />Must have memory in limits |  | Required: \{\} <br /> |
-
-
-#### AIMImageStatus
-
-
-
-AIMImageStatus defines the observed state of AIMImage.
-
-
-
-_Appears in:_
-- [AIMClusterImage](#aimclusterimage)
-- [AIMImage](#aimimage)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `observedGeneration` _integer_ | ObservedGeneration is the most recent generation observed by the controller |  |  |
-| `status` _[AIMImageStatusEnum](#aimimagestatusenum)_ | Status represents the overall status of the image based on its templates | Pending | Enum: [Pending Progressing Ready Degraded Failed] <br /> |
-| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest available observations of the model's state |  |  |
-| `resolvedRuntimeConfig` _[AIMResolvedRuntimeConfig](#aimresolvedruntimeconfig)_ | ResolvedRuntimeConfig captures metadata about the runtime config that was resolved. |  |  |
-| `imageMetadata` _[ImageMetadata](#imagemetadata)_ | ImageMetadata is the metadata extracted from an AIM image |  |  |
-
-
-#### AIMImageStatusEnum
-
-_Underlying type:_ _string_
-
-AIMImageStatusEnum represents the overall status of an AIMImage.
-
-_Validation:_
-- Enum: [Pending Progressing Ready Degraded Failed]
-
-_Appears in:_
-- [AIMImageStatus](#aimimagestatus)
-
-| Field | Description |
-| --- | --- |
-| `Pending` | AIMImageStatusPending indicates the image has been created but template generation has not started.<br /> |
-| `Progressing` | AIMImageStatusProgressing indicates one or more templates are still being discovered.<br /> |
-| `Ready` | AIMImageStatusReady indicates all templates are available and ready.<br /> |
-| `Degraded` | AIMImageStatusDegraded indicates one or more templates are degraded or failed.<br /> |
-| `Failed` | AIMImageStatusFailed indicates all templates are degraded or failed.<br /> |
+| `count` _integer_ | Count is the number of GPU resources requested per replica.<br />Must be at least 1. |  | Minimum: 1 <br /> |
+| `model` _string_ | Model is the GPU model name required for this deployment.<br />Examples: "MI300X", "MI325X" |  | MinLength: 1 <br /> |
+| `resourceName` _string_ | ResourceName is the Kubernetes resource name for GPU resources.<br />Defaults to "amd.com/gpu" if not specified. | amd.com/gpu |  |
 
 
 #### AIMMetric
@@ -345,6 +255,26 @@ _Appears in:_
 | --- | --- |
 | `latency` |  |
 | `throughput` |  |
+
+
+#### AIMModel
+
+
+
+AIMModel is the Schema for namespace-scoped AIM model catalog entries.
+
+
+
+_Appears in:_
+- [AIMModelList](#aimmodellist)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `AIMModel` | | |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `spec` _[AIMModelSpec](#aimmodelspec)_ |  |  |  |
+| `status` _[AIMModelStatus](#aimmodelstatus)_ |  |  |  |
 
 
 #### AIMModelCache
@@ -446,22 +376,144 @@ _Appears in:_
 | `Failed` | AIMModelCacheStatusFailed denotes that the model cache has failed. A more detailed reason will be available in the conditions.<br /> |
 
 
-#### AIMModelSource
+#### AIMModelConfig
 
 
 
-
+AIMModelConfig controls model creation and discovery behavior.
 
 
 
 _Appears in:_
+- [AIMClusterRuntimeConfigSpec](#aimclusterruntimeconfigspec)
+- [AIMRuntimeConfigCommon](#aimruntimeconfigcommon)
+- [AIMRuntimeConfigSpec](#aimruntimeconfigspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `autoDiscovery` _boolean_ | AutoDiscovery controls whether models run discovery by default.<br />When true, models run discovery jobs to extract metadata and auto-create templates.<br />When false, discovery is skipped. Discovery failures are non-fatal and reported via conditions. | true |  |
+
+
+#### AIMModelDiscoveryConfig
+
+
+
+AIMModelDiscoveryConfig controls discovery behavior for a model.
+
+
+
+_Appears in:_
+- [AIMModelSpec](#aimmodelspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | Enabled controls whether discovery runs for this model.<br />When unset (nil), uses the runtime config's model.autoDiscovery setting.<br />When true, discovery always runs regardless of runtime config.<br />When false, discovery never runs regardless of runtime config. |  |  |
+| `autoCreateTemplates` _boolean_ | AutoCreateTemplates controls whether templates are auto-created from discovery results.<br />When unset, templates are created if discovery succeeds and returns recommended deployments.<br />When false, discovery runs but templates are not created (metadata extraction only).<br />When true, templates are always created from discovery results. |  |  |
+
+
+#### AIMModelList
+
+
+
+AIMModelList contains a list of AIMModel.
+
+
+
+
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `AIMModelList` | | |
+| `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `items` _[AIMModel](#aimmodel) array_ |  |  |  |
+
+
+#### AIMModelSource
+
+
+
+AIMModelSource describes a model artifact that must be downloaded for inference.
+Discovery extracts these from the container's configuration to enable caching and validation.
+
+
+
+_Appears in:_
+- [AIMClusterServiceTemplateSpec](#aimclusterservicetemplatespec)
+- [AIMServiceTemplateSpec](#aimservicetemplatespec)
+- [AIMServiceTemplateSpecCommon](#aimservicetemplatespeccommon)
 - [AIMServiceTemplateStatus](#aimservicetemplatestatus)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | Name is the name of the model |  |  |
-| `sourceUri` _string_ | SourceURI is the source where the model should be downloaded from |  |  |
-| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#quantity-resource-api)_ | Size is the amount of storage that the source expects |  |  |
+| `name` _string_ | Name is a human-readable identifier for this model artifact.<br />May be empty if the source represents the primary model. |  |  |
+| `sourceUri` _string_ | SourceURI is the location from which the model should be downloaded.<br />Supported schemes:<br />- hf://org/model - Hugging Face Hub model<br />- s3://bucket/key - S3-compatible storage |  | Pattern: `^(hf\|s3)://[^ \t\r\n]+$` <br /> |
+| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#quantity-resource-api)_ | Size is the expected storage space required for this model artifact.<br />Used for PVC sizing and capacity planning during cache creation. |  |  |
+
+
+#### AIMModelSpec
+
+
+
+AIMModelSpec defines the desired state of AIMModel.
+
+
+
+_Appears in:_
+- [AIMClusterModel](#aimclustermodel)
+- [AIMModel](#aimmodel)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `image` _string_ | Image is the container image URI for this AIM model.<br />This image is inspected by the operator to select runtime profiles used by templates.<br />Discovery behavior is controlled by the discovery field and runtime config's AutoDiscovery setting. |  | MinLength: 1 <br /> |
+| `discovery` _[AIMModelDiscoveryConfig](#aimmodeldiscoveryconfig)_ | Discovery controls discovery behavior for this model.<br />When unset, uses runtime config defaults. |  |  |
+| `defaultServiceTemplate` _string_ | DefaultServiceTemplate is the default template to use for this image, if the user does not provide any |  |  |
+| `runtimeConfigName` _string_ | RuntimeConfigName references the AIM runtime configuration (by name) to use for this image.<br />The runtime config controls discovery behavior and model creation scope. | default |  |
+| `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets lists secrets containing credentials for pulling the model container image.<br />These secrets are used for:<br />- OCI registry metadata extraction during discovery<br />- Pulling the image for inference services<br />The secrets are merged with any runtime config defaults.<br />For namespace-scoped models, secrets must exist in the same namespace.<br />For cluster-scoped models, secrets must exist in the operator namespace. |  |  |
+| `serviceAccountName` _string_ | ServiceAccountName specifies the Kubernetes service account to use for workloads related to this model.<br />This includes metadata extraction jobs and any other model-related operations.<br />If empty, the default service account for the namespace is used. |  |  |
+| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core)_ | Resources defines the default resource requirements for services using this image.<br />Template- or service-level values override these defaults. |  |  |
+
+
+#### AIMModelStatus
+
+
+
+AIMModelStatus defines the observed state of AIMModel.
+
+
+
+_Appears in:_
+- [AIMClusterModel](#aimclustermodel)
+- [AIMModel](#aimmodel)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `observedGeneration` _integer_ | ObservedGeneration is the most recent generation observed by the controller |  |  |
+| `status` _[AIMModelStatusEnum](#aimmodelstatusenum)_ | Status represents the overall status of the image based on its templates | Pending | Enum: [Pending Progressing Ready Degraded Failed] <br /> |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest available observations of the model's state |  |  |
+| `resolvedRuntimeConfig` _[AIMResolvedRuntimeConfig](#aimresolvedruntimeconfig)_ | ResolvedRuntimeConfig captures metadata about the runtime config that was resolved. |  |  |
+| `imageMetadata` _[ImageMetadata](#imagemetadata)_ | ImageMetadata is the metadata extracted from an AIM image |  |  |
+
+
+#### AIMModelStatusEnum
+
+_Underlying type:_ _string_
+
+AIMModelStatusEnum represents the overall status of an AIMModel.
+
+_Validation:_
+- Enum: [Pending Progressing Ready Degraded Failed]
+
+_Appears in:_
+- [AIMModelStatus](#aimmodelstatus)
+
+| Field | Description |
+| --- | --- |
+| `Pending` | AIMModelStatusPending indicates the image has been created but template generation has not started.<br /> |
+| `Progressing` | AIMModelStatusProgressing indicates one or more templates are still being discovered.<br /> |
+| `Ready` | AIMModelStatusReady indicates all templates are available and ready.<br /> |
+| `Degraded` | AIMModelStatusDegraded indicates one or more templates are degraded or failed.<br /> |
+| `Failed` | AIMModelStatusFailed indicates all templates are degraded or failed.<br /> |
 
 
 #### AIMPrecision
@@ -498,7 +550,16 @@ _Appears in:_
 
 
 
+AIMProfile contains the cached discovery results for a template.
+This is the processed and validated version of AIMDiscoveryProfile that is stored
+in the template's status after successful discovery.
 
+The profile serves as a cache of runtime configuration, eliminating the need to
+re-run discovery for each service that uses this template. Services and caching
+mechanisms reference this cached profile for deployment parameters and model sources.
+
+See discovery.go for AIMDiscoveryProfile (the raw discovery output) and the
+relationship between these types.
 
 
 
@@ -507,8 +568,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `engine_args` _[JSON](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#json-v1-apiextensions-k8s-io)_ |  |  | Schemaless: \{\} <br /> |
-| `env_vars` _object (keys:string, values:string)_ |  |  |  |
+| `engine_args` _[JSON](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#json-v1-apiextensions-k8s-io)_ | EngineArgs contains runtime-specific engine configuration as a free-form JSON object.<br />The structure depends on the inference engine being used (e.g., vLLM, TGI).<br />These arguments are passed to the runtime container to configure model loading and inference. |  | Schemaless: \{\} <br /> |
+| `env_vars` _object (keys:string, values:string)_ | EnvVars contains environment variables required by the runtime for this profile.<br />These may include engine-specific settings, optimization flags, or hardware configuration. |  |  |
 | `metadata` _[AIMProfileMetadata](#aimprofilemetadata)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
 
 
@@ -516,7 +577,8 @@ _Appears in:_
 
 
 
-
+AIMProfileMetadata describes the characteristics of a cached deployment profile.
+This is identical to AIMDiscoveryProfileMetadata but exists in the template status namespace.
 
 
 
@@ -525,11 +587,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `engine` _string_ |  |  |  |
-| `gpu` _string_ |  |  |  |
-| `gpu_count` _integer_ |  |  |  |
-| `metric` _[AIMMetric](#aimmetric)_ |  |  | Enum: [latency throughput] <br /> |
-| `precision` _[AIMPrecision](#aimprecision)_ |  |  | Enum: [bf16 fp16 fp8 int8] <br /> |
+| `engine` _string_ | Engine identifies the inference engine used for this profile (e.g., "vllm", "tgi"). |  |  |
+| `gpu` _string_ | GPU specifies the GPU model this profile is optimized for (e.g., "MI300X", "MI325X"). |  |  |
+| `gpu_count` _integer_ | GPUCount indicates how many GPUs are required per replica for this profile. |  |  |
+| `metric` _[AIMMetric](#aimmetric)_ | Metric indicates the optimization goal for this profile ("latency" or "throughput"). |  | Enum: [latency throughput] <br /> |
+| `precision` _[AIMPrecision](#aimprecision)_ | Precision specifies the numeric precision used in this profile (e.g., "fp16", "fp8"). |  | Enum: [bf16 fp16 fp8 int8] <br /> |
 
 
 #### AIMResolutionScope
@@ -539,7 +601,7 @@ _Underlying type:_ _string_
 AIMResolutionScope describes the scope of a resolved reference.
 
 _Validation:_
-- Enum: [Namespace Cluster Unknown]
+- Enum: [Namespace Cluster Merged Unknown]
 
 _Appears in:_
 - [AIMResolvedReference](#aimresolvedreference)
@@ -550,6 +612,7 @@ _Appears in:_
 | --- | --- |
 | `Namespace` | AIMResolutionScopeNamespace denotes a namespace-scoped resource.<br /> |
 | `Cluster` | AIMResolutionScopeCluster denotes a cluster-scoped resource.<br /> |
+| `Merged` | AIMResolutionScopeMerged denotes that both cluster and namespace configs were merged.<br /> |
 | `Unknown` | AIMResolutionScopeUnknown denotes that the scope could not be determined.<br /> |
 
 
@@ -571,7 +634,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `name` _string_ | Name is the resource name that satisfied the reference. |  |  |
 | `namespace` _string_ | Namespace identifies where the resource was found when namespace-scoped.<br />Empty indicates a cluster-scoped resource. |  |  |
-| `scope` _[AIMResolutionScope](#aimresolutionscope)_ | Scope indicates whether the resolved resource was namespace or cluster scoped. |  | Enum: [Namespace Cluster Unknown] <br /> |
+| `scope` _[AIMResolutionScope](#aimresolutionscope)_ | Scope indicates whether the resolved resource was namespace or cluster scoped. |  | Enum: [Namespace Cluster Merged Unknown] <br /> |
 | `kind` _string_ | Kind is the fully-qualified kind of the resolved reference, when known. |  |  |
 | `uid` _[UID](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#uid-types-pkg)_ | UID captures the unique identifier of the resolved reference, when known. |  |  |
 
@@ -586,7 +649,7 @@ This follows the same pattern as AIMServiceResolvedTemplate for consistency.
 
 
 _Appears in:_
-- [AIMImageStatus](#aimimagestatus)
+- [AIMModelStatus](#aimmodelstatus)
 - [AIMServiceStatus](#aimservicestatus)
 - [AIMServiceTemplateStatus](#aimservicetemplatestatus)
 - [AIMTemplateCacheStatus](#aimtemplatecachestatus)
@@ -595,7 +658,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `name` _string_ | Name is the resource name that satisfied the reference. |  |  |
 | `namespace` _string_ | Namespace identifies where the resource was found when namespace-scoped.<br />Empty indicates a cluster-scoped resource. |  |  |
-| `scope` _[AIMResolutionScope](#aimresolutionscope)_ | Scope indicates whether the resolved resource was namespace or cluster scoped. |  | Enum: [Namespace Cluster Unknown] <br /> |
+| `scope` _[AIMResolutionScope](#aimresolutionscope)_ | Scope indicates whether the resolved resource was namespace or cluster scoped. |  | Enum: [Namespace Cluster Merged Unknown] <br /> |
 | `kind` _string_ | Kind is the fully-qualified kind of the resolved reference, when known. |  |  |
 | `uid` _[UID](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#uid-types-pkg)_ | UID captures the unique identifier of the resolved reference, when known. |  |  |
 
@@ -625,6 +688,7 @@ _Appears in:_
 
 
 AIMRuntimeConfigCommon captures configuration fields shared across cluster and namespace scopes.
+These settings apply to both AIMRuntimeConfig (namespace-scoped) and AIMClusterRuntimeConfig (cluster-scoped).
 
 
 
@@ -634,25 +698,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `defaultStorageClassName` _string_ | DefaultStorageClassName is the storage class used for model caches when one is not<br />specified directly on the consumer resource. |  |  |
-| `routing` _[AIMRuntimeRoutingConfig](#aimruntimeroutingconfig)_ | Routing controls HTTP routing defaults applied to AIM resources. |  |  |
-
-
-#### AIMRuntimeConfigCredentials
-
-
-
-AIMRuntimeConfigCredentials captures namespace-scoped authentication knobs.
-
-
-
-_Appears in:_
-- [AIMRuntimeConfigSpec](#aimruntimeconfigspec)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `serviceAccountName` _string_ | ServiceAccountName is the service account used for discovery jobs, cache warmers,<br />and any other workloads spawned by the operator on behalf of this runtime config. |  |  |
-| `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets are merged with controller defaults when creating pods that need<br />to pull model or runtime images. |  |  |
+| `defaultStorageClassName` _string_ | DefaultStorageClassName specifies the storage class to use for model caches and PVCs<br />when the consuming resource (AIMModelCache, AIMTemplateCache, AIMServiceTemplate) does not<br />specify a storage class. If this field is empty, the cluster's default storage class is used. |  |  |
+| `model` _[AIMModelConfig](#aimmodelconfig)_ | Model controls model creation and discovery defaults. |  |  |
+| `routing` _[AIMRuntimeRoutingConfig](#aimruntimeroutingconfig)_ | Routing controls HTTP routing defaults applied to AIM resources.<br />When set, these defaults are used for AIMService resources that enable routing<br />but do not specify their own routing configuration. |  |  |
 
 
 #### AIMRuntimeConfigList
@@ -686,10 +734,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `defaultStorageClassName` _string_ | DefaultStorageClassName is the storage class used for model caches when one is not<br />specified directly on the consumer resource. |  |  |
-| `routing` _[AIMRuntimeRoutingConfig](#aimruntimeroutingconfig)_ | Routing controls HTTP routing defaults applied to AIM resources. |  |  |
-| `serviceAccountName` _string_ | ServiceAccountName is the service account used for discovery jobs, cache warmers,<br />and any other workloads spawned by the operator on behalf of this runtime config. |  |  |
-| `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets are merged with controller defaults when creating pods that need<br />to pull model or runtime images. |  |  |
+| `defaultStorageClassName` _string_ | DefaultStorageClassName specifies the storage class to use for model caches and PVCs<br />when the consuming resource (AIMModelCache, AIMTemplateCache, AIMServiceTemplate) does not<br />specify a storage class. If this field is empty, the cluster's default storage class is used. |  |  |
+| `model` _[AIMModelConfig](#aimmodelconfig)_ | Model controls model creation and discovery defaults. |  |  |
+| `routing` _[AIMRuntimeRoutingConfig](#aimruntimeroutingconfig)_ | Routing controls HTTP routing defaults applied to AIM resources.<br />When set, these defaults are used for AIMService resources that enable routing<br />but do not specify their own routing configuration. |  |  |
 
 
 #### AIMRuntimeConfigStatus
@@ -730,14 +777,15 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
 | `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. |  | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
-| `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
+| `gpuSelector` _[AIMGpuSelector](#aimgpuselector)_ | GpuSelector specifies GPU requirements for each replica.<br />Defines the GPU count and model type required for deployment.<br />This field is immutable after creation. |  |  |
 
 
 #### AIMRuntimeRoutingConfig
 
 
 
-AIMRuntimeRoutingConfig configures routing defaults applied during inference service creation.
+AIMRuntimeRoutingConfig configures HTTP routing defaults for inference services.
+These settings control how Gateway API HTTPRoutes are created and configured.
 
 
 
@@ -748,9 +796,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `enabled` _boolean_ | Enabled toggles HTTP routing management for consumers of this runtime config. |  |  |
-| `gatewayRef` _[ParentReference](#parentreference)_ | GatewayRef identifies the Gateway parent that should receive HTTPRoutes for consumers. |  |  |
-| `routeTemplate` _string_ | RouteTemplate renders a HTTP path prefix using the AIMService as context.<br />Example: `/\{.metadata.namespace\}/\{.metadata.labels['team']\}/\{.spec.model\}/` |  |  |
+| `enabled` _boolean_ | Enabled controls whether HTTP routing is managed for inference services using this config.<br />When true, the operator creates HTTPRoute resources for services that reference this config.<br />When false or unset, routing must be explicitly enabled on each service.<br />This provides a namespace or cluster-wide default that individual services can override. |  |  |
+| `gatewayRef` _[ParentReference](#parentreference)_ | GatewayRef specifies the Gateway API Gateway resource that should receive HTTPRoutes.<br />This identifies the parent gateway for routing traffic to inference services.<br />The gateway can be in any namespace (cross-namespace references are supported).<br />If routing is enabled but GatewayRef is not specified, service reconciliation will fail<br />with a validation error. |  |  |
+| `pathTemplate` _string_ | PathTemplate defines the HTTP path template for routes, evaluated using JSONPath expressions.<br />The template is rendered against the AIMService object to generate unique paths.<br />Example templates:<br />- `/\{.metadata.namespace\}/\{.metadata.name\}` - namespace and service name<br />- `/\{.metadata.namespace\}/\{.metadata.labels['team']\}/inference` - with label<br />- `/models/\{.spec.aimModelName\}` - based on model name<br />The template must:<br />- Use valid JSONPath expressions wrapped in \{...\}<br />- Reference fields that exist on the service<br />- Produce a path ≤ 200 characters after rendering<br />- Result in valid URL path segments (lowercase, RFC 1123 compliant)<br />If evaluation fails, the service enters Degraded state with PathTemplateInvalid reason.<br />Individual services can override this template via spec.routing.pathTemplate. |  |  |
 
 
 #### AIMService
@@ -791,6 +839,23 @@ AIMServiceList contains a list of AIMService.
 | `items` _[AIMService](#aimservice) array_ |  |  |  |
 
 
+#### AIMServiceModel
+
+
+
+AIMServiceModel specifies which model to deploy. Exactly one field must be set.
+
+
+
+_Appears in:_
+- [AIMServiceSpec](#aimservicespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `ref` _string_ | Ref references an existing AIMModel or AIMClusterModel by metadata.name.<br />The controller looks for a namespace-scoped AIMModel first, then falls back to cluster-scoped AIMClusterModel.<br />Example: `meta-llama-3-8b`. |  |  |
+| `image` _string_ | Image specifies a container image URI directly.<br />The controller searches for an existing model with this image, or creates one if none exists.<br />The scope of the created model is controlled by the runtime config's ModelCreationScope field.<br />Example: `ghcr.io/silogen/llama-3-8b:v1.2.0`. |  |  |
+
+
 #### AIMServiceOverrides
 
 
@@ -808,7 +873,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
 | `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. |  | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
-| `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
+| `gpuSelector` _[AIMGpuSelector](#aimgpuselector)_ | GpuSelector specifies GPU requirements for each replica.<br />Defines the GPU count and model type required for deployment.<br />This field is immutable after creation. |  |  |
 
 
 #### AIMServiceResolvedTemplate
@@ -826,7 +891,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `name` _string_ | Name is the resource name that satisfied the reference. |  |  |
 | `namespace` _string_ | Namespace identifies where the resource was found when namespace-scoped.<br />Empty indicates a cluster-scoped resource. |  |  |
-| `scope` _[AIMResolutionScope](#aimresolutionscope)_ | Scope indicates whether the resolved resource was namespace or cluster scoped. |  | Enum: [Namespace Cluster Unknown] <br /> |
+| `scope` _[AIMResolutionScope](#aimresolutionscope)_ | Scope indicates whether the resolved resource was namespace or cluster scoped. |  | Enum: [Namespace Cluster Merged Unknown] <br /> |
 | `kind` _string_ | Kind is the fully-qualified kind of the resolved reference, when known. |  |  |
 | `uid` _[UID](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#uid-types-pkg)_ | UID captures the unique identifier of the resolved reference, when known. |  |  |
 
@@ -844,10 +909,10 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `enabled` _boolean_ | Enabled toggles HTTP routing management. | false |  |
+| `enabled` _boolean_ | Enabled toggles HTTP routing management.<br />When nil, inherits the enabled state from the runtime configuration.<br />When false, explicitly disables routing regardless of runtime config.<br />When true, explicitly enables routing regardless of runtime config. |  |  |
 | `gatewayRef` _[ParentReference](#parentreference)_ | GatewayRef identifies the Gateway parent that should receive the HTTPRoute.<br />When omitted while routing is enabled, reconciliation will report a failure. |  |  |
 | `annotations` _object (keys:string, values:string)_ | Annotations to add to the HTTPRoute resource. |  |  |
-| `routeTemplate` _string_ | RouteTemplate overrides the HTTP path template used for routing.<br />The value is rendered against the AIMService object using JSONPath expressions. |  |  |
+| `pathTemplate` _string_ | PathTemplate overrides the HTTP path template used for routing.<br />The value is rendered against the AIMService object using JSONPath expressions. |  |  |
 
 
 #### AIMServiceRoutingStatus
@@ -884,7 +949,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `aimImageName` _string_ | AIMImageName is the canonical model name (including version/revision) to deploy.<br />Expected to match the `spec.metadata.name` of an AIMImage. Example:<br />`meta-llama-3-8b-1-1-20240915`. |  | MinLength: 1 <br /> |
+| `model` _[AIMServiceModel](#aimservicemodel)_ | Model specifies which model to deploy using one of the available reference methods.<br />Use `ref` to reference an existing AIMModel/AIMClusterModel by name, or use `image`<br />to specify a container image URI directly (which will auto-create a model if needed). |  |  |
 | `templateRef` _string_ | TemplateRef is the name of the AIMServiceTemplate or AIMClusterServiceTemplate to use.<br />The template selects the runtime profile and GPU parameters. |  |  |
 | `cacheModel` _boolean_ | CacheModel requests that model sources be cached when starting the service<br />if the template itself does not warm the cache.<br />When `warmCache: false` on the template, this setting ensures caching is<br />performed before the service becomes ready. | false |  |
 | `replicas` _integer_ | Replicas overrides the number of replicas for this service.<br />Other runtime settings remain governed by the template unless overridden. | 1 |  |
@@ -893,6 +958,7 @@ _Appears in:_
 | `overrides` _[AIMServiceOverrides](#aimserviceoverrides)_ | Overrides allows overriding specific template parameters for this service.<br />When specified, these values take precedence over the template values. |  |  |
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to use for authentication when downloading models.<br />These variables are used for authentication with model registries (e.g., HuggingFace tokens). |  |  |
 | `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets references secrets for pulling AIM container images. |  |  |
+| `serviceAccountName` _string_ | ServiceAccountName specifies the Kubernetes service account to use for the inference workload.<br />This service account is used by the deployed inference pods.<br />If empty, the default service account for the namespace is used. |  |  |
 | `routing` _[AIMServiceRouting](#aimservicerouting)_ | Routing enables HTTP routing through Gateway API for this service. |  |  |
 
 
@@ -997,15 +1063,17 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `aimImageName` _string_ | AIMImageName is the AIM image name. Matches `metadata.name` of an AIMImage. Immutable.<br />Example: `meta/llama-3-8b:1.1+20240915` |  | MinLength: 1 <br /> |
+| `modelName` _string_ | ModelName is the model name. Matches `metadata.name` of an AIMModel or AIMClusterModel. Immutable.<br />Example: `meta/llama-3-8b:1.1+20240915` |  | MinLength: 1 <br /> |
 | `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
 | `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. |  | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
-| `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
+| `gpuSelector` _[AIMGpuSelector](#aimgpuselector)_ | GpuSelector specifies GPU requirements for each replica.<br />Defines the GPU count and model type required for deployment.<br />This field is immutable after creation. |  |  |
 | `runtimeConfigName` _string_ | RuntimeConfigName references the AIM runtime configuration (by name) to use for this template. | default |  |
+| `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets lists secrets containing credentials for pulling container images.<br />These secrets are used for:<br />- Discovery dry-run jobs that inspect the model container<br />- Pulling the image for inference services<br />The secrets are merged with any model or runtime config defaults.<br />For namespace-scoped templates, secrets must exist in the same namespace.<br />For cluster-scoped templates, secrets must exist in the operator namespace. |  |  |
+| `serviceAccountName` _string_ | ServiceAccountName specifies the Kubernetes service account to use for workloads related to this template.<br />This includes discovery dry-run jobs and inference services created from this template.<br />If empty, the default service account for the namespace is used. |  |  |
 | `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core)_ | Resources defines the default container resource requirements applied to services derived from this template.<br />Service-specific values override the template defaults. |  |  |
+| `modelSources` _[AIMModelSource](#aimmodelsource) array_ | ModelSources specifies the model artifacts required to run this template.<br />When provided, the discovery dry-run will be skipped and these sources will be used directly.<br />This allows users to explicitly declare model dependencies without requiring a discovery job.<br />If omitted, a discovery job will be run to automatically determine the required model sources. |  |  |
 | `caching` _[AIMTemplateCachingConfig](#aimtemplatecachingconfig)_ | Caching configures model caching behavior for this namespace-scoped template.<br />When enabled, models will be cached using the specified environment variables<br />during download. |  |  |
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to use for authentication when downloading models.<br />These variables are used for authentication with model registries (e.g., HuggingFace tokens). |  |  |
-| `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets references secrets for pulling AIM container images. |  |  |
 
 
 #### AIMServiceTemplateSpecCommon
@@ -1023,12 +1091,15 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `aimImageName` _string_ | AIMImageName is the AIM image name. Matches `metadata.name` of an AIMImage. Immutable.<br />Example: `meta/llama-3-8b:1.1+20240915` |  | MinLength: 1 <br /> |
+| `modelName` _string_ | ModelName is the model name. Matches `metadata.name` of an AIMModel or AIMClusterModel. Immutable.<br />Example: `meta/llama-3-8b:1.1+20240915` |  | MinLength: 1 <br /> |
 | `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
 | `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. |  | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
-| `gpuSelector` _[AimGpuSelector](#aimgpuselector)_ | AimGpuSelector contains the strategy to choose the resources to give each replica |  |  |
+| `gpuSelector` _[AIMGpuSelector](#aimgpuselector)_ | GpuSelector specifies GPU requirements for each replica.<br />Defines the GPU count and model type required for deployment.<br />This field is immutable after creation. |  |  |
 | `runtimeConfigName` _string_ | RuntimeConfigName references the AIM runtime configuration (by name) to use for this template. | default |  |
+| `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets lists secrets containing credentials for pulling container images.<br />These secrets are used for:<br />- Discovery dry-run jobs that inspect the model container<br />- Pulling the image for inference services<br />The secrets are merged with any model or runtime config defaults.<br />For namespace-scoped templates, secrets must exist in the same namespace.<br />For cluster-scoped templates, secrets must exist in the operator namespace. |  |  |
+| `serviceAccountName` _string_ | ServiceAccountName specifies the Kubernetes service account to use for workloads related to this template.<br />This includes discovery dry-run jobs and inference services created from this template.<br />If empty, the default service account for the namespace is used. |  |  |
 | `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core)_ | Resources defines the default container resource requirements applied to services derived from this template.<br />Service-specific values override the template defaults. |  |  |
+| `modelSources` _[AIMModelSource](#aimmodelsource) array_ | ModelSources specifies the model artifacts required to run this template.<br />When provided, the discovery dry-run will be skipped and these sources will be used directly.<br />This allows users to explicitly declare model dependencies without requiring a discovery job.<br />If omitted, a discovery job will be run to automatically determine the required model sources. |  |  |
 
 
 #### AIMServiceTemplateStatus
@@ -1048,8 +1119,8 @@ _Appears in:_
 | `observedGeneration` _integer_ | ObservedGeneration is the most recent generation observed by the controller. |  |  |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest observations of template state. |  |  |
 | `resolvedRuntimeConfig` _[AIMResolvedRuntimeConfig](#aimresolvedruntimeconfig)_ | ResolvedRuntimeConfig captures metadata about the runtime config that was resolved. |  |  |
-| `resolvedImage` _[AIMResolvedReference](#aimresolvedreference)_ | ResolvedImage captures metadata about the image that was resolved. |  |  |
-| `status` _[AIMTemplateStatusEnum](#aimtemplatestatusenum)_ | Status represents the current high‑level status of the template lifecycle.<br />Values: `Pending`, `Progressing`, `Available`, `Failed`. | Pending | Enum: [Pending Progressing Available Degraded Failed] <br /> |
+| `resolvedModel` _[AIMResolvedReference](#aimresolvedreference)_ | ResolvedModel captures metadata about the image that was resolved. |  |  |
+| `status` _[AIMTemplateStatusEnum](#aimtemplatestatusenum)_ | Status represents the current high‑level status of the template lifecycle.<br />Values: `Pending`, `Progressing`, `Ready`, `Failed`, `NotAvailable`. | Pending | Enum: [Pending Progressing NotAvailable Ready Degraded Failed] <br /> |
 | `modelSources` _[AIMModelSource](#aimmodelsource) array_ | ModelSources list the models that this template requires to run. These are the models that will be<br />cached, if this template is cached. |  |  |
 | `profile` _[AIMProfile](#aimprofile)_ | Profile contains the full discovery result profile as a free-form JSON object.<br />This includes metadata, engine args, environment variables, and model details. |  |  |
 
@@ -1176,7 +1247,7 @@ _Underlying type:_ _string_
 AIMTemplateStatusEnum defines coarse-grained states for a template.
 
 _Validation:_
-- Enum: [Pending Progressing Available Degraded Failed]
+- Enum: [Pending Progressing NotAvailable Ready Degraded Failed]
 
 _Appears in:_
 - [AIMServiceTemplateStatus](#aimservicetemplatestatus)
@@ -1185,30 +1256,10 @@ _Appears in:_
 | --- | --- |
 | `Pending` | AIMTemplateStatusPending denotes that the template has been created and discovery has not yet started.<br /> |
 | `Progressing` | AIMTemplateStatusProgressing denotes that discovery and/or cache warm is in progress.<br /> |
-| `Available` | AIMTemplateStatusAvailable denotes that discovery succeeded and, if requested, caches are warmed.<br /> |
+| `NotAvailable` | AIMTemplateStatusNotAvailable denotes that the template cannot run because the required GPU resources are not present in the cluster.<br /> |
+| `Ready` | AIMTemplateStatusReady denotes that discovery succeeded and, if requested, caches are warmed.<br /> |
 | `Degraded` | AIMTemplateStatusDegraded denotes that the template is non-functional for some reason, for example that the cluster doesn't have the resources specified.<br /> |
 | `Failed` | AIMTemplateStatusFailed denotes a terminal failure for discovery or warm operations.<br /> |
-
-
-#### AimGpuSelector
-
-
-
-
-
-
-
-_Appears in:_
-- [AIMClusterServiceTemplateSpec](#aimclusterservicetemplatespec)
-- [AIMRuntimeParameters](#aimruntimeparameters)
-- [AIMServiceOverrides](#aimserviceoverrides)
-- [AIMServiceTemplateSpec](#aimservicetemplatespec)
-- [AIMServiceTemplateSpecCommon](#aimservicetemplatespeccommon)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `count` _integer_ | Count is the number of the GPU resources requested per replica |  | Minimum: 1 <br /> |
-| `model` _string_ | Model is the model name of the GPU that is supported by this template |  | MinLength: 1 <br /> |
 
 
 #### ImageMetadata
@@ -1220,7 +1271,7 @@ ImageMetadata contains metadata extracted from or provided for a container image
 
 
 _Appears in:_
-- [AIMImageStatus](#aimimagestatus)
+- [AIMModelStatus](#aimmodelstatus)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |

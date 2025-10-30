@@ -30,14 +30,15 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
 func TestResolveServiceRoutePath_ServiceOverride(t *testing.T) {
 	svc := newTestService()
 	svc.Labels["aim.silogen.ai/workload-id"] = "Workload-42"
 	svc.Spec.Routing = &aimv1alpha1.AIMServiceRouting{
-		Enabled:       true,
-		RouteTemplate: "/{.metadata.namespace}/{.metadata.labels['aim.silogen.ai/workload-id']}/",
+		Enabled:      boolPtr(true),
+		PathTemplate: "/{.metadata.namespace}/{.metadata.labels['aim.silogen.ai/workload-id']}/",
 	}
 
 	path, err := ResolveServiceRoutePath(svc, aimv1alpha1.AIMRuntimeConfigSpec{})
@@ -51,11 +52,14 @@ func TestResolveServiceRoutePath_ServiceOverride(t *testing.T) {
 
 func TestResolveServiceRoutePath_RuntimeConfigFallback(t *testing.T) {
 	svc := newTestService()
-	svc.Spec.Routing = &aimv1alpha1.AIMServiceRouting{Enabled: true}
+	svc.Spec.Routing = &aimv1alpha1.AIMServiceRouting{Enabled: boolPtr(true)}
+	svc.Status.ResolvedImage = &aimv1alpha1.AIMResolvedReference{
+		Name: "Meta/Llama-3-8B",
+	}
 	runtimeCfg := aimv1alpha1.AIMRuntimeConfigSpec{
 		AIMRuntimeConfigCommon: aimv1alpha1.AIMRuntimeConfigCommon{
 			Routing: &aimv1alpha1.AIMRuntimeRoutingConfig{
-				RouteTemplate: "/{.metadata.namespace}/{.spec.aimImageName}",
+				PathTemplate: "/{.metadata.namespace}/{.status.resolvedImage.name}",
 			},
 		},
 	}
@@ -75,8 +79,8 @@ func TestResolveServiceRoutePath_Annotation(t *testing.T) {
 		"route.suffix": "Team-A/B",
 	}
 	svc.Spec.Routing = &aimv1alpha1.AIMServiceRouting{
-		Enabled:       true,
-		RouteTemplate: "/{.metadata.annotations['route.suffix']}",
+		Enabled:      boolPtr(true),
+		PathTemplate: "/{.metadata.annotations['route.suffix']}",
 	}
 
 	path, err := ResolveServiceRoutePath(svc, aimv1alpha1.AIMRuntimeConfigSpec{})
@@ -104,8 +108,8 @@ func TestResolveServiceRoutePath_DefaultFallback(t *testing.T) {
 func TestResolveServiceRoutePath_MissingLabel(t *testing.T) {
 	svc := newTestService()
 	svc.Spec.Routing = &aimv1alpha1.AIMServiceRouting{
-		Enabled:       true,
-		RouteTemplate: "/{.metadata.labels['missing']}",
+		Enabled:      boolPtr(true),
+		PathTemplate: "/{.metadata.labels['missing']}",
 	}
 
 	_, err := ResolveServiceRoutePath(svc, aimv1alpha1.AIMRuntimeConfigSpec{})
@@ -125,8 +129,8 @@ func TestResolveServiceRoutePath_PathTooLong(t *testing.T) {
 	svc.Labels["segment-c"] = segment
 	svc.Labels["segment-d"] = segment
 	svc.Spec.Routing = &aimv1alpha1.AIMServiceRouting{
-		Enabled:       true,
-		RouteTemplate: "/{.metadata.labels['segment-a']}/{.metadata.labels['segment-b']}/{.metadata.labels['segment-c']}/{.metadata.labels['segment-d']}",
+		Enabled:      boolPtr(true),
+		PathTemplate: "/{.metadata.labels['segment-a']}/{.metadata.labels['segment-b']}/{.metadata.labels['segment-c']}/{.metadata.labels['segment-d']}",
 	}
 
 	_, err := ResolveServiceRoutePath(svc, aimv1alpha1.AIMRuntimeConfigSpec{})
@@ -141,8 +145,8 @@ func TestResolveServiceRoutePath_PathTooLong(t *testing.T) {
 func TestResolveServiceRoutePath_InvalidExpression(t *testing.T) {
 	svc := newTestService()
 	svc.Spec.Routing = &aimv1alpha1.AIMServiceRouting{
-		Enabled:       true,
-		RouteTemplate: "/{.metadata[}",
+		Enabled:      boolPtr(true),
+		PathTemplate: "/{.metadata[}",
 	}
 
 	_, err := ResolveServiceRoutePath(svc, aimv1alpha1.AIMRuntimeConfigSpec{})
@@ -165,8 +169,8 @@ func newTestService() *aimv1alpha1.AIMService {
 			},
 		},
 		Spec: aimv1alpha1.AIMServiceSpec{
-			AIMImageName: "Meta/Llama-3-8B",
-			TemplateRef:  "demo-template",
+			Model:       aimv1alpha1.AIMServiceModel{Ref: baseutils.Pointer("Meta/Llama-3-8B")},
+			TemplateRef: "demo-template",
 		},
 	}
 }

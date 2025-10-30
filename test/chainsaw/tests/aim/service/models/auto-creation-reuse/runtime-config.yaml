@@ -1,0 +1,8 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMRuntimeConfig
+metadata:
+  name: reuse-config
+spec:
+  model:
+    creationScope: Namespace
+    autoDiscovery: true

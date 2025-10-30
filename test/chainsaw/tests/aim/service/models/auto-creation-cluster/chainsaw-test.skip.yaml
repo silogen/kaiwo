@@ -1,0 +1,31 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: model-auto-creation-cluster
+spec:
+  description: Test automatic model creation from spec.model.image with cluster scope
+  concurrent: false
+  timeouts:
+    assert: 90s
+  steps:
+  - name: Create cluster runtime config for cluster-scoped model creation
+    try:
+    - apply:
+        file: cluster-runtime-config.yaml
+
+  - name: Create service with model.image (cluster scope)
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify auto-created cluster model exists
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterModel
+          metadata:
+            labels:
+              aim.silogen.ai/auto-created: "true"
+          spec:
+            image: ghcr.io/amd/mistral-7b-instruct:latest

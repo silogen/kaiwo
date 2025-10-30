@@ -1,0 +1,64 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: auto-select-filters-unavailable-gpus
+spec:
+  description: Test that auto-selection filters out templates with unavailable GPUs
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create cluster image
+    try:
+    - apply:
+        file: cluster-image.yaml
+
+  - name: Create both templates
+    try:
+    - apply:
+        file: template-h100.yaml
+    - apply:
+        file: template-mi300x.yaml
+
+  - name: Wait for MI300X template to become Available
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: test-filter-mi300x
+          status:
+            status: Ready
+
+  - name: Wait for H100 template to become NotAvailable
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: test-filter-h100
+          status:
+            status: NotAvailable
+
+  - name: Create service without templateRef
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service selected MI300X template (filtered out H100)
+    try:
+    - assert:
+        timeout: 10s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-filters-unavailable-service
+          status:
+            resolvedTemplate:
+              name: test-filter-mi300x
+              scope: Cluster
+            (conditions[?type == 'Resolved']):
+            - status: "True"
+              reason: Resolved
