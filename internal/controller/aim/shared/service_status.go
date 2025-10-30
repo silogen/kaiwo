@@ -532,12 +532,27 @@ func initializeStatusReferences(status *aimv1alpha1.AIMServiceStatus, obs *Servi
 	status.ResolvedRuntimeConfig = nil
 	status.ResolvedImage = nil
 	status.Routing = nil
+	status.ResolvedTemplateCache = nil
 
 	if obs != nil && obs.ResolvedRuntimeConfig != nil {
 		status.ResolvedRuntimeConfig = obs.ResolvedRuntimeConfig
 	}
 	if obs != nil && obs.ResolvedImage != nil {
 		status.ResolvedImage = obs.ResolvedImage
+	}
+	if obs != nil && obs.TemplateCache != nil {
+		status.ResolvedTemplateCache = &aimv1alpha1.AIMResolvedReference{
+			Name:      obs.TemplateCache.Name,
+			Namespace: obs.TemplateCache.Namespace,
+			Kind:      "AIMTemplateCache",
+			Scope: func() aimv1alpha1.AIMResolutionScope {
+				if obs.TemplateCache.Namespace != "" {
+					return aimv1alpha1.AIMResolutionScopeNamespace
+				}
+				return aimv1alpha1.AIMResolutionScopeCluster
+			}(),
+			UID: obs.TemplateCache.UID,
+		}
 	}
 }
 

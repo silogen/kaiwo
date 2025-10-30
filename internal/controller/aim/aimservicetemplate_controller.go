@@ -211,7 +211,7 @@ func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *ai
 				return nil, nil
 			}
 			var availableCaches aimv1alpha1.AIMTemplateCacheList
-			err := r.Client.List(ctx, &availableCaches)
+			err := r.List(ctx, &availableCaches)
 			if err != nil {
 				return nil, err
 			}
@@ -285,7 +285,7 @@ func (r *AIMServiceTemplateReconciler) plan(ctx context.Context, template *aimv1
 			}
 		}
 
-		//Caching is enabled, and didn't find ours - create one
+		// Caching is enabled, and didn't find ours - create one
 		if !cacheFound {
 			newCache := buildTemplateCache(template, obs.RuntimeConfig)
 			desired = append(desired, newCache)

@@ -443,6 +443,7 @@ _Appears in:_
 - [AIMServiceTemplateSpec](#aimservicetemplatespec)
 - [AIMServiceTemplateSpecCommon](#aimservicetemplatespeccommon)
 - [AIMServiceTemplateStatus](#aimservicetemplatestatus)
+- [AIMTemplateCacheSpec](#aimtemplatecachespec)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -982,6 +983,7 @@ _Appears in:_
 | `status` _[AIMServiceStatusEnum](#aimservicestatusenum)_ | Status represents the current high‑level status of the service lifecycle.<br />Values: `Pending`, `Starting`, `Running`, `Failed`, `Degraded`. | Pending | Enum: [Pending Starting Running Failed Degraded] <br /> |
 | `routing` _[AIMServiceRoutingStatus](#aimserviceroutingstatus)_ | Routing surfaces information about the configured HTTP routing, when enabled. |  |  |
 | `resolvedTemplate` _[AIMServiceResolvedTemplate](#aimserviceresolvedtemplate)_ | ResolvedTemplate captures metadata about the template that satisfied the reference. |  |  |
+| `resolvedTemplateCache` _[AIMResolvedReference](#aimresolvedreference)_ | ResolvedTemplateCache captures metadata about the template cache being used, if any. |  |  |
 
 
 #### AIMServiceStatusEnum
@@ -1179,7 +1181,9 @@ _Appears in:_
 | `templateRef` _string_ | TemplateRef is the name of the AIMServiceTemplate or AIMClusterServiceTemplate to cache.<br />The controller will first look for a namespace-scoped AIMServiceTemplate in the same namespace.<br />If not found, it will look for a cluster-scoped AIMClusterServiceTemplate with the same name.<br />Namespace-scoped templates take priority over cluster-scoped templates. |  | MinLength: 1 <br /> |
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to use for authentication when downloading models.<br />These variables are used for authentication with model registries (e.g., HuggingFace tokens). |  |  |
 | `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets references secrets for pulling AIM container images. |  |  |
-| `storageClassName` _string_ | StorageClassName is the name for the storage class to use for this cache |  |  |
+| `storageClassName` _string_ | StorageClassName is the name for the storage class to use for this cache<br />If not set the cluster default will be used |  |  |
+| `downloadImage` _string_ | The image that should be used to download the models<br />If not set the model cache controller will decide |  |  |
+| `modelSources` _[AIMModelSource](#aimmodelsource) array_ | ModelSources are set by the template that wants these cached |  |  |
 | `runtimeConfigName` _string_ | RuntimeConfigName references the AIM runtime configuration (by name) to use for this template cache. | default |  |
 
 

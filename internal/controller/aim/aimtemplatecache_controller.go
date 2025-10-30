@@ -29,14 +29,12 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 
 	"k8s.io/client-go/tools/record"
 
-	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
-	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
-	baseutils "github.com/silogen/kaiwo/pkg/utils"
-	"k8s.io/apimachinery/pkg/api/meta"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -46,6 +44,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
+	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
 // AIMModelCacheReconciler reconciles a AIMModelCache object
@@ -60,7 +62,6 @@ type AIMTemplateCacheReconciler struct {
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimtemplatecaches,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimtemplatecaches/status,verbs=get;update;patch
 func (r *AIMTemplateCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-
 	// Fetch CR
 	var tc aimv1alpha1.AIMTemplateCache
 	if err := r.Get(ctx, req.NamespacedName, &tc); err != nil {
@@ -100,7 +101,6 @@ func (r *AIMTemplateCacheReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		},
 		FinalizeFn: nil,
 	})
-
 }
 
 // observation holds read-only snapshot of dependent resources and derived flags
@@ -108,6 +108,8 @@ type templateCacheObservation struct {
 	AllCachesAvailable bool
 	MissingCaches      []aimv1alpha1.AIMModelSource
 	CacheStatus        map[string]aimv1alpha1.AIMModelCacheStatusEnum
+	TemplateNotFound   bool
+	TemplateError      string
 }
 
 func cmpModelCacheStatus(a aimv1alpha1.AIMModelCacheStatusEnum, b aimv1alpha1.AIMModelCacheStatusEnum) int {
@@ -125,26 +127,27 @@ func cmpModelCacheStatus(a aimv1alpha1.AIMModelCacheStatusEnum, b aimv1alpha1.AI
 
 func (r *AIMTemplateCacheReconciler) observe(ctx context.Context, tc *aimv1alpha1.AIMTemplateCache) (*templateCacheObservation, error) {
 	var obs templateCacheObservation
+	obs.CacheStatus = map[string]aimv1alpha1.AIMModelCacheStatusEnum{}
 
 	// Resolve the template reference to get model sources
 	modelSources, err := r.getModelSourcesFromTemplate(ctx, tc)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get model sources from template: %w", err)
+		// Template not found is a valid state - reflect it in the observation instead of returning an error
+		obs.TemplateNotFound = true
+		obs.TemplateError = err.Error()
+		return &obs, nil
 	}
 
 	// Fetch available caches in the namespace
-	var caches = aimv1alpha1.AIMModelCacheList{}
-	if err := r.Client.List(ctx, &caches, client.InNamespace(tc.Namespace)); err != nil {
+	caches := aimv1alpha1.AIMModelCacheList{}
+	if err := r.List(ctx, &caches, client.InNamespace(tc.Namespace)); err != nil {
 		return nil, err
 	}
-
-	obs.CacheStatus = map[string]aimv1alpha1.AIMModelCacheStatusEnum{}
 
 	// Loop through model sources from the template and check with what's available in our namespace
 	for _, model := range modelSources {
 		bestStatus := aimv1alpha1.AIMModelCacheStatusPending
 		for _, cached := range caches.Items {
-
 			// ModelCache is a match if it has the same SourceURI and a StorageClass matching our config
 			if cached.Spec.SourceURI == model.SourceURI &&
 				(tc.Spec.StorageClassName == "" || tc.Spec.StorageClassName == cached.Spec.StorageClassName) {
@@ -167,7 +170,7 @@ func (r *AIMTemplateCacheReconciler) observe(ctx context.Context, tc *aimv1alpha
 func (r *AIMTemplateCacheReconciler) getModelSourcesFromTemplate(ctx context.Context, tc *aimv1alpha1.AIMTemplateCache) ([]aimv1alpha1.AIMModelSource, error) {
 	// Try namespace-scoped template first
 	var nsTemplate aimv1alpha1.AIMServiceTemplate
-	err := r.Client.Get(ctx, client.ObjectKey{
+	err := r.Get(ctx, client.ObjectKey{
 		Namespace: tc.Namespace,
 		Name:      tc.Spec.TemplateRef,
 	}, &nsTemplate)
@@ -180,7 +183,7 @@ func (r *AIMTemplateCacheReconciler) getModelSourcesFromTemplate(ctx context.Con
 
 	// Try cluster-scoped template
 	var clusterTemplate aimv1alpha1.AIMClusterServiceTemplate
-	err = r.Client.Get(ctx, client.ObjectKey{
+	err = r.Get(ctx, client.ObjectKey{
 		Name: tc.Spec.TemplateRef,
 	}, &clusterTemplate)
 	if err == nil {
@@ -197,7 +200,9 @@ func BuildMissingModelCaches(tc *aimv1alpha1.AIMTemplateCache, obs *templateCach
 		// Sanitize the model name for use as a Kubernetes resource name
 		// The original model name (with capitalization) is preserved in SourceURI for matching
 		// Note: Don't add "-cache" suffix here as the ModelCache controller will add it when creating the PVC
-		sanitizedName := baseutils.MakeRFC1123Compliant(cache.Name)
+		// Replace dots with dashes first to ensure DNS-compliant names (dots cause warnings in Pod names)
+		nameWithoutDots := strings.ReplaceAll(cache.Name, ".", "-")
+		sanitizedName := baseutils.MakeRFC1123Compliant(nameWithoutDots)
 
 		caches = append(caches,
 			&aimv1alpha1.AIMModelCache{
@@ -221,7 +226,6 @@ func BuildMissingModelCaches(tc *aimv1alpha1.AIMTemplateCache, obs *templateCach
 }
 
 func (r *AIMTemplateCacheReconciler) plan(_ context.Context, tc *aimv1alpha1.AIMTemplateCache, obs *templateCacheObservation) (desired []client.Object, err error) {
-
 	for _, mc := range BuildMissingModelCaches(tc, obs) {
 		desired = append(desired, mc)
 	}
@@ -232,7 +236,7 @@ func (r *AIMTemplateCacheReconciler) plan(_ context.Context, tc *aimv1alpha1.AIM
 func (r *AIMTemplateCacheReconciler) projectStatus(_ context.Context, tc *aimv1alpha1.AIMTemplateCache, obs *templateCacheObservation, errs controllerutils.ReconcileErrors) (err error) {
 	var conditions []metav1.Condition
 
-	//Report any outstanding errors to report from previous controller actions
+	// Report any outstanding errors to report from previous controller actions
 	if errs.HasError() {
 
 		if errs.ObserveErr != nil {
@@ -254,18 +258,44 @@ func (r *AIMTemplateCacheReconciler) projectStatus(_ context.Context, tc *aimv1a
 		}
 	}
 
-	statusValues := slices.Collect(maps.Values(obs.CacheStatus))
-	worstCacheStatus := slices.MaxFunc(statusValues, cmpModelCacheStatus)
-	tc.Status.Status = aimv1alpha1.AIMTemplateCacheStatusEnum(worstCacheStatus)
+	// If observation failed, we can't determine cache status
+	if obs == nil {
+		for _, cond := range conditions {
+			meta.SetStatusCondition(&tc.Status.Conditions, cond)
+		}
+		tc.Status.Status = aimv1alpha1.AIMTemplateCacheStatusPending
+		return err
+	}
+
+	// Handle template not found as a condition
+	if obs.TemplateNotFound {
+		conditions = append(conditions, controllerutils.NewCondition(
+			controllerutils.ConditionTypeFailure,
+			metav1.ConditionTrue,
+			"TemplateNotFound",
+			obs.TemplateError,
+		))
+		tc.Status.Status = aimv1alpha1.AIMTemplateCacheStatusFailed
+		for _, cond := range conditions {
+			meta.SetStatusCondition(&tc.Status.Conditions, cond)
+		}
+		return err
+	}
+
+	// Set conditions before computing status
 	for _, cond := range conditions {
 		meta.SetStatusCondition(&tc.Status.Conditions, cond)
 	}
+
+	statusValues := slices.Collect(maps.Values(obs.CacheStatus))
+	worstCacheStatus := slices.MaxFunc(statusValues, cmpModelCacheStatus)
+	tc.Status.Status = aimv1alpha1.AIMTemplateCacheStatusEnum(worstCacheStatus)
 
 	if obs.AllCachesAvailable {
 		tc.Status.Status = aimv1alpha1.AIMTemplateCacheStatusAvailable
 	}
 
-	return
+	return err
 }
 
 func requestsFromTemplateCaches(templateCaches []aimv1alpha1.AIMTemplateCache) []reconcile.Request {
@@ -285,7 +315,6 @@ func requestsFromTemplateCaches(templateCaches []aimv1alpha1.AIMTemplateCache) [
 }
 
 func (r *AIMTemplateCacheReconciler) SetupWithManager(mgr ctrl.Manager) error {
-
 	modelCacheHandler := handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
 		modelCache, ok := obj.(*aimv1alpha1.AIMModelCache)
 		if !ok {

@@ -224,29 +224,214 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 
 	//
 
-	// If caching is enabled, observe template cache and available model caches for mounting
-	if service.Spec.CacheModel {
+	// Always check for template caches that can be used for this service
+	// This allows services to use pre-created caches even if cacheModel=false
+	if obs.TemplateName != "" {
 		templateCaches := aimv1alpha1.AIMTemplateCacheList{}
-		err := r.List(ctx, &templateCaches)
+		err := r.List(ctx, &templateCaches, client.InNamespace(service.Namespace))
 		if err != nil {
 			return nil, err
 		}
-		for _, templateCache := range templateCaches.Items {
-			if templateCache.Name == obs.TemplateName+"-tc" {
-				obs.TemplateCache = &templateCache
+
+		// Look for a template cache that matches our template
+		for _, tc := range templateCaches.Items {
+			if tc.Spec.TemplateRef == obs.TemplateName {
+				obs.TemplateCache = &tc
+				baseutils.Debug(logger, "Found template cache for service",
+					"cache", tc.Name,
+					"template", obs.TemplateName,
+					"status", tc.Status.Status)
+
+				// Fetch the model caches referenced by this template cache
+				if tc.Status.Status == aimv1alpha1.AIMTemplateCacheStatusAvailable ||
+					tc.Status.Status == aimv1alpha1.AIMTemplateCacheStatusProgressing {
+					modelCaches := aimv1alpha1.AIMModelCacheList{}
+					err = r.List(ctx, &modelCaches, client.InNamespace(service.Namespace))
+					if err != nil {
+						return nil, err
+					}
+					obs.ModelCaches = &modelCaches
+					baseutils.Debug(logger, "Found model caches for template cache",
+						"count", len(modelCaches.Items))
+				}
 				break
 			}
 		}
-
-		modelCaches := aimv1alpha1.AIMModelCacheList{}
-		err = r.List(ctx, &modelCaches)
-		if err != nil {
-			return nil, err
-		}
-		obs.ModelCaches = &modelCaches
 	}
 
 	return obs, nil
+}
+
+func (r *AIMServiceReconciler) planDerivedTemplate(logger logr.Logger, service *aimv1alpha1.AIMService, obs *shared.ServiceObservation) client.Object {
+	// Manage namespace-scoped template if we created it or need to create it.
+	if obs.ShouldCreateTemplate || (obs.Scope == shared.TemplateScopeNamespace && obs.TemplateOwnedByService) {
+		baseutils.Debug(logger, "Planning to manage derived template",
+			"shouldCreate", obs.ShouldCreateTemplate,
+			"ownedByService", obs.TemplateOwnedByService)
+		var baseSpec *aimv1alpha1.AIMServiceTemplateSpec
+		if obs.TemplateSpec != nil {
+			baseSpec = obs.TemplateSpec.DeepCopy()
+		}
+		// Get resolved model name from observation
+		resolvedModelName := ""
+		if obs.ResolvedImage != nil {
+			resolvedModelName = obs.ResolvedImage.Name
+		}
+		return shared.BuildDerivedTemplate(service, obs.TemplateName, resolvedModelName, baseSpec)
+	}
+	return nil
+}
+
+func (r *AIMServiceReconciler) planTemplateCache(ctx context.Context, logger logr.Logger, service *aimv1alpha1.AIMService, obs *shared.ServiceObservation) client.Object {
+	// Create template cache if service requests caching but none exists
+	// Only create for namespace-scoped templates (cluster templates need manual cache creation)
+	if service.Spec.CacheModel && obs.TemplateCache == nil && obs.TemplateAvailable &&
+		obs.Scope == shared.TemplateScopeNamespace && obs.TemplateStatus != nil && len(obs.TemplateStatus.ModelSources) > 0 {
+		baseutils.Debug(logger, "Service requests caching but no template cache exists, creating one",
+			"templateName", obs.TemplateName)
+
+		// Get the template to create owner reference
+		var template aimv1alpha1.AIMServiceTemplate
+		err := r.Get(ctx, client.ObjectKey{
+			Namespace: service.Namespace,
+			Name:      obs.TemplateName,
+		}, &template)
+		if err != nil {
+			baseutils.Debug(logger, "Failed to get template for cache creation", "error", err)
+			return nil
+		}
+
+		templateOwnerRef := metav1.OwnerReference{
+			APIVersion:         template.APIVersion,
+			Kind:               template.Kind,
+			Name:               template.Name,
+			UID:                template.UID,
+			Controller:         baseutils.Pointer(true),
+			BlockOwnerDeletion: baseutils.Pointer(true),
+		}
+
+		return &aimv1alpha1.AIMTemplateCache{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "aim.silogen.ai/v1alpha1",
+				Kind:       "AIMTemplateCache",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            obs.TemplateName + "-tc",
+				Namespace:       service.Namespace,
+				OwnerReferences: []metav1.OwnerReference{templateOwnerRef},
+			},
+			Spec: aimv1alpha1.AIMTemplateCacheSpec{
+				TemplateRef:      obs.TemplateName,
+				StorageClassName: obs.RuntimeConfigSpec.DefaultStorageClassName,
+				Env:              service.Spec.Env,
+			},
+		}
+	}
+	return nil
+}
+
+type cacheMount struct {
+	cache     aimv1alpha1.AIMModelCache
+	modelName string
+}
+
+func (r *AIMServiceReconciler) computeModelCacheMounts(service *aimv1alpha1.AIMService, obs *shared.ServiceObservation, templateState aimstate.TemplateState) ([]cacheMount, bool) {
+	modelsReady := templateState.ModelSource != nil
+	templateCacheReady := obs.TemplateCache != nil && obs.TemplateCache.Status.Status == aimv1alpha1.AIMTemplateCacheStatusAvailable
+
+	var modelCachesToMount []cacheMount
+	// If template cache is ready, use it regardless of whether cacheModel is set
+	if modelsReady && templateCacheReady {
+		// We know our models, verify that they are cached
+	SEARCH:
+		for _, model := range templateState.Status.ModelSources {
+			for _, modelCache := range obs.ModelCaches.Items {
+				// Select first modelCache that matches sourceURI and is Available
+				if model.SourceURI == modelCache.Spec.SourceURI && modelCache.Status.Status == aimv1alpha1.AIMModelCacheStatusAvailable {
+					modelCachesToMount = append(modelCachesToMount, cacheMount{
+						cache:     modelCache,
+						modelName: model.Name,
+					})
+					continue SEARCH
+				}
+			}
+			// We searched for an Available cache, but didn't find one
+			// If cacheModel is true, this is a failure (we need the cache)
+			// If cacheModel is false, we can fall back to downloading (models are still ready)
+			if service.Spec.CacheModel {
+				modelsReady = false
+			}
+		}
+	}
+
+	return modelCachesToMount, modelsReady
+}
+
+func (r *AIMServiceReconciler) planInferenceServiceAndRoute(logger logr.Logger, service *aimv1alpha1.AIMService, obs *shared.ServiceObservation, ownerRef metav1.OwnerReference) []client.Object {
+	var desired []client.Object
+
+	baseutils.Debug(logger, "Template is available, planning InferenceService")
+	routePath := shared.DefaultRoutePath(service)
+	if obs.PathTemplateErr == nil && obs.RoutePath != "" {
+		routePath = obs.RoutePath
+	}
+
+	templateState := aimstate.NewTemplateState(aimstate.TemplateState{
+		Name:              obs.TemplateName,
+		Namespace:         obs.TemplateNamespace,
+		SpecCommon:        obs.TemplateSpecCommon,
+		ImageResources:    obs.ImageResources,
+		RuntimeConfigSpec: obs.RuntimeConfigSpec,
+		Status:            obs.TemplateStatus,
+	})
+
+	serviceState := aimstate.NewServiceState(service, templateState, aimstate.ServiceStateOptions{
+		RuntimeName: obs.RuntimeName(),
+		RoutePath:   routePath,
+	})
+
+	// Compute model cache mounts
+	modelCachesToMount, modelsReady := r.computeModelCacheMounts(service, obs, templateState)
+	templateCacheReady := obs.TemplateCache != nil && obs.TemplateCache.Status.Status == aimv1alpha1.AIMTemplateCacheStatusAvailable
+
+	// Service is ready if:
+	// - Models are ready AND
+	// - Either we don't need caching OR cache is ready
+	serviceReady := modelsReady && (!service.Spec.CacheModel || templateCacheReady)
+
+	// Only create InferenceService if we have a model source and cache (discovery must have succeeded and populated ModelSources)
+	if serviceReady {
+		inferenceService := shared.BuildInferenceService(serviceState, ownerRef)
+
+		// If we have caches to mount, set the AIM_CACHE_PATH env var and mount them
+		if len(modelCachesToMount) > 0 {
+			inferenceService.Spec.Predictor.Model.Env = append(
+				inferenceService.Spec.Predictor.Model.Env,
+				v1.EnvVar{
+					Name:  "AIM_CACHE_PATH",
+					Value: AIMCacheBasePath,
+				})
+
+			for _, cm := range modelCachesToMount {
+				addModelCacheMount(inferenceService, cm.cache, cm.modelName)
+			}
+		}
+
+		desired = append(desired, inferenceService)
+	} else {
+		baseutils.Debug(logger, "Model source not available, skipping InferenceService creation")
+	}
+
+	// Create HTTPRoute if routing is enabled, regardless of model source availability
+	if serviceState.Routing.Enabled && serviceState.Routing.GatewayRef != nil && obs.PathTemplateErr == nil {
+		baseutils.Debug(logger, "Routing enabled, building HTTPRoute",
+			"gateway", serviceState.Routing.GatewayRef.Name,
+			"path", routePath)
+		route := shared.BuildInferenceServiceHTTPRoute(serviceState, ownerRef)
+		desired = append(desired, route)
+	}
+
+	return desired
 }
 
 func (r *AIMServiceReconciler) plan(ctx context.Context, service *aimv1alpha1.AIMService, obs *shared.ServiceObservation) []client.Object {
@@ -266,157 +451,20 @@ func (r *AIMServiceReconciler) plan(ctx context.Context, service *aimv1alpha1.AI
 		BlockOwnerDeletion: baseutils.Pointer(true),
 	}
 
-	// Manage namespace-scoped template if we created it or need to create it.
-	if obs.ShouldCreateTemplate || (obs.Scope == shared.TemplateScopeNamespace && obs.TemplateOwnedByService) {
-		baseutils.Debug(logger, "Planning to manage derived template",
-			"shouldCreate", obs.ShouldCreateTemplate,
-			"ownedByService", obs.TemplateOwnedByService)
-		var baseSpec *aimv1alpha1.AIMServiceTemplateSpec
-		if obs.TemplateSpec != nil {
-			baseSpec = obs.TemplateSpec.DeepCopy()
-		}
-		// Get resolved model name from observation
-		resolvedModelName := ""
-		if obs.ResolvedImage != nil {
-			resolvedModelName = obs.ResolvedImage.Name
-		}
-		template := shared.BuildDerivedTemplate(service, obs.TemplateName, resolvedModelName, baseSpec)
+	// Plan derived template if needed
+	if template := r.planDerivedTemplate(logger, service, obs); template != nil {
 		desired = append(desired, template)
 	}
 
-	// Create template cache if service requests caching but none exists
-	// Only create for namespace-scoped templates (cluster templates need manual cache creation)
-	if service.Spec.CacheModel && obs.TemplateCache == nil && obs.TemplateAvailable &&
-		obs.Scope == shared.TemplateScopeNamespace && obs.TemplateStatus != nil && len(obs.TemplateStatus.ModelSources) > 0 {
-		baseutils.Debug(logger, "Service requests caching but no template cache exists, creating one",
-			"templateName", obs.TemplateName)
-
-		// Get the template to create owner reference
-		var template aimv1alpha1.AIMServiceTemplate
-		err := r.Client.Get(ctx, client.ObjectKey{
-			Namespace: service.Namespace,
-			Name:      obs.TemplateName,
-		}, &template)
-		if err != nil {
-			baseutils.Debug(logger, "Failed to get template for cache creation", "error", err)
-		} else {
-			templateOwnerRef := metav1.OwnerReference{
-				APIVersion:         template.APIVersion,
-				Kind:               template.Kind,
-				Name:               template.Name,
-				UID:                template.UID,
-				Controller:         baseutils.Pointer(true),
-				BlockOwnerDeletion: baseutils.Pointer(true),
-			}
-
-			templateCache := &aimv1alpha1.AIMTemplateCache{
-				TypeMeta: metav1.TypeMeta{
-					APIVersion: "aim.silogen.ai/v1alpha1",
-					Kind:       "AIMTemplateCache",
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:            obs.TemplateName + "-tc",
-					Namespace:       service.Namespace,
-					OwnerReferences: []metav1.OwnerReference{templateOwnerRef},
-				},
-				Spec: aimv1alpha1.AIMTemplateCacheSpec{
-					TemplateRef:      obs.TemplateName,
-					StorageClassName: obs.RuntimeConfigSpec.DefaultStorageClassName,
-					Env:              service.Spec.Env,
-				},
-			}
-			desired = append(desired, templateCache)
-		}
+	// Plan template cache if needed
+	if templateCache := r.planTemplateCache(ctx, logger, service, obs); templateCache != nil {
+		desired = append(desired, templateCache)
 	}
 
-	// Only create/update the InferenceService once the template is available.
+	// Plan InferenceService and HTTPRoute if template is ready
 	if obs.TemplateAvailable && obs.RuntimeConfigErr == nil {
-		baseutils.Debug(logger, "Template is available, planning InferenceService")
-		routePath := shared.DefaultRoutePath(service)
-		if obs.PathTemplateErr == nil && obs.RoutePath != "" {
-			routePath = obs.RoutePath
-		}
-		templateState := aimstate.NewTemplateState(aimstate.TemplateState{
-			Name:              obs.TemplateName,
-			Namespace:         obs.TemplateNamespace,
-			SpecCommon:        obs.TemplateSpecCommon,
-			ImageResources:    obs.ImageResources,
-			RuntimeConfigSpec: obs.RuntimeConfigSpec,
-			Status:            obs.TemplateStatus,
-		})
-
-		serviceState := aimstate.NewServiceState(service, templateState, aimstate.ServiceStateOptions{
-			RuntimeName: obs.RuntimeName(),
-			RoutePath:   routePath,
-		})
-
-		modelsReady := templateState.ModelSource != nil
-		templateCacheReady := obs.TemplateCache != nil && obs.TemplateCache.Status.Status == aimv1alpha1.AIMTemplateCacheStatusAvailable
-
-		// Map to track modelCache -> modelName for proper mounting
-		type cacheMount struct {
-			cache     aimv1alpha1.AIMModelCache
-			modelName string
-		}
-		modelCachesToMount := []cacheMount{}
-		if modelsReady && service.Spec.CacheModel && templateCacheReady {
-			// We know our models, verify that they are cached
-		SEARCH:
-			for _, model := range templateState.Status.ModelSources {
-				for _, modelCache := range obs.ModelCaches.Items {
-					// Select first modelCache that matches sourceURI and is Available
-					if model.SourceURI == modelCache.Spec.SourceURI && modelCache.Status.Status == aimv1alpha1.AIMModelCacheStatusAvailable {
-						modelCachesToMount = append(modelCachesToMount, cacheMount{
-							cache:     modelCache,
-							modelName: model.Name,
-						})
-						continue SEARCH
-					}
-				}
-				// We searched for an Available cache, but didn't find one. models aren't ready for use
-				modelsReady = false
-			}
-		}
-
-		serviceReady := modelsReady && (!service.Spec.CacheModel || templateCacheReady)
-
-		// Only create InferenceService if we have a model source and cache (discovery must have succeeded and populated ModelSources)
-		if serviceReady {
-			serviceState := aimstate.NewServiceState(service, templateState, aimstate.ServiceStateOptions{
-				RuntimeName: obs.RuntimeName(),
-				RoutePath:   routePath,
-			})
-			inferenceService := shared.BuildInferenceService(serviceState, ownerRef)
-
-			// If we have caches to mount, set the AIM_CACHE_PATH env var and mount them
-			if len(modelCachesToMount) > 0 {
-				inferenceService.Spec.Predictor.Model.Env = append(
-					inferenceService.Spec.Predictor.Model.Env,
-					v1.EnvVar{
-						Name:  "AIM_CACHE_PATH",
-						Value: AIMCacheBasePath,
-					})
-
-				for _, cm := range modelCachesToMount {
-					addModelCacheMount(inferenceService, cm.cache, cm.modelName)
-				}
-			}
-
-			desired = append(desired, inferenceService)
-		} else {
-			baseutils.Debug(logger, "Model source not available, skipping InferenceService creation")
-		}
-
-		// Create HTTPRoute if routing is enabled, regardless of model source availability
-		if serviceState.Routing.Enabled && serviceState.Routing.GatewayRef != nil && obs.PathTemplateErr == nil {
-			baseutils.Debug(logger, "Routing enabled, building HTTPRoute",
-				"gateway", serviceState.Routing.GatewayRef.Name,
-				"path", routePath)
-			route := shared.BuildInferenceServiceHTTPRoute(serviceState, ownerRef)
-			desired = append(desired, route)
-		}
-		// If ModelSource is nil, the status projection will handle showing that discovery
-		// succeeded but produced no usable model sources.
+		isvcObjects := r.planInferenceServiceAndRoute(logger, service, obs, ownerRef)
+		desired = append(desired, isvcObjects...)
 	} else {
 		baseutils.Debug(logger, "Template not available or runtime config error, skipping InferenceService",
 			"templateAvailable", obs.TemplateAvailable,

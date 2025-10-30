@@ -4,6 +4,8 @@ metadata:
   name: integration-cache-precreated-private
 spec:
   description: Test that an AIMService can use pre-created template cache with network isolation, using private/gated HF model
+  # using a cluster model, so parallel for safety
+  concurrent: false
   steps:
   - name: Create runtime config
     try:
@@ -13,6 +15,7 @@ spec:
   - name: Create secrets
     try:
     - apply:
+        # Must exist in this folder
         file: secrets.yaml
 
   - name: Create cluster model
@@ -83,13 +86,13 @@ spec:
           kind: Pod
           metadata:
             labels:
-              serving.kserve.io/inferenceservice: integration-cache-precreated-private
+              aim.silogen.ai/service-name: integration-cache-precreated-private
           spec:
             (containers[?name == 'kserve-container']):
-              - (volumeMounts[?mountPath == '/workspace/model-cache/amd/Llama-3.1-1B-Instruct-FP8-KV']):
-                  - mountPath: /workspace/model-cache/amd/Llama-3.1-1B-Instruct-FP8-KV
-                (env[?name == 'AIM_CACHE_PATH']):
-                  - value: /workspace/model-cache
+            - (volumeMounts[?mountPath == '/workspace/model-cache/meta-llama/Llama-3.2-1B-Instruct']):
+              - mountPath: /workspace/model-cache/meta-llama/Llama-3.2-1B-Instruct
+              (env[?name == 'AIM_CACHE_PATH']):
+              - value: /workspace/model-cache
           status:
             phase: Running
 
