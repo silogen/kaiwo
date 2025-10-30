@@ -1,13 +1,11 @@
 apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMService
 metadata:
-  name: integration-cache-from-service-public
+  name: cache-svc-public
 spec:
   model:
-    ref: aim-meta-llama-llama-3-1-8b-instruct-0-7-0
-  # Explicitly specify the template ref to ensure the right cache gets used
-  templateRef: aim-meta-llama-llama-3-1-8b-instruct-0-7-1x-mi300x-lat-fp8-6729
-  runtimeConfigName: integration-cache-from-service-public
+    image: ghcr.io/silogen/aim-meta-llama-llama-3-1-8b-instruct:0.7.0
+  runtimeConfigName: cache-svc-public
   cacheModel: true
   routing:
     annotations:

@@ -284,6 +284,51 @@ func (r *AIMServiceReconciler) plan(ctx context.Context, service *aimv1alpha1.AI
 		desired = append(desired, template)
 	}
 
+	// Create template cache if service requests caching but none exists
+	// Only create for namespace-scoped templates (cluster templates need manual cache creation)
+	if service.Spec.CacheModel && obs.TemplateCache == nil && obs.TemplateAvailable &&
+		obs.Scope == shared.TemplateScopeNamespace && obs.TemplateStatus != nil && len(obs.TemplateStatus.ModelSources) > 0 {
+		baseutils.Debug(logger, "Service requests caching but no template cache exists, creating one",
+			"templateName", obs.TemplateName)
+
+		// Get the template to create owner reference
+		var template aimv1alpha1.AIMServiceTemplate
+		err := r.Client.Get(ctx, client.ObjectKey{
+			Namespace: service.Namespace,
+			Name:      obs.TemplateName,
+		}, &template)
+		if err != nil {
+			baseutils.Debug(logger, "Failed to get template for cache creation", "error", err)
+		} else {
+			templateOwnerRef := metav1.OwnerReference{
+				APIVersion:         template.APIVersion,
+				Kind:               template.Kind,
+				Name:               template.Name,
+				UID:                template.UID,
+				Controller:         baseutils.Pointer(true),
+				BlockOwnerDeletion: baseutils.Pointer(true),
+			}
+
+			templateCache := &aimv1alpha1.AIMTemplateCache{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "aim.silogen.ai/v1alpha1",
+					Kind:       "AIMTemplateCache",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            obs.TemplateName + "-tc",
+					Namespace:       service.Namespace,
+					OwnerReferences: []metav1.OwnerReference{templateOwnerRef},
+				},
+				Spec: aimv1alpha1.AIMTemplateCacheSpec{
+					TemplateRef:      obs.TemplateName,
+					StorageClassName: obs.RuntimeConfigSpec.DefaultStorageClassName,
+					Env:              service.Spec.Env,
+				},
+			}
+			desired = append(desired, templateCache)
+		}
+	}
+
 	// Only create/update the InferenceService once the template is available.
 	if obs.TemplateAvailable && obs.RuntimeConfigErr == nil {
 		baseutils.Debug(logger, "Template is available, planning InferenceService")
@@ -382,8 +427,9 @@ func (r *AIMServiceReconciler) plan(ctx context.Context, service *aimv1alpha1.AI
 }
 
 func addModelCacheMount(inferenceService *servingv1beta1.InferenceService, modelCache aimv1alpha1.AIMModelCache, modelName string) {
-	// Sanitize volume name to be RFC1123 compliant (max 63 chars, lowercase alphanumeric or '-')
+	// Sanitize volume name for Kubernetes (no dots allowed in volume names, only lowercase alphanumeric and '-')
 	volumeName := baseutils.MakeRFC1123Compliant(modelCache.Name)
+	volumeName = strings.ReplaceAll(volumeName, ".", "-")
 
 	// Add the PVC volume for the model cache
 	inferenceService.Spec.Predictor.Volumes = append(inferenceService.Spec.Predictor.Volumes, v1.Volume{

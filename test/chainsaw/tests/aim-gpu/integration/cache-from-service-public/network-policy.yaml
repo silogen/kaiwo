@@ -5,7 +5,7 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      serving.kserve.io/inferenceservice: integration-cache-from-service-public
+      aim.silogen.ai/service-name: cache-svc-public
   policyTypes:
   - Egress
   egress:

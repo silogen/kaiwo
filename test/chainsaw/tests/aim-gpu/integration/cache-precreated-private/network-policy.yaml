@@ -5,7 +5,7 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      serving.kserve.io/inferenceservice: integration-cache-precreated-private
+      aim.silogen.ai/service-name: integration-cache-precreated-private
   policyTypes:
   - Egress
   egress:

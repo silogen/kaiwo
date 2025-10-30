@@ -1,7 +1,7 @@
 apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMRuntimeConfig
 metadata:
-  name: integration-cache-from-service-public
+  name: cache-svc-public
 spec:
   defaultStorageClassName: "rwx-nfs"
   routing:

@@ -11,4 +11,3 @@ spec:
       secretKeyRef:
         name: hf-token
         key: token
-  # ModelSources are automatically fetched from the referenced template

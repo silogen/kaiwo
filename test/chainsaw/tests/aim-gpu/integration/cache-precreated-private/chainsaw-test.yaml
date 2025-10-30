@@ -15,20 +15,19 @@ spec:
     - apply:
         file: secrets.yaml
 
-  - name: Create service using image spec (to trigger template creation)
+  - name: Create cluster model
     try:
     - apply:
-        file: service.yaml
+        file: cluster-model.yaml
 
-  - name: Wait for auto-created template to be ready with model sources
+  - name: Wait for model to be ready
     try:
     - assert:
-        timeout: 10m
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMServiceTemplate
+          kind: AIMClusterModel
           metadata:
-            name: integration-cache-precreated-private
+            name: aim-meta-llama-llama-3-2-1b-instruct-0-7-0-preview
           status:
             status: Ready
 
@@ -54,10 +53,10 @@ spec:
     - apply:
         file: network-policy.yaml
 
-  - name: Update service to enable cacheModel
+  - name: Create service
     try:
     - apply:
-        file: service-with-cache.yaml
+        file: service.yaml
 
   - name: Verify service becomes ready despite network isolation
     try:
@@ -86,11 +85,11 @@ spec:
             labels:
               serving.kserve.io/inferenceservice: integration-cache-precreated-private
           spec:
-            containers:
-            - name: kserve-container
-              env:
-              - name: AIM_CACHE_PATH
-                value: /workspace/model-cache
+            (containers[?name == 'kserve-container']):
+              - (volumeMounts[?mountPath == '/workspace/model-cache/amd/Llama-3.1-1B-Instruct-FP8-KV']):
+                  - mountPath: /workspace/model-cache/amd/Llama-3.1-1B-Instruct-FP8-KV
+                (env[?name == 'AIM_CACHE_PATH']):
+                  - value: /workspace/model-cache
           status:
             phase: Running
 
