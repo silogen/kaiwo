@@ -20,7 +20,7 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMTemplateCache
           metadata:
-            name: aimdummy-template-tc
+            name: aimdummy-template
             ownerReferences:
               - name: aimdummy-template
           spec:
@@ -35,7 +35,7 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMTemplateCache
           metadata:
-            name: aimdummy-template-tc
+            name: aimdummy-template
           status:
             status: Available
 

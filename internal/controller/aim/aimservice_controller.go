@@ -317,7 +317,7 @@ func (r *AIMServiceReconciler) planTemplateCache(ctx context.Context, logger log
 				Kind:       "AIMTemplateCache",
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            obs.TemplateName + "-tc",
+				Name:            obs.TemplateName,
 				Namespace:       service.Namespace,
 				OwnerReferences: []metav1.OwnerReference{templateOwnerRef},
 			},

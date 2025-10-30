@@ -47,7 +47,7 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMTemplateCache
           metadata:
-            name: integration-cache-precreated-private-tc
+            name: integration-cache-precreated-private
           status:
             status: Available
 

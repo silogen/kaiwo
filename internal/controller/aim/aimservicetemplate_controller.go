@@ -301,7 +301,7 @@ func buildTemplateCache(template *aimv1alpha1.AIMServiceTemplate, runtimeConfigR
 	return &aimv1alpha1.AIMTemplateCache{
 		TypeMeta: metav1.TypeMeta{APIVersion: "aimv1alpha1", Kind: "AIMModelCache"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      template.Name + "-tc",
+			Name:      template.Name,
 			Namespace: template.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				{

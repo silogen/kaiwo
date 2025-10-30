@@ -23,7 +23,7 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMTemplateCache
           metadata:
-            name: aim-meta-llama-llama-3-1-8b-instruct-0-7-1x-mi300x-lat-fp8-8d3e-tc
+            name: aim-meta-llama-llama-3-1-8b-instruct-0-7-1x-mi300x-lat-fp8-8d3e
           status:
             status: Available
 
@@ -61,10 +61,10 @@ spec:
               serving.kserve.io/inferenceservice: cache-svc-public
           spec:
             (containers[?name == 'kserve-container']):
-              - (volumeMounts[?mountPath == '/workspace/model-cache/amd/Llama-3.1-8B-Instruct-FP8-KV']):
-                  - mountPath: /workspace/model-cache/amd/Llama-3.1-8B-Instruct-FP8-KV
-                (env[?name == 'AIM_CACHE_PATH']):
-                  - value: /workspace/model-cache
+            - (volumeMounts[?mountPath == '/workspace/model-cache/amd/Llama-3.1-8B-Instruct-FP8-KV']):
+              - mountPath: /workspace/model-cache/amd/Llama-3.1-8B-Instruct-FP8-KV
+              (env[?name == 'AIM_CACHE_PATH']):
+              - value: /workspace/model-cache
           status:
             phase: Running
 
