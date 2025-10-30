@@ -6,7 +6,7 @@ spec:
   defaultStorageClassName: "rwx-nfs"
 ---
 apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMImage
+kind: AIMModel
 metadata:
   name: aimdummy-model
 spec:
@@ -25,7 +25,7 @@ kind: AIMServiceTemplate
 metadata:
   name: aimdummy-template
 spec:
-  aimImageName: aimdummy-model
+  modelName: aimdummy-model
   runtimeConfigName: aimdummy-rc
   metric: latency
   caching:
@@ -38,7 +38,8 @@ metadata:
   labels:
     team: red 
 spec:
-  aimImageName: aimdummy-model
+  model: 
+    ref: aimdummy-model
   templateRef: aimdummy-template
   cacheModel: true
   replicas: 1
@@ -47,4 +48,4 @@ spec:
     gatewayRef:
       name: inference-gateway
       namespace: gateways
-    routeTemplate: "/{.metadata.namespace}/{.metadata.labels['team']}/chat"
+    pathTemplate: "/{.metadata.namespace}/{.metadata.labels['team']}/chat"
