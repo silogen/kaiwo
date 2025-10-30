@@ -26,7 +26,6 @@ spec:
         args: ["server", "/data"]
         resources:
           limits:
-            cpu: "1"
             memory: "1Gi"
           requests:
             cpu: "1"

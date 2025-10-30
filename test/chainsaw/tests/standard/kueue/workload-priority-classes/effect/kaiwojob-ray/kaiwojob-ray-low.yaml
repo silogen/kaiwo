@@ -12,7 +12,6 @@ spec:
       cpu: "1000m"
       memory: "1.5Gi"
     limits:
-      cpu: "1000m"
       memory: "1.5Gi"
   image: rayproject/ray:2.41.0
   entrypoint: |

@@ -51,7 +51,7 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 Selector labels
 */}}
 {{- define "kaiwo.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "kaiwo.name" . }}
+app.kubernetes.io/name: "kaiwo"
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 

@@ -70,7 +70,6 @@ spec:
                   name: workload
                   resources:
                     limits:
-                      cpu: "32"
                       memory: 256Gi
                       nvidia.com/gpu: "8"
                     requests:
@@ -192,7 +191,6 @@ spec:
                   name: workload
                   resources:
                     limits:
-                      cpu: "2"
                       memory: 16Gi
                     requests:
                       cpu: "2"

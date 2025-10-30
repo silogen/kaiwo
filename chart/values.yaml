@@ -49,7 +49,7 @@ rbac:
 # Webhook Configuration
 webhooks:
   # Enable webhook admission controllers
-  enabled: true
+  enabled: false
 
 # Scheduler Configuration
 scheduler:

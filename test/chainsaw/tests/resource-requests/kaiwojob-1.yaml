@@ -6,7 +6,6 @@ spec:
   user: test@amd.com
   resources:
     limits:
-      cpu: 1
       memory: 2Gi
     requests:
       cpu: 1

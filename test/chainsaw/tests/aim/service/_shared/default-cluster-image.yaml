@@ -12,7 +12,6 @@ spec:
     limits:
       memory: 2Gi
       #amd.com/gpu: '1'
-      cpu: '2'
     requests:
       cpu: '100m'
       memory: 1Gi

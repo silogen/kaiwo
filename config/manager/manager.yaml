@@ -81,6 +81,8 @@ spec:
           value: "15s"
         - name: RESOURCE_MONITORING_PROMETHEUS_ENDPOINT
           value: "http://prometheus-k8s.monitoring.svc.cluster.local:9090"
+        - name: DISABLE_WEBHOOKS
+          value: "true"  # Set to "true" to disable webhooks
 
         name: manager
         ports: []

@@ -50,7 +50,6 @@ spec:
                 cpu: "100m"
                 memory: "100Mi"
               limits:
-                cpu: "100m"
                 memory: "100Mi"
             # Readiness probe that checks for the health file
             readinessProbe:

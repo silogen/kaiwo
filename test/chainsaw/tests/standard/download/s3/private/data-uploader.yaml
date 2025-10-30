@@ -59,7 +59,6 @@ spec:
         image: ghcr.io/silogen/kaiwo-python:0.5
         resources:
           limits:
-            cpu: "1"
             memory: "1Gi"
           requests:
             cpu: "1"

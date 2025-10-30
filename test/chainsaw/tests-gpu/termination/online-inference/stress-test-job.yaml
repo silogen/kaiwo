@@ -16,7 +16,6 @@ spec:
             cpu: 200m
             memory: 2Gi
           limits:
-            cpu: 200m
             memory: 2Gi
         args:
         - /scripts/stress-test.sh
