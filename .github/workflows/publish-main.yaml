@@ -2,7 +2,7 @@ name: publish-main
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, fix-helm-publish]
     # paths:
     #   - 'apis/**'
     #   - 'internal/**'
@@ -98,35 +98,77 @@ jobs:
       run: |
         set -euo pipefail
 
+        get_sha() {
+          local dst="$1"
+          local tmp; tmp="$(mktemp)"
+          local code
+          code="$(curl -sS -H "Authorization: Bearer ${GH_TOKEN}" \
+                        -H "Accept: application/vnd.github+json" \
+                        -o "$tmp" -w '%{http_code}' \
+                        "https://api.github.com/repos/${GH_REPO}/contents/${dst}?ref=${GH_BRANCH}")"
+          if [ "$code" = "200" ]; then
+            jq -r '.sha // empty' < "$tmp"
+          else
+            echo ""
+          fi
+          rm -f "$tmp"
+        }
+
+        put_file() {
+          local dst="$1" payload="$2"
+          local http
+          http="$(curl -sS -o /tmp/resp.json -w '%{http_code}' \
+            -X PUT \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" \
+            --data-binary @"$payload" \
+            "https://api.github.com/repos/${GH_REPO}/contents/${dst}" || true)"
+          echo "$http"
+        }
+
         commit_file () {
           local SRC="$1" DST="$2" MSG="$3"
 
-          # get current sha if file exists (needed for updates)
-          SHA="$(curl -fsS -H "Authorization: token ${GH_TOKEN}" \
-                https://api.github.com/repos/${GH_REPO}/contents/${DST}?ref=${GH_BRANCH} \
-                | jq -r '.sha // empty' || true)"
+          # get file sha if it exists
+          local SHA; SHA="$(get_sha "$DST")"
+          local CONTENT_B64; CONTENT_B64="$(base64 -w0 < "${SRC}")"
 
-          CONTENT_B64="$(base64 -w0 < "${SRC}")"
-
-          curl -fsS -X PUT \
-            -H "Authorization: token ${GH_TOKEN}" \
-            -H "Content-Type: application/json" \
-            "https://api.github.com/repos/${GH_REPO}/contents/${DST}" \
-            -d @- <<EOF
-          {
-            "message": "${MSG}",
-            "content": "${CONTENT_B64}",
-            "branch": "${GH_BRANCH}",
-            "committer": {
-              "name": "github-actions[bot]",
-              "email": "41898282+github-actions[bot]@users.noreply.github.com"
-            },
-            "author": {
-              "name": "github-actions[bot]",
-              "email": "41898282+github-actions[bot]@users.noreply.github.com"
-            }$( [ -n "${SHA}" ] && printf ', "sha": "%s"' "${SHA}" )
-          }
+          local payload; payload="$(mktemp)"
+          cat >"$payload" <<EOF
+        {
+          "message": "${MSG}",
+          "content": "${CONTENT_B64}",
+          "branch": "${GH_BRANCH}",
+          "committer": {
+            "name": "github-actions[bot]",
+            "email": "41898282+github-actions[bot]@users.noreply.github.com"
+          },
+          "author": {
+            "name": "github-actions[bot]",
+            "email": "41898282+github-actions[bot]@users.noreply.github.com"
+          }$( [ -n "${SHA}" ] && printf ', "sha": "%s"' "${SHA}" )
+        }
         EOF
+
+          # try once
+          http="$(put_file "$DST" "$payload")"
+          if [ "$http" = "409" ]; then
+            # branch advanced / file updated between calls: re-fetch SHA and retry once
+            SHA="$(get_sha "$DST")"
+            if [ -n "$SHA" ]; then
+              jq --arg sha "$SHA" '. + {sha: $sha}' "$payload" > "${payload}.2"
+              mv "${payload}.2" "$payload"
+            fi
+            http="$(put_file "$DST" "$payload")"
+          fi
+
+          if [ "$http" != "200" ] && [ "$http" != "201" ]; then
+            echo "GitHub API error ($http) while uploading $DST:" >&2
+            cat /tmp/resp.json >&2 || true
+            exit 22
+          fi
+          rm -f "$payload" /tmp/resp.json || true
         }
 
         # files to publish
@@ -139,12 +181,12 @@ jobs:
 
         test -f "${TGZ_SRC}" || { echo "Missing ${TGZ_SRC}"; exit 1; }
         [ -f "${VER_SRC}" ] || echo "${CHART_VERSION}" > "${VER_SRC}"
-        # ensure README exists
-        [ -f "${README_SRC}" ] || echo "Local chart version ${CHART_VERSION} based on main branch. This is not intended for production use. Do not confuse this with [official releases](https://github.com/silogen/kaiwo/releases)" > "${README_SRC}"
+        [ -f "${README_SRC}" ] || echo "Local chart version ${CHART_VERSION} based on main branch. This is not intended for production use. Do not confuse this with official releases." > "${README_SRC}"
 
         MSG="Update local Helm chart to ${CHART_VERSION}"
         commit_file "${TGZ_SRC}"    "${TGZ_DST}"    "${MSG}"
         commit_file "${VER_SRC}"    "${VER_DST}"    "${MSG}"
         commit_file "${README_SRC}" "${README_DST}" "${MSG}"
+
 
 
