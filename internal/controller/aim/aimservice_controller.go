@@ -27,6 +27,7 @@ package aim
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -60,6 +61,8 @@ import (
 const (
 	aimServiceFieldOwner       = "aim-service-controller"
 	aimServiceTemplateIndexKey = ".spec.templateRef"
+	// AIMCacheBasePath is the base directory where AIM expects to find cached models
+	AIMCacheBasePath = "/workspace/model-cache"
 )
 
 // AIMServiceReconciler reconciles AIMService resources into KServe InferenceServices.
@@ -223,8 +226,8 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 
 	// If caching is enabled, observe template cache and available model caches for mounting
 	if service.Spec.CacheModel {
-		var templateCaches = aimv1alpha1.AIMTemplateCacheList{}
-		err := r.Client.List(ctx, &templateCaches)
+		templateCaches := aimv1alpha1.AIMTemplateCacheList{}
+		err := r.List(ctx, &templateCaches)
 		if err != nil {
 			return nil, err
 		}
@@ -235,8 +238,8 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 			}
 		}
 
-		var modelCaches = aimv1alpha1.AIMModelCacheList{}
-		err = r.Client.List(ctx, &modelCaches)
+		modelCaches := aimv1alpha1.AIMModelCacheList{}
+		err = r.List(ctx, &modelCaches)
 		if err != nil {
 			return nil, err
 		}
@@ -302,10 +305,15 @@ func (r *AIMServiceReconciler) plan(ctx context.Context, service *aimv1alpha1.AI
 			RoutePath:   routePath,
 		})
 
-		var modelsReady = templateState.ModelSource != nil
-		var templateCacheReady = obs.TemplateCache != nil && obs.TemplateCache.Status.Status == aimv1alpha1.AIMTemplateCacheStatusAvailable
+		modelsReady := templateState.ModelSource != nil
+		templateCacheReady := obs.TemplateCache != nil && obs.TemplateCache.Status.Status == aimv1alpha1.AIMTemplateCacheStatusAvailable
 
-		var modelCachesToMount = []aimv1alpha1.AIMModelCache{}
+		// Map to track modelCache -> modelName for proper mounting
+		type cacheMount struct {
+			cache     aimv1alpha1.AIMModelCache
+			modelName string
+		}
+		modelCachesToMount := []cacheMount{}
 		if modelsReady && service.Spec.CacheModel && templateCacheReady {
 			// We know our models, verify that they are cached
 		SEARCH:
@@ -313,17 +321,19 @@ func (r *AIMServiceReconciler) plan(ctx context.Context, service *aimv1alpha1.AI
 				for _, modelCache := range obs.ModelCaches.Items {
 					// Select first modelCache that matches sourceURI and is Available
 					if model.SourceURI == modelCache.Spec.SourceURI && modelCache.Status.Status == aimv1alpha1.AIMModelCacheStatusAvailable {
-						modelCachesToMount = append(modelCachesToMount, modelCache)
+						modelCachesToMount = append(modelCachesToMount, cacheMount{
+							cache:     modelCache,
+							modelName: model.Name,
+						})
 						continue SEARCH
 					}
 				}
 				// We searched for an Available cache, but didn't find one. models aren't ready for use
 				modelsReady = false
 			}
-
 		}
 
-		var serviceReady = modelsReady && (!service.Spec.CacheModel || templateCacheReady)
+		serviceReady := modelsReady && (!service.Spec.CacheModel || templateCacheReady)
 
 		// Only create InferenceService if we have a model source and cache (discovery must have succeeded and populated ModelSources)
 		if serviceReady {
@@ -332,9 +342,21 @@ func (r *AIMServiceReconciler) plan(ctx context.Context, service *aimv1alpha1.AI
 				RoutePath:   routePath,
 			})
 			inferenceService := shared.BuildInferenceService(serviceState, ownerRef)
-			for _, modelCache := range modelCachesToMount {
-				addModelCacheMount(inferenceService, modelCache)
+
+			// If we have caches to mount, set the AIM_CACHE_PATH env var and mount them
+			if len(modelCachesToMount) > 0 {
+				inferenceService.Spec.Predictor.Model.Env = append(
+					inferenceService.Spec.Predictor.Model.Env,
+					v1.EnvVar{
+						Name:  "AIM_CACHE_PATH",
+						Value: AIMCacheBasePath,
+					})
+
+				for _, cm := range modelCachesToMount {
+					addModelCacheMount(inferenceService, cm.cache, cm.modelName)
+				}
 			}
+
 			desired = append(desired, inferenceService)
 		} else {
 			baseutils.Debug(logger, "Model source not available, skipping InferenceService creation")
@@ -359,8 +381,8 @@ func (r *AIMServiceReconciler) plan(ctx context.Context, service *aimv1alpha1.AI
 	return desired
 }
 
-func addModelCacheMount(inferenceService *servingv1beta1.InferenceService, modelCache aimv1alpha1.AIMModelCache) {
-
+func addModelCacheMount(inferenceService *servingv1beta1.InferenceService, modelCache aimv1alpha1.AIMModelCache, modelName string) {
+	// Add the PVC volume for the model cache
 	inferenceService.Spec.Predictor.Volumes = append(inferenceService.Spec.Predictor.Volumes, v1.Volume{
 		Name: modelCache.Name,
 		VolumeSource: v1.VolumeSource{
@@ -370,14 +392,16 @@ func addModelCacheMount(inferenceService *servingv1beta1.InferenceService, model
 		},
 	})
 
-	// Remove any protocol specifier
-	mountPath := strings.Split(modelCache.Spec.SourceURI, "://")[1]
+	// Mount at the AIM cache base path + model name (using filepath.Join for safe path construction)
+	// e.g., /workspace/model-cache/meta-llama/Llama-3.1-8B
+	mountPath := filepath.Join(AIMCacheBasePath, modelName)
 
-	inferenceService.Spec.Predictor.Model.PredictorExtensionSpec.Container.VolumeMounts = append(inferenceService.Spec.Predictor.Model.PredictorExtensionSpec.Container.VolumeMounts, v1.VolumeMount{
-		Name:      modelCache.Name,
-		MountPath: "/mnt/models/" + mountPath,
-	})
-
+	inferenceService.Spec.Predictor.Model.VolumeMounts = append(
+		inferenceService.Spec.Predictor.Model.VolumeMounts,
+		v1.VolumeMount{
+			Name:      modelCache.Name,
+			MountPath: mountPath,
+		})
 }
 
 func (r *AIMServiceReconciler) projectStatus(
@@ -521,7 +545,6 @@ func (r *AIMServiceReconciler) clusterTemplateHandlerFunc() handler.MapFunc {
 }
 
 func (r *AIMServiceReconciler) templateCacheHandlerFunc() handler.MapFunc {
-
 	return func(ctx context.Context, obj client.Object) []reconcile.Request {
 		templateCache, ok := obj.(*aimv1alpha1.AIMTemplateCache)
 		if !ok {
