@@ -34,6 +34,7 @@ import (
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -214,6 +215,9 @@ func (r *AIMTemplateCacheReconciler) projectStatus(_ context.Context, tc *aimv1a
 	statusValues := slices.Collect(maps.Values(obs.CacheStatus))
 	worstCacheStatus := slices.MaxFunc(statusValues, cmpModelCacheStatus)
 	tc.Status.Status = aimv1alpha1.AIMTemplateCacheStatusEnum(worstCacheStatus)
+	for _, cond := range conditions {
+		meta.SetStatusCondition(&tc.Status.Conditions, cond)
+	}
 
 	if obs.AllCachesAvailable {
 		tc.Status.Status = aimv1alpha1.AIMTemplateCacheStatusAvailable
