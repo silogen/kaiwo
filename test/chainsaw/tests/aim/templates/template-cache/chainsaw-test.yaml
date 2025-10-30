@@ -55,9 +55,13 @@ spec:
             labels:
               serving.kserve.io/inferenceservice: smollm-chat
           spec:
-            containers:
-            - name: kserve-container
-              volumeMounts:
+            (containers[?name == 'kserve-container']):
+            - env:
+              - name: AIM_MODEL_ID
+                value: smol2-135m
+              - name: VLLM_ENABLE_METRICS
+                value: "true"
+              (volumeMounts[?name == 'smol2-135m-cache']):
               - mountPath: /mnt/models/HuggingFaceTB/SmolLM2-135M
                 name: smol2-135m-cache
           status:
