@@ -1,7 +1,7 @@
 apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMRuntimeConfig
 metadata:
-  name: aimdummy-rc
+  name: default
 spec:
   defaultStorageClassName: "rwx-nfs"
 ---
@@ -26,7 +26,6 @@ metadata:
   name: aimdummy-template
 spec:
   modelName: aimdummy-model
-  runtimeConfigName: aimdummy-rc
   metric: latency
   caching:
     enabled: true

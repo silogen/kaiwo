@@ -395,10 +395,14 @@ func (r *AIMServiceReconciler) planInferenceServiceAndRoute(logger logr.Logger, 
 	modelCachesToMount, modelsReady := r.computeModelCacheMounts(service, obs, templateState)
 	templateCacheReady := obs.TemplateCache != nil && obs.TemplateCache.Status.Status == aimv1alpha1.AIMTemplateCacheStatusAvailable
 
-	// Determine if we need a service PVC (when no template cache exists)
+	// Determine if we need a service PVC
+	// Only create service PVC if:
+	// 1. cacheModel is false (service doesn't want to wait for template cache) AND
+	// 2. No template cache exists (no pre-created cache available to use)
+	// This prevents creating temp PVCs when cacheModel=true or when a cache already exists
 	var servicePVC *v1.PersistentVolumeClaim
 	var servicePVCErr error
-	if obs.TemplateCache == nil {
+	if !service.Spec.CacheModel && obs.TemplateCache == nil {
 		servicePVC, servicePVCErr = buildServicePVC(service, templateState, obs.RuntimeConfigSpec.DefaultStorageClassName)
 		if servicePVCErr != nil {
 			baseutils.Debug(logger, "Failed to build service PVC", "error", servicePVCErr)
