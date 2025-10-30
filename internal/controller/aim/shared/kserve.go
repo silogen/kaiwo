@@ -26,6 +26,9 @@ package shared
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -43,8 +46,8 @@ import (
 )
 
 const (
-	// amdGPUResourceName is the resource name for AMD GPUs in Kubernetes
-	amdGPUResourceName corev1.ResourceName = "amd.com/gpu"
+	// DefaultGPUResourceName is the default resource name for AMD GPUs in Kubernetes
+	DefaultGPUResourceName = "amd.com/gpu"
 
 	// DefaultSharedMemorySize is the default size allocated for /dev/shm in inference containers.
 	// This is required for efficient inter-process communication in model serving workloads.
@@ -85,6 +88,61 @@ func sanitizeLabelValue(s string) string {
 	return sanitized
 }
 
+// GenerateInferenceServiceName creates a KServe InferenceService name that fits DNS label constraints.
+// KServe creates hostnames in the format: {isvc-name}-predictor-{namespace}
+// These hostnames must be ≤ 63 characters to comply with DNS label limits.
+//
+// If the original name would exceed the limit, this function:
+// 1. Truncates the base name
+// 2. Appends an 8-character hash of the full original name
+// 3. Ensures the result is RFC1123 compliant
+//
+// The hash ensures uniqueness while keeping names deterministic and short.
+func GenerateInferenceServiceName(serviceName, namespace string) string {
+	const (
+		// DNS label maximum length per RFC1123
+		maxDNSLabelLength = 63
+		// KServe adds "-predictor" to the ISVC name
+		kserveSuffix = "-predictor"
+		// Length of hash suffix we'll use (8 chars + 1 for hyphen)
+		hashSuffixLength = 9
+	)
+
+	// Calculate how much space we have for the ISVC name
+	// Format: {isvc-name}-predictor-{namespace}
+	maxISVCNameLength := maxDNSLabelLength - len(kserveSuffix) - len(namespace) - 1 // -1 for the hyphen before namespace
+
+	// If the service name fits, use it as-is
+	if len(serviceName) <= maxISVCNameLength {
+		return serviceName
+	}
+
+	// Otherwise, truncate and add a hash suffix for uniqueness
+	// Reserve space for the hash suffix
+	maxPrefixLength := maxISVCNameLength - hashSuffixLength
+	if maxPrefixLength < 1 {
+		// Edge case: namespace is so long we can barely fit anything
+		// Use just the hash
+		maxPrefixLength = 1
+	}
+
+	// Truncate the service name
+	prefix := serviceName
+	if len(prefix) > maxPrefixLength {
+		prefix = prefix[:maxPrefixLength]
+	}
+
+	// Generate a deterministic hash from the full service name
+	hash := sha256.Sum256([]byte(serviceName))
+	hashStr := hex.EncodeToString(hash[:])[:8]
+
+	// Combine prefix and hash
+	result := fmt.Sprintf("%s-%s", prefix, hashStr)
+
+	// Ensure RFC1123 compliance (handles edge cases like trailing hyphens)
+	return baseutils.MakeRFC1123Compliant(result)
+}
+
 // BuildClusterServingRuntime creates a KServe ClusterServingRuntime for a cluster-scoped template.
 func BuildClusterServingRuntime(template aimstate.TemplateState, ownerRef metav1.OwnerReference) *servingv1alpha1.ClusterServingRuntime {
 	runtime := &servingv1alpha1.ClusterServingRuntime{
@@ -120,7 +178,7 @@ func buildServingRuntimeObjectMeta(template aimstate.TemplateState, ownerRef met
 			"app.kubernetes.io/name":       LabelValueRuntimeName,
 			"app.kubernetes.io/component":  LabelValueRuntimeComponent,
 			"app.kubernetes.io/managed-by": LabelValueManagedBy,
-			LabelKeyModelID:                sanitizeLabelValue(template.SpecCommon.AIMImageName),
+			LabelKeyModelID:                sanitizeLabelValue(template.SpecCommon.ModelName),
 		},
 		OwnerReferences: []metav1.OwnerReference{ownerRef},
 	}
@@ -132,14 +190,27 @@ func buildServingRuntimeObjectMeta(template aimstate.TemplateState, ownerRef met
 	return meta
 }
 
+// getGPUResourceName returns the GPU resource name from the template's gpuSelector.
+// If the ResourceName is specified in gpuSelector, it will be used.
+// Otherwise, the default value of "amd.com/gpu" is returned.
+func getGPUResourceName(template aimstate.TemplateState) corev1.ResourceName {
+	if template.SpecCommon.GpuSelector != nil && template.SpecCommon.GpuSelector.ResourceName != "" {
+		return corev1.ResourceName(template.SpecCommon.GpuSelector.ResourceName)
+	}
+	return corev1.ResourceName(DefaultGPUResourceName)
+}
+
 func buildServingRuntimeSpec(template aimstate.TemplateState) servingv1alpha1.ServingRuntimeSpec {
 	dshmSizeLimit := resource.MustParse(DefaultSharedMemorySize)
 
-	// Determine model ID: prefer ModelSource.Name, fall back to AIMImageName
-	modelID := template.SpecCommon.AIMImageName
-	if template.ModelSource != nil {
-		modelID = template.ModelSource.Name
-	}
+	// Determine model ID: prefer ModelSource.Name, fall back to ModelName
+	//modelID := template.SpecCommon.ModelName
+	//if template.ModelSource != nil {
+	//	modelID = template.ModelSource.Name
+	//}
+
+	// Get the GPU resource name from the template, or use the default
+	gpuResourceName := getGPUResourceName(template)
 
 	return servingv1alpha1.ServingRuntimeSpec{
 		// The AIM containers handle downloading themselves
@@ -159,10 +230,10 @@ func buildServingRuntimeSpec(template aimstate.TemplateState) servingv1alpha1.Se
 					Name:  "kserve-container",
 					Image: template.Image,
 					Env: []corev1.EnvVar{
-						{
-							Name:  "AIM_MODEL_ID",
-							Value: modelID,
-						},
+						//{
+						//	Name:  "AIM_MODEL_ID",
+						//	Value: modelID,
+						//},
 						{
 							Name:  "VLLM_ENABLE_METRICS",
 							Value: "true",
@@ -170,10 +241,10 @@ func buildServingRuntimeSpec(template aimstate.TemplateState) servingv1alpha1.Se
 					},
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
-							"amd.com/gpu": *resource.NewQuantity(int64(template.Status.Profile.Metadata.GPUCount), resource.DecimalSI),
+							gpuResourceName: *resource.NewQuantity(int64(template.Status.Profile.Metadata.GPUCount), resource.DecimalSI),
 						},
 						Limits: corev1.ResourceList{
-							"amd.com/gpu": *resource.NewQuantity(int64(template.Status.Profile.Metadata.GPUCount), resource.DecimalSI),
+							gpuResourceName: *resource.NewQuantity(int64(template.Status.Profile.Metadata.GPUCount), resource.DecimalSI),
 						},
 					},
 					Ports: []corev1.ContainerPort{
@@ -223,7 +294,8 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 		"app.kubernetes.io/managed-by": LabelValueManagedBy,
 		LabelKeyTemplate:               serviceState.Template.Name,
 		LabelKeyModelID:                sanitizeLabelValue(serviceState.ModelID),
-		LabelKeyImageName:              sanitizeLabelValue(serviceState.Template.SpecCommon.AIMImageName),
+		LabelKeyImageName:              sanitizeLabelValue(serviceState.Template.SpecCommon.ModelName),
+		LabelKeyServiceName:            sanitizeLabelValue(serviceState.Name),
 	}
 	for k, v := range systemLabels {
 		labels[k] = v
@@ -235,7 +307,7 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 			Kind:       "InferenceService",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            serviceState.Name,
+			Name:            GenerateInferenceServiceName(serviceState.Name, serviceState.Namespace),
 			Namespace:       serviceState.Namespace,
 			Annotations:     serviceState.Metadata.Annotations,
 			Labels:          labels,
@@ -284,27 +356,30 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 }
 
 func resolveServiceResources(serviceState aimstate.ServiceState) corev1.ResourceRequirements {
-	var resolved corev1.ResourceRequirements
+	gpuCount := templateGPUCount(serviceState.Template)
+
+	resolved := defaultResourceRequirementsForGPU(gpuCount)
 
 	if serviceState.Resources != nil {
-		resolved = *serviceState.Resources.DeepCopy()
+		resolved = mergeResourceRequirements(resolved, serviceState.Resources)
 	}
 
-	if gpuCount := templateGPUCount(serviceState.Template); gpuCount > 0 {
+	if gpuCount > 0 {
+		gpuResourceName := getGPUResourceName(serviceState.Template)
 		if resolved.Requests == nil {
 			resolved.Requests = corev1.ResourceList{}
 		}
 		if resolved.Limits == nil {
 			resolved.Limits = corev1.ResourceList{}
 		}
-		if _, ok := resolved.Requests[amdGPUResourceName]; !ok {
+		if _, ok := resolved.Requests[gpuResourceName]; !ok {
 			if qty := resource.NewQuantity(gpuCount, resource.DecimalSI); qty != nil {
-				resolved.Requests[amdGPUResourceName] = *qty
+				resolved.Requests[gpuResourceName] = *qty
 			}
 		}
-		if _, ok := resolved.Limits[amdGPUResourceName]; !ok {
+		if _, ok := resolved.Limits[gpuResourceName]; !ok {
 			if qty := resource.NewQuantity(gpuCount, resource.DecimalSI); qty != nil {
-				resolved.Limits[amdGPUResourceName] = *qty
+				resolved.Limits[gpuResourceName] = *qty
 			}
 		}
 	}
@@ -321,6 +396,63 @@ func templateGPUCount(template aimstate.TemplateState) int64 {
 		return 0
 	}
 	return int64(gpuCount)
+}
+
+func defaultResourceRequirementsForGPU(gpuCount int64) corev1.ResourceRequirements {
+	if gpuCount <= 0 {
+		return corev1.ResourceRequirements{}
+	}
+
+	requests := corev1.ResourceList{
+		corev1.ResourceCPU:    *resource.NewQuantity(gpuCount*4, resource.DecimalSI),
+		corev1.ResourceMemory: quantityGi(gpuCount * 32),
+	}
+
+	limits := corev1.ResourceList{
+		corev1.ResourceMemory: quantityGi(gpuCount * 48),
+	}
+
+	return corev1.ResourceRequirements{
+		Requests: requests,
+		Limits:   limits,
+	}
+}
+
+func mergeResourceRequirements(base corev1.ResourceRequirements, override *corev1.ResourceRequirements) corev1.ResourceRequirements {
+	if override == nil {
+		return base
+	}
+
+	if len(override.Requests) > 0 {
+		if base.Requests == nil {
+			base.Requests = corev1.ResourceList{}
+		}
+		for name, qty := range override.Requests {
+			base.Requests[name] = qty.DeepCopy()
+		}
+	}
+
+	if len(override.Limits) > 0 {
+		if base.Limits == nil {
+			base.Limits = corev1.ResourceList{}
+		}
+		for name, qty := range override.Limits {
+			base.Limits[name] = qty.DeepCopy()
+		}
+	}
+
+	if override.Claims != nil {
+		base.Claims = append([]corev1.ResourceClaim{}, override.Claims...)
+	}
+
+	return base
+}
+
+func quantityGi(value int64) resource.Quantity {
+	if value <= 0 {
+		return resource.Quantity{}
+	}
+	return resource.MustParse(fmt.Sprintf("%dGi", value))
 }
 
 // GetClusterServingRuntime fetches a ClusterServingRuntime by name

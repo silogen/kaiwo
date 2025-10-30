@@ -37,6 +37,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 )
@@ -57,28 +58,52 @@ type TemplateResolution struct {
 	BaseName  string
 	FinalName string
 	Derived   bool
+	Scope     TemplateScope
+}
+
+// TemplateSelectionStatus captures metadata about automatic template selection.
+type TemplateSelectionStatus struct {
+	AutoSelected              bool
+	CandidateCount            int
+	SelectionReason           string
+	SelectionMessage          string
+	TemplatesExistButNotReady bool
+	ImageReady                bool
+	ImageReadyReason          string
+	ImageReadyMessage         string
+	ModelResolutionErr        error
 }
 
 // ServiceObservation holds observed state for an AIMService reconciliation.
 type ServiceObservation struct {
-	TemplateName           string
-	BaseTemplateName       string
-	Scope                  TemplateScope
-	TemplateAvailable      bool
-	TemplateOwnedByService bool
-	ShouldCreateTemplate   bool
-	RuntimeConfigSpec      aimv1alpha1.AIMRuntimeConfigSpec
-	ResolvedRuntimeConfig  *aimv1alpha1.AIMResolvedRuntimeConfig
-	ResolvedImage          *aimv1alpha1.AIMResolvedReference
-	RoutePath              string
-	RouteTemplateErr       error
-	RuntimeConfigErr       error
-	ImageErr               error
-	TemplateStatus         *aimv1alpha1.AIMServiceTemplateStatus
-	TemplateSpecCommon     aimv1alpha1.AIMServiceTemplateSpecCommon
-	TemplateSpec           *aimv1alpha1.AIMServiceTemplateSpec
-	TemplateNamespace      string
-	ImageResources         *corev1.ResourceRequirements
+	TemplateName                  string
+	BaseTemplateName              string
+	Scope                         TemplateScope
+	AutoSelectedTemplate          bool
+	TemplateAvailable             bool
+	TemplateOwnedByService        bool
+	ShouldCreateTemplate          bool
+	RuntimeConfigSpec             aimv1alpha1.AIMRuntimeConfigSpec
+	ResolvedRuntimeConfig         *aimv1alpha1.AIMResolvedRuntimeConfig
+	ResolvedImage                 *aimv1alpha1.AIMResolvedReference
+	RoutePath                     string
+	PathTemplateErr               error
+	RuntimeConfigErr              error
+	ImageErr                      error
+	ModelResolutionErr            error
+	TemplateStatus                *aimv1alpha1.AIMServiceTemplateStatus
+	TemplateSpecCommon            aimv1alpha1.AIMServiceTemplateSpecCommon
+	TemplateSpec                  *aimv1alpha1.AIMServiceTemplateSpec
+	TemplateNamespace             string
+	ImageResources                *corev1.ResourceRequirements
+	TemplateSelectionReason       string
+	TemplateSelectionMessage      string
+	TemplateSelectionCount        int
+	TemplatesExistButNotReady     bool // True when templates exist but aren't Available yet
+	ImageReady                    bool
+	ImageReadyReason              string
+	ImageReadyMessage             string
+	InferenceServicePodImageError *ImagePullError // Categorized image pull error from InferenceService pods
 }
 
 // TemplateFound returns true if a template was resolved (namespace or cluster scope).
@@ -98,35 +123,126 @@ func (o *ServiceObservation) RuntimeName() string {
 // It handles default template lookup, base template resolution, and derived template naming.
 // Returns an empty BaseName/FinalName if no template can be resolved, which indicates
 // the service should enter a degraded state.
-func ResolveTemplateNameForService(ctx context.Context, k8sClient client.Client, service *aimv1alpha1.AIMService) (TemplateResolution, error) {
+func ResolveTemplateNameForService(
+	ctx context.Context,
+	k8sClient client.Client,
+	service *aimv1alpha1.AIMService,
+) (TemplateResolution, TemplateSelectionStatus, error) {
 	var res TemplateResolution
+	status := TemplateSelectionStatus{ImageReady: true}
 
 	baseName := strings.TrimSpace(service.Spec.TemplateRef)
-	if baseName == "" {
-		defaultTemplate, err := LookupDefaultServiceTemplate(ctx, k8sClient, service)
-		if err != nil {
-			return res, err
-		}
-		baseName = defaultTemplate
-		// If no default template is found, baseName remains empty.
-		// The controller will handle this by entering a degraded state.
-	}
-
-	res.BaseName = baseName
-	res.Derived = service.Spec.Overrides != nil
-
-	if res.Derived && baseName != "" {
-		suffix := OverridesSuffix(service.Spec.Overrides)
-		if suffix != "" {
-			res.FinalName = DerivedTemplateName(baseName, suffix)
+	if baseName != "" {
+		res.BaseName = baseName
+		res.Derived = service.Spec.Overrides != nil
+		if res.Derived {
+			suffix := OverridesSuffix(service.Spec.Overrides)
+			if suffix != "" {
+				res.FinalName = DerivedTemplateName(baseName, suffix)
+			} else {
+				res.FinalName = baseName
+			}
 		} else {
 			res.FinalName = baseName
 		}
-	} else {
-		res.FinalName = baseName
+		return res, status, nil
 	}
 
-	return res, nil
+	status.AutoSelected = true
+
+	// Resolve model name from service.Spec.Model (ref or image)
+	imageName, err := resolveModelNameFromService(ctx, k8sClient, service)
+	if err != nil {
+		status.ModelResolutionErr = err
+		return res, status, nil
+	}
+
+	if imageName == "" {
+		status.ImageReady = false
+		status.ImageReadyReason = aimv1alpha1.AIMServiceReasonModelNotFound
+		status.ImageReadyMessage = "No model specified in service spec"
+		return res, status, nil
+	}
+
+	ready, _, reason, message, err := evaluateImageReadiness(ctx, k8sClient, service.Namespace, imageName)
+	if err != nil {
+		return res, status, err
+	}
+
+	status.ImageReady = ready
+	status.ImageReadyReason = reason
+	status.ImageReadyMessage = message
+
+	if !ready {
+		return res, status, nil
+	}
+
+	candidates, err := listTemplateCandidatesForImage(ctx, k8sClient, service.Namespace, imageName)
+	if err != nil {
+		return res, status, err
+	}
+
+	availableGPUs, err := ListAvailableGPUs(ctx, k8sClient)
+	if err != nil {
+		return res, status, fmt.Errorf("failed to list available GPUs: %w", err)
+	}
+
+	// When auto-selecting, don't filter by overrides - we're selecting a base template
+	// to potentially derive from. The derived template will have the overrides applied.
+	selected, count := SelectBestTemplate(candidates, nil, availableGPUs)
+	status.CandidateCount = count
+
+	if count != 1 {
+		if count == 0 {
+			// Check if any templates exist at all (regardless of availability)
+			if len(candidates) == 0 {
+				// No templates exist at all - this is a failure
+				status.SelectionReason = aimv1alpha1.AIMServiceReasonTemplateNotFound
+				status.SelectionMessage = fmt.Sprintf("No templates found for image %q", imageName)
+				return res, status, nil
+			}
+
+			// Templates exist but selection returned 0 - check why
+			// Count how many are Available vs other statuses
+			availableCount := 0
+			for _, c := range candidates {
+				if c.Status.Status == aimv1alpha1.AIMTemplateStatusReady {
+					availableCount++
+				}
+			}
+
+			if availableCount == 0 {
+				// Templates exist but none are Available yet - service should wait
+				status.TemplatesExistButNotReady = true
+				status.SelectionReason = ""
+				status.SelectionMessage = ""
+			} else {
+				// Templates are Available but don't match overrides/GPU requirements
+				status.SelectionReason = aimv1alpha1.AIMServiceReasonTemplateNotFound
+				status.SelectionMessage = fmt.Sprintf("No available templates match the service requirements for image %q", imageName)
+			}
+		} else {
+			status.SelectionReason = aimv1alpha1.AIMServiceReasonTemplateSelectionAmbiguous
+			status.SelectionMessage = fmt.Sprintf("Multiple templates (%d) satisfy image %q", count, imageName)
+		}
+		return res, status, nil
+	}
+
+	res.BaseName = selected.Name
+	res.Scope = selected.Scope
+	res.Derived = service.Spec.Overrides != nil
+	if res.Derived {
+		suffix := OverridesSuffix(service.Spec.Overrides)
+		if suffix != "" {
+			res.FinalName = DerivedTemplateName(selected.Name, suffix)
+		} else {
+			res.FinalName = selected.Name
+		}
+	} else {
+		res.FinalName = selected.Name
+	}
+
+	return res, status, nil
 }
 
 // OverridesSuffix computes a hash suffix for service overrides.
@@ -168,34 +284,174 @@ func DerivedTemplateName(baseName, suffix string) string {
 	return fmt.Sprintf("%s%s", trimmed, extra)
 }
 
-// LookupDefaultServiceTemplate searches for a default template name from the service's AIMImage or AIMClusterImage.
-func LookupDefaultServiceTemplate(ctx context.Context, k8sClient client.Client, service *aimv1alpha1.AIMService) (string, error) {
-	imageName := strings.TrimSpace(service.Spec.AIMImageName)
-	if imageName == "" {
-		return "", nil
+// resolveModelNameFromService resolves the model name from service.Spec.Model
+// If Model.Ref is specified, returns it directly.
+// If Model.Image is specified, searches for or creates a model with that image.
+func resolveModelNameFromService(
+	ctx context.Context,
+	k8sClient client.Client,
+	service *aimv1alpha1.AIMService,
+) (string, error) {
+	// Check Model.Ref
+	if service.Spec.Model.Ref != nil && *service.Spec.Model.Ref != "" {
+		return strings.TrimSpace(*service.Spec.Model.Ref), nil
 	}
 
-	if service.Namespace != "" {
-		var nsImage aimv1alpha1.AIMImage
-		if err := k8sClient.Get(ctx, client.ObjectKey{Name: imageName, Namespace: service.Namespace}, &nsImage); err == nil {
-			if tpl := strings.TrimSpace(nsImage.Spec.DefaultServiceTemplate); tpl != "" {
-				return tpl, nil
-			}
-		} else if !apierrors.IsNotFound(err) {
-			return "", fmt.Errorf("failed to get AIMImage %s/%s: %w", service.Namespace, imageName, err)
+	// Check Model.Image
+	if service.Spec.Model.Image != nil && *service.Spec.Model.Image != "" {
+		imageURI := strings.TrimSpace(*service.Spec.Model.Image)
+
+		// Resolve runtime config to get model creation settings
+		runtimeConfigResolution, err := ResolveRuntimeConfig(ctx, k8sClient, service.Namespace, service.Spec.RuntimeConfigName)
+		if err != nil {
+			// If runtime config resolution fails, use defaults
+			// This allows services to work without a runtime config present
+			runtimeConfigResolution = nil
 		}
-	}
 
-	var clusterImage aimv1alpha1.AIMClusterImage
-	if err := k8sClient.Get(ctx, client.ObjectKey{Name: imageName}, &clusterImage); err == nil {
-		if tpl := strings.TrimSpace(clusterImage.Spec.DefaultServiceTemplate); tpl != "" {
-			return tpl, nil
+		var runtimeConfig *aimv1alpha1.AIMRuntimeConfigSpec
+		if runtimeConfigResolution != nil {
+			runtimeConfig = &runtimeConfigResolution.EffectiveSpec
 		}
-	} else if !apierrors.IsNotFound(err) {
-		return "", fmt.Errorf("failed to get AIMClusterImage %s: %w", imageName, err)
+
+		// Use service's imagePullSecrets and serviceAccountName for auto-created model
+		imagePullSecrets := service.Spec.ImagePullSecrets
+		serviceAccountName := service.Spec.ServiceAccountName
+
+		// Resolve or create model from image
+		modelName, _, err := ResolveOrCreateModelFromImage(ctx, k8sClient, service.Namespace, imageURI, runtimeConfig, imagePullSecrets, serviceAccountName)
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve/create model from image %q: %w", imageURI, err)
+		}
+
+		return modelName, nil
 	}
 
+	// Neither ref nor image specified (should be caught by CEL validation)
 	return "", nil
+}
+
+// checkModelStatus evaluates a model's status and returns readiness information
+func checkModelStatus(status aimv1alpha1.AIMModelStatusEnum, scope TemplateScope, kind, imageName string) (bool, TemplateScope, string, string) {
+	switch status {
+	case aimv1alpha1.AIMModelStatusReady:
+		return true, scope, "", ""
+	case aimv1alpha1.AIMModelStatusPending:
+		return false, scope, "ModelPending",
+			fmt.Sprintf("%s %q is pending discovery", kind, imageName)
+	case aimv1alpha1.AIMModelStatusProgressing:
+		return false, scope, "ModelProgressing",
+			fmt.Sprintf("%s %q is running discovery", kind, imageName)
+	case aimv1alpha1.AIMModelStatusFailed:
+		return false, scope, "ModelFailed",
+			fmt.Sprintf("%s %q failed discovery", kind, imageName)
+	case aimv1alpha1.AIMModelStatusDegraded:
+		return false, scope, "ModelDegraded",
+			fmt.Sprintf("%s %q is degraded", kind, imageName)
+	case "":
+		// Model status not yet initialized - treat as pending
+		return false, scope, "ModelPending",
+			fmt.Sprintf("%s %q status not yet initialized", kind, imageName)
+	default:
+		return false, scope, "ModelNotReady",
+			fmt.Sprintf("%s %q is %s", kind, imageName, status)
+	}
+}
+
+func evaluateImageReadiness(
+	ctx context.Context,
+	k8sClient client.Client,
+	namespace string,
+	imageName string,
+) (bool, TemplateScope, string, string, error) {
+	logger := log.FromContext(ctx)
+
+	if imageName == "" {
+		return false, TemplateScopeNone, aimv1alpha1.AIMServiceReasonModelNotFound, "Model name is empty", nil
+	}
+
+	if namespace != "" {
+		var nsModel aimv1alpha1.AIMModel
+		err := k8sClient.Get(ctx, client.ObjectKey{Name: imageName, Namespace: namespace}, &nsModel)
+		switch {
+		case err == nil:
+			ready, scope, reason, message := checkModelStatus(nsModel.Status.Status, TemplateScopeNamespace, "AIMModel", imageName)
+			return ready, scope, reason, message, nil
+		case apierrors.IsNotFound(err):
+			logger.V(1).Info("AIMModel not found, checking cluster scope", "model", imageName, "namespace", namespace)
+			// fall through to cluster scope
+		default:
+			return false, TemplateScopeNone, "", "", fmt.Errorf("failed to get AIMModel %s/%s: %w", namespace, imageName, err)
+		}
+	}
+
+	var clusterModel aimv1alpha1.AIMClusterModel
+	err := k8sClient.Get(ctx, client.ObjectKey{Name: imageName}, &clusterModel)
+	switch {
+	case err == nil:
+		ready, scope, reason, message := checkModelStatus(clusterModel.Status.Status, TemplateScopeCluster, "AIMClusterModel", imageName)
+		return ready, scope, reason, message, nil
+	case apierrors.IsNotFound(err):
+		logger.V(1).Info("Model not found", "model", imageName)
+		return false, TemplateScopeNone, aimv1alpha1.AIMServiceReasonModelNotFound,
+			fmt.Sprintf("No AIMModel or AIMClusterModel found for %q", imageName), nil
+	default:
+		return false, TemplateScopeNone, "", "", fmt.Errorf("failed to get AIMClusterModel %s: %w", imageName, err)
+	}
+}
+
+func listTemplateCandidatesForImage(
+	ctx context.Context,
+	k8sClient client.Client,
+	namespace string,
+	imageName string,
+) ([]TemplateCandidate, error) {
+	candidates := make([]TemplateCandidate, 0)
+
+	if namespace != "" {
+		var templateList aimv1alpha1.AIMServiceTemplateList
+		if err := k8sClient.List(ctx, &templateList, client.InNamespace(namespace)); err != nil {
+			return nil, fmt.Errorf("failed to list AIMServiceTemplates in namespace %q: %w", namespace, err)
+		}
+		for i := range templateList.Items {
+			tpl := &templateList.Items[i]
+			if tpl.Spec.ModelName != imageName {
+				continue
+			}
+			if IsDerivedTemplate(tpl.GetLabels()) {
+				continue
+			}
+			candidates = append(candidates, TemplateCandidate{
+				Name:      tpl.Name,
+				Namespace: tpl.Namespace,
+				Scope:     TemplateScopeNamespace,
+				Spec:      tpl.Spec.AIMServiceTemplateSpecCommon,
+				Status:    tpl.Status,
+			})
+		}
+	}
+
+	var clusterTemplateList aimv1alpha1.AIMClusterServiceTemplateList
+	if err := k8sClient.List(ctx, &clusterTemplateList); err != nil {
+		return nil, fmt.Errorf("failed to list AIMClusterServiceTemplates: %w", err)
+	}
+	for i := range clusterTemplateList.Items {
+		tpl := &clusterTemplateList.Items[i]
+		if tpl.Spec.ModelName != imageName {
+			continue
+		}
+		if IsDerivedTemplate(tpl.GetLabels()) {
+			continue
+		}
+		candidates = append(candidates, TemplateCandidate{
+			Name:   tpl.Name,
+			Scope:  TemplateScopeCluster,
+			Spec:   tpl.Spec.AIMServiceTemplateSpecCommon,
+			Status: tpl.Status,
+		})
+	}
+
+	return candidates, nil
 }
 
 // LoadBaseTemplateSpec fetches the base template spec for a derived template.
@@ -236,14 +492,14 @@ func PopulateObservationFromNamespaceTemplate(
 	obs *ServiceObservation,
 ) error {
 	obs.Scope = TemplateScopeNamespace
-	obs.TemplateAvailable = template.Status.Status == aimv1alpha1.AIMTemplateStatusAvailable
+	obs.TemplateAvailable = template.Status.Status == aimv1alpha1.AIMTemplateStatusReady
 	obs.TemplateOwnedByService = HasOwnerReference(template.GetOwnerReferences(), service.UID) ||
 		IsDerivedTemplate(template.GetLabels())
 	if template.Status.ResolvedRuntimeConfig != nil {
 		obs.ResolvedRuntimeConfig = template.Status.ResolvedRuntimeConfig
 	}
-	if template.Status.ResolvedImage != nil {
-		obs.ResolvedImage = template.Status.ResolvedImage
+	if template.Status.ResolvedModel != nil {
+		obs.ResolvedImage = template.Status.ResolvedModel
 	}
 	obs.TemplateStatus = template.Status.DeepCopy()
 	obs.TemplateSpecCommon = template.Spec.AIMServiceTemplateSpecCommon
@@ -263,12 +519,12 @@ func PopulateObservationFromNamespaceTemplate(
 		}
 	}
 	obs.TemplateNamespace = template.Namespace
-	if image, imageErr := LookupImageForNamespaceTemplate(ctx, k8sClient, template.Namespace, template.Spec.AIMImageName); imageErr == nil {
+	if image, imageErr := LookupImageForNamespaceTemplate(ctx, k8sClient, template.Namespace, template.Spec.ModelName); imageErr == nil {
 		obs.ImageResources = image.Resources.DeepCopy()
 	} else if errors.Is(imageErr, ErrImageNotFound) {
-		obs.ImageErr = fmt.Errorf("AIMImage %q not found in namespace %q", template.Spec.AIMImageName, template.Namespace)
+		obs.ImageErr = fmt.Errorf("AIMModel %q not found in namespace %q", template.Spec.ModelName, template.Namespace)
 	} else {
-		return fmt.Errorf("failed to lookup AIMImage %q in namespace %q: %w", template.Spec.AIMImageName, template.Namespace, imageErr)
+		return fmt.Errorf("failed to lookup AIMModel %q in namespace %q: %w", template.Spec.ModelName, template.Namespace, imageErr)
 	}
 	return nil
 }
@@ -282,12 +538,12 @@ func PopulateObservationFromClusterTemplate(
 	obs *ServiceObservation,
 ) error {
 	obs.Scope = TemplateScopeCluster
-	obs.TemplateAvailable = template.Status.Status == aimv1alpha1.AIMTemplateStatusAvailable
+	obs.TemplateAvailable = template.Status.Status == aimv1alpha1.AIMTemplateStatusReady
 	if template.Status.ResolvedRuntimeConfig != nil {
 		obs.ResolvedRuntimeConfig = template.Status.ResolvedRuntimeConfig
 	}
-	if template.Status.ResolvedImage != nil {
-		obs.ResolvedImage = template.Status.ResolvedImage
+	if template.Status.ResolvedModel != nil {
+		obs.ResolvedImage = template.Status.ResolvedModel
 	}
 	obs.TemplateStatus = template.Status.DeepCopy()
 	obs.TemplateSpecCommon = template.Spec.AIMServiceTemplateSpecCommon
@@ -306,12 +562,12 @@ func PopulateObservationFromClusterTemplate(
 	} else {
 		return fmt.Errorf("failed to resolve AIMRuntimeConfig %q in namespace %q: %w", runtimeConfigName, service.Namespace, resolveErr)
 	}
-	if image, imageErr := LookupImageForClusterTemplate(ctx, k8sClient, template.Spec.AIMImageName); imageErr == nil {
+	if image, imageErr := LookupImageForClusterTemplate(ctx, k8sClient, template.Spec.ModelName); imageErr == nil {
 		obs.ImageResources = image.Resources.DeepCopy()
 	} else if errors.Is(imageErr, ErrImageNotFound) {
-		obs.ImageErr = fmt.Errorf("AIMClusterImage %q not found", template.Spec.AIMImageName)
+		obs.ImageErr = fmt.Errorf("AIMClusterModel %q not found", template.Spec.ModelName)
 	} else {
-		return fmt.Errorf("failed to lookup AIMClusterImage %q: %w", template.Spec.AIMImageName, imageErr)
+		return fmt.Errorf("failed to lookup AIMClusterModel %q: %w", template.Spec.ModelName, imageErr)
 	}
 	return nil
 }
@@ -351,7 +607,13 @@ func ObserveDerivedTemplate(
 			return err
 		}
 
-		match, matchErr := findMatchingTemplateForDerivedSpec(ctx, k8sClient, service, baseSpec)
+		// Resolve model name from service for derived template matching
+		resolvedModelName, err := resolveModelNameFromService(ctx, k8sClient, service)
+		if err != nil {
+			return fmt.Errorf("failed to resolve model name: %w", err)
+		}
+
+		match, matchErr := findMatchingTemplateForDerivedSpec(ctx, k8sClient, service, resolvedModelName, baseSpec)
 		if matchErr != nil {
 			return matchErr
 		}
@@ -407,7 +669,7 @@ func prepareObservationForDerivedCreation(
 	}
 
 	// Lookup image resources based on base scope
-	if err := lookupImageResourcesForScope(ctx, k8sClient, service.Namespace, baseSpec.AIMImageName, baseScope, obs); err != nil {
+	if err := lookupImageResourcesForScope(ctx, k8sClient, service.Namespace, baseSpec.ModelName, baseScope, obs); err != nil {
 		return err
 	}
 
@@ -420,13 +682,14 @@ func findMatchingTemplateForDerivedSpec(
 	ctx context.Context,
 	k8sClient client.Client,
 	service *aimv1alpha1.AIMService,
+	resolvedModelName string,
 	baseSpec *aimv1alpha1.AIMServiceTemplateSpec,
 ) (*templateMatch, error) {
 	if service == nil || service.Spec.Overrides == nil {
 		return nil, nil
 	}
 
-	expectedTemplate := BuildDerivedTemplate(service, "placeholder", baseSpec)
+	expectedTemplate := BuildDerivedTemplate(service, "placeholder", resolvedModelName, baseSpec)
 	expectedSpec := expectedTemplate.Spec
 
 	if service.Namespace != "" {
@@ -436,7 +699,7 @@ func findMatchingTemplateForDerivedSpec(
 		}
 		for i := range templateList.Items {
 			template := &templateList.Items[i]
-			if template.Spec.AIMImageName != expectedSpec.AIMImageName {
+			if template.Spec.ModelName != expectedSpec.ModelName {
 				continue
 			}
 			if !apiequality.Semantic.DeepEqual(template.Spec, expectedSpec) {
@@ -457,7 +720,7 @@ func findMatchingTemplateForDerivedSpec(
 	}
 	for i := range clusterTemplateList.Items {
 		template := &clusterTemplateList.Items[i]
-		if template.Spec.AIMImageName != expectedSpec.AIMImageName {
+		if template.Spec.ModelName != expectedSpec.ModelName {
 			continue
 		}
 		if !apiequality.Semantic.DeepEqual(template.Spec.AIMServiceTemplateSpecCommon, expectedSpec.AIMServiceTemplateSpecCommon) {
@@ -478,25 +741,40 @@ func ObserveNonDerivedTemplate(
 	k8sClient client.Client,
 	service *aimv1alpha1.AIMService,
 	templateName string,
+	preferredScope TemplateScope,
 	obs *ServiceObservation,
 ) error {
-	// Try namespace-scoped template first
-	var namespaceTemplate aimv1alpha1.AIMServiceTemplate
-	err := k8sClient.Get(ctx, types.NamespacedName{
-		Namespace: service.Namespace,
-		Name:      templateName,
-	}, &namespaceTemplate)
-
-	switch {
-	case err == nil:
-		return PopulateObservationFromNamespaceTemplate(ctx, k8sClient, service, &namespaceTemplate, obs)
-
-	case apierrors.IsNotFound(err):
-		// Fall back to cluster-scoped template
+	switch preferredScope {
+	case TemplateScopeNamespace:
+		var namespaceTemplate aimv1alpha1.AIMServiceTemplate
+		err := k8sClient.Get(ctx, types.NamespacedName{
+			Namespace: service.Namespace,
+			Name:      templateName,
+		}, &namespaceTemplate)
+		switch {
+		case err == nil:
+			return PopulateObservationFromNamespaceTemplate(ctx, k8sClient, service, &namespaceTemplate, obs)
+		case apierrors.IsNotFound(err):
+			return nil
+		default:
+			return fmt.Errorf("failed to get AIMServiceTemplate %s/%s: %w", service.Namespace, templateName, err)
+		}
+	case TemplateScopeCluster:
 		return observeClusterTemplate(ctx, k8sClient, service, templateName, obs)
-
 	default:
-		return fmt.Errorf("failed to get AIMServiceTemplate %s/%s: %w", service.Namespace, templateName, err)
+		var namespaceTemplate aimv1alpha1.AIMServiceTemplate
+		err := k8sClient.Get(ctx, types.NamespacedName{
+			Namespace: service.Namespace,
+			Name:      templateName,
+		}, &namespaceTemplate)
+		switch {
+		case err == nil:
+			return PopulateObservationFromNamespaceTemplate(ctx, k8sClient, service, &namespaceTemplate, obs)
+		case apierrors.IsNotFound(err):
+			return observeClusterTemplate(ctx, k8sClient, service, templateName, obs)
+		default:
+			return fmt.Errorf("failed to get AIMServiceTemplate %s/%s: %w", service.Namespace, templateName, err)
+		}
 	}
 }
 
@@ -565,19 +843,19 @@ func lookupImageResourcesForScope(
 	case TemplateScopeNamespace:
 		image, err = LookupImageForNamespaceTemplate(ctx, k8sClient, namespace, imageName)
 		if err != nil && !errors.Is(err, ErrImageNotFound) {
-			return fmt.Errorf("failed to lookup AIMImage %q in namespace %q: %w", imageName, namespace, err)
+			return fmt.Errorf("failed to lookup AIMModel %q in namespace %q: %w", imageName, namespace, err)
 		}
 		if errors.Is(err, ErrImageNotFound) {
-			obs.ImageErr = fmt.Errorf("AIMImage %q not found in namespace %q", imageName, namespace)
+			obs.ImageErr = fmt.Errorf("AIMModel %q not found in namespace %q", imageName, namespace)
 		}
 
 	case TemplateScopeCluster:
 		image, err = LookupImageForClusterTemplate(ctx, k8sClient, imageName)
 		if err != nil && !errors.Is(err, ErrImageNotFound) {
-			return fmt.Errorf("failed to lookup AIMClusterImage %q: %w", imageName, err)
+			return fmt.Errorf("failed to lookup AIMClusterModel %q: %w", imageName, err)
 		}
 		if errors.Is(err, ErrImageNotFound) {
-			obs.ImageErr = fmt.Errorf("AIMClusterImage %q not found", imageName)
+			obs.ImageErr = fmt.Errorf("AIMClusterModel %q not found", imageName)
 		}
 	}
 

@@ -154,6 +154,9 @@ jobs:
             sudo rm -rf "$d" >/dev/null 2>&1 &
           fi
         done
+
+        docker builder prune -af || true
+        docker system prune -af --volumes || true
         wait
 
 

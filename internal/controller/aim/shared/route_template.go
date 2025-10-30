@@ -52,10 +52,10 @@ var (
 // ResolveServiceRoutePath renders the HTTP route prefix using service and runtime config context.
 func ResolveServiceRoutePath(service *aimv1alpha1.AIMService, runtimeConfig aimv1alpha1.AIMRuntimeConfigSpec) (string, error) {
 	template := ""
-	if service.Spec.Routing != nil && service.Spec.Routing.RouteTemplate != "" {
-		template = service.Spec.Routing.RouteTemplate
-	} else if runtimeConfig.Routing != nil && runtimeConfig.Routing.RouteTemplate != "" {
-		template = runtimeConfig.Routing.RouteTemplate
+	if service.Spec.Routing != nil && service.Spec.Routing.PathTemplate != "" {
+		template = service.Spec.Routing.PathTemplate
+	} else if runtimeConfig.Routing != nil && runtimeConfig.Routing.PathTemplate != "" {
+		template = runtimeConfig.Routing.PathTemplate
 	}
 
 	if template == "" {
@@ -157,6 +157,14 @@ func evaluateJSONPath(expr string, obj interface{}) (string, error) {
 	}
 	if val.Kind() == reflect.Ptr && val.IsNil() {
 		return "", fmt.Errorf("jsonpath returned nil value")
+	}
+
+	// Dereference pointers to get the actual value
+	for val.Kind() == reflect.Ptr {
+		val = val.Elem()
+		if !val.IsValid() {
+			return "", fmt.Errorf("jsonpath returned nil pointer")
+		}
 	}
 
 	value := val.Interface()

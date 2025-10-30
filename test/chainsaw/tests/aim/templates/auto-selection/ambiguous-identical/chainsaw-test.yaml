@@ -1,0 +1,62 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: auto-select-ambiguous-identical-templates
+spec:
+  concurrent: false
+  description: Test that auto-selection fails when multiple identical templates exist
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create cluster image
+    try:
+    - apply:
+        file: cluster-image.yaml
+
+  - name: Create two identical templates
+    try:
+    - apply:
+        file: template-1.yaml
+    - apply:
+        file: template-2.yaml
+
+  - name: Wait for both templates to become Available
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: test-ambiguous-template-1
+          status:
+            status: Ready
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: test-ambiguous-template-2
+          status:
+            status: Ready
+
+  - name: Create service without templateRef
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service failed with ambiguous selection
+    try:
+    - assert:
+        timeout: 10s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-ambiguous-service
+          status:
+            status: Failed
+            (conditions[?type == 'Failure']):
+            - status: "True"
+              reason: TemplateSelectionAmbiguous
+            (conditions[?type == 'Resolved']):
+            - status: "False"

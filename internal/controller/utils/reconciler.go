@@ -27,6 +27,7 @@ package controllerutils
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -110,7 +111,12 @@ func Reconcile[T ObjectWithStatus[S], S any](ctx context.Context, spec Reconcile
 		errs.ApplyErr = applyErr
 
 		if applyErr != nil {
-			logger.Error(applyErr, "Apply failed")
+			// Don't log stack traces for namespace termination errors - this is expected during cleanup
+			if isNamespaceTerminatingError(applyErr) {
+				logger.V(1).Info("Skipping apply in terminating namespace", "error", applyErr.Error())
+			} else {
+				logger.Error(applyErr, "Apply failed")
+			}
 		}
 	}
 
@@ -230,4 +236,16 @@ func ReconcileWithoutStatus(ctx context.Context, spec ReconcileWithoutStatusSpec
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// isNamespaceTerminatingError checks if an error is caused by attempting to create resources
+// in a namespace that is being deleted. This is a normal part of cleanup and doesn't need
+// error-level logging.
+func isNamespaceTerminatingError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errMsg := err.Error()
+	return strings.Contains(errMsg, "is being terminated") ||
+		strings.Contains(errMsg, "namespace is being deleted")
 }

@@ -1,0 +1,102 @@
+# Skipped as we only have a single public image and testing this is hard with just one
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: model-auto-creation-reuse
+spec:
+  description: Test that multiple services using the same model.image reuse the auto-created model
+  timeouts:
+    assert: 90s
+  steps:
+  - name: Create runtime config
+    try:
+    - apply:
+        file: runtime-config.yaml
+
+  - name: Create first service with model.image
+    try:
+    - apply:
+        file: service-1.yaml
+
+  - name: Verify auto-created model exists
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMModel
+          metadata:
+
+            labels:
+              aim.silogen.ai/auto-created: "true"
+          spec:
+            image: ghcr.io/amd/phi-3-mini:latest
+
+  - name: Create second service with same model.image
+    try:
+    - apply:
+        file: service-2.yaml
+
+  - name: Verify both services resolve to same model
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: reuse-service-1
+
+          status:
+            (resolvedImage != null): true
+            resolvedImage:
+              (name != null): true
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: reuse-service-2
+
+          status:
+            (resolvedImage != null): true
+            resolvedImage:
+              (name != null): true
+
+  - name: Verify only ONE model was created (not duplicated)
+    try:
+    - script:
+        content: |
+          set -e
+          count=$(kubectl get aimmodels -n $NAMESPACE --selector=aim.silogen.ai/auto-created=true -o json | jq '.items | length')
+          if [ "$count" -ne 1 ]; then
+            echo "Expected 1 auto-created model to be reused, found $count"
+            exit 1
+          fi
+
+          # Verify both services reference the same model
+          service1_model=$(kubectl get aimservice reuse-service-1 -n $NAMESPACE -o jsonpath='{.status.resolvedImage.name}')
+          service2_model=$(kubectl get aimservice reuse-service-2 -n $NAMESPACE -o jsonpath='{.status.resolvedImage.name}')
+
+          if [ "$service1_model" != "$service2_model" ]; then
+            echo "Services reference different models: $service1_model vs $service2_model"
+            exit 1
+          fi
+
+          echo "Both services successfully reuse the same auto-created model: $service1_model"
+
+    catch:
+    - script:
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        content: |-
+          echo "== MODELS =="
+          kubectl get aimmodels -n $NAMESPACE -o json
+          echo ""
+
+          echo "== SERVICE TEMPLATES =="
+          kubectl get aimservicetemplates -n $NAMESPACE -o json
+          echo ""
+
+          echo "== SERVICES =="
+          kubectl get aimservices -n $NAMESPACE -o json
+          echo ""

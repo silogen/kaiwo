@@ -62,6 +62,7 @@ if ((${#EXISTING_NODES[@]})); then
     nvidia.com/gpu.count=8 \
     feature.node.kubernetes.io/pci-10de.present=true \
     kaiwo.silogen.ai/node.gpu.partitioned=false \
+    amd.com/gpu.product-name=AMD_Instinct_MI300X_OAM \
     --overwrite
 else
   echo "No matching worker nodes found to label (skipping)."
@@ -81,11 +82,11 @@ kubectl apply -f test/configs/kaiwoconfig/local-kind.yaml
 
 kind get kubeconfig -n "$TEST_NAME" > kaiwo_test_kubeconfig.yaml 
 
-if [[ -n "${CI:-}"  ]]; then
-  echo "Running in CI. Skipping cert generation"
-else  
-  bash test/scripts/generate_certs.sh
-fi
+# if [[ -n "${CI:-}"  ]]; then
+#   echo "Running in CI. Skipping cert generation"
+# else  
+#   bash test/scripts/generate_certs.sh
+# fi
 
 WEBHOOK_CERT_DIRECTORY=$(pwd)/certs
 KUBECONFIG=$(pwd)/kaiwo_test_kubeconfig.yaml
@@ -106,12 +107,15 @@ update_env_var() {
 touch "$ENV_FILE"
 
 
-update_env_var "WEBHOOK_CERT_DIRECTORY" "$WEBHOOK_CERT_DIRECTORY"
+# update_env_var "WEBHOOK_CERT_DIRECTORY" "$WEBHOOK_CERT_DIRECTORY"
 update_env_var "KUBECONFIG" "$KUBECONFIG"
 
-#kubectl apply -f config/webhook_local_dev/webhooks.yaml
+
 
 sh test/aimdummy/populate_kind.sh
+
+# When running debugger in IDE
+kubectl create ns kaiwo-system
 
 echo "You can now run debugger in your IDE"
 

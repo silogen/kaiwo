@@ -5,8 +5,6 @@ metadata:
 spec:
   user: test@amd.com
   resources:
-    limits:
-      cpu: 150m
     requests:
       memory: 100Mi
   job:

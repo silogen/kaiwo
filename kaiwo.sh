@@ -330,12 +330,17 @@ deploy_helm_with_ref() {
   local img_tag="${PARSED_TAG}"
 
   info "Deploying via Helm with image: ${img_registry:+$img_registry/}$img_repo${img_tag:+:$img_tag}"
+  set -x
   helm upgrade --install "${HELM_RELEASE_NAME}" "${chart_path}" \
     --namespace "${HELM_NAMESPACE}" \
-    ${img_registry:+--set image.registry="${img_registry}"} \
-    --set image.repository="${img_repo}" \
-    ${img_tag:+--set image.tag="${img_tag}"} \
-    --wait
+    ${img_registry:+--set-string image.registry="${img_registry}"} \
+    --set-string image.repository="${img_repo}" \
+    ${img_tag:+--set-string image.tag="${img_tag}"} \
+    --wait \
+    --atomic \
+    --timeout 10m \
+    --debug
+  set +x
 
   ok "Helm deployment completed"
 }
@@ -349,7 +354,7 @@ deploy_kustomization_with_ref() {
 
   # Prepare test overlay and apply
   cp dist/install.yaml test/merged.yaml
-  kubectl apply --server-side -k test/
+  kubectl apply --server-side -k test/ --force-conflicts
   
 }
 

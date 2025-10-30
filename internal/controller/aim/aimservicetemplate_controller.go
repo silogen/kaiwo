@@ -30,12 +30,14 @@ import (
 
 	servingv1alpha1 "github.com/kserve/kserve/pkg/apis/serving/v1alpha1"
 	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -71,6 +73,7 @@ type AIMServiceTemplateReconciler struct {
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
 
 func (r *AIMServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -148,7 +151,7 @@ func requestsFromNamespaceTemplates(templates []aimv1alpha1.AIMServiceTemplate) 
 // observe gathers current cluster state (read-only)
 func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *aimv1alpha1.AIMServiceTemplate) (*namespaceTemplateObservation, error) {
 	logger := log.FromContext(ctx)
-	return shared.ObserveTemplate(ctx, shared.TemplateObservationOptions[*servingv1alpha1.ServingRuntime]{
+	observation, err := shared.ObserveTemplate(ctx, shared.TemplateObservationOptions[*servingv1alpha1.ServingRuntime]{
 		K8sClient: r.Client,
 		GetRuntime: func(ctx context.Context) (*servingv1alpha1.ServingRuntime, error) {
 			servingRuntime, err := shared.GetServingRuntime(ctx, r.Client, template.Namespace, template.Name)
@@ -157,7 +160,9 @@ func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *ai
 			}
 			return servingRuntime, err
 		},
-		ShouldCheckDiscoveryJob: template.Status.Status != aimv1alpha1.AIMTemplateStatusAvailable,
+		ShouldCheckDiscoveryJob: len(template.Spec.ModelSources) == 0 &&
+			template.Status.Status != aimv1alpha1.AIMTemplateStatusReady &&
+			template.Status.Status != aimv1alpha1.AIMTemplateStatusNotAvailable,
 		GetDiscoveryJob: func(ctx context.Context) (*batchv1.Job, error) {
 			job, err := shared.GetDiscoveryJob(ctx, r.Client, template.Namespace, template.Name)
 			if err != nil {
@@ -169,7 +174,7 @@ func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *ai
 			return template.Namespace
 		},
 		LookupImage: func(ctx context.Context) (*shared.ImageLookupResult, error) {
-			return shared.LookupImageForNamespaceTemplate(ctx, r.Client, template.Namespace, template.Spec.AIMImageName)
+			return shared.LookupImageForNamespaceTemplate(ctx, r.Client, template.Namespace, template.Spec.ModelName)
 		},
 		ResolveRuntimeConfig: func(ctx context.Context) (*shared.RuntimeConfigResolution, error) {
 			resolution, err := shared.ResolveRuntimeConfig(ctx, r.Client, template.Namespace, template.Spec.RuntimeConfigName)
@@ -188,13 +193,29 @@ func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *ai
 
 			baseutils.Debug(logger, "Resolved AIMRuntimeConfig",
 				"name", resolution.Name,
-				"sources", shared.JoinRuntimeConfigSources(resolution, template.Namespace),
-				"imagePullSecrets", len(resolution.EffectiveSpec.ImagePullSecrets))
+				"sources", shared.JoinRuntimeConfigSources(resolution, template.Namespace))
 
 			controllerutils.EmitNormalEvent(r.Recorder, template, "RuntimeConfigResolved",
 				fmt.Sprintf("Using AIMRuntimeConfig %q from %s", resolution.Name, shared.JoinRuntimeConfigSources(resolution, template.Namespace)))
 		},
+		GetImagePullSecrets: func() []corev1.LocalObjectReference {
+			return template.Spec.ImagePullSecrets
+		},
+		GetServiceAccountName: func() string {
+			return template.Spec.ServiceAccountName
+		},
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	if observation != nil {
+		if err := shared.UpdateTemplateGPUAvailability(ctx, r.Client, template.Spec.AIMServiceTemplateSpecCommon, &observation.TemplateObservation); err != nil {
+			return nil, fmt.Errorf("failed to validate GPU availability: %w", err)
+		}
+	}
+
+	return observation, nil
 }
 
 // plan computes desired state (pure function)
@@ -228,11 +249,11 @@ func (r *AIMServiceTemplateReconciler) plan(ctx context.Context, template *aimv1
 			return shared.BuildDiscoveryJob(shared.DiscoveryJobSpec{
 				TemplateName:     template.Name,
 				Namespace:        template.Namespace,
-				ModelID:          template.Spec.AIMImageName,
+				ModelID:          template.Spec.ModelName,
 				Image:            input.Observation.Image,
 				Env:              template.Spec.Env,
 				ImagePullSecrets: input.Observation.ImagePullSecrets,
-				ServiceAccount:   input.RuntimeConfigSpec.ServiceAccountName,
+				ServiceAccount:   input.Observation.ServiceAccountName,
 				OwnerRef:         input.OwnerReference,
 				TemplateSpec:     template.Spec.AIMServiceTemplateSpecCommon,
 			})
@@ -252,7 +273,7 @@ func (r *AIMServiceTemplateReconciler) projectStatus(
 	obs *namespaceTemplateObservation,
 	errs controllerutils.ReconcileErrors,
 ) error {
-	imageNotFoundMsg := fmt.Sprintf("No AIMImage or AIMClusterImage found for image name %q", template.Spec.AIMImageName)
+	imageNotFoundMsg := fmt.Sprintf("No AIMModel or AIMClusterModel found for image name %q", template.Spec.ModelName)
 	var templateObs *shared.TemplateObservation
 	if obs != nil {
 		templateObs = &obs.TemplateObservation
@@ -314,12 +335,35 @@ func (r *AIMServiceTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error 
 		return requestsFromNamespaceTemplates(templates.Items)
 	})
 
+	nodeHandler := handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+		_, ok := obj.(*corev1.Node)
+		if !ok {
+			return nil
+		}
+
+		var templates aimv1alpha1.AIMServiceTemplateList
+		if err := r.List(ctx, &templates); err != nil {
+			ctrl.LoggerFrom(ctx).Error(err, "failed to list AIMServiceTemplates for Node event")
+			return nil
+		}
+
+		filtered := make([]aimv1alpha1.AIMServiceTemplate, 0, len(templates.Items))
+		for i := range templates.Items {
+			if shared.TemplateRequiresGPU(templates.Items[i].Spec.AIMServiceTemplateSpecCommon) {
+				filtered = append(filtered, templates.Items[i])
+			}
+		}
+
+		return requestsFromNamespaceTemplates(filtered)
+	})
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&aimv1alpha1.AIMServiceTemplate{}).
 		Owns(&batchv1.Job{}).
 		Owns(&servingv1alpha1.ServingRuntime{}).
 		Watches(&aimv1alpha1.AIMRuntimeConfig{}, runtimeConfigHandler).
 		Watches(&aimv1alpha1.AIMClusterRuntimeConfig{}, clusterRuntimeConfigHandler).
+		Watches(&corev1.Node{}, nodeHandler, builder.WithPredicates(shared.NodeGPUChangePredicate())).
 		Named("aim-namespace-template").
 		Complete(r)
 }

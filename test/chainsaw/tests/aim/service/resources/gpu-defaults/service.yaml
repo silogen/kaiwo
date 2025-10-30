@@ -1,0 +1,8 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: gpu-defaults-service
+spec:
+  model:
+    ref: gpu-defaults-image
+  templateRef: gpu-defaults-template

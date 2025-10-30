@@ -42,6 +42,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -118,13 +119,25 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		queueConfig.Status.Status = kaiwo.QueueConfigStatusReady
 	}
 
-	// **Only Update WorkloadStatus If It Has Changed**
+	// Only Update WorkloadStatus If It Has Changed
 	if previousStatus != queueConfig.Status.Status {
-		if err := r.Status().Update(ctx, &queueConfig); err != nil {
+		latest := &kaiwo.KaiwoQueueConfig{}
+		if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+			logger.Error(err, "Failed to re-fetch KaiwoQueueConfig for status update")
+			return ctrl.Result{}, err
+		}
+
+		latest.Status.Status = queueConfig.Status.Status
+
+		if err := r.Status().Update(ctx, latest); err != nil {
 			logger.Error(err, "Failed to update KaiwoQueueConfig status")
 			return ctrl.Result{}, err
 		}
-		logger.Info("Updated KaiwoQueueConfig status", "name", queueConfig.Name, "WorkloadStatus", queueConfig.Status.Status)
+
+		logger.Info("Updated KaiwoQueueConfig status",
+			"name", latest.Name,
+			"WorkloadStatus", latest.Status.Status,
+		)
 	}
 
 	return ctrl.Result{}, nil
@@ -358,13 +371,22 @@ func (r *KaiwoQueueConfigReconciler) syncClusterQueues(ctx context.Context, queu
 			success = false
 		} else if !controllerutils.CompareClusterQueues(*existingQueue, kueueQueue) {
 			logger.Info("Updating ClusterQueue", "name", kueueQueue.Name)
-			existingQueue.Spec = kueueQueue.Spec
-			err := r.Update(ctx, existingQueue)
-			if err != nil {
-				logger.Error(err, "Failed to update ClusterQueue", "name", kueueQueue.Name)
+
+			updateErr := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+				var latest kueuev1beta1.ClusterQueue
+				if err := r.Get(ctx, client.ObjectKey{Name: kueueQueue.Name}, &latest); err != nil {
+					return err
+				}
+				latest.Spec = kueueQueue.Spec
+				return r.Update(ctx, &latest)
+			})
+
+			if updateErr != nil {
+				logger.Error(updateErr, "Failed to update ClusterQueue", "name", kueueQueue.Name)
 				success = false
 			}
-			r.emitEvent(queueConfig, "cluster queue", "update", existingQueue, err)
+			r.emitEvent(queueConfig, "cluster queue", "update", existingQueue, updateErr)
+
 		}
 		expectedQueues[kueueQueue.Name] = kueueQueue
 	}
@@ -373,7 +395,7 @@ func (r *KaiwoQueueConfigReconciler) syncClusterQueues(ctx context.Context, queu
 		if _, exists := expectedQueues[existingQueue.Name]; !exists {
 			logger.Info("Deleting ClusterQueue", "name", existingQueue.Name)
 			err := r.Delete(ctx, &existingQueue)
-			if err != nil {
+			if err := r.Delete(ctx, &existingQueue); err != nil && !errors.IsNotFound(err) {
 				logger.Error(err, "Failed to delete ClusterQueue", "name", existingQueue.Name)
 				success = false
 			}
@@ -671,6 +693,17 @@ func (r *KaiwoQueueConfigReconciler) CreateTopology(ctx context.Context) error {
 	return nil
 }
 
+func sanitizeTopologies(in []kaiwo.Topology) []kaiwo.Topology {
+	out := make([]kaiwo.Topology, 0, len(in))
+	for _, t := range in {
+		out = append(out, kaiwo.Topology{
+			ObjectMeta: metav1.ObjectMeta{Name: t.Name},
+			Spec:       t.Spec,
+		})
+	}
+	return out
+}
+
 func (r *KaiwoQueueConfigReconciler) EnsureKaiwoQueueConfig(ctx context.Context, kaiwoQueueConfigName string, clusterQueueName string, cohort string) error {
 	logger := log.FromContext(ctx)
 
@@ -688,6 +721,8 @@ func (r *KaiwoQueueConfigReconciler) EnsureKaiwoQueueConfig(ctx context.Context,
 		logger.Error(err, "Failed to create default topology")
 		return err
 	}
+
+	newTopologies = sanitizeTopologies(newTopologies)
 
 	var existingConfig kaiwo.KaiwoQueueConfig
 	err = r.Get(ctx, client.ObjectKey{Name: kaiwoQueueConfigName}, &existingConfig)
@@ -743,7 +778,7 @@ func (r *KaiwoQueueConfigReconciler) EnsureKaiwoQueueConfig(ctx context.Context,
 	}
 
 	topologyMap := make(map[string]kaiwo.Topology)
-	for _, t := range existingConfig.Spec.Topologies {
+	for _, t := range sanitizeTopologies(existingConfig.Spec.Topologies) {
 		topologyMap[t.Name] = t
 	}
 	for _, t := range newTopologies {

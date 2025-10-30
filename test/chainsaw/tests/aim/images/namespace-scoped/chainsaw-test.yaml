@@ -1,0 +1,77 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: namespace-scoped-image
+spec:
+  description: Test namespace-scoped AIMModel with discovery and template auto-generation
+  steps:
+  - name: Create namespace-scoped AIMModel
+    try:
+    - apply:
+        file: namespace-image.yaml
+
+  - name: Verify AIMModel status becomes Ready
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMModel
+          metadata:
+            name: llama-3-8b-ns
+          status:
+            status: Ready
+
+  - name: Verify namespace-scoped templates are created
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMServiceTemplate
+          metadata:
+            ownerReferences:
+            - name: llama-3-8b-ns
+          spec:
+            modelName: llama-3-8b-ns
+            metric: latency
+            precision: fp8
+            gpuSelector:
+              count: 1
+              model: MI300X
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMServiceTemplate
+          metadata:
+            ownerReferences:
+            - name: llama-3-8b-ns
+          spec:
+            modelName: llama-3-8b-ns
+            metric: throughput
+            precision: fp8
+
+  - name: Verify templates inherit image metadata
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMServiceTemplate
+          metadata:
+            ownerReferences:
+            - name: llama-3-8b-ns
+          status:
+            status: Ready
+            (modelSources[0].sourceUri): hf://HuggingFaceTB/SmolLM2-135M
+
+  - name: Verify AIMModel has imageMetadata populated
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMModel
+          metadata:
+            name: llama-3-8b-ns
+          status:
+            imageMetadata:
+              model:
+                canonicalName: HuggingFaceTB/SmolLM2-135M
+                (recommendedDeployments != null): true

@@ -58,41 +58,41 @@ spec:
             properties:
               defaultStorageClassName:
                 description: |-
-                  DefaultStorageClassName is the storage class used for model caches when one is not
-                  specified directly on the consumer resource.
+                  DefaultStorageClassName specifies the storage class to use for model caches and PVCs
+                  when the consuming resource (AIMModelCache, AIMTemplateCache, AIMServiceTemplate) does not
+                  specify a storage class. If this field is empty, the cluster's default storage class is used.
                 type: string
-              imagePullSecrets:
-                description: |-
-                  ImagePullSecrets are merged with controller defaults when creating pods that need
-                  to pull model or runtime images.
-                items:
-                  description: |-
-                    LocalObjectReference contains enough information to let you locate the
-                    referenced object inside the same namespace.
-                  properties:
-                    name:
-                      default: ""
-                      description: |-
-                        Name of the referent.
-                        This field is effectively required, but due to backwards compatibility is
-                        allowed to be empty. Instances of this type with an empty value here are
-                        almost certainly wrong.
-                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                      type: string
-                  type: object
-                  x-kubernetes-map-type: atomic
-                type: array
+              model:
+                description: Model controls model creation and discovery defaults.
+                properties:
+                  autoDiscovery:
+                    default: true
+                    description: |-
+                      AutoDiscovery controls whether models run discovery by default.
+                      When true, models run discovery jobs to extract metadata and auto-create templates.
+                      When false, discovery is skipped. Discovery failures are non-fatal and reported via conditions.
+                    type: boolean
+                type: object
               routing:
-                description: Routing controls HTTP routing defaults applied to AIM
-                  resources.
+                description: |-
+                  Routing controls HTTP routing defaults applied to AIM resources.
+                  When set, these defaults are used for AIMService resources that enable routing
+                  but do not specify their own routing configuration.
                 properties:
                   enabled:
-                    description: Enabled toggles HTTP routing management for consumers
-                      of this runtime config.
+                    description: |-
+                      Enabled controls whether HTTP routing is managed for inference services using this config.
+                      When true, the operator creates HTTPRoute resources for services that reference this config.
+                      When false or unset, routing must be explicitly enabled on each service.
+                      This provides a namespace or cluster-wide default that individual services can override.
                     type: boolean
                   gatewayRef:
-                    description: GatewayRef identifies the Gateway parent that should
-                      receive HTTPRoutes for consumers.
+                    description: |-
+                      GatewayRef specifies the Gateway API Gateway resource that should receive HTTPRoutes.
+                      This identifies the parent gateway for routing traffic to inference services.
+                      The gateway can be in any namespace (cross-namespace references are supported).
+                      If routing is enabled but GatewayRef is not specified, service reconciliation will fail
+                      with a validation error.
                     properties:
                       group:
                         default: gateway.networking.k8s.io
@@ -175,17 +175,20 @@ spec:
                     required:
                     - name
                     type: object
-                  routeTemplate:
+                  pathTemplate:
                     description: |-
-                      RouteTemplate renders a HTTP path prefix using the AIMService as context.
-                      Example: `/{.metadata.namespace}/{.metadata.labels['team']}/{.spec.model}/`
+                      PathTemplate defines the HTTP path template for routes, evaluated using JSONPath expressions.
+                      The template is rendered against the AIMService object to generate unique paths.
+
+                      Example templates:
+                      - `/{.metadata.namespace}/{.metadata.name}` - namespace and service name
+                      - `/{.metadata.namespace}/{.metadata.labels['team']}/inference` - with label
+                      - `/models/{.spec.aimModelName}` - based on model name
+
+                      The template must:
+                      - Use valid JSONPath expressions wrapped in {...
                     type: string
                 type: object
-              serviceAccountName:
-                description: |-
-                  ServiceAccountName is the service account used for discovery jobs, cache warmers,
-                  and any other workloads spawned by the operator on behalf of this runtime config.
-                type: string
             type: object
           status:
             description: AIMRuntimeConfigStatus records the resolved config reference

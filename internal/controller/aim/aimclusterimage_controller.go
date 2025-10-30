@@ -26,11 +26,13 @@ package aim
 
 import (
 	"context"
+	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -45,10 +47,11 @@ const (
 	aimClusterImageFieldOwner = "aim-cluster-image-controller"
 )
 
-// AIMClusterImageReconciler reconciles an AIMClusterImage object
-type AIMClusterImageReconciler struct {
+// AIMClusterModelReconciler reconciles an AIMClusterModel object
+type AIMClusterModelReconciler struct {
 	client.Client
 	Scheme    *runtime.Scheme
+	Recorder  record.EventRecorder
 	Clientset kubernetes.Interface
 }
 
@@ -60,11 +63,11 @@ type AIMClusterImageReconciler struct {
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclusterservicetemplates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 
-func (r *AIMClusterImageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *AIMClusterModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
 	// Fetch the cluster image
-	var image aimv1alpha1.AIMClusterImage
+	var image aimv1alpha1.AIMClusterModel
 	if err := r.Get(ctx, req.NamespacedName, &image); err != nil {
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -72,10 +75,10 @@ func (r *AIMClusterImageReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 
-	baseutils.Debug(logger, "Reconciling AIMClusterImage", "name", image.Name)
+	baseutils.Debug(logger, "Reconciling AIMClusterModel", "name", image.Name)
 
 	// Use framework orchestrator
-	return controllerutils.Reconcile(ctx, controllerutils.ReconcileSpec[*aimv1alpha1.AIMClusterImage, aimv1alpha1.AIMImageStatus]{
+	return controllerutils.Reconcile(ctx, controllerutils.ReconcileSpec[*aimv1alpha1.AIMClusterModel, aimv1alpha1.AIMModelStatus]{
 		Client:     r.Client,
 		Scheme:     r.Scheme,
 		Object:     &image,
@@ -114,7 +117,8 @@ func (r *AIMClusterImageReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 }
 
 // observe gathers current cluster state (read-only)
-func (r *AIMClusterImageReconciler) observe(ctx context.Context, image *aimv1alpha1.AIMClusterImage) (*shared.ImageObservation, error) {
+func (r *AIMClusterModelReconciler) observe(ctx context.Context, image *aimv1alpha1.AIMClusterModel) (*shared.ImageObservation, error) {
+	logger := log.FromContext(ctx)
 	return shared.ObserveImage(ctx, shared.ImageObservationOptions{
 		GetRuntimeConfig: func(ctx context.Context) (*shared.RuntimeConfigResolution, error) {
 			// Look for AIMRuntimeConfig named "default" in kaiwo-system namespace
@@ -122,6 +126,8 @@ func (r *AIMClusterImageReconciler) observe(ctx context.Context, image *aimv1alp
 			resolution, err := shared.ResolveRuntimeConfig(ctx, r.Client, operatorNs, shared.DefaultRuntimeConfigName)
 			if err != nil {
 				// If not found, that's okay - we'll proceed without image pull secrets
+				baseutils.Debug(logger, "Runtime config not found for cluster image, proceeding without image pull secrets",
+					"operatorNamespace", operatorNs, "name", shared.DefaultRuntimeConfigName)
 				return &shared.RuntimeConfigResolution{}, nil
 			}
 			return resolution, nil
@@ -146,18 +152,19 @@ func (r *AIMClusterImageReconciler) observe(ctx context.Context, image *aimv1alp
 			return objects, nil
 		},
 
-		GetCurrentStatus: func() *aimv1alpha1.AIMImageStatus {
+		GetCurrentStatus: func() *aimv1alpha1.AIMModelStatus {
 			return &image.Status
 		},
 
-		GetImageSpec: func() aimv1alpha1.AIMImageSpec {
+		GetImageSpec: func() aimv1alpha1.AIMModelSpec {
 			return image.Spec
 		},
 	})
 }
 
 // plan computes desired state (pure function)
-func (r *AIMClusterImageReconciler) plan(ctx context.Context, image *aimv1alpha1.AIMClusterImage, obs *shared.ImageObservation) ([]client.Object, error) {
+func (r *AIMClusterModelReconciler) plan(ctx context.Context, image *aimv1alpha1.AIMClusterModel, obs *shared.ImageObservation) ([]client.Object, error) {
+	logger := log.FromContext(ctx)
 	// Build owner reference
 	ownerRef := []metav1.OwnerReference{
 		{
@@ -181,16 +188,23 @@ func (r *AIMClusterImageReconciler) plan(ctx context.Context, image *aimv1alpha1
 		IsClusterScoped: true,
 	})
 
+	if err != nil {
+		baseutils.Debug(logger, "Plan failed for cluster image", "error", err)
+	} else {
+		baseutils.Debug(logger, "Planned cluster image resources", "desiredCount", len(desired))
+	}
+
 	return desired, err
 }
 
 // projectStatus computes status from observation + errors (modifies image.Status directly)
-func (r *AIMClusterImageReconciler) projectStatus(
+func (r *AIMClusterModelReconciler) projectStatus(
 	ctx context.Context,
-	image *aimv1alpha1.AIMClusterImage,
+	image *aimv1alpha1.AIMClusterModel,
 	obs *shared.ImageObservation,
 	errs controllerutils.ReconcileErrors,
 ) error {
+	logger := log.FromContext(ctx)
 	// Extract metadata and error from the plan execution
 	var extractedMetadata *aimv1alpha1.ImageMetadata
 	var extractionErr error
@@ -198,6 +212,7 @@ func (r *AIMClusterImageReconciler) projectStatus(
 	// Check if there was a plan error
 	if errs.PlanErr != nil {
 		extractionErr = errs.PlanErr
+		logger.Error(errs.PlanErr, "Plan error occurred for cluster image")
 	}
 
 	if obs != nil && obs.MetadataError != nil {
@@ -211,6 +226,13 @@ func (r *AIMClusterImageReconciler) projectStatus(
 	// Otherwise, use what's already in the observation
 	if obs != nil && obs.ImageMetadata != nil {
 		extractedMetadata = obs.ImageMetadata
+		var deploymentCount int
+		if extractedMetadata.Model != nil {
+			deploymentCount = len(extractedMetadata.Model.RecommendedDeployments)
+		}
+		baseutils.Debug(logger, "Extracted cluster image metadata",
+			"hasModel", extractedMetadata.Model != nil,
+			"deploymentCount", deploymentCount)
 	}
 
 	// Re-run the plan to get the extracted metadata if extraction was attempted
@@ -243,6 +265,9 @@ func (r *AIMClusterImageReconciler) projectStatus(
 		}
 	}
 
+	// Capture old status for comparison
+	oldStatus := image.Status.Status
+
 	// Update status using shared logic
 	shared.ProjectImageStatus(
 		&image.Status,
@@ -253,12 +278,39 @@ func (r *AIMClusterImageReconciler) projectStatus(
 		image.Generation,
 	)
 
+	// Log and emit events for status transitions
+	if oldStatus != image.Status.Status {
+		logger.Info("Cluster image status changed",
+			"name", image.Name,
+			"previousStatus", oldStatus,
+			"newStatus", image.Status.Status)
+
+		switch image.Status.Status {
+		case aimv1alpha1.AIMModelStatusReady:
+			var deploymentCount int
+			if image.Status.ImageMetadata != nil && image.Status.ImageMetadata.Model != nil {
+				deploymentCount = len(image.Status.ImageMetadata.Model.RecommendedDeployments)
+			}
+			controllerutils.EmitNormalEvent(r.Recorder, image, "ClusterImageReady",
+				fmt.Sprintf("Cluster image %s is ready with %d recommended deployments", image.Name, deploymentCount))
+		case aimv1alpha1.AIMModelStatusFailed:
+			msg := "Cluster image processing failed"
+			if extractionErr != nil {
+				msg = fmt.Sprintf("Cluster image processing failed: %v", extractionErr)
+			}
+			controllerutils.EmitWarningEvent(r.Recorder, image, "ClusterImageFailed", msg)
+		case aimv1alpha1.AIMModelStatusProgressing:
+			baseutils.Debug(logger, "Cluster image processing in progress")
+		}
+	}
+
 	return nil
 }
 
-func (r *AIMClusterImageReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *AIMClusterModelReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.Recorder = mgr.GetEventRecorderFor("aim-cluster-image-controller")
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&aimv1alpha1.AIMClusterImage{}).
+		For(&aimv1alpha1.AIMClusterModel{}).
 		Owns(&aimv1alpha1.AIMClusterServiceTemplate{}).
 		Named("aim-cluster-image").
 		Complete(r)

@@ -10,7 +10,6 @@ spec:
       cpu: "1"
       memory: "2Gi"
     limits:
-      cpu: "1"
       memory: "2Gi"
   ray: true
   image: ghcr.io/silogen/ray-test:v0.3

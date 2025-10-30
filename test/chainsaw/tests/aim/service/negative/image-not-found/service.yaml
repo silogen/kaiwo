@@ -1,8 +1,0 @@
-apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMService
-metadata:
-  name: test-service
-spec:
-  aimImageName: non-existent-image
-  templateRef: llama-3-8b-latency-image-missing
-  replicas: 1

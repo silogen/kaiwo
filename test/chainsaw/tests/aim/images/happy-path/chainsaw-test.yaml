@@ -3,12 +3,24 @@ kind: Test
 metadata:
   name: image-discovery-happy-path
 spec:
-  description: Ensure that an official AIM image can be succesfully discovered
+  description: Ensure that an official AIM image can be successfully discovered
   steps:
   - name: Create image
     try:
     - apply:
         file: cluster-image.yaml
+
+  - name: Verify image status becomes Ready
+    try:
+    - assert:
+        timeout: 180s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterModel
+          metadata:
+            name: qwen3-preview-happy-path
+          status:
+            status: Ready
 
   - name: Ensure templates are created
     try:
@@ -17,7 +29,8 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
-            name: llama-3-8b-cluster-with-image-mi300x-x1-latency-fp8
+            ownerReferences:
+            - name: qwen3-preview-happy-path
           spec:
             metric: latency
             precision: fp8
@@ -29,7 +42,8 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
-            name: llama-3-8b-cluster-with-image-mi300x-x1-throughput-fp8
+            ownerReferences:
+            - name: qwen3-preview-happy-path
           spec:
             metric: throughput
             precision: fp8
@@ -41,7 +55,8 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
-            name: llama-3-8b-cluster-with-image-mi325x-x1-latency-fp8
+            ownerReferences:
+            - name: qwen3-preview-happy-path
           spec:
             metric: latency
             precision: fp8
@@ -53,7 +68,8 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMClusterServiceTemplate
           metadata:
-            name: llama-3-8b-cluster-with-image-mi325x-x1-throughput-fp8
+            ownerReferences:
+            - name: qwen3-preview-happy-path
           spec:
             metric: throughput
             precision: fp8

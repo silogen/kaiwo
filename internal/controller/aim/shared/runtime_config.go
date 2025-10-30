@@ -37,7 +37,7 @@ import (
 )
 
 // RuntimeConfigResolution captures the resolved runtime configuration.
-// Namespace config completely overrides cluster config when present (no merging).
+// When both namespace and cluster configs exist, they are merged with namespace config taking precedence.
 type RuntimeConfigResolution struct {
 	// Name is the runtime config name requested by the consumer.
 	Name string
@@ -57,8 +57,9 @@ type RuntimeConfigResolution struct {
 // ErrRuntimeConfigNotFound indicates that neither namespace nor cluster runtime config could be located.
 var ErrRuntimeConfigNotFound = errors.New("runtime config not found")
 
-// ResolveRuntimeConfig resolves runtime config using complete override semantics.
-// Namespace config completely replaces cluster config when present - no field-level merging.
+// ResolveRuntimeConfig resolves runtime config with field-level merging.
+// When both cluster and namespace configs exist, cluster config is used as base
+// and namespace config fields override/merge on top.
 // When configName is empty, the default runtime config name is used.
 func ResolveRuntimeConfig(ctx context.Context, k8sClient client.Client, namespace, configName string) (*RuntimeConfigResolution, error) {
 	name := NormalizeRuntimeConfigName(configName)
@@ -96,8 +97,21 @@ func ResolveRuntimeConfig(ctx context.Context, k8sClient client.Client, namespac
 		return nil, fmt.Errorf("runtime config %q not found: %w", name, ErrRuntimeConfigNotFound)
 	}
 
-	// Namespace config completely overrides cluster config (no merging)
-	if resolution.NamespaceConfig != nil {
+	// Merge cluster and namespace configs
+	if resolution.NamespaceConfig != nil && resolution.ClusterConfig != nil {
+		// Both exist: merge with namespace taking precedence
+		resolution.EffectiveSpec = mergeRuntimeConfigSpecs(resolution.ClusterConfig.Spec, resolution.NamespaceConfig.Spec)
+		resolution.ResolvedRef = &aimv1alpha1.AIMResolvedRuntimeConfig{
+			AIMResolvedReference: aimv1alpha1.AIMResolvedReference{
+				Name:      resolution.NamespaceConfig.Name,
+				Namespace: resolution.NamespaceConfig.Namespace,
+				Scope:     aimv1alpha1.AIMResolutionScopeMerged,
+				Kind:      "AIMRuntimeConfig",
+				UID:       resolution.NamespaceConfig.UID,
+			},
+		}
+	} else if resolution.NamespaceConfig != nil {
+		// Only namespace config exists
 		resolution.EffectiveSpec = resolution.NamespaceConfig.Spec
 		resolution.ResolvedRef = &aimv1alpha1.AIMResolvedRuntimeConfig{
 			AIMResolvedReference: aimv1alpha1.AIMResolvedReference{
@@ -109,10 +123,10 @@ func ResolveRuntimeConfig(ctx context.Context, k8sClient client.Client, namespac
 			},
 		}
 	} else if resolution.ClusterConfig != nil {
-		// Convert cluster config spec to namespace config spec format
+		// Only cluster config exists
 		resolution.EffectiveSpec = aimv1alpha1.AIMRuntimeConfigSpec{
 			AIMRuntimeConfigCommon: resolution.ClusterConfig.Spec.AIMRuntimeConfigCommon,
-			// Credentials fields remain empty when using cluster config
+			// Credentials fields remain empty when using cluster config only
 		}
 		resolution.ResolvedRef = &aimv1alpha1.AIMResolvedRuntimeConfig{
 			AIMResolvedReference: aimv1alpha1.AIMResolvedReference{
@@ -125,6 +139,60 @@ func ResolveRuntimeConfig(ctx context.Context, k8sClient client.Client, namespac
 	}
 
 	return resolution, nil
+}
+
+// mergeRuntimeConfigSpecs merges cluster and namespace runtime config specs.
+// Cluster config is the base, namespace config fields override.
+func mergeRuntimeConfigSpecs(clusterSpec aimv1alpha1.AIMClusterRuntimeConfigSpec, namespaceSpec aimv1alpha1.AIMRuntimeConfigSpec) aimv1alpha1.AIMRuntimeConfigSpec {
+	merged := aimv1alpha1.AIMRuntimeConfigSpec(clusterSpec)
+
+	// Override common fields from namespace config if set
+	if namespaceSpec.DefaultStorageClassName != "" {
+		merged.DefaultStorageClassName = namespaceSpec.DefaultStorageClassName
+	}
+
+	// Merge routing configuration
+	merged.Routing = mergeRoutingConfig(clusterSpec.Routing, namespaceSpec.Routing)
+
+	return merged
+}
+
+// mergeRoutingConfig merges cluster and namespace routing configurations.
+// Cluster routing is the base, namespace routing fields override.
+func mergeRoutingConfig(clusterRouting, namespaceRouting *aimv1alpha1.AIMRuntimeRoutingConfig) *aimv1alpha1.AIMRuntimeRoutingConfig {
+	if namespaceRouting == nil && clusterRouting == nil {
+		return nil
+	}
+
+	if namespaceRouting == nil {
+		// Only cluster routing exists, return a copy
+		return clusterRouting.DeepCopy()
+	}
+
+	if clusterRouting == nil {
+		// Only namespace routing exists, return a copy
+		return namespaceRouting.DeepCopy()
+	}
+
+	// Both exist: merge with namespace taking precedence
+	merged := &aimv1alpha1.AIMRuntimeRoutingConfig{
+		Enabled:      clusterRouting.Enabled,
+		GatewayRef:   clusterRouting.GatewayRef,
+		PathTemplate: clusterRouting.PathTemplate,
+	}
+
+	// Override with namespace values if set
+	if namespaceRouting.Enabled != nil {
+		merged.Enabled = namespaceRouting.Enabled
+	}
+	if namespaceRouting.GatewayRef != nil {
+		merged.GatewayRef = namespaceRouting.GatewayRef
+	}
+	if namespaceRouting.PathTemplate != "" {
+		merged.PathTemplate = namespaceRouting.PathTemplate
+	}
+
+	return merged
 }
 
 // NormalizeRuntimeConfigName returns the effective name to use for lookups when the user omits the field.

@@ -42,10 +42,12 @@ type AIMRuntimeParameters struct {
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="precision is immutable"
 	Precision *AIMPrecision `json:"precision,omitempty"`
 
-	// AimGpuSelector contains the strategy to choose the resources to give each replica
+	// GpuSelector specifies GPU requirements for each replica.
+	// Defines the GPU count and model type required for deployment.
+	// This field is immutable after creation.
 	// +optional
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="gpuSelector is immutable"
-	GpuSelector *AimGpuSelector `json:"gpuSelector,omitempty"`
+	GpuSelector *AIMGpuSelector `json:"gpuSelector,omitempty"`
 }
 
 // AIMMetric enumerates the targeted service characteristic
@@ -72,14 +74,24 @@ const (
 	AIMPrecisionInt8 AIMPrecision = "int8"
 )
 
-type AimGpuSelector struct {
-	// Count is the number of the GPU resources requested per replica
+// AIMGpuSelector specifies GPU requirements for a deployment.
+// It defines the number and type of GPUs needed for each replica.
+type AIMGpuSelector struct {
+	// Count is the number of GPU resources requested per replica.
+	// Must be at least 1.
 	// +kubebuilder:validation:Minimum=1
 	Count int32 `json:"count"`
 
-	// Model is the model name of the GPU that is supported by this template
+	// Model is the GPU model name required for this deployment.
+	// Examples: "MI300X", "MI325X"
 	// +kubebuilder:validation:MinLength=1
 	Model string `json:"model"`
+
+	// ResourceName is the Kubernetes resource name for GPU resources.
+	// Defaults to "amd.com/gpu" if not specified.
+	// +optional
+	// +kubebuilder:default="amd.com/gpu"
+	ResourceName string `json:"resourceName,omitempty"`
 
 	// TODO re-enable partitioning once it is supported
 

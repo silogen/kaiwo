@@ -28,6 +28,23 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
+// AIMServiceModel specifies which model to deploy. Exactly one field must be set.
+// +kubebuilder:validation:XValidation:rule="(has(self.ref) && !has(self.image)) || (!has(self.ref) && has(self.image))",message="exactly one of ref or image must be specified"
+type AIMServiceModel struct {
+	// Ref references an existing AIMModel or AIMClusterModel by metadata.name.
+	// The controller looks for a namespace-scoped AIMModel first, then falls back to cluster-scoped AIMClusterModel.
+	// Example: `meta-llama-3-8b`.
+	// +optional
+	Ref *string `json:"ref,omitempty"`
+
+	// Image specifies a container image URI directly.
+	// The controller searches for an existing model with this image, or creates one if none exists.
+	// The scope of the created model is controlled by the runtime config's ModelCreationScope field.
+	// Example: `ghcr.io/silogen/llama-3-8b:v1.2.0`.
+	// +optional
+	Image *string `json:"image,omitempty"`
+}
+
 // AIMServiceOverrides allows overriding template parameters at the service level.
 // All fields are optional. When specified, they override the corresponding values
 // from the referenced AIMServiceTemplate.
@@ -42,11 +59,10 @@ type AIMServiceOverrides struct {
 // runtime selection knobs, while the overrides field allows service-specific
 // customization.
 type AIMServiceSpec struct {
-	// AIMImageName is the canonical model name (including version/revision) to deploy.
-	// Expected to match the `spec.metadata.name` of an AIMImage. Example:
-	// `meta-llama-3-8b-1-1-20240915`.
-	// +kubebuilder:validation:MinLength=1
-	AIMImageName string `json:"aimImageName"`
+	// Model specifies which model to deploy using one of the available reference methods.
+	// Use `ref` to reference an existing AIMModel/AIMClusterModel by name, or use `image`
+	// to specify a container image URI directly (which will auto-create a model if needed).
+	Model AIMServiceModel `json:"model"`
 
 	// TemplateRef is the name of the AIMServiceTemplate or AIMClusterServiceTemplate to use.
 	// The template selects the runtime profile and GPU parameters.
@@ -88,6 +104,12 @@ type AIMServiceSpec struct {
 	// ImagePullSecrets references secrets for pulling AIM container images.
 	// +optional
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
+	// ServiceAccountName specifies the Kubernetes service account to use for the inference workload.
+	// This service account is used by the deployed inference pods.
+	// If empty, the default service account for the namespace is used.
+	// +optional
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 
 	// Routing enables HTTP routing through Gateway API for this service.
 	// +optional
@@ -173,10 +195,13 @@ const (
 // Condition reasons for AIMService
 const (
 	// Resolution
-	AIMServiceReasonTemplateNotFound = "TemplateNotFound"
-	AIMServiceReasonModelNotFound    = "ModelNotFound"
-	AIMServiceReasonResolved         = "Resolved"
-	AIMServiceReasonValidationFailed = "ValidationFailed"
+	AIMServiceReasonTemplateNotFound           = "TemplateNotFound"
+	AIMServiceReasonModelNotFound              = "ModelNotFound"
+	AIMServiceReasonModelNotReady              = "ModelNotReady"
+	AIMServiceReasonMultipleModelsFound        = "MultipleModelsFound"
+	AIMServiceReasonResolved                   = "Resolved"
+	AIMServiceReasonValidationFailed           = "ValidationFailed"
+	AIMServiceReasonTemplateSelectionAmbiguous = "TemplateSelectionAmbiguous"
 
 	// Cache
 	AIMServiceReasonWaitingForCache = "WaitingForCache"
@@ -190,11 +215,16 @@ const (
 	AIMServiceReasonRuntimeFailed        = "RuntimeFailed"
 	AIMServiceReasonRuntimeConfigMissing = "RuntimeConfigMissing"
 
+	// Image pull related
+	AIMServiceReasonImagePullAuthFailure = "ImagePullAuthFailure"
+	AIMServiceReasonImageNotFound        = "ImageNotFound"
+	AIMServiceReasonImagePullBackOff     = "ImagePullBackOff"
+
 	// Routing
-	AIMServiceReasonConfiguringRoute     = "ConfiguringRoute"
-	AIMServiceReasonRouteReady           = "RouteReady"
-	AIMServiceReasonRouteFailed          = "RouteFailed"
-	AIMServiceReasonRouteTemplateInvalid = "RouteTemplateInvalid"
+	AIMServiceReasonConfiguringRoute    = "ConfiguringRoute"
+	AIMServiceReasonRouteReady          = "RouteReady"
+	AIMServiceReasonRouteFailed         = "RouteFailed"
+	AIMServiceReasonPathTemplateInvalid = "PathTemplateInvalid"
 )
 
 // AIMService manages a KServe-based AIM inference service for the selected model and template.
@@ -202,8 +232,8 @@ const (
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=aimsvc,categories=aim;all
 // +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.status`
-// +kubebuilder:printcolumn:name="Image",type=string,JSONPath=`.spec.aimImageName`
-// +kubebuilder:printcolumn:name="Template",type=string,JSONPath=`.status.resolvedTemplateRef`
+// +kubebuilder:printcolumn:name="Model",type=string,JSONPath=`.status.resolvedImage.name`
+// +kubebuilder:printcolumn:name="Template",type=string,JSONPath=`.status.resolvedTemplate.name`
 // +kubebuilder:printcolumn:name="Replicas",type=integer,JSONPath=`.spec.replicas`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 type AIMService struct {
@@ -225,8 +255,11 @@ type AIMServiceList struct {
 // AIMServiceRouting configures optional HTTP routing for the service.
 type AIMServiceRouting struct {
 	// Enabled toggles HTTP routing management.
-	// +kubebuilder:default=false
-	Enabled bool `json:"enabled,omitempty"`
+	// When nil, inherits the enabled state from the runtime configuration.
+	// When false, explicitly disables routing regardless of runtime config.
+	// When true, explicitly enables routing regardless of runtime config.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
 
 	// GatewayRef identifies the Gateway parent that should receive the HTTPRoute.
 	// When omitted while routing is enabled, reconciliation will report a failure.
@@ -237,10 +270,10 @@ type AIMServiceRouting struct {
 	// +optional
 	Annotations map[string]string `json:"annotations,omitempty"`
 
-	// RouteTemplate overrides the HTTP path template used for routing.
+	// PathTemplate overrides the HTTP path template used for routing.
 	// The value is rendered against the AIMService object using JSONPath expressions.
 	// +optional
-	RouteTemplate string `json:"routeTemplate,omitempty"`
+	PathTemplate string `json:"pathTemplate,omitempty"`
 }
 
 // AIMServiceRoutingStatus captures observed routing details.

@@ -1,0 +1,88 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: credentials-cascade
+spec:
+  description: |
+    Test that imagePullSecrets and serviceAccountName cascade properly through the entire chain:
+    AIMService → AIMModel → AIMServiceTemplate → Discovery Job, and InferenceService
+  steps:
+  - name: Create prerequisites
+    try:
+    - apply:
+        file: service-account.yaml
+    - apply:
+        file: image-pull-secret.yaml
+
+  - name: Create AIMService with credentials
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify AIMModel was auto-created with credentials and metadata was extracted
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMModel
+          metadata:
+            name: aim-google-gemma-3-1b-it-0-7-0-preview-0a8c9e05
+          spec:
+            image: ghcr.io/silogen/aim-google-gemma-3-1b-it:0.7.0-preview
+            imagePullSecrets:
+            - name: test-registry-secret
+            serviceAccountName: test-inference-sa
+          status:
+            status: Ready
+            (conditions[?type == 'MetadataExtracted']):
+            - status: "True"
+
+  - name: Verify AIMServiceTemplate has credentials and discovery completes
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMServiceTemplate
+          metadata:
+            name: aim-google-gemma-3-1b-it-0-7-0-preview-1x-mi300x-lat-fp16-e17e
+          spec:
+            modelName: aim-google-gemma-3-1b-it-0-7-0-preview-0a8c9e05
+            metric: latency
+            precision: fp16
+            imagePullSecrets:
+            - name: test-registry-secret
+            serviceAccountName: test-inference-sa
+          status:
+            status: Ready
+
+  - name: Verify discovery Job has credentials
+    try:
+    - assert:
+        timeout: 5s
+        resource:
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            labels:
+              aim.silogen.ai/template: aim-google-gemma-3-1b-it-0-7-0-preview-1x-mi300x-lat-fp16-e17e
+          spec:
+            template:
+              spec:
+                serviceAccountName: test-inference-sa
+                imagePullSecrets:
+                - name: test-registry-secret
+
+  - name: Verify InferenceService has credentials
+    try:
+    - assert:
+        timeout: 10s
+        resource:
+          apiVersion: serving.kserve.io/v1beta1
+          kind: InferenceService
+          metadata:
+            name: credentials-test
+          spec:
+            predictor:
+              serviceAccountName: test-inference-sa
+              imagePullSecrets:
+              - name: test-registry-secret

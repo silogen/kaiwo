@@ -25,8 +25,8 @@ SOFTWARE.
 package shared
 
 import (
+	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/silogen/kaiwo/internal/controller/aim/routingconfig"
 
@@ -49,18 +49,21 @@ func EvaluateHTTPRouteStatus(route *gatewayapiv1.HTTPRoute) (bool, string, strin
 		return false, aimv1alpha1.AIMServiceReasonConfiguringRoute, "HTTPRoute has no parent status"
 	}
 	for _, parent := range status.Parents {
-		for _, condition := range parent.Conditions {
-			if condition.Status == metav1.ConditionFalse {
-				reason := condition.Reason
-				if reason == "" {
-					reason = aimv1alpha1.AIMServiceReasonRouteFailed
-				}
-				message := condition.Message
-				if message == "" {
-					message = "Gateway reported HTTPRoute condition false"
-				}
-				return false, reason, message
+		// Check if the HTTPRoute is accepted by this parent gateway
+		acceptedCond := meta.FindStatusCondition(parent.Conditions, string(gatewayapiv1.RouteConditionAccepted))
+		if acceptedCond == nil {
+			return false, aimv1alpha1.AIMServiceReasonConfiguringRoute, "HTTPRoute Accepted condition not found"
+		}
+		if acceptedCond.Status != metav1.ConditionTrue {
+			reason := acceptedCond.Reason
+			if reason == "" {
+				reason = aimv1alpha1.AIMServiceReasonRouteFailed
 			}
+			message := acceptedCond.Message
+			if message == "" {
+				message = "HTTPRoute not accepted by gateway"
+			}
+			return false, reason, message
 		}
 	}
 	return true, aimv1alpha1.AIMServiceReasonRouteReady, "HTTPRoute is ready"
@@ -160,6 +163,34 @@ func HandleRuntimeConfigMissing(
 	return true
 }
 
+// HandleModelResolutionFailure checks for model resolution failures and updates status.
+// Returns true if model resolution failed.
+func HandleModelResolutionFailure(
+	status *aimv1alpha1.AIMServiceStatus,
+	obs *ServiceObservation,
+	setCondition func(conditionType string, conditionStatus metav1.ConditionStatus, reason, message string),
+) bool {
+	if obs.ModelResolutionErr == nil {
+		return false
+	}
+
+	status.Status = aimv1alpha1.AIMServiceStatusFailed
+	message := obs.ModelResolutionErr.Error()
+	reason := "ModelResolutionFailed"
+
+	// Check if the error is due to multiple models being found
+	if errors.Is(obs.ModelResolutionErr, ErrMultipleModelsFound) {
+		reason = "MultipleModelsFound"
+	}
+
+	setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, reason, message)
+	setCondition(aimv1alpha1.AIMServiceConditionResolved, metav1.ConditionFalse, reason, "Cannot resolve model for service")
+	setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, reason, "Cannot proceed without resolved model")
+	setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionFalse, reason, "Model resolution failed")
+	setCondition(aimv1alpha1.AIMServiceConditionReady, metav1.ConditionFalse, reason, message)
+	return true
+}
+
 // HandleImageMissing checks for missing image and updates status.
 // Returns true if the image is missing.
 func HandleImageMissing(
@@ -181,33 +212,80 @@ func HandleImageMissing(
 	return true
 }
 
-// HandleRouteTemplateError checks for route template errors and updates status.
-// Returns true if there is a route template error.
-func HandleRouteTemplateError(
+// HandleImageNotReady checks if the resolved image is not yet ready and updates status.
+// Returns true if the service should wait for the image to become ready.
+func HandleImageNotReady(
+	status *aimv1alpha1.AIMServiceStatus,
+	obs *ServiceObservation,
+	setCondition func(conditionType string, conditionStatus metav1.ConditionStatus, reason, message string),
+) bool {
+	if obs == nil || obs.ImageReady || obs.ImageReadyReason == "" {
+		return false
+	}
+
+	message := obs.ImageReadyMessage
+	if message == "" {
+		message = "Image is not ready"
+	}
+
+	// Set status based on the reason
+	// ModelFailed is a terminal error (e.g., image not found 404) - cascade to Failed
+	// ModelDegraded is a recoverable error (e.g., auth issues) - cascade to Degraded
+	// Other reasons (e.g., model pending) - set to Pending
+	switch obs.ImageReadyReason {
+	case "ModelFailed":
+		status.Status = aimv1alpha1.AIMServiceStatusFailed
+		setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, obs.ImageReadyReason, message)
+	case "ModelDegraded":
+		status.Status = aimv1alpha1.AIMServiceStatusDegraded
+		setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, obs.ImageReadyReason, message)
+	default:
+		status.Status = aimv1alpha1.AIMServiceStatusPending
+	}
+
+	setCondition(aimv1alpha1.AIMServiceConditionResolved, metav1.ConditionFalse, obs.ImageReadyReason, message)
+	setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, obs.ImageReadyReason, "Waiting for image readiness")
+	setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionTrue, obs.ImageReadyReason, "Awaiting image readiness")
+	setCondition(aimv1alpha1.AIMServiceConditionReady, metav1.ConditionFalse, obs.ImageReadyReason, message)
+	return true
+}
+
+// HandlePathTemplateError checks for path template errors and updates status.
+// Returns true if there is a path template error.
+// This can occur when routing is enabled (via service spec or runtime config) but the path template is invalid.
+func HandlePathTemplateError(
 	status *aimv1alpha1.AIMServiceStatus,
 	service *aimv1alpha1.AIMService,
 	obs *ServiceObservation,
 	setCondition func(conditionType string, conditionStatus metav1.ConditionStatus, reason, message string),
 ) bool {
-	if service.Spec.Routing == nil || !service.Spec.Routing.Enabled {
+	if obs == nil || obs.PathTemplateErr == nil {
 		return false
 	}
-	if obs == nil || obs.RouteTemplateErr == nil {
+
+	// Check if routing is enabled (via service spec or runtime config)
+	var runtimeRouting *aimv1alpha1.AIMRuntimeRoutingConfig
+	if obs != nil {
+		runtimeRouting = obs.RuntimeConfigSpec.Routing
+	}
+	resolved := routingconfig.Resolve(service, runtimeRouting)
+	if !resolved.Enabled {
+		// Path template error doesn't matter if routing is disabled
 		return false
 	}
 
 	status.Status = aimv1alpha1.AIMServiceStatusDegraded
-	message := obs.RouteTemplateErr.Error()
-	reason := aimv1alpha1.AIMServiceReasonRouteTemplateInvalid
+	message := obs.PathTemplateErr.Error()
+	reason := aimv1alpha1.AIMServiceReasonPathTemplateInvalid
 	setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, reason, message)
 	setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, reason, "Cannot configure HTTP routing")
-	setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionFalse, reason, "Routing template is invalid")
+	setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionFalse, reason, "Path template is invalid")
 	setCondition(aimv1alpha1.AIMServiceConditionReady, metav1.ConditionFalse, reason, message)
 	return true
 }
 
-// HandleTemplateDegraded checks if the template is degraded or failed and updates status.
-// Returns true if the template is degraded or failed.
+// HandleTemplateDegraded checks if the template is degraded, not available, or failed and updates status.
+// Returns true if the template is degraded, not available, or failed.
 func HandleTemplateDegraded(
 	status *aimv1alpha1.AIMServiceStatus,
 	obs *ServiceObservation,
@@ -217,13 +295,14 @@ func HandleTemplateDegraded(
 		return false
 	}
 
-	// Handle both Degraded and Failed template statuses
+	// Handle Degraded, NotAvailable, and Failed template statuses
 	if obs.TemplateStatus.Status != aimv1alpha1.AIMTemplateStatusDegraded &&
+		obs.TemplateStatus.Status != aimv1alpha1.AIMTemplateStatusNotAvailable &&
 		obs.TemplateStatus.Status != aimv1alpha1.AIMTemplateStatusFailed {
 		return false
 	}
 
-	// Use Failed for terminal failures, Degraded for recoverable issues
+	// Use Failed for terminal failures, Degraded for recoverable issues (including NotAvailable)
 	if obs.TemplateStatus.Status == aimv1alpha1.AIMTemplateStatusFailed {
 		status.Status = aimv1alpha1.AIMServiceStatusFailed
 	} else {
@@ -282,6 +361,31 @@ func HandleTemplateNotAvailable(
 	return true
 }
 
+// HandleTemplateSelectionFailure reports failures during automatic template selection.
+func HandleTemplateSelectionFailure(
+	status *aimv1alpha1.AIMServiceStatus,
+	obs *ServiceObservation,
+	setCondition func(conditionType string, conditionStatus metav1.ConditionStatus, reason, message string),
+) bool {
+	if obs == nil || obs.TemplateSelectionReason == "" {
+		return false
+	}
+
+	message := obs.TemplateSelectionMessage
+	if message == "" {
+		message = "Template selection failed"
+	}
+
+	status.Status = aimv1alpha1.AIMServiceStatusFailed
+	reason := obs.TemplateSelectionReason
+	setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, reason, message)
+	setCondition(aimv1alpha1.AIMServiceConditionResolved, metav1.ConditionFalse, reason, message)
+	setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, reason, "Cannot proceed without a unique template")
+	setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionFalse, reason, "Template selection failed")
+	setCondition(aimv1alpha1.AIMServiceConditionReady, metav1.ConditionFalse, reason, message)
+	return true
+}
+
 // HandleMissingModelSource checks if the template is available but has no model sources.
 // Returns true if model sources are missing (discovery succeeded but produced no usable sources).
 func HandleMissingModelSource(
@@ -310,6 +414,49 @@ func HandleMissingModelSource(
 		"Service is degraded due to missing model sources")
 	setCondition(aimv1alpha1.AIMServiceConditionReady, metav1.ConditionFalse, reason,
 		"Service cannot be ready without model sources")
+	return true
+}
+
+// HandleInferenceServicePodImageError checks for image pull errors in InferenceService pods.
+// Returns true if an image pull error was detected.
+func HandleInferenceServicePodImageError(
+	status *aimv1alpha1.AIMServiceStatus,
+	obs *ServiceObservation,
+	setCondition func(conditionType string, conditionStatus metav1.ConditionStatus, reason, message string),
+) bool {
+	if obs == nil || obs.InferenceServicePodImageError == nil {
+		return false
+	}
+
+	pullErr := obs.InferenceServicePodImageError
+
+	// Determine the condition reason based on error type
+	var conditionReason string
+	switch pullErr.Type {
+	case ImagePullErrorAuth:
+		conditionReason = aimv1alpha1.AIMServiceReasonImagePullAuthFailure
+	case ImagePullErrorNotFound:
+		conditionReason = aimv1alpha1.AIMServiceReasonImageNotFound
+	default:
+		conditionReason = aimv1alpha1.AIMServiceReasonImagePullBackOff
+	}
+
+	// Format detailed message
+	containerType := "Container"
+	if pullErr.IsInitContainer {
+		containerType = "Init container"
+	}
+	detailedMessage := fmt.Sprintf("InferenceService pod %s %q is stuck in %s: %s",
+		containerType, pullErr.Container, pullErr.Reason, pullErr.Message)
+
+	status.Status = aimv1alpha1.AIMServiceStatusDegraded
+	setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionTrue, conditionReason, detailedMessage)
+	setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, conditionReason,
+		"InferenceService cannot run due to image pull failure")
+	setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionFalse, conditionReason,
+		"Service is degraded due to image pull failure")
+	setCondition(aimv1alpha1.AIMServiceConditionReady, metav1.ConditionFalse, conditionReason,
+		"Service cannot be ready due to image pull failure")
 	return true
 }
 
@@ -407,7 +554,7 @@ func setupCacheCondition(
 }
 
 // setupResolvedTemplate populates the resolved template reference in status.
-func setupResolvedTemplate(service *aimv1alpha1.AIMService, obs *ServiceObservation, status *aimv1alpha1.AIMServiceStatus) {
+func setupResolvedTemplate(obs *ServiceObservation, status *aimv1alpha1.AIMServiceStatus) {
 	status.ResolvedTemplate = nil
 	if obs != nil && obs.TemplateName != "" {
 		status.ResolvedTemplate = &aimv1alpha1.AIMServiceResolvedTemplate{
@@ -418,15 +565,8 @@ func setupResolvedTemplate(service *aimv1alpha1.AIMService, obs *ServiceObservat
 				Kind:      "AIMServiceTemplate",
 			},
 		}
-	} else if name := strings.TrimSpace(TemplateNameFromSpec(service)); name != "" {
-		status.ResolvedTemplate = &aimv1alpha1.AIMServiceResolvedTemplate{
-			AIMResolvedReference: aimv1alpha1.AIMResolvedReference{
-				Name:  name,
-				Scope: aimv1alpha1.AIMResolutionScopeUnknown,
-				Kind:  "AIMServiceTemplate",
-			},
-		}
 	}
+	// Don't set resolvedTemplate if no template was actually resolved
 }
 
 // evaluateHTTPRouteReadiness checks HTTP route status and updates routing conditions.
@@ -473,14 +613,26 @@ func handleTemplateNotFound(
 		setCondition(aimv1alpha1.AIMServiceConditionResolved, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonTemplateNotFound, message)
 		setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonCreatingRuntime, "Waiting for template creation")
 		setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonTemplateNotFound, "Waiting for template to be created")
+	} else if obs != nil && obs.TemplatesExistButNotReady {
+		// Templates exist but aren't Available yet - service should wait
+		status.Status = aimv1alpha1.AIMServiceStatusPending
+		message = "Waiting for templates to become Available"
+		setCondition(aimv1alpha1.AIMServiceConditionResolved, metav1.ConditionFalse, "TemplateNotAvailable", message)
+		setCondition(aimv1alpha1.AIMServiceConditionRuntimeReady, metav1.ConditionFalse, "TemplateNotAvailable", "Waiting for template discovery to complete")
+		setCondition(aimv1alpha1.AIMServiceConditionProgressing, metav1.ConditionTrue, "TemplateNotAvailable", "Templates exist but are not yet Available")
 	} else {
 		// No template could be resolved and no derived template will be created.
 		// This is a degraded state - the service cannot proceed.
 		status.Status = aimv1alpha1.AIMServiceStatusDegraded
-		if obs != nil && obs.BaseTemplateName == "" {
-			message = "No template reference specified and no default template found on the image. Provide spec.templateRef or configure the image's defaultServiceTemplate field."
-		} else if obs != nil {
-			message = fmt.Sprintf("Template %q not found. Create the template or verify the template name.", obs.BaseTemplateName)
+		if obs != nil {
+			switch {
+			case obs.TemplateSelectionMessage != "":
+				message = obs.TemplateSelectionMessage
+			case obs.BaseTemplateName == "":
+				message = "No template reference specified and no templates are available for the selected image. Provide spec.templateRef or create templates for the image."
+			default:
+				message = fmt.Sprintf("Template %q not found. Create the template or verify the template name.", obs.BaseTemplateName)
+			}
 		} else {
 			message = "Template not found"
 		}
@@ -519,7 +671,7 @@ func ProjectServiceStatus(
 	}
 
 	setupCacheCondition(service, setCondition)
-	setupResolvedTemplate(service, obs, status)
+	setupResolvedTemplate(obs, status)
 
 	routingEnabled, routingReady, routingHasFatalError := EvaluateRoutingStatus(service, obs, status, setCondition)
 
@@ -537,6 +689,22 @@ func ProjectServiceStatus(
 		setCondition(aimv1alpha1.AIMServiceConditionFailure, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonResolved, "No active failures")
 	}
 
+	if HandleModelResolutionFailure(status, obs, setCondition) {
+		return
+	}
+
+	if HandleImageMissing(status, obs, setCondition) {
+		return
+	}
+
+	if HandleImageNotReady(status, obs, setCondition) {
+		return
+	}
+
+	if HandleTemplateSelectionFailure(status, obs, setCondition) {
+		return
+	}
+
 	if handleTemplateNotFound(obs, status, setCondition) {
 		return
 	}
@@ -548,11 +716,7 @@ func ProjectServiceStatus(
 		return
 	}
 
-	if HandleImageMissing(status, obs, setCondition) {
-		return
-	}
-
-	if HandleRouteTemplateError(status, service, obs, setCondition) {
+	if HandlePathTemplateError(status, service, obs, setCondition) {
 		return
 	}
 
@@ -565,6 +729,11 @@ func ProjectServiceStatus(
 	}
 
 	if HandleMissingModelSource(status, obs, setCondition) {
+		return
+	}
+
+	// Check for image pull errors in InferenceService pods
+	if HandleInferenceServicePodImageError(status, obs, setCondition) {
 		return
 	}
 

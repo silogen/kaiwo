@@ -1,0 +1,36 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: model-ambiguous-multiple-matches
+spec:
+  description: Test that service degrades when multiple models exist for the same image URI
+  timeouts:
+    assert: 90s
+  steps:
+  - name: Create first model with specific image
+    try:
+    - apply:
+        file: model-1.yaml
+
+  - name: Create second model with same image (creates ambiguity)
+    try:
+    - apply:
+        file: model-2.yaml
+
+  - name: Create service with model.image matching both models
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service enters degraded state due to ambiguous model resolution
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: ambiguous-service
+          status:
+            (conditions[?type == 'Ready']):
+            - status: "False"
+              reason: MultipleModelsFound

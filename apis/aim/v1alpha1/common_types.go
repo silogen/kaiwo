@@ -25,7 +25,7 @@ package v1alpha1
 import "k8s.io/apimachinery/pkg/types"
 
 // AIMResolutionScope describes the scope of a resolved reference.
-// +kubebuilder:validation:Enum=Namespace;Cluster;Unknown
+// +kubebuilder:validation:Enum=Namespace;Cluster;Merged;Unknown
 type AIMResolutionScope string
 
 const (
@@ -33,6 +33,8 @@ const (
 	AIMResolutionScopeNamespace AIMResolutionScope = "Namespace"
 	// AIMResolutionScopeCluster denotes a cluster-scoped resource.
 	AIMResolutionScopeCluster AIMResolutionScope = "Cluster"
+	// AIMResolutionScopeMerged denotes that both cluster and namespace configs were merged.
+	AIMResolutionScopeMerged AIMResolutionScope = "Merged"
 	// AIMResolutionScopeUnknown denotes that the scope could not be determined.
 	AIMResolutionScopeUnknown AIMResolutionScope = "Unknown"
 )

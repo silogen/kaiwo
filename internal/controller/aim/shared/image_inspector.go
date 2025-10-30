@@ -37,9 +37,71 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
+	ctrl "sigs.k8s.io/controller-runtime"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 )
+
+// ImageRegistryError wraps registry access errors with categorization
+type ImageRegistryError struct {
+	Type    ImagePullErrorType // From template.go
+	Message string
+	Cause   error
+}
+
+func (e *ImageRegistryError) Error() string {
+	return e.Message
+}
+
+func (e *ImageRegistryError) Unwrap() error {
+	return e.Cause
+}
+
+// categorizeRegistryError analyzes a registry error to determine its type
+func categorizeRegistryError(err error) ImagePullErrorType {
+	if err == nil {
+		return ImagePullErrorGeneric
+	}
+
+	errMsg := strings.ToLower(err.Error())
+
+	// Check for authentication/authorization errors
+	authIndicators := []string{
+		"unauthorized",
+		"authentication required",
+		"authentication failed",
+		"401",
+		"403",
+		"forbidden",
+		"denied",
+		"permission denied",
+		"access denied",
+		"credentials",
+		"authentication",
+	}
+	for _, indicator := range authIndicators {
+		if strings.Contains(errMsg, indicator) {
+			return ImagePullErrorAuth
+		}
+	}
+
+	// Check for not-found errors
+	notFoundIndicators := []string{
+		"not found",
+		"404",
+		"manifest unknown",
+		"name unknown",
+		"image not found",
+		"no such",
+	}
+	for _, indicator := range notFoundIndicators {
+		if strings.Contains(errMsg, indicator) {
+			return ImagePullErrorNotFound
+		}
+	}
+
+	return ImagePullErrorGeneric
+}
 
 // InspectImage extracts metadata from a container image using the provided image pull secrets.
 // It uses go-containerregistry to authenticate and fetch image labels, then parses them into
@@ -55,6 +117,7 @@ import (
 // Returns:
 //   - *ImageMetadata: Extracted metadata if successful
 //   - error: Any error encountered during inspection (authentication, network, parsing, etc.)
+//     Registry access errors are wrapped in ImageRegistryError for categorization.
 func InspectImage(
 	ctx context.Context,
 	imageURI string,
@@ -62,9 +125,13 @@ func InspectImage(
 	clientset kubernetes.Interface,
 	namespace string,
 ) (*aimv1alpha1.ImageMetadata, error) {
+	logger := ctrl.LoggerFrom(ctx)
+
 	// Parse the image reference
 	ref, err := name.ParseReference(imageURI)
 	if err != nil {
+		// Parse errors are user errors (invalid image format) - log at Info level without stack trace
+		logger.Info("Invalid image reference format", "imageURI", imageURI, "error", err.Error())
 		return nil, fmt.Errorf("failed to parse image reference %q: %w", imageURI, err)
 	}
 
@@ -76,6 +143,8 @@ func InspectImage(
 		for i, secret := range imagePullSecrets {
 			secretNames[i] = secret.Name
 		}
+
+		logger.V(1).Info("Using image pull secrets for authentication", "secrets", secretNames, "namespace", namespace)
 
 		// Create k8s keychain with the provided secrets
 		kc, err := k8schain.New(ctx, clientset, k8schain.Options{
@@ -95,26 +164,77 @@ func InspectImage(
 	// Fetch the image descriptor
 	desc, err := remote.Get(ref, remote.WithAuthFromKeychain(keychain), remote.WithContext(ctx))
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch image %q: %w", imageURI, err)
+		errType := categorizeRegistryError(err)
+		// Log user errors (auth, not-found) at Info level without stack trace
+		// Log system errors (generic) at Error level with stack trace
+		if errType == ImagePullErrorAuth || errType == ImagePullErrorNotFound {
+			logger.Info("Failed to fetch image descriptor",
+				"imageURI", imageURI,
+				"errorType", errType,
+				"error", err.Error())
+		} else {
+			logger.Error(err, "Failed to fetch image descriptor",
+				"imageURI", imageURI,
+				"errorType", errType)
+		}
+		return nil, &ImageRegistryError{
+			Type:    errType,
+			Message: fmt.Sprintf("failed to fetch image %q: %v", imageURI, err),
+			Cause:   err,
+		}
 	}
 
 	// Get the image
 	img, err := desc.Image()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get image from descriptor: %w", err)
+		errType := categorizeRegistryError(err)
+		// Log user errors at Info level, system errors at Error level
+		if errType == ImagePullErrorAuth || errType == ImagePullErrorNotFound {
+			logger.Info("Failed to get image from descriptor",
+				"imageURI", imageURI,
+				"errorType", errType,
+				"error", err.Error())
+		} else {
+			logger.Error(err, "Failed to get image from descriptor", "imageURI", imageURI, "errorType", errType)
+		}
+		return nil, &ImageRegistryError{
+			Type:    errType,
+			Message: fmt.Sprintf("failed to get image from descriptor: %v", err),
+			Cause:   err,
+		}
 	}
 
 	// Get the config file which contains labels
 	configFile, err := img.ConfigFile()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get image config: %w", err)
+		errType := categorizeRegistryError(err)
+		// Log user errors at Info level, system errors at Error level
+		if errType == ImagePullErrorAuth || errType == ImagePullErrorNotFound {
+			logger.Info("Failed to get image config file",
+				"imageURI", imageURI,
+				"errorType", errType,
+				"error", err.Error())
+		} else {
+			logger.Error(err, "Failed to get image config file", "imageURI", imageURI, "errorType", errType)
+		}
+		return nil, &ImageRegistryError{
+			Type:    errType,
+			Message: fmt.Sprintf("failed to get image config: %v", err),
+			Cause:   err,
+		}
 	}
 
 	// Extract metadata from labels
+	labelCount := len(configFile.Config.Labels)
 	metadata, err := parseImageLabels(configFile.Config.Labels)
 	if err != nil {
+		logger.Error(err, "Failed to parse image labels", "imageURI", imageURI, "labelCount", labelCount)
 		return nil, fmt.Errorf("failed to parse image labels: %w", err)
 	}
+
+	logger.V(1).Info("Successfully extracted image metadata", "imageURI", imageURI,
+		"canonicalName", metadata.Model.CanonicalName,
+		"recommendedDeploymentCount", len(metadata.Model.RecommendedDeployments))
 
 	return metadata, nil
 }
@@ -144,9 +264,8 @@ func newMetadataFormatError(reason, message string) *MetadataFormatError {
 
 // parseImageLabels extracts structured metadata from OCI and AMD Silogen image labels.
 func parseImageLabels(labels map[string]string) (*aimv1alpha1.ImageMetadata, error) {
-	if len(labels) == 0 {
-		return nil, fmt.Errorf("no labels found in image")
-	}
+	// Allow images with no labels - metadata will be minimal but valid
+	// Downstream logic will detect missing recommendedDeployments if needed
 
 	metadata := &aimv1alpha1.ImageMetadata{
 		OCI:   &aimv1alpha1.OCIMetadata{},
@@ -200,11 +319,8 @@ func parseImageLabels(labels map[string]string) (*aimv1alpha1.ImageMetadata, err
 		metadata.Model.RecommendedDeployments = deployments
 	}
 
-	if metadata.Model.CanonicalName == "" {
-		return nil, newMetadataFormatError(
-			"MetadataMissingLabel",
-			"missing required image label \"org.amd.silogen.model.canonicalName\"")
-	}
+	// Note: canonicalName is optional. If missing, downstream logic will handle it.
+	// This allows images without full metadata to be processed gracefully.
 
 	return metadata, nil
 }

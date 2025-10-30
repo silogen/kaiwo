@@ -58,7 +58,7 @@ func TestResolveUsesRuntimeDefaultsWhenServiceMissing(t *testing.T) {
 func TestResolvePrefersServiceOverrides(t *testing.T) {
 	service := &aimv1alpha1.AIMService{}
 	service.Spec.Routing = &aimv1alpha1.AIMServiceRouting{
-		Enabled: false,
+		Enabled: boolPtr(false),
 	}
 	runtimeCfg := &aimv1alpha1.AIMRuntimeRoutingConfig{
 		Enabled: boolPtr(true),
@@ -74,7 +74,7 @@ func TestResolvePrefersServiceOverrides(t *testing.T) {
 func TestResolveFallsBackGatewayWhenServiceMissing(t *testing.T) {
 	service := &aimv1alpha1.AIMService{}
 	service.Spec.Routing = &aimv1alpha1.AIMServiceRouting{
-		Enabled: true,
+		Enabled: boolPtr(true),
 	}
 	runtimeCfg := &aimv1alpha1.AIMRuntimeRoutingConfig{
 		GatewayRef: &gatewayapiv1.ParentReference{Name: "shared-gateway"},
@@ -90,5 +90,206 @@ func TestResolveFallsBackGatewayWhenServiceMissing(t *testing.T) {
 	}
 	if result.GatewayRef == runtimeCfg.GatewayRef {
 		t.Fatalf("expected gateway ref deep copy when falling back to runtime config")
+	}
+}
+
+func TestResolveMergesAnnotations(t *testing.T) {
+	service := &aimv1alpha1.AIMService{}
+	service.Spec.Routing = &aimv1alpha1.AIMServiceRouting{
+		Enabled: boolPtr(true),
+		Annotations: map[string]string{
+			"service-annotation": "service-value",
+		},
+	}
+	runtimeCfg := &aimv1alpha1.AIMRuntimeRoutingConfig{
+		Enabled: boolPtr(true),
+	}
+
+	result := Resolve(service, runtimeCfg)
+
+	if !result.Enabled {
+		t.Fatalf("expected routing to be enabled")
+	}
+	if len(result.Annotations) != 1 {
+		t.Fatalf("expected 1 annotation, got %d", len(result.Annotations))
+	}
+	if result.Annotations["service-annotation"] != "service-value" {
+		t.Fatalf("expected service annotation to be present")
+	}
+}
+
+func TestResolveMergesPathTemplate(t *testing.T) {
+	service := &aimv1alpha1.AIMService{}
+	service.Spec.Routing = &aimv1alpha1.AIMServiceRouting{
+		Enabled:      boolPtr(true),
+		PathTemplate: "/custom/{.metadata.name}",
+	}
+	runtimeCfg := &aimv1alpha1.AIMRuntimeRoutingConfig{
+		Enabled:      boolPtr(true),
+		PathTemplate: "/default/{.metadata.name}",
+	}
+
+	result := Resolve(service, runtimeCfg)
+
+	if !result.Enabled {
+		t.Fatalf("expected routing to be enabled")
+	}
+	if result.PathTemplate != "/custom/{.metadata.name}" {
+		t.Fatalf("expected service route template to override runtime, got %s", result.PathTemplate)
+	}
+}
+
+func TestResolveUsesRuntimePathTemplateWhenServiceEmpty(t *testing.T) {
+	service := &aimv1alpha1.AIMService{}
+	service.Spec.Routing = &aimv1alpha1.AIMServiceRouting{
+		Enabled: boolPtr(true),
+	}
+	runtimeCfg := &aimv1alpha1.AIMRuntimeRoutingConfig{
+		Enabled:      boolPtr(true),
+		PathTemplate: "/default/{.metadata.name}",
+	}
+
+	result := Resolve(service, runtimeCfg)
+
+	if !result.Enabled {
+		t.Fatalf("expected routing to be enabled")
+	}
+	if result.PathTemplate != "/default/{.metadata.name}" {
+		t.Fatalf("expected runtime route template when service doesn't specify one, got %s", result.PathTemplate)
+	}
+}
+
+func TestResolveServiceOverridesGatewayRef(t *testing.T) {
+	service := &aimv1alpha1.AIMService{}
+	service.Spec.Routing = &aimv1alpha1.AIMServiceRouting{
+		Enabled:    boolPtr(true),
+		GatewayRef: &gatewayapiv1.ParentReference{Name: "service-gateway"},
+	}
+	runtimeCfg := &aimv1alpha1.AIMRuntimeRoutingConfig{
+		Enabled:    boolPtr(true),
+		GatewayRef: &gatewayapiv1.ParentReference{Name: "runtime-gateway"},
+	}
+
+	result := Resolve(service, runtimeCfg)
+
+	if !result.Enabled {
+		t.Fatalf("expected routing to be enabled")
+	}
+	if result.GatewayRef == nil {
+		t.Fatalf("expected gateway ref to be present")
+	}
+	if result.GatewayRef.Name != "service-gateway" {
+		t.Fatalf("expected service gateway ref to override runtime, got %s", result.GatewayRef.Name)
+	}
+}
+
+func TestResolveCompleteServiceOverride(t *testing.T) {
+	service := &aimv1alpha1.AIMService{}
+	service.Spec.Routing = &aimv1alpha1.AIMServiceRouting{
+		Enabled:      boolPtr(false),
+		GatewayRef:   &gatewayapiv1.ParentReference{Name: "service-gateway"},
+		PathTemplate: "/service/{.metadata.name}",
+		Annotations: map[string]string{
+			"key1": "value1",
+			"key2": "value2",
+		},
+	}
+	runtimeCfg := &aimv1alpha1.AIMRuntimeRoutingConfig{
+		Enabled:      boolPtr(true),
+		GatewayRef:   &gatewayapiv1.ParentReference{Name: "runtime-gateway"},
+		PathTemplate: "/runtime/{.metadata.name}",
+	}
+
+	result := Resolve(service, runtimeCfg)
+
+	// Service overrides all fields
+	if result.Enabled {
+		t.Fatalf("expected routing to be disabled from service override")
+	}
+	if result.GatewayRef.Name != "service-gateway" {
+		t.Fatalf("expected service gateway ref, got %s", result.GatewayRef.Name)
+	}
+	if result.PathTemplate != "/service/{.metadata.name}" {
+		t.Fatalf("expected service route template, got %s", result.PathTemplate)
+	}
+	if len(result.Annotations) != 2 {
+		t.Fatalf("expected 2 annotations, got %d", len(result.Annotations))
+	}
+}
+
+func TestResolveInheritsEnabledWhenServiceDoesNotSpecify(t *testing.T) {
+	service := &aimv1alpha1.AIMService{}
+	service.Spec.Routing = &aimv1alpha1.AIMServiceRouting{
+		// Enabled is nil - should inherit from runtime
+		Annotations: map[string]string{
+			"my-annotation": "my-value",
+		},
+	}
+	runtimeCfg := &aimv1alpha1.AIMRuntimeRoutingConfig{
+		Enabled: boolPtr(true),
+	}
+
+	result := Resolve(service, runtimeCfg)
+
+	if !result.Enabled {
+		t.Fatalf("expected routing to be enabled via inheritance from runtime config")
+	}
+	if len(result.Annotations) != 1 {
+		t.Fatalf("expected 1 annotation from service, got %d", len(result.Annotations))
+	}
+	if result.Annotations["my-annotation"] != "my-value" {
+		t.Fatalf("expected service annotation to be present")
+	}
+}
+
+func TestResolveInheritsEnabledFalseWhenServiceDoesNotSpecify(t *testing.T) {
+	service := &aimv1alpha1.AIMService{}
+	service.Spec.Routing = &aimv1alpha1.AIMServiceRouting{
+		// Enabled is nil - should inherit from runtime
+		GatewayRef: &gatewayapiv1.ParentReference{Name: "my-gateway"},
+	}
+	runtimeCfg := &aimv1alpha1.AIMRuntimeRoutingConfig{
+		Enabled: boolPtr(false),
+	}
+
+	result := Resolve(service, runtimeCfg)
+
+	if result.Enabled {
+		t.Fatalf("expected routing to be disabled via inheritance from runtime config")
+	}
+	if result.GatewayRef == nil || result.GatewayRef.Name != "my-gateway" {
+		t.Fatalf("expected service gateway ref to be present")
+	}
+}
+
+func TestResolveServiceExplicitlyDisablesOverridingRuntimeTrue(t *testing.T) {
+	service := &aimv1alpha1.AIMService{}
+	service.Spec.Routing = &aimv1alpha1.AIMServiceRouting{
+		Enabled: boolPtr(false),
+	}
+	runtimeCfg := &aimv1alpha1.AIMRuntimeRoutingConfig{
+		Enabled: boolPtr(true),
+	}
+
+	result := Resolve(service, runtimeCfg)
+
+	if result.Enabled {
+		t.Fatalf("expected service explicit false to override runtime true")
+	}
+}
+
+func TestResolveServiceExplicitlyEnablesOverridingRuntimeFalse(t *testing.T) {
+	service := &aimv1alpha1.AIMService{}
+	service.Spec.Routing = &aimv1alpha1.AIMServiceRouting{
+		Enabled: boolPtr(true),
+	}
+	runtimeCfg := &aimv1alpha1.AIMRuntimeRoutingConfig{
+		Enabled: boolPtr(false),
+	}
+
+	result := Resolve(service, runtimeCfg)
+
+	if !result.Enabled {
+		t.Fatalf("expected service explicit true to override runtime false")
 	}
 }

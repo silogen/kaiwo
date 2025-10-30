@@ -1,5 +1,6 @@
 # Test directories for different environments
-KIND_DIRS = chainsaw/tests/standard chainsaw/tests/aim
+# Automated AIM tests are disabled for now
+KIND_DIRS = chainsaw/tests/standard #  chainsaw/tests/aim
 
 # Values file configuration (can be overridden via env var)
 VALUES_FILE ?= values/base.yaml

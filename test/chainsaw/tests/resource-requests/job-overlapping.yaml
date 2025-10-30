@@ -6,7 +6,6 @@ spec:
   user: test@amd.com
   resources:
     limits:
-      cpu: 100m
       memory: 150Mi
     requests:
       memory: 100Mi
@@ -22,7 +21,7 @@ spec:
             image: busybox
             resources:
               limits:
-                cpu: 125m
+                memory: 225Mi
               requests:
                 memory: 125Mi
           restartPolicy: Never
