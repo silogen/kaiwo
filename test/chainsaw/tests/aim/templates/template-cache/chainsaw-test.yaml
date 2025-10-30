@@ -24,11 +24,6 @@ spec:
             ownerReferences:
               - name: aimdummy-template
           spec:
-            modelSources:
-            - name: HuggingFaceTB/SmolLM2-135M
-              size: 512Mi
-              sourceUri: hf://HuggingFaceTB/SmolLM2-135M
-            runtimeConfigName: default
             templateRef: aimdummy-template
 
 

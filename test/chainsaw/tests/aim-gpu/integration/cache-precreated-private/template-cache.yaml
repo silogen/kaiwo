@@ -1,0 +1,14 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMTemplateCache
+metadata:
+  name: integration-cache-precreated-private-tc
+spec:
+  templateRef: integration-cache-precreated-private
+  storageClassName: rwx-nfs
+  env:
+  - name: HF_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: hf-token
+        key: token
+  # ModelSources are automatically fetched from the referenced template

@@ -36,6 +36,7 @@ import (
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 	"k8s.io/apimachinery/pkg/api/meta"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -124,6 +125,13 @@ func cmpModelCacheStatus(a aimv1alpha1.AIMModelCacheStatusEnum, b aimv1alpha1.AI
 
 func (r *AIMTemplateCacheReconciler) observe(ctx context.Context, tc *aimv1alpha1.AIMTemplateCache) (*templateCacheObservation, error) {
 	var obs templateCacheObservation
+
+	// Resolve the template reference to get model sources
+	modelSources, err := r.getModelSourcesFromTemplate(ctx, tc)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get model sources from template: %w", err)
+	}
+
 	// Fetch available caches in the namespace
 	var caches = aimv1alpha1.AIMModelCacheList{}
 	if err := r.Client.List(ctx, &caches, client.InNamespace(tc.Namespace)); err != nil {
@@ -132,9 +140,8 @@ func (r *AIMTemplateCacheReconciler) observe(ctx context.Context, tc *aimv1alpha
 
 	obs.CacheStatus = map[string]aimv1alpha1.AIMModelCacheStatusEnum{}
 
-	// Loop through our needed model sources and check with what's available in our namespace.
-	// If multiple are available, select the one
-	for _, model := range tc.Spec.ModelSources {
+	// Loop through model sources from the template and check with what's available in our namespace
+	for _, model := range modelSources {
 		bestStatus := aimv1alpha1.AIMModelCacheStatusPending
 		for _, cached := range caches.Items {
 
@@ -154,6 +161,35 @@ func (r *AIMTemplateCacheReconciler) observe(ctx context.Context, tc *aimv1alpha
 	}
 
 	return &obs, nil
+}
+
+// getModelSourcesFromTemplate looks up the referenced template and returns its ModelSources
+func (r *AIMTemplateCacheReconciler) getModelSourcesFromTemplate(ctx context.Context, tc *aimv1alpha1.AIMTemplateCache) ([]aimv1alpha1.AIMModelSource, error) {
+	// Try namespace-scoped template first
+	var nsTemplate aimv1alpha1.AIMServiceTemplate
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Namespace: tc.Namespace,
+		Name:      tc.Spec.TemplateRef,
+	}, &nsTemplate)
+	if err == nil {
+		return nsTemplate.Status.ModelSources, nil
+	}
+	if !apierrors.IsNotFound(err) {
+		return nil, fmt.Errorf("error fetching namespace template: %w", err)
+	}
+
+	// Try cluster-scoped template
+	var clusterTemplate aimv1alpha1.AIMClusterServiceTemplate
+	err = r.Client.Get(ctx, client.ObjectKey{
+		Name: tc.Spec.TemplateRef,
+	}, &clusterTemplate)
+	if err == nil {
+		return clusterTemplate.Status.ModelSources, nil
+	}
+	if apierrors.IsNotFound(err) {
+		return nil, fmt.Errorf("template %q not found in namespace %q or cluster scope", tc.Spec.TemplateRef, tc.Namespace)
+	}
+	return nil, fmt.Errorf("error fetching cluster template: %w", err)
 }
 
 func BuildMissingModelCaches(tc *aimv1alpha1.AIMTemplateCache, obs *templateCacheObservation) (caches []*aimv1alpha1.AIMModelCache) {

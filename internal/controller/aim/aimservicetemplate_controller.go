@@ -316,8 +316,8 @@ func buildTemplateCache(template *aimv1alpha1.AIMServiceTemplate, runtimeConfigR
 		Spec: aimv1alpha1.AIMTemplateCacheSpec{
 			TemplateRef:      template.Name,
 			StorageClassName: runtimeConfigResolution.EffectiveSpec.DefaultStorageClassName,
-			ModelSources:     template.Status.ModelSources,
 			Env:              template.Spec.Caching.Env,
+			// ModelSources are fetched from the template reference at runtime - no duplication
 		},
 	}
 }

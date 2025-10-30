@@ -1,0 +1,8 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMTemplateCache
+metadata:
+  name: aim-meta-llama-llama-3-1-8b-instruct-0-7-1x-mi300x-lat-fp8-6729-tc
+spec:
+  templateRef: aim-meta-llama-llama-3-1-8b-instruct-0-7-1x-mi300x-lat-fp8-6729
+  storageClassName: rwx-nfs
+  # ModelSources are automatically fetched from the referenced cluster template
