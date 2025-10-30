@@ -52,7 +52,7 @@ func main() {
 	precision := getEnv("AIM_PRECISION", "fp8")
 	gpuModel := getEnv("AIM_GPU_MODEL", "MI300X")
 
-	qwen := discoveryModelResult{Name: "smol2-135m", Source: "hf://HuggingFaceTB/SmolLM2-135M", SizeGB: 0.5}
+	qwen := discoveryModelResult{Name: "HuggingFaceTB/SmolLM2-135M", Source: "hf://HuggingFaceTB/SmolLM2-135M", SizeGB: 0.5}
 	fakeprofilemeta := profileMetadata{
 		Engine:    "vllm",
 		GPU:       gpuModel,

@@ -206,11 +206,11 @@ func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *ai
 			return template.Spec.ServiceAccountName
 		},
 		GetTemplateCaches: func(ctx context.Context) (*aimv1alpha1.AIMTemplateCacheList, error) {
-			var availableCaches aimv1alpha1.AIMTemplateCacheList
-			if !template.Spec.Caching.Enabled {
+			// Caching is optional, check if it's enabled
+			if template.Spec.Caching == nil || !template.Spec.Caching.Enabled {
 				return nil, nil
 			}
-			availableCaches = aimv1alpha1.AIMTemplateCacheList{}
+			var availableCaches aimv1alpha1.AIMTemplateCacheList
 			err := r.Client.List(ctx, &availableCaches)
 			if err != nil {
 				return nil, err
@@ -273,7 +273,7 @@ func (r *AIMServiceTemplateReconciler) plan(ctx context.Context, template *aimv1
 		},
 	})
 
-	if template.Spec.Caching.Enabled && len(template.Status.ModelSources) > 0 && obs.TemplateCaches != nil {
+	if template.Spec.Caching != nil && template.Spec.Caching.Enabled && len(template.Status.ModelSources) > 0 && obs.TemplateCaches != nil {
 		cacheFound := false
 
 		// Check if we already have a valid cache

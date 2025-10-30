@@ -25,7 +25,7 @@ spec:
               - name: aimdummy-template
           spec:
             modelSources:
-            - name: smol2-135m
+            - name: HuggingFaceTB/SmolLM2-135M
               size: 512Mi
               sourceUri: hf://HuggingFaceTB/SmolLM2-135M
             runtimeConfigName: default
@@ -56,11 +56,7 @@ spec:
               serving.kserve.io/inferenceservice: smollm-chat
           spec:
             (containers[?name == 'kserve-container']):
-            - env:
-              - name: VLLM_ENABLE_METRICS
-                value: "true"
-              (volumeMounts[?name == 'smol2-135m-cache']):
-              - mountPath: /mnt/models/HuggingFaceTB/SmolLM2-135M
-                name: smol2-135m-cache
+              - (volumeMounts[?mountPath == '/workspace/model-cache/HuggingFaceTB/SmolLM2-135M']):
+                - mountPath: /workspace/model-cache/HuggingFaceTB/SmolLM2-135M
           status:
             phase: Running

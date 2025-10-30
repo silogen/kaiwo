@@ -34,6 +34,7 @@ import (
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -157,11 +158,16 @@ func (r *AIMTemplateCacheReconciler) observe(ctx context.Context, tc *aimv1alpha
 
 func BuildMissingModelCaches(tc *aimv1alpha1.AIMTemplateCache, obs *templateCacheObservation) (caches []*aimv1alpha1.AIMModelCache) {
 	for _, cache := range obs.MissingCaches {
+		// Sanitize the model name for use as a Kubernetes resource name
+		// The original model name (with capitalization) is preserved in SourceURI for matching
+		// Note: Don't add "-cache" suffix here as the ModelCache controller will add it when creating the PVC
+		sanitizedName := baseutils.MakeRFC1123Compliant(cache.Name)
+
 		caches = append(caches,
 			&aimv1alpha1.AIMModelCache{
 				TypeMeta: metav1.TypeMeta{APIVersion: "aimv1alpha1", Kind: "AIMModelCache"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      cache.Name + "-cache",
+					Name:      sanitizedName,
 					Namespace: tc.Namespace,
 					Labels:    map[string]string{"template-created": "true"}, // Can be cleaned up if no templates are referencing it
 				},

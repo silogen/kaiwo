@@ -10,7 +10,7 @@ kind: AIMModel
 metadata:
   name: aimdummy-model
 spec:
-  image: aimdummy:dev-latest
+  image: ghcr.io/silogen/aim-dummy:0.1.3
   defaultServiceTemplate: aimdummy-template
   resources:
     limits:

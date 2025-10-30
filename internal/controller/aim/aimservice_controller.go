@@ -382,9 +382,12 @@ func (r *AIMServiceReconciler) plan(ctx context.Context, service *aimv1alpha1.AI
 }
 
 func addModelCacheMount(inferenceService *servingv1beta1.InferenceService, modelCache aimv1alpha1.AIMModelCache, modelName string) {
+	// Sanitize volume name to be RFC1123 compliant (max 63 chars, lowercase alphanumeric or '-')
+	volumeName := baseutils.MakeRFC1123Compliant(modelCache.Name)
+
 	// Add the PVC volume for the model cache
 	inferenceService.Spec.Predictor.Volumes = append(inferenceService.Spec.Predictor.Volumes, v1.Volume{
-		Name: modelCache.Name,
+		Name: volumeName,
 		VolumeSource: v1.VolumeSource{
 			PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
 				ClaimName: modelCache.Status.PersistentVolumeClaim,
@@ -399,7 +402,7 @@ func addModelCacheMount(inferenceService *servingv1beta1.InferenceService, model
 	inferenceService.Spec.Predictor.Model.VolumeMounts = append(
 		inferenceService.Spec.Predictor.Model.VolumeMounts,
 		v1.VolumeMount{
-			Name:      modelCache.Name,
+			Name:      volumeName,
 			MountPath: mountPath,
 		})
 }
