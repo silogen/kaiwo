@@ -1,12 +1,16 @@
 name: publish-main
 
 on:
-  push:
-    branches: [main, master]
-    # paths:
-    #   - 'apis/**'
-    #   - 'internal/**'
-    #   - 'pkg/**'
+  pull_request:
+    types: [opened, synchronize]
+    branches-ignore:
+    - main
+    paths:
+    - 'apis/**'
+    - 'internal/**'
+    - 'pkg/**'
+    - 'cmd/**'
+    - 'config/**'
 
 permissions:
   contents: write
