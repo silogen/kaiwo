@@ -37,6 +37,7 @@ import (
 	servingv1beta1 "github.com/kserve/kserve/pkg/apis/serving/v1beta1"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -394,32 +395,55 @@ func (r *AIMServiceReconciler) planInferenceServiceAndRoute(logger logr.Logger, 
 	modelCachesToMount, modelsReady := r.computeModelCacheMounts(service, obs, templateState)
 	templateCacheReady := obs.TemplateCache != nil && obs.TemplateCache.Status.Status == aimv1alpha1.AIMTemplateCacheStatusAvailable
 
+	// Determine if we need a service PVC (when no template cache exists)
+	var servicePVC *v1.PersistentVolumeClaim
+	var servicePVCErr error
+	if obs.TemplateCache == nil {
+		servicePVC, servicePVCErr = buildServicePVC(service, templateState, obs.RuntimeConfigSpec.DefaultStorageClassName)
+		if servicePVCErr != nil {
+			baseutils.Debug(logger, "Failed to build service PVC", "error", servicePVCErr)
+			// This error will be handled in status projection
+		} else {
+			desired = append(desired, servicePVC)
+		}
+	}
+
 	// Service is ready if:
 	// - Models are ready AND
 	// - Either we don't need caching OR cache is ready
-	serviceReady := modelsReady && (!service.Spec.CacheModel || templateCacheReady)
+	// - AND either we have a template cache OR we successfully created a service PVC
+	serviceReady := modelsReady && (!service.Spec.CacheModel || templateCacheReady) && (templateCacheReady || servicePVC != nil)
 
-	// Only create InferenceService if we have a model source and cache (discovery must have succeeded and populated ModelSources)
+	// Only create InferenceService if we have a model source and storage
 	if serviceReady {
 		inferenceService := shared.BuildInferenceService(serviceState, ownerRef)
 
-		// If we have caches to mount, set the AIM_CACHE_PATH env var and mount them
-		if len(modelCachesToMount) > 0 {
-			inferenceService.Spec.Predictor.Model.Env = append(
-				inferenceService.Spec.Predictor.Model.Env,
-				v1.EnvVar{
-					Name:  "AIM_CACHE_PATH",
-					Value: AIMCacheBasePath,
-				})
+		// Set AIM_CACHE_PATH env var for all services
+		inferenceService.Spec.Predictor.Model.Env = append(
+			inferenceService.Spec.Predictor.Model.Env,
+			v1.EnvVar{
+				Name:  "AIM_CACHE_PATH",
+				Value: AIMCacheBasePath,
+			})
 
+		// Mount either template cache PVCs or service PVC
+		if len(modelCachesToMount) > 0 {
+			// Mount template cache PVCs
 			for _, cm := range modelCachesToMount {
 				addModelCacheMount(inferenceService, cm.cache, cm.modelName)
 			}
+		} else if servicePVC != nil {
+			// Mount service PVC for model downloads
+			addServicePVCMount(inferenceService, servicePVC.Name)
 		}
 
 		desired = append(desired, inferenceService)
 	} else {
-		baseutils.Debug(logger, "Model source not available, skipping InferenceService creation")
+		if servicePVCErr != nil {
+			baseutils.Debug(logger, "Service not ready due to PVC creation error", "error", servicePVCErr)
+		} else {
+			baseutils.Debug(logger, "Model source not available, skipping InferenceService creation")
+		}
 	}
 
 	// Create HTTPRoute if routing is enabled, regardless of model source availability
@@ -472,6 +496,114 @@ func (r *AIMServiceReconciler) plan(ctx context.Context, service *aimv1alpha1.AI
 	}
 
 	return desired
+}
+
+// buildServicePVC creates a PVC for a service to store downloaded models.
+// This is used when there's no template cache available.
+// Returns nil and an error if model sizes aren't specified.
+func buildServicePVC(service *aimv1alpha1.AIMService, templateState aimstate.TemplateState, storageClassName string) (*v1.PersistentVolumeClaim, error) {
+	// Generate PVC name using same pattern as InferenceService
+	pvcName := shared.GenerateInferenceServiceName(service.Name, service.Namespace) + "-temp-cache"
+
+	// Calculate required size from model sources
+	size, err := calculateRequiredStorageSize(templateState)
+	if err != nil {
+		return nil, fmt.Errorf("cannot determine storage size: %w", err)
+	}
+
+	var sc *string
+	if storageClassName != "" {
+		sc = &storageClassName
+	}
+
+	return &v1.PersistentVolumeClaim{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "PersistentVolumeClaim",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pvcName,
+			Namespace: service.Namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/managed-by": "aim-service-controller",
+				"app.kubernetes.io/component":  "model-storage",
+				"aim.silogen.ai/service":       service.Name,
+			},
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         service.APIVersion,
+					Kind:               service.Kind,
+					Name:               service.Name,
+					UID:                service.UID,
+					Controller:         baseutils.Pointer(true),
+					BlockOwnerDeletion: baseutils.Pointer(true),
+				},
+			},
+		},
+		Spec: v1.PersistentVolumeClaimSpec{
+			AccessModes: []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce},
+			Resources: v1.VolumeResourceRequirements{
+				Requests: v1.ResourceList{
+					v1.ResourceStorage: size,
+				},
+			},
+			StorageClassName: sc,
+		},
+	}, nil
+}
+
+// calculateRequiredStorageSize computes the total storage needed for model sources.
+// Returns sum of all model sizes plus 20% headroom, or an error if sizes aren't specified.
+func calculateRequiredStorageSize(templateState aimstate.TemplateState) (resource.Quantity, error) {
+	const headroomPercent = 1.2 // 20% extra
+
+	if templateState.Status == nil || len(templateState.Status.ModelSources) == 0 {
+		return resource.Quantity{}, fmt.Errorf("no model sources available in template")
+	}
+
+	var totalBytes int64
+	for _, modelSource := range templateState.Status.ModelSources {
+		if modelSource.Size.IsZero() {
+			return resource.Quantity{}, fmt.Errorf("model source %q has no size specified", modelSource.Name)
+		}
+		totalBytes += modelSource.Size.Value()
+	}
+
+	if totalBytes == 0 {
+		return resource.Quantity{}, fmt.Errorf("total model size is zero")
+	}
+
+	// Add headroom
+	totalBytes = int64(float64(totalBytes) * headroomPercent)
+
+	// Format as Gi for better readability and compatibility
+	totalGi := float64(totalBytes) / (1024 * 1024 * 1024)
+	sizeStr := fmt.Sprintf("%.1fGi", totalGi)
+	qty, err := resource.ParseQuantity(sizeStr)
+	if err != nil {
+		return resource.Quantity{}, fmt.Errorf("failed to parse size %q: %w", sizeStr, err)
+	}
+	return qty, nil
+}
+
+func addServicePVCMount(inferenceService *servingv1beta1.InferenceService, pvcName string) {
+	volumeName := "model-storage"
+
+	// Add the PVC volume
+	inferenceService.Spec.Predictor.Volumes = append(inferenceService.Spec.Predictor.Volumes, v1.Volume{
+		Name: volumeName,
+		VolumeSource: v1.VolumeSource{
+			PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
+				ClaimName: pvcName,
+			},
+		},
+	})
+
+	// Mount the volume in the kserve-container
+	inferenceService.Spec.Predictor.Model.VolumeMounts = append(inferenceService.Spec.Predictor.Model.VolumeMounts, v1.VolumeMount{
+		Name:      volumeName,
+		MountPath: AIMCacheBasePath,
+	})
 }
 
 func addModelCacheMount(inferenceService *servingv1beta1.InferenceService, modelCache aimv1alpha1.AIMModelCache, modelName string) {
