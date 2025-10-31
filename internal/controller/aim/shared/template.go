@@ -55,6 +55,7 @@ type TemplateObservation struct {
 	ImagePullSecrets   []corev1.LocalObjectReference
 	ServiceAccountName string
 	RuntimeConfig      *RuntimeConfigResolution
+	TemplateCaches     *aimv1alpha1.AIMTemplateCacheList
 	GPUModel           string
 	GPUAvailable       bool
 	GPUChecked         bool
@@ -92,6 +93,7 @@ type TemplateObservationOptions[R client.Object] struct {
 	OnRuntimeConfigResolved func(resolution *RuntimeConfigResolution)
 	GetImagePullSecrets     func() []corev1.LocalObjectReference // Template's imagePullSecrets
 	GetServiceAccountName   func() string                        // Template's serviceAccountName
+	GetTemplateCaches       func(ctx context.Context) (*aimv1alpha1.AIMTemplateCacheList, error)
 }
 
 // ObserveTemplate gathers runtime, discovery job, image, and runtime config information with common error handling.
@@ -158,6 +160,15 @@ func ObserveTemplate[R client.Object](ctx context.Context, opts TemplateObservat
 	// Get template's serviceAccountName
 	if opts.GetServiceAccountName != nil {
 		obs.ServiceAccountName = opts.GetServiceAccountName()
+	}
+
+	if opts.GetTemplateCaches != nil {
+		cache, err := opts.GetTemplateCaches(ctx)
+		if err != nil {
+			return nil, err
+		}
+		obs.TemplateCaches = cache
+
 	}
 
 	return obs, nil

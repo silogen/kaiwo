@@ -4,6 +4,8 @@ metadata:
   name: integration-cluster-model-public-image
 spec:
   description: Test that an AIMService can be started from an AIMClusterModel reference, with public AIM image and public model weights
+  # using a cluster model, so parallel for safety
+  concurrent: false
   steps:
   - name: Create cluster runtime config
     try:
@@ -72,9 +74,9 @@ spec:
                   value: /integration/custom-path/integration-cluster-model-public-image
           status:
             (parents[0].conditions[?type == 'ResolvedRefs']):
-              - status: "True"
+            - status: "True"
             (parents[0].conditions[?type == 'Accepted']):
-              - status: "True"
+            - status: "True"
 
   - name: Verify the service responds
     try:

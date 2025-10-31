@@ -1,0 +1,14 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: integration-cache-precreated-private
+spec:
+  model:
+    ref: aim-meta-llama-llama-3-2-1b-instruct-0-7-0-preview
+  runtimeConfigName: integration-cache-precreated-private
+  routing:
+    annotations:
+      my-annotation: my-value
+  # No env needed, model exists in cache
+  imagePullSecrets:
+  - name: ghcr-pull-secret

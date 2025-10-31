@@ -32,6 +32,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -204,6 +205,18 @@ func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *ai
 		GetServiceAccountName: func() string {
 			return template.Spec.ServiceAccountName
 		},
+		GetTemplateCaches: func(ctx context.Context) (*aimv1alpha1.AIMTemplateCacheList, error) {
+			// Caching is optional, check if it's enabled
+			if template.Spec.Caching == nil || !template.Spec.Caching.Enabled {
+				return nil, nil
+			}
+			var availableCaches aimv1alpha1.AIMTemplateCacheList
+			err := r.List(ctx, &availableCaches)
+			if err != nil {
+				return nil, err
+			}
+			return &availableCaches, nil
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -260,10 +273,53 @@ func (r *AIMServiceTemplateReconciler) plan(ctx context.Context, template *aimv1
 		},
 	})
 
-	// TODO: If caching.enabled, create AIMTemplateCache object
-	// This will be handled in a future iteration
+	if template.Spec.Caching != nil && template.Spec.Caching.Enabled && len(template.Status.ModelSources) > 0 && obs.TemplateCaches != nil {
+		cacheFound := false
+
+		// Check if we already have a valid cache
+		for _, cache := range obs.TemplateCaches.Items {
+			for _, owner := range cache.OwnerReferences {
+				if owner.UID == template.UID {
+					cacheFound = true
+				}
+			}
+		}
+
+		// Caching is enabled, and didn't find ours - create one
+		if !cacheFound {
+			newCache := buildTemplateCache(template, obs.RuntimeConfig)
+			desired = append(desired, newCache)
+		}
+
+	}
 
 	return desired, nil
+}
+
+func buildTemplateCache(template *aimv1alpha1.AIMServiceTemplate, runtimeConfigResolution *shared.RuntimeConfigResolution) *aimv1alpha1.AIMTemplateCache {
+	cBool := true
+	return &aimv1alpha1.AIMTemplateCache{
+		TypeMeta: metav1.TypeMeta{APIVersion: "aimv1alpha1", Kind: "AIMModelCache"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      template.Name,
+			Namespace: template.Namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: template.APIVersion,
+					Kind:       template.Kind,
+					Name:       template.Name,
+					UID:        template.UID,
+					Controller: &cBool,
+				},
+			},
+		},
+		Spec: aimv1alpha1.AIMTemplateCacheSpec{
+			TemplateRef:      template.Name,
+			StorageClassName: runtimeConfigResolution.EffectiveSpec.DefaultStorageClassName,
+			Env:              template.Spec.Caching.Env,
+			// ModelSources are fetched from the template reference at runtime - no duplication
+		},
+	}
 }
 
 // projectStatus computes status from observation + errors (modifies template.Status directly)

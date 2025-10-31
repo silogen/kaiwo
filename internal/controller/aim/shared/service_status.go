@@ -532,12 +532,27 @@ func initializeStatusReferences(status *aimv1alpha1.AIMServiceStatus, obs *Servi
 	status.ResolvedRuntimeConfig = nil
 	status.ResolvedImage = nil
 	status.Routing = nil
+	status.ResolvedTemplateCache = nil
 
 	if obs != nil && obs.ResolvedRuntimeConfig != nil {
 		status.ResolvedRuntimeConfig = obs.ResolvedRuntimeConfig
 	}
 	if obs != nil && obs.ResolvedImage != nil {
 		status.ResolvedImage = obs.ResolvedImage
+	}
+	if obs != nil && obs.TemplateCache != nil {
+		status.ResolvedTemplateCache = &aimv1alpha1.AIMResolvedReference{
+			Name:      obs.TemplateCache.Name,
+			Namespace: obs.TemplateCache.Namespace,
+			Kind:      "AIMTemplateCache",
+			Scope: func() aimv1alpha1.AIMResolutionScope {
+				if obs.TemplateCache.Namespace != "" {
+					return aimv1alpha1.AIMResolutionScopeNamespace
+				}
+				return aimv1alpha1.AIMResolutionScopeCluster
+			}(),
+			UID: obs.TemplateCache.UID,
+		}
 	}
 }
 
@@ -738,7 +753,11 @@ func ProjectServiceStatus(
 	}
 
 	if service.Spec.CacheModel {
-		setCondition(aimv1alpha1.AIMServiceConditionCacheReady, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonCacheWarm, "Template caching enabled")
+		if obs.TemplateCache != nil && obs.TemplateCache.Status.Status == aimv1alpha1.AIMTemplateCacheStatusAvailable {
+			setCondition(aimv1alpha1.AIMServiceConditionCacheReady, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonCacheWarm, "Template cache is warm")
+		} else {
+			setCondition(aimv1alpha1.AIMServiceConditionCacheReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonCacheWarm, "Template caching is enabled")
+		}
 	}
 
 	EvaluateInferenceServiceStatus(status, obs, inferenceService, httpRoute, routingEnabled, routingReady, setCondition)

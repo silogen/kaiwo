@@ -145,6 +145,10 @@ type AIMServiceStatus struct {
 
 	// ResolvedTemplate captures metadata about the template that satisfied the reference.
 	ResolvedTemplate *AIMServiceResolvedTemplate `json:"resolvedTemplate,omitempty"`
+
+	// ResolvedTemplateCache captures metadata about the template cache being used, if any.
+	// +optional
+	ResolvedTemplateCache *AIMResolvedReference `json:"resolvedTemplateCache,omitempty"`
 }
 
 // AIMServiceStatusEnum defines coarse-grained states for a service.
