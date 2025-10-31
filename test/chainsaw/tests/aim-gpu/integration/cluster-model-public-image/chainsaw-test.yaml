@@ -72,6 +72,8 @@ spec:
             - matches:
               - path:
                   value: /integration/custom-path/integration-cluster-model-public-image
+              timeouts:
+                request: "3m0s"
           status:
             (parents[0].conditions[?type == 'ResolvedRefs']):
             - status: "True"
