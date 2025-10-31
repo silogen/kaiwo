@@ -63,9 +63,9 @@ func BuildInferenceServiceHTTPRoute(serviceState aimstate.ServiceState, ownerRef
 				"app.kubernetes.io/component":  LabelValueServiceComponent,
 				"app.kubernetes.io/managed-by": LabelValueManagedBy,
 				LabelKeyTemplate:               serviceState.Template.Name,
-				LabelKeyModelID:                sanitizeLabelValue(serviceState.ModelID),
-				LabelKeyImageName:              sanitizeLabelValue(serviceState.Template.SpecCommon.ModelName),
-				LabelKeyServiceName:            sanitizeLabelValue(serviceState.Name),
+				LabelKeyModelID:                SanitizeLabelValue(serviceState.ModelID),
+				LabelKeyImageName:              SanitizeLabelValue(serviceState.Template.SpecCommon.ModelName),
+				LabelKeyServiceName:            SanitizeLabelValue(serviceState.Name),
 			},
 			Annotations:     annotations,
 			OwnerReferences: []metav1.OwnerReference{ownerRef},
@@ -113,36 +113,38 @@ func BuildInferenceServiceHTTPRoute(serviceState aimstate.ServiceState, ownerRef
 		},
 	}
 
-	// Set a longer timeout for inference requests (to handle JIT compilation on first request)
-	requestTimeout := gatewayapiv1.Duration("120s")
-
-	route.Spec.Rules = []gatewayapiv1.HTTPRouteRule{
-		{
-			Matches: []gatewayapiv1.HTTPRouteMatch{
-				{
-					Path: &gatewayapiv1.HTTPPathMatch{
-						Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
-						Value: ptr.To(pathPrefix),
-					},
+	rule := gatewayapiv1.HTTPRouteRule{
+		Matches: []gatewayapiv1.HTTPRouteMatch{
+			{
+				Path: &gatewayapiv1.HTTPPathMatch{
+					Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+					Value: ptr.To(pathPrefix),
 				},
-			},
-			Filters: []gatewayapiv1.HTTPRouteFilter{
-				{
-					Type: gatewayapiv1.HTTPRouteFilterURLRewrite,
-					URLRewrite: &gatewayapiv1.HTTPURLRewriteFilter{
-						Path: &gatewayapiv1.HTTPPathModifier{
-							Type:               gatewayapiv1.PrefixMatchHTTPPathModifier,
-							ReplacePrefixMatch: ptr.To("/"),
-						},
-					},
-				},
-			},
-			BackendRefs: []gatewayapiv1.HTTPBackendRef{backend},
-			Timeouts: &gatewayapiv1.HTTPRouteTimeouts{
-				Request: &requestTimeout,
 			},
 		},
+		Filters: []gatewayapiv1.HTTPRouteFilter{
+			{
+				Type: gatewayapiv1.HTTPRouteFilterURLRewrite,
+				URLRewrite: &gatewayapiv1.HTTPURLRewriteFilter{
+					Path: &gatewayapiv1.HTTPPathModifier{
+						Type:               gatewayapiv1.PrefixMatchHTTPPathModifier,
+						ReplacePrefixMatch: ptr.To("/"),
+					},
+				},
+			},
+		},
+		BackendRefs: []gatewayapiv1.HTTPBackendRef{backend},
 	}
+
+	// Set request timeout if configured (either from service or runtime config)
+	if serviceState.Routing.RequestTimeout != nil {
+		timeout := gatewayapiv1.Duration(*serviceState.Routing.RequestTimeout)
+		rule.Timeouts = &gatewayapiv1.HTTPRouteTimeouts{
+			Request: &timeout,
+		}
+	}
+
+	route.Spec.Rules = []gatewayapiv1.HTTPRouteRule{rule}
 
 	return route
 }

@@ -73,6 +73,16 @@ spec:
                       When false, discovery is skipped. Discovery failures are non-fatal and reported via conditions.
                     type: boolean
                 type: object
+              pvcHeadroomPercent:
+                default: 10
+                description: |-
+                  PVCHeadroomPercent specifies the percentage of extra space to add to PVCs
+                  for model storage. This accounts for filesystem overhead and temporary files
+                  during model loading. The value represents a percentage (e.g., 10 means 10% extra space).
+                  If not specified, defaults to 10%.
+                format: int32
+                minimum: 0
+                type: integer
               routing:
                 description: |-
                   Routing controls HTTP routing defaults applied to AIM resources.
@@ -187,6 +197,14 @@ spec:
 
                       The template must:
                       - Use valid JSONPath expressions wrapped in {...
+                    type: string
+                  requestTimeout:
+                    description: |-
+                      RequestTimeout defines the HTTP request timeout for routes.
+                      This sets the maximum duration for a request to complete before timing out.
+                      The timeout applies to the entire request/response cycle.
+                      If not specified, no timeout is set on the route.
+                      Individual services can override this value via spec.routing.requestTimeout.
                     type: string
                 type: object
             type: object

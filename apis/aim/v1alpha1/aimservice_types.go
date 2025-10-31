@@ -278,6 +278,13 @@ type AIMServiceRouting struct {
 	// The value is rendered against the AIMService object using JSONPath expressions.
 	// +optional
 	PathTemplate string `json:"pathTemplate,omitempty"`
+
+	// RequestTimeout overrides the HTTP request timeout for routes.
+	// This sets the maximum duration for a request to complete before timing out.
+	// The timeout applies to the entire request/response cycle.
+	// If not specified, inherits from runtime config. If neither is set, no timeout is configured.
+	// +optional
+	RequestTimeout *metav1.Duration `json:"requestTimeout,omitempty"`
 }
 
 // AIMServiceRoutingStatus captures observed routing details.

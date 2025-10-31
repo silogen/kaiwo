@@ -52,16 +52,18 @@ type ServiceState struct {
 
 // ServiceRoutingState carries routing configuration resolved for the service.
 type ServiceRoutingState struct {
-	Enabled     bool
-	PathPrefix  string
-	GatewayRef  *gatewayapiv1.ParentReference
-	Annotations map[string]string
+	Enabled        bool
+	PathPrefix     string
+	GatewayRef     *gatewayapiv1.ParentReference
+	Annotations    map[string]string
+	RequestTimeout *string
 }
 
 // ServiceStateOptions exposes optional overrides when constructing the service view.
 type ServiceStateOptions struct {
-	RuntimeName string
-	RoutePath   string
+	RuntimeName    string
+	RoutePath      string
+	RequestTimeout *string
 }
 
 // NewServiceState projects the AIMService and template data into a vendor-neutral structure.
@@ -116,8 +118,9 @@ func NewServiceState(service *aimv1alpha1.AIMService, template TemplateState, op
 
 	if resolvedRouting.Enabled {
 		routing := ServiceRoutingState{
-			Enabled:    true,
-			PathPrefix: opts.RoutePath,
+			Enabled:        true,
+			PathPrefix:     opts.RoutePath,
+			RequestTimeout: opts.RequestTimeout,
 		}
 		if routing.PathPrefix == "" {
 			routing.PathPrefix = "/"

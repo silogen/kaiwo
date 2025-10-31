@@ -1,10 +1,8 @@
 name: publish-main
 
 on:
-  pull_request:
-    types: [opened, synchronize]
-    branches-ignore:
-    - main
+  pull_request_review:
+    types: [submitted]
     paths:
     - 'apis/**'
     - 'internal/**'
@@ -18,6 +16,7 @@ permissions:
 
 jobs:
   publish:
+    if: github.event.review.state == 'approved'
     runs-on: ubuntu-latest
     env:
       IMAGE_REPO: ghcr.io/${{ github.repository_owner }}/kaiwo-operator
@@ -72,83 +71,34 @@ jobs:
       run: |
         make helm-release TAG=${IMAGE_TAG} CHART_VERSION=${CHART_VERSION}
 
+
     - name: Log in to GHCR (Helm/OCI)
       run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u $GITHUB_ACTOR --password-stdin
 
-    - name: Push Helm chart to OCI registry
-      run: |
-        make helm-push-oci TAG=${IMAGE_TAG} CHART_VERSION=${CHART_VERSION}
 
-    - name: Prepare local 'latest' chart dir in repo
-      shell: bash
-      run: |
-        set -euo pipefail
-        LOCAL_DIR="chart/local/latest-main"
-        mkdir -p "${LOCAL_DIR}"
-        git rm -rf --quiet "${LOCAL_DIR}"/* 2>/dev/null || true
-        mkdir -p "${LOCAL_DIR}"
-        CHART_TGZ="dist/${CHART_NAME}-${CHART_VERSION}.tgz"
-        test -f "${CHART_TGZ}" || { echo "Chart not found: ${CHART_TGZ}"; ls -l dist || true; exit 1; }
-        cp "${CHART_TGZ}" "${LOCAL_DIR}/${CHART_NAME}.tgz"
-
-    - name: Commit local chart files via Contents API (Verified)
+    - name: Commit and push local chart files (Verified)
       shell: bash
       env:
+        GH_BRANCH: ${{ github.event.pull_request.head.ref || github.ref_name }}
         GH_REPO: ${{ github.repository }}
-        GH_BRANCH: ${{ github.ref_name }}
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        CHART_NAME: ${{ env.CHART_NAME }}
         CHART_VERSION: ${{ env.CHART_VERSION }}
+      if: ${{ (github.event_name != 'pull_request') || (github.event.pull_request.head.repo.full_name == github.repository) }}
       run: |
         set -euo pipefail
+        # configure commit identity
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-        commit_file () {
-          local SRC="$1" DST="$2" MSG="$3"
+        # Ensure we have the branch
+        git fetch origin "${GH_BRANCH}:${GH_BRANCH}" || true
+        git checkout "${GH_BRANCH}"
 
-          # get current sha if file exists (needed for updates)
-          SHA="$(curl -fsS -H "Authorization: token ${GH_TOKEN}" \
-                https://api.github.com/repos/${GH_REPO}/contents/${DST}?ref=${GH_BRANCH} \
-                | jq -r '.sha // empty' || true)"
+        git add chart/Chart.yaml || true
+        git commit -m "ci: Update local Helm chart and CRDs to ${CHART_VERSION}"
+        # push back to the same branch
+        git push origin "HEAD:${GH_BRANCH}"
+        echo "Pushed commit to ${GH_REPO}@${GH_BRANCH}"
 
-          CONTENT_B64="$(base64 -w0 < "${SRC}")"
 
-          curl -fsS -X PUT \
-            -H "Authorization: token ${GH_TOKEN}" \
-            -H "Content-Type: application/json" \
-            "https://api.github.com/repos/${GH_REPO}/contents/${DST}" \
-            -d @- <<EOF
-          {
-            "message": "${MSG}",
-            "content": "${CONTENT_B64}",
-            "branch": "${GH_BRANCH}",
-            "committer": {
-              "name": "github-actions[bot]",
-              "email": "41898282+github-actions[bot]@users.noreply.github.com"
-            },
-            "author": {
-              "name": "github-actions[bot]",
-              "email": "41898282+github-actions[bot]@users.noreply.github.com"
-            }$( [ -n "${SHA}" ] && printf ', "sha": "%s"' "${SHA}" )
-          }
-        EOF
-        }
-
-        # files to publish
-        TGZ_SRC="dist/${CHART_NAME}-${CHART_VERSION}.tgz"
-        TGZ_DST="chart/local/latest-main/${CHART_NAME}.tgz"
-        VER_SRC="dist/version.txt"
-        VER_DST="chart/local/latest-main/version.txt"
-        README_SRC="chart/local/latest-main/README.md"
-        README_DST="chart/local/latest-main/README.md"
-
-        test -f "${TGZ_SRC}" || { echo "Missing ${TGZ_SRC}"; exit 1; }
-        [ -f "${VER_SRC}" ] || echo "${CHART_VERSION}" > "${VER_SRC}"
-        # ensure README exists
-        [ -f "${README_SRC}" ] || echo "Local chart version ${CHART_VERSION} based on main branch. This is not intended for production use. Do not confuse this with [official releases](https://github.com/silogen/kaiwo/releases)" > "${README_SRC}"
-
-        MSG="Update local Helm chart to ${CHART_VERSION}"
-        commit_file "${TGZ_SRC}"    "${TGZ_DST}"    "${MSG}"
-        commit_file "${VER_SRC}"    "${VER_DST}"    "${MSG}"
-        commit_file "${README_SRC}" "${README_DST}" "${MSG}"
 
 

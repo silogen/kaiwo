@@ -61,6 +61,10 @@ jobs:
       run: |
         make helm-release TAG=${{ env.VERSION }} CHART_VERSION=${{ env.VERSION }}
 
+    - name: Build CRDs
+      run: |
+        kustomize build config/crd > crds.yaml
+
     - name: Push Helm chart to OCI registry
       run: |
         echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u $GITHUB_ACTOR --password-stdin
@@ -77,6 +81,11 @@ jobs:
       with:
         name: helm-chart
         path: dist/kaiwo-operator-*.tgz
+
+    - name: Upload CRDs artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: crds.yaml
 
     - name: Create draft release and upload assets
       uses: softprops/action-gh-release@v2
@@ -95,6 +104,11 @@ jobs:
           ### Kubernetes Install (kubectl)
           ```bash
           kubectl apply -f https://github.com/${{ github.repository }}/releases/download/${{ env.VERSION }}/install.yaml --server-side
+          ```
+
+           ### If using Helm - Install CRDs first
+          ```bash
+          kubectl apply -f https://github.com/${{ github.repository }}/releases/download/${{ env.VERSION }}/crds.yaml
           ```
 
           ### Helm Install (from GitHub Releases)

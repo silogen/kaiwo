@@ -205,6 +205,12 @@ spec:
                 description: ModelDownloadImage is the image used to download the
                   model
                 type: string
+              runtimeConfigName:
+                default: default
+                description: |-
+                  RuntimeConfigName references the AIM runtime configuration (by name) to use for this model cache.
+                  This determines PVC headroom and other runtime settings.
+                type: string
               size:
                 anyOf:
                 - type: integer

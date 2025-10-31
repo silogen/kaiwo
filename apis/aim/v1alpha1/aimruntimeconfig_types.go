@@ -55,6 +55,15 @@ type AIMRuntimeConfigCommon struct {
 	// but do not specify their own routing configuration.
 	// +optional
 	Routing *AIMRuntimeRoutingConfig `json:"routing,omitempty"`
+
+	// PVCHeadroomPercent specifies the percentage of extra space to add to PVCs
+	// for model storage. This accounts for filesystem overhead and temporary files
+	// during model loading. The value represents a percentage (e.g., 10 means 10% extra space).
+	// If not specified, defaults to 10%.
+	// +kubebuilder:default=10
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	PVCHeadroomPercent *int32 `json:"pvcHeadroomPercent,omitempty"`
 }
 
 // AIMClusterRuntimeConfigSpec defines cluster-wide defaults for AIM resources.
@@ -103,6 +112,14 @@ type AIMRuntimeRoutingConfig struct {
 	// Individual services can override this template via spec.routing.pathTemplate.
 	// +optional
 	PathTemplate string `json:"pathTemplate,omitempty"`
+
+	// RequestTimeout defines the HTTP request timeout for routes.
+	// This sets the maximum duration for a request to complete before timing out.
+	// The timeout applies to the entire request/response cycle.
+	// If not specified, no timeout is set on the route.
+	// Individual services can override this value via spec.routing.requestTimeout.
+	// +optional
+	RequestTimeout *metav1.Duration `json:"requestTimeout,omitempty"`
 }
 
 // AIMRuntimeConfigStatus records the resolved config reference surfaced to consumers.

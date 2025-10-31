@@ -3,9 +3,11 @@ kind: AIMClusterRuntimeConfig
 metadata:
   name: integration-cluster-model-public-image
 spec:
+  defaultStorageClassName: "rwx-nfs"
   routing:
     enabled: true
     gatewayRef:
       name: kserve-ingress-gateway
       namespace: kgateway-system
     pathTemplate: "/integration/custom-path/{.metadata.name}"
+    requestTimeout: "3m0s"
