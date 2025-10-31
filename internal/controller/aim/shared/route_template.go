@@ -79,6 +79,23 @@ func DefaultRoutePath(service *aimv1alpha1.AIMService) string {
 	return path
 }
 
+// ResolveServiceRouteTimeout resolves the HTTP route timeout using service and runtime config context.
+// Returns the timeout from the service if set, otherwise from runtime config, otherwise nil (no timeout).
+func ResolveServiceRouteTimeout(service *aimv1alpha1.AIMService, runtimeConfig aimv1alpha1.AIMRuntimeConfigSpec) *string {
+	// AIMService.Spec.Routing.RequestTimeout has priority
+	if service.Spec.Routing != nil && service.Spec.Routing.RequestTimeout != nil {
+		timeout := service.Spec.Routing.RequestTimeout.Duration.String()
+		return &timeout
+	}
+	// Falls back to runtime config
+	if runtimeConfig.Routing != nil && runtimeConfig.Routing.RequestTimeout != nil {
+		timeout := runtimeConfig.Routing.RequestTimeout.Duration.String()
+		return &timeout
+	}
+	// If neither defined, no timeout is set
+	return nil
+}
+
 func renderRouteTemplate(template string, service *aimv1alpha1.AIMService) (string, error) {
 	matches := routeTemplatePattern.FindAllStringSubmatchIndex(template, -1)
 	if len(matches) == 0 {

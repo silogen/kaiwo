@@ -494,6 +494,13 @@ spec:
                       PathTemplate overrides the HTTP path template used for routing.
                       The value is rendered against the AIMService object using JSONPath expressions.
                     type: string
+                  requestTimeout:
+                    description: |-
+                      RequestTimeout overrides the HTTP request timeout for routes.
+                      This sets the maximum duration for a request to complete before timing out.
+                      The timeout applies to the entire request/response cycle.
+                      If not specified, inherits from runtime config. If neither is set, no timeout is configured.
+                    type: string
                 type: object
               runtimeConfigName:
                 default: default

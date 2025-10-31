@@ -199,6 +199,14 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 			obs.RoutePath = routePath
 			baseutils.Debug(logger, "Route path resolved", "path", routePath)
 		}
+
+		// Resolve request timeout for the route
+		obs.RouteTimeout = shared.ResolveServiceRouteTimeout(service, obs.RuntimeConfigSpec)
+		if obs.RouteTimeout != nil {
+			baseutils.Debug(logger, "Route timeout resolved", "timeout", *obs.RouteTimeout)
+		} else {
+			baseutils.Debug(logger, "No route timeout configured")
+		}
 	}
 
 	// Check InferenceService pods for image pull errors
@@ -272,8 +280,9 @@ func (r *AIMServiceReconciler) plan(ctx context.Context, service *aimv1alpha1.AI
 		})
 
 		serviceState := aimstate.NewServiceState(service, templateState, aimstate.ServiceStateOptions{
-			RuntimeName: obs.RuntimeName(),
-			RoutePath:   routePath,
+			RuntimeName:    obs.RuntimeName(),
+			RoutePath:      routePath,
+			RequestTimeout: obs.RouteTimeout,
 		})
 
 		// Only create InferenceService if we have a model source (discovery must have succeeded and populated ModelSources)
