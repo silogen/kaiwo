@@ -230,14 +230,10 @@ func (r *AIMModelCacheReconciler) plan(ctx context.Context, mc *aimv1alpha1.AIMM
 	}
 	// Include PVC on every reconcile
 	headroomPercent := shared.GetPVCHeadroomPercent(ob.runtimeConfigSpec)
+	storageClassName := shared.ResolveStorageClass(mc.Spec.StorageClassName, ob.runtimeConfigSpec)
+	pvcSize := shared.QuantityWithHeadroom(mc.Spec.Size.Value(), headroomPercent)
 
-	// Determine effective storage class: use spec if set, otherwise fall back to runtime config
-	storageClassName := mc.Spec.StorageClassName
-	if storageClassName == "" {
-		storageClassName = ob.runtimeConfigSpec.DefaultStorageClassName
-	}
-
-	pvc := r.buildPVC(mc, r.pvcName(mc), headroomPercent, storageClassName)
+	pvc := r.buildPVC(mc, r.pvcName(mc), pvcSize, storageClassName)
 	if err := ctrl.SetControllerReference(mc, pvc, r.Scheme); err != nil {
 		return desired, fmt.Errorf("owner pvc: %w", err)
 	}
@@ -460,19 +456,12 @@ func (r *AIMModelCacheReconciler) determineOverallStatus(sf stateFlags, ob obser
 	}
 }
 
-func (r *AIMModelCacheReconciler) buildPVC(mc *aimv1alpha1.AIMModelCache, pvcName string, headroomPercent int32, storageClassName string) *corev1.PersistentVolumeClaim {
+func (r *AIMModelCacheReconciler) buildPVC(mc *aimv1alpha1.AIMModelCache, pvcName string, pvcSize resource.Quantity, storageClassName string) *corev1.PersistentVolumeClaim {
 	// Storage class: empty string means use cluster default
 	var sc *string
 	if storageClassName != "" {
 		sc = &storageClassName
 	}
-
-	// Apply headroom to the requested size
-	// Convert percentage to multiplier (e.g., 10% -> 1.10)
-	headroomMultiplier := 1.0 + (float64(headroomPercent) / 100.0)
-	baseSize := mc.Spec.Size.Value()
-	sizeWithHeadroom := int64(float64(baseSize) * headroomMultiplier)
-	pvcSize := *resource.NewQuantity(sizeWithHeadroom, resource.BinarySI)
 
 	return &corev1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{APIVersion: corev1.SchemeGroupVersion.String(), Kind: "PersistentVolumeClaim"},

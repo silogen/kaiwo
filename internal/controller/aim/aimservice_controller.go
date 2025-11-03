@@ -585,18 +585,8 @@ func calculateRequiredStorageSize(templateState aimstate.TemplateState, headroom
 		return resource.Quantity{}, fmt.Errorf("total model size is zero")
 	}
 
-	// Add headroom: convert percentage to multiplier (e.g., 10% -> 1.10)
-	headroomMultiplier := 1.0 + (float64(headroomPercent) / 100.0)
-	totalBytes = int64(float64(totalBytes) * headroomMultiplier)
-
-	// Format as Gi for better readability and compatibility
-	totalGi := float64(totalBytes) / (1024 * 1024 * 1024)
-	sizeStr := fmt.Sprintf("%.1fGi", totalGi)
-	qty, err := resource.ParseQuantity(sizeStr)
-	if err != nil {
-		return resource.Quantity{}, fmt.Errorf("failed to parse size %q: %w", sizeStr, err)
-	}
-	return qty, nil
+	// Apply headroom and round to nearest Gi using shared utility
+	return shared.QuantityWithHeadroom(totalBytes, headroomPercent), nil
 }
 
 func addServicePVCMount(inferenceService *servingv1beta1.InferenceService, pvcName string) {
