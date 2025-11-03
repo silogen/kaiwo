@@ -15,7 +15,7 @@ spec:
   - name: Create cluster model
     try:
     - apply:
-        file: cluster-model.yaml
+        file: model.yaml
 
   - name: Create template cache
     try:
