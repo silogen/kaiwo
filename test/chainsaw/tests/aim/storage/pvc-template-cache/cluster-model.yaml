@@ -1,0 +1,6 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterModel
+metadata:
+  name: llama-3-8b-pvc-template-cache
+spec:
+  image: ghcr.io/silogen/aim-dummy:0.1.3
