@@ -46,6 +46,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
+	"github.com/silogen/kaiwo/internal/controller/aim/shared"
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
@@ -210,7 +211,11 @@ func BuildMissingModelCaches(tc *aimv1alpha1.AIMTemplateCache, obs *templateCach
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      sanitizedName,
 					Namespace: tc.Namespace,
-					Labels:    map[string]string{"template-created": "true"}, // Can be cleaned up if no templates are referencing it
+					Labels: map[string]string{
+						"template-created":         "true", // Backward compatibility
+						shared.LabelKeyTemplateCache: tc.Name,
+						shared.LabelKeySourceModel:   shared.SanitizeLabelValue(cache.Name),
+					},
 				},
 				Spec: aimv1alpha1.AIMModelCacheSpec{
 					StorageClassName:  tc.Spec.StorageClassName,

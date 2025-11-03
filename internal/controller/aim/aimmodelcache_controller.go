@@ -27,6 +27,7 @@ package aim
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"k8s.io/client-go/tools/record"
 
@@ -456,6 +457,18 @@ func (r *AIMModelCacheReconciler) determineOverallStatus(sf stateFlags, ob obser
 	}
 }
 
+// extractModelFromSourceURI extracts the model name from a sourceURI.
+// Examples:
+//   - "hf://amd/Llama-3.1-8B-Instruct" → "amd/Llama-3.1-8B-Instruct"
+//   - "s3://bucket/model-v1" → "bucket/model-v1"
+func extractModelFromSourceURI(sourceURI string) string {
+	// Remove the scheme prefix (hf://, s3://, etc.)
+	if idx := strings.Index(sourceURI, "://"); idx != -1 {
+		return sourceURI[idx+3:]
+	}
+	return sourceURI
+}
+
 func (r *AIMModelCacheReconciler) buildPVC(mc *aimv1alpha1.AIMModelCache, pvcName string, pvcSize resource.Quantity, storageClassName string) *corev1.PersistentVolumeClaim {
 	// Storage class: empty string means use cluster default
 	var sc *string
@@ -463,15 +476,36 @@ func (r *AIMModelCacheReconciler) buildPVC(mc *aimv1alpha1.AIMModelCache, pvcNam
 		sc = &storageClassName
 	}
 
+	// Determine cache type based on whether this was created by a template cache
+	cacheType := shared.LabelValueCacheTypeTemplateCache
+	if mc.Labels == nil || mc.Labels["template-created"] != "true" {
+		cacheType = "" // Standalone model cache (not template or service cache)
+	}
+
+	// Build labels with type and source information
+	labels := map[string]string{
+		"app.kubernetes.io/managed-by": "modelcache-controller",
+		shared.LabelKeyModelCache:      mc.Name,
+	}
+
+	// Add cache type if it's a template cache
+	if cacheType != "" {
+		labels[shared.LabelKeyCacheType] = cacheType
+	}
+
+	// Extract model name from sourceURI (e.g., "hf://amd/Llama-3.1-8B" → "amd/Llama-3.1-8B")
+	if mc.Spec.SourceURI != "" {
+		if modelName := extractModelFromSourceURI(mc.Spec.SourceURI); modelName != "" {
+			labels[shared.LabelKeySourceModel] = shared.SanitizeLabelValue(modelName)
+		}
+	}
+
 	return &corev1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{APIVersion: corev1.SchemeGroupVersion.String(), Kind: "PersistentVolumeClaim"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pvcName,
 			Namespace: mc.Namespace,
-			Labels: mergeStringMap(nil, map[string]string{
-				"app.kubernetes.io/managed-by": "modelcache-controller",
-				"aim.silogen.ai/modelcache":    mc.Name,
-			}),
+			Labels:    mergeStringMap(nil, labels),
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany},
