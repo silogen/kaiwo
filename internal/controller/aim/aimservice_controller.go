@@ -285,41 +285,20 @@ func (r *AIMServiceReconciler) planDerivedTemplate(logger logr.Logger, service *
 
 func (r *AIMServiceReconciler) planTemplateCache(ctx context.Context, logger logr.Logger, service *aimv1alpha1.AIMService, obs *shared.ServiceObservation) client.Object {
 	// Create template cache if service requests caching but none exists
-	// Only create for namespace-scoped templates (cluster templates need manual cache creation)
+	// Works for both namespace-scoped and cluster-scoped templates
 	if service.Spec.CacheModel && obs.TemplateCache == nil && obs.TemplateAvailable &&
-		obs.Scope == shared.TemplateScopeNamespace && obs.TemplateStatus != nil && len(obs.TemplateStatus.ModelSources) > 0 {
+		obs.TemplateStatus != nil && len(obs.TemplateStatus.ModelSources) > 0 {
 		baseutils.Debug(logger, "Service requests caching but no template cache exists, creating one",
-			"templateName", obs.TemplateName)
+			"templateName", obs.TemplateName, "scope", obs.Scope)
 
-		// Get the template to create owner reference
-		var template aimv1alpha1.AIMServiceTemplate
-		err := r.Get(ctx, client.ObjectKey{
-			Namespace: service.Namespace,
-			Name:      obs.TemplateName,
-		}, &template)
-		if err != nil {
-			baseutils.Debug(logger, "Failed to get template for cache creation", "error", err)
-			return nil
-		}
-
-		templateOwnerRef := metav1.OwnerReference{
-			APIVersion:         template.APIVersion,
-			Kind:               template.Kind,
-			Name:               template.Name,
-			UID:                template.UID,
-			Controller:         baseutils.Pointer(true),
-			BlockOwnerDeletion: baseutils.Pointer(true),
-		}
-
-		return &aimv1alpha1.AIMTemplateCache{
+		cache := &aimv1alpha1.AIMTemplateCache{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: "aim.silogen.ai/v1alpha1",
 				Kind:       "AIMTemplateCache",
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            obs.TemplateName,
-				Namespace:       service.Namespace,
-				OwnerReferences: []metav1.OwnerReference{templateOwnerRef},
+				Name:      obs.TemplateName,
+				Namespace: service.Namespace,
 			},
 			Spec: aimv1alpha1.AIMTemplateCacheSpec{
 				TemplateRef:      obs.TemplateName,
@@ -327,6 +306,35 @@ func (r *AIMServiceReconciler) planTemplateCache(ctx context.Context, logger log
 				Env:              service.Spec.Env,
 			},
 		}
+
+		// Only set owner reference for namespace-scoped templates
+		// Kubernetes doesn't allow namespace-scoped resources to own cluster-scoped resources
+		if obs.Scope == shared.TemplateScopeNamespace {
+			var template aimv1alpha1.AIMServiceTemplate
+			err := r.Get(ctx, client.ObjectKey{
+				Namespace: service.Namespace,
+				Name:      obs.TemplateName,
+			}, &template)
+			if err != nil {
+				baseutils.Debug(logger, "Failed to get template for cache creation", "error", err)
+				return nil
+			}
+
+			cache.OwnerReferences = []metav1.OwnerReference{
+				{
+					APIVersion:         template.APIVersion,
+					Kind:               template.Kind,
+					Name:               template.Name,
+					UID:                template.UID,
+					Controller:         baseutils.Pointer(true),
+					BlockOwnerDeletion: baseutils.Pointer(true),
+				},
+			}
+		}
+		// For cluster-scoped templates, no owner reference is set
+		// The cache lifecycle is managed by the template cache controller
+
+		return cache
 	}
 	return nil
 }
