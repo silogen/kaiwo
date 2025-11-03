@@ -72,24 +72,20 @@ jobs:
       run: |
         make helm-release TAG=${IMAGE_TAG} CHART_VERSION=${CHART_VERSION}
 
+    - name: Build CRDs
+      shell: bash
+      run: |
+        set -euo pipefail
+        LOCAL_DIR="chart/crds"
+        mkdir -p "${LOCAL_DIR}"
+        kustomize build config/crd > chart/crds/crds.yaml
+
     - name: Log in to GHCR (Helm/OCI)
       run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u $GITHUB_ACTOR --password-stdin
 
     - name: Push Helm chart to OCI registry
       run: |
         make helm-push-oci TAG=${IMAGE_TAG} CHART_VERSION=${CHART_VERSION}
-
-    - name: Prepare local 'latest' chart dir in repo
-      shell: bash
-      run: |
-        set -euo pipefail
-        LOCAL_DIR="chart/local/latest-main"
-        mkdir -p "${LOCAL_DIR}"
-        git rm -rf --quiet "${LOCAL_DIR}"/* 2>/dev/null || true
-        mkdir -p "${LOCAL_DIR}"
-        CHART_TGZ="dist/${CHART_NAME}-${CHART_VERSION}.tgz"
-        test -f "${CHART_TGZ}" || { echo "Chart not found: ${CHART_TGZ}"; ls -l dist || true; exit 1; }
-        cp "${CHART_TGZ}" "${LOCAL_DIR}/${CHART_NAME}.tgz"
 
     - name: Commit local chart files via Contents API (Verified)
       shell: bash
@@ -134,21 +130,11 @@ jobs:
         }
 
         # files to publish
-        TGZ_SRC="dist/${CHART_NAME}-${CHART_VERSION}.tgz"
-        TGZ_DST="chart/local/latest-main/${CHART_NAME}.tgz"
-        VER_SRC="dist/version.txt"
-        VER_DST="chart/local/latest-main/version.txt"
-        README_SRC="chart/local/latest-main/README.md"
-        README_DST="chart/local/latest-main/README.md"
+        CHART_PATH="chart/Chart.yaml"
+        CRD_PATH=chart/crds/crds.yaml
 
-        test -f "${TGZ_SRC}" || { echo "Missing ${TGZ_SRC}"; exit 1; }
-        [ -f "${VER_SRC}" ] || echo "${CHART_VERSION}" > "${VER_SRC}"
-        # ensure README exists
-        [ -f "${README_SRC}" ] || echo "Local chart version ${CHART_VERSION} based on main branch. This is not intended for production use. Do not confuse this with [official releases](https://github.com/silogen/kaiwo/releases)" > "${README_SRC}"
-
-        MSG="Update local Helm chart to ${CHART_VERSION}"
-        commit_file "${TGZ_SRC}"    "${TGZ_DST}"    "${MSG}"
-        commit_file "${VER_SRC}"    "${VER_DST}"    "${MSG}"
-        commit_file "${README_SRC}" "${README_DST}" "${MSG}"
+        MSG="Update local Helm chart and CRDs to ${CHART_VERSION}"
+        commit_file "${CHART_PATH}"    "${CHART_PATH}"    "${MSG}"
+        commit_file "${CRD_PATH}"    "${CRD_PATH}"    "${MSG}"
 
 
