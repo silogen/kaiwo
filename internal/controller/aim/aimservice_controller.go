@@ -403,7 +403,8 @@ func (r *AIMServiceReconciler) planInferenceServiceAndRoute(logger logr.Logger, 
 	var servicePVC *v1.PersistentVolumeClaim
 	var servicePVCErr error
 	if !service.Spec.CacheModel && obs.TemplateCache == nil {
-		servicePVC, servicePVCErr = buildServicePVC(service, templateState, obs.RuntimeConfigSpec.DefaultStorageClassName)
+		headroomPercent := shared.GetPVCHeadroomPercent(obs.RuntimeConfigSpec)
+		servicePVC, servicePVCErr = buildServicePVC(service, templateState, obs.RuntimeConfigSpec.DefaultStorageClassName, headroomPercent)
 		if servicePVCErr != nil {
 			baseutils.Debug(logger, "Failed to build service PVC", "error", servicePVCErr)
 			// This error will be handled in status projection
@@ -505,12 +506,12 @@ func (r *AIMServiceReconciler) plan(ctx context.Context, service *aimv1alpha1.AI
 // buildServicePVC creates a PVC for a service to store downloaded models.
 // This is used when there's no template cache available.
 // Returns nil and an error if model sizes aren't specified.
-func buildServicePVC(service *aimv1alpha1.AIMService, templateState aimstate.TemplateState, storageClassName string) (*v1.PersistentVolumeClaim, error) {
+func buildServicePVC(service *aimv1alpha1.AIMService, templateState aimstate.TemplateState, storageClassName string, headroomPercent int32) (*v1.PersistentVolumeClaim, error) {
 	// Generate PVC name using same pattern as InferenceService
 	pvcName := shared.GenerateInferenceServiceName(service.Name, service.Namespace) + "-temp-cache"
 
 	// Calculate required size from model sources
-	size, err := calculateRequiredStorageSize(templateState)
+	size, err := calculateRequiredStorageSize(templateState, headroomPercent)
 	if err != nil {
 		return nil, fmt.Errorf("cannot determine storage size: %w", err)
 	}
@@ -557,10 +558,9 @@ func buildServicePVC(service *aimv1alpha1.AIMService, templateState aimstate.Tem
 }
 
 // calculateRequiredStorageSize computes the total storage needed for model sources.
-// Returns sum of all model sizes plus 20% headroom, or an error if sizes aren't specified.
-func calculateRequiredStorageSize(templateState aimstate.TemplateState) (resource.Quantity, error) {
-	const headroomPercent = 1.2 // 20% extra
-
+// Returns sum of all model sizes plus the specified headroom percentage, or an error if sizes aren't specified.
+// headroomPercent represents the percentage (0-100) of extra space to add. For example, 10 means 10% extra.
+func calculateRequiredStorageSize(templateState aimstate.TemplateState, headroomPercent int32) (resource.Quantity, error) {
 	if templateState.Status == nil || len(templateState.Status.ModelSources) == 0 {
 		return resource.Quantity{}, fmt.Errorf("no model sources available in template")
 	}
@@ -577,8 +577,9 @@ func calculateRequiredStorageSize(templateState aimstate.TemplateState) (resourc
 		return resource.Quantity{}, fmt.Errorf("total model size is zero")
 	}
 
-	// Add headroom
-	totalBytes = int64(float64(totalBytes) * headroomPercent)
+	// Add headroom: convert percentage to multiplier (e.g., 10% -> 1.10)
+	headroomMultiplier := 1.0 + (float64(headroomPercent) / 100.0)
+	totalBytes = int64(float64(totalBytes) * headroomMultiplier)
 
 	// Format as Gi for better readability and compatibility
 	totalGi := float64(totalBytes) / (1024 * 1024 * 1024)

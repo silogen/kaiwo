@@ -47,6 +47,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
+	"github.com/silogen/kaiwo/internal/controller/aim/shared"
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 )
 
@@ -124,6 +125,9 @@ type observation struct {
 	storageClassFound bool
 	jobFound          bool
 	job               batchv1.Job
+
+	// runtime config
+	runtimeConfigSpec aimv1alpha1.AIMRuntimeConfigSpec
 
 	// derived
 	pvcBound             bool
@@ -203,6 +207,18 @@ func (r *AIMModelCacheReconciler) observe(ctx context.Context, mc *aimv1alpha1.A
 	// derived storage flags
 	ob.storageReady = ob.pvcFound && ob.pvc.Status.Phase == corev1.ClaimBound
 	ob.storageLost = ob.pvcFound && ob.pvc.Status.Phase == corev1.ClaimLost
+
+	// Resolve runtime config for PVC headroom and other settings
+	// Note: AIMModelCache doesn't have a runtimeConfigName field, so we always use default
+	runtimeConfig, err := shared.ResolveRuntimeConfig(ctx, r.Client, mc.Namespace, "")
+	if err != nil {
+		// If runtime config resolution fails, use empty spec (will use defaults)
+		baseutils.Debug(logger, "Failed to resolve runtime config, using defaults", "error", err)
+		ob.runtimeConfigSpec = aimv1alpha1.AIMRuntimeConfigSpec{}
+	} else {
+		ob.runtimeConfigSpec = runtimeConfig.EffectiveSpec
+	}
+
 	return ob, nil
 }
 
@@ -214,7 +230,8 @@ func (r *AIMModelCacheReconciler) plan(ctx context.Context, mc *aimv1alpha1.AIMM
 		return desired, nil
 	}
 	// Include PVC on every reconcile
-	pvc := r.buildPVC(mc, r.pvcName(mc))
+	headroomPercent := shared.GetPVCHeadroomPercent(ob.runtimeConfigSpec)
+	pvc := r.buildPVC(mc, r.pvcName(mc), headroomPercent)
 	if err := ctrl.SetControllerReference(mc, pvc, r.Scheme); err != nil {
 		return desired, fmt.Errorf("owner pvc: %w", err)
 	}
@@ -437,12 +454,20 @@ func (r *AIMModelCacheReconciler) determineOverallStatus(sf stateFlags, ob obser
 	}
 }
 
-func (r *AIMModelCacheReconciler) buildPVC(mc *aimv1alpha1.AIMModelCache, pvcName string) *corev1.PersistentVolumeClaim {
+func (r *AIMModelCacheReconciler) buildPVC(mc *aimv1alpha1.AIMModelCache, pvcName string, headroomPercent int32) *corev1.PersistentVolumeClaim {
 	var sc *string
 	if mc.Spec.StorageClassName != "" {
 		v := mc.Spec.StorageClassName
 		sc = &v
 	}
+
+	// Apply headroom to the requested size
+	// Convert percentage to multiplier (e.g., 10% -> 1.10)
+	headroomMultiplier := 1.0 + (float64(headroomPercent) / 100.0)
+	baseSize := mc.Spec.Size.Value()
+	sizeWithHeadroom := int64(float64(baseSize) * headroomMultiplier)
+	pvcSize := *resource.NewQuantity(sizeWithHeadroom, resource.BinarySI)
+
 	return &corev1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{APIVersion: corev1.SchemeGroupVersion.String(), Kind: "PersistentVolumeClaim"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -457,7 +482,7 @@ func (r *AIMModelCacheReconciler) buildPVC(mc *aimv1alpha1.AIMModelCache, pvcNam
 			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany},
 			Resources: corev1.VolumeResourceRequirements{
 				Requests: corev1.ResourceList{
-					corev1.ResourceStorage: mc.Spec.Size,
+					corev1.ResourceStorage: pvcSize,
 				},
 			},
 			StorageClassName: sc,
