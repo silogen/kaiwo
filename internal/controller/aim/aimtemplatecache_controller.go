@@ -213,10 +213,11 @@ func BuildMissingModelCaches(tc *aimv1alpha1.AIMTemplateCache, obs *templateCach
 					Labels:    map[string]string{"template-created": "true"}, // Can be cleaned up if no templates are referencing it
 				},
 				Spec: aimv1alpha1.AIMModelCacheSpec{
-					StorageClassName: tc.Spec.StorageClassName,
-					SourceURI:        cache.SourceURI,
-					Size:             cache.Size,
-					Env:              tc.Spec.Env,
+					StorageClassName:  tc.Spec.StorageClassName,
+					SourceURI:         cache.SourceURI,
+					Size:              cache.Size,
+					Env:               tc.Spec.Env,
+					RuntimeConfigName: tc.Spec.RuntimeConfigName,
 				},
 			},
 		)

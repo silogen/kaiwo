@@ -209,11 +209,10 @@ func (r *AIMModelCacheReconciler) observe(ctx context.Context, mc *aimv1alpha1.A
 	ob.storageLost = ob.pvcFound && ob.pvc.Status.Phase == corev1.ClaimLost
 
 	// Resolve runtime config for PVC headroom and other settings
-	// Note: AIMModelCache doesn't have a runtimeConfigName field, so we always use default
-	runtimeConfig, err := shared.ResolveRuntimeConfig(ctx, r.Client, mc.Namespace, "")
+	runtimeConfig, err := shared.ResolveRuntimeConfig(ctx, r.Client, mc.Namespace, mc.Spec.RuntimeConfigName)
 	if err != nil {
 		// If runtime config resolution fails, use empty spec (will use defaults)
-		baseutils.Debug(logger, "Failed to resolve runtime config, using defaults", "error", err)
+		baseutils.Debug(logger, "Failed to resolve runtime config, using defaults", "error", err, "runtimeConfigName", mc.Spec.RuntimeConfigName)
 		ob.runtimeConfigSpec = aimv1alpha1.AIMRuntimeConfigSpec{}
 	} else {
 		ob.runtimeConfigSpec = runtimeConfig.EffectiveSpec
@@ -231,7 +230,14 @@ func (r *AIMModelCacheReconciler) plan(ctx context.Context, mc *aimv1alpha1.AIMM
 	}
 	// Include PVC on every reconcile
 	headroomPercent := shared.GetPVCHeadroomPercent(ob.runtimeConfigSpec)
-	pvc := r.buildPVC(mc, r.pvcName(mc), headroomPercent)
+
+	// Determine effective storage class: use spec if set, otherwise fall back to runtime config
+	storageClassName := mc.Spec.StorageClassName
+	if storageClassName == "" {
+		storageClassName = ob.runtimeConfigSpec.DefaultStorageClassName
+	}
+
+	pvc := r.buildPVC(mc, r.pvcName(mc), headroomPercent, storageClassName)
 	if err := ctrl.SetControllerReference(mc, pvc, r.Scheme); err != nil {
 		return desired, fmt.Errorf("owner pvc: %w", err)
 	}
@@ -454,11 +460,11 @@ func (r *AIMModelCacheReconciler) determineOverallStatus(sf stateFlags, ob obser
 	}
 }
 
-func (r *AIMModelCacheReconciler) buildPVC(mc *aimv1alpha1.AIMModelCache, pvcName string, headroomPercent int32) *corev1.PersistentVolumeClaim {
+func (r *AIMModelCacheReconciler) buildPVC(mc *aimv1alpha1.AIMModelCache, pvcName string, headroomPercent int32, storageClassName string) *corev1.PersistentVolumeClaim {
+	// Storage class: empty string means use cluster default
 	var sc *string
-	if mc.Spec.StorageClassName != "" {
-		v := mc.Spec.StorageClassName
-		sc = &v
+	if storageClassName != "" {
+		sc = &storageClassName
 	}
 
 	// Apply headroom to the requested size
