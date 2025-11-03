@@ -538,12 +538,12 @@ func buildServicePVC(service *aimv1alpha1.AIMService, templateState aimstate.Tem
 			Name:      pvcName,
 			Namespace: service.Namespace,
 			Labels: map[string]string{
-				"app.kubernetes.io/managed-by":   "aim-service-controller",
-				"app.kubernetes.io/component":    "model-storage",
-				shared.LabelKeyServiceName:       shared.SanitizeLabelValue(service.Name),
-				shared.LabelKeyCacheType:         shared.LabelValueCacheTypeTempService,
-				shared.LabelKeyTemplate:          templateState.Name,
-				shared.LabelKeyModelID:           shared.SanitizeLabelValue(templateState.SpecCommon.ModelName),
+				"app.kubernetes.io/managed-by": "aim-service-controller",
+				"app.kubernetes.io/component":  "model-storage",
+				shared.LabelKeyServiceName:     shared.SanitizeLabelValue(service.Name),
+				shared.LabelKeyCacheType:       shared.LabelValueCacheTypeTempService,
+				shared.LabelKeyTemplate:        templateState.Name,
+				shared.LabelKeyModelID:         shared.SanitizeLabelValue(templateState.SpecCommon.ModelName),
 			},
 			OwnerReferences: []metav1.OwnerReference{
 				{
