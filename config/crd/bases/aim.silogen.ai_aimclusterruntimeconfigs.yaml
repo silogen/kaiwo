@@ -198,6 +198,14 @@ spec:
                       The template must:
                       - Use valid JSONPath expressions wrapped in {...
                     type: string
+                  requestTimeout:
+                    description: |-
+                      RequestTimeout defines the HTTP request timeout for routes.
+                      This sets the maximum duration for a request to complete before timing out.
+                      The timeout applies to the entire request/response cycle.
+                      If not specified, no timeout is set on the route.
+                      Individual services can override this value via spec.routing.requestTimeout.
+                    type: string
                 type: object
             type: object
           status:

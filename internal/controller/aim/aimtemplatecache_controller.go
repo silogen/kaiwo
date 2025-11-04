@@ -236,7 +236,7 @@ func (r *AIMTemplateCacheReconciler) plan(_ context.Context, tc *aimv1alpha1.AIM
 		desired = append(desired, mc)
 	}
 
-	return
+	return desired, err
 }
 
 func (r *AIMTemplateCacheReconciler) projectStatus(_ context.Context, tc *aimv1alpha1.AIMTemplateCache, obs *templateCacheObservation, errs controllerutils.ReconcileErrors) (err error) {
@@ -296,8 +296,13 @@ func (r *AIMTemplateCacheReconciler) projectStatus(_ context.Context, tc *aimv1a
 	}
 
 	statusValues := slices.Collect(maps.Values(obs.CacheStatus))
-	worstCacheStatus := slices.MaxFunc(statusValues, cmpModelCacheStatus)
-	tc.Status.Status = aimv1alpha1.AIMTemplateCacheStatusEnum(worstCacheStatus)
+	if len(statusValues) > 0 {
+		worstCacheStatus := slices.MaxFunc(statusValues, cmpModelCacheStatus)
+		tc.Status.Status = aimv1alpha1.AIMTemplateCacheStatusEnum(worstCacheStatus)
+	} else {
+		// If there are no caches to track, mark as Pending
+		tc.Status.Status = aimv1alpha1.AIMTemplateCacheStatusPending
+	}
 
 	if obs.AllCachesAvailable {
 		tc.Status.Status = aimv1alpha1.AIMTemplateCacheStatusAvailable

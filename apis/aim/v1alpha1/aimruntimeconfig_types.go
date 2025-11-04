@@ -112,6 +112,14 @@ type AIMRuntimeRoutingConfig struct {
 	// Individual services can override this template via spec.routing.pathTemplate.
 	// +optional
 	PathTemplate string `json:"pathTemplate,omitempty"`
+
+	// RequestTimeout defines the HTTP request timeout for routes.
+	// This sets the maximum duration for a request to complete before timing out.
+	// The timeout applies to the entire request/response cycle.
+	// If not specified, no timeout is set on the route.
+	// Individual services can override this value via spec.routing.requestTimeout.
+	// +optional
+	RequestTimeout *metav1.Duration `json:"requestTimeout,omitempty"`
 }
 
 // AIMRuntimeConfigStatus records the resolved config reference surfaced to consumers.

@@ -13,6 +13,12 @@ repos:
     language: system
     pass_filenames: false
 
+  - id: build-crds
+    name: Build CRDs for Helm chart
+    entry: bash -lc 'kubectl kustomize config/crd/ > crd/crds.yaml'
+    language: system
+    pass_filenames: false
+
   - id: make-generate-crd-docs
     name: Run make generate-crd-docs
     entry: make generate-crd-docs
@@ -33,7 +39,7 @@ repos:
   hooks:
   - id: yamlfmt
     args: [--offset, "0", --sequence, "2", --mapping, "2", "--width", "4096", "--preserve-quotes", "--implicit_start", "--preserve_null"]
-    exclude: "(^config/prometheus/.*\\.ya?ml$)|(^docs/mkdocs\\.ya?ml$)|(^config/crd/.*\\.ya?ml$)|(^chart/templates/.*\\.(ya?ml|tpl)$)|(^.*/templates/.*\\.(ya?ml|tpl)$)"
+    exclude: "(^config/prometheus/.*\\.ya?ml$)|(^docs/mkdocs\\.ya?ml$)|(^config/crd/.*\\.ya?ml$)|(^crd/.*\\.ya?ml$)|(^chart/templates/.*\\.(ya?ml|tpl)$)|(^.*/templates/.*\\.(ya?ml|tpl)$)"
 
 - repo: https://github.com/psf/black
   rev: 25.1.0

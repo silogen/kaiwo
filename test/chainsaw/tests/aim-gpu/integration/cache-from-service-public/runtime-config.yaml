@@ -10,3 +10,4 @@ spec:
       name: kserve-ingress-gateway
       namespace: kgateway-system
     pathTemplate: "/integration/custom-path/{.metadata.name}"
+    requestTimeout: "180s"
