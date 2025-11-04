@@ -28,6 +28,25 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
+// ModelScope defines the search scope for model/template selection.
+// +kubebuilder:validation:Enum=Auto;Namespace;Cluster
+type ModelScope string
+
+const (
+	// ModelScopeAuto searches both namespace and cluster scopes (default).
+	// Namespace-scoped resources are checked first, then cluster-scoped resources.
+	ModelScopeAuto ModelScope = "Auto"
+
+	// ModelScopeNamespace limits search to namespace-scoped resources only.
+	// Only AIMModel and AIMServiceTemplate resources in the same namespace are considered.
+	ModelScopeNamespace ModelScope = "Namespace"
+
+	// ModelScopeCluster limits search to cluster-scoped resources only.
+	// Only AIMClusterModel and AIMClusterServiceTemplate resources are considered.
+	// When this scope is set, the controller will never auto-create models.
+	ModelScopeCluster ModelScope = "Cluster"
+)
+
 // AIMServiceModel specifies which model to deploy. Exactly one field must be set.
 // +kubebuilder:validation:XValidation:rule="(has(self.ref) && !has(self.image)) || (!has(self.ref) && has(self.image))",message="exactly one of ref or image must be specified"
 type AIMServiceModel struct {
@@ -63,6 +82,16 @@ type AIMServiceSpec struct {
 	// Use `ref` to reference an existing AIMModel/AIMClusterModel by name, or use `image`
 	// to specify a container image URI directly (which will auto-create a model if needed).
 	Model AIMServiceModel `json:"model"`
+
+	// Scope controls which models and templates are considered when resolving references.
+	// Auto (default): searches namespace-scoped first, then cluster-scoped resources.
+	// Namespace: only considers namespace-scoped AIMModel and AIMServiceTemplate.
+	// Cluster: only considers cluster-scoped AIMClusterModel and AIMClusterServiceTemplate.
+	// When set to Cluster, the controller will never auto-create models - if a matching
+	// cluster model is not found, the service will become Degraded until one is available.
+	// +kubebuilder:default="Auto"
+	// +optional
+	Scope ModelScope `json:"scope,omitempty"`
 
 	// TemplateRef is the name of the AIMServiceTemplate or AIMClusterServiceTemplate to use.
 	// The template selects the runtime profile and GPU parameters.

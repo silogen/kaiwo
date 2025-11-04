@@ -59,7 +59,7 @@ var (
 )
 
 // ResolveOrCreateModelFromImage searches for existing models matching the image URI,
-// or creates a new one if none exists. Returns the model name and scope.
+// or creates a new one if none exists (unless scope is Cluster). Returns the model name and scope.
 func ResolveOrCreateModelFromImage(
 	ctx context.Context,
 	k8sClient client.Client,
@@ -68,20 +68,26 @@ func ResolveOrCreateModelFromImage(
 	runtimeConfig *aimv1alpha1.AIMRuntimeConfigSpec,
 	imagePullSecrets []corev1.LocalObjectReference,
 	serviceAccountName string,
+	modelScope aimv1alpha1.ModelScope,
 ) (modelName string, scope TemplateScope, err error) {
 	if imageURI == "" {
 		return "", TemplateScopeNone, fmt.Errorf("image URI is empty")
 	}
 
-	// Search for existing models with this image
-	models, err := findModelsWithImage(ctx, k8sClient, serviceNamespace, imageURI)
+	// Search for existing models with this image, respecting scope
+	models, err := findModelsWithImage(ctx, k8sClient, serviceNamespace, imageURI, modelScope)
 	if err != nil {
 		return "", TemplateScopeNone, fmt.Errorf("failed to search for models: %w", err)
 	}
 
 	switch len(models) {
 	case 0:
-		// No models found - create one
+		// No models found
+		if modelScope == aimv1alpha1.ModelScopeCluster {
+			// Cluster scope - never create models, return error that will cause service to degrade
+			return "", TemplateScopeNone, fmt.Errorf("no cluster-scoped model found for image %q (scope: Cluster prevents auto-creation)", imageURI)
+		}
+		// Auto or Namespace scope - create a namespace-scoped model
 		return createModelForImage(ctx, k8sClient, serviceNamespace, imageURI, runtimeConfig, imagePullSecrets, serviceAccountName)
 	case 1:
 		// Single match - use it
@@ -106,17 +112,19 @@ type ModelReference struct {
 	Scope TemplateScope
 }
 
-// findModelsWithImage searches for AIMModel and AIMClusterModel resources with the specified image
+// findModelsWithImage searches for AIMModel and AIMClusterModel resources with the specified image,
+// respecting the provided scope constraint.
 func findModelsWithImage(
 	ctx context.Context,
 	k8sClient client.Client,
 	namespace string,
 	imageURI string,
+	modelScope aimv1alpha1.ModelScope,
 ) ([]ModelReference, error) {
 	var results []ModelReference
 
-	// Search namespace-scoped models
-	if namespace != "" {
+	// Search namespace-scoped models if scope allows
+	if (modelScope == aimv1alpha1.ModelScopeAuto || modelScope == aimv1alpha1.ModelScopeNamespace) && namespace != "" {
 		var modelList aimv1alpha1.AIMModelList
 		if err := k8sClient.List(ctx, &modelList, client.InNamespace(namespace)); err != nil {
 			return nil, fmt.Errorf("failed to list AIMModels: %w", err)
@@ -131,17 +139,19 @@ func findModelsWithImage(
 		}
 	}
 
-	// Search cluster-scoped models
-	var clusterModelList aimv1alpha1.AIMClusterModelList
-	if err := k8sClient.List(ctx, &clusterModelList); err != nil {
-		return nil, fmt.Errorf("failed to list AIMClusterModels: %w", err)
-	}
-	for i := range clusterModelList.Items {
-		if clusterModelList.Items[i].Spec.Image == imageURI {
-			results = append(results, ModelReference{
-				Name:  clusterModelList.Items[i].Name,
-				Scope: TemplateScopeCluster,
-			})
+	// Search cluster-scoped models if scope allows
+	if modelScope == aimv1alpha1.ModelScopeAuto || modelScope == aimv1alpha1.ModelScopeCluster {
+		var clusterModelList aimv1alpha1.AIMClusterModelList
+		if err := k8sClient.List(ctx, &clusterModelList); err != nil {
+			return nil, fmt.Errorf("failed to list AIMClusterModels: %w", err)
+		}
+		for i := range clusterModelList.Items {
+			if clusterModelList.Items[i].Spec.Image == imageURI {
+				results = append(results, ModelReference{
+					Name:  clusterModelList.Items[i].Name,
+					Scope: TemplateScopeCluster,
+				})
+			}
 		}
 	}
 

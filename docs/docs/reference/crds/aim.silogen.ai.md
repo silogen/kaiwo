@@ -957,6 +957,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `model` _[AIMServiceModel](#aimservicemodel)_ | Model specifies which model to deploy using one of the available reference methods.<br />Use `ref` to reference an existing AIMModel/AIMClusterModel by name, or use `image`<br />to specify a container image URI directly (which will auto-create a model if needed). |  |  |
+| `scope` _[ModelScope](#modelscope)_ | Scope controls which models and templates are considered when resolving references.<br />Auto (default): searches namespace-scoped first, then cluster-scoped resources.<br />Namespace: only considers namespace-scoped AIMModel and AIMServiceTemplate.<br />Cluster: only considers cluster-scoped AIMClusterModel and AIMClusterServiceTemplate.<br />When set to Cluster, the controller will never auto-create models - if a matching<br />cluster model is not found, the service will become Degraded until one is available. | Auto | Enum: [Auto Namespace Cluster] <br /> |
 | `templateRef` _string_ | TemplateRef is the name of the AIMServiceTemplate or AIMClusterServiceTemplate to use.<br />The template selects the runtime profile and GPU parameters. |  |  |
 | `cacheModel` _boolean_ | CacheModel requests that model sources be cached when starting the service<br />if the template itself does not warm the cache.<br />When `warmCache: false` on the template, this setting ensures caching is<br />performed before the service becomes ready. | false |  |
 | `replicas` _integer_ | Replicas overrides the number of replicas for this service.<br />Other runtime settings remain governed by the template unless overridden. | 1 |  |
@@ -1312,6 +1313,25 @@ _Appears in:_
 | `descriptionFull` _string_ | DescriptionFull is the full description.<br />Extracted from: org.amd.silogen.description.full |  |  |
 | `releaseNotes` _string_ | ReleaseNotes contains release notes for this version.<br />Extracted from: org.amd.silogen.release.notes |  |  |
 | `recommendedDeployments` _[RecommendedDeployment](#recommendeddeployment) array_ | RecommendedDeployments contains recommended deployment configurations.<br />Extracted from: org.amd.silogen.model.recommendedDeployments (parsed from JSON array) |  |  |
+
+
+#### ModelScope
+
+_Underlying type:_ _string_
+
+ModelScope defines the search scope for model/template selection.
+
+_Validation:_
+- Enum: [Auto Namespace Cluster]
+
+_Appears in:_
+- [AIMServiceSpec](#aimservicespec)
+
+| Field | Description |
+| --- | --- |
+| `Auto` | ModelScopeAuto searches both namespace and cluster scopes (default).<br />Namespace-scoped resources are checked first, then cluster-scoped resources.<br /> |
+| `Namespace` | ModelScopeNamespace limits search to namespace-scoped resources only.<br />Only AIMModel and AIMServiceTemplate resources in the same namespace are considered.<br /> |
+| `Cluster` | ModelScopeCluster limits search to cluster-scoped resources only.<br />Only AIMClusterModel and AIMClusterServiceTemplate resources are considered.<br />When this scope is set, the controller will never auto-create models.<br /> |
 
 
 #### OCIMetadata
