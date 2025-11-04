@@ -1,0 +1,33 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: auto-fallback-cluster
+spec:
+  description: Verify Auto scope falls back to cluster-scoped model when no namespace model exists
+  concurrent: false
+  steps:
+  - name: Create cluster-scoped model
+    try:
+    - apply:
+        file: cluster-model.yaml
+
+  - name: Create AIMService with Auto scope
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service uses cluster-scoped model
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-service
+          status:
+            conditions:
+            - type: Ready
+              status: "True"
+            modelRef:
+              name: cluster-model
+              kind: AIMClusterModel

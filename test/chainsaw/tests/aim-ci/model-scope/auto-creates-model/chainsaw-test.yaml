@@ -1,0 +1,37 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: auto-creates-model
+spec:
+  description: Verify Auto scope auto-creates a namespace-scoped model when no models exist
+  steps:
+  - name: Create AIMService with Auto scope
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service created a namespace-scoped model
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMModel
+          metadata:
+            namespace: ($namespace)
+          spec:
+            image: ghcr.io/silogen/aim-dummy:0.1.3
+
+  - name: Verify service is ready and uses the auto-created model
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-service
+          status:
+            conditions:
+            - type: Ready
+              status: "True"
+            modelRef:
+              kind: AIMModel

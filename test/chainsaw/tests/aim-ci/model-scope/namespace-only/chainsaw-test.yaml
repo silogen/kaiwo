@@ -1,0 +1,32 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: namespace-only
+spec:
+  description: Verify Namespace scope only uses namespace-scoped models
+  steps:
+  - name: Create namespace-scoped model
+    try:
+    - apply:
+        file: namespace-model.yaml
+
+  - name: Create AIMService with Namespace scope
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service uses namespace-scoped model
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-service
+          status:
+            conditions:
+            - type: Ready
+              status: "True"
+            modelRef:
+              name: namespace-model
+              kind: AIMModel

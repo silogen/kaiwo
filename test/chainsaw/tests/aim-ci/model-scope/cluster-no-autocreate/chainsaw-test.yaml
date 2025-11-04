@@ -1,0 +1,32 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: cluster-no-autocreate
+spec:
+  description: Verify Cluster scope never auto-creates models and service becomes Degraded
+  concurrent: false
+  steps:
+  - name: Create AIMService with Cluster scope
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service is Degraded due to missing cluster model
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-service
+          status:
+            conditions:
+            - type: Degraded
+              status: "True"
+              reason: ModelResolutionFailed
+
+  - name: Verify no namespace-scoped model was auto-created
+    try:
+    - script:
+        content: |
+          kubectl get aimmodel -n $NAMESPACE -o json | jq -e '.items | length == 0'
