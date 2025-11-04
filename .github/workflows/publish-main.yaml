@@ -4,13 +4,12 @@ on:
   push:
     branches:
     - main
-    - fix-gha-workflows
-    # paths:
-    # - 'apis/**'
-    # - 'internal/**'
-    # - 'pkg/**'
-    # - 'cmd/**'
-    # - 'config/**'
+    paths:
+    - 'apis/**'
+    - 'internal/**'
+    - 'pkg/**'
+    - 'cmd/**'
+    - 'config/**'
 
 permissions:
   contents: write
