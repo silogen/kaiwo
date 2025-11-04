@@ -59,13 +59,13 @@ const (
 
 var labelValueRegex = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
 
-// sanitizeLabelValue converts a string to a valid Kubernetes label value.
+// SanitizeLabelValue converts a string to a valid Kubernetes label value.
 // Valid label values must:
 // - Be empty or consist of alphanumeric characters, '-', '_' or '.'
 // - Start and end with an alphanumeric character
 // - Be at most 63 characters
 // Returns "unknown" if the sanitized value is empty.
-func sanitizeLabelValue(s string) string {
+func SanitizeLabelValue(s string) string {
 	// Replace invalid characters with underscores
 	sanitized := labelValueRegex.ReplaceAllString(s, "_")
 
@@ -178,7 +178,7 @@ func buildServingRuntimeObjectMeta(template aimstate.TemplateState, ownerRef met
 			"app.kubernetes.io/name":       LabelValueRuntimeName,
 			"app.kubernetes.io/component":  LabelValueRuntimeComponent,
 			"app.kubernetes.io/managed-by": LabelValueManagedBy,
-			LabelKeyModelID:                sanitizeLabelValue(template.SpecCommon.ModelName),
+			LabelKeyModelID:                SanitizeLabelValue(template.SpecCommon.ModelName),
 		},
 		OwnerReferences: []metav1.OwnerReference{ownerRef},
 	}
@@ -293,9 +293,9 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 		"app.kubernetes.io/component":  LabelValueServiceComponent,
 		"app.kubernetes.io/managed-by": LabelValueManagedBy,
 		LabelKeyTemplate:               serviceState.Template.Name,
-		LabelKeyModelID:                sanitizeLabelValue(serviceState.ModelID),
-		LabelKeyImageName:              sanitizeLabelValue(serviceState.Template.SpecCommon.ModelName),
-		LabelKeyServiceName:            sanitizeLabelValue(serviceState.Name),
+		LabelKeyModelID:                SanitizeLabelValue(serviceState.ModelID),
+		LabelKeyImageName:              SanitizeLabelValue(serviceState.Template.SpecCommon.ModelName),
+		LabelKeyServiceName:            SanitizeLabelValue(serviceState.Name),
 	}
 	for k, v := range systemLabels {
 		labels[k] = v
@@ -340,11 +340,11 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 	container.Resources = resolveServiceResources(serviceState)
 
 	if metric := serviceState.Template.StatusMetric(); metric != nil {
-		inferenceService.Labels[LabelKeyMetric] = sanitizeLabelValue(string(*metric))
+		inferenceService.Labels[LabelKeyMetric] = SanitizeLabelValue(string(*metric))
 	}
 
 	if precision := serviceState.Template.StatusPrecision(); precision != nil {
-		inferenceService.Labels[LabelKeyPrecision] = sanitizeLabelValue(string(*precision))
+		inferenceService.Labels[LabelKeyPrecision] = SanitizeLabelValue(string(*precision))
 	}
 
 	if serviceState.Replicas != nil {

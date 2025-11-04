@@ -61,6 +61,12 @@ type AIMModelCacheSpec struct {
 	// ImagePullSecrets references secrets for pulling AIM container images.
 	// +optional
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
+	// RuntimeConfigName references the AIM runtime configuration (by name) to use for this model cache.
+	// This determines PVC headroom and other runtime settings.
+	// +kubebuilder:default=default
+	// +optional
+	RuntimeConfigName string `json:"runtimeConfigName,omitempty"`
 }
 
 // +kubebuilder:validation:Enum=Pending;Progressing;Available;Failed

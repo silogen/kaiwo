@@ -3,6 +3,7 @@ kind: AIMClusterRuntimeConfig
 metadata:
   name: integration-cluster-model-public-image
 spec:
+  defaultStorageClassName: "rwx-nfs"
   routing:
     enabled: true
     gatewayRef:

@@ -151,6 +151,10 @@ func mergeRuntimeConfigSpecs(clusterSpec aimv1alpha1.AIMClusterRuntimeConfigSpec
 		merged.DefaultStorageClassName = namespaceSpec.DefaultStorageClassName
 	}
 
+	if namespaceSpec.PVCHeadroomPercent != nil {
+		merged.PVCHeadroomPercent = namespaceSpec.PVCHeadroomPercent
+	}
+
 	// Merge routing configuration
 	merged.Routing = mergeRoutingConfig(clusterSpec.Routing, namespaceSpec.Routing)
 
@@ -201,4 +205,13 @@ func NormalizeRuntimeConfigName(name string) string {
 		return DefaultRuntimeConfigName
 	}
 	return name
+}
+
+// GetPVCHeadroomPercent returns the PVC headroom percentage from the runtime config spec.
+// If not set, returns the default value of 10%.
+func GetPVCHeadroomPercent(spec aimv1alpha1.AIMRuntimeConfigSpec) int32 {
+	if spec.PVCHeadroomPercent != nil {
+		return *spec.PVCHeadroomPercent
+	}
+	return 10 // Default 10% headroom
 }

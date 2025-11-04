@@ -46,6 +46,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
+	"github.com/silogen/kaiwo/internal/controller/aim/shared"
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
@@ -210,19 +211,24 @@ func BuildMissingModelCaches(tc *aimv1alpha1.AIMTemplateCache, obs *templateCach
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      sanitizedName,
 					Namespace: tc.Namespace,
-					Labels:    map[string]string{"template-created": "true"}, // Can be cleaned up if no templates are referencing it
+					Labels: map[string]string{
+						"template-created":           "true", // Backward compatibility
+						shared.LabelKeyTemplateCache: tc.Name,
+						shared.LabelKeySourceModel:   shared.SanitizeLabelValue(cache.Name),
+					},
 				},
 				Spec: aimv1alpha1.AIMModelCacheSpec{
-					StorageClassName: tc.Spec.StorageClassName,
-					SourceURI:        cache.SourceURI,
-					Size:             cache.Size,
-					Env:              tc.Spec.Env,
+					StorageClassName:  tc.Spec.StorageClassName,
+					SourceURI:         cache.SourceURI,
+					Size:              cache.Size,
+					Env:               tc.Spec.Env,
+					RuntimeConfigName: tc.Spec.RuntimeConfigName,
 				},
 			},
 		)
 
 	}
-	return
+	return caches
 }
 
 func (r *AIMTemplateCacheReconciler) plan(_ context.Context, tc *aimv1alpha1.AIMTemplateCache, obs *templateCacheObservation) (desired []client.Object, err error) {
@@ -267,15 +273,17 @@ func (r *AIMTemplateCacheReconciler) projectStatus(_ context.Context, tc *aimv1a
 		return err
 	}
 
-	// Handle template not found as a condition
+	// Handle template not found - this is a pending state, not a failure
+	// The template may not exist yet (race condition during creation)
+	// Our watch on templates will trigger reconciliation when the template is created
 	if obs.TemplateNotFound {
 		conditions = append(conditions, controllerutils.NewCondition(
-			controllerutils.ConditionTypeFailure,
-			metav1.ConditionTrue,
 			"TemplateNotFound",
-			obs.TemplateError,
+			metav1.ConditionTrue,
+			"AwaitingTemplate",
+			fmt.Sprintf("Waiting for template %q to be created", tc.Spec.TemplateRef),
 		))
-		tc.Status.Status = aimv1alpha1.AIMTemplateCacheStatusFailed
+		tc.Status.Status = aimv1alpha1.AIMTemplateCacheStatusPending
 		for _, cond := range conditions {
 			meta.SetStatusCondition(&tc.Status.Conditions, cond)
 		}
@@ -333,10 +341,72 @@ func (r *AIMTemplateCacheReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return requestsFromTemplateCaches(templateCaches.Items)
 	})
 
+	// Watch for ServiceTemplate changes and reconcile any TemplateCaches that reference them
+	serviceTemplateHandler := handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+		template, ok := obj.(*aimv1alpha1.AIMServiceTemplate)
+		if !ok {
+			return nil
+		}
+
+		// Find all TemplateCaches in the same namespace that reference this template
+		var templateCaches aimv1alpha1.AIMTemplateCacheList
+		if err := r.List(ctx, &templateCaches,
+			client.InNamespace(template.Namespace),
+		); err != nil {
+			ctrl.LoggerFrom(ctx).Error(err, "failed to list AIMTemplateCaches for ServiceTemplate",
+				"template", template.Name, "namespace", template.Namespace)
+			return nil
+		}
+
+		var requests []reconcile.Request
+		for _, tc := range templateCaches.Items {
+			if tc.Spec.TemplateRef == template.Name {
+				requests = append(requests, reconcile.Request{
+					NamespacedName: types.NamespacedName{
+						Namespace: tc.Namespace,
+						Name:      tc.Name,
+					},
+				})
+			}
+		}
+		return requests
+	})
+
+	// Watch for ClusterServiceTemplate changes and reconcile any TemplateCaches that reference them
+	clusterServiceTemplateHandler := handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+		template, ok := obj.(*aimv1alpha1.AIMClusterServiceTemplate)
+		if !ok {
+			return nil
+		}
+
+		// Find all TemplateCaches across all namespaces that reference this cluster template
+		var templateCaches aimv1alpha1.AIMTemplateCacheList
+		if err := r.List(ctx, &templateCaches); err != nil {
+			ctrl.LoggerFrom(ctx).Error(err, "failed to list AIMTemplateCaches for ClusterServiceTemplate",
+				"template", template.Name)
+			return nil
+		}
+
+		var requests []reconcile.Request
+		for _, tc := range templateCaches.Items {
+			if tc.Spec.TemplateRef == template.Name {
+				requests = append(requests, reconcile.Request{
+					NamespacedName: types.NamespacedName{
+						Namespace: tc.Namespace,
+						Name:      tc.Name,
+					},
+				})
+			}
+		}
+		return requests
+	})
+
 	r.Recorder = mgr.GetEventRecorderFor("aimtemplatecache-controller")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&aimv1alpha1.AIMTemplateCache{}).
 		Watches(&aimv1alpha1.AIMModelCache{}, modelCacheHandler).
+		Watches(&aimv1alpha1.AIMServiceTemplate{}, serviceTemplateHandler).
+		Watches(&aimv1alpha1.AIMClusterServiceTemplate{}, clusterServiceTemplateHandler).
 		WithOptions(controller.Options{MaxConcurrentReconciles: 2}).
 		Named("aimtemplatecache-controller").
 		Complete(r)

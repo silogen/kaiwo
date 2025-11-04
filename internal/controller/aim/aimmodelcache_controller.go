@@ -27,6 +27,7 @@ package aim
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"k8s.io/client-go/tools/record"
 
@@ -47,6 +48,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
+	"github.com/silogen/kaiwo/internal/controller/aim/shared"
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 )
 
@@ -124,6 +126,9 @@ type observation struct {
 	storageClassFound bool
 	jobFound          bool
 	job               batchv1.Job
+
+	// runtime config
+	runtimeConfigSpec aimv1alpha1.AIMRuntimeConfigSpec
 
 	// derived
 	pvcBound             bool
@@ -203,6 +208,17 @@ func (r *AIMModelCacheReconciler) observe(ctx context.Context, mc *aimv1alpha1.A
 	// derived storage flags
 	ob.storageReady = ob.pvcFound && ob.pvc.Status.Phase == corev1.ClaimBound
 	ob.storageLost = ob.pvcFound && ob.pvc.Status.Phase == corev1.ClaimLost
+
+	// Resolve runtime config for PVC headroom and other settings
+	runtimeConfig, err := shared.ResolveRuntimeConfig(ctx, r.Client, mc.Namespace, mc.Spec.RuntimeConfigName)
+	if err != nil {
+		// If runtime config resolution fails, use empty spec (will use defaults)
+		baseutils.Debug(logger, "Failed to resolve runtime config, using defaults", "error", err, "runtimeConfigName", mc.Spec.RuntimeConfigName)
+		ob.runtimeConfigSpec = aimv1alpha1.AIMRuntimeConfigSpec{}
+	} else {
+		ob.runtimeConfigSpec = runtimeConfig.EffectiveSpec
+	}
+
 	return ob, nil
 }
 
@@ -214,7 +230,11 @@ func (r *AIMModelCacheReconciler) plan(ctx context.Context, mc *aimv1alpha1.AIMM
 		return desired, nil
 	}
 	// Include PVC on every reconcile
-	pvc := r.buildPVC(mc, r.pvcName(mc))
+	headroomPercent := shared.GetPVCHeadroomPercent(ob.runtimeConfigSpec)
+	storageClassName := shared.ResolveStorageClass(mc.Spec.StorageClassName, ob.runtimeConfigSpec)
+	pvcSize := shared.QuantityWithHeadroom(mc.Spec.Size.Value(), headroomPercent)
+
+	pvc := r.buildPVC(mc, r.pvcName(mc), pvcSize, storageClassName)
 	if err := ctrl.SetControllerReference(mc, pvc, r.Scheme); err != nil {
 		return desired, fmt.Errorf("owner pvc: %w", err)
 	}
@@ -437,27 +457,61 @@ func (r *AIMModelCacheReconciler) determineOverallStatus(sf stateFlags, ob obser
 	}
 }
 
-func (r *AIMModelCacheReconciler) buildPVC(mc *aimv1alpha1.AIMModelCache, pvcName string) *corev1.PersistentVolumeClaim {
-	var sc *string
-	if mc.Spec.StorageClassName != "" {
-		v := mc.Spec.StorageClassName
-		sc = &v
+// extractModelFromSourceURI extracts the model name from a sourceURI.
+// Examples:
+//   - "hf://amd/Llama-3.1-8B-Instruct" → "amd/Llama-3.1-8B-Instruct"
+//   - "s3://bucket/model-v1" → "bucket/model-v1"
+func extractModelFromSourceURI(sourceURI string) string {
+	// Remove the scheme prefix (hf://, s3://, etc.)
+	if idx := strings.Index(sourceURI, "://"); idx != -1 {
+		return sourceURI[idx+3:]
 	}
+	return sourceURI
+}
+
+func (r *AIMModelCacheReconciler) buildPVC(mc *aimv1alpha1.AIMModelCache, pvcName string, pvcSize resource.Quantity, storageClassName string) *corev1.PersistentVolumeClaim {
+	// Storage class: empty string means use cluster default
+	var sc *string
+	if storageClassName != "" {
+		sc = &storageClassName
+	}
+
+	// Determine cache type based on whether this was created by a template cache
+	cacheType := shared.LabelValueCacheTypeTemplateCache
+	if mc.Labels == nil || mc.Labels["template-created"] != "true" {
+		cacheType = "" // Standalone model cache (not template or service cache)
+	}
+
+	// Build labels with type and source information
+	labels := map[string]string{
+		"app.kubernetes.io/managed-by": "modelcache-controller",
+		shared.LabelKeyModelCache:      mc.Name,
+	}
+
+	// Add cache type if it's a template cache
+	if cacheType != "" {
+		labels[shared.LabelKeyCacheType] = cacheType
+	}
+
+	// Extract model name from sourceURI (e.g., "hf://amd/Llama-3.1-8B" → "amd/Llama-3.1-8B")
+	if mc.Spec.SourceURI != "" {
+		if modelName := extractModelFromSourceURI(mc.Spec.SourceURI); modelName != "" {
+			labels[shared.LabelKeySourceModel] = shared.SanitizeLabelValue(modelName)
+		}
+	}
+
 	return &corev1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{APIVersion: corev1.SchemeGroupVersion.String(), Kind: "PersistentVolumeClaim"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pvcName,
 			Namespace: mc.Namespace,
-			Labels: mergeStringMap(nil, map[string]string{
-				"app.kubernetes.io/managed-by": "modelcache-controller",
-				"aim.silogen.ai/modelcache":    mc.Name,
-			}),
+			Labels:    mergeStringMap(nil, labels),
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany},
 			Resources: corev1.VolumeResourceRequirements{
 				Requests: corev1.ResourceList{
-					corev1.ResourceStorage: mc.Spec.Size,
+					corev1.ResourceStorage: pvcSize,
 				},
 			},
 			StorageClassName: sc,

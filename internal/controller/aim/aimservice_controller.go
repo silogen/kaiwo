@@ -285,41 +285,20 @@ func (r *AIMServiceReconciler) planDerivedTemplate(logger logr.Logger, service *
 
 func (r *AIMServiceReconciler) planTemplateCache(ctx context.Context, logger logr.Logger, service *aimv1alpha1.AIMService, obs *shared.ServiceObservation) client.Object {
 	// Create template cache if service requests caching but none exists
-	// Only create for namespace-scoped templates (cluster templates need manual cache creation)
+	// Works for both namespace-scoped and cluster-scoped templates
 	if service.Spec.CacheModel && obs.TemplateCache == nil && obs.TemplateAvailable &&
-		obs.Scope == shared.TemplateScopeNamespace && obs.TemplateStatus != nil && len(obs.TemplateStatus.ModelSources) > 0 {
+		obs.TemplateStatus != nil && len(obs.TemplateStatus.ModelSources) > 0 {
 		baseutils.Debug(logger, "Service requests caching but no template cache exists, creating one",
-			"templateName", obs.TemplateName)
+			"templateName", obs.TemplateName, "scope", obs.Scope)
 
-		// Get the template to create owner reference
-		var template aimv1alpha1.AIMServiceTemplate
-		err := r.Get(ctx, client.ObjectKey{
-			Namespace: service.Namespace,
-			Name:      obs.TemplateName,
-		}, &template)
-		if err != nil {
-			baseutils.Debug(logger, "Failed to get template for cache creation", "error", err)
-			return nil
-		}
-
-		templateOwnerRef := metav1.OwnerReference{
-			APIVersion:         template.APIVersion,
-			Kind:               template.Kind,
-			Name:               template.Name,
-			UID:                template.UID,
-			Controller:         baseutils.Pointer(true),
-			BlockOwnerDeletion: baseutils.Pointer(true),
-		}
-
-		return &aimv1alpha1.AIMTemplateCache{
+		cache := &aimv1alpha1.AIMTemplateCache{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: "aim.silogen.ai/v1alpha1",
 				Kind:       "AIMTemplateCache",
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            obs.TemplateName,
-				Namespace:       service.Namespace,
-				OwnerReferences: []metav1.OwnerReference{templateOwnerRef},
+				Name:      obs.TemplateName,
+				Namespace: service.Namespace,
 			},
 			Spec: aimv1alpha1.AIMTemplateCacheSpec{
 				TemplateRef:      obs.TemplateName,
@@ -327,6 +306,35 @@ func (r *AIMServiceReconciler) planTemplateCache(ctx context.Context, logger log
 				Env:              service.Spec.Env,
 			},
 		}
+
+		// Only set owner reference for namespace-scoped templates
+		// Kubernetes doesn't allow namespace-scoped resources to own cluster-scoped resources
+		if obs.Scope == shared.TemplateScopeNamespace {
+			var template aimv1alpha1.AIMServiceTemplate
+			err := r.Get(ctx, client.ObjectKey{
+				Namespace: service.Namespace,
+				Name:      obs.TemplateName,
+			}, &template)
+			if err != nil {
+				baseutils.Debug(logger, "Failed to get template for cache creation", "error", err)
+				return nil
+			}
+
+			cache.OwnerReferences = []metav1.OwnerReference{
+				{
+					APIVersion:         template.APIVersion,
+					Kind:               template.Kind,
+					Name:               template.Name,
+					UID:                template.UID,
+					Controller:         baseutils.Pointer(true),
+					BlockOwnerDeletion: baseutils.Pointer(true),
+				},
+			}
+		}
+		// For cluster-scoped templates, no owner reference is set
+		// The cache lifecycle is managed by the template cache controller
+
+		return cache
 	}
 	return nil
 }
@@ -403,7 +411,8 @@ func (r *AIMServiceReconciler) planInferenceServiceAndRoute(logger logr.Logger, 
 	var servicePVC *v1.PersistentVolumeClaim
 	var servicePVCErr error
 	if !service.Spec.CacheModel && obs.TemplateCache == nil {
-		servicePVC, servicePVCErr = buildServicePVC(service, templateState, obs.RuntimeConfigSpec.DefaultStorageClassName)
+		headroomPercent := shared.GetPVCHeadroomPercent(obs.RuntimeConfigSpec)
+		servicePVC, servicePVCErr = buildServicePVC(service, templateState, obs.RuntimeConfigSpec.DefaultStorageClassName, headroomPercent)
 		if servicePVCErr != nil {
 			baseutils.Debug(logger, "Failed to build service PVC", "error", servicePVCErr)
 			// This error will be handled in status projection
@@ -505,12 +514,12 @@ func (r *AIMServiceReconciler) plan(ctx context.Context, service *aimv1alpha1.AI
 // buildServicePVC creates a PVC for a service to store downloaded models.
 // This is used when there's no template cache available.
 // Returns nil and an error if model sizes aren't specified.
-func buildServicePVC(service *aimv1alpha1.AIMService, templateState aimstate.TemplateState, storageClassName string) (*v1.PersistentVolumeClaim, error) {
+func buildServicePVC(service *aimv1alpha1.AIMService, templateState aimstate.TemplateState, storageClassName string, headroomPercent int32) (*v1.PersistentVolumeClaim, error) {
 	// Generate PVC name using same pattern as InferenceService
 	pvcName := shared.GenerateInferenceServiceName(service.Name, service.Namespace) + "-temp-cache"
 
 	// Calculate required size from model sources
-	size, err := calculateRequiredStorageSize(templateState)
+	size, err := calculateRequiredStorageSize(templateState, headroomPercent)
 	if err != nil {
 		return nil, fmt.Errorf("cannot determine storage size: %w", err)
 	}
@@ -531,7 +540,10 @@ func buildServicePVC(service *aimv1alpha1.AIMService, templateState aimstate.Tem
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "aim-service-controller",
 				"app.kubernetes.io/component":  "model-storage",
-				"aim.silogen.ai/service":       service.Name,
+				shared.LabelKeyServiceName:     shared.SanitizeLabelValue(service.Name),
+				shared.LabelKeyCacheType:       shared.LabelValueCacheTypeTempService,
+				shared.LabelKeyTemplate:        templateState.Name,
+				shared.LabelKeyModelID:         shared.SanitizeLabelValue(templateState.SpecCommon.ModelName),
 			},
 			OwnerReferences: []metav1.OwnerReference{
 				{
@@ -545,7 +557,7 @@ func buildServicePVC(service *aimv1alpha1.AIMService, templateState aimstate.Tem
 			},
 		},
 		Spec: v1.PersistentVolumeClaimSpec{
-			AccessModes: []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce},
+			AccessModes: []v1.PersistentVolumeAccessMode{v1.ReadWriteMany},
 			Resources: v1.VolumeResourceRequirements{
 				Requests: v1.ResourceList{
 					v1.ResourceStorage: size,
@@ -557,10 +569,9 @@ func buildServicePVC(service *aimv1alpha1.AIMService, templateState aimstate.Tem
 }
 
 // calculateRequiredStorageSize computes the total storage needed for model sources.
-// Returns sum of all model sizes plus 20% headroom, or an error if sizes aren't specified.
-func calculateRequiredStorageSize(templateState aimstate.TemplateState) (resource.Quantity, error) {
-	const headroomPercent = 1.2 // 20% extra
-
+// Returns sum of all model sizes plus the specified headroom percentage, or an error if sizes aren't specified.
+// headroomPercent represents the percentage (0-100) of extra space to add. For example, 10 means 10% extra.
+func calculateRequiredStorageSize(templateState aimstate.TemplateState, headroomPercent int32) (resource.Quantity, error) {
 	if templateState.Status == nil || len(templateState.Status.ModelSources) == 0 {
 		return resource.Quantity{}, fmt.Errorf("no model sources available in template")
 	}
@@ -577,17 +588,8 @@ func calculateRequiredStorageSize(templateState aimstate.TemplateState) (resourc
 		return resource.Quantity{}, fmt.Errorf("total model size is zero")
 	}
 
-	// Add headroom
-	totalBytes = int64(float64(totalBytes) * headroomPercent)
-
-	// Format as Gi for better readability and compatibility
-	totalGi := float64(totalBytes) / (1024 * 1024 * 1024)
-	sizeStr := fmt.Sprintf("%.1fGi", totalGi)
-	qty, err := resource.ParseQuantity(sizeStr)
-	if err != nil {
-		return resource.Quantity{}, fmt.Errorf("failed to parse size %q: %w", sizeStr, err)
-	}
-	return qty, nil
+	// Apply headroom and round to nearest Gi using shared utility
+	return shared.QuantityWithHeadroom(totalBytes, headroomPercent), nil
 }
 
 func addServicePVCMount(inferenceService *servingv1beta1.InferenceService, pvcName string) {

@@ -213,6 +213,35 @@ jobs:
         kubectl -n kube-system rollout status deployment/kaiwo-scheduler --timeout=300s
         kubectl -n kaiwo-system get pods -o wide
 
+    - name: Debug rollout failure
+      if: failure()
+      run: |
+        echo "=== Deployment status ==="
+        kubectl -n kaiwo-system get deployments -o wide
+        kubectl -n kube-system get deployments -o wide
+
+        echo "=== Pod status ==="
+        kubectl -n kaiwo-system get pods -o wide
+        kubectl -n kube-system get pods -o wide
+
+        echo "=== Controller manager pod details ==="
+        kubectl -n kaiwo-system describe deployment kaiwo-controller-manager
+        kubectl -n kaiwo-system describe pods -l control-plane=controller-manager
+
+        echo "=== Scheduler pod details ==="
+        kubectl -n kube-system describe deployment kaiwo-scheduler
+        kubectl -n kube-system describe pods -l component=kaiwo-scheduler
+
+        echo "=== Controller manager logs ==="
+        kubectl -n kaiwo-system logs -l control-plane=controller-manager --tail=100 --all-containers=true || true
+
+        echo "=== Scheduler logs ==="
+        kubectl -n kube-system logs -l component=kaiwo-scheduler --tail=100 --all-containers=true || true
+
+        echo "=== Events ==="
+        kubectl -n kaiwo-system get events --sort-by='.lastTimestamp'
+        kubectl -n kube-system get events --sort-by='.lastTimestamp'
+
     - name: Run E2E tests
       run: |
         cd test
