@@ -1,0 +1,9 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-service
+spec:
+  scope: Auto
+  model:
+    image: ghcr.io/silogen/aim-dummy:0.1.3
+  runtimeConfigName: auto-prefers-namespace

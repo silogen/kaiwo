@@ -1,0 +1,38 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: auto-prefers-namespace
+spec:
+  description: Verify Auto scope prefers namespace-scoped model over cluster-scoped model
+  concurrent: false
+  steps:
+  - name: Create cluster-scoped model
+    try:
+    - apply:
+        file: cluster-model.yaml
+
+  - name: Create namespace-scoped model
+    try:
+    - apply:
+        file: namespace-model.yaml
+
+  - name: Create AIMService with Auto scope
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service uses namespace-scoped model
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-service
+          status:
+            conditions:
+            - type: Ready
+              status: "True"
+            modelRef:
+              name: namespace-model
+              kind: AIMModel

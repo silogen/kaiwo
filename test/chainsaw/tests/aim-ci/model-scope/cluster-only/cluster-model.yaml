@@ -1,0 +1,6 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterModel
+metadata:
+  name: cluster-model
+spec:
+  image: ghcr.io/silogen/aim-dummy:0.1.3

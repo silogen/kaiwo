@@ -1,0 +1,43 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: namespace-ignores-cluster
+spec:
+  description: Verify Namespace scope ignores cluster-scoped models and auto-creates namespace model
+  concurrent: false
+  steps:
+  - name: Create cluster-scoped model (should be ignored)
+    try:
+    - apply:
+        file: cluster-model.yaml
+
+  - name: Create AIMService with Namespace scope
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service auto-created a namespace-scoped model
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMModel
+          metadata:
+            namespace: ($namespace)
+          spec:
+            image: ghcr.io/silogen/aim-dummy:0.1.3
+
+  - name: Verify service uses namespace model, not cluster model
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-service
+          status:
+            conditions:
+            - type: Ready
+              status: "True"
+            modelRef:
+              kind: AIMModel
