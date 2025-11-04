@@ -238,6 +238,10 @@ func buildServingRuntimeSpec(template aimstate.TemplateState) servingv1alpha1.Se
 							Name:  "VLLM_ENABLE_METRICS",
 							Value: "true",
 						},
+						{
+							Name:  "HF_HUB_DISABLE_XET",
+							Value: "1",
+						},
 					},
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
