@@ -85,7 +85,8 @@ jobs:
     - name: Upload CRDs artifact
       uses: actions/upload-artifact@v4
       with:
-        name: crds.yaml
+        name: crds-yaml
+        path: crds.yaml
 
     - name: Create draft release and upload assets
       uses: softprops/action-gh-release@v2
@@ -94,6 +95,7 @@ jobs:
           builds/*
           workloads.zip
           install.yaml
+          crds.yaml
           dist/kaiwo-operator-*.tgz
         token: '${{ secrets.GITHUB_TOKEN }}'
         draft: true
@@ -126,6 +128,3 @@ jobs:
           ### Docker Images
           - Operator: `ghcr.io/${{ github.repository_owner }}/kaiwo-operator:${{ env.VERSION }}`
 
-          ## What's Changed
-
-          *Fill in release notes...*

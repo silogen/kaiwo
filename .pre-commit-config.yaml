@@ -34,6 +34,49 @@ repos:
     require_serial: true
     pass_filenames: false
 
+  - id: derive-versions
+    name: Derive image and chart versions
+    entry: >
+      bash -c "
+        set -euo pipefail;
+        SHORT_SHA=$(git rev-parse --short=7 HEAD);
+        IMAGE_TAG=\"main-${SHORT_SHA}\";
+        CHART_VERSION=\"0.0.0-main.${SHORT_SHA}\";
+        echo SHORT_SHA=${SHORT_SHA} > .precommit_env;
+        echo IMAGE_TAG=${IMAGE_TAG} >> .precommit_env;
+        echo CHART_VERSION=${CHART_VERSION} >> .precommit_env;
+        echo 'Derived versions:';
+        cat .precommit_env;
+      "
+    language: system
+    pass_filenames: false
+    stages: [pre-commit]
+
+  - id: build-install-yaml
+    name: Generate install.yaml
+    entry: >
+      bash -c "
+        set -euo pipefail;
+        source .precommit_env;
+        make build-installer TAG=${IMAGE_TAG};
+        cp dist/install.yaml install.yaml;
+      "
+    language: system
+    pass_filenames: false
+    stages: [pre-commit]
+
+  - id: helm-package
+    name: Package Helm chart
+    entry: >
+      bash -c "
+        set -euo pipefail;
+        source .precommit_env;
+        make helm-release TAG=${IMAGE_TAG} CHART_VERSION=${CHART_VERSION};
+      "
+    language: system
+    pass_filenames: false
+    stages: [pre-commit]
+
 - repo: https://github.com/jumanjihouse/pre-commit-hook-yamlfmt
   rev: 0.2.3
   hooks:
