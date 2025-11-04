@@ -3,8 +3,6 @@ name: publish-main
 on:
   pull_request:
     types: [opened, synchronize]
-    branches-ignore:
-    - main
     paths:
     - 'apis/**'
     - 'internal/**'
