@@ -227,7 +227,8 @@ func createModelForImage(
 			Name:      modelName,
 			Namespace: namespace,
 			Labels: map[string]string{
-				LabelAutoCreated: "true",
+				LabelAutoCreated:   "true",
+				LabelKeyModelImage: SanitizeLabelValue(imageURI),
 			},
 		},
 		Spec: aimv1alpha1.AIMModelSpec{

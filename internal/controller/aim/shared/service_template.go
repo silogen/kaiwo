@@ -25,6 +25,7 @@ SOFTWARE.
 package shared
 
 import (
+	"strconv"
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -102,18 +103,44 @@ func BuildDerivedTemplate(
 		spec.Caching = spec.Caching.DeepCopy()
 	}
 
+	// Build labels for derived template
+	labels := map[string]string{
+		"app.kubernetes.io/managed-by": LabelValueManagedBy,
+		LabelKeyDerivedTemplate:        LabelValueDerivedTemplate,
+	}
+
+	// Add model information
+	if resolvedModelName != "" {
+		labels[LabelKeyModelID] = SanitizeLabelValue(resolvedModelName)
+		labels[LabelKeyImageName] = SanitizeLabelValue(resolvedModelName)
+		labels[LabelKeyModelName] = SanitizeLabelValue(resolvedModelName)
+	}
+
+	// Add template properties from spec
+	if specCommon.Metric != nil {
+		labels[LabelKeyMetric] = SanitizeLabelValue(string(*specCommon.Metric))
+	}
+	if specCommon.Precision != nil {
+		labels[LabelKeyPrecision] = SanitizeLabelValue(string(*specCommon.Precision))
+	}
+	if specCommon.GpuSelector != nil {
+		if specCommon.GpuSelector.Model != "" {
+			labels[LabelKeyTemplateGPUModel] = SanitizeLabelValue(specCommon.GpuSelector.Model)
+		}
+		if specCommon.GpuSelector.Count > 0 {
+			labels[LabelKeyTemplateGPUCount] = SanitizeLabelValue(strconv.Itoa(int(specCommon.GpuSelector.Count)))
+		}
+	}
+
 	template := &aimv1alpha1.AIMServiceTemplate{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: aimv1alpha1.GroupVersion.String(),
 			Kind:       "AIMServiceTemplate",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      templateName,
-			Namespace: service.Namespace,
-			Labels: map[string]string{
-				"app.kubernetes.io/managed-by": LabelValueManagedBy,
-				LabelKeyDerivedTemplate:        LabelValueDerivedTemplate,
-			},
+			Name:            templateName,
+			Namespace:       service.Namespace,
+			Labels:          labels,
 			OwnerReferences: []metav1.OwnerReference{},
 		},
 		Spec: spec,

@@ -300,6 +300,35 @@ func (r *AIMServiceReconciler) planTemplateCache(ctx context.Context, logger log
 		baseutils.Debug(logger, "Service requests caching but no template cache exists, creating one",
 			"templateName", obs.TemplateName, "scope", obs.Scope)
 
+		// Build labels
+		labels := map[string]string{
+			"app.kubernetes.io/managed-by": shared.LabelValueManagedBy,
+			shared.LabelKeyTemplateCache:   obs.TemplateName,
+			shared.LabelKeyCacheType:       shared.LabelValueCacheTypeTemplateCache,
+		}
+
+		// Add hierarchical labels for model properties if available
+		if obs.TemplateSpecCommon.ModelName != "" {
+			labels[shared.LabelKeyModelID] = shared.SanitizeLabelValue(obs.TemplateSpecCommon.ModelName)
+			labels[shared.LabelKeyModelName] = shared.SanitizeLabelValue(obs.TemplateSpecCommon.ModelName)
+		}
+
+		// Add hierarchical labels for template properties
+		if obs.TemplateSpecCommon.Metric != nil {
+			labels[shared.LabelKeyMetric] = shared.SanitizeLabelValue(string(*obs.TemplateSpecCommon.Metric))
+		}
+		if obs.TemplateSpecCommon.Precision != nil {
+			labels[shared.LabelKeyPrecision] = shared.SanitizeLabelValue(string(*obs.TemplateSpecCommon.Precision))
+		}
+		if obs.TemplateSpecCommon.GpuSelector != nil {
+			if obs.TemplateSpecCommon.GpuSelector.Model != "" {
+				labels[shared.LabelKeyTemplateGPUModel] = shared.SanitizeLabelValue(obs.TemplateSpecCommon.GpuSelector.Model)
+			}
+			if obs.TemplateSpecCommon.GpuSelector.Count > 0 {
+				labels[shared.LabelKeyTemplateGPUCount] = shared.SanitizeLabelValue(fmt.Sprintf("%d", obs.TemplateSpecCommon.GpuSelector.Count))
+			}
+		}
+
 		cache := &aimv1alpha1.AIMTemplateCache{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: "aim.silogen.ai/v1alpha1",
@@ -308,6 +337,7 @@ func (r *AIMServiceReconciler) planTemplateCache(ctx context.Context, logger log
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      obs.TemplateName,
 				Namespace: service.Namespace,
+				Labels:    labels,
 			},
 			Spec: aimv1alpha1.AIMTemplateCacheSpec{
 				TemplateRef:      obs.TemplateName,
@@ -539,6 +569,37 @@ func buildServicePVC(service *aimv1alpha1.AIMService, templateState aimstate.Tem
 		sc = &storageClassName
 	}
 
+	// Build labels - include hierarchical properties from template
+	labels := map[string]string{
+		"app.kubernetes.io/managed-by": "aim-service-controller",
+		"app.kubernetes.io/component":  "model-storage",
+		shared.LabelKeyServiceName:     shared.SanitizeLabelValue(service.Name),
+		shared.LabelKeyCacheType:       shared.LabelValueCacheTypeTempService,
+		shared.LabelKeyTemplate:        templateState.Name,
+		shared.LabelKeyModelID:         shared.SanitizeLabelValue(templateState.SpecCommon.ModelName),
+	}
+
+	// Add hierarchical labels for model properties
+	if templateState.SpecCommon.ModelName != "" {
+		labels[shared.LabelKeyModelName] = shared.SanitizeLabelValue(templateState.SpecCommon.ModelName)
+	}
+
+	// Add hierarchical labels for template properties
+	if templateState.SpecCommon.Metric != nil {
+		labels[shared.LabelKeyMetric] = shared.SanitizeLabelValue(string(*templateState.SpecCommon.Metric))
+	}
+	if templateState.SpecCommon.Precision != nil {
+		labels[shared.LabelKeyPrecision] = shared.SanitizeLabelValue(string(*templateState.SpecCommon.Precision))
+	}
+	if templateState.SpecCommon.GpuSelector != nil {
+		if templateState.SpecCommon.GpuSelector.Model != "" {
+			labels[shared.LabelKeyTemplateGPUModel] = shared.SanitizeLabelValue(templateState.SpecCommon.GpuSelector.Model)
+		}
+		if templateState.SpecCommon.GpuSelector.Count > 0 {
+			labels[shared.LabelKeyTemplateGPUCount] = shared.SanitizeLabelValue(fmt.Sprintf("%d", templateState.SpecCommon.GpuSelector.Count))
+		}
+	}
+
 	return &v1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
@@ -547,14 +608,7 @@ func buildServicePVC(service *aimv1alpha1.AIMService, templateState aimstate.Tem
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pvcName,
 			Namespace: service.Namespace,
-			Labels: map[string]string{
-				"app.kubernetes.io/managed-by": "aim-service-controller",
-				"app.kubernetes.io/component":  "model-storage",
-				shared.LabelKeyServiceName:     shared.SanitizeLabelValue(service.Name),
-				shared.LabelKeyCacheType:       shared.LabelValueCacheTypeTempService,
-				shared.LabelKeyTemplate:        templateState.Name,
-				shared.LabelKeyModelID:         shared.SanitizeLabelValue(templateState.SpecCommon.ModelName),
-			},
+			Labels:    labels,
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion:         service.APIVersion,

@@ -278,6 +278,14 @@ func (r *AIMModelReconciler) projectStatus(
 		image.Generation,
 	)
 
+	// Add canonical name label if metadata was successfully extracted
+	if extractedMetadata != nil && extractedMetadata.Model != nil && extractedMetadata.Model.CanonicalName != "" {
+		if image.Labels == nil {
+			image.Labels = make(map[string]string)
+		}
+		image.Labels[shared.LabelKeyModelCanonicalName] = shared.SanitizeLabelValue(extractedMetadata.Model.CanonicalName)
+	}
+
 	// Log and emit events for status transitions
 	if oldStatus != image.Status.Status {
 		logger.Info("Image status changed",

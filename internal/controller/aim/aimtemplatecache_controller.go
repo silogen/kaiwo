@@ -205,17 +205,53 @@ func BuildMissingModelCaches(tc *aimv1alpha1.AIMTemplateCache, obs *templateCach
 		nameWithoutDots := strings.ReplaceAll(cache.Name, ".", "-")
 		sanitizedName := baseutils.MakeRFC1123Compliant(nameWithoutDots)
 
+		// Build labels - inherit hierarchical labels from template cache
+		labels := map[string]string{
+			"app.kubernetes.io/managed-by": shared.LabelValueManagedBy,
+			"template-created":             "true", // Backward compatibility
+			shared.LabelKeyTemplateCache:   tc.Name,
+			shared.LabelKeySourceModel:     shared.SanitizeLabelValue(cache.Name),
+			shared.LabelKeyModelCache:      sanitizedName,
+		}
+
+		// Inherit hierarchical labels from template cache
+		if tc.Labels != nil {
+			// Model properties
+			if modelID, ok := tc.Labels[shared.LabelKeyModelID]; ok {
+				labels[shared.LabelKeyModelID] = modelID
+			}
+			if modelName, ok := tc.Labels[shared.LabelKeyModelName]; ok {
+				labels[shared.LabelKeyModelName] = modelName
+			}
+			if modelImage, ok := tc.Labels[shared.LabelKeyModelImage]; ok {
+				labels[shared.LabelKeyModelImage] = modelImage
+			}
+			if canonicalName, ok := tc.Labels[shared.LabelKeyModelCanonicalName]; ok {
+				labels[shared.LabelKeyModelCanonicalName] = canonicalName
+			}
+
+			// Template properties
+			if metric, ok := tc.Labels[shared.LabelKeyMetric]; ok {
+				labels[shared.LabelKeyMetric] = metric
+			}
+			if precision, ok := tc.Labels[shared.LabelKeyPrecision]; ok {
+				labels[shared.LabelKeyPrecision] = precision
+			}
+			if gpuModel, ok := tc.Labels[shared.LabelKeyTemplateGPUModel]; ok {
+				labels[shared.LabelKeyTemplateGPUModel] = gpuModel
+			}
+			if gpuCount, ok := tc.Labels[shared.LabelKeyTemplateGPUCount]; ok {
+				labels[shared.LabelKeyTemplateGPUCount] = gpuCount
+			}
+		}
+
 		caches = append(caches,
 			&aimv1alpha1.AIMModelCache{
 				TypeMeta: metav1.TypeMeta{APIVersion: "aimv1alpha1", Kind: "AIMModelCache"},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      sanitizedName,
 					Namespace: tc.Namespace,
-					Labels: map[string]string{
-						"template-created":           "true", // Backward compatibility
-						shared.LabelKeyTemplateCache: tc.Name,
-						shared.LabelKeySourceModel:   shared.SanitizeLabelValue(cache.Name),
-					},
+					Labels:    labels,
 				},
 				Spec: aimv1alpha1.AIMModelCacheSpec{
 					StorageClassName:  tc.Spec.StorageClassName,

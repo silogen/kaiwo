@@ -298,11 +298,51 @@ func (r *AIMServiceTemplateReconciler) plan(ctx context.Context, template *aimv1
 
 func buildTemplateCache(template *aimv1alpha1.AIMServiceTemplate, runtimeConfigResolution *shared.RuntimeConfigResolution) *aimv1alpha1.AIMTemplateCache {
 	cBool := true
+
+	// Build labels - inherit hierarchical labels from template
+	labels := map[string]string{
+		"app.kubernetes.io/managed-by": shared.LabelValueManagedBy,
+		shared.LabelKeyTemplateCache:   template.Name,
+		shared.LabelKeyCacheType:       shared.LabelValueCacheTypeTemplateCache,
+	}
+
+	// Inherit hierarchical labels from template
+	if template.Labels != nil {
+		// Model properties
+		if modelID, ok := template.Labels[shared.LabelKeyModelID]; ok {
+			labels[shared.LabelKeyModelID] = modelID
+		}
+		if modelName, ok := template.Labels[shared.LabelKeyModelName]; ok {
+			labels[shared.LabelKeyModelName] = modelName
+		}
+		if modelImage, ok := template.Labels[shared.LabelKeyModelImage]; ok {
+			labels[shared.LabelKeyModelImage] = modelImage
+		}
+		if canonicalName, ok := template.Labels[shared.LabelKeyModelCanonicalName]; ok {
+			labels[shared.LabelKeyModelCanonicalName] = canonicalName
+		}
+
+		// Template properties
+		if metric, ok := template.Labels[shared.LabelKeyMetric]; ok {
+			labels[shared.LabelKeyMetric] = metric
+		}
+		if precision, ok := template.Labels[shared.LabelKeyPrecision]; ok {
+			labels[shared.LabelKeyPrecision] = precision
+		}
+		if gpuModel, ok := template.Labels[shared.LabelKeyTemplateGPUModel]; ok {
+			labels[shared.LabelKeyTemplateGPUModel] = gpuModel
+		}
+		if gpuCount, ok := template.Labels[shared.LabelKeyTemplateGPUCount]; ok {
+			labels[shared.LabelKeyTemplateGPUCount] = gpuCount
+		}
+	}
+
 	return &aimv1alpha1.AIMTemplateCache{
 		TypeMeta: metav1.TypeMeta{APIVersion: "aimv1alpha1", Kind: "AIMModelCache"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      template.Name,
 			Namespace: template.Namespace,
+			Labels:    labels,
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion: template.APIVersion,
