@@ -1,0 +1,38 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: pvc-template-cache
+spec:
+  description: Ensure that the PVC is correctly created for pre-created template caches
+  timeouts:
+    assert: 180s
+  steps:
+  - name: Create runtime config
+    try:
+    - apply:
+        file: runtimeconfig.yaml
+
+  - name: Create model
+    try:
+    - apply:
+        file: model.yaml
+
+  - name: Create template cache
+    try:
+    - apply:
+        file: template-cache.yaml
+
+  - name: Verify the PVC was created with the right size
+    try:
+    - assert:
+#        timeout: 30s
+        resource:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: huggingfacetb-smollm2-135m-cache
+          spec:
+            resources:
+              requests:
+                # 20 % of 0.5 Gi, rounded up
+                storage: "1Gi"

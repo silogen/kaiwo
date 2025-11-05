@@ -1,0 +1,8 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-service-image-not-found
+spec:
+  model:
+    # Use the same repo but with a tag that definitely doesn't exist
+    image: ghcr.io/silogen/aim-dummy:0.1.3
