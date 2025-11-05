@@ -11,7 +11,7 @@ spec:
     - apply:
         file: service.yaml
 
-  - name: Verify service is Degraded due to missing cluster model
+  - name: Verify service failed due to missing cluster model
     try:
     - assert:
         resource:
@@ -20,10 +20,12 @@ spec:
           metadata:
             name: test-service
           status:
-            conditions:
-            - type: Degraded
-              status: "True"
+            status: Failed
+            (conditions[?type == 'Failure']):
+            - status: "True"
               reason: ModelResolutionFailed
+            (conditions[?type == 'Ready']):
+            - status: "False"
 
   - name: Verify no namespace-scoped model was auto-created
     try:

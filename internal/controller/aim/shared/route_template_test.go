@@ -53,7 +53,7 @@ func TestResolveServiceRoutePath_ServiceOverride(t *testing.T) {
 func TestResolveServiceRoutePath_RuntimeConfigFallback(t *testing.T) {
 	svc := newTestService()
 	svc.Spec.Routing = &aimv1alpha1.AIMServiceRouting{Enabled: boolPtr(true)}
-	svc.Status.ResolvedImage = &aimv1alpha1.AIMResolvedReference{
+	svc.Status.ResolvedModel = &aimv1alpha1.AIMResolvedReference{
 		Name: "Meta/Llama-3-8B",
 	}
 	runtimeCfg := aimv1alpha1.AIMRuntimeConfigSpec{

@@ -530,15 +530,15 @@ func convertTemplateScope(scope TemplateScope) aimv1alpha1.AIMResolutionScope {
 // initializeStatusReferences resets and populates resolved references in status.
 func initializeStatusReferences(status *aimv1alpha1.AIMServiceStatus, obs *ServiceObservation) {
 	status.ResolvedRuntimeConfig = nil
-	status.ResolvedImage = nil
+	status.ResolvedModel = nil
 	status.Routing = nil
 	status.ResolvedTemplateCache = nil
 
 	if obs != nil && obs.ResolvedRuntimeConfig != nil {
 		status.ResolvedRuntimeConfig = obs.ResolvedRuntimeConfig
 	}
-	if obs != nil && obs.ResolvedImage != nil {
-		status.ResolvedImage = obs.ResolvedImage
+	if obs != nil && obs.ResolvedModel != nil {
+		status.ResolvedModel = obs.ResolvedModel
 	}
 	if obs != nil && obs.TemplateCache != nil {
 		status.ResolvedTemplateCache = &aimv1alpha1.AIMResolvedReference{

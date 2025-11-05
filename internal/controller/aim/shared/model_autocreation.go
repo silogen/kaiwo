@@ -93,7 +93,48 @@ func ResolveOrCreateModelFromImage(
 		// Single match - use it
 		return models[0].Name, models[0].Scope, nil
 	default:
-		// Multiple matches - error
+		// Multiple matches found
+		if modelScope == aimv1alpha1.ModelScopeAuto {
+			// For Auto scope: prefer namespace-scoped over cluster-scoped
+			// But only if there's exactly one namespace model - multiple models of the same scope is still an error
+			var namespaceModels []ModelReference
+			var clusterModels []ModelReference
+			for _, m := range models {
+				if m.Scope == TemplateScopeNamespace {
+					namespaceModels = append(namespaceModels, m)
+				} else {
+					clusterModels = append(clusterModels, m)
+				}
+			}
+
+			// Multiple namespace models is an error
+			if len(namespaceModels) > 1 {
+				names := make([]string, len(namespaceModels))
+				for i, m := range namespaceModels {
+					names[i] = fmt.Sprintf("%s/%s (namespace)", serviceNamespace, m.Name)
+				}
+				return "", TemplateScopeNone, fmt.Errorf("%w with image %q: %s", ErrMultipleModelsFound, imageURI, strings.Join(names, ", "))
+			}
+
+			// Multiple cluster models is an error
+			if len(clusterModels) > 1 {
+				names := make([]string, len(clusterModels))
+				for i, m := range clusterModels {
+					names[i] = fmt.Sprintf("%s (cluster)", m.Name)
+				}
+				return "", TemplateScopeNone, fmt.Errorf("%w with image %q: %s", ErrMultipleModelsFound, imageURI, strings.Join(names, ", "))
+			}
+
+			// Exactly one namespace model (and maybe some cluster models): prefer namespace
+			if len(namespaceModels) == 1 {
+				return namespaceModels[0].Name, namespaceModels[0].Scope, nil
+			}
+
+			// No namespace models, exactly one cluster model
+			return clusterModels[0].Name, clusterModels[0].Scope, nil
+		}
+
+		// For Namespace or Cluster scope: multiple models of the same scope is an error
 		names := make([]string, len(models))
 		for i, m := range models {
 			if m.Scope == TemplateScopeNamespace {

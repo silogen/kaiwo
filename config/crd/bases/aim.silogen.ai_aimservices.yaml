@@ -237,6 +237,18 @@ spec:
                       The controller looks for a namespace-scoped AIMModel first, then falls back to cluster-scoped AIMClusterModel.
                       Example: `meta-llama-3-8b`.
                     type: string
+                  scope:
+                    default: Auto
+                    description: |-
+                      Scope controls which types of models and templates are considered when resolving model references.
+                      - Auto (default): searches namespace-scoped first, then falls back to cluster-scoped. Auto-creates namespace-scoped models.
+                      - Namespace: only searches namespace-scoped resources. Auto-creates namespace-scoped models.
+                      - Cluster: only searches cluster-scoped resources. Never auto-creates models.
+                    enum:
+                    - Auto
+                    - Namespace
+                    - Cluster
+                    type: string
                 type: object
                 x-kubernetes-validations:
                 - message: exactly one of ref or image must be specified
@@ -507,20 +519,6 @@ spec:
                 description: RuntimeConfigName references the AIM runtime configuration
                   (by name) to use for this service.
                 type: string
-              scope:
-                default: Auto
-                description: |-
-                  Scope controls which models and templates are considered when resolving references.
-                  Auto (default): searches namespace-scoped first, then cluster-scoped resources.
-                  Namespace: only considers namespace-scoped AIMModel and AIMServiceTemplate.
-                  Cluster: only considers cluster-scoped AIMClusterModel and AIMClusterServiceTemplate.
-                  When set to Cluster, the controller will never auto-create models - if a matching
-                  cluster model is not found, the service will become Degraded until one is available.
-                enum:
-                - Auto
-                - Namespace
-                - Cluster
-                type: string
               serviceAccountName:
                 description: |-
                   ServiceAccountName specifies the Kubernetes service account to use for the inference workload.
@@ -604,8 +602,8 @@ spec:
                   by the controller.
                 format: int64
                 type: integer
-              resolvedImage:
-                description: ResolvedImage captures metadata about the image that
+              resolvedModel:
+                description: ResolvedModel captures metadata about the model that
                   was resolved.
                 properties:
                   kind:
