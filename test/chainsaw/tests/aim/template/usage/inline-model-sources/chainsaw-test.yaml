@@ -7,15 +7,15 @@ spec:
   timeouts:
     assert: 60s
   steps:
-  - name: Create namespace image
+  - name: Create model
     try:
     - apply:
-        file: namespace-image.yaml
+        file: model.yaml
 
   - name: Create template with inline modelSources
     try:
     - apply:
-        file: namespace-template.yaml
+        file: template.yaml
 
   - name: Wait for template to become Ready
     try:

@@ -1,9 +1,9 @@
 apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMClusterServiceTemplate
+kind: AIMServiceTemplate
 metadata:
-  name: test-single-latency-fp8
+  name: default-overrides
 spec:
-  modelName: test-auto-select-single
+  modelName: default-overrides
   metric: latency
   precision: fp8
   gpuSelector:

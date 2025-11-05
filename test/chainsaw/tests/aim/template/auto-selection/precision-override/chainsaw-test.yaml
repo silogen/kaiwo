@@ -4,13 +4,12 @@ metadata:
   name: auto-select-precision-override
 spec:
   description: Test that precision override filters templates correctly
-  timeouts:
-    assert: 60s
+
   steps:
-  - name: Create cluster image
+  - name: Create model
     try:
     - apply:
-        file: cluster-image.yaml
+        file: model.yaml
 
   - name: Create both templates
     try:
@@ -24,7 +23,7 @@ spec:
     - assert:
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMClusterServiceTemplate
+          kind: AIMServiceTemplate
           metadata:
             name: test-precision-fp8
           status:
@@ -32,7 +31,7 @@ spec:
     - assert:
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMClusterServiceTemplate
+          kind: AIMServiceTemplate
           metadata:
             name: test-precision-fp16
           status:
@@ -55,7 +54,6 @@ spec:
           status:
             resolvedTemplate:
               name: test-precision-fp16
-              scope: Cluster
             (conditions[?type == 'Resolved']):
             - status: "True"
               reason: Resolved

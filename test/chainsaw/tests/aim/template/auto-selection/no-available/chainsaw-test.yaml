@@ -5,15 +5,15 @@ metadata:
 spec:
   description: Test that service waits when template is still Progressing (not yet Available)
   steps:
-  - name: Create cluster image
+  - name: Create model
     try:
     - apply:
-        file: cluster-image.yaml
+        file: model.yaml
 
   - name: Create template
     try:
     - apply:
-        file: cluster-template.yaml
+        file: template.yaml
 
   - name: Create service immediately (before template is Available)
     try:
@@ -39,7 +39,7 @@ spec:
     - assert:
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMClusterServiceTemplate
+          kind: AIMServiceTemplate
           metadata:
             name: test-no-available-template
           status:
@@ -56,7 +56,6 @@ spec:
           status:
             resolvedTemplate:
               name: test-no-available-template
-              scope: Cluster
             (conditions[?type == 'Resolved']):
             - status: "True"
               reason: Resolved

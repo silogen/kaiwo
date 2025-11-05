@@ -7,16 +7,12 @@ spec:
   timeouts:
     assert: 90s
   steps:
-  - name: Ensure default template is available
-    try:
-    - assert:
-        timeout: 10s
-        file: ../../_shared/template-available.yaml
-
   - name: Create reusable namespace template
     try:
     - apply:
-        file: namespace-template.yaml
+        file: model.yaml
+    - apply:
+        file: template.yaml
 
   - name: Wait for namespace template to become available
     try:

@@ -4,6 +4,5 @@ metadata:
   name: test-service
 spec:
   model:
-    ref: default-testing-llama-3-8b
+    ref: namespace-over-cluster
   templateRef: llama-3-8b-latency-ns-priority
-  replicas: 1

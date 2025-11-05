@@ -4,13 +4,12 @@ metadata:
   name: auto-select-prefers-latency
 spec:
   description: Test that auto-selection prefers latency over throughput when both templates are available
-  timeouts:
-    assert: 60s
+
   steps:
-  - name: Create cluster image
+  - name: Create model
     try:
     - apply:
-        file: cluster-image.yaml
+        file: model.yaml
 
   - name: Create both templates
     try:
@@ -24,7 +23,7 @@ spec:
     - assert:
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMClusterServiceTemplate
+          kind: AIMServiceTemplate
           metadata:
             name: test-latency-fp8
           status:
@@ -32,7 +31,7 @@ spec:
     - assert:
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMClusterServiceTemplate
+          kind: AIMServiceTemplate
           metadata:
             name: test-throughput-fp8
           status:
@@ -55,7 +54,6 @@ spec:
           status:
             resolvedTemplate:
               name: test-latency-fp8
-              scope: Cluster
             (conditions[?type == 'Resolved']):
             - status: "True"
               reason: Resolved
