@@ -14,14 +14,12 @@ spec:
     - apply:
         file: template.yaml
 
-  - name: Ensure that the template becomes ready
+  - name: Ensure that the base template becomes ready
     try:
     - assert:
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMServiceTemplate
-          metadata:
-            name: default-overrides
           status:
             status: Ready
 
@@ -29,30 +27,33 @@ spec:
     try:
     - apply:
         file: service.yaml
-    - sleep:
-        # Give the reconciler time to handle the object
-        duration: 5s
 
-  - name: Verify the service uses an overridden template, and that the derived template exists and becomes available
+  - name: Verify derived template is created with correct overrides
     try:
-    - script:
-        content: kubectl get aimservice default-template-overrides -n $NAMESPACE -o jsonpath='{.status.resolvedTemplate.name}'
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-        outputs:
-        - name: template_name
-          value: ($stdout)
-        check:
-          (starts_with($stdout, 'default-testing-llama-3-8b-ovr')): true
     - assert:
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMServiceTemplate
           metadata:
-            name: ($template_name)
+            labels:
+              aim.silogen.ai/derived-template: "true"
+              aim.silogen.ai/template.metric: "throughput"
+              aim.silogen.ai/template.precision: "fp8"
           spec:
             metric: throughput
             precision: fp8
           status:
             status: Ready
+
+  - name: Verify service references the derived template (not the base)
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: default-template-overrides
+          status:
+            (resolvedTemplate != null): true
+            (resolvedTemplate.name != 'default-testing'): true
+            status: Running

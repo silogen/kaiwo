@@ -3,7 +3,6 @@ kind: AIMRuntimeConfig
 metadata:
   name: integration-service-image-private-hf
 spec:
-  defaultStorageClassName: "rwx-nfs"
   routing:
     enabled: true
     gatewayRef:

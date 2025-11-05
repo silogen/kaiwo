@@ -3,7 +3,6 @@ kind: AIMRuntimeConfig
 metadata:
   name: cache-svc-public
 spec:
-  defaultStorageClassName: "rwx-nfs"
   routing:
     enabled: true
     gatewayRef:
