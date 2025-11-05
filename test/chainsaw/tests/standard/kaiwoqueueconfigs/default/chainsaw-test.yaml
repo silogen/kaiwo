@@ -81,35 +81,41 @@ spec:
           (contains($stdout, '"nodeLabels":{"kaiwo/nodepool":"nvidia-teslak80-8gpu')): true
     - apply:
         file: kaiwoqueueconfig1.yaml
-    - script:
-        content: sleep 10
+    - wait:
+        apiVersion: kueue.x-k8s.io/v1beta1
+        kind: ClusterQueue
+        timeout: 1m
+        metadata:
+          name: bazam
     - script:
         content: kubectl get resourceflavor --no-headers | wc -l
-        timeout: 60s
         check:
           (contains($stdout, '7')): true
     - script:
         content: kubectl get clusterqueue --no-headers | wc -l
-        timeout: 30s
         check:
           (contains($stdout, '3')): true
     - apply:
         file: kaiwoqueueconfig2.yaml
-    - script:
-        content: sleep 10
+    - wait:
+        apiVersion: kueue.x-k8s.io/v1beta1
+        kind: ResourceFlavor
+        timeout: 1m
+        metadata:
+          name: foo
+        spec:
+        nodeLabels:
+          kaiwo/nodepool: amd-rocks
     - script:
         content: kubectl get resourceflavor --no-headers | wc -l
-        timeout: 60s
         check:
           (contains($stdout, '3')): true
     - script:
         content: kubectl get clusterqueue --no-headers | wc -l
-        timeout: 30s
         check:
           (contains($stdout, '2')): true
     - script:
         content: kubectl get clusterqueue fizz -o json
-        timeout: 30s
         check:
           (contains($stdout, 'amd.com/gpu')): true
           (contains($stdout, 'nvidia.com/gpu')): false
