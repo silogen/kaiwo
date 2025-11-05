@@ -1,0 +1,96 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: shared-cache
+spec:
+  description: Test that multiple AIMServices can share the same template cache
+
+  steps:
+
+  - name: Create model
+    try:
+    - apply:
+        file: model.yaml
+
+  - name: Wait for model to be ready
+    try:
+    - assert:
+        timeout: 60s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMModel
+          metadata:
+            name: shared-cache-model
+          status:
+            status: Ready
+
+  - name: Create first service with cacheModel=true
+    try:
+    - apply:
+        file: service1.yaml
+
+  - name: Create second service with cacheModel=true
+    try:
+    - apply:
+        file: service2.yaml
+
+  - name: Verify that the template cache becomes available
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMTemplateCache
+          metadata:
+            labels:
+              aim.silogen.ai/model.name: shared-cache-model
+          status:
+            status: Available
+
+  - name: Verify service1 becomes running
+    try:
+    - assert:
+        timeout: 120s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: shared-cache-service1
+          status:
+            status: Running
+            (conditions[?type == 'RuntimeReady']):
+            - status: "True"
+            (conditions[?type == 'CacheReady']):
+            - status: "True"
+
+  - name: Verify service2 becomes running using same cache
+    try:
+    - assert:
+        timeout: 120s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: shared-cache-service2
+          status:
+            status: Running
+            (conditions[?type == 'RuntimeReady']):
+            - status: "True"
+            (conditions[?type == 'CacheReady']):
+            - status: "True"
+
+  - name: Verify only ONE template cache exists (shared)
+    try:
+    - script:
+        timeout: 30s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        content: |
+          # Count template caches with templateRef=shared-cache-template
+          COUNT=$(kubectl get aimtemplatecache -n $NAMESPACE -o json | jq '.items | length')
+          if [ "$COUNT" != "1" ]; then
+            echo "ERROR: Found $COUNT template caches, expected exactly 1"
+            kubectl get aimtemplatecache -n $NAMESPACE -o yaml
+            exit 1
+          fi
+          echo "OK: Found exactly 1 template cache (shared by both services)"

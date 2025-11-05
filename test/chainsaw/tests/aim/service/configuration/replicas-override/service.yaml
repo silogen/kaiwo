@@ -4,5 +4,5 @@ metadata:
   name: test-service
 spec:
   model:
-    ref: default-testing-llama-3-8b
+    ref: default-testing
   replicas: 3

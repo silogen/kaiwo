@@ -10,20 +10,7 @@ spec:
   - name: Create prerequisites
     try:
     - apply:
-        file: cluster-image.yaml
-    - apply:
-        file: cluster-template.yaml
-
-  - name: Wait for template to become Available
-    try:
-    - assert:
-        resource:
-          apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMClusterServiceTemplate
-          metadata:
-            name: service-override-template
-          status:
-            status: Ready
+        file: model-and-template.yaml
 
   - name: Create AIMService
     try:
@@ -37,7 +24,7 @@ spec:
           apiVersion: serving.kserve.io/v1beta1
           kind: InferenceService
           metadata:
-            name: service-override-service
+            name: service-override
           spec:
             predictor:
               model:

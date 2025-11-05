@@ -1,0 +1,37 @@
+# Test is skipped due to the dummy image providing 0 GPU count
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: resources-gpu-defaults
+spec:
+  description: GPU metadata from the template drives default CPU and memory resources when no overrides are provided
+  steps:
+  - name: Create model and template
+    try:
+    - apply:
+        file: model-and-template.yaml
+
+  - name: Create AIMService
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify GPU defaults applied to InferenceService
+    try:
+    - assert:
+        resource:
+          apiVersion: serving.kserve.io/v1beta1
+          kind: InferenceService
+          metadata:
+            name: gpu-defaults-service
+          spec:
+            predictor:
+              model:
+                resources:
+                  requests:
+                    amd.com/gpu: "1"
+                    cpu: "4"
+                    memory: 32Gi
+                  limits:
+                    amd.com/gpu: "1"
+                    memory: 48Gi

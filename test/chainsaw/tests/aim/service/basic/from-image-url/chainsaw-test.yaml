@@ -4,8 +4,6 @@ metadata:
   name: basic-creation-from-image-url
 spec:
   description: Test that AIMService can be created by only specifying the Docker container image URL
-  timeouts:
-    assert: 180s
   steps:
   - name: Create AIMService
     try:
@@ -19,6 +17,7 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMModel
           metadata:
-            name: aim-qwen-qwen3-4b-0-7-0-preview-1242eba8
+            labels:
+              aim.silogen.ai/model.image: ghcr.io-silogen-aim-dummy-0.1.3
           status:
             status: Ready

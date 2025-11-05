@@ -7,11 +7,10 @@ spec:
   timeouts:
     assert: 60s
   steps:
-  - name: Ensure template is available
+  - name: Create model and template
     try:
-    - assert:
-        timeout: 5s
-        file: ../../_shared/template-available.yaml
+    - apply:
+        file: ../../_shared/default-model-and-template.yaml
 
   - name: Create runtime config with namespace path template
     try:
@@ -34,7 +33,7 @@ spec:
           status:
             (conditions[?type == 'Resolved']):
             - status: "True"
-            (routing.path == join('', ['/', $namespace, '/data-team/default-testing-llama-3-8b'])): true
+            (routing.path == join('', ['/', $namespace, '/data-team/default-testing'])): true
 
   - name: Verify HTTPRoute uses rendered prefix
     try:
@@ -45,4 +44,4 @@ spec:
           metadata:
             name: test-service
           spec:
-            (rules[0].matches[0].path.value == join('', ['/', $namespace, '/data-team/default-testing-llama-3-8b'])): true
+            (rules[0].matches[0].path.value == join('', ['/', $namespace, '/data-team/default-testing'])): true

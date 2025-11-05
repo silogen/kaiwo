@@ -4,14 +4,11 @@ metadata:
   name: routing-template-service-override
 spec:
   description: Service-level path template overrides runtime config default
-  timeouts:
-    assert: 60s
   steps:
-  - name: Ensure template is available
+  - name: Create model and template
     try:
-    - assert:
-        timeout: 5s
-        file: ../../_shared/template-available.yaml
+    - apply:
+        file: ../../_shared/default-model-and-template.yaml
 
   - name: Create runtime config with default path template
     try:

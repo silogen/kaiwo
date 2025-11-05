@@ -26,11 +26,9 @@ spec:
           spec:
             templateRef: aimdummy-template
 
-
   - name: Verify that the template cache becomes available
     try:
     - assert:
-        timeout: 60s
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMTemplateCache
@@ -42,7 +40,6 @@ spec:
   - name: Verify that the cached model is mounted into the inference container
     try:
     - assert:
-        timeout: 10s
         resource:
           apiVersion: v1
           kind: Pod

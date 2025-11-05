@@ -1,0 +1,9 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMModel
+metadata:
+  name: buxybox-unsupported
+spec:
+  image: busybox:latest
+  discovery:
+    enabled: true
+    autoCreateTemplates: true

@@ -4,6 +4,5 @@ metadata:
   name: test-service
 spec:
   model:
-    ref: default-testing-llama-3-8b
+    ref: default-testing
   runtimeConfigName: invalid-path-template-config
-  replicas: 1

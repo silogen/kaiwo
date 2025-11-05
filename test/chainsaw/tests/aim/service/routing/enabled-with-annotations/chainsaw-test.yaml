@@ -4,14 +4,11 @@ metadata:
   name: routing-enabled-with-annotations
 spec:
   description: Test HTTPRoute created with custom annotations when routing enabled
-  timeouts:
-    assert: 60s
   steps:
-  - name: Ensure template is available
+  - name: Create model and template
     try:
-    - assert:
-        timeout: 5s
-        file: ../../_shared/template-available.yaml
+    - apply:
+        file: ../../_shared/default-model-and-template.yaml
 
   - name: Create AIMService with routing enabled
     try:

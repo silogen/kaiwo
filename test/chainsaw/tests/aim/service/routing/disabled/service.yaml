@@ -4,7 +4,6 @@ metadata:
   name: test-service
 spec:
   model:
-    ref: default-testing-llama-3-8b
-  replicas: 1
+    ref: default-testing
   routing:
     enabled: false
