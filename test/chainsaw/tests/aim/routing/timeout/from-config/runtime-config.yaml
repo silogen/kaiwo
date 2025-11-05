@@ -1,0 +1,8 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMRuntimeConfig
+metadata:
+  name: timeout-from-config
+spec:
+  routing:
+    enabled: true
+    requestTimeout: "3m"
