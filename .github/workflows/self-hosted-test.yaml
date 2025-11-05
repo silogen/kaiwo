@@ -1,0 +1,47 @@
+# .github/workflows/lint-test-e2e.yml
+name: test-self-hosted
+
+on:
+  pull_request: {}
+
+permissions:
+  contents: read
+
+jobs:
+  lint-go:
+    name: Lint (Go)
+    runs-on: self-hosted
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-go@v5
+      with:
+        go-version: stable
+    - name: golangci-lint
+      uses: golangci/golangci-lint-action@v8
+      with:
+        version: v2.1
+        args: --timeout=10m
+
+
+  test-kubectl:
+    name: Unit tests
+    runs-on: self-hosted
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v4
+      with:
+        version: 'latest'
+    - name: Run kubectl get po -A
+      env:
+        KUBECONFIG_CONTENT: ${{ secrets.TW038_KUBECONFIG }}
+      run: |
+        # Write kubeconfig to a temporary file
+        echo "$KUBECONFIG_CONTENT" > kubeconfig
+        export KUBECONFIG=$(pwd)/kubeconfig
+
+        # Verify cluster access
+        kubectl cluster-info
+
+        # List all pods across all namespaces
+        kubectl get po -A
