@@ -3,7 +3,6 @@ kind: AIMRuntimeConfig
 metadata:
   name: integration-cache-precreated-private
 spec:
-  defaultStorageClassName: "rwx-nfs"
   routing:
     enabled: true
     gatewayRef:
