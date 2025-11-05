@@ -1,0 +1,31 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: timeout-from-config
+spec:
+  description: Ensure that HTTPRoute timeout is set from runtime config
+  timeouts:
+    assert: 180s
+  steps:
+  - name: Create runtime config
+    try:
+    - apply:
+        file: runtime-config.yaml
+
+  - name: Create AIMService
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify the HTTP route has the correct timeout
+    try:
+    - assert:
+        resource:
+          apiVersion: gateway.networking.k8s.io/v1
+          kind: HTTPRoute
+          metadata:
+            name: test-service
+          spec:
+            rules:
+            - timeouts:
+                request: "3m0s"
