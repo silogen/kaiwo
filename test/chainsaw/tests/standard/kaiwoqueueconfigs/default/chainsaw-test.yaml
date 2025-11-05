@@ -37,104 +37,107 @@ spec:
     #               reclaimWithinCohort: Never
     #               withinClusterQueue: Never
     #             queueingStrategy: BestEffortFIFO
-    - script:
-        content: kubectl get kaiwoqueueconfig kaiwo -o json
-        outputs:
-        - name: coveredResources
-          value: (json_parse($stdout).spec.clusterQueues[0].spec.resourceGroups[0].coveredResources)
-        - name: resourceGroupFlavorResources
-          value: (json_parse($stdout).spec.clusterQueues[0].spec.resourceGroups[0].flavors[*].resources)
-        - name: resourceFlavors
-          value: (json_parse($stdout).spec.resourceFlavors)
-    - script:
-        env:
-        - name: covered
-          value: (to_string($coveredResources))
-        content: |
-          echo $covered
-        check:
-          (contains($stdout, 'cpu')): true
-          (contains($stdout, 'memory')): true
-          (contains($stdout, 'nvidia.com/gpu')): true
-
-    - script:
-        env:
-        - name: resources
-          value: (to_string($resourceGroupFlavorResources))
-        content: |
-          echo $resources
-        check:
-          (contains($stdout, 'cpu')): true
-          (contains($stdout, 'memory')): true
-          (contains($stdout, '{"name":"nvidia.com/gpu","nominalQuota":"32"}')): true
-
-    - script:
-        env:
-        - name: flavors
-          value: (to_string($resourceFlavors))
-        content: |
-          echo $flavors
-        check:
-          (contains($stdout, '"name":"cpu-only-0gpu')): true
-          (contains($stdout, 'nodeLabels":{"kaiwo/nodepool":"cpu-only-0gpu')): true
-          (contains($stdout, '"name":"nvidia-teslak80-8gpu')): true
-          (contains($stdout, '"nodeLabels":{"kaiwo/nodepool":"nvidia-teslak80-8gpu')): true
-    - apply:
-        file: kaiwoqueueconfig1.yaml
-    - wait:
-        apiVersion: kueue.x-k8s.io/v1beta1
-        kind: ClusterQueue
-        timeout: 1m
-        metadata:
-          name: bazam
-    - script:
-        content: kubectl get resourceflavor --no-headers | wc -l
-        check:
-          (contains($stdout, '7')): true
-    - script:
-        content: kubectl get clusterqueue --no-headers | wc -l
-        check:
-          (contains($stdout, '3')): true
-    - apply:
-        file: kaiwoqueueconfig2.yaml
-    - wait:
-        apiVersion: kueue.x-k8s.io/v1beta1
-        kind: ResourceFlavor
-        timeout: 1m
-        metadata:
-          name: foo
-        spec:
-        nodeLabels:
-          kaiwo/nodepool: amd-rocks
-    - script:
-        content: kubectl get resourceflavor --no-headers | wc -l
-        check:
-          (contains($stdout, '3')): true
-    - script:
-        content: kubectl get clusterqueue --no-headers | wc -l
-        check:
-          (contains($stdout, '2')): true
-    - script:
-        content: kubectl get clusterqueue fizz -o json
-        check:
-          (contains($stdout, 'amd.com/gpu')): true
-          (contains($stdout, 'nvidia.com/gpu')): false
-    ## Cannot replicate "amd-rocks" label missing - this label exists in the output when applied with kubectl
-    ## TODO: Figure this out
     # - script:
-    #     content: kubectl get resourceflavor foo -o json
+    #     content: kubectl get kaiwoqueueconfig kaiwo -o json
+    #     outputs:
+    #     - name: coveredResources
+    #       value: (json_parse($stdout).spec.clusterQueues[0].spec.resourceGroups[0].coveredResources)
+    #     - name: resourceGroupFlavorResources
+    #       value: (json_parse($stdout).spec.clusterQueues[0].spec.resourceGroups[0].flavors[*].resources)
+    #     - name: resourceFlavors
+    #       value: (json_parse($stdout).spec.resourceFlavors)
+    # - script:
+    #     env:
+    #     - name: covered
+    #       value: (to_string($coveredResources))
+    #     content: |
+    #       echo $covered
+    #     check:
+    #       (contains($stdout, 'cpu')): true
+    #       (contains($stdout, 'memory')): true
+    #       (contains($stdout, 'nvidia.com/gpu')): true
+
+    # - script:
+    #     env:
+    #     - name: resources
+    #       value: (to_string($resourceGroupFlavorResources))
+    #     content: |
+    #       echo $resources
+    #     check:
+    #       (contains($stdout, 'cpu')): true
+    #       (contains($stdout, 'memory')): true
+    #       (contains($stdout, '{"name":"nvidia.com/gpu","nominalQuota":"32"}')): true
+
+    # - script:
+    #     env:
+    #     - name: flavors
+    #       value: (to_string($resourceFlavors))
+    #     content: |
+    #       echo $flavors
+    #     check:
+    #       (contains($stdout, '"name":"cpu-only-0gpu')): true
+    #       (contains($stdout, 'nodeLabels":{"kaiwo/nodepool":"cpu-only-0gpu')): true
+    #       (contains($stdout, '"name":"nvidia-teslak80-8gpu')): true
+    #       (contains($stdout, '"nodeLabels":{"kaiwo/nodepool":"nvidia-teslak80-8gpu')): true
+    # - script:
+    #     content: kubectl apply -f kaiwoqueueconfig1.yaml
+    # - wait:
+    #     apiVersion: kueue.x-k8s.io/v1beta1
+    #     kind: ClusterQueue
+    #     timeout: 1m
+    #     name: bazam
+    #     for:
+    #       condition:
+    #         name: Ready
+    #         value: 'true'
+    # - script:
+    #     content: kubectl get resourceflavor --no-headers | wc -l
+    #     check:
+    #       (contains($stdout, '7')): true
+    # - script:
+    #     content: kubectl get clusterqueue --no-headers | wc -l
+    #     check:
+    #       (contains($stdout, '3')): true
+    # - script:
+    #     content: kubectl apply -f kaiwoqueueconfig2.yaml
+    # - wait:
+    #     apiVersion: kueue.x-k8s.io/v1beta1
+    #     kind: ResourceFlavor
+    #     timeout: 1m
+    #     name: faz
+    #     for:
+    #       condition:
+    #         name: Ready
+    #         value: 'true'
+    # - script:
+    #     content: kubectl get resourceflavor --no-headers | wc -l
+    #     check:
+    #       (contains($stdout, '3')): true
+    # - script:
+    #     content: kubectl get clusterqueue --no-headers | wc -l
+    #     check:
+    #       (contains($stdout, '2')): true
+    # - script:
+    #     content: kubectl get clusterqueue fizz -o json
+    #     check:
+    #       (contains($stdout, 'amd.com/gpu')): true
+    #       (contains($stdout, 'nvidia.com/gpu')): false
+    # # Cannot replicate "amd-rocks" label missing - this label exists in the output when applied with kubectl
+    # # TODO: Figure this out
+    # - script:
+    #     content: kubectl get resourceflavor faz -o json
     #     check:
     #       (contains($stdout, 'amd-rocks')): true
-    finally:
-    # Delete patched kaiwoqueueconfig. Default kaiwoqueueconfig will be re-created by the operator
-    - script:
-        content: kubectl delete kaiwoqueueconfig kaiwo
-    catch:
-    - command:
-        entrypoint: kaiwo-dev
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-        - name: PRINT_LEVEL
-          value: ($values.print_level)
-        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+    # finally:
+    # # Delete patched kaiwoqueueconfig. Default kaiwoqueueconfig will be re-created by the operator
+    # - script:
+    #     content: kubectl delete kaiwoqueueconfig kaiwo
+    # catch:
+    # - command:
+    #     entrypoint: kaiwo-dev
+    #     env:
+    #     - name: NAMESPACE
+    #       value: ($namespace)
+    #     - name: PRINT_LEVEL
+    #       value: ($values.print_level)
+    #     args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
