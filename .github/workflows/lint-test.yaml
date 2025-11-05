@@ -245,7 +245,7 @@ jobs:
     - name: Run E2E tests
       run: |
         cd test
-        make test-kind
+        make test-kind CHAINSAW_CONFIG=chainsaw/configs/ci.yaml
 
     - name: Disk usage report (post-mortem)
       if: always()

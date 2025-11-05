@@ -5,6 +5,9 @@ KIND_DIRS = chainsaw/tests/standard chainsaw/tests/aim
 # Values file configuration (can be overridden via env var)
 VALUES_FILE ?= values/base.yaml
 
+# Chainsaw configuration (can be overridden for CI vs local)
+CHAINSAW_CONFIG ?= chainsaw/configs/local.yaml
+
 # Default environment variables for testing
 GH_TOKEN_BASE64 ?=
 HF_TOKEN_BASE64 ?=
@@ -42,6 +45,6 @@ test-kind: substitute-values ## Run tests against Kind cluster
 	kubectl apply -f chainsaw/tests/aim/service/_shared/default-cluster-template.yaml
 	sleep 3
 	@PATH="$(shell pwd)/../builds:$$PATH" chainsaw test \
-	  --config ./chainsaw/configs/local.yaml \
+	  --config ./$(CHAINSAW_CONFIG) \
 	  --test-dir $(KIND_DIRS) \
 	  --values values/runtime.yaml

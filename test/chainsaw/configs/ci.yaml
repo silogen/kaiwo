@@ -7,7 +7,7 @@ spec:
     fullName: true
   timeouts:
     apply: 10s
-    assert: 90s
+    assert: 180s
     cleanup: 60s
     delete: 90s
     error: 60s

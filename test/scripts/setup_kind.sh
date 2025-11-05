@@ -114,6 +114,10 @@ update_env_var "KUBECONFIG" "$KUBECONFIG"
 
 sh test/aimdummy/populate_kind.sh
 
+# Mark rwx-nfs as the default storage class for tests
+echo "Setting rwx-nfs as default storage class..."
+kubectl patch storageclass rwx-nfs -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+
 # When running debugger in IDE
 kubectl create ns kaiwo-system
 
