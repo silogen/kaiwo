@@ -36,7 +36,6 @@ spec:
           metadata:
             name: non-existent-template
 
-
   - name: Verify no InferenceService was created
     try:
     - error:

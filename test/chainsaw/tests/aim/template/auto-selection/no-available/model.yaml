@@ -1,7 +1,7 @@
 apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMClusterModel
+kind: AIMModel
 metadata:
-  name: test-auto-select-single
+  name: test-no-available
 spec:
   image: ghcr.io/silogen/aim-dummy:0.1.3
   discovery:

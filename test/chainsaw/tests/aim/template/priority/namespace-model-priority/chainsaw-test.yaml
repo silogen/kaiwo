@@ -1,0 +1,39 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: namespace-template-priority
+spec:
+  concurrent: false
+  description: Test that namespace template prioritizes namespace model over cluster model
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create both cluster and namespace models for the same aimModelName
+    try:
+    - apply:
+        file: cluster-model.yaml
+    - apply:
+        file: namespace-model.yaml
+
+  - name: Create namespace template
+    try:
+    - apply:
+        file: namespace-template.yaml
+
+  - name: Create service
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Ensure service chose the namespace model
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: namespace-model-priority
+          status:
+            resolvedModel:
+              name: namespace-model-priority
+              scope: Namespace

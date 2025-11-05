@@ -1,9 +1,9 @@
 apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMClusterServiceTemplate
+kind: AIMServiceTemplate
 metadata:
-  name: llama-3-8b-latency-with-image
+  name: llama-3-8b-latency-no-image
 spec:
-  modelName: llama-3-8b-cluster-with-image
+  modelName: not-found
   metric: latency
   gpuSelector:
     count: 1

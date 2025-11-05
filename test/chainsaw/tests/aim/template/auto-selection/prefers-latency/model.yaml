@@ -1,0 +1,8 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMModel
+metadata:
+  name: test-prefers-latency
+spec:
+  image: ghcr.io/silogen/aim-dummy:0.1.3
+  discovery:
+    enabled: false

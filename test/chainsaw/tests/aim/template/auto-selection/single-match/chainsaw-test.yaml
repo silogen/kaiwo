@@ -4,25 +4,24 @@ metadata:
   name: auto-select-single-match
 spec:
   description: Test that a service auto-selects the only available template when templateRef is omitted
-  timeouts:
-    assert: 60s
+
   steps:
-  - name: Create cluster image
+  - name: Create model
     try:
     - apply:
-        file: cluster-image.yaml
+        file: model.yaml
 
   - name: Create template
     try:
     - apply:
-        file: cluster-template.yaml
+        file: template.yaml
 
   - name: Wait for template to become Available
     try:
     - assert:
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMClusterServiceTemplate
+          kind: AIMServiceTemplate
           metadata:
             name: test-single-latency-fp8
           status:
@@ -45,7 +44,6 @@ spec:
           status:
             resolvedTemplate:
               name: test-single-latency-fp8
-              scope: Cluster
             (conditions[?type == 'Resolved']):
             - status: "True"
               reason: Resolved

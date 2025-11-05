@@ -3,14 +3,13 @@ kind: Test
 metadata:
   name: discovery-results-cluster
 spec:
+  concurrent: false
   description: Test that discovery results populate modelSources and profile correctly
-  timeouts:
-    assert: 60s
   steps:
-  - name: Create cluster image and config
+  - name: Create cluster model
     try:
     - apply:
-        file: cluster-image.yaml
+        file: cluster-model.yaml
 #    - apply:
 #        file: ../resources-cluster-config.yaml
 
@@ -61,7 +60,7 @@ spec:
                 VLLM_USE_TRITON_FLASH_ATTN: "0"
                 VLLM_USE_V1: "0"
             modelSources:
-            - name: smol2-135m
+            - name: HuggingFaceTB/SmolLM2-135M
               sourceUri: hf://HuggingFaceTB/SmolLM2-135M
               size: 512Mi
 

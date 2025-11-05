@@ -7,22 +7,22 @@ spec:
   timeouts:
     assert: 60s
   steps:
-  - name: Create cluster image
+  - name: Create model
     try:
     - apply:
-        file: cluster-image.yaml
+        file: model.yaml
 
   - name: Create template requiring H100 GPU (not in cluster)
     try:
     - apply:
-        file: cluster-template.yaml
+        file: template.yaml
 
   - name: Verify template status is NotAvailable
     try:
     - assert:
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMClusterServiceTemplate
+          kind: AIMServiceTemplate
           metadata:
             name: test-wrong-gpu-h100
           status:

@@ -10,6 +10,8 @@ spec:
   - name: Create cluster resources
     try:
     - apply:
+        file: cluster-model.yaml
+    - apply:
         file: cluster-template.yaml
 
   - name: Create namespace resources

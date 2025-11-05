@@ -4,7 +4,7 @@ metadata:
   name: reuse-namespace-template
 spec:
   model:
-    ref: default-testing-llama-3-8b
+    ref: reuse-namespace
   overrides:
     metric: throughput
     precision: fp16

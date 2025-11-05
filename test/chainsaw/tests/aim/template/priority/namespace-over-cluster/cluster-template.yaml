@@ -3,7 +3,7 @@ kind: AIMClusterServiceTemplate
 metadata:
   name: llama-3-8b-latency-ns-priority
 spec:
-  modelName: default-testing-llama-3-8b
+  modelName: namespace-over-cluster
   metric: latency
   precision: fp16
   gpuSelector:

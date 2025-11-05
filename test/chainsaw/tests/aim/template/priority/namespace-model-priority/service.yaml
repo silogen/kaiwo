@@ -1,0 +1,8 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: namespace-model-priority
+spec:
+  model:
+    ref: namespace-model-priority
+  # No templateRef - should auto-select the only available template

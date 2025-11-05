@@ -1,0 +1,7 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterModel
+metadata:
+  name: namespace-over-cluster
+spec:
+  image: ghcr.io/silogen/aim-dummy:0.1.3
+

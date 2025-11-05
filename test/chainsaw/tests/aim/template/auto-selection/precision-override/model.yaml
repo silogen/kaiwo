@@ -1,8 +1,8 @@
 apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMModel
 metadata:
-  name: llama-3-8b-throughput-template-priority
+  name: test-precision-override
 spec:
-  image: busybox:latest-aim-namespace
+  image: ghcr.io/silogen/aim-dummy:0.1.3
   discovery:
     enabled: false

@@ -1,5 +1,5 @@
 apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMClusterServiceTemplate
+kind: AIMServiceTemplate
 metadata:
   name: test-wrong-gpu-h100
 spec:

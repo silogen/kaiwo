@@ -1,11 +1,11 @@
 apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMServiceTemplate
 metadata:
-  name: llama-3-8b-latency-ns-priority
+  name: reused-namespace-template
 spec:
-  modelName: namespace-over-cluster
-  metric: latency
-  precision: fp8
+  modelName: reuse-namespace
+  metric: throughput
+  precision: fp16
   gpuSelector:
     count: 1
     model: MI300X
