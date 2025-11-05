@@ -3,7 +3,6 @@ kind: AIMService
 metadata:
   name: test-service
 spec:
-  scope: Namespace
   model:
     image: ghcr.io/silogen/aim-dummy:0.1.3
-  runtimeConfigName: namespace-only
+    scope: Namespace

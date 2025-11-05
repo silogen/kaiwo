@@ -3,7 +3,6 @@ kind: AIMService
 metadata:
   name: test-service
 spec:
-  scope: Cluster
   model:
     image: ghcr.io/silogen/aim-dummy:0.1.3
-  runtimeConfigName: cluster-only
+    scope: Cluster

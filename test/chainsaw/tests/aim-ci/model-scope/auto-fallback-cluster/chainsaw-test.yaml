@@ -25,9 +25,9 @@ spec:
           metadata:
             name: test-service
           status:
-            conditions:
-            - type: Ready
-              status: "True"
-            modelRef:
+            (conditions[?type == 'Resolved']):
+            - status: "True"
+            resolvedModel:
               name: cluster-model
               kind: AIMClusterModel
+              scope: Cluster

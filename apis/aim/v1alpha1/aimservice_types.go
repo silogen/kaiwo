@@ -62,6 +62,14 @@ type AIMServiceModel struct {
 	// Example: `ghcr.io/silogen/llama-3-8b:v1.2.0`.
 	// +optional
 	Image *string `json:"image,omitempty"`
+
+	// Scope controls which types of models and templates are considered when resolving model references.
+	// - Auto (default): searches namespace-scoped first, then falls back to cluster-scoped. Auto-creates namespace-scoped models.
+	// - Namespace: only searches namespace-scoped resources. Auto-creates namespace-scoped models.
+	// - Cluster: only searches cluster-scoped resources. Never auto-creates models.
+	// +kubebuilder:default=Auto
+	// +optional
+	Scope *ModelScope `json:"scope,omitempty"`
 }
 
 // AIMServiceOverrides allows overriding template parameters at the service level.
@@ -82,16 +90,6 @@ type AIMServiceSpec struct {
 	// Use `ref` to reference an existing AIMModel/AIMClusterModel by name, or use `image`
 	// to specify a container image URI directly (which will auto-create a model if needed).
 	Model AIMServiceModel `json:"model"`
-
-	// Scope controls which models and templates are considered when resolving references.
-	// Auto (default): searches namespace-scoped first, then cluster-scoped resources.
-	// Namespace: only considers namespace-scoped AIMModel and AIMServiceTemplate.
-	// Cluster: only considers cluster-scoped AIMClusterModel and AIMClusterServiceTemplate.
-	// When set to Cluster, the controller will never auto-create models - if a matching
-	// cluster model is not found, the service will become Degraded until one is available.
-	// +kubebuilder:default="Auto"
-	// +optional
-	Scope ModelScope `json:"scope,omitempty"`
 
 	// TemplateRef is the name of the AIMServiceTemplate or AIMClusterServiceTemplate to use.
 	// The template selects the runtime profile and GPU parameters.
@@ -159,9 +157,9 @@ type AIMServiceStatus struct {
 	// +optional
 	ResolvedRuntimeConfig *AIMResolvedRuntimeConfig `json:"resolvedRuntimeConfig,omitempty"`
 
-	// ResolvedImage captures metadata about the image that was resolved.
+	// ResolvedModel captures metadata about the model that was resolved.
 	// +optional
-	ResolvedImage *AIMResolvedReference `json:"resolvedImage,omitempty"`
+	ResolvedModel *AIMResolvedReference `json:"resolvedModel,omitempty"`
 
 	// Status represents the current high‑level status of the service lifecycle.
 	// Values: `Pending`, `Starting`, `Running`, `Failed`, `Degraded`.

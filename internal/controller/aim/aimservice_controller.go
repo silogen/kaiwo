@@ -164,6 +164,7 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 		ImageReadyReason:          selectionStatus.ImageReadyReason,
 		ImageReadyMessage:         selectionStatus.ImageReadyMessage,
 		ModelResolutionErr:        selectionStatus.ModelResolutionErr,
+		ResolvedModel:             selectionStatus.ResolvedModel,
 	}
 
 	// Observe template based on whether it's derived or not
@@ -283,8 +284,8 @@ func (r *AIMServiceReconciler) planDerivedTemplate(logger logr.Logger, service *
 		}
 		// Get resolved model name from observation
 		resolvedModelName := ""
-		if obs.ResolvedImage != nil {
-			resolvedModelName = obs.ResolvedImage.Name
+		if obs.ResolvedModel != nil {
+			resolvedModelName = obs.ResolvedModel.Name
 		}
 		return shared.BuildDerivedTemplate(service, obs.TemplateName, resolvedModelName, baseSpec)
 	}
@@ -753,8 +754,8 @@ func (r *AIMServiceReconciler) findServicesByTemplate(
 
 // getServiceModelName extracts the model name from a service
 func (r *AIMServiceReconciler) getServiceModelName(svc *aimv1alpha1.AIMService) string {
-	if svc.Status.ResolvedImage != nil {
-		return svc.Status.ResolvedImage.Name
+	if svc.Status.ResolvedModel != nil {
+		return svc.Status.ResolvedModel.Name
 	}
 	if svc.Spec.Model.Ref != nil {
 		return strings.TrimSpace(*svc.Spec.Model.Ref)
@@ -812,12 +813,6 @@ func (r *AIMServiceReconciler) templateCacheHandlerFunc() handler.MapFunc {
 func (r *AIMServiceReconciler) findServicesByModel(ctx context.Context, model *aimv1alpha1.AIMModel) []aimv1alpha1.AIMService {
 	logger := ctrl.LoggerFrom(ctx)
 
-	// Only trigger reconciliation for auto-created models
-	if model.Labels[shared.LabelAutoCreated] != "true" {
-		logger.V(1).Info("Skipping model - not auto-created", "model", model.Name)
-		return nil
-	}
-
 	// Find services using this model
 	var services aimv1alpha1.AIMServiceList
 	if err := r.List(ctx, &services, client.InNamespace(model.Namespace)); err != nil {
@@ -844,7 +839,7 @@ func (r *AIMServiceReconciler) serviceUsesModel(svc *aimv1alpha1.AIMService, mod
 		return true
 	}
 	// 2. Image URL that resolves to this model (check status)
-	if svc.Status.ResolvedImage != nil && svc.Status.ResolvedImage.Name == model.Name {
+	if svc.Status.ResolvedModel != nil && svc.Status.ResolvedModel.Name == model.Name {
 		return true
 	}
 	// 3. Image URL in spec (need to check if it would resolve to this model)
@@ -946,7 +941,7 @@ func (r *AIMServiceReconciler) serviceUsesClusterModel(svc *aimv1alpha1.AIMServi
 		return true
 	}
 	// 2. Image URL that resolves to this cluster model (check status)
-	if svc.Status.ResolvedImage != nil && svc.Status.ResolvedImage.Name == clusterModel.Name {
+	if svc.Status.ResolvedModel != nil && svc.Status.ResolvedModel.Name == clusterModel.Name {
 		return true
 	}
 	// 3. Image URL in spec (need to check if it would resolve to this cluster model)

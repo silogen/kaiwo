@@ -72,6 +72,7 @@ type TemplateSelectionStatus struct {
 	ImageReadyReason          string
 	ImageReadyMessage         string
 	ModelResolutionErr        error
+	ResolvedModel             *aimv1alpha1.AIMResolvedReference
 }
 
 // ServiceObservation holds observed state for an AIMService reconciliation.
@@ -85,7 +86,7 @@ type ServiceObservation struct {
 	ShouldCreateTemplate          bool
 	RuntimeConfigSpec             aimv1alpha1.AIMRuntimeConfigSpec
 	ResolvedRuntimeConfig         *aimv1alpha1.AIMResolvedRuntimeConfig
-	ResolvedImage                 *aimv1alpha1.AIMResolvedReference
+	ResolvedModel                 *aimv1alpha1.AIMResolvedReference
 	RoutePath                     string
 	RouteTimeout                  *string
 	PathTemplateErr               error
@@ -154,9 +155,9 @@ func ResolveTemplateNameForService(
 	status.AutoSelected = true
 
 	// Normalize scope - default to Auto if empty
-	scope := service.Spec.Scope
-	if scope == "" {
-		scope = aimv1alpha1.ModelScopeAuto
+	scope := aimv1alpha1.ModelScopeAuto
+	if service.Spec.Model.Scope != nil {
+		scope = *service.Spec.Model.Scope
 	}
 
 	// Resolve model name from service.Spec.Model (ref or image)
@@ -173,7 +174,7 @@ func ResolveTemplateNameForService(
 		return res, status, nil
 	}
 
-	ready, _, reason, message, err := evaluateImageReadiness(ctx, k8sClient, service.Namespace, imageName, scope)
+	ready, _, reason, message, resolvedModelRef, err := evaluateImageReadiness(ctx, k8sClient, service.Namespace, imageName, scope)
 	if err != nil {
 		return res, status, err
 	}
@@ -181,6 +182,7 @@ func ResolveTemplateNameForService(
 	status.ImageReady = ready
 	status.ImageReadyReason = reason
 	status.ImageReadyMessage = message
+	status.ResolvedModel = resolvedModelRef
 
 	if !ready {
 		return res, status, nil
@@ -374,11 +376,11 @@ func evaluateImageReadiness(
 	namespace string,
 	imageName string,
 	scope aimv1alpha1.ModelScope,
-) (bool, TemplateScope, string, string, error) {
+) (bool, TemplateScope, string, string, *aimv1alpha1.AIMResolvedReference, error) {
 	logger := log.FromContext(ctx)
 
 	if imageName == "" {
-		return false, TemplateScopeNone, aimv1alpha1.AIMServiceReasonModelNotFound, "Model name is empty", nil
+		return false, TemplateScopeNone, aimv1alpha1.AIMServiceReasonModelNotFound, "Model name is empty", nil, nil
 	}
 
 	// Check namespace-scoped model if scope allows
@@ -388,18 +390,25 @@ func evaluateImageReadiness(
 		switch {
 		case err == nil:
 			ready, modelScope, reason, message := checkModelStatus(nsModel.Status.Status, TemplateScopeNamespace, "AIMModel", imageName)
-			return ready, modelScope, reason, message, nil
+			resolvedRef := &aimv1alpha1.AIMResolvedReference{
+				Name:      nsModel.Name,
+				Namespace: nsModel.Namespace,
+				Kind:      "AIMModel",
+				Scope:     aimv1alpha1.AIMResolutionScopeNamespace,
+				UID:       nsModel.UID,
+			}
+			return ready, modelScope, reason, message, resolvedRef, nil
 		case apierrors.IsNotFound(err):
 			if scope == aimv1alpha1.ModelScopeNamespace {
 				// Namespace scope only - don't fall through
 				logger.V(1).Info("AIMModel not found (namespace scope only)", "model", imageName, "namespace", namespace)
 				return false, TemplateScopeNone, aimv1alpha1.AIMServiceReasonModelNotFound,
-					fmt.Sprintf("No namespace-scoped AIMModel found for %q", imageName), nil
+					fmt.Sprintf("No namespace-scoped AIMModel found for %q", imageName), nil, nil
 			}
 			logger.V(1).Info("AIMModel not found, checking cluster scope", "model", imageName, "namespace", namespace)
 			// fall through to cluster scope
 		default:
-			return false, TemplateScopeNone, "", "", fmt.Errorf("failed to get AIMModel %s/%s: %w", namespace, imageName, err)
+			return false, TemplateScopeNone, "", "", nil, fmt.Errorf("failed to get AIMModel %s/%s: %w", namespace, imageName, err)
 		}
 	}
 
@@ -410,7 +419,13 @@ func evaluateImageReadiness(
 		switch {
 		case err == nil:
 			ready, modelScope, reason, message := checkModelStatus(clusterModel.Status.Status, TemplateScopeCluster, "AIMClusterModel", imageName)
-			return ready, modelScope, reason, message, nil
+			resolvedRef := &aimv1alpha1.AIMResolvedReference{
+				Name:  clusterModel.Name,
+				Kind:  "AIMClusterModel",
+				Scope: aimv1alpha1.AIMResolutionScopeCluster,
+				UID:   clusterModel.UID,
+			}
+			return ready, modelScope, reason, message, resolvedRef, nil
 		case apierrors.IsNotFound(err):
 			logger.V(1).Info("AIMClusterModel not found", "model", imageName)
 			scopeDesc := "cluster-scoped"
@@ -418,15 +433,15 @@ func evaluateImageReadiness(
 				scopeDesc = ""
 			}
 			return false, TemplateScopeNone, aimv1alpha1.AIMServiceReasonModelNotFound,
-				fmt.Sprintf("No %s AIMClusterModel found for %q", scopeDesc, imageName), nil
+				fmt.Sprintf("No %s AIMClusterModel found for %q", scopeDesc, imageName), nil, nil
 		default:
-			return false, TemplateScopeNone, "", "", fmt.Errorf("failed to get AIMClusterModel %s: %w", imageName, err)
+			return false, TemplateScopeNone, "", "", nil, fmt.Errorf("failed to get AIMClusterModel %s: %w", imageName, err)
 		}
 	}
 
 	// This shouldn't be reached, but handle the case where scope doesn't allow any checks
 	return false, TemplateScopeNone, aimv1alpha1.AIMServiceReasonModelNotFound,
-		fmt.Sprintf("No model found for %q with scope %s", imageName, scope), nil
+		fmt.Sprintf("No model found for %q with scope %s", imageName, scope), nil, nil
 }
 
 func listTemplateCandidatesForImage(
@@ -533,7 +548,7 @@ func PopulateObservationFromNamespaceTemplate(
 		obs.ResolvedRuntimeConfig = template.Status.ResolvedRuntimeConfig
 	}
 	if template.Status.ResolvedModel != nil {
-		obs.ResolvedImage = template.Status.ResolvedModel
+		obs.ResolvedModel = template.Status.ResolvedModel
 	}
 	obs.TemplateStatus = template.Status.DeepCopy()
 	obs.TemplateSpecCommon = template.Spec.AIMServiceTemplateSpecCommon
@@ -577,7 +592,7 @@ func PopulateObservationFromClusterTemplate(
 		obs.ResolvedRuntimeConfig = template.Status.ResolvedRuntimeConfig
 	}
 	if template.Status.ResolvedModel != nil {
-		obs.ResolvedImage = template.Status.ResolvedModel
+		obs.ResolvedModel = template.Status.ResolvedModel
 	}
 	obs.TemplateStatus = template.Status.DeepCopy()
 	obs.TemplateSpecCommon = template.Spec.AIMServiceTemplateSpecCommon
@@ -643,9 +658,9 @@ func ObserveDerivedTemplate(
 
 		// Resolve model name from service for derived template matching
 		// Normalize scope - default to Auto if empty
-		serviceScope := service.Spec.Scope
-		if serviceScope == "" {
-			serviceScope = aimv1alpha1.ModelScopeAuto
+		serviceScope := aimv1alpha1.ModelScopeAuto
+		if service.Spec.Model.Scope != nil {
+			serviceScope = *service.Spec.Model.Scope
 		}
 		resolvedModelName, err := resolveModelNameFromService(ctx, k8sClient, service, serviceScope)
 		if err != nil {
