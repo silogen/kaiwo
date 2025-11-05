@@ -1,8 +1,0 @@
-apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMService
-metadata:
-  name: ambiguous-service
-spec:
-  model:
-    image: ghcr.io/amd/gemma-2b:latest
-  runtimeConfigName: ambiguous-config

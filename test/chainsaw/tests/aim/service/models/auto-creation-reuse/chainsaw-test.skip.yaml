@@ -29,7 +29,7 @@ spec:
             labels:
               aim.silogen.ai/auto-created: "true"
           spec:
-            image: ghcr.io/amd/phi-3-mini:latest
+            image: ghcr.io/silogen/aim-dummy:0.1.3
 
   - name: Create second service with same model.image
     try:

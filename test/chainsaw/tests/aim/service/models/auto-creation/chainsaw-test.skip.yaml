@@ -33,7 +33,7 @@ spec:
             labels:
               aim.silogen.ai/auto-created: "true"
           spec:
-            image: ghcr.io/amd/llama-3-8b-instruct:latest
+            image: ghcr.io/silogen/aim-dummy:0.1.3
 
   - name: Verify service resolves to auto-created model
     try:

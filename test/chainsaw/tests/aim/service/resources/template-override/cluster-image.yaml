@@ -3,7 +3,7 @@ kind: AIMClusterModel
 metadata:
   name: template-override-image
 spec:
-  image: ghcr.io/silogen/aim-dummy:0.1.1
+  image: ghcr.io/silogen/aim-dummy:0.1.3
   defaultServiceTemplate: template-override-template
   resources:
     limits:

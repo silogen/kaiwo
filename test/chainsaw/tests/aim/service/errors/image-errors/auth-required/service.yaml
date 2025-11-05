@@ -1,9 +1,0 @@
-apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMService
-metadata:
-  name: test-service-auth-required
-spec:
-  model:
-    # This is a private image that requires authentication
-    # Without imagePullSecrets, it should fail with auth error
-    image: ghcr.io/silogen/aim-qwen-qwen3-32b:0.7.0-preview

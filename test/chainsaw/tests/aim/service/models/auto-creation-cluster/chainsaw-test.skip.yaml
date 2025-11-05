@@ -28,4 +28,4 @@ spec:
             labels:
               aim.silogen.ai/auto-created: "true"
           spec:
-            image: ghcr.io/amd/mistral-7b-instruct:latest
+            image: ghcr.io/silogen/aim-dummy:0.1.3

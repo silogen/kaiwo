@@ -1,7 +1,0 @@
-apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMRuntimeConfig
-metadata:
-  name: pvc-service-cache
-spec:
-  defaultStorageClassName: "rwx-nfs"
-  pvcHeadroomPercent: 200

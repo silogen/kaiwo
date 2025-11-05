@@ -1,7 +1,0 @@
-apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMTemplateCache
-metadata:
-  name: pvc-template-cache
-spec:
-  templateRef: llama-3-8b-pvc-template-cache-1x-mi300x-lat-fp8-15ca
-  storageClassName: rwx-nfs
