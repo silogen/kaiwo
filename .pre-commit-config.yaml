@@ -34,12 +34,29 @@ repos:
     require_serial: true
     pass_filenames: false
 
+  - id: build-install-artifacts
+    name: Build artifacts for installation
+    entry: >
+      bash -c "
+        set -euo pipefail;
+        SHORT_SHA=$(git rev-parse --short=7 HEAD);
+        IMAGE_TAG=\"main-${SHORT_SHA}\";
+        CHART_VERSION=\"0.0.0-main.${SHORT_SHA}\";
+        export SHORT_SHA IMAGE_TAG CHART_VERSION;
+        make build-installer TAG=${IMAGE_TAG};
+        cp dist/install.yaml install.yaml;
+        make helm-release TAG=${IMAGE_TAG} CHART_VERSION=${CHART_VERSION};
+      "
+    language: system
+    pass_filenames: false
+    stages: [pre-commit]
+
 - repo: https://github.com/jumanjihouse/pre-commit-hook-yamlfmt
   rev: 0.2.3
   hooks:
   - id: yamlfmt
     args: [--offset, "0", --sequence, "2", --mapping, "2", "--width", "4096", "--preserve-quotes", "--implicit_start", "--preserve_null"]
-    exclude: "(^config/prometheus/.*\\.ya?ml$)|(^docs/mkdocs\\.ya?ml$)|(^config/crd/.*\\.ya?ml$)|(^crd/.*\\.ya?ml$)|(^chart/templates/.*\\.(ya?ml|tpl)$)|(^.*/templates/.*\\.(ya?ml|tpl)$)"
+    exclude: "(^config/prometheus/.*\\.ya?ml$)|(^docs/mkdocs\\.ya?ml$)|(^config/crd/.*\\.ya?ml$)||(^install.ya?ml$)|(^crd/.*\\.ya?ml$)|(^chart/templates/.*\\.(ya?ml|tpl)$)|(^.*/templates/.*\\.(ya?ml|tpl)$)"
 
 - repo: https://github.com/psf/black
   rev: 25.1.0
