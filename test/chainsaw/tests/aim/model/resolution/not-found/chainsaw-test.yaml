@@ -10,7 +10,7 @@ spec:
   - name: Create prerequisites
     try:
     - apply:
-        file: cluster-template.yaml
+        file: template.yaml
 
   - name: Create AIMService
     try:

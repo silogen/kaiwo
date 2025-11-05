@@ -5,4 +5,4 @@ metadata:
 spec:
   model:
     # Use the same repo but with a tag that definitely doesn't exist
-    image: ghcr.io/silogen/aim-dummy:0.1.3
+    image: ghcr.io/silogen/aim-qwen-qwen3-32b:this-tag-absolutely-does-not-exist-404

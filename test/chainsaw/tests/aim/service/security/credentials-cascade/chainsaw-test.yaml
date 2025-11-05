@@ -26,7 +26,8 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMModel
           metadata:
-            name: aim-google-gemma-3-1b-it-0-7-0-preview-0a8c9e05
+            labels:
+              aim.silogen.ai/model.image: ghcr.io-silogen-aim-dummy-0.1.3
           spec:
             image: ghcr.io/silogen/aim-dummy:0.1.3
             imagePullSecrets:
@@ -44,11 +45,11 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMServiceTemplate
           metadata:
-            name: aim-google-gemma-3-1b-it-0-7-0-preview-1x-mi300x-lat-fp16-e17e
+            labels:
+              aim.silogen.ai/model.canonical-name: huggingfacetb-smollm2-135m
           spec:
-            modelName: aim-google-gemma-3-1b-it-0-7-0-preview-0a8c9e05
             metric: latency
-            precision: fp16
+            precision: fp8
             imagePullSecrets:
             - name: test-registry-secret
             serviceAccountName: test-inference-sa
@@ -64,7 +65,7 @@ spec:
           kind: Job
           metadata:
             labels:
-              aim.silogen.ai/template: aim-google-gemma-3-1b-it-0-7-0-preview-1x-mi300x-lat-fp16-e17e
+              app.kubernetes.io/name: aim-discovery
           spec:
             template:
               spec:

@@ -29,7 +29,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"regexp"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -57,27 +56,22 @@ const (
 	KubernetesLabelValueMaxLength = 63
 )
 
-var labelValueRegex = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
-
-// SanitizeLabelValue converts a string to a valid Kubernetes label value.
+// SanitizeLabelValue converts a string to a valid Kubernetes label value using RFC1123 DNS label format.
+// This ensures the value can be used as both a label value AND a Kubernetes resource name.
 // Valid label values must:
-// - Be empty or consist of alphanumeric characters, '-', '_' or '.'
+// - Be lowercase alphanumeric characters, '-', or '.'
 // - Start and end with an alphanumeric character
 // - Be at most 63 characters
 // Returns "unknown" if the sanitized value is empty.
 func SanitizeLabelValue(s string) string {
-	// Replace invalid characters with underscores
-	sanitized := labelValueRegex.ReplaceAllString(s, "_")
+	// Use RFC1123 compliance for consistency with Kubernetes naming
+	sanitized := baseutils.MakeRFC1123Compliant(s)
 
-	// Trim leading and trailing non-alphanumeric characters
-	sanitized = strings.TrimLeft(sanitized, "_.-")
-	sanitized = strings.TrimRight(sanitized, "_.-")
-
-	// Truncate to maximum label value length
+	// Truncate to maximum label value length (MakeRFC1123Compliant doesn't enforce length)
 	if len(sanitized) > KubernetesLabelValueMaxLength {
 		sanitized = sanitized[:KubernetesLabelValueMaxLength]
 		// Trim trailing non-alphanumeric after truncation
-		sanitized = strings.TrimRight(sanitized, "_.-")
+		sanitized = strings.TrimRight(sanitized, "-.")
 	}
 
 	// Return "unknown" if fully sanitized string is empty

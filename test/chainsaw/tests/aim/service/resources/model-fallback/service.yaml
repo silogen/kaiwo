@@ -1,0 +1,8 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: model-fallback
+spec:
+  model:
+    ref: model-fallback
+  templateRef: model-fallback

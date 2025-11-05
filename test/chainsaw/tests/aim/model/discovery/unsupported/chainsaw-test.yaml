@@ -5,17 +5,17 @@ metadata:
 spec:
   description: Ensure that unsupported images fail if templates are auto-generated
   steps:
-  - name: Create image
+  - name: Create model
     try:
     - apply:
-        file: cluster-image.yaml
+        file: model.yaml
 
   - name: Ensure image is ready but discovery failed
     try:
     - assert:
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMClusterModel
+          kind: AIMModel
           metadata:
             name: buxybox-unsupported
           status:

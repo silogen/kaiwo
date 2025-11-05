@@ -3,27 +3,13 @@ kind: Test
 metadata:
   name: resources-template-override
 spec:
-  description: Template-level resources override image defaults when service does not specify any
-  timeouts:
-    assert: 60s
+  description: Template-level resources override model defaults when service does not specify any
+
   steps:
   - name: Create prerequisites
     try:
     - apply:
-        file: cluster-image.yaml
-    - apply:
-        file: cluster-template.yaml
-
-  - name: Wait for template to become Available
-    try:
-    - assert:
-        resource:
-          apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMClusterServiceTemplate
-          metadata:
-            name: template-override-template
-          status:
-            status: Ready
+        file: model-and-template.yaml
 
   - name: Create AIMService
     try:
@@ -37,16 +23,16 @@ spec:
           apiVersion: serving.kserve.io/v1beta1
           kind: InferenceService
           metadata:
-            name: template-override-service
+            name: template-override
           spec:
             predictor:
               model:
                 resources:
                   requests:
-                    #amd.com/gpu: "1"
+                    amd.com/gpu: "1"
                     cpu: "1"
                     memory: 1Gi
                   limits:
-                    #amd.com/gpu: "1"
+                    amd.com/gpu: "1"
                     cpu: "2"
                     memory: 2Gi

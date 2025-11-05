@@ -1,11 +1,4 @@
 apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMRuntimeConfig
-metadata:
-  name: default
-spec:
-  defaultStorageClassName: "rwx-nfs"
----
-apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMModel
 metadata:
   name: aimdummy-model

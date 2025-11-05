@@ -8,7 +8,7 @@ spec:
   - name: Create image
     try:
     - apply:
-        file: cluster-image.yaml
+        file: model.yaml
 
   - name: Verify image status becomes Ready
     try:
@@ -16,9 +16,9 @@ spec:
         timeout: 180s
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMClusterModel
+          kind: AIMModel
           metadata:
-            name: qwen3-preview-happy-path
+            name: happy-path
           status:
             status: Ready
 
@@ -27,10 +27,10 @@ spec:
     - assert:
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMClusterServiceTemplate
+          kind: AIMServiceTemplate
           metadata:
             ownerReferences:
-            - name: qwen3-preview-happy-path
+            - name: happy-path
           spec:
             metric: latency
             precision: fp8
@@ -40,10 +40,10 @@ spec:
     - assert:
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMClusterServiceTemplate
+          kind: AIMServiceTemplate
           metadata:
             ownerReferences:
-            - name: qwen3-preview-happy-path
+            - name: happy-path
           spec:
             metric: throughput
             precision: fp8
@@ -53,10 +53,10 @@ spec:
     - assert:
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMClusterServiceTemplate
+          kind: AIMServiceTemplate
           metadata:
             ownerReferences:
-            - name: qwen3-preview-happy-path
+            - name: happy-path
           spec:
             metric: latency
             precision: fp8
@@ -66,10 +66,10 @@ spec:
     - assert:
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMClusterServiceTemplate
+          kind: AIMServiceTemplate
           metadata:
             ownerReferences:
-            - name: qwen3-preview-happy-path
+            - name: happy-path
           spec:
             metric: throughput
             precision: fp8

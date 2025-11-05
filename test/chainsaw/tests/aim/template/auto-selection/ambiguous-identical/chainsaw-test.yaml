@@ -8,10 +8,10 @@ spec:
   timeouts:
     assert: 60s
   steps:
-  - name: Create cluster image
+  - name: Create model
     try:
     - apply:
-        file: cluster-image.yaml
+        file: model.yaml
 
   - name: Create two identical templates
     try:
@@ -20,12 +20,12 @@ spec:
     - apply:
         file: template-2.yaml
 
-  - name: Wait for both templates to become Available
+  - name: Wait for both templates to become Ready
     try:
     - assert:
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMClusterServiceTemplate
+          kind: AIMServiceTemplate
           metadata:
             name: test-ambiguous-template-1
           status:
@@ -33,13 +33,13 @@ spec:
     - assert:
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMClusterServiceTemplate
+          kind: AIMServiceTemplate
           metadata:
             name: test-ambiguous-template-2
           status:
             status: Ready
 
-  - name: Create service without templateRef
+  - name: Create service
     try:
     - apply:
         file: service.yaml

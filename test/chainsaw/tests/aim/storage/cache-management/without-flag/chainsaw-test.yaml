@@ -1,0 +1,111 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: cache-without-flag
+spec:
+  description: Test that an AIMService uses pre-created template cache even when cacheModel=false
+  steps:
+
+  - name: Create model
+    try:
+    - apply:
+        file: model.yaml
+
+  - name: Wait for model to be ready
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMModel
+          metadata:
+            name: cache-without-flag-model
+          status:
+            status: Ready
+
+  - name: Create template without caching enabled
+    try:
+    - apply:
+        file: template.yaml
+
+  - name: Wait for template to be available
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMServiceTemplate
+          metadata:
+            name: cache-without-flag-template
+          status:
+            status: Ready
+
+  - name: Pre-create template cache explicitly
+    try:
+    - apply:
+        file: template-cache.yaml
+
+  - name: Create service
+    try:
+    - apply:
+        file: service.yaml
+
+  # TODO ensure service picked up the template and is waiting for it to become available (check conditions)
+
+  - name: Wait for template cache to become available
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMTemplateCache
+          metadata:
+            name: cache-without-flag-template
+          status:
+            status: Available
+
+  - name: Verify NO service PVC is created
+    try:
+    - script:
+        timeout: 30s
+        content: |
+          # Check that no PVC with service label exists
+          COUNT=$(kubectl get pvc -l aim.silogen.ai/service=cache-without-flag-service -o json | jq '.items | length')
+          if [ "$COUNT" != "0" ]; then
+            echo "ERROR: Found $COUNT service PVCs, expected 0"
+            exit 1
+          fi
+          echo "OK: No service PVC created as expected"
+
+  - name: Verify service becomes running with cache
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: cache-without-flag-service
+          status:
+            status: Running
+            (conditions[?type == 'RuntimeReady']):
+            - status: "True"
+            (conditions[?type == 'CacheReady']):
+            - status: "True"
+            resolvedTemplateCache:
+              name: cache-without-flag-template
+
+  - name: Verify pod has cache mounts
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            labels:
+              serving.kserve.io/inferenceservice: cache-without-flag-service
+          spec:
+            (containers[?name == 'kserve-container']):
+            - (volumeMounts[?mountPath == '/workspace/model-cache/HuggingFaceTB/SmolLM2-135M']):
+              - mountPath: /workspace/model-cache/HuggingFaceTB/SmolLM2-135M
+              (env[?name == 'AIM_CACHE_PATH']):
+              - value: /workspace/model-cache
+          status:
+            phase: Running

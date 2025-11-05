@@ -5,4 +5,3 @@ metadata:
 spec:
   model:
     ref: test-ambiguous
-  # No templateRef - should fail with TemplateSelectionAmbiguous

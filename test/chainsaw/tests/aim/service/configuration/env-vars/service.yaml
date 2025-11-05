@@ -4,8 +4,7 @@ metadata:
   name: test-service
 spec:
   model:
-    ref: default-testing-llama-3-8b
-  replicas: 1
+    ref: default-testing
   env:
   - name: HF_TOKEN
     value: "test-token-123"

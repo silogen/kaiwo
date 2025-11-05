@@ -8,7 +8,7 @@ spec:
   - name: Create namespace-scoped AIMModel
     try:
     - apply:
-        file: namespace-image.yaml
+        file: model.yaml
 
   - name: Verify AIMModel status becomes Ready
     try:

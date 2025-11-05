@@ -7,10 +7,10 @@ spec:
   timeouts:
     assert: 60s
   steps:
-  - name: Create cluster image
+  - name: Create model
     try:
     - apply:
-        file: cluster-image.yaml
+        file: model.yaml
 
   - name: Create both templates
     try:
@@ -24,7 +24,7 @@ spec:
     - assert:
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMClusterServiceTemplate
+          kind: AIMServiceTemplate
           metadata:
             name: test-filter-mi300x
           status:
@@ -35,7 +35,7 @@ spec:
     - assert:
         resource:
           apiVersion: aim.silogen.ai/v1alpha1
-          kind: AIMClusterServiceTemplate
+          kind: AIMServiceTemplate
           metadata:
             name: test-filter-h100
           status:
@@ -58,7 +58,6 @@ spec:
           status:
             resolvedTemplate:
               name: test-filter-mi300x
-              scope: Cluster
             (conditions[?type == 'Resolved']):
             - status: "True"
               reason: Resolved
