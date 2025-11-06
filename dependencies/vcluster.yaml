@@ -7,15 +7,9 @@ sync:
     storageClasses:
       enabled: true
 
-# Use embedded etcd instead of SQLite (much better performance)
-# Force it to use openebs-hostpath (RWO) instead of rwx-nfs
+# Force vcluster's StatefulSet to use fast RWO storage instead of slow NFS
+# This uses SQLite but on openebs-hostpath (much faster than NFS)
 controlPlane:
-  backingStore:
-    etcd:
-      embedded:
-        enabled: true
-      deploy:
-        enabled: false
   statefulSet:
     persistence:
       volumeClaim:
