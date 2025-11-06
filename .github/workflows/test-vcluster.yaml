@@ -217,7 +217,7 @@ jobs:
       - name: Install CRDs
         env:
           KUBECONFIG: ${{ github.workspace }}/vcluster-kubeconfig
-        run: kubectl apply -f crd/crds.yaml
+        run: kubectl apply -f crd/crds.yaml --server-side
 
       - name: Deploy operator (${{ matrix.installer }})
         env:
