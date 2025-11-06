@@ -146,10 +146,15 @@ jobs:
             --values dependencies/vcluster.yaml \
             --connect=false \
             --update-current=false
+
+          # Wait for vcluster StatefulSet to be ready (official labels from chart)
+          echo "Waiting for vcluster StatefulSet to be ready..."
           kubectl -n "$VCLUSTER_NAMESPACE" wait --for=condition=ready pod \
-            -l app.kubernetes.io/name=vcluster,app.kubernetes.io/instance="$VCLUSTER_NAME" \
+            -l app=vcluster,release="$VCLUSTER_NAME" \
             --timeout=5m
-          kubectl -n "$VCLUSTER_NAMESPACE" get pods -l app.kubernetes.io/name=vcluster -o wide
+
+          echo "Vcluster pods:"
+          kubectl -n "$VCLUSTER_NAMESPACE" get pods -l app=vcluster,release="$VCLUSTER_NAME" -o wide
 
       - name: Connect to vcluster
         env: { KUBECONFIG: host-kubeconfig }
