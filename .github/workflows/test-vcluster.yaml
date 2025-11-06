@@ -159,10 +159,33 @@ jobs:
       - name: Connect to vcluster
         env: { KUBECONFIG: host-kubeconfig }
         run: |
+          # Start vcluster connect in background (creates port-forward)
           vcluster connect "$VCLUSTER_NAME" \
             --namespace "$VCLUSTER_NAMESPACE" \
             --update-current=false \
-            --kube-config=./vcluster-kubeconfig
+            --kube-config=./vcluster-kubeconfig &
+
+          VCLUSTER_PID=$!
+          echo "VCLUSTER_PID=$VCLUSTER_PID" >> "$GITHUB_ENV"
+
+          # Wait for kubeconfig to be written
+          for i in {1..30}; do
+            if [[ -f ./vcluster-kubeconfig ]]; then
+              echo "Kubeconfig file created"
+              break
+            fi
+            sleep 1
+          done
+
+          # Wait for connection to be ready
+          echo "Waiting for vcluster connection to be ready..."
+          for i in {1..30}; do
+            if KUBECONFIG=$(pwd)/vcluster-kubeconfig kubectl get ns >/dev/null 2>&1; then
+              echo "Successfully connected to vcluster"
+              break
+            fi
+            sleep 2
+          done
 
           # Verify connection
           KUBECONFIG=$(pwd)/vcluster-kubeconfig kubectl get ns
@@ -224,6 +247,12 @@ jobs:
         if: always()
         env: { KUBECONFIG: host-kubeconfig }
         run: |
+          # Kill the vcluster connect port-forward process
+          if [[ -n "${VCLUSTER_PID:-}" ]]; then
+            kill "$VCLUSTER_PID" 2>/dev/null || true
+          fi
+
+          # Delete the vcluster
           vcluster delete "$VCLUSTER_NAME" --namespace "$VCLUSTER_NAMESPACE" || true
           kubectl delete namespace "$VCLUSTER_NAMESPACE" --ignore-not-found=true || true
           rm -f host-kubeconfig vcluster-kubeconfig
