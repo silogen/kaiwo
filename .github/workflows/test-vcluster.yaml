@@ -13,9 +13,10 @@ concurrency:
 env:
   TTL_TAG: 1h
   GO_VERSION_FILE: go.mod
-  GOLANGCI_LINT_VERSION: v1.61.0
+  # Lint toolchains (pinned)
+  GOLANGCI_LINT_VERSION: v1.64.2   # use action v6 with v1.x
   PY_VERSION: '3.12'
-  # Pin tool versions used in E2E (self-hosted only needs these)
+  # E2E tool versions (pinned)
   KUBECTL_VERSION: 'v1.30.4'
   VCLUSTER_VERSION: 'v0.20.0'
   HELMFILE_VERSION: 'v1.1.5'
@@ -26,15 +27,19 @@ defaults:
 
 jobs:
   lint-go:
+    name: Lint (Go)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with: { clean: true }
+
       - uses: actions/setup-go@v5
         with:
           go-version-file: ${{ env.GO_VERSION_FILE }}
           check-latest: true
-      - uses: actions/cache@v4
+
+      - name: Cache Go
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cache/go-build
@@ -42,12 +47,16 @@ jobs:
           key: go-${{ runner.os }}-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             go-${{ runner.os }}-
-      - uses: golangci/golangci-lint-action@v8
+
+      # Use action v6 to run golangci-lint v1.x
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           args: --timeout=10m
 
   lint-python:
+    name: Lint (Python)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -55,30 +64,43 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { clean: true }
+
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PY_VERSION }}
           cache: 'pip'
           cache-dependency-path: 'python/requirements-dev.txt'
-      - run: |
+
+      - name: Install dependencies
+        run: |
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
-      - run: flake8 kaiwo
-      - run: black --check --diff kaiwo
-      - run: isort --check-only --diff kaiwo
+
+      - name: flake8
+        run: flake8 kaiwo
+
+      - name: black (check)
+        run: black --check --diff kaiwo
+
+      - name: isort (check)
+        run: isort --check-only --diff kaiwo
 
   test:
+    name: Unit tests
     needs: [lint-go, lint-python]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with: { clean: true }
+
       - uses: actions/setup-go@v5
         with:
           go-version-file: ${{ env.GO_VERSION_FILE }}
           check-latest: true
-      - uses: actions/cache@v4
+
+      - name: Cache Go
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cache/go-build
@@ -86,14 +108,16 @@ jobs:
           key: go-${{ runner.os }}-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             go-${{ runner.os }}-
-      - run: |
+
+      - name: Run tests
+        run: |
           go mod tidy
           make test
 
   build-image:
     name: Build & push (ttl.sh)
     needs: test
-    runs-on: ubuntu-latest   # moved off self-hosted
+    runs-on: ubuntu-latest
     timeout-minutes: 25
     outputs:
       image: ${{ steps.vars.outputs.full_image }}
@@ -102,7 +126,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { clean: true }
+
       - uses: docker/setup-buildx-action@v3
+
       - name: Compute ttl.sh image ref
         id: vars
         run: |
@@ -112,6 +138,7 @@ jobs:
           echo "repo=${REPO}"              >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}"                >> "$GITHUB_OUTPUT"
           echo "full_image=${REPO}:${TAG}" >> "$GITHUB_OUTPUT"
+
       - name: Build & push
         uses: docker/build-push-action@v6
         with:
@@ -122,13 +149,16 @@ jobs:
           tags: ${{ steps.vars.outputs.full_image }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
       - name: Build CLI artifact
         run: |
           make build-cli
           make build-log
           mkdir -p builds
           cp bin/kaiwo builds/
-      - uses: actions/upload-artifact@v4
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
         with:
           name: kaiwo-builds
           path: builds
@@ -158,13 +188,17 @@ jobs:
         with:
           version: ${{ env.KUBECTL_VERSION }}
 
-      - uses: actions/download-artifact@v4
+      - name: Download CLI artifact
+        uses: actions/download-artifact@v4
         with:
           name: kaiwo-builds
           path: builds
-      - run: |
+
+      - name: Make CLI executable
+        run: |
           chmod +x builds/kaiwo
           chmod +x builds/log
+          ls -l builds
 
       - name: Install Chainsaw
         uses: kyverno/action-install-chainsaw@v0.2.12
@@ -174,7 +208,9 @@ jobs:
       - name: Install Helmfile (pinned)
         run: |
           curl -L -o helmfile.tar.gz https://github.com/helmfile/helmfile/releases/download/${HELMFILE_VERSION}/helmfile_${HELMFILE_VERSION#v}_linux_amd64.tar.gz
-          tar -xzf helmfile.tar.gz && chmod +x ./helmfile && sudo mv ./helmfile /usr/local/bin/helmfile
+          tar -xzf helmfile.tar.gz
+          chmod +x ./helmfile
+          sudo mv ./helmfile /usr/local/bin/helmfile
           rm -f helmfile.tar.gz
           helmfile version
 
@@ -186,21 +222,31 @@ jobs:
       - name: Install vcluster CLI (pinned)
         run: |
           curl -L -o vcluster "https://github.com/loft-sh/vcluster/releases/download/${VCLUSTER_VERSION}/vcluster-linux-amd64"
-          chmod +x vcluster && sudo mv vcluster /usr/local/bin/vcluster
+          chmod +x vcluster
+          sudo mv vcluster /usr/local/bin/vcluster
           vcluster --version
 
       - name: Create namespace & vcluster
         env: { KUBECONFIG: host-kubeconfig }
         run: |
           kubectl get ns "$VCLUSTER_NAMESPACE" >/dev/null 2>&1 || kubectl create namespace "$VCLUSTER_NAMESPACE"
-          vcluster create "$VCLUSTER_NAME" --namespace "$VCLUSTER_NAMESPACE" --values dependencies/vcluster.yaml --connect=false --update-current=false
+          vcluster create "$VCLUSTER_NAME" \
+            --namespace "$VCLUSTER_NAMESPACE" \
+            --values dependencies/vcluster.yaml \
+            --connect=false \
+            --update-current=false
           kubectl -n "$VCLUSTER_NAMESPACE" wait --for=condition=ready pod \
-            -l app.kubernetes.io/name=vcluster,app.kubernetes.io/instance="$VCLUSTER_NAME" --timeout=5m
+            -l app.kubernetes.io/name=vcluster,app.kubernetes.io/instance="$VCLUSTER_NAME" \
+            --timeout=5m
+          kubectl -n "$VCLUSTER_NAMESPACE" get pods -l app.kubernetes.io/name=vcluster -o wide
 
       - name: Connect to vcluster
         env: { KUBECONFIG: host-kubeconfig }
         run: |
-          vcluster connect "$VCLUSTER_NAME" --namespace "$VCLUSTER_NAMESPACE" --kube-config=./vcluster-kubeconfig --update-current=false --background-timeout=0s
+          vcluster connect "$VCLUSTER_NAME" \
+            --namespace "$VCLUSTER_NAMESPACE" \
+            --update-current=false \
+            --kube-config=./vcluster-kubeconfig --background-timeout=0s
           KUBECONFIG=$(pwd)/vcluster-kubeconfig kubectl get ns
 
       - name: Install dependencies
@@ -218,6 +264,37 @@ jobs:
         run: |
           kubectl -n kaiwo-system rollout status deployment/kaiwo-controller-manager --timeout=300s
           kubectl -n kube-system rollout status deployment/kaiwo-scheduler --timeout=300s
+          kubectl -n kaiwo-system get pods -o wide
+
+      - name: Debug rollout failure
+        if: failure()
+        env: { KUBECONFIG: vcluster-kubeconfig }
+        run: |
+          echo "=== Deployment status ==="
+          kubectl -n kaiwo-system get deployments -o wide || true
+          kubectl -n kube-system get deployments -o wide || true
+          
+          echo "=== Pod status ==="
+          kubectl -n kaiwo-system get pods -o wide || true
+          kubectl -n kube-system get pods -o wide || true
+          
+          echo "=== Controller manager details ==="
+          kubectl -n kaiwo-system describe deployment kaiwo-controller-manager || true
+          kubectl -n kaiwo-system describe pods -l control-plane=controller-manager || true
+          
+          echo "=== Scheduler details ==="
+          kubectl -n kube-system describe deployment kaiwo-scheduler || true
+          kubectl -n kube-system describe pods -l component=kaiwo-scheduler || true
+          
+          echo "=== Controller manager logs ==="
+          kubectl -n kaiwo-system logs -l control-plane=controller-manager --tail=200 --all-containers=true || true
+          
+          echo "=== Scheduler logs ==="
+          kubectl -n kube-system logs -l component=kaiwo-scheduler --tail=200 --all-containers=true || true
+          
+          echo "=== Events ==="
+          kubectl -n kaiwo-system get events --sort-by='.lastTimestamp' || true
+          kubectl -n kube-system get events --sort-by='.lastTimestamp' || true
 
       - name: Run E2E tests
         env: { KUBECONFIG: vcluster-kubeconfig }
