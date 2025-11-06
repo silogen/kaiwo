@@ -149,9 +149,6 @@ jobs:
       VCLUSTER_NAMESPACE: kaiwo-test-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.installer }}
       VCLUSTER_NAME: kaiwo-test-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.installer }}
       IMAGE_NAME: ${{ needs.build-image.outputs.image }}
-      KUBECTL_VERSION: ${{ env.KUBECTL_VERSION }}
-      VCLUSTER_VERSION: ${{ env.VCLUSTER_VERSION }}
-      HELMFILE_VERSION: ${{ env.HELMFILE_VERSION }}
     steps:
       - uses: actions/checkout@v4
         with: { clean: true }
