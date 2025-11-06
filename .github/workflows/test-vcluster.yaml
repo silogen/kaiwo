@@ -116,6 +116,14 @@ jobs:
         with:
           release: v0.2.12
 
+      - name: Install Helm (pinned)
+        run: |
+          curl -fsSL https://get.helm.sh/helm-v3.16.4-linux-amd64.tar.gz -o helm.tar.gz
+          tar -xzf helm.tar.gz
+          sudo mv linux-amd64/helm /usr/local/bin/helm
+          rm -rf helm.tar.gz linux-amd64
+          helm version
+
       - name: Install Helmfile (pinned)
         run: |
           curl -L -o helmfile.tar.gz https://github.com/helmfile/helmfile/releases/download/${HELMFILE_VERSION}/helmfile_${HELMFILE_VERSION#v}_linux_amd64.tar.gz
