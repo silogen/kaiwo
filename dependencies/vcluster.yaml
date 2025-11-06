@@ -6,3 +6,20 @@ sync:
         all: true
     storageClasses:
       enabled: true
+
+# Use embedded etcd instead of SQLite (much better performance)
+# Force it to use openebs-hostpath (RWO) instead of rwx-nfs
+controlPlane:
+  backingStore:
+    etcd:
+      embedded:
+        enabled: true
+      deploy:
+        enabled: false
+  statefulSet:
+    persistence:
+      volumeClaim:
+        enabled: "true"
+        accessModes: ["ReadWriteOnce"]
+        storageClass: "openebs-hostpath"
+        size: 5Gi
