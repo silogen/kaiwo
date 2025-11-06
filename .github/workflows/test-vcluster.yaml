@@ -94,6 +94,11 @@ jobs:
       - uses: actions/checkout@v4
         with: { clean: true }
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ env.GO_VERSION_FILE }}
+
       - name: Set up kubectl (pinned)
         uses: azure/setup-kubectl@v4
         with:
@@ -218,6 +223,12 @@ jobs:
         env:
           KUBECONFIG: ${{ github.workspace }}/vcluster-kubeconfig
         run: kubectl apply -f crd/crds.yaml --server-side
+
+      - name: Build helm chart
+        if: matrix.installer == 'helm'
+        run: |
+          mkdir -p dist
+#          make helm-package
 
       - name: Deploy operator (${{ matrix.installer }})
         env:
