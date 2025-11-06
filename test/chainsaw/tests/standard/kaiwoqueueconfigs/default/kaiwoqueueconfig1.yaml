@@ -1,3 +1,4 @@
+
 apiVersion: kaiwo.silogen.ai/v1alpha1
 kind: KaiwoQueueConfig
 metadata:
@@ -74,4 +75,3 @@ spec:
   - name: quux
     nodeLabels:
       kaiwo/nodepool: quux
-

@@ -4,7 +4,7 @@ metadata:
   name: kaiwo
 spec:
   clusterQueues:
-  - name: faz
+  - name: fizz
     spec:
       flavorFungibility:
         whenCanBorrow: Borrow
@@ -22,7 +22,7 @@ spec:
         - memory
         - amd.com/gpu
         flavors:
-        - name: faz
+        - name: foo
           resources:
           - name: cpu
             nominalQuota: "14"
@@ -32,6 +32,6 @@ spec:
             nominalQuota: "8"
       stopPolicy: None
   resourceFlavors:
-  - name: faz
+  - name: foo
     nodeLabels:
       kaiwo/nodepool: amd-rocks
