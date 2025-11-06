@@ -4,7 +4,7 @@ metadata:
   name: ci-config
 spec:
   execution:
-    parallel: 4
+    parallel: 10
   discovery:
     fullName: true
   timeouts:
