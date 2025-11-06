@@ -9,13 +9,11 @@ spec:
     enabled: false
   resources:
     limits:
-      cpu: '5'
-      memory: 30Gi
-      amd.com/gpu: '1'
+      cpu: '1500m'
+      memory: 1536Mi
     requests:
-      cpu: '3'
-      memory: 20Gi
-      amd.com/gpu: '1'
+      cpu: '1200m'
+      memory: 1Gi
 ---
 apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMServiceTemplate

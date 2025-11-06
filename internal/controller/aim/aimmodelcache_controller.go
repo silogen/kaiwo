@@ -147,6 +147,9 @@ type observation struct {
 
 func (r *AIMModelCacheReconciler) observe(ctx context.Context, mc *aimv1alpha1.AIMModelCache) (*observation, error) {
 	logger := log.FromContext(ctx)
+
+	baseutils.Debug(logger, "Observing ModelCache")
+
 	ob := &observation{}
 	// PVC
 	pvcName := r.pvcName(mc)
@@ -224,6 +227,9 @@ func (r *AIMModelCacheReconciler) observe(ctx context.Context, mc *aimv1alpha1.A
 
 func (r *AIMModelCacheReconciler) plan(ctx context.Context, mc *aimv1alpha1.AIMModelCache, ob *observation) ([]client.Object, error) {
 	logger := log.FromContext(ctx)
+
+	baseutils.Debug(logger, "Planning ModelCache resources")
+
 	var desired []client.Object
 
 	if ob == nil {
@@ -291,6 +297,9 @@ func (r *AIMModelCacheReconciler) calculateStateFlags(ob observation) stateFlags
 
 func (r *AIMModelCacheReconciler) projectStatus(ctx context.Context, mc *aimv1alpha1.AIMModelCache, ob *observation, errs controllerutils.ReconcileErrors) error {
 	logger := log.FromContext(ctx)
+
+	baseutils.Debug(logger, "Projecting ModelCache status")
+
 	status := mc.Status
 	var conditions []metav1.Condition
 
@@ -343,7 +352,7 @@ func (r *AIMModelCacheReconciler) projectStatus(ctx context.Context, mc *aimv1al
 
 	// Log and emit events for status transitions
 	if mc.Status.Status != newStatus {
-		logger.Info("Model cache status changed",
+		logger.Info(fmt.Sprintf("ModelCache %s/%s status: %s → %s", mc.Namespace, mc.Name, mc.Status.Status, newStatus),
 			"previousStatus", mc.Status.Status,
 			"newStatus", newStatus,
 			"pvcName", mc.Status.PersistentVolumeClaim)

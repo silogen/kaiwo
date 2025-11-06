@@ -28,11 +28,9 @@ spec:
             predictor:
               model:
                 resources:
-                  requests:
-                    amd.com/gpu: "1"
-                    cpu: "1"
-                    memory: 1Gi
                   limits:
-                    amd.com/gpu: "1"
-                    cpu: "2"
-                    memory: 2Gi
+                    cpu: '1500m'
+                    memory: 1536Mi
+                  requests:
+                    cpu: '1200m'
+                    memory: 1Gi

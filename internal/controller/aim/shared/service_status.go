@@ -25,6 +25,7 @@ SOFTWARE.
 package shared
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -33,10 +34,12 @@ import (
 	servingv1beta1 "github.com/kserve/kserve/pkg/apis/serving/v1beta1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
 // EvaluateHTTPRouteStatus checks the HTTPRoute status and returns readiness state.
@@ -663,17 +666,22 @@ func handleTemplateNotFound(
 // ProjectServiceStatus computes and updates the service status based on observations and errors.
 // This is a high-level orchestrator that calls the individual status handler functions.
 func ProjectServiceStatus(
+	ctx context.Context,
 	service *aimv1alpha1.AIMService,
 	obs *ServiceObservation,
 	inferenceService *servingv1beta1.InferenceService,
 	httpRoute *gatewayapiv1.HTTPRoute,
 	errs controllerutils.ReconcileErrors,
 ) {
+	logger := log.FromContext(ctx)
 	status := &service.Status
 	initializeStatusReferences(status, obs)
 
+	baseutils.Debug(logger, "Projecting service status")
+
 	// Helper to update status conditions.
 	setCondition := func(conditionType string, conditionStatus metav1.ConditionStatus, reason, message string) {
+		oldCond := meta.FindStatusCondition(status.Conditions, conditionType)
 		cond := metav1.Condition{
 			Type:               conditionType,
 			Status:             conditionStatus,
@@ -682,6 +690,16 @@ func ProjectServiceStatus(
 			ObservedGeneration: service.Generation,
 			LastTransitionTime: metav1.Now(),
 		}
+
+		// Log only when condition actually changes
+		if oldCond == nil || oldCond.Status != conditionStatus || oldCond.Reason != reason {
+			baseutils.Debug(logger,
+				fmt.Sprintf("Condition %s: %s (reason: %s)", conditionType, conditionStatus, reason),
+				"condition", conditionType,
+				"status", conditionStatus,
+				"reason", reason)
+		}
+
 		meta.SetStatusCondition(&status.Conditions, cond)
 	}
 

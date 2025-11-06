@@ -119,6 +119,9 @@ func (r *AIMModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 // observe gathers current cluster state (read-only)
 func (r *AIMModelReconciler) observe(ctx context.Context, image *aimv1alpha1.AIMModel) (*shared.ImageObservation, error) {
 	logger := log.FromContext(ctx)
+
+	baseutils.Debug(logger, "Observing model")
+
 	return shared.ObserveImage(ctx, shared.ImageObservationOptions{
 		GetRuntimeConfig: func(ctx context.Context) (*shared.RuntimeConfigResolution, error) {
 			// Look for AIMRuntimeConfig named "default" in the same namespace
@@ -165,6 +168,9 @@ func (r *AIMModelReconciler) observe(ctx context.Context, image *aimv1alpha1.AIM
 // plan computes desired state (pure function)
 func (r *AIMModelReconciler) plan(ctx context.Context, image *aimv1alpha1.AIMModel, obs *shared.ImageObservation) ([]client.Object, error) {
 	logger := log.FromContext(ctx)
+
+	baseutils.Debug(logger, "Planning model resources")
+
 	// Build owner reference
 	ownerRef := []metav1.OwnerReference{
 		{
@@ -205,6 +211,9 @@ func (r *AIMModelReconciler) projectStatus(
 	errs controllerutils.ReconcileErrors,
 ) error {
 	logger := log.FromContext(ctx)
+
+	baseutils.Debug(logger, "Projecting model status")
+
 	// Extract metadata and error from the plan execution
 	var extractedMetadata *aimv1alpha1.ImageMetadata
 	var extractionErr error
@@ -288,9 +297,7 @@ func (r *AIMModelReconciler) projectStatus(
 
 	// Log and emit events for status transitions
 	if oldStatus != image.Status.Status {
-		logger.Info("Image status changed",
-			"name", image.Name,
-			"namespace", image.Namespace,
+		logger.Info(fmt.Sprintf("Model %s/%s status: %s → %s", image.Namespace, image.Name, oldStatus, image.Status.Status),
 			"previousStatus", oldStatus,
 			"newStatus", image.Status.Status)
 

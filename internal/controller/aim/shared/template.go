@@ -41,6 +41,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 
@@ -98,6 +99,7 @@ type TemplateObservationOptions[R client.Object] struct {
 
 // ObserveTemplate gathers runtime, discovery job, image, and runtime config information with common error handling.
 func ObserveTemplate[R client.Object](ctx context.Context, opts TemplateObservationOptions[R]) (*RuntimeObservation[R], error) {
+	logger := log.FromContext(ctx)
 	obs := &RuntimeObservation[R]{}
 
 	if opts.GetRuntime != nil {
@@ -106,7 +108,11 @@ func ObserveTemplate[R client.Object](ctx context.Context, opts TemplateObservat
 			if !apierrors.IsNotFound(err) {
 				return nil, err
 			}
+			baseutils.Debug(logger, "Runtime not found (will be created if needed)")
 		} else {
+			baseutils.Debug(logger,
+				fmt.Sprintf("Found existing runtime %s", runtime.GetName()),
+				"runtime", runtime.GetName())
 			obs.Runtime = runtime
 		}
 	}
@@ -118,9 +124,25 @@ func ObserveTemplate[R client.Object](ctx context.Context, opts TemplateObservat
 		}
 		obs.Job = job
 
-		// If we have a job and it's not complete, check if its pod is stuck in ImagePullBackOff
-		if job != nil && !IsJobComplete(job) && opts.GetJobNamespace != nil && opts.K8sClient != nil {
-			obs.JobPodImageError = checkJobPodImagePullStatus(ctx, opts.K8sClient, job, opts.GetJobNamespace)
+		if job != nil {
+			complete := IsJobComplete(job)
+			baseutils.Debug(logger,
+				fmt.Sprintf("Discovery job %s found (complete: %v)", job.Name, complete),
+				"job", job.Name,
+				"complete", complete)
+
+			// If we have a job and it's not complete, check if its pod is stuck in ImagePullBackOff
+			if !complete && opts.GetJobNamespace != nil && opts.K8sClient != nil {
+				obs.JobPodImageError = checkJobPodImagePullStatus(ctx, opts.K8sClient, job, opts.GetJobNamespace)
+				if obs.JobPodImageError != nil {
+					baseutils.Debug(logger,
+						fmt.Sprintf("Discovery job %s has image pull error: %s", job.Name, obs.JobPodImageError.Reason),
+						"job", job.Name,
+						"error", obs.JobPodImageError.Reason)
+				}
+			}
+		} else {
+			baseutils.Debug(logger, "No discovery job found")
 		}
 	}
 
@@ -132,8 +154,12 @@ func ObserveTemplate[R client.Object](ctx context.Context, opts TemplateObservat
 			if !errors.Is(err, ErrImageNotFound) {
 				return nil, err
 			}
+			baseutils.Debug(logger, "Model not found")
 			// obs.Image remains empty string
 		} else if image != nil {
+			baseutils.Debug(logger,
+				fmt.Sprintf("Model resolved: %s", image.Image),
+				"image", image.Image)
 			obs.Image = image.Image
 			obs.ImageResources = image.Resources.DeepCopy()
 		}
@@ -145,6 +171,13 @@ func ObserveTemplate[R client.Object](ctx context.Context, opts TemplateObservat
 			return nil, err
 		}
 		if resolution != nil {
+			configName := DefaultRuntimeConfigName
+			if resolution.ResolvedRef != nil {
+				configName = resolution.ResolvedRef.Name
+			}
+			baseutils.Debug(logger,
+				fmt.Sprintf("Runtime config resolved: %s", configName),
+				"runtimeConfig", configName)
 			obs.RuntimeConfig = resolution
 			if opts.OnRuntimeConfigResolved != nil {
 				opts.OnRuntimeConfigResolved(resolution)
@@ -449,15 +482,21 @@ func CheckInferenceServicePodImagePullStatus(ctx context.Context, k8sClient clie
 // PlanTemplateResources produces desired objects based on the observation and controller-provided builders.
 // It respects the global limit on concurrent discovery jobs (MaxConcurrentDiscoveryJobs).
 func PlanTemplateResources(ctx TemplatePlanContext, builders TemplatePlanBuilders) []client.Object {
+	logger := ctrl.LoggerFrom(ctx.Ctx)
+
 	if ctx.Observation != nil && ctx.Observation.GPUChecked && !ctx.Observation.GPUAvailable {
+		baseutils.Debug(logger, "Skipping plan: GPU not available")
 		return nil
 	}
 
 	if ctx.Observation == nil || ctx.Observation.Image == "" {
+		baseutils.Debug(logger, "Skipping plan: no observation or image")
 		return nil
 	}
 
-	logger := ctrl.LoggerFrom(ctx.Ctx)
+	baseutils.Debug(logger,
+		fmt.Sprintf("Planning template resources (status: %s)", ctx.Status),
+		"status", ctx.Status)
 
 	runtimeConfigSpec := aimv1alpha1.AIMRuntimeConfigSpec{}
 	if ctx.Observation.RuntimeConfig != nil {
@@ -484,6 +523,9 @@ func PlanTemplateResources(ctx TemplatePlanContext, builders TemplatePlanBuilder
 	// Only create the ServingRuntime after discovery has completed successfully
 	if ctx.Status == aimv1alpha1.AIMTemplateStatusReady && builders.BuildRuntime != nil {
 		if runtime := builders.BuildRuntime(input); runtime != nil {
+			baseutils.Debug(logger,
+				fmt.Sprintf("Planning to create/update runtime %s", runtime.GetName()),
+				"runtime", runtime.GetName())
 			desired = append(desired, runtime)
 		}
 	}
