@@ -1,17 +1,15 @@
 apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMService
 metadata:
-  name: service-override-service
+  name: service-override
 spec:
   model:
-    ref: service-override-image
-  templateRef: service-override-template
+    ref: service-override
+  templateRef: service-override
   resources:
     limits:
-      cpu: "9"
-      memory: 72Gi
-      amd.com/gpu: "2"
+      cpu: '1500m'
+      memory: 1536Mi
     requests:
-      cpu: "7"
-      memory: 56Gi
-      amd.com/gpu: "2"
+      cpu: '1200m'
+      memory: 1Gi

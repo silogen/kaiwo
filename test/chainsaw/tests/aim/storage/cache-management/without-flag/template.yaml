@@ -1,0 +1,6 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMServiceTemplate
+metadata:
+  name: cache-without-flag-template
+spec:
+  modelName: cache-without-flag-model

@@ -4,14 +4,11 @@ metadata:
   name: routing-disabled
 spec:
   description: Test that no HTTPRoute is created when routing.enabled=false
-  timeouts:
-    assert: 60s
   steps:
-  - name: Ensure template is available
+  - name: Create model and template
     try:
-    - assert:
-        timeout: 5s
-        file: ../../_shared/template-available.yaml
+    - apply:
+        file: ../../_shared/default-model-and-template.yaml
 
   - name: Create AIMService with routing disabled
     try:

@@ -6,7 +6,7 @@ metadata:
     team: Data-Team
 spec:
   model:
-    ref: default-testing-llama-3-8b
+    ref: default-testing
   runtimeConfigName: routing-template-config
   routing:
     enabled: true

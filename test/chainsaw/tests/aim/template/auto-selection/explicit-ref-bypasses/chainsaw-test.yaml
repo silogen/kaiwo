@@ -1,0 +1,59 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: explicit-template-ref-bypasses-auto-selection
+spec:
+  description: Test that explicit templateRef bypasses auto-selection logic
+
+  steps:
+  - name: Create model
+    try:
+    - apply:
+        file: model.yaml
+
+  - name: Create both templates
+    try:
+    - apply:
+        file: template-latency.yaml
+    - apply:
+        file: template-throughput.yaml
+
+  - name: Wait for both templates to become Available
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMServiceTemplate
+          metadata:
+            name: test-explicit-latency
+          status:
+            status: Ready
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMServiceTemplate
+          metadata:
+            name: test-explicit-throughput
+          status:
+            status: Ready
+
+  - name: Create service with explicit templateRef to throughput
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service used explicit template (not latency preference)
+    try:
+    - assert:
+        timeout: 10s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-explicit-ref-service
+          status:
+            resolvedTemplate:
+              name: test-explicit-throughput
+            (conditions[?type == 'Resolved']):
+            - status: "True"
+              reason: Resolved

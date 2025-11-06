@@ -1,0 +1,7 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMServiceTemplate
+metadata:
+  name: shared-cache-template
+spec:
+  modelName: shared-cache-model
+  runtimeConfigName: shared-cache-runtime

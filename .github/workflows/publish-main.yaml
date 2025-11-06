@@ -1,9 +1,8 @@
 name: publish-main
 
 on:
-  push:
-    branches:
-    - main
+  pull_request:
+    types: [opened, synchronize]
     paths:
     - 'apis/**'
     - 'internal/**'
@@ -62,9 +61,22 @@ jobs:
         docker tag ${IMAGE_REPO}:${IMAGE_TAG} ${IMAGE_REPO}:main
         docker push ${IMAGE_REPO}:main
 
+    - name: Generate install.yaml
+      run: |
+        make build-installer TAG=${IMAGE_TAG}
+        cp dist/install.yaml install.yaml
+
     - name: Package Helm chart
       run: |
         make helm-release TAG=${IMAGE_TAG} CHART_VERSION=${CHART_VERSION}
+
+    - name: Build CRDs
+      shell: bash
+      run: |
+        set -euo pipefail
+        LOCAL_DIR="chart/crds"
+        mkdir -p "${LOCAL_DIR}"
+        kustomize build config/crd > chart/crds/crds.yaml
 
     - name: Log in to GHCR (Helm/OCI)
       run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u $GITHUB_ACTOR --password-stdin
@@ -73,5 +85,54 @@ jobs:
       run: |
         make helm-push-oci TAG=${IMAGE_TAG} CHART_VERSION=${CHART_VERSION}
 
+    - name: Commit local chart files via Contents API (Verified)
+      shell: bash
+      env:
+        GH_REPO: ${{ github.repository }}
+        GH_BRANCH: ${{ github.ref_name }}
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        CHART_NAME: ${{ env.CHART_NAME }}
+        CHART_VERSION: ${{ env.CHART_VERSION }}
+      run: |
+        set -euo pipefail
+
+        commit_file () {
+          local SRC="$1" DST="$2" MSG="$3"
+
+          # get current sha if file exists (needed for updates)
+          SHA="$(curl -fsS -H "Authorization: token ${GH_TOKEN}" \
+                https://api.github.com/repos/${GH_REPO}/contents/${DST}?ref=${GH_BRANCH} \
+                | jq -r '.sha // empty' || true)"
+
+          CONTENT_B64="$(base64 -w0 < "${SRC}")"
+
+          curl -fsS -X PUT \
+            -H "Authorization: token ${GH_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "https://api.github.com/repos/${GH_REPO}/contents/${DST}" \
+            -d @- <<EOF
+          {
+            "message": "${MSG}",
+            "content": "${CONTENT_B64}",
+            "branch": "${GH_BRANCH}",
+            "committer": {
+              "name": "github-actions[bot]",
+              "email": "41898282+github-actions[bot]@users.noreply.github.com"
+            },
+            "author": {
+              "name": "github-actions[bot]",
+              "email": "41898282+github-actions[bot]@users.noreply.github.com"
+            }$( [ -n "${SHA}" ] && printf ', "sha": "%s"' "${SHA}" )
+          }
+        EOF
+        }
+
+        # files to publish
+        CHART_PATH="chart/Chart.yaml"
+        CRD_PATH=chart/crds/crds.yaml
+
+        MSG="Update local Helm chart and CRDs to ${CHART_VERSION}"
+        commit_file "${CHART_PATH}"    "${CHART_PATH}"    "${MSG}"
+        commit_file "${CRD_PATH}"    "${CRD_PATH}"    "${MSG}"
 
 

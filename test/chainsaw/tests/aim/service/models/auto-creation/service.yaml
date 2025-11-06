@@ -4,5 +4,5 @@ metadata:
   name: auto-creation-service
 spec:
   model:
-    image: ghcr.io/amd/llama-3-8b-instruct:latest
+    image: ghcr.io/silogen/aim-dummy:0.1.3
   runtimeConfigName: auto-creation-config

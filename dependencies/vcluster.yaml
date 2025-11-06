@@ -6,3 +6,14 @@ sync:
         all: true
     storageClasses:
       enabled: true
+
+# Force vcluster's StatefulSet to use fast RWO storage instead of slow NFS
+# This uses SQLite but on openebs-hostpath (much faster than NFS)
+controlPlane:
+  statefulSet:
+    persistence:
+      volumeClaim:
+        enabled: "true"
+        accessModes: ["ReadWriteOnce"]
+        storageClass: "openebs-hostpath"
+        size: 5Gi

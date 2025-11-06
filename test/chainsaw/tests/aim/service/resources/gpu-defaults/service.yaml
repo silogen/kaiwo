@@ -4,5 +4,4 @@ metadata:
   name: gpu-defaults-service
 spec:
   model:
-    ref: gpu-defaults-image
-  templateRef: gpu-defaults-template
+    ref: gpu-defaults

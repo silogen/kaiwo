@@ -1,0 +1,7 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-ambiguous-service
+spec:
+  model:
+    ref: test-ambiguous

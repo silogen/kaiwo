@@ -1,0 +1,59 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: default-template-overrides
+spec:
+  description: AIMService without templateRef but with overrides clones the default template
+  timeouts:
+    assert: 90s
+  steps:
+  - name: Create resources
+    try:
+    - apply:
+        file: model.yaml
+    - apply:
+        file: template.yaml
+
+  - name: Ensure that the base template becomes ready
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMServiceTemplate
+          status:
+            status: Ready
+
+  - name: Create AIMService with overrides
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify derived template is created with correct overrides
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMServiceTemplate
+          metadata:
+            labels:
+              aim.silogen.ai/derived-template: "true"
+              aim.silogen.ai/template.metric: "throughput"
+              aim.silogen.ai/template.precision: "fp8"
+          spec:
+            metric: throughput
+            precision: fp8
+          status:
+            status: Ready
+
+  - name: Verify service references the derived template (not the base)
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: default-template-overrides
+          status:
+            (resolvedTemplate != null): true
+            (resolvedTemplate.name != 'default-testing'): true
+            status: Running

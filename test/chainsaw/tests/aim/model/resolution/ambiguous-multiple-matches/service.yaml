@@ -1,0 +1,8 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: ambiguous-service
+spec:
+  model:
+    image: ghcr.io/silogen/aim-dummy:0.1.3
+  runtimeConfigName: ambiguous-config

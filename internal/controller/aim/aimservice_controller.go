@@ -139,6 +139,9 @@ func (r *AIMServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1.AIMService) (*shared.ServiceObservation, error) {
 	logger := log.FromContext(ctx)
+
+	baseutils.Debug(logger, "Observing service")
+
 	resolution, selectionStatus, err := shared.ResolveTemplateNameForService(ctx, r.Client, service)
 	if err != nil {
 		return nil, err
@@ -164,6 +167,7 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 		ImageReadyReason:          selectionStatus.ImageReadyReason,
 		ImageReadyMessage:         selectionStatus.ImageReadyMessage,
 		ModelResolutionErr:        selectionStatus.ModelResolutionErr,
+		ResolvedModel:             selectionStatus.ResolvedModel,
 	}
 
 	// Observe template based on whether it's derived or not
@@ -283,8 +287,8 @@ func (r *AIMServiceReconciler) planDerivedTemplate(logger logr.Logger, service *
 		}
 		// Get resolved model name from observation
 		resolvedModelName := ""
-		if obs.ResolvedImage != nil {
-			resolvedModelName = obs.ResolvedImage.Name
+		if obs.ResolvedModel != nil {
+			resolvedModelName = obs.ResolvedModel.Name
 		}
 		return shared.BuildDerivedTemplate(service, obs.TemplateName, resolvedModelName, baseSpec)
 	}
@@ -299,6 +303,35 @@ func (r *AIMServiceReconciler) planTemplateCache(ctx context.Context, logger log
 		baseutils.Debug(logger, "Service requests caching but no template cache exists, creating one",
 			"templateName", obs.TemplateName, "scope", obs.Scope)
 
+		// Build labels
+		labels := map[string]string{
+			"app.kubernetes.io/managed-by": shared.LabelValueManagedBy,
+			shared.LabelKeyTemplateCache:   obs.TemplateName,
+			shared.LabelKeyCacheType:       shared.LabelValueCacheTypeTemplateCache,
+		}
+
+		// Add hierarchical labels for model properties if available
+		if obs.TemplateSpecCommon.ModelName != "" {
+			labels[shared.LabelKeyModelID] = shared.SanitizeLabelValue(obs.TemplateSpecCommon.ModelName)
+			labels[shared.LabelKeyModelName] = shared.SanitizeLabelValue(obs.TemplateSpecCommon.ModelName)
+		}
+
+		// Add hierarchical labels for template properties
+		if obs.TemplateSpecCommon.Metric != nil {
+			labels[shared.LabelKeyMetric] = shared.SanitizeLabelValue(string(*obs.TemplateSpecCommon.Metric))
+		}
+		if obs.TemplateSpecCommon.Precision != nil {
+			labels[shared.LabelKeyPrecision] = shared.SanitizeLabelValue(string(*obs.TemplateSpecCommon.Precision))
+		}
+		if obs.TemplateSpecCommon.GpuSelector != nil {
+			if obs.TemplateSpecCommon.GpuSelector.Model != "" {
+				labels[shared.LabelKeyTemplateGPUModel] = shared.SanitizeLabelValue(obs.TemplateSpecCommon.GpuSelector.Model)
+			}
+			if obs.TemplateSpecCommon.GpuSelector.Count > 0 {
+				labels[shared.LabelKeyTemplateGPUCount] = shared.SanitizeLabelValue(fmt.Sprintf("%d", obs.TemplateSpecCommon.GpuSelector.Count))
+			}
+		}
+
 		cache := &aimv1alpha1.AIMTemplateCache{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: "aim.silogen.ai/v1alpha1",
@@ -307,6 +340,7 @@ func (r *AIMServiceReconciler) planTemplateCache(ctx context.Context, logger log
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      obs.TemplateName,
 				Namespace: service.Namespace,
+				Labels:    labels,
 			},
 			Spec: aimv1alpha1.AIMTemplateCacheSpec{
 				TemplateRef:      obs.TemplateName,
@@ -482,6 +516,9 @@ func (r *AIMServiceReconciler) planInferenceServiceAndRoute(logger logr.Logger, 
 
 func (r *AIMServiceReconciler) plan(ctx context.Context, service *aimv1alpha1.AIMService, obs *shared.ServiceObservation) []client.Object {
 	logger := log.FromContext(ctx)
+
+	baseutils.Debug(logger, "Planning service resources")
+
 	var desired []client.Object
 
 	if obs == nil {
@@ -538,6 +575,37 @@ func buildServicePVC(service *aimv1alpha1.AIMService, templateState aimstate.Tem
 		sc = &storageClassName
 	}
 
+	// Build labels - include hierarchical properties from template
+	labels := map[string]string{
+		"app.kubernetes.io/managed-by": "aim-service-controller",
+		"app.kubernetes.io/component":  "model-storage",
+		shared.LabelKeyServiceName:     shared.SanitizeLabelValue(service.Name),
+		shared.LabelKeyCacheType:       shared.LabelValueCacheTypeTempService,
+		shared.LabelKeyTemplate:        templateState.Name,
+		shared.LabelKeyModelID:         shared.SanitizeLabelValue(templateState.SpecCommon.ModelName),
+	}
+
+	// Add hierarchical labels for model properties
+	if templateState.SpecCommon.ModelName != "" {
+		labels[shared.LabelKeyModelName] = shared.SanitizeLabelValue(templateState.SpecCommon.ModelName)
+	}
+
+	// Add hierarchical labels for template properties
+	if templateState.SpecCommon.Metric != nil {
+		labels[shared.LabelKeyMetric] = shared.SanitizeLabelValue(string(*templateState.SpecCommon.Metric))
+	}
+	if templateState.SpecCommon.Precision != nil {
+		labels[shared.LabelKeyPrecision] = shared.SanitizeLabelValue(string(*templateState.SpecCommon.Precision))
+	}
+	if templateState.SpecCommon.GpuSelector != nil {
+		if templateState.SpecCommon.GpuSelector.Model != "" {
+			labels[shared.LabelKeyTemplateGPUModel] = shared.SanitizeLabelValue(templateState.SpecCommon.GpuSelector.Model)
+		}
+		if templateState.SpecCommon.GpuSelector.Count > 0 {
+			labels[shared.LabelKeyTemplateGPUCount] = shared.SanitizeLabelValue(fmt.Sprintf("%d", templateState.SpecCommon.GpuSelector.Count))
+		}
+	}
+
 	return &v1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
@@ -546,14 +614,7 @@ func buildServicePVC(service *aimv1alpha1.AIMService, templateState aimstate.Tem
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pvcName,
 			Namespace: service.Namespace,
-			Labels: map[string]string{
-				"app.kubernetes.io/managed-by": "aim-service-controller",
-				"app.kubernetes.io/component":  "model-storage",
-				shared.LabelKeyServiceName:     shared.SanitizeLabelValue(service.Name),
-				shared.LabelKeyCacheType:       shared.LabelValueCacheTypeTempService,
-				shared.LabelKeyTemplate:        templateState.Name,
-				shared.LabelKeyModelID:         shared.SanitizeLabelValue(templateState.SpecCommon.ModelName),
-			},
+			Labels:    labels,
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion:         service.APIVersion,
@@ -654,6 +715,10 @@ func (r *AIMServiceReconciler) projectStatus(
 	obs *shared.ServiceObservation,
 	errs controllerutils.ReconcileErrors,
 ) error {
+	logger := log.FromContext(ctx)
+
+	baseutils.Debug(logger, "Projecting service status")
+
 	// Fetch InferenceService and HTTPRoute for status evaluation
 	var inferenceService *servingv1beta1.InferenceService
 	{
@@ -684,7 +749,7 @@ func (r *AIMServiceReconciler) projectStatus(
 	}
 
 	// Delegate status projection to shared function
-	shared.ProjectServiceStatus(service, obs, inferenceService, httpRoute, errs)
+	shared.ProjectServiceStatus(ctx, service, obs, inferenceService, httpRoute, errs)
 	return nil
 }
 
@@ -753,8 +818,8 @@ func (r *AIMServiceReconciler) findServicesByTemplate(
 
 // getServiceModelName extracts the model name from a service
 func (r *AIMServiceReconciler) getServiceModelName(svc *aimv1alpha1.AIMService) string {
-	if svc.Status.ResolvedImage != nil {
-		return svc.Status.ResolvedImage.Name
+	if svc.Status.ResolvedModel != nil {
+		return svc.Status.ResolvedModel.Name
 	}
 	if svc.Spec.Model.Ref != nil {
 		return strings.TrimSpace(*svc.Spec.Model.Ref)
@@ -812,12 +877,6 @@ func (r *AIMServiceReconciler) templateCacheHandlerFunc() handler.MapFunc {
 func (r *AIMServiceReconciler) findServicesByModel(ctx context.Context, model *aimv1alpha1.AIMModel) []aimv1alpha1.AIMService {
 	logger := ctrl.LoggerFrom(ctx)
 
-	// Only trigger reconciliation for auto-created models
-	if model.Labels[shared.LabelAutoCreated] != "true" {
-		logger.V(1).Info("Skipping model - not auto-created", "model", model.Name)
-		return nil
-	}
-
 	// Find services using this model
 	var services aimv1alpha1.AIMServiceList
 	if err := r.List(ctx, &services, client.InNamespace(model.Namespace)); err != nil {
@@ -844,7 +903,7 @@ func (r *AIMServiceReconciler) serviceUsesModel(svc *aimv1alpha1.AIMService, mod
 		return true
 	}
 	// 2. Image URL that resolves to this model (check status)
-	if svc.Status.ResolvedImage != nil && svc.Status.ResolvedImage.Name == model.Name {
+	if svc.Status.ResolvedModel != nil && svc.Status.ResolvedModel.Name == model.Name {
 		return true
 	}
 	// 3. Image URL in spec (need to check if it would resolve to this model)
@@ -893,13 +952,7 @@ func (r *AIMServiceReconciler) modelPredicate() predicate.Funcs {
 			}
 			// Trigger if status changed
 			statusChanged := oldModel.Status.Status != newModel.Status.Status
-			if statusChanged {
-				ctrl.Log.Info("AIMModel status changed - triggering reconciliation",
-					"model", newModel.Name,
-					"namespace", newModel.Namespace,
-					"oldStatus", oldModel.Status.Status,
-					"newStatus", newModel.Status.Status)
-			} else {
+			if !statusChanged {
 				ctrl.Log.V(1).Info("AIMModel update (no status change)",
 					"model", newModel.Name,
 					"status", newModel.Status.Status)
@@ -946,7 +999,7 @@ func (r *AIMServiceReconciler) serviceUsesClusterModel(svc *aimv1alpha1.AIMServi
 		return true
 	}
 	// 2. Image URL that resolves to this cluster model (check status)
-	if svc.Status.ResolvedImage != nil && svc.Status.ResolvedImage.Name == clusterModel.Name {
+	if svc.Status.ResolvedModel != nil && svc.Status.ResolvedModel.Name == clusterModel.Name {
 		return true
 	}
 	// 3. Image URL in spec (need to check if it would resolve to this cluster model)
@@ -995,12 +1048,7 @@ func (r *AIMServiceReconciler) clusterModelPredicate() predicate.Funcs {
 			}
 			// Trigger if status changed
 			statusChanged := oldModel.Status.Status != newModel.Status.Status
-			if statusChanged {
-				ctrl.Log.Info("AIMClusterModel status changed - triggering reconciliation",
-					"model", newModel.Name,
-					"oldStatus", oldModel.Status.Status,
-					"newStatus", newModel.Status.Status)
-			} else {
+			if !statusChanged {
 				ctrl.Log.V(1).Info("AIMClusterModel update (no status change)",
 					"model", newModel.Name,
 					"status", newModel.Status.Status)

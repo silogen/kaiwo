@@ -43,6 +43,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
@@ -127,23 +128,38 @@ func cmpModelCacheStatus(a aimv1alpha1.AIMModelCacheStatusEnum, b aimv1alpha1.AI
 }
 
 func (r *AIMTemplateCacheReconciler) observe(ctx context.Context, tc *aimv1alpha1.AIMTemplateCache) (*templateCacheObservation, error) {
+	logger := log.FromContext(ctx)
 	var obs templateCacheObservation
 	obs.CacheStatus = map[string]aimv1alpha1.AIMModelCacheStatusEnum{}
+
+	baseutils.Debug(logger, "Observing TemplateCache")
 
 	// Resolve the template reference to get model sources
 	modelSources, err := r.getModelSourcesFromTemplate(ctx, tc)
 	if err != nil {
 		// Template not found is a valid state - reflect it in the observation instead of returning an error
+		baseutils.Debug(logger,
+			fmt.Sprintf("Template not found or error: %s", err.Error()),
+			"error", err.Error())
 		obs.TemplateNotFound = true
 		obs.TemplateError = err.Error()
 		return &obs, nil
 	}
+
+	baseutils.Debug(logger,
+		fmt.Sprintf("Found %d model sources from template %s", len(modelSources), tc.Spec.TemplateRef),
+		"modelCount", len(modelSources),
+		"template", tc.Spec.TemplateRef)
 
 	// Fetch available caches in the namespace
 	caches := aimv1alpha1.AIMModelCacheList{}
 	if err := r.List(ctx, &caches, client.InNamespace(tc.Namespace)); err != nil {
 		return nil, err
 	}
+
+	baseutils.Debug(logger,
+		fmt.Sprintf("Found %d existing ModelCaches", len(caches.Items)),
+		"cacheCount", len(caches.Items))
 
 	// Loop through model sources from the template and check with what's available in our namespace
 	for _, model := range modelSources {
@@ -205,17 +221,53 @@ func BuildMissingModelCaches(tc *aimv1alpha1.AIMTemplateCache, obs *templateCach
 		nameWithoutDots := strings.ReplaceAll(cache.Name, ".", "-")
 		sanitizedName := baseutils.MakeRFC1123Compliant(nameWithoutDots)
 
+		// Build labels - inherit hierarchical labels from template cache
+		labels := map[string]string{
+			"app.kubernetes.io/managed-by": shared.LabelValueManagedBy,
+			"template-created":             "true", // Backward compatibility
+			shared.LabelKeyTemplateCache:   tc.Name,
+			shared.LabelKeySourceModel:     shared.SanitizeLabelValue(cache.Name),
+			shared.LabelKeyModelCache:      sanitizedName,
+		}
+
+		// Inherit hierarchical labels from template cache
+		if tc.Labels != nil {
+			// Model properties
+			if modelID, ok := tc.Labels[shared.LabelKeyModelID]; ok {
+				labels[shared.LabelKeyModelID] = modelID
+			}
+			if modelName, ok := tc.Labels[shared.LabelKeyModelName]; ok {
+				labels[shared.LabelKeyModelName] = modelName
+			}
+			if modelImage, ok := tc.Labels[shared.LabelKeyModelImage]; ok {
+				labels[shared.LabelKeyModelImage] = modelImage
+			}
+			if canonicalName, ok := tc.Labels[shared.LabelKeyModelCanonicalName]; ok {
+				labels[shared.LabelKeyModelCanonicalName] = canonicalName
+			}
+
+			// Template properties
+			if metric, ok := tc.Labels[shared.LabelKeyMetric]; ok {
+				labels[shared.LabelKeyMetric] = metric
+			}
+			if precision, ok := tc.Labels[shared.LabelKeyPrecision]; ok {
+				labels[shared.LabelKeyPrecision] = precision
+			}
+			if gpuModel, ok := tc.Labels[shared.LabelKeyTemplateGPUModel]; ok {
+				labels[shared.LabelKeyTemplateGPUModel] = gpuModel
+			}
+			if gpuCount, ok := tc.Labels[shared.LabelKeyTemplateGPUCount]; ok {
+				labels[shared.LabelKeyTemplateGPUCount] = gpuCount
+			}
+		}
+
 		caches = append(caches,
 			&aimv1alpha1.AIMModelCache{
 				TypeMeta: metav1.TypeMeta{APIVersion: "aimv1alpha1", Kind: "AIMModelCache"},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      sanitizedName,
 					Namespace: tc.Namespace,
-					Labels: map[string]string{
-						"template-created":           "true", // Backward compatibility
-						shared.LabelKeyTemplateCache: tc.Name,
-						shared.LabelKeySourceModel:   shared.SanitizeLabelValue(cache.Name),
-					},
+					Labels:    labels,
 				},
 				Spec: aimv1alpha1.AIMModelCacheSpec{
 					StorageClassName:  tc.Spec.StorageClassName,
@@ -231,16 +283,31 @@ func BuildMissingModelCaches(tc *aimv1alpha1.AIMTemplateCache, obs *templateCach
 	return caches
 }
 
-func (r *AIMTemplateCacheReconciler) plan(_ context.Context, tc *aimv1alpha1.AIMTemplateCache, obs *templateCacheObservation) (desired []client.Object, err error) {
-	for _, mc := range BuildMissingModelCaches(tc, obs) {
-		desired = append(desired, mc)
+func (r *AIMTemplateCacheReconciler) plan(ctx context.Context, tc *aimv1alpha1.AIMTemplateCache, obs *templateCacheObservation) (desired []client.Object, err error) {
+	logger := log.FromContext(ctx)
+
+	baseutils.Debug(logger, "Planning TemplateCache resources")
+
+	missingCaches := BuildMissingModelCaches(tc, obs)
+	if len(missingCaches) > 0 {
+		baseutils.Debug(logger,
+			fmt.Sprintf("Creating %d missing ModelCaches", len(missingCaches)),
+			"missingCount", len(missingCaches))
+		for _, mc := range missingCaches {
+			desired = append(desired, mc)
+		}
+	} else {
+		baseutils.Debug(logger, "No missing ModelCaches")
 	}
 
 	return desired, err
 }
 
-func (r *AIMTemplateCacheReconciler) projectStatus(_ context.Context, tc *aimv1alpha1.AIMTemplateCache, obs *templateCacheObservation, errs controllerutils.ReconcileErrors) (err error) {
+func (r *AIMTemplateCacheReconciler) projectStatus(ctx context.Context, tc *aimv1alpha1.AIMTemplateCache, obs *templateCacheObservation, errs controllerutils.ReconcileErrors) (err error) {
+	logger := log.FromContext(ctx)
 	var conditions []metav1.Condition
+
+	baseutils.Debug(logger, "Projecting TemplateCache status")
 
 	// Report any outstanding errors to report from previous controller actions
 	if errs.HasError() {
@@ -296,6 +363,7 @@ func (r *AIMTemplateCacheReconciler) projectStatus(_ context.Context, tc *aimv1a
 	}
 
 	statusValues := slices.Collect(maps.Values(obs.CacheStatus))
+	oldStatus := tc.Status.Status
 	if len(statusValues) > 0 {
 		worstCacheStatus := slices.MaxFunc(statusValues, cmpModelCacheStatus)
 		tc.Status.Status = aimv1alpha1.AIMTemplateCacheStatusEnum(worstCacheStatus)
@@ -306,6 +374,14 @@ func (r *AIMTemplateCacheReconciler) projectStatus(_ context.Context, tc *aimv1a
 
 	if obs.AllCachesAvailable {
 		tc.Status.Status = aimv1alpha1.AIMTemplateCacheStatusAvailable
+	}
+
+	// Log only when status changes
+	if oldStatus != tc.Status.Status {
+		baseutils.Debug(logger,
+			fmt.Sprintf("TemplateCache status: %s → %s", oldStatus, tc.Status.Status),
+			"oldStatus", oldStatus,
+			"newStatus", tc.Status.Status)
 	}
 
 	return err

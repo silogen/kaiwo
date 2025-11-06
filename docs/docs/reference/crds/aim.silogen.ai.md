@@ -860,6 +860,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `ref` _string_ | Ref references an existing AIMModel or AIMClusterModel by metadata.name.<br />The controller looks for a namespace-scoped AIMModel first, then falls back to cluster-scoped AIMClusterModel.<br />Example: `meta-llama-3-8b`. |  |  |
 | `image` _string_ | Image specifies a container image URI directly.<br />The controller searches for an existing model with this image, or creates one if none exists.<br />The scope of the created model is controlled by the runtime config's ModelCreationScope field.<br />Example: `ghcr.io/silogen/llama-3-8b:v1.2.0`. |  |  |
+| `scope` _[ModelScope](#modelscope)_ | Scope controls which types of models and templates are considered when resolving model references.<br />- Auto (default): searches namespace-scoped first, then falls back to cluster-scoped. Auto-creates namespace-scoped models.<br />- Namespace: only searches namespace-scoped resources. Auto-creates namespace-scoped models.<br />- Cluster: only searches cluster-scoped resources. Never auto-creates models. | Auto | Enum: [Auto Namespace Cluster] <br /> |
 
 
 #### AIMServiceOverrides
@@ -985,7 +986,7 @@ _Appears in:_
 | `observedGeneration` _integer_ | ObservedGeneration is the most recent generation observed by the controller. |  |  |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest observations of template state. |  |  |
 | `resolvedRuntimeConfig` _[AIMResolvedRuntimeConfig](#aimresolvedruntimeconfig)_ | ResolvedRuntimeConfig captures metadata about the runtime config that was resolved. |  |  |
-| `resolvedImage` _[AIMResolvedReference](#aimresolvedreference)_ | ResolvedImage captures metadata about the image that was resolved. |  |  |
+| `resolvedModel` _[AIMResolvedReference](#aimresolvedreference)_ | ResolvedModel captures metadata about the model that was resolved. |  |  |
 | `status` _[AIMServiceStatusEnum](#aimservicestatusenum)_ | Status represents the current high‑level status of the service lifecycle.<br />Values: `Pending`, `Starting`, `Running`, `Failed`, `Degraded`. | Pending | Enum: [Pending Starting Running Failed Degraded] <br /> |
 | `routing` _[AIMServiceRoutingStatus](#aimserviceroutingstatus)_ | Routing surfaces information about the configured HTTP routing, when enabled. |  |  |
 | `resolvedTemplate` _[AIMServiceResolvedTemplate](#aimserviceresolvedtemplate)_ | ResolvedTemplate captures metadata about the template that satisfied the reference. |  |  |
@@ -1312,6 +1313,25 @@ _Appears in:_
 | `descriptionFull` _string_ | DescriptionFull is the full description.<br />Extracted from: org.amd.silogen.description.full |  |  |
 | `releaseNotes` _string_ | ReleaseNotes contains release notes for this version.<br />Extracted from: org.amd.silogen.release.notes |  |  |
 | `recommendedDeployments` _[RecommendedDeployment](#recommendeddeployment) array_ | RecommendedDeployments contains recommended deployment configurations.<br />Extracted from: org.amd.silogen.model.recommendedDeployments (parsed from JSON array) |  |  |
+
+
+#### ModelScope
+
+_Underlying type:_ _string_
+
+ModelScope defines the search scope for model/template selection.
+
+_Validation:_
+- Enum: [Auto Namespace Cluster]
+
+_Appears in:_
+- [AIMServiceModel](#aimservicemodel)
+
+| Field | Description |
+| --- | --- |
+| `Auto` | ModelScopeAuto searches both namespace and cluster scopes (default).<br />Namespace-scoped resources are checked first, then cluster-scoped resources.<br /> |
+| `Namespace` | ModelScopeNamespace limits search to namespace-scoped resources only.<br />Only AIMModel and AIMServiceTemplate resources in the same namespace are considered.<br /> |
+| `Cluster` | ModelScopeCluster limits search to cluster-scoped resources only.<br />Only AIMClusterModel and AIMClusterServiceTemplate resources are considered.<br />When this scope is set, the controller will never auto-create models.<br /> |
 
 
 #### OCIMetadata
