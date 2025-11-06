@@ -262,6 +262,18 @@ func newMetadataFormatError(reason, message string) *MetadataFormatError {
 	}
 }
 
+// getAMDLabel retrieves a label value, checking both new and legacy prefixes.
+// It first checks for com.amd.aim.<suffix> (new prefix), then falls back to
+// org.amd.silogen.<suffix> (legacy prefix). Returns the first non-empty value found.
+func getAMDLabel(labels map[string]string, suffix string) string {
+	// Try new prefix first
+	if val := labels["com.amd.aim."+suffix]; val != "" {
+		return val
+	}
+	// Fall back to legacy prefix
+	return labels["org.amd.silogen."+suffix]
+}
+
 // parseImageLabels extracts structured metadata from OCI and AMD Silogen image labels.
 func parseImageLabels(labels map[string]string) (*aimv1alpha1.ImageMetadata, error) {
 	// Allow images with no labels - metadata will be minimal but valid
@@ -284,26 +296,26 @@ func parseImageLabels(labels map[string]string) (*aimv1alpha1.ImageMetadata, err
 	metadata.OCI.Revision = labels["org.opencontainers.image.revision"]
 	metadata.OCI.Version = labels["org.opencontainers.image.version"]
 
-	// Parse AMD Silogen model labels
-	metadata.Model.CanonicalName = labels["org.amd.silogen.model.canonicalName"]
-	metadata.Model.Source = labels["org.amd.silogen.model.source"]
-	metadata.Model.Title = labels["org.amd.silogen.title"]
-	metadata.Model.DescriptionFull = labels["org.amd.silogen.description.full"]
-	metadata.Model.ReleaseNotes = labels["org.amd.silogen.release.notes"]
+	// Parse AMD Silogen model labels (supports both com.amd.aim and org.amd.silogen prefixes)
+	metadata.Model.CanonicalName = getAMDLabel(labels, "model.canonicalName")
+	metadata.Model.Source = getAMDLabel(labels, "model.source")
+	metadata.Model.Title = getAMDLabel(labels, "title")
+	metadata.Model.DescriptionFull = getAMDLabel(labels, "description.full")
+	metadata.Model.ReleaseNotes = getAMDLabel(labels, "release.notes")
 
 	// Parse comma-separated fields
-	if tags := labels["org.amd.silogen.model.tags"]; tags != "" {
+	if tags := getAMDLabel(labels, "model.tags"); tags != "" {
 		metadata.Model.Tags = parseCommaSeparated(tags)
 	}
-	if versions := labels["org.amd.silogen.model.versions"]; versions != "" {
+	if versions := getAMDLabel(labels, "model.versions"); versions != "" {
 		metadata.Model.Versions = parseCommaSeparated(versions)
 	}
-	if variants := labels["org.amd.silogen.model.variants"]; variants != "" {
+	if variants := getAMDLabel(labels, "model.variants"); variants != "" {
 		metadata.Model.Variants = parseCommaSeparated(variants)
 	}
 
 	// Parse boolean HF token required
-	if hfTokenStr := labels["org.amd.silogen.hfToken.required"]; hfTokenStr != "" {
+	if hfTokenStr := getAMDLabel(labels, "hfToken.required"); hfTokenStr != "" {
 		hfTokenRequired, err := strconv.ParseBool(hfTokenStr)
 		if err == nil {
 			metadata.Model.HFTokenRequired = hfTokenRequired
@@ -311,7 +323,7 @@ func parseImageLabels(labels map[string]string) (*aimv1alpha1.ImageMetadata, err
 	}
 
 	// Parse recommended deployments JSON array
-	if deploymentsJSON := labels["org.amd.silogen.model.recommendedDeployments"]; deploymentsJSON != "" {
+	if deploymentsJSON := getAMDLabel(labels, "model.recommendedDeployments"); deploymentsJSON != "" {
 		deployments, err := parseRecommendedDeployments(deploymentsJSON)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse recommended deployments: %w", err)
