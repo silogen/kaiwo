@@ -207,7 +207,7 @@ jobs:
 
       - name: Install dependencies
         env:
-          KUBECONFIG: vcluster-kubeconfig
+          KUBECONFIG: ${{ github.workspace }}/vcluster-kubeconfig
           TMPDIR: ${{ github.workspace }}/tmp
         run: |
           # Use workspace for temp files to avoid /tmp cleanup issues on self-hosted runners
@@ -216,12 +216,12 @@ jobs:
 
       - name: Install CRDs and Deploy (${{ matrix.installer }})
         env:
-          KUBECONFIG: vcluster-kubeconfig
+          KUBECONFIG: ${{ github.workspace }}/vcluster-kubeconfig
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
         run: bash ./kaiwo.sh --install-crds --deploy-via=${{ matrix.installer }} up
 
       - name: Wait for rollout
-        env: { KUBECONFIG: vcluster-kubeconfig }
+        env: { KUBECONFIG: ${{ github.workspace }}/vcluster-kubeconfig }
         run: |
           kubectl -n kaiwo-system rollout status deployment/kaiwo-controller-manager --timeout=300s
           kubectl -n kube-system rollout status deployment/kaiwo-scheduler --timeout=300s
@@ -229,7 +229,7 @@ jobs:
 
       - name: Debug rollout failure
         if: failure()
-        env: { KUBECONFIG: vcluster-kubeconfig }
+        env: { KUBECONFIG: ${{ github.workspace }}/vcluster-kubeconfig }
         run: |
           echo "=== Deployment status ==="
           kubectl -n kaiwo-system get deployments -o wide || true
@@ -258,7 +258,7 @@ jobs:
           kubectl -n kube-system get events --sort-by='.lastTimestamp' || true
 
       - name: Run E2E tests
-        env: { KUBECONFIG: vcluster-kubeconfig }
+        env: { KUBECONFIG: ${{ github.workspace }}/vcluster-kubeconfig }
         run: |
           cd test
           make test-kind CHAINSAW_CONFIG=chainsaw/configs/ci.yaml
