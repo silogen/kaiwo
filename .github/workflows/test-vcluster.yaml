@@ -214,11 +214,16 @@ jobs:
           mkdir -p "$TMPDIR"
           bash ./dependencies/deploy.sh vcluster up
 
-      - name: Install CRDs and Deploy (${{ matrix.installer }})
+      - name: Install CRDs
+        env:
+          KUBECONFIG: ${{ github.workspace }}/vcluster-kubeconfig
+        run: kubectl apply -f crd/crds.yaml
+
+      - name: Deploy operator (${{ matrix.installer }})
         env:
           KUBECONFIG: ${{ github.workspace }}/vcluster-kubeconfig
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
-        run: bash ./kaiwo.sh --install-crds --deploy-via=${{ matrix.installer }} up
+        run: bash ./kaiwo.sh --deploy-via=${{ matrix.installer }} up
 
       - name: Wait for rollout
         env:
