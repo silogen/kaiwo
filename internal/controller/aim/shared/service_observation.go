@@ -40,6 +40,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
 const templateNameMaxLength = 63
@@ -132,6 +133,7 @@ func ResolveTemplateNameForService(
 	k8sClient client.Client,
 	service *aimv1alpha1.AIMService,
 ) (TemplateResolution, TemplateSelectionStatus, error) {
+	logger := log.FromContext(ctx)
 	var res TemplateResolution
 	status := TemplateSelectionStatus{ImageReady: true}
 
@@ -143,15 +145,27 @@ func ResolveTemplateNameForService(
 			suffix := OverridesSuffix(service.Spec.Overrides)
 			if suffix != "" {
 				res.FinalName = DerivedTemplateName(baseName, suffix)
+				baseutils.Debug(logger,
+					fmt.Sprintf("Template resolution: explicit template %s with overrides (derived: %s)", baseName, res.FinalName),
+					"baseTemplate", baseName,
+					"derivedTemplate", res.FinalName,
+					"overrideSuffix", suffix)
 			} else {
 				res.FinalName = baseName
+				baseutils.Debug(logger,
+					fmt.Sprintf("Template resolution: explicit template %s (empty override suffix)", baseName),
+					"template", baseName)
 			}
 		} else {
 			res.FinalName = baseName
+			baseutils.Debug(logger,
+				fmt.Sprintf("Template resolution: explicit template %s (no overrides)", baseName),
+				"template", baseName)
 		}
 		return res, status, nil
 	}
 
+	baseutils.Debug(logger, "Template resolution: auto-select mode")
 	status.AutoSelected = true
 
 	// Normalize scope - default to Auto if empty
@@ -159,20 +173,31 @@ func ResolveTemplateNameForService(
 	if service.Spec.Model.Scope != nil {
 		scope = *service.Spec.Model.Scope
 	}
+	baseutils.Debug(logger,
+		fmt.Sprintf("Model scope: %s", scope),
+		"scope", scope)
 
 	// Resolve model name from service.Spec.Model (ref or image)
 	imageName, err := resolveModelNameFromService(ctx, k8sClient, service, scope)
 	if err != nil {
+		baseutils.Debug(logger,
+			fmt.Sprintf("Model resolution failed: %s", err.Error()),
+			"error", err.Error())
 		status.ModelResolutionErr = err
 		return res, status, nil
 	}
 
 	if imageName == "" {
+		baseutils.Debug(logger, "No model specified in service spec")
 		status.ImageReady = false
 		status.ImageReadyReason = aimv1alpha1.AIMServiceReasonModelNotFound
 		status.ImageReadyMessage = "No model specified in service spec"
 		return res, status, nil
 	}
+
+	baseutils.Debug(logger,
+		fmt.Sprintf("Model resolved: %s", imageName),
+		"model", imageName)
 
 	ready, _, reason, message, resolvedModelRef, err := evaluateImageReadiness(ctx, k8sClient, service.Namespace, imageName, scope)
 	if err != nil {
@@ -185,13 +210,27 @@ func ResolveTemplateNameForService(
 	status.ResolvedModel = resolvedModelRef
 
 	if !ready {
+		baseutils.Debug(logger,
+			fmt.Sprintf("Model %s not ready (reason: %s)", imageName, reason),
+			"model", imageName,
+			"reason", reason,
+			"message", message)
 		return res, status, nil
 	}
+
+	baseutils.Debug(logger,
+		fmt.Sprintf("Model %s ready, searching for template candidates", imageName),
+		"model", imageName)
 
 	candidates, err := listTemplateCandidatesForImage(ctx, k8sClient, service.Namespace, imageName, scope)
 	if err != nil {
 		return res, status, err
 	}
+
+	baseutils.Debug(logger,
+		fmt.Sprintf("Found %d template candidates for model %s", len(candidates), imageName),
+		"candidateCount", len(candidates),
+		"model", imageName)
 
 	availableGPUs, err := ListAvailableGPUs(ctx, k8sClient)
 	if err != nil {
@@ -208,6 +247,9 @@ func ResolveTemplateNameForService(
 			// Check if any templates exist at all (regardless of availability)
 			if len(candidates) == 0 {
 				// No templates exist at all - this is a failure
+				baseutils.Debug(logger,
+					fmt.Sprintf("No templates found for model %s", imageName),
+					"model", imageName)
 				status.SelectionReason = aimv1alpha1.AIMServiceReasonTemplateNotFound
 				status.SelectionMessage = fmt.Sprintf("No templates found for image %q", imageName)
 				return res, status, nil
@@ -224,15 +266,27 @@ func ResolveTemplateNameForService(
 
 			if availableCount == 0 {
 				// Templates exist but none are Available yet - service should wait
+				baseutils.Debug(logger,
+					fmt.Sprintf("Found %d templates for model %s, but none are Available yet", len(candidates), imageName),
+					"candidateCount", len(candidates),
+					"model", imageName)
 				status.TemplatesExistButNotReady = true
 				status.SelectionReason = ""
 				status.SelectionMessage = ""
 			} else {
 				// Templates are Available but don't match overrides/GPU requirements
+				baseutils.Debug(logger,
+					fmt.Sprintf("Found %d Available templates for model %s, but none match service requirements", availableCount, imageName),
+					"availableCount", availableCount,
+					"model", imageName)
 				status.SelectionReason = aimv1alpha1.AIMServiceReasonTemplateNotFound
 				status.SelectionMessage = fmt.Sprintf("No available templates match the service requirements for image %q", imageName)
 			}
 		} else {
+			baseutils.Debug(logger,
+				fmt.Sprintf("Template selection ambiguous: %d templates match model %s", count, imageName),
+				"matchCount", count,
+				"model", imageName)
 			status.SelectionReason = aimv1alpha1.AIMServiceReasonTemplateSelectionAmbiguous
 			status.SelectionMessage = fmt.Sprintf("Multiple templates (%d) satisfy image %q", count, imageName)
 		}
@@ -246,11 +300,25 @@ func ResolveTemplateNameForService(
 		suffix := OverridesSuffix(service.Spec.Overrides)
 		if suffix != "" {
 			res.FinalName = DerivedTemplateName(selected.Name, suffix)
+			baseutils.Debug(logger,
+				fmt.Sprintf("Auto-selected template %s with overrides (derived: %s)", selected.Name, res.FinalName),
+				"baseTemplate", selected.Name,
+				"derivedTemplate", res.FinalName,
+				"scope", selected.Scope,
+				"overrideSuffix", suffix)
 		} else {
 			res.FinalName = selected.Name
+			baseutils.Debug(logger,
+				fmt.Sprintf("Auto-selected template %s (empty override suffix)", selected.Name),
+				"template", selected.Name,
+				"scope", selected.Scope)
 		}
 	} else {
 		res.FinalName = selected.Name
+		baseutils.Debug(logger,
+			fmt.Sprintf("Auto-selected template %s (no overrides)", selected.Name),
+			"template", selected.Name,
+			"scope", selected.Scope)
 	}
 
 	return res, status, nil
@@ -639,6 +707,13 @@ func ObserveDerivedTemplate(
 	resolution TemplateResolution,
 	obs *ServiceObservation,
 ) error {
+	logger := log.FromContext(ctx)
+
+	baseutils.Debug(logger,
+		fmt.Sprintf("Observing derived template %s (base: %s)", resolution.FinalName, resolution.BaseName),
+		"derivedTemplate", resolution.FinalName,
+		"baseTemplate", resolution.BaseName)
+
 	var namespaceTemplate aimv1alpha1.AIMServiceTemplate
 	err := k8sClient.Get(ctx, types.NamespacedName{
 		Namespace: service.Namespace,
@@ -648,9 +723,17 @@ func ObserveDerivedTemplate(
 	switch {
 	case err == nil:
 		// Derived template exists, populate observation from it
+		baseutils.Debug(logger,
+			fmt.Sprintf("Derived template %s found", resolution.FinalName),
+			"template", resolution.FinalName)
 		return PopulateObservationFromNamespaceTemplate(ctx, k8sClient, service, &namespaceTemplate, obs)
 
 	case apierrors.IsNotFound(err):
+		baseutils.Debug(logger,
+			fmt.Sprintf("Derived template %s not found, loading base template %s", resolution.FinalName, resolution.BaseName),
+			"derivedTemplate", resolution.FinalName,
+			"baseTemplate", resolution.BaseName)
+
 		baseSpec, baseScope, err := LoadBaseTemplateSpec(ctx, k8sClient, service, resolution.BaseName)
 		if err != nil {
 			return err
@@ -667,6 +750,10 @@ func ObserveDerivedTemplate(
 			return fmt.Errorf("failed to resolve model name: %w", err)
 		}
 
+		baseutils.Debug(logger,
+			fmt.Sprintf("Searching for existing template matching derived spec (model: %s)", resolvedModelName),
+			"model", resolvedModelName)
+
 		match, matchErr := findMatchingTemplateForDerivedSpec(ctx, k8sClient, service, resolvedModelName, baseSpec)
 		if matchErr != nil {
 			return matchErr
@@ -674,17 +761,26 @@ func ObserveDerivedTemplate(
 
 		if match != nil {
 			if match.NamespaceTemplate != nil {
+				baseutils.Debug(logger,
+					fmt.Sprintf("Found matching namespace template %s", match.NamespaceTemplate.Name),
+					"template", match.NamespaceTemplate.Name)
 				obs.TemplateName = match.NamespaceTemplate.Name
 				return PopulateObservationFromNamespaceTemplate(ctx, k8sClient, service, match.NamespaceTemplate, obs)
 			}
 
 			if match.ClusterTemplate != nil {
+				baseutils.Debug(logger,
+					fmt.Sprintf("Found matching cluster template %s", match.ClusterTemplate.Name),
+					"template", match.ClusterTemplate.Name)
 				obs.TemplateName = match.ClusterTemplate.Name
 				return PopulateObservationFromClusterTemplate(ctx, k8sClient, service, match.ClusterTemplate, obs)
 			}
 		}
 
 		// Derived template doesn't exist yet, prepare observation for creation
+		baseutils.Debug(logger,
+			fmt.Sprintf("No matching template found, will create derived template %s", resolution.FinalName),
+			"derivedTemplate", resolution.FinalName)
 		return prepareObservationForDerivedCreation(ctx, k8sClient, service, baseSpec, baseScope, obs)
 
 	default:
@@ -798,6 +894,13 @@ func ObserveNonDerivedTemplate(
 	preferredScope TemplateScope,
 	obs *ServiceObservation,
 ) error {
+	logger := log.FromContext(ctx)
+
+	baseutils.Debug(logger,
+		fmt.Sprintf("Observing non-derived template %s (preferred scope: %s)", templateName, preferredScope),
+		"template", templateName,
+		"preferredScope", preferredScope)
+
 	switch preferredScope {
 	case TemplateScopeNamespace:
 		var namespaceTemplate aimv1alpha1.AIMServiceTemplate
@@ -807,13 +910,22 @@ func ObserveNonDerivedTemplate(
 		}, &namespaceTemplate)
 		switch {
 		case err == nil:
+			baseutils.Debug(logger,
+				fmt.Sprintf("Found namespace template %s", templateName),
+				"template", templateName)
 			return PopulateObservationFromNamespaceTemplate(ctx, k8sClient, service, &namespaceTemplate, obs)
 		case apierrors.IsNotFound(err):
+			baseutils.Debug(logger,
+				fmt.Sprintf("Namespace template %s not found", templateName),
+				"template", templateName)
 			return nil
 		default:
 			return fmt.Errorf("failed to get AIMServiceTemplate %s/%s: %w", service.Namespace, templateName, err)
 		}
 	case TemplateScopeCluster:
+		baseutils.Debug(logger,
+			fmt.Sprintf("Checking cluster scope for template %s", templateName),
+			"template", templateName)
 		return observeClusterTemplate(ctx, k8sClient, service, templateName, obs)
 	default:
 		var namespaceTemplate aimv1alpha1.AIMServiceTemplate
@@ -823,8 +935,14 @@ func ObserveNonDerivedTemplate(
 		}, &namespaceTemplate)
 		switch {
 		case err == nil:
+			baseutils.Debug(logger,
+				fmt.Sprintf("Found namespace template %s", templateName),
+				"template", templateName)
 			return PopulateObservationFromNamespaceTemplate(ctx, k8sClient, service, &namespaceTemplate, obs)
 		case apierrors.IsNotFound(err):
+			baseutils.Debug(logger,
+				fmt.Sprintf("Namespace template %s not found, checking cluster scope", templateName),
+				"template", templateName)
 			return observeClusterTemplate(ctx, k8sClient, service, templateName, obs)
 		default:
 			return fmt.Errorf("failed to get AIMServiceTemplate %s/%s: %w", service.Namespace, templateName, err)
@@ -841,15 +959,23 @@ func observeClusterTemplate(
 	templateName string,
 	obs *ServiceObservation,
 ) error {
+	logger := log.FromContext(ctx)
+
 	var clusterTemplate aimv1alpha1.AIMClusterServiceTemplate
 	err := k8sClient.Get(ctx, client.ObjectKey{Name: templateName}, &clusterTemplate)
 
 	switch {
 	case err == nil:
+		baseutils.Debug(logger,
+			fmt.Sprintf("Found cluster template %s", templateName),
+			"template", templateName)
 		return PopulateObservationFromClusterTemplate(ctx, k8sClient, service, &clusterTemplate, obs)
 
 	case apierrors.IsNotFound(err):
 		// Template not found - let the controller decide whether to create one
+		baseutils.Debug(logger,
+			fmt.Sprintf("Cluster template %s not found", templateName),
+			"template", templateName)
 		return nil
 
 	default:

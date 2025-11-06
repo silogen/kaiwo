@@ -152,6 +152,9 @@ func requestsFromNamespaceTemplates(templates []aimv1alpha1.AIMServiceTemplate) 
 // observe gathers current cluster state (read-only)
 func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *aimv1alpha1.AIMServiceTemplate) (*namespaceTemplateObservation, error) {
 	logger := log.FromContext(ctx)
+
+	baseutils.Debug(logger, "Observing template")
+
 	observation, err := shared.ObserveTemplate(ctx, shared.TemplateObservationOptions[*servingv1alpha1.ServingRuntime]{
 		K8sClient: r.Client,
 		GetRuntime: func(ctx context.Context) (*servingv1alpha1.ServingRuntime, error) {
@@ -187,17 +190,12 @@ func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *ai
 		OnRuntimeConfigResolved: func(resolution *shared.RuntimeConfigResolution) {
 			if resolution.NamespaceConfig == nil && resolution.ClusterConfig == nil && resolution.Name == shared.DefaultRuntimeConfigName {
 				baseutils.Debug(logger, "Default AIMRuntimeConfig not found, proceeding without overrides")
-				controllerutils.EmitWarningEvent(r.Recorder, template, "DefaultRuntimeConfigNotFound",
-					"Default AIMRuntimeConfig not found, proceeding with controller defaults.")
 				return
 			}
 
 			baseutils.Debug(logger, "Resolved AIMRuntimeConfig",
 				"name", resolution.Name,
 				"sources", shared.JoinRuntimeConfigSources(resolution, template.Namespace))
-
-			controllerutils.EmitNormalEvent(r.Recorder, template, "RuntimeConfigResolved",
-				fmt.Sprintf("Using AIMRuntimeConfig %q from %s", resolution.Name, shared.JoinRuntimeConfigSources(resolution, template.Namespace)))
 		},
 		GetImagePullSecrets: func() []corev1.LocalObjectReference {
 			return template.Spec.ImagePullSecrets
@@ -233,6 +231,10 @@ func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *ai
 
 // plan computes desired state (pure function)
 func (r *AIMServiceTemplateReconciler) plan(ctx context.Context, template *aimv1alpha1.AIMServiceTemplate, obs *namespaceTemplateObservation) ([]client.Object, error) {
+	logger := log.FromContext(ctx)
+
+	baseutils.Debug(logger, "Planning template resources")
+
 	var observation *shared.TemplateObservation
 	if obs != nil {
 		observation = &obs.TemplateObservation
@@ -287,8 +289,13 @@ func (r *AIMServiceTemplateReconciler) plan(ctx context.Context, template *aimv1
 
 		// Caching is enabled, and didn't find ours - create one
 		if !cacheFound {
+			baseutils.Debug(logger,
+				fmt.Sprintf("Creating TemplateCache %s", template.Name),
+				"templateCache", template.Name)
 			newCache := buildTemplateCache(template, obs.RuntimeConfig)
 			desired = append(desired, newCache)
+		} else {
+			baseutils.Debug(logger, "TemplateCache already exists")
 		}
 
 	}
@@ -369,6 +376,9 @@ func (r *AIMServiceTemplateReconciler) projectStatus(
 	obs *namespaceTemplateObservation,
 	errs controllerutils.ReconcileErrors,
 ) error {
+	logger := log.FromContext(ctx)
+
+	baseutils.Debug(logger, "Projecting template status")
 	imageNotFoundMsg := fmt.Sprintf("No AIMModel or AIMClusterModel found for image name %q", template.Spec.ModelName)
 	var templateObs *shared.TemplateObservation
 	if obs != nil {

@@ -139,6 +139,9 @@ func (r *AIMServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1.AIMService) (*shared.ServiceObservation, error) {
 	logger := log.FromContext(ctx)
+
+	baseutils.Debug(logger, "Observing service")
+
 	resolution, selectionStatus, err := shared.ResolveTemplateNameForService(ctx, r.Client, service)
 	if err != nil {
 		return nil, err
@@ -513,6 +516,9 @@ func (r *AIMServiceReconciler) planInferenceServiceAndRoute(logger logr.Logger, 
 
 func (r *AIMServiceReconciler) plan(ctx context.Context, service *aimv1alpha1.AIMService, obs *shared.ServiceObservation) []client.Object {
 	logger := log.FromContext(ctx)
+
+	baseutils.Debug(logger, "Planning service resources")
+
 	var desired []client.Object
 
 	if obs == nil {
@@ -709,6 +715,10 @@ func (r *AIMServiceReconciler) projectStatus(
 	obs *shared.ServiceObservation,
 	errs controllerutils.ReconcileErrors,
 ) error {
+	logger := log.FromContext(ctx)
+
+	baseutils.Debug(logger, "Projecting service status")
+
 	// Fetch InferenceService and HTTPRoute for status evaluation
 	var inferenceService *servingv1beta1.InferenceService
 	{
@@ -739,7 +749,7 @@ func (r *AIMServiceReconciler) projectStatus(
 	}
 
 	// Delegate status projection to shared function
-	shared.ProjectServiceStatus(service, obs, inferenceService, httpRoute, errs)
+	shared.ProjectServiceStatus(ctx, service, obs, inferenceService, httpRoute, errs)
 	return nil
 }
 
@@ -942,13 +952,7 @@ func (r *AIMServiceReconciler) modelPredicate() predicate.Funcs {
 			}
 			// Trigger if status changed
 			statusChanged := oldModel.Status.Status != newModel.Status.Status
-			if statusChanged {
-				ctrl.Log.Info("AIMModel status changed - triggering reconciliation",
-					"model", newModel.Name,
-					"namespace", newModel.Namespace,
-					"oldStatus", oldModel.Status.Status,
-					"newStatus", newModel.Status.Status)
-			} else {
+			if !statusChanged {
 				ctrl.Log.V(1).Info("AIMModel update (no status change)",
 					"model", newModel.Name,
 					"status", newModel.Status.Status)
@@ -1044,12 +1048,7 @@ func (r *AIMServiceReconciler) clusterModelPredicate() predicate.Funcs {
 			}
 			// Trigger if status changed
 			statusChanged := oldModel.Status.Status != newModel.Status.Status
-			if statusChanged {
-				ctrl.Log.Info("AIMClusterModel status changed - triggering reconciliation",
-					"model", newModel.Name,
-					"oldStatus", oldModel.Status.Status,
-					"newStatus", newModel.Status.Status)
-			} else {
+			if !statusChanged {
 				ctrl.Log.V(1).Info("AIMClusterModel update (no status change)",
 					"model", newModel.Name,
 					"status", newModel.Status.Status)

@@ -119,6 +119,9 @@ func (r *AIMClusterModelReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 // observe gathers current cluster state (read-only)
 func (r *AIMClusterModelReconciler) observe(ctx context.Context, image *aimv1alpha1.AIMClusterModel) (*shared.ImageObservation, error) {
 	logger := log.FromContext(ctx)
+
+	baseutils.Debug(logger, "Observing cluster model")
+
 	return shared.ObserveImage(ctx, shared.ImageObservationOptions{
 		GetRuntimeConfig: func(ctx context.Context) (*shared.RuntimeConfigResolution, error) {
 			// Look for AIMRuntimeConfig named "default" in kaiwo-system namespace
@@ -165,6 +168,9 @@ func (r *AIMClusterModelReconciler) observe(ctx context.Context, image *aimv1alp
 // plan computes desired state (pure function)
 func (r *AIMClusterModelReconciler) plan(ctx context.Context, image *aimv1alpha1.AIMClusterModel, obs *shared.ImageObservation) ([]client.Object, error) {
 	logger := log.FromContext(ctx)
+
+	baseutils.Debug(logger, "Planning cluster model resources")
+
 	// Build owner reference
 	ownerRef := []metav1.OwnerReference{
 		{
@@ -205,6 +211,9 @@ func (r *AIMClusterModelReconciler) projectStatus(
 	errs controllerutils.ReconcileErrors,
 ) error {
 	logger := log.FromContext(ctx)
+
+	baseutils.Debug(logger, "Projecting cluster model status")
+
 	// Extract metadata and error from the plan execution
 	var extractedMetadata *aimv1alpha1.ImageMetadata
 	var extractionErr error
@@ -288,8 +297,7 @@ func (r *AIMClusterModelReconciler) projectStatus(
 
 	// Log and emit events for status transitions
 	if oldStatus != image.Status.Status {
-		logger.Info("Cluster image status changed",
-			"name", image.Name,
+		logger.Info(fmt.Sprintf("ClusterModel %s status: %s → %s", image.Name, oldStatus, image.Status.Status),
 			"previousStatus", oldStatus,
 			"newStatus", image.Status.Status)
 

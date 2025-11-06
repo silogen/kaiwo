@@ -4,8 +4,6 @@ metadata:
   name: timeout-from-config
 spec:
   description: Ensure that HTTPRoute timeout is set from runtime config
-  timeouts:
-    assert: 180s
   steps:
   - name: Create runtime config
     try:
