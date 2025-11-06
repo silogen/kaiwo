@@ -116,6 +116,13 @@ jobs:
         with:
           release: v0.2.12
 
+      - name: Install yq
+        run: |
+          curl -fsSL https://github.com/mikefarah/yq/releases/download/v4.44.6/yq_linux_amd64 -o yq
+          chmod +x yq
+          sudo mv yq /usr/local/bin/yq
+          yq --version
+
       - name: Install Helm (pinned)
         run: |
           curl -fsSL https://get.helm.sh/helm-v3.16.4-linux-amd64.tar.gz -o helm.tar.gz
@@ -199,8 +206,13 @@ jobs:
           KUBECONFIG=$(pwd)/vcluster-kubeconfig kubectl get ns
 
       - name: Install dependencies
-        env: { KUBECONFIG: vcluster-kubeconfig }
-        run: bash ./dependencies/deploy.sh vcluster up
+        env:
+          KUBECONFIG: vcluster-kubeconfig
+          TMPDIR: ${{ github.workspace }}/tmp
+        run: |
+          # Use workspace for temp files to avoid /tmp cleanup issues on self-hosted runners
+          mkdir -p "$TMPDIR"
+          bash ./dependencies/deploy.sh vcluster up
 
       - name: Install CRDs and Deploy (${{ matrix.installer }})
         env:
