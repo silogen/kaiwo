@@ -162,7 +162,9 @@ jobs:
           vcluster connect "$VCLUSTER_NAME" \
             --namespace "$VCLUSTER_NAMESPACE" \
             --update-current=false \
-            --kube-config=./vcluster-kubeconfig --background-timeout=0s
+            --kube-config=./vcluster-kubeconfig
+
+          # Verify connection
           KUBECONFIG=$(pwd)/vcluster-kubeconfig kubectl get ns
 
       - name: Install dependencies
