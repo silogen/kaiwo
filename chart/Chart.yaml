@@ -5,8 +5,8 @@ home: https://github.com/silogen/kaiwo
 sources:
 - https://github.com/silogen/kaiwo
 type: application
-version: 0.0.0-main.229a19f
-appVersion: "main-229a19f"
+version: 0.0.0-main.20030c9
+appVersion: "main-20030c9"
 keywords:
 - ai
 - gpu
