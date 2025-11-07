@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: test-observability
+
+configMapGenerator:
+  - name: grafana-dashboards-kaiwo
+    behavior: create
+    files:
+      - namespace-debug-dashboard.json
+      - cluster-health-dashboard.json
+    options:
+      disableNameSuffixHash: true
+      labels:
+        grafana_dashboard: "1"

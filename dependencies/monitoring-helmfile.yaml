@@ -1,0 +1,209 @@
+repositories:
+  - name: grafana
+    url: https://grafana.github.io/helm-charts
+  - name: prometheus-community
+    url: https://prometheus-community.github.io/helm-charts
+
+releases:
+  # Grafana Loki - Log aggregation
+  - name: loki
+    namespace: test-observability
+    createNamespace: true
+    chart: grafana/loki
+    version: 6.23.0
+    values:
+      - deploymentMode: SingleBinary
+        # Explicitly disable other deployment modes
+        read:
+          replicas: 0
+        write:
+          replicas: 0
+        backend:
+          replicas: 0
+        loki:
+          auth_enabled: false
+          commonConfig:
+            replication_factor: 1
+          storage:
+            type: 'filesystem'
+          schemaConfig:
+            configs:
+              - from: "2024-01-01"
+                store: tsdb
+                object_store: filesystem
+                schema: v13
+                index:
+                  prefix: loki_index_
+                  period: 24h
+          limits_config:
+            retention_period: 720h  # 30 days
+            max_query_series: 100000
+            max_query_lookback: 720h
+        singleBinary:
+          replicas: 1
+          persistence:
+            enabled: true
+            storageClass: openebs-hostpath
+            size: 50Gi
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 2000m
+              memory: 4Gi
+        chunksCache:
+          enabled: false
+        resultsCache:
+          enabled: false
+        gateway:
+          enabled: true
+          replicas: 1
+          service:
+            type: ClusterIP
+            port: 80
+          nginxConfig:
+            # Don't use DNS resolver - causes issues in some clusters
+            resolver: ""
+        monitoring:
+          selfMonitoring:
+            enabled: false
+            grafanaAgent:
+              installOperator: false
+        test:
+          enabled: false
+
+  # kube-prometheus-stack - Prometheus + Grafana + Alertmanager
+  - name: kube-prometheus-stack
+    namespace: test-observability
+    chart: prometheus-community/kube-prometheus-stack
+    version: 67.6.0
+    values:
+      - prometheus:
+          prometheusSpec:
+            retention: 30d
+            retentionSize: "45GB"
+            storageSpec:
+              volumeClaimTemplate:
+                spec:
+                  storageClassName: openebs-hostpath
+                  accessModes: ["ReadWriteOnce"]
+                  resources:
+                    requests:
+                      storage: 50Gi
+            resources:
+              requests:
+                cpu: 500m
+                memory: 2Gi
+              limits:
+                cpu: 2000m
+                memory: 8Gi
+            # Service monitors for scraping
+            serviceMonitorSelectorNilUsesHelmValues: false
+            podMonitorSelectorNilUsesHelmValues: false
+            # Additional scrape configs for vCluster metrics
+            additionalScrapeConfigs:
+              - job_name: 'vcluster-federate'
+                honor_labels: true
+                metrics_path: '/federate'
+                params:
+                  'match[]':
+                    - '{job=~".+"}'
+                static_configs:
+                  - targets: []
+                    # Targets will be dynamically added per vCluster
+                    # Example: ['vcluster-prometheus.kaiwo-test-123-1-helm.svc.cluster.local:9090']
+
+        grafana:
+          enabled: true
+          adminPassword: admin  # Change this in production!
+          persistence:
+            enabled: true
+            storageClassName: openebs-hostpath
+            size: 10Gi
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+          additionalDataSources:
+            - name: Loki
+              type: loki
+              url: http://loki-gateway.test-observability.svc.cluster.local
+              access: proxy
+              isDefault: false
+              jsonData:
+                maxLines: 1000
+          # Pre-configure dashboards
+          dashboardProviders:
+            dashboardproviders.yaml:
+              apiVersion: 1
+              providers:
+                - name: 'default'
+                  orgId: 1
+                  folder: ''
+                  type: file
+                  disableDeletion: false
+                  editable: true
+                  options:
+                    path: /var/lib/grafana/dashboards/default
+                - name: 'kaiwo'
+                  orgId: 1
+                  folder: 'KAIWO Observability'
+                  type: file
+                  disableDeletion: false
+                  editable: true
+                  options:
+                    path: /var/lib/grafana/dashboards/kaiwo
+          dashboardsConfigMaps:
+            kaiwo: grafana-dashboards-kaiwo
+          service:
+            type: NodePort
+            nodePort: 30300
+
+        alertmanager:
+          enabled: true
+          alertmanagerSpec:
+            storage:
+              volumeClaimTemplate:
+                spec:
+                  storageClassName: openebs-hostpath
+                  accessModes: ["ReadWriteOnce"]
+                  resources:
+                    requests:
+                      storage: 10Gi
+
+        # Disable default exporters we don't need (or that conflict with existing monitoring)
+        kubeStateMetrics:
+          enabled: true  # Keep for host cluster metrics
+        nodeExporter:
+          enabled: false  # Disable - conflicts with existing node-exporter on port 9100
+        prometheusOperator:
+          enabled: true
+
+  # Grafana Alloy - Telemetry collector for host cluster
+  - name: alloy-host
+    namespace: test-observability
+    chart: grafana/alloy
+    version: 0.12.0
+    values:
+      - alloy:
+          configMap:
+            name: alloy-host-config
+            create: false  # We'll create this separately
+          clustering:
+            enabled: false
+        controller:
+          type: daemonset
+          tolerations:
+            - effect: NoSchedule
+              operator: Exists
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi

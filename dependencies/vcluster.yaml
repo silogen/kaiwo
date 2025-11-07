@@ -17,3 +17,27 @@ controlPlane:
         accessModes: ["ReadWriteOnce"]
         storageClass: "openebs-hostpath"
         size: 5Gi
+      # Add audit policy volume
+      addVolumes:
+        - name: audit-policy
+          configMap:
+            name: vcluster-audit-policy
+      addVolumeMounts:
+        - name: audit-policy
+          mountPath: /etc/kubernetes/audit
+          readOnly: true
+
+  # K3s distribution configuration with audit logging
+  distro:
+    k3s:
+      enabled: true
+      image:
+        tag: v1.31.4-k3s1
+      extraArgs:
+        - --kube-apiserver-arg=audit-policy-file=/etc/kubernetes/audit/policy.yaml
+        - --kube-apiserver-arg=audit-log-path=-
+        - --kube-apiserver-arg=audit-log-format=json
+
+# API server configuration for audit logging
+policies:
+  podSecurityStandard: baseline

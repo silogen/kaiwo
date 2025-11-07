@@ -1,0 +1,93 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vcluster-audit-policy
+  # This will be created in the vCluster namespace (e.g., kaiwo-test-*)
+data:
+  policy.yaml: |
+    apiVersion: audit.k8s.io/v1
+    kind: Policy
+    # Don't generate audit events for all requests in RequestReceived stage.
+    omitStages:
+      - "RequestReceived"
+    rules:
+      # Log nothing from the following users
+      - level: None
+        users:
+          - "system:kube-proxy"
+          - "system:kube-scheduler"
+          - "system:kube-controller-manager"
+          - "system:node"
+        userGroups:
+          - "system:nodes"
+
+      # Don't log read-only requests from these system components
+      - level: None
+        users:
+          - "system:serviceaccount:kube-system:generic-garbage-collector"
+          - "system:serviceaccount:kube-system:attachdetach-controller"
+          - "system:serviceaccount:kube-system:certificate-controller"
+          - "system:serviceaccount:kube-system:clusterrole-aggregation-controller"
+        verbs: ["get", "list", "watch"]
+
+      # Don't log reads of leases
+      - level: None
+        resources:
+          - group: "coordination.k8s.io"
+            resources: ["leases"]
+        verbs: ["get", "list", "watch"]
+
+      # Don't log HPA fetching metrics
+      - level: None
+        users:
+          - "system:serviceaccount:kube-system:horizontal-pod-autoscaler"
+        verbs: ["get", "list"]
+
+      # Don't log Prometheus health checks
+      - level: None
+        users: ["system:serviceaccount:monitoring:prometheus-k8s"]
+        verbs: ["get"]
+        resources:
+          - group: ""
+            resources: ["services", "endpoints", "pods"]
+
+      # Log metadata for all other requests to core and extensions
+      - level: Metadata
+        resources:
+          - group: ""
+            resources: ["pods", "services", "configmaps", "secrets", "persistentvolumeclaims"]
+          - group: "apps"
+            resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+
+      # Log request and response for KAIWO CRDs (important for debugging)
+      - level: RequestResponse
+        resources:
+          - group: "kaiwo.silogen.ai"
+            resources: ["*"]
+          - group: "aim.silogen.ai"
+            resources: ["*"]
+          - group: "serving.kserve.io"
+            resources: ["*"]
+          - group: "ray.io"
+            resources: ["rayclusters", "rayservices", "rayjobs"]
+          - group: "workload.codeflare.dev"
+            resources: ["appwrappers"]
+          - group: "kueue.x-k8s.io"
+            resources: ["clusterqueues", "localqueues", "workloads"]
+
+      # Log metadata for job-related resources
+      - level: Metadata
+        resources:
+          - group: "batch"
+            resources: ["jobs", "cronjobs"]
+
+      # Log metadata for events (captures pod failures, etc.)
+      - level: Metadata
+        resources:
+          - group: ""
+            resources: ["events"]
+
+      # Catch-all: log metadata for anything else
+      - level: Metadata
+        omitStages:
+          - "RequestReceived"

@@ -157,10 +157,21 @@ jobs:
           sudo mv vcluster /usr/local/bin/vcluster
           vcluster --version
 
-      - name: Create namespace & vcluster
+      - name: Create namespace & deploy audit components
         env: { KUBECONFIG: host-kubeconfig }
         run: |
           kubectl get ns "$VCLUSTER_NAMESPACE" >/dev/null 2>&1 || kubectl create namespace "$VCLUSTER_NAMESPACE"
+
+          # Deploy audit logging components (Alloy receiver, ConfigMaps)
+          export VCLUSTER_NAMESPACE="$VCLUSTER_NAMESPACE"
+          export GITHUB_RUN_ID="${{ github.run_id }}"
+          export GITHUB_RUN_ATTEMPT="${{ github.run_attempt }}"
+          export INSTALLER="${{ matrix.installer }}"
+          bash ./dependencies/deploy-vcluster-audit.sh
+
+      - name: Create vcluster
+        env: { KUBECONFIG: host-kubeconfig }
+        run: |
           vcluster create "$VCLUSTER_NAME" \
             --namespace "$VCLUSTER_NAMESPACE" \
             --values dependencies/vcluster.yaml \
@@ -218,6 +229,16 @@ jobs:
           # Use workspace for temp files to avoid /tmp cleanup issues on self-hosted runners
           mkdir -p "$TMPDIR"
           bash ./dependencies/deploy.sh vcluster up
+
+      - name: Deploy vCluster monitoring
+        env:
+          KUBECONFIG: ${{ github.workspace }}/vcluster-kubeconfig
+          VCLUSTER_NAMESPACE: ${{ env.VCLUSTER_NAMESPACE }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          INSTALLER: ${{ matrix.installer }}
+        run: |
+          bash ./dependencies/deploy-vcluster-monitoring.sh
 
       - name: Install CRDs
         env:
