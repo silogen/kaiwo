@@ -68,6 +68,84 @@ spec:
           status:
             phase: Running
 
+  - name: Validate actual PVC disk size
+    try:
+    - apply:
+        resource:
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: pvc-size-validator
+          spec:
+            template:
+              spec:
+                restartPolicy: Never
+                containers:
+                - name: validator
+                  image: busybox:latest
+                  command:
+                  - /bin/sh
+                  - -c
+                  - |
+                    echo "=== PVC Size Validation ==="
+                    df -h /workspace/model-cache/amd/Llama-3.1-8B-Instruct-FP8-KV
+                    echo "=== End PVC Size Validation ==="
+                  volumeMounts:
+                  - name: cache-volume
+                    mountPath: /workspace/model-cache/amd/Llama-3.1-8B-Instruct-FP8-KV
+                volumes:
+                - name: cache-volume
+                  persistentVolumeClaim:
+                    claimName: amd-llama-3-1-8b-instruct-fp8-kv-cache
+    - wait:
+        apiVersion: batch/v1
+        kind: Job
+        name: pvc-size-validator
+        timeout: 2m
+        for:
+          condition:
+            name: Complete
+            value: 'true'
+    - script:
+        content: 'kubectl logs -n $NAMESPACE job/pvc-size-validator'
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        outputs:
+        - name: PVC_SIZE_OUTPUT
+          value: ($stdout)
+    - script:
+        content: |
+          # Extract the size from df output (handles both single and multi-line NFS output)
+          SIZE=$(echo "$PVC_SIZE_OUTPUT" | grep -A1 "Filesystem" | tail -n 1 | awk '{print $1}')
+          echo "$SIZE"
+        env:
+        - name: PVC_SIZE_OUTPUT
+          value: ($PVC_SIZE_OUTPUT)
+        outputs:
+        - name: ACTUAL_SIZE
+          value: ($stdout)
+    - script:
+        content: |
+          # Validate size is approximately 10Gi (allowing for 9-11G range)
+          # With 200% headroom on ~3.3GB model = ~10GB PVC
+          ACTUAL="$ACTUAL_SIZE"
+          # Convert to numeric value in GB (strip G suffix)
+          ACTUAL_NUM=$(echo "$ACTUAL" | sed 's/G$//' | sed 's/\..*$//')
+
+          if [ "$ACTUAL_NUM" -ge 9 ] && [ "$ACTUAL_NUM" -le 11 ]; then
+            echo "PASS: PVC size $ACTUAL is within expected range (9-11G)"
+            exit 0
+          else
+            echo "FAIL: PVC size $ACTUAL is outside expected range (9-11G)"
+            exit 1
+          fi
+        env:
+        - name: ACTUAL_SIZE
+          value: ($ACTUAL_SIZE)
+        check:
+          ($error == null): true
+
   - name: Verify the service responds
     try:
     - script:
