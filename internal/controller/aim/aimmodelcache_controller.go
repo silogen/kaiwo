@@ -229,16 +229,23 @@ func (r *AIMModelCacheReconciler) plan(ctx context.Context, mc *aimv1alpha1.AIMM
 	if ob == nil {
 		return desired, nil
 	}
-	// Include PVC on every reconcile
-	headroomPercent := shared.GetPVCHeadroomPercent(ob.runtimeConfigSpec)
-	storageClassName := shared.ResolveStorageClass(mc.Spec.StorageClassName, ob.runtimeConfigSpec)
-	pvcSize := shared.QuantityWithHeadroom(mc.Spec.Size.Value(), headroomPercent)
 
-	pvc := r.buildPVC(mc, r.pvcName(mc), pvcSize, storageClassName)
-	if err := ctrl.SetControllerReference(mc, pvc, r.Scheme); err != nil {
-		return desired, fmt.Errorf("owner pvc: %w", err)
+	// Include PVC only if it doesn't exist yet
+	// Once created, PVCs are immutable - we never modify them to avoid:
+	// 1. StorageClassName mutation errors (forbidden by Kubernetes)
+	// 2. Storage size shrinkage errors (forbidden by Kubernetes)
+	// 3. Unexpected PVC expansion from runtime config changes
+	if !ob.pvcFound {
+		headroomPercent := shared.GetPVCHeadroomPercent(ob.runtimeConfigSpec)
+		storageClassName := shared.ResolveStorageClass(mc.Spec.StorageClassName, ob.runtimeConfigSpec)
+		pvcSize := shared.QuantityWithHeadroom(mc.Spec.Size.Value(), headroomPercent)
+
+		pvc := r.buildPVC(mc, r.pvcName(mc), pvcSize, storageClassName)
+		if err := ctrl.SetControllerReference(mc, pvc, r.Scheme); err != nil {
+			return desired, fmt.Errorf("owner pvc: %w", err)
+		}
+		desired = append(desired, pvc)
 	}
-	desired = append(desired, pvc)
 
 	// Include Job when storage is ready OR when PVC is pending with WaitForFirstConsumer
 	canCreateJob := ob.storageReady || (ob.pvcFound && ob.pvc.Status.Phase == corev1.ClaimPending && ob.waitForFirstConsumer)
