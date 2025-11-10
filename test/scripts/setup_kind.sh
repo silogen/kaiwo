@@ -62,7 +62,7 @@ if ((${#EXISTING_NODES[@]})); then
     nvidia.com/gpu.count=8 \
     feature.node.kubernetes.io/pci-10de.present=true \
     kaiwo.silogen.ai/node.gpu.partitioned=false \
-    amd.com/gpu.product-name=AMD_Instinct_MI300X_OAM \
+    amd.com/gpu.device-id=74a1 \
     --overwrite
 else
   echo "No matching worker nodes found to label (skipping)."

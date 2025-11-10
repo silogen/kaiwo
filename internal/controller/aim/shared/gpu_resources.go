@@ -67,8 +67,8 @@ func GetClusterGPUResources(ctx context.Context, k8sClient client.Client) (map[s
 
 // extractGPUModelFromNodeLabels extracts the GPU model from node labels.
 // Supports multiple label formats from AMD and NVIDIA GPU labellers:
-//   - AMD: amd.com/gpu.product-name, beta.amd.com/gpu.product-name, amd.com/gpu.device-id,
-//     amd.com/gpu.family, and count-encoded variants (e.g., amd.com/gpu.product-name.MI300X=4)
+//   - AMD: amd.com/gpu.device-id (primary), beta.amd.com/gpu.device-id, amd.com/gpu.family,
+//     and count-encoded variants (e.g., amd.com/gpu.device-id.74a1=4)
 //   - NVIDIA: nvidia.com/gpu.product, nvidia.com/mig.product, nvidia.com/gpu.family,
 //     and Node Feature Discovery labels (feature.node.kubernetes.io/nvidia-gpu-model)
 //
@@ -122,18 +122,50 @@ func normalizeGPUModel(model string) string {
 }
 
 // mapAMDDeviceIDToModel maps AMD device IDs to model names.
-// TODO: Expand this mapping as needed
+// Comprehensive mapping covering AMD Instinct, Radeon Pro, and Radeon GPUs.
 func mapAMDDeviceIDToModel(deviceID string) string {
 	// Remove "0x" prefix if present
 	deviceID = strings.TrimPrefix(strings.ToLower(deviceID), "0x")
 
 	knownDevices := map[string]string{
-		"74a1": "MI300X",
-		"740f": "MI210",
+		// AMD Instinct
+		"738c": "MI100",
+		"738e": "MI100",
 		"7408": "MI250X",
-		"744c": "MI250",
-		"74e0": "MI300A",
-		// TODO: Add more mappings
+		"740c": "MI250X", // MI250/MI250X
+		"740f": "MI210",
+		"7410": "MI210", // MI210 VF
+		"74a0": "MI300A",
+		"74a1": "MI300X",
+		"74a2": "MI308X",
+		"74a5": "MI325X",
+		"74a8": "MI308X", // MI308X HF
+		"74a9": "MI300X", // MI300X HF
+		"74b5": "MI300X", // MI300X VF
+		"74b6": "MI308X",
+		"74b9": "MI325X", // MI325X VF
+		"74bd": "MI300X", // MI300X HF
+		"75a0": "MI350X",
+		"75a3": "MI355X",
+		"75b0": "MI350X", // MI350X VF
+		"75b3": "MI355X", // MI355X VF
+		// AMD Radeon Pro
+		"7460": "V710",
+		"7461": "V710", // Radeon Pro V710 MxGPU
+		"7448": "W7900",
+		"744a": "W7900", // W7900 Dual Slot
+		"7449": "W7800", // W7800 48GB
+		"745e": "W7800",
+		"73a2": "W6900X",
+		"73a3": "W6800",  // W6800 GL-XL
+		"73ab": "W6800X", // W6800X / W6800X Duo
+		"73a1": "V620",
+		"73ae": "V620", // Radeon Pro V620 MxGPU
+		// AMD Radeon
+		"7550": "RX9070", // RX 9070 / 9070 XT
+		"744c": "RX7900", // RX 7900 XT / 7900 XTX / 7900 GRE / 7900M
+		"73af": "RX6900",
+		"73bf": "RX6800", // RX 6800 / 6800 XT / 6900 XT
 	}
 
 	if model, ok := knownDevices[deviceID]; ok {
@@ -144,17 +176,7 @@ func mapAMDDeviceIDToModel(deviceID string) string {
 }
 
 func extractAMDModel(labels map[string]string) string {
-	// Preferred direct labels exposed by the AMD labeller
-	if product := labelValue(labels, "amd.com/gpu.product-name", "beta.amd.com/gpu.product-name"); product != "" {
-		return normalizeGPUModel(product)
-	}
-
-	// Labels with counts encoded in the key suffix
-	if productKey := extractLabelSuffix(labels, "amd.com/gpu.product-name.", "beta.amd.com/gpu.product-name."); productKey != "" {
-		return normalizeGPUModel(productKey)
-	}
-
-	// Fall back to device identifiers
+	// Primary method: Use device ID for accurate model identification
 	if deviceID := labelValue(labels, "amd.com/gpu.device-id", "beta.amd.com/gpu.device-id"); deviceID != "" {
 		return mapAMDDeviceIDToModel(deviceID)
 	}
