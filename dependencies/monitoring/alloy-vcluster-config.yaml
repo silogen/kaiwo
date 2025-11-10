@@ -11,7 +11,9 @@ data:
 
     loki.write "host_loki" {
       endpoint {
-        url = "http://loki-gateway.test-observability.svc.cluster.local/loki/api/v1/push"
+        // Using direct Loki pod IP to avoid vCluster DNS issues
+        // TODO: Update this IP if Loki pod is recreated
+        url = "http://10.42.1.233:3100/loki/api/v1/push"
         // No auth for internal cluster communication
       }
       external_labels = {
@@ -25,7 +27,9 @@ data:
 
     prometheus.remote_write "host_prometheus" {
       endpoint {
-        url = "http://kube-prometheus-stack-prometheus.test-observability.svc.cluster.local:9090/api/v1/write"
+        // Using direct Prometheus pod IP to avoid vCluster DNS issues
+        // TODO: Update this IP if Prometheus pod is recreated
+        url = "http://10.42.1.140:9090/api/v1/write"
       }
       external_labels = {
         cluster = "vcluster",
@@ -145,52 +149,10 @@ data:
     }
 
     // ============================================================================
-    // Audit Log Webhook Receiver
+    // Audit Logs - Collected by Host Alloy
     // ============================================================================
-
-    loki.source.webhook "audit_logs" {
-      http {
-        listen_address = "0.0.0.0"
-        listen_port    = 8080
-      }
-
-      forward_to = [loki.process.audit_logs.receiver]
-    }
-
-    loki.process "audit_logs" {
-      forward_to = [loki.write.host_loki.receiver]
-
-      // Parse audit log JSON
-      stage.json {
-        expressions = {
-          verb             = "verb",
-          user             = "user.username",
-          namespace        = "objectRef.namespace",
-          resource         = "objectRef.resource",
-          name             = "objectRef.name",
-          stage            = "stage",
-          status_code      = "responseStatus.code",
-          request_uri      = "requestURI",
-        }
-      }
-
-      // Add labels from audit log fields
-      stage.labels {
-        values = {
-          verb      = "",
-          namespace = "",
-          resource  = "",
-          stage     = "",
-        }
-      }
-
-      // Add log type
-      stage.static_labels {
-        values = {
-          log_type = "k8s_audit_log",
-        }
-      }
-    }
+    // Note: Audit logs are collected by the host Alloy from vCluster pod logs
+    // No webhook receiver needed in vCluster Alloy
 
     // ============================================================================
     // Metrics Collection - Operator

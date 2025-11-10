@@ -18,6 +18,7 @@ rules:
       - services
       - endpoints
       - pods
+      - pods/log
       - events
     verbs: ["get", "list", "watch"]
   - apiGroups: [""]
@@ -60,10 +61,6 @@ spec:
       port: 12345
       targetPort: 12345
       protocol: TCP
-    - name: audit-webhook
-      port: 8080
-      targetPort: 8080
-      protocol: TCP
   selector:
     app: alloy-vcluster
 ---
@@ -84,8 +81,8 @@ spec:
         app: alloy-vcluster
     spec:
       serviceAccountName: alloy-vcluster
-      hostNetwork: false
-      dnsPolicy: ClusterFirst
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       securityContext:
         fsGroup: 473
         runAsUser: 473
@@ -117,8 +114,6 @@ spec:
           ports:
             - containerPort: 12345
               name: http-metrics
-            - containerPort: 8080
-              name: audit-webhook
           volumeMounts:
             - name: config
               mountPath: /etc/alloy

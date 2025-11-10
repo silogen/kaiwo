@@ -98,7 +98,20 @@ data:
       }
     }
 
-    // Discover vCluster pods
+    // ============================================================================
+    // Discover vCluster Namespaces (to extract labels)
+    // ============================================================================
+    discovery.kubernetes "vcluster_namespaces" {
+      role = "namespace"
+      selectors {
+        role = "namespace"
+        label = "vcluster-namespace"  // Only namespaces with this label
+      }
+    }
+
+    // ============================================================================
+    // vCluster Control Plane Pod Logs (audit logs + syncer logs)
+    // ============================================================================
     discovery.kubernetes "vcluster_pods" {
       role = "pod"
       selectors {
@@ -116,6 +129,22 @@ data:
         target_label  = "vcluster_namespace"
       }
 
+      // Extract namespace labels (github-run-id, etc.)
+      rule {
+        source_labels = ["__meta_kubernetes_namespace_label_github_run_id"]
+        target_label  = "github_run_id"
+      }
+
+      rule {
+        source_labels = ["__meta_kubernetes_namespace_label_github_run_attempt"]
+        target_label  = "github_run_attempt"
+      }
+
+      rule {
+        source_labels = ["__meta_kubernetes_namespace_label_installer"]
+        target_label  = "installer"
+      }
+
       rule {
         source_labels = ["__meta_kubernetes_pod_name"]
         target_label  = "pod"
@@ -127,10 +156,75 @@ data:
       }
     }
 
-    // Collect vCluster pod logs
+    // ============================================================================
+    // vCluster Workload Pod Logs (synced pods from inside vCluster)
+    // ============================================================================
+    discovery.kubernetes "vcluster_workload_pods" {
+      role = "pod"
+      // These are synced pods that have the vcluster.loft.sh labels
+      selectors {
+        role = "pod"
+        label = "vcluster.loft.sh/managed-by"
+      }
+    }
+
+    discovery.relabel "vcluster_workload_logs" {
+      targets = discovery.kubernetes.vcluster_workload_pods.targets
+
+      // Extract vCluster namespace
+      rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        target_label  = "vcluster_namespace"
+      }
+
+      // Extract namespace labels
+      rule {
+        source_labels = ["__meta_kubernetes_namespace_label_github_run_id"]
+        target_label  = "github_run_id"
+      }
+
+      rule {
+        source_labels = ["__meta_kubernetes_namespace_label_github_run_attempt"]
+        target_label  = "github_run_attempt"
+      }
+
+      rule {
+        source_labels = ["__meta_kubernetes_namespace_label_installer"]
+        target_label  = "installer"
+      }
+
+      // Extract original vCluster namespace from label
+      rule {
+        source_labels = ["__meta_kubernetes_pod_label_vcluster_loft_sh_namespace"]
+        target_label  = "workload_namespace"
+      }
+
+      rule {
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label  = "pod"
+      }
+
+      rule {
+        source_labels = ["__meta_kubernetes_pod_container_name"]
+        target_label  = "container"
+      }
+
+      rule {
+        source_labels = ["__meta_kubernetes_pod_label_app"]
+        target_label  = "app"
+      }
+    }
+
+    // Collect vCluster control plane logs (for audit logs)
     loki.source.kubernetes "vcluster_logs" {
       targets    = discovery.relabel.vcluster_logs.output
       forward_to = [loki.process.audit_logs.receiver]
+    }
+
+    // Collect vCluster workload pod logs
+    loki.source.kubernetes "vcluster_workload_logs" {
+      targets    = discovery.relabel.vcluster_workload_logs.output
+      forward_to = [loki.process.workload_logs.receiver]
     }
 
     // Process and parse audit logs
@@ -194,5 +288,41 @@ data:
           expression = ".*"
           drop_counter_reason = "not_audit_log"
         }
+      }
+    }
+
+    // ============================================================================
+    // Process vCluster Workload Logs
+    // ============================================================================
+    loki.process "workload_logs" {
+      forward_to = [loki.write.loki.receiver]
+
+      // Add log type label
+      stage.static_labels {
+        values = {
+          log_type = "pod_log",
+        }
+      }
+
+      // Try to extract JSON logs if present
+      stage.json {
+        expressions = {
+          level = "level",
+          msg   = "msg",
+          time  = "time",
+        }
+      }
+
+      // Promote log level to label
+      stage.labels {
+        values = {
+          level = "",
+        }
+      }
+
+      // Drop noisy health check logs
+      stage.match {
+        selector = "{app=\"kube-probe\"}"
+        action   = "drop"
       }
     }

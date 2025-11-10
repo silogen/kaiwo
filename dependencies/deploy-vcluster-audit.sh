@@ -28,8 +28,17 @@ fi
 
 echo "Deploying audit logging components to namespace: $VCLUSTER_NAMESPACE"
 
-# Step 1: Deploy audit policy ConfigMap
-echo "1. Deploying audit policy ConfigMap..."
+# Step 1: Label namespace for monitoring
+echo "1. Labeling namespace with vCluster metadata..."
+kubectl label namespace "$VCLUSTER_NAMESPACE" \
+  vcluster-namespace="$VCLUSTER_NAMESPACE" \
+  github-run-id="$GITHUB_RUN_ID" \
+  github-run-attempt="$GITHUB_RUN_ATTEMPT" \
+  installer="$INSTALLER" \
+  --overwrite
+
+# Step 2: Deploy audit policy ConfigMap
+echo "2. Deploying audit policy ConfigMap..."
 kubectl apply -f "${MONITORING_DIR}/vcluster-audit-policy.yaml" -n "$VCLUSTER_NAMESPACE"
 
 echo ""
