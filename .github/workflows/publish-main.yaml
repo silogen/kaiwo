@@ -3,13 +3,13 @@ name: publish-main
 on:
   push:
     branches:
-    - main
+      - main
     paths:
-    - 'apis/**'
-    - 'internal/**'
-    - 'pkg/**'
-    - 'cmd/**'
-    - 'config/**'
+      - 'apis/**'
+      - 'internal/**'
+      - 'pkg/**'
+      - 'cmd/**'
+      - 'config/**'
 
 permissions:
   contents: write
@@ -23,55 +23,70 @@ jobs:
       CHART_NAME: kaiwo-operator
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
 
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.21'
+      - name: Create or update publish-main branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -B publish-main
 
-    - name: Set up Helm
-      uses: azure/setup-helm@v4.3.1
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
 
-    - name: Derive versions (image + chart)
-      id: ver
-      shell: bash
-      run: |
-        SHORT_SHA="${GITHUB_SHA::7}"
-        IMAGE_TAG="main-${SHORT_SHA}"
-        CHART_VERSION="0.0.0-main.${SHORT_SHA}"
-        {
-          echo "SHORT_SHA=${SHORT_SHA}"
-          echo "IMAGE_TAG=${IMAGE_TAG}"
-          echo "CHART_VERSION=${CHART_VERSION}"
-        } >> "$GITHUB_ENV"
-        {
-          echo "short_sha=${SHORT_SHA}"
-          echo "image_tag=${IMAGE_TAG}"
-          echo "chart_version=${CHART_VERSION}"
-        } >> "$GITHUB_OUTPUT"
+      - name: Set up Helm
+        uses: azure/setup-helm@v4.3.1
 
-    - name: Log in to GHCR (docker)
-      run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $GITHUB_ACTOR --password-stdin
+      - name: Derive versions (image + chart)
+        id: ver
+        shell: bash
+        run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          IMAGE_TAG="publish-main-${SHORT_SHA}"
+          CHART_VERSION="0.0.0-publish-main.${SHORT_SHA}"
+          {
+            echo "SHORT_SHA=${SHORT_SHA}"
+            echo "IMAGE_TAG=${IMAGE_TAG}"
+            echo "CHART_VERSION=${CHART_VERSION}"
+          } >> "$GITHUB_ENV"
+          {
+            echo "short_sha=${SHORT_SHA}"
+            echo "image_tag=${IMAGE_TAG}"
+            echo "chart_version=${CHART_VERSION}"
+          } >> "$GITHUB_OUTPUT"
 
-    - name: Build and push operator image
-      run: |
-        make docker-build IMG=${IMAGE_REPO}:${IMAGE_TAG}
-        make docker-push  IMG=${IMAGE_REPO}:${IMAGE_TAG}
-        docker tag ${IMAGE_REPO}:${IMAGE_TAG} ${IMAGE_REPO}:main
-        docker push ${IMAGE_REPO}:main
+      - name: Log in to GHCR (docker)
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $GITHUB_ACTOR --password-stdin
 
-    - name: Package Helm chart
-      run: |
-        make helm-release TAG=${IMAGE_TAG} CHART_VERSION=${CHART_VERSION}
+      - name: Build and push operator image
+        run: |
+          make docker-build IMG=${IMAGE_REPO}:${IMAGE_TAG}
+          make docker-push  IMG=${IMAGE_REPO}:${IMAGE_TAG}
+          # Optionally tag with publish-main (instead of main)
+          docker tag ${IMAGE_REPO}:${IMAGE_TAG} ${IMAGE_REPO}:publish-main
+          docker push ${IMAGE_REPO}:publish-main
 
-    - name: Log in to GHCR (Helm/OCI)
-      run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u $GITHUB_ACTOR --password-stdin
+      - name: Package Helm chart
+        run: |
+          make helm-release TAG=${IMAGE_TAG} CHART_VERSION=${CHART_VERSION}
 
-    - name: Push Helm chart to OCI registry
-      run: |
-        make helm-push-oci TAG=${IMAGE_TAG} CHART_VERSION=${CHART_VERSION}
+      - name: Log in to GHCR (Helm/OCI)
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u $GITHUB_ACTOR --password-stdin
 
+      - name: Push Helm chart to OCI registry
+        run: |
+          make helm-push-oci TAG=${IMAGE_TAG} CHART_VERSION=${CHART_VERSION}
+
+      - name: Commit and push to publish-main
+        run: |
+          git add -A
+          git commit -m "Publish artifacts for commit $GITHUB_SHA" || echo "No changes to commit"
+          git push origin publish-main --force
 
 
