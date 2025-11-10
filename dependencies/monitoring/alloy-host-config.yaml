@@ -91,10 +91,10 @@ data:
     // ============================================================================
     // vCluster Audit Logs Collection
     // ============================================================================
-    // Loki remote write endpoint
+    // Loki remote write endpoint (direct to Loki, bypassing crashlooping gateway)
     loki.write "loki" {
       endpoint {
-        url = "http://loki-gateway.test-observability.svc.cluster.local/loki/api/v1/push"
+        url = "http://loki-0.loki-headless.test-observability.svc.cluster.local:3100/loki/api/v1/push"
       }
     }
 
@@ -231,13 +231,16 @@ data:
     loki.process "audit_logs" {
       forward_to = [loki.write.loki.receiver]
 
-      // Only process lines that look like audit logs (start with {"kind":"Event")
+      // Only process lines that look like audit logs
+      // vCluster syncer logs audit events with INFO prefix
       stage.match {
-        selector = "{container=\"vcluster\"}"
+        selector = "{container=\"syncer\",pod=~\".*vcluster-0\"}"
 
-        // Look for audit log JSON
+        // Extract audit log JSON from log line
+        // The JSON starts with {"kind":"Event" and ends before the last tab
+        // Use a simple greedy capture from the first { to capture the JSON
         stage.regex {
-          expression = "^(?P<audit_json>\\{\"kind\":\"Event\".+)$"
+          expression = "\\t(?P<audit_json>\\{\"kind\":\"Event\".*\\})\\t"
         }
 
         // Parse the audit log JSON
@@ -278,17 +281,6 @@ data:
         }
       }
 
-      // Drop non-audit log lines from vCluster
-      stage.match {
-        selector = "{container=\"vcluster\"}"
-        pipeline_name = "drop_non_audit"
-
-        // If it doesn't have the audit_json extracted, drop it
-        stage.drop {
-          expression = ".*"
-          drop_counter_reason = "not_audit_log"
-        }
-      }
     }
 
     // ============================================================================

@@ -51,8 +51,8 @@ data:
           - group: ""
             resources: ["services", "endpoints", "pods"]
 
-      # Log metadata for all other requests to core and extensions
-      - level: Metadata
+      # Log full request/response for core resources (for debugging)
+      - level: RequestResponse
         resources:
           - group: ""
             resources: ["pods", "services", "configmaps", "secrets", "persistentvolumeclaims"]

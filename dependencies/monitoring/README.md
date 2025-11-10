@@ -8,43 +8,34 @@ This directory contains the complete observability stack for KAIWO testing and d
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Host Cluster                             │
 │  ┌────────────────────────────────────────────────────────────┐ │
-│  │  monitoring namespace                                      │ │
+│  │  test-observability namespace                              │ │
 │  │  ├── Grafana Loki (logs storage)                           │ │
 │  │  ├── Prometheus (metrics storage)                          │ │
-│  │  ├── Grafana (visualization)                               │ │
-│  │  └── Alloy DaemonSet (GPU & node metrics collection)       │ │
+│  │  ├── Grafana (visualization + dashboards)                  │ │
+│  │  └── Alloy DaemonSet (collects from all vClusters)         │ │
+│  │      ├── GPU metrics (AMD/NVIDIA exporters)                │ │
+│  │      ├── Node metrics (kubelet, cAdvisor)                  │ │
+│  │      ├── vCluster control plane logs (syncer container)    │ │
+│  │      ├── vCluster workload pod logs (synced to host)       │ │
+│  │      └── K8s audit logs (from syncer stdout)               │ │
 │  └────────────────────────────────────────────────────────────┘ │
 │                                                                 │
 │  ┌────────────────────────────────────────────────────────────┐ │
-│  │  vCluster Namespace (kaiwo-test-{run_id}-{attempt}-{inst} )│ │
-│  │  └── vCluster Control Plane ─────────────────────────────-─┼─┼─┐
-│  └────────────────────────────────────────────────────────────┘ │ │
-└───────────────────────────────────────────────────────────────────┘ │
-                                                                      │
-    ┌─────────────────────────────────────────────────────────────────┘
-    │
-    │  ┌────────────────────────────────────────────────────────────┐
-    └──│                    vCluster (Virtual)                      │
-       │  ┌──────────────────────────────────────────────────────┐ │
-       │  │  Alloy DaemonSet                                     │ │
-       │  │  ├── Pod logs collection (all namespaces)           │ │
-       │  │  ├── K8s events collection                          │ │
-       │  │  ├── API audit log webhook receiver                 │ │
-       │  │  ├── Operator metrics scraping                      │ │
-       │  │  ├── Kube-state-metrics scraping                    │ │
-       │  │  ├── KubeRay metrics scraping                       │ │
-       │  │  ├── Kueue metrics scraping                         │ │
-       │  │  └── Ray cluster metrics scraping                   │ │
-       │  │                                                        │ │
-       │  │  All data → Remote write to host Loki/Prometheus     │ │
-       │  └──────────────────────────────────────────────────────┘ │
-       │                                                            │
-       │  ┌──────────────────────────────────────────────────────┐ │
-       │  │  kube-state-metrics (in kube-system)                 │ │
-       │  │  Exposes K8s resource metrics (pods, deployments...)  │ │
-       │  └──────────────────────────────────────────────────────┘ │
-       └────────────────────────────────────────────────────────────┘
+│  │  vCluster Namespace (kaiwo-test-{run_id}-{attempt}-{inst}) │ │
+│  │  ├── vCluster Control Plane Pod (test-monitoring-vcluster) │ │
+│  │  │   └── syncer container: K3s API server + audit logs     │ │
+│  │  ├── Synced workload pods (from vCluster)                  │ │
+│  │  │   └── Labels: vcluster.loft.sh/managed-by               │ │
+│  │  └── Namespace labels: vcluster_namespace, github_run_id   │ │
+│  └────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────┘
 ```
+
+**Key Architecture Changes (2025-11-10):**
+- ✅ **Host-side collection**: Alloy runs ONLY on host cluster (not in vCluster)
+- ✅ **Direct log collection**: Collects from vCluster syncer container and synced workload pods
+- ✅ **No webhook**: Audit logs scraped from syncer stdout (K3s writes to `-`)
+- ✅ **Label propagation**: Namespace labels automatically propagate to all logs/metrics
 
 ## Components
 
@@ -54,6 +45,7 @@ This directory contains the complete observability stack for KAIWO testing and d
    - Stores logs from all vClusters with proper labeling
    - 30-day retention
    - 50Gi persistent storage
+   - Direct access endpoint (no gateway needed)
 
 2. **Prometheus** - Metrics storage and querying
    - Stores metrics from vClusters and host
@@ -64,29 +56,34 @@ This directory contains the complete observability stack for KAIWO testing and d
    - Pre-configured with Loki and Prometheus datasources
    - NodePort service on port 30300
    - Default credentials: admin/admin
+   - Auto-loads dashboards from ConfigMap
 
-4. **Alloy (Host)** - Telemetry collector for host
-   - Scrapes GPU exporters (AMD OpenTelemetry, NVIDIA DCGM)
-   - Collects host node metrics (kubelet, cAdvisor)
-   - Writes to local Prometheus
+4. **Alloy (Host DaemonSet)** - Unified telemetry collector
+   - **GPU Metrics**: Scrapes AMD/NVIDIA GPU exporters
+   - **Node Metrics**: Collects kubelet and cAdvisor metrics
+   - **vCluster Logs**: Discovers and collects logs from:
+     - vCluster control plane pods (syncer container)
+     - Workload pods synced to host (vcluster.loft.sh/managed-by label)
+   - **Audit Logs**: Parses K3s audit JSON from syncer stdout
+   - **Label Extraction**: Propagates namespace labels (github_run_id, etc.)
 
-### vCluster Components
+### vCluster Configuration
 
-1. **Alloy (vCluster)** - Telemetry collector for vCluster
-   - Collects pod logs from all namespaces
-   - Collects Kubernetes events
-   - Receives audit logs from API server webhook
-   - Scrapes operator, Kueue, KubeRay, Ray cluster metrics
-   - Remote writes to host Loki/Prometheus with labels
+1. **Audit Policy** - Kubernetes API audit trail
+   - ConfigMap: `vcluster-audit-policy` (deployed to host namespace)
+   - Configured in vCluster's K3s API server
+   - Audit logs written to stdout (audit-log-path=-)
+   - Levels:
+     - **RequestResponse**: KAIWO CRDs, core resources (pods, services, etc.)
+     - **Metadata**: Everything else
+   - Captured fields: verb, user, resource, request/response bodies
 
-2. **kube-state-metrics** - Kubernetes resource metrics
-   - Deployed in kube-system namespace
-   - Exposes metrics about pods, deployments, CRDs, etc.
-
-3. **Audit Logging** - Kubernetes API audit trail
-   - Configured in vCluster API server
-   - Sends audit events to Alloy via webhook
-   - Captures KAIWO CRD operations, pod lifecycle, etc.
+2. **Namespace Labels** - Metadata propagation
+   - `vcluster-namespace`: vCluster instance identifier
+   - `github-run-id`: GitHub Actions run ID
+   - `github-run-attempt`: GitHub Actions run attempt
+   - `installer`: Installation method (helm/kustomization/manual)
+   - Labels automatically extracted and added to all logs/metrics
 
 ## Setup Instructions
 
@@ -96,29 +93,26 @@ This directory contains the complete observability stack for KAIWO testing and d
 # From the project root directory
 cd dependencies
 
-# Deploy Loki, Prometheus, Grafana, and host Alloy to the host cluster
+# Deploy Loki, Prometheus, Grafana, and host Alloy to test-observability namespace
 helmfile -f monitoring-helmfile.yaml apply
 
 # Deploy the Alloy host configuration ConfigMap
-kubectl apply -f monitoring/alloy-host-config.yaml -n monitoring
+kubectl apply -f monitoring/alloy-host-config.yaml -n test-observability
 
 # Wait for deployments to be ready
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=loki -n monitoring --timeout=5m
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n monitoring --timeout=5m
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n monitoring --timeout=5m
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=loki -n test-observability --timeout=5m
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n test-observability --timeout=5m
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n test-observability --timeout=5m
 ```
 
 ### 2. Deploy Grafana Dashboards
 
 ```bash
-# Create the dashboard ConfigMap
-kubectl create configmap grafana-dashboards-kaiwo \
-  --from-file=monitoring/grafana-dashboards/ \
-  -n monitoring \
-  --dry-run=client -o yaml | kubectl apply -f -
+# Apply dashboards using kustomize
+kubectl apply -k monitoring/grafana-dashboards/
 
-# Label it for Grafana to discover
-kubectl label configmap grafana-dashboards-kaiwo grafana_dashboard=1 -n monitoring
+# Wait for Grafana to load dashboards
+kubectl rollout restart deployment/kube-prometheus-stack-grafana -n test-observability
 ```
 
 ### 3. Access Grafana
@@ -128,76 +122,70 @@ kubectl label configmap grafana-dashboards-kaiwo grafana_dashboard=1 -n monitori
 echo "Grafana URL: http://<node-ip>:30300"
 
 # Or via port-forward
-kubectl port-forward -n monitoring svc/kube-prometheus-stack-grafana 3000:80
+kubectl port-forward -n test-observability svc/kube-prometheus-stack-grafana 3000:80
 
 # Default credentials: admin/admin
 ```
 
-### 4. Deploy vCluster Monitoring (Automatic via CI)
+### 4. Deploy vCluster with Monitoring
 
-When vCluster is created via GitHub Actions, monitoring is automatically deployed via the `deploy-vcluster-monitoring.sh` script.
+**Automated (CI/CD):**
+The `deploy-vcluster-audit.sh` script automatically:
+1. Labels the vCluster namespace with metadata
+2. Deploys audit policy ConfigMap
 
 **Manual deployment:**
 
 ```bash
-# Ensure you're in the vCluster context
-kubectl config use-context vcluster_<vcluster-name>
-
 # Set environment variables
-export VCLUSTER_NAMESPACE="kaiwo-test-123-1-helm"  # Host namespace where vCluster runs
+export VCLUSTER_NAMESPACE="kaiwo-test-manual-1-local"
 export GITHUB_RUN_ID="local"
 export GITHUB_RUN_ATTEMPT="1"
 export INSTALLER="manual"
 
-# Deploy monitoring
-bash ./dependencies/deploy-vcluster-monitoring.sh
+# Create namespace
+kubectl create namespace "$VCLUSTER_NAMESPACE"
+
+# Deploy audit components (labels namespace + audit policy)
+bash ./dependencies/deploy-vcluster-audit.sh
+
+# Create vCluster with audit logging enabled
+vcluster create test-monitoring \
+  --namespace "$VCLUSTER_NAMESPACE" \
+  --values dependencies/vcluster.yaml
 ```
 
-### 5. Deploy Audit Policy to vCluster Namespace (Host)
-
-The audit policy ConfigMaps must be deployed to the **host cluster** in the vCluster namespace before vCluster starts:
-
-```bash
-# Switch to host kubeconfig
-export KUBECONFIG=/path/to/host-kubeconfig
-
-# Deploy audit ConfigMaps to vCluster namespace
-export VCLUSTER_NAMESPACE="kaiwo-test-123-1-helm"
-kubectl apply -f monitoring/vcluster-audit-policy.yaml -n $VCLUSTER_NAMESPACE
-kubectl apply -f monitoring/vcluster-audit-webhook.yaml -n $VCLUSTER_NAMESPACE
-
-# Update the webhook config with correct namespace
-cat monitoring/vcluster-audit-webhook.yaml | \
-  sed "s/\${NAMESPACE}/$VCLUSTER_NAMESPACE/g" | \
-  kubectl apply -f - -n $VCLUSTER_NAMESPACE
-```
+**No additional steps needed!** The host Alloy DaemonSet automatically discovers and collects from the new vCluster.
 
 ## Label Strategy
 
 All data is labeled with the following labels for filtering and correlation:
 
-### Common Labels
+### Common Labels (All Logs/Metrics)
 
 - `vcluster_namespace`: Host cluster namespace where vCluster runs (e.g., `kaiwo-test-123-1-helm`)
-- `github_run_id`: GitHub Actions run ID
-- `github_run_attempt`: GitHub Actions run attempt number
-- `installer`: Installation method (`kustomization` or `helm`)
+- `github_run_id`: GitHub Actions run ID (e.g., `12345`)
+- `github_run_attempt`: GitHub Actions run attempt number (e.g., `1`)
+- `installer`: Installation method (`kustomization`, `helm`, or `manual`)
+- `cluster`: Always `vcluster` for vCluster data
 
 ### Log-Specific Labels
 
 - `log_type`: Type of log entry
-  - `pod_log`: Container logs from pods
-  - `k8s_event`: Kubernetes events
+  - `pod_log`: Container logs from workload pods
   - `k8s_audit_log`: API server audit logs
-- `namespace`: Kubernetes namespace within vCluster
+- `namespace`: Kubernetes namespace within vCluster (for pod logs)
+- `workload_namespace`: Original vCluster namespace (for synced workload pods)
 - `pod`: Pod name
 - `container`: Container name
+- `app`: App label from pod
 
-### Metric-Specific Labels
+### Audit Log Labels (Parsed from JSON)
 
-- `job`: Scrape job name (e.g., `kaiwo-operator`, `kueue`, `kuberay`)
-- `namespace`: Kubernetes namespace within vCluster
-- `pod`: Pod name
+- `verb`: API operation (`create`, `update`, `delete`, `get`, `list`, `patch`, `watch`)
+- `resource`: Kubernetes resource type (e.g., `pods`, `deployments`, `aims`)
+- `namespace`: Namespace within vCluster
+- `stage`: Audit stage (always `ResponseComplete`)
 
 ## Grafana Dashboards
 
@@ -250,10 +238,16 @@ Cluster-wide health and resource overview:
 {vcluster_namespace="kaiwo-test-456-1-helm", log_type="k8s_audit_log", resource=~"aims|rayservices|appwrappers"}
 ```
 
-### Find pod failures
+### View full request/response for create operations
 
 ```logql
-{vcluster_namespace="kaiwo-test-456-1-helm", log_type="k8s_event"} |~ "(?i)failed|error|crash|oom"
+{vcluster_namespace="kaiwo-test-456-1-helm", log_type="k8s_audit_log", verb="create"} | json
+```
+
+### Filter audit logs by specific resource
+
+```logql
+{vcluster_namespace="kaiwo-test-456-1-helm", log_type="k8s_audit_log", resource="pods", verb="create"}
 ```
 
 ### Filter by GitHub run
@@ -290,61 +284,104 @@ histogram_quantile(0.95,
 )
 ```
 
+## Audit Logging Details
+
+### What Gets Audited?
+
+See `vcluster-audit-policy.yaml` for the full policy:
+
+**RequestResponse level (full request/response bodies):**
+- **KAIWO CRDs**: `kaiwo.silogen.ai/*`, `aim.silogen.ai/*`
+- **Core resources**: `pods`, `services`, `configmaps`, `secrets`, `persistentvolumeclaims`
+- **Apps**: `deployments`, `statefulsets`, `daemonsets`, `replicasets`
+- **KServe**: `serving.kserve.io/*`
+- **Ray**: `ray.io/rayclusters`, `rayservices`, `rayjobs`
+- **Kueue**: `kueue.x-k8s.io/*`
+- **AppWrappers**: `workload.codeflare.dev/appwrappers`
+
+**Metadata level (just metadata, no bodies):**
+- Jobs, CronJobs
+- Events
+
+**Excluded (not logged):**
+- System component read operations
+- Lease operations (high volume)
+- Health checks
+
+### Example Audit Log
+
+```json
+{
+  "kind": "Event",
+  "apiVersion": "audit.k8s.io/v1",
+  "level": "RequestResponse",
+  "verb": "create",
+  "user": {"username": "system:admin"},
+  "objectRef": {
+    "resource": "configmaps",
+    "namespace": "default",
+    "name": "test-config"
+  },
+  "requestObject": {
+    "kind": "ConfigMap",
+    "data": {"key1": "value1"}
+  },
+  "responseObject": {
+    "kind": "ConfigMap",
+    "metadata": {"uid": "...", "resourceVersion": "123"},
+    "data": {"key1": "value1"}
+  }
+}
+```
+
 ## Troubleshooting
 
 ### No logs appearing in Loki
 
-1. Check Alloy is running in vCluster:
+1. Check Alloy is running on host:
    ```bash
-   kubectl get pods -l app=alloy-vcluster
-   kubectl logs -l app=alloy-vcluster -f
+   kubectl get pods -n test-observability -l app=alloy-host
+   kubectl logs -n test-observability -l app=alloy-host -f
    ```
 
-2. Verify remote write endpoint is accessible:
+2. Verify vCluster pods are labeled correctly:
    ```bash
-   kubectl exec -it <alloy-pod> -- wget -O- http://loki-gateway.monitoring.svc.cluster.local/ready
+   kubectl get pods -n "$VCLUSTER_NAMESPACE" --show-labels | grep vcluster
    ```
 
-3. Check Alloy configuration:
+3. Check namespace labels:
    ```bash
-   kubectl get configmap alloy-vcluster-config -o yaml
+   kubectl get namespace "$VCLUSTER_NAMESPACE" --show-labels
    ```
 
-### No metrics appearing in Prometheus
-
-1. Check ServiceMonitor is deployed:
+4. Query Loki directly:
    ```bash
-   kubectl get servicemonitor -A
-   ```
-
-2. Verify operator metrics endpoint:
-   ```bash
-   kubectl port-forward -n kaiwo-system svc/controller-manager-metrics-service 8443:8443
-   curl -k https://localhost:8443/metrics
-   ```
-
-3. Check Alloy scrape targets:
-   ```bash
-   kubectl logs -l app=alloy-vcluster | grep -i "scrape"
+   kubectl exec -n test-observability loki-0 -c loki -- \
+     wget -q -O- 'http://localhost:3100/loki/api/v1/label/vcluster_namespace/values'
    ```
 
 ### Audit logs not appearing
 
-1. Verify audit policy ConfigMap exists in vCluster namespace (host):
+1. Verify audit policy ConfigMap exists:
    ```bash
-   kubectl get configmap vcluster-audit-policy -n <vcluster-namespace>
+   kubectl get configmap vcluster-audit-policy -n "$VCLUSTER_NAMESPACE"
    ```
 
-2. Check vCluster API server logs (host):
+2. Check vCluster syncer logs for audit JSON:
    ```bash
-   kubectl logs -n <vcluster-namespace> -l app=vcluster -c syncer | grep audit
+   kubectl logs -n "$VCLUSTER_NAMESPACE" -l app=vcluster -c syncer | grep '{"kind":"Event"'
    ```
 
-3. Verify Alloy webhook endpoint is accessible from vCluster:
+3. Check Alloy is parsing audit logs:
    ```bash
-   # From within vCluster
-   kubectl run -it --rm test --image=curlimages/curl -- \
-     curl -v http://alloy-vcluster.<namespace>.svc.cluster.local:8080/audit
+   kubectl logs -n test-observability -l app=alloy-host | grep audit
+   ```
+
+4. Query for audit log type:
+   ```bash
+   kubectl exec -n test-observability loki-0 -c loki -- \
+     wget -q -O- 'http://localhost:3100/loki/api/v1/label/log_type/values'
+   # Should include: k8s_audit_log
    ```
 
 ### Dashboard shows "No data"
@@ -354,8 +391,7 @@ histogram_quantile(0.95,
    - Test connection
 
 2. Check label filters match your vCluster:
-   ```bash
-   # In Grafana Explore
+   ```logql
    {vcluster_namespace=~".*"}  # Should show available vcluster_namespace labels
    ```
 
@@ -369,26 +405,43 @@ histogram_quantile(0.95,
 
 After vCluster deletion, historical data remains in Loki/Prometheus for 30 days, queryable by `vcluster_namespace`, `github_run_id`, etc.
 
-## Cost and Resource Usage
+## Resource Usage
 
 **Host Cluster Resources:**
 - Loki: 500m-2 CPU, 1-4Gi RAM, 50Gi storage
 - Prometheus: 500m-2 CPU, 2-8Gi RAM, 50Gi storage
 - Grafana: 250m-1 CPU, 512Mi-2Gi RAM, 10Gi storage
-- Alloy (host): 100m-500m CPU, 128-512Mi RAM per node
+- Alloy (host): 100m-500m CPU, 256Mi-1Gi RAM per node
 
-**vCluster Resources:**
-- Alloy: 100m-500m CPU, 256Mi-1Gi RAM per node
-- kube-state-metrics: 100m-500m CPU, 256-512Mi RAM
-
-**Total (per vCluster test run):** ~200-600m CPU, ~512Mi-1.5Gi RAM
+**vCluster Overhead:** None! (monitoring runs on host)
 
 ## Security Considerations
 
 1. **Grafana Access**: Change default admin password in production
-2. **Metrics Authentication**: Consider enabling mTLS for remote write
-3. **Audit Logs**: Contain sensitive API request/response data
-4. **Label Injection**: Labels are trusted input from CI environment
+2. **Audit Logs**: Contain sensitive API request/response data including secrets
+3. **Label Injection**: Labels are trusted input from CI environment
+4. **Access Control**: Consider RBAC for Grafana datasource access
+
+## Files in This Directory
+
+### Active Files
+- `README.md` - This file
+- `QUICK_START.md` - Quick setup guide
+- `DEPLOYMENT_NOTES.md` - Deployment history and troubleshooting
+- `AUDIT_LOGGING_SETUP.md` - **OUTDATED** (describes webhook approach)
+- `alloy-host-config.yaml` - Alloy configuration for host cluster ✅
+- `vcluster-audit-policy.yaml` - K8s audit policy ✅
+- `grafana-dashboards/` - Dashboard JSON files ✅
+- `grafana-dashboards/kustomization.yaml` - Dashboard deployment config ✅
+
+### Deprecated Files (No Longer Used)
+- `alloy-audit-receiver.yaml` - ❌ Webhook receiver (replaced by stdout scraping)
+- `alloy-vcluster-config.yaml` - ❌ Alloy config for inside vCluster (no longer deployed)
+- `alloy-vcluster-daemonset.yaml` - ❌ Alloy DaemonSet for vCluster (no longer deployed)
+- `vcluster-audit-webhook.yaml` - ❌ Audit webhook config (no longer used)
+- `kube-state-metrics.yaml` - ❌ Separate deployment (using host Prometheus stack)
+- `grafana-dashboards-configmap.yaml` - ❌ Manual ConfigMap (using kustomize)
+- `test-workloads.yaml` - ❌ Testing only
 
 ## Further Reading
 

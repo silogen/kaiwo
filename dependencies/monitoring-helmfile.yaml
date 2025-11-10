@@ -57,14 +57,7 @@ releases:
         resultsCache:
           enabled: false
         gateway:
-          enabled: true
-          replicas: 1
-          service:
-            type: ClusterIP
-            port: 80
-          nginxConfig:
-            # Don't use DNS resolver - causes issues in some clusters
-            resolver: ""
+          enabled: false  # Disabled - using direct Loki access instead
         monitoring:
           selfMonitoring:
             enabled: false
@@ -131,7 +124,7 @@ releases:
           additionalDataSources:
             - name: Loki
               type: loki
-              url: http://loki-gateway.test-observability.svc.cluster.local
+              url: http://loki-0.loki-headless.test-observability.svc.cluster.local:3100
               access: proxy
               isDefault: false
               jsonData:
@@ -164,16 +157,7 @@ releases:
             nodePort: 30300
 
         alertmanager:
-          enabled: true
-          alertmanagerSpec:
-            storage:
-              volumeClaimTemplate:
-                spec:
-                  storageClassName: openebs-hostpath
-                  accessModes: ["ReadWriteOnce"]
-                  resources:
-                    requests:
-                      storage: 10Gi
+          enabled: false  # Disabled - not needed for log/metric collection
 
         # Disable default exporters we don't need (or that conflict with existing monitoring)
         kubeStateMetrics:
