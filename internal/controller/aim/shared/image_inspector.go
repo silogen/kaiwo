@@ -33,6 +33,7 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/authn/k8schain"
+	kauth "github.com/google/go-containerregistry/pkg/authn/kubernetes"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	corev1 "k8s.io/api/core/v1"
@@ -150,7 +151,7 @@ func InspectImage(
 		kc, err := k8schain.New(ctx, clientset, k8schain.Options{
 			Namespace:          namespace,
 			ImagePullSecrets:   secretNames,
-			ServiceAccountName: "",
+			ServiceAccountName: kauth.NoServiceAccount,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to create k8s keychain: %w", err)
