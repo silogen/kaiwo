@@ -46,6 +46,7 @@ func TestNormalizeGPUModel(t *testing.T) {
 		{"mi300x", "MI300X"},
 		{"MI300X (rev 2)", "MI300X"},
 		{"Instinct MI300X", "MI300X"},
+		{"AMD_Instinct_MI325_OAM", "MI325"},
 		{"A100-SXM4-40GB", "A100"},
 		{"Tesla T4", "T4"},
 		{"NVIDIA-A100-SXM4-40GB", "A100"},
@@ -65,12 +66,12 @@ func TestNormalizeGPUModel(t *testing.T) {
 }
 
 func TestIsGPUAvailableWithVariantNames(t *testing.T) {
-	// Create a fake node with MI300X GPU
+	// Create a fake node with MI300X GPU using device ID
 	node := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-node",
 			Labels: map[string]string{
-				"amd.com/gpu.product-name": "MI300X (rev 2)", // Variant name with extra tokens
+				"amd.com/gpu.device-id": "0x74a1", // MI300X device ID
 			},
 		},
 		Status: corev1.NodeStatus{
@@ -112,12 +113,12 @@ func TestIsGPUAvailableWithVariantNames(t *testing.T) {
 }
 
 func TestUpdateTemplateGPUAvailabilityNormalization(t *testing.T) {
-	// Create a fake node with MI300X GPU labeled with variant name
+	// Create a fake node with MI300X GPU using device ID
 	node := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-node",
 			Labels: map[string]string{
-				"amd.com/gpu.product-name": "Instinct MI300X",
+				"amd.com/gpu.device-id": "0x74a1", // MI300X device ID
 			},
 		},
 		Status: corev1.NodeStatus{
@@ -199,33 +200,65 @@ func TestExtractGPUModelFromNodeLabels(t *testing.T) {
 		expected     string
 	}{
 		{
-			name: "AMD product-name direct",
-			labels: map[string]string{
-				"amd.com/gpu.product-name": "MI300X",
-			},
-			resourceName: "amd.com/gpu",
-			expected:     "MI300X",
-		},
-		{
-			name: "AMD product-name with variant",
-			labels: map[string]string{
-				"amd.com/gpu.product-name": "MI300X (rev 2)",
-			},
-			resourceName: "amd.com/gpu",
-			expected:     "MI300X",
-		},
-		{
-			name: "AMD product-name count-encoded",
-			labels: map[string]string{
-				"amd.com/gpu.product-name.MI300X": "4",
-			},
-			resourceName: "amd.com/gpu",
-			expected:     "MI300X",
-		},
-		{
-			name: "AMD device-id",
+			name: "AMD device-id MI300X",
 			labels: map[string]string{
 				"amd.com/gpu.device-id": "0x74a1",
+			},
+			resourceName: "amd.com/gpu",
+			expected:     "MI300X",
+		},
+		{
+			name: "AMD device-id MI300X HF",
+			labels: map[string]string{
+				"amd.com/gpu.device-id": "0x74bd",
+			},
+			resourceName: "amd.com/gpu",
+			expected:     "MI300X",
+		},
+		{
+			name: "AMD device-id MI325X",
+			labels: map[string]string{
+				"amd.com/gpu.device-id": "0x74a5",
+			},
+			resourceName: "amd.com/gpu",
+			expected:     "MI325X",
+		},
+		{
+			name: "AMD device-id MI210",
+			labels: map[string]string{
+				"amd.com/gpu.device-id": "0x740f",
+			},
+			resourceName: "amd.com/gpu",
+			expected:     "MI210",
+		},
+		{
+			name: "AMD device-id MI250X",
+			labels: map[string]string{
+				"amd.com/gpu.device-id": "0x7408",
+			},
+			resourceName: "amd.com/gpu",
+			expected:     "MI250X",
+		},
+		{
+			name: "AMD device-id count-encoded",
+			labels: map[string]string{
+				"amd.com/gpu.device-id.74a1": "4",
+			},
+			resourceName: "amd.com/gpu",
+			expected:     "MI300X",
+		},
+		{
+			name: "AMD device-id without 0x prefix",
+			labels: map[string]string{
+				"amd.com/gpu.device-id": "74a1",
+			},
+			resourceName: "amd.com/gpu",
+			expected:     "MI300X",
+		},
+		{
+			name: "AMD beta device-id",
+			labels: map[string]string{
+				"beta.amd.com/gpu.device-id": "0x74a1",
 			},
 			resourceName: "amd.com/gpu",
 			expected:     "MI300X",
@@ -277,12 +310,12 @@ func TestExtractGPUModelFromNodeLabels(t *testing.T) {
 func TestGetClusterGPUResourcesStrictMatching(t *testing.T) {
 	scheme := GetTestScheme()
 
-	// Node with properly labeled GPU
+	// Node with properly labeled GPU using device ID
 	labeledNode := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "labeled-node",
 			Labels: map[string]string{
-				"amd.com/gpu.product-name": "MI300X",
+				"amd.com/gpu.device-id": "0x74a1", // MI300X device ID
 			},
 		},
 		Status: corev1.NodeStatus{
