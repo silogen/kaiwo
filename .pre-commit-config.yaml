@@ -34,22 +34,6 @@ repos:
     require_serial: true
     pass_filenames: false
 
-  - id: build-install-artifacts
-    name: Build artifacts for installation
-    entry: >
-      bash -c "
-        set -euo pipefail;
-        SHORT_SHA=$(git rev-parse --short=7 HEAD);
-        IMAGE_TAG=\"main-${SHORT_SHA}\";
-        CHART_VERSION=\"0.0.0-main.${SHORT_SHA}\";
-        export SHORT_SHA IMAGE_TAG CHART_VERSION;
-        make build-installer TAG=${IMAGE_TAG};
-        cp dist/install.yaml install.yaml;
-        make helm-release TAG=${IMAGE_TAG} CHART_VERSION=${CHART_VERSION};
-      "
-    language: system
-    pass_filenames: false
-    stages: [pre-commit]
 
 - repo: https://github.com/jumanjihouse/pre-commit-hook-yamlfmt
   rev: 0.2.3

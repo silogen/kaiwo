@@ -73,6 +73,7 @@ func EnsureNamespaceKueueManaged(ctx context.Context, k8sClient client.Client, n
 	return nil
 }
 
+// CreateDefaultResourceFlavors goes through all nodes divides them into "flavors" based on capacity. It then adds there labels to the nodes, and returns the result.
 func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo.ResourceFlavorSpec, map[string]kueuev1beta1.FlavorQuotas, error) {
 	logger := log.FromContext(ctx)
 	config := common.ConfigFromContext(ctx)
