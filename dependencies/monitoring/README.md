@@ -87,32 +87,32 @@ This directory contains the complete observability stack for KAIWO testing and d
 
 ## Setup Instructions
 
-### 1. Deploy Monitoring Stack to Host Cluster
+**IMPORTANT**: ConfigMaps must be applied BEFORE helmfile to avoid pod startup failures.
+
+### 1. Deploy Prerequisites (ConfigMaps)
 
 ```bash
 # From the project root directory
 cd dependencies
 
-# Deploy Loki, Prometheus, Grafana, and host Alloy to test-observability namespace
-helmfile -f monitoring-helmfile.yaml apply
+# Deploy the Alloy host configuration ConfigMap (MUST be done first)
+kubectl apply -f monitoring/alloy-host-config.yaml
 
-# Deploy the Alloy host configuration ConfigMap
-kubectl apply -f monitoring/alloy-host-config.yaml -n test-observability
+# Deploy Grafana dashboards ConfigMap (MUST be done first)
+kubectl apply -k monitoring/grafana-dashboards/
+```
+
+### 2. Deploy Monitoring Stack to Host Cluster
+
+```bash
+# Deploy Loki, Grafana, and host Alloy to test-observability namespace
+# NOTE: This uses Prometheus from the existing 'monitoring' namespace
+helmfile -f monitoring-helmfile.yaml apply
 
 # Wait for deployments to be ready
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=loki -n test-observability --timeout=5m
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n test-observability --timeout=5m
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n test-observability --timeout=5m
-```
-
-### 2. Deploy Grafana Dashboards
-
-```bash
-# Apply dashboards using kustomize
-kubectl apply -k monitoring/grafana-dashboards/
-
-# Wait for Grafana to load dashboards
-kubectl rollout restart deployment/kube-prometheus-stack-grafana -n test-observability
+kubectl wait --for=condition=ready pod -l app=alloy-host -n test-observability --timeout=5m
 ```
 
 ### 3. Access Grafana

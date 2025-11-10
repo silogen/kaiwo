@@ -66,106 +66,85 @@ releases:
         test:
           enabled: false
 
-  # kube-prometheus-stack - Prometheus + Grafana + Alertmanager
-  - name: kube-prometheus-stack
+  # Grafana - Visualization and dashboards
+  - name: grafana
     namespace: test-observability
-    chart: prometheus-community/kube-prometheus-stack
-    version: 67.6.0
+    chart: grafana/grafana
+    version: 10.1.4
     values:
-      - prometheus:
-          prometheusSpec:
-            retention: 30d
-            retentionSize: "45GB"
-            storageSpec:
-              volumeClaimTemplate:
-                spec:
-                  storageClassName: openebs-hostpath
-                  accessModes: ["ReadWriteOnce"]
-                  resources:
-                    requests:
-                      storage: 50Gi
-            resources:
-              requests:
-                cpu: 500m
-                memory: 2Gi
-              limits:
-                cpu: 2000m
-                memory: 8Gi
-            # Service monitors for scraping
-            serviceMonitorSelectorNilUsesHelmValues: false
-            podMonitorSelectorNilUsesHelmValues: false
-            # Additional scrape configs for vCluster metrics
-            additionalScrapeConfigs:
-              - job_name: 'vcluster-federate'
-                honor_labels: true
-                metrics_path: '/federate'
-                params:
-                  'match[]':
-                    - '{job=~".+"}'
-                static_configs:
-                  - targets: []
-                    # Targets will be dynamically added per vCluster
-                    # Example: ['vcluster-prometheus.kaiwo-test-123-1-helm.svc.cluster.local:9090']
-
-        grafana:
+      - adminPassword: admin  # Change this in production!
+        persistence:
           enabled: true
-          adminPassword: admin  # Change this in production!
-          persistence:
+          storageClassName: openebs-hostpath
+          size: 10Gi
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 2Gi
+        # Disable init container - PVC already has correct permissions
+        initChownData:
+          enabled: false
+        # Enable sidecar to auto-reload dashboards and datasources
+        sidecar:
+          dashboards:
             enabled: true
-            storageClassName: openebs-hostpath
-            size: 10Gi
-          resources:
-            requests:
-              cpu: 250m
-              memory: 512Mi
-            limits:
-              cpu: 1000m
-              memory: 2Gi
-          additionalDataSources:
-            - name: Loki
-              type: loki
-              url: http://loki-0.loki-headless.test-observability.svc.cluster.local:3100
-              access: proxy
-              isDefault: false
-              jsonData:
-                maxLines: 1000
-          # Pre-configure dashboards
-          dashboardProviders:
-            dashboardproviders.yaml:
-              apiVersion: 1
-              providers:
-                - name: 'default'
-                  orgId: 1
-                  folder: ''
-                  type: file
-                  disableDeletion: false
-                  editable: true
-                  options:
-                    path: /var/lib/grafana/dashboards/default
-                - name: 'kaiwo'
-                  orgId: 1
-                  folder: 'KAIWO Observability'
-                  type: file
-                  disableDeletion: false
-                  editable: true
-                  options:
-                    path: /var/lib/grafana/dashboards/kaiwo
-          dashboardsConfigMaps:
-            kaiwo: grafana-dashboards-kaiwo
-          service:
-            type: NodePort
-            nodePort: 30300
-
-        alertmanager:
-          enabled: false  # Disabled - not needed for log/metric collection
-
-        # Disable default exporters we don't need (or that conflict with existing monitoring)
-        kubeStateMetrics:
-          enabled: true  # Keep for host cluster metrics
-        nodeExporter:
-          enabled: false  # Disable - conflicts with existing node-exporter on port 9100
-        prometheusOperator:
-          enabled: true
+            label: grafana_dashboard
+            labelValue: "1"
+            folder: /tmp/dashboards
+            defaultFolderName: KAIWO
+            searchNamespace: test-observability
+          datasources:
+            enabled: false  # We configure datasources statically
+        datasources:
+          datasources.yaml:
+            apiVersion: 1
+            datasources:
+              - name: Loki
+                type: loki
+                uid: loki
+                url: http://loki-0.loki-headless.test-observability.svc.cluster.local:3100
+                access: proxy
+                isDefault: false
+                jsonData:
+                  maxLines: 1000
+              - name: Prometheus
+                type: prometheus
+                uid: prometheus
+                url: http://kps-kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
+                access: proxy
+                isDefault: true
+                jsonData:
+                  httpMethod: POST
+                  timeInterval: 30s
+        # Pre-configure dashboards
+        dashboardProviders:
+          dashboardproviders.yaml:
+            apiVersion: 1
+            providers:
+              - name: 'default'
+                orgId: 1
+                folder: ''
+                type: file
+                disableDeletion: false
+                editable: true
+                options:
+                  path: /var/lib/grafana/dashboards/default
+              - name: 'kaiwo'
+                orgId: 1
+                folder: 'KAIWO Observability'
+                type: file
+                disableDeletion: false
+                editable: true
+                options:
+                  path: /var/lib/grafana/dashboards/kaiwo
+        dashboardsConfigMaps:
+          kaiwo: grafana-dashboards-kaiwo
+        service:
+          type: NodePort
+          nodePort: 30300
 
   # Grafana Alloy - Telemetry collector for host cluster
   - name: alloy-host
