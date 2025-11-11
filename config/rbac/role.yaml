@@ -41,7 +41,6 @@ rules:
   - aimclusterservicetemplates
   - aimmodelcaches
   - aimmodels
-  - aimruntimeconfig
   - aimruntimeconfigs
   - aimservices
   - aimservicetemplates
