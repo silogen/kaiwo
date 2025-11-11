@@ -22,8 +22,8 @@ This directory contains the complete observability stack for KAIWO testing and d
 │                                                                 │
 │  ┌────────────────────────────────────────────────────────────┐ │
 │  │  vCluster Namespace (kaiwo-test-{run_id}-{attempt}-{inst}) │ │
-│  │  ├── vCluster Control Plane Pod (test-monitoring-vcluster) │ │
-│  │  │   └── syncer container: K3s API server + audit logs     │ │
+│  │  ├── vCluster Control Plane Pod (test-monitoring-0)        │ │
+│  │  │   └── syncer container: K8s API server + audit logs     │ │
 │  │  ├── Synced workload pods (from vCluster)                  │ │
 │  │  │   └── Labels: vcluster.loft.sh/managed-by               │ │
 │  │  └── Namespace labels: vcluster_namespace, github_run_id   │ │
@@ -34,8 +34,9 @@ This directory contains the complete observability stack for KAIWO testing and d
 **Key Architecture Changes (2025-11-10):**
 - ✅ **Host-side collection**: Alloy runs ONLY on host cluster (not in vCluster)
 - ✅ **Direct log collection**: Collects from vCluster syncer container and synced workload pods
-- ✅ **No webhook**: Audit logs scraped from syncer stdout (K3s writes to `-`)
+- ✅ **No webhook**: Audit logs scraped from syncer stdout (K8s API server writes to `-`)
 - ✅ **Label propagation**: Namespace labels automatically propagate to all logs/metrics
+- ✅ **K8s distro required**: vCluster must use K8s distro (not K3s) for audit logging to work
 
 ## Components
 
@@ -71,7 +72,7 @@ This directory contains the complete observability stack for KAIWO testing and d
 
 1. **Audit Policy** - Kubernetes API audit trail
    - ConfigMap: `vcluster-audit-policy` (deployed to host namespace)
-   - Configured in vCluster's K3s API server
+   - Configured in vCluster's K8s API server (via controlPlane.distro.k8s.apiServer.extraArgs)
    - Audit logs written to stdout (audit-log-path=-)
    - Levels:
      - **RequestResponse**: KAIWO CRDs, core resources (pods, services, etc.)

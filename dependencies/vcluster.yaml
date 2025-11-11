@@ -27,16 +27,15 @@ controlPlane:
           mountPath: /etc/kubernetes/audit
           readOnly: true
 
-  # K3s distribution configuration with audit logging
+  # K8s distribution configuration with audit logging
   distro:
-    k3s:
+    k8s:
       enabled: true
-      image:
-        tag: v1.31.4-k3s1
-      extraArgs:
-        - --kube-apiserver-arg=audit-policy-file=/etc/kubernetes/audit/policy.yaml
-        - --kube-apiserver-arg=audit-log-path=-
-        - --kube-apiserver-arg=audit-log-format=json
+      apiServer:
+        extraArgs:
+          - --audit-policy-file=/etc/kubernetes/audit/policy.yaml
+          - --audit-log-path=-
+          - --audit-log-format=json
 
 # API server configuration for audit logging
 policies:

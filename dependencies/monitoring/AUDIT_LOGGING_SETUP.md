@@ -1,6 +1,21 @@
 # Audit Logging Setup Guide
 
-## Architecture
+**⚠️ OUTDATED DOCUMENTATION ⚠️**
+
+This document describes a webhook-based audit logging architecture that is **no longer used**.
+
+**Current approach (as of 2025-11-11):**
+- Audit logs are written to stdout by the vCluster K8s API server (--audit-log-path=-)
+- Alloy DaemonSet on the host cluster scrapes audit logs from syncer container stdout
+- Audit logs are parsed and labeled with `log_type=k8s_audit_log`
+- No webhook, no separate Alloy deployment needed
+- vCluster must use K8s distro (not K3s) for audit logging configuration to work
+
+**See:** [Main Monitoring README](./README.md) for current setup instructions.
+
+---
+
+## OLD Architecture (No Longer Used)
 
 Audit logging uses a different architecture than other monitoring components:
 

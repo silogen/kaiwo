@@ -234,7 +234,7 @@ data:
       // Only process lines that look like audit logs
       // vCluster syncer logs audit events with INFO prefix
       stage.match {
-        selector = "{container=\"syncer\",pod=~\".*vcluster-0\"}"
+        selector = "{job=\"loki.source.kubernetes.vcluster_logs\", container=\"syncer\"}"
 
         // Extract audit log JSON from log line
         // The JSON starts with {"kind":"Event" and ends before the last tab
