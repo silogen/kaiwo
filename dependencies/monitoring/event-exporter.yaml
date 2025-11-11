@@ -1,0 +1,101 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: event-exporter
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: event-exporter
+rules:
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["get", "watch", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: event-exporter
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: event-exporter
+subjects:
+- kind: ServiceAccount
+  name: event-exporter
+  namespace: kube-system
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: event-exporter-config
+  namespace: kube-system
+data:
+  config.yaml: |
+    logLevel: info
+    logFormat: json
+    route:
+      routes:
+        - match:
+            - receiver: "stdout"
+    receivers:
+      - name: "stdout"
+        stdout:
+          layout:
+            involvedObject:
+              apiVersion: "{{ .InvolvedObject.APIVersion }}"
+              kind: "{{ .InvolvedObject.Kind }}"
+              name: "{{ .InvolvedObject.Name }}"
+              namespace: "{{ .InvolvedObject.Namespace }}"
+              resourceVersion: "{{ .InvolvedObject.ResourceVersion }}"
+              uid: "{{ .InvolvedObject.UID }}"
+            message: "{{ .Message }}"
+            metadata:
+              creationTimestamp: "{{ .GetTimestampMs }}"
+              name: "{{ .Name }}"
+              namespace: "{{ .Namespace }}"
+            reason: "{{ .Reason }}"
+            reportingComponent: "{{ .Source.Component }}"
+            reportingInstance: "{{ .Source.Host }}"
+            type: "{{ .Type }}"
+            count: "{{ .Count }}"
+            firstTimestamp: "{{ .FirstTimestamp }}"
+            lastTimestamp: "{{ .LastTimestamp }}"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: event-exporter
+  namespace: kube-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: event-exporter
+  template:
+    metadata:
+      labels:
+        app: event-exporter
+    spec:
+      serviceAccountName: event-exporter
+      containers:
+      - name: event-exporter
+        image: ghcr.io/resmoio/kubernetes-event-exporter:v1.7
+        args:
+          - -conf=/data/config.yaml
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+        volumeMounts:
+        - mountPath: /data
+          name: config
+      volumes:
+      - name: config
+        configMap:
+          name: event-exporter-config

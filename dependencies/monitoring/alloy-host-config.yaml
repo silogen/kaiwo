@@ -221,10 +221,13 @@ data:
       forward_to = [loki.process.audit_logs.receiver]
     }
 
-    // Collect vCluster workload pod logs
+    // Collect vCluster workload pod logs (includes event-exporter)
     loki.source.kubernetes "vcluster_workload_logs" {
       targets    = discovery.relabel.vcluster_workload_logs.output
-      forward_to = [loki.process.workload_logs.receiver]
+      forward_to = [
+        loki.process.workload_logs.receiver,
+        loki.process.event_exporter_logs.receiver,
+      ]
     }
 
     // Process and parse audit logs
@@ -316,5 +319,61 @@ data:
       stage.match {
         selector = "{app=\"kube-probe\"}"
         action   = "drop"
+      }
+    }
+
+    // ============================================================================
+    // Kubernetes Events from event-exporter (inside vClusters)
+    // ============================================================================
+    // Event-exporter runs inside each vCluster and outputs events as JSON to stdout
+    // Alloy collects these logs like any other workload pod logs
+    // The event-exporter JSON already contains the original object names/namespaces
+
+    // Events are collected via the workload_logs source and processed here
+    loki.process "event_exporter_logs" {
+      forward_to = [loki.write.loki.receiver]
+
+      // Only process logs from event-exporter pods
+      stage.match {
+        selector = "{app=\"event-exporter\"}"
+
+        // Parse the JSON event from event-exporter
+        stage.json {
+          expressions = {
+            object_name        = "involvedObject.name",
+            object_namespace   = "involvedObject.namespace",
+            object_kind        = "involvedObject.kind",
+            object_api_version = "involvedObject.apiVersion",
+            reason             = "reason",
+            type               = "type",
+            message            = "message",
+            count              = "count",
+            first_timestamp    = "firstTimestamp",
+            last_timestamp     = "lastTimestamp",
+          }
+        }
+
+        // Add log type label
+        stage.static_labels {
+          values = {
+            log_type = "k8s_event",
+          }
+        }
+
+        // Promote useful fields to labels for filtering
+        stage.labels {
+          values = {
+            workload_namespace = "object_namespace",  // Namespace inside vCluster
+            object_kind        = "",
+            reason             = "",
+            type               = "",
+          }
+        }
+
+        // Replace log line with just the message for readability
+        stage.template {
+          source   = "message"
+          template = "{{ .Value }}"
+        }
       }
     }
