@@ -36,11 +36,16 @@ rules:
 - apiGroups:
   - aim.silogen.ai
   resources:
-  - aimclusterimages
+  - aimclustermodels
+  - aimclusterruntimeconfigs
   - aimclusterservicetemplates
-  - aimimages
   - aimmodelcaches
+  - aimmodels
+  - aimruntimeconfig
+  - aimruntimeconfigs
+  - aimservices
   - aimservicetemplates
+  - aimtemplatecaches
   verbs:
   - create
   - delete
@@ -52,36 +57,27 @@ rules:
 - apiGroups:
   - aim.silogen.ai
   resources:
-  - aimclusterimages/finalizers
+  - aimclustermodels/finalizers
   - aimclusterservicetemplates/finalizers
-  - aimimages/finalizers
   - aimmodelcaches/finalizers
+  - aimmodels/finalizers
   - aimservicetemplates/finalizers
   verbs:
   - update
 - apiGroups:
   - aim.silogen.ai
   resources:
-  - aimclusterimages/status
+  - aimclustermodels/status
   - aimclusterservicetemplates/status
-  - aimimages/status
   - aimmodelcaches/status
+  - aimmodels/status
   - aimservices/status
   - aimservicetemplates/status
+  - aimtemplatecaches/status
   verbs:
   - get
   - patch
   - update
-- apiGroups:
-  - aim.silogen.ai
-  resources:
-  - aimclusterruntimeconfigs
-  - aimruntimeconfigs
-  - aimservices
-  verbs:
-  - get
-  - list
-  - watch
 - apiGroups:
   - apps
   resources:
@@ -109,7 +105,6 @@ rules:
 - apiGroups:
   - config.kaiwo.silogen.ai
   resources:
-  - aimnamespaceconfig
   - kaiwoconfigs
   verbs:
   - create
@@ -217,9 +212,13 @@ rules:
 - apiGroups:
   - serving.kserve.io
   resources:
+  - clusterservingruntimes/status
   - inferenceservices/status
+  - servingruntimes/status
   verbs:
   - get
+  - patch
+  - update
 - apiGroups:
   - storage.k8s.io
   resources:
