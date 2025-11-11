@@ -491,7 +491,7 @@
         "type": "loki",
         "uid": "loki"
       },
-      "description": "Structured logs with color coding by source and level",
+      "description": "Unified chronological log stream combining pod logs, Kubernetes events, and audit logs",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -520,7 +520,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "level"
+              "options": "Level"
             },
             "properties": [
               {
@@ -573,15 +573,54 @@
                 "value": {
                   "type": "color-background"
                 }
+              },
+              {
+                "id": "custom.width",
+                "value": 80
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "container"
+              "options": "Source"
             },
             "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "pod_log": {
+                        "color": "purple",
+                        "index": 0,
+                        "text": "Pod Log"
+                      }
+                    },
+                    "type": "value"
+                  },
+                  {
+                    "options": {
+                      "k8s_event": {
+                        "color": "green",
+                        "index": 1,
+                        "text": "K8s Event"
+                      }
+                    },
+                    "type": "value"
+                  },
+                  {
+                    "options": {
+                      "k8s_audit_log": {
+                        "color": "yellow",
+                        "index": 2,
+                        "text": "Audit Log"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              },
               {
                 "id": "custom.cellOptions",
                 "value": {
@@ -589,32 +628,8 @@
                 }
               },
               {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "purple"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "pod"
-            },
-            "properties": [
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "color-text"
-                }
-              },
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "semi-dark-blue"
-                }
+                "id": "custom.width",
+                "value": 100
               }
             ]
           },
@@ -633,19 +648,19 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "level"
+              "options": "Kind"
             },
             "properties": [
               {
                 "id": "custom.width",
-                "value": 80
+                "value": 120
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "container"
+              "options": "Namespace"
             },
             "properties": [
               {
@@ -657,7 +672,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "pod"
+              "options": "Name"
             },
             "properties": [
               {
@@ -669,7 +684,7 @@
         ]
       },
       "gridPos": {
-        "h": 15,
+        "h": 20,
         "w": 24,
         "x": 0,
         "y": 18
@@ -686,7 +701,7 @@
         "showHeader": true,
         "sortBy": [
           {
-            "desc": true,
+            "desc": false,
             "displayName": "Time"
           }
         ]
@@ -702,188 +717,7 @@
           "expr": "{vcluster_namespace=~\".*$github_run_id.*\", workload_namespace=~\"$test_namespace\", log_type=\"pod_log\"} | json",
           "queryType": "range",
           "refId": "A"
-        }
-      ],
-      "title": "Pod Logs (Structured)",
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "labels": true,
-              "tsNs": true,
-              "id": true,
-              "Line": false
-            },
-            "includeByName": {},
-            "indexByName": {
-              "Time": 0,
-              "level": 1,
-              "container": 2,
-              "pod": 3,
-              "msg": 4,
-              "Line": 5
-            },
-            "renameByName": {
-              "Line": "Raw Log",
-              "container": "Container",
-              "level": "Level",
-              "msg": "Message",
-              "pod": "Pod"
-            }
-          }
-        }
-      ],
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "description": "Kubernetes Events from inside the vCluster",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto",
-              "wrapText": true
-            },
-            "inspect": false
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
         },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "type"
-            },
-            "properties": [
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "options": {
-                      "Warning": {
-                        "color": "orange",
-                        "index": 0
-                      }
-                    },
-                    "type": "value"
-                  },
-                  {
-                    "options": {
-                      "Normal": {
-                        "color": "blue",
-                        "index": 1
-                      }
-                    },
-                    "type": "value"
-                  }
-                ]
-              },
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "color-background"
-                }
-              },
-              {
-                "id": "custom.width",
-                "value": 80
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "reason"
-            },
-            "properties": [
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "color-text"
-                }
-              },
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "purple"
-                }
-              },
-              {
-                "id": "custom.width",
-                "value": 150
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Time"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 180
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "object_kind"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 100
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 10,
-        "w": 24,
-        "x": 0,
-        "y": 33
-      },
-      "id": 11,
-      "options": {
-        "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": ["sum"],
-          "show": false
-        },
-        "showHeader": true,
-        "sortBy": [
-          {
-            "desc": true,
-            "displayName": "Time"
-          }
-        ]
-      },
-      "pluginVersion": "12.2.1",
-      "targets": [
         {
           "datasource": {
             "type": "loki",
@@ -892,234 +726,85 @@
           "editorMode": "code",
           "expr": "{vcluster_namespace=~\".*$github_run_id.*\", workload_namespace=~\"$test_namespace\", log_type=\"k8s_event\"} | json",
           "queryType": "range",
-          "refId": "A"
-        }
-      ],
-      "title": "Kubernetes Events",
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "labels": true,
-              "tsNs": true,
-              "id": true,
-              "count": true,
-              "firstTimestamp": true,
-              "lastTimestamp": true
-            },
-            "includeByName": {},
-            "indexByName": {
-              "Time": 0,
-              "type": 1,
-              "reason": 2,
-              "object_kind": 3,
-              "object_name": 4,
-              "object_namespace": 5,
-              "message": 6,
-              "Line": 7
-            },
-            "renameByName": {
-              "Line": "Full Event JSON",
-              "type": "Type",
-              "reason": "Reason",
-              "object_kind": "Kind",
-              "object_name": "Object",
-              "object_namespace": "Namespace",
-              "message": "Message"
-            }
-          }
-        }
-      ],
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "description": "Kubernetes API audit logs showing mutations",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto",
-              "wrapText": true
-            },
-            "inspect": false
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
+          "refId": "B"
         },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "verb"
-            },
-            "properties": [
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "options": {
-                      "create": {
-                        "color": "green",
-                        "index": 0
-                      }
-                    },
-                    "type": "value"
-                  },
-                  {
-                    "options": {
-                      "update": {
-                        "color": "blue",
-                        "index": 1
-                      },
-                      "patch": {
-                        "color": "blue",
-                        "index": 2
-                      }
-                    },
-                    "type": "value"
-                  },
-                  {
-                    "options": {
-                      "delete": {
-                        "color": "red",
-                        "index": 3
-                      }
-                    },
-                    "type": "value"
-                  }
-                ]
-              },
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "color-background"
-                }
-              },
-              {
-                "id": "custom.width",
-                "value": 80
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "resource"
-            },
-            "properties": [
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "color-text"
-                }
-              },
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "purple"
-                }
-              },
-              {
-                "id": "custom.width",
-                "value": 150
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Time"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 180
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 12,
-        "w": 24,
-        "x": 0,
-        "y": 33
-      },
-      "id": 4,
-      "options": {
-        "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": ["sum"],
-          "show": false
-        },
-        "showHeader": true,
-        "sortBy": [
-          {
-            "desc": true,
-            "displayName": "Time"
-          }
-        ]
-      },
-      "pluginVersion": "12.2.1",
-      "targets": [
         {
           "datasource": {
             "type": "loki",
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "{vcluster_namespace=~\".*$github_run_id.*\", log_type=\"k8s_audit_log\", namespace=~\"$test_namespace\"} | json",
+          "expr": "{vcluster_namespace=~\".*$github_run_id.*\", namespace=~\"$test_namespace\", log_type=\"k8s_audit_log\", verb=~\"create|update|delete|patch\"} | json",
           "queryType": "range",
-          "refId": "A"
+          "refId": "C"
         }
       ],
-      "title": "Kubernetes Audit Logs",
+      "title": "Unified Log Stream",
       "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {}
+        },
+        {
+          "id": "extractFields",
+          "options": {
+            "source": "Line",
+            "format": "json",
+            "keepTime": false,
+            "replace": false
+          }
+        },
         {
           "id": "organize",
           "options": {
             "excludeByName": {
-              "labels": true,
+              "labelTypes": true,
+              "id": true,
               "tsNs": true,
-              "id": true
+              "labels": true,
+              "app": true,
+              "container": true,
+              "detected_level": true,
+              "instance": true,
+              "job": true,
+              "service_name": true,
+              "vcluster_namespace": true,
+              "stream": true,
+              "time": true,
+              "duration_ms": true,
+              "controller": true
             },
-            "includeByName": {},
             "indexByName": {
               "Time": 0,
-              "verb": 1,
-              "resource": 2,
-              "namespace": 3,
-              "name": 4,
-              "user": 5,
-              "Line": 6
+              "source": 1,
+              "level": 2,
+              "object_kind": 3,
+              "kind": 3,
+              "pod": 4,
+              "workload_namespace": 5,
+              "namespace": 5,
+              "object_namespace": 5,
+              "name": 6,
+              "object_name": 6,
+              "msg": 7,
+              "message": 7,
+              "Line": 8
             },
             "renameByName": {
-              "Line": "Full Audit JSON",
-              "name": "Resource Name",
+              "Time": "Time",
+              "source": "Source",
+              "level": "Level",
+              "object_kind": "Kind",
+              "kind": "Kind",
+              "pod": "Pod",
+              "workload_namespace": "Namespace",
+              "object_namespace": "Namespace",
               "namespace": "Namespace",
-              "resource": "Resource Type",
-              "user": "User",
-              "verb": "Action"
+              "name": "Object",
+              "object_name": "Object",
+              "msg": "Message",
+              "message": "Message",
+              "Line": "Payload"
             }
           }
         }

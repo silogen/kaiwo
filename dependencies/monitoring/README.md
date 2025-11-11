@@ -416,12 +416,45 @@ After vCluster deletion, historical data remains in Loki/Prometheus for 30 days,
 
 **vCluster Overhead:** None! (monitoring runs on host)
 
+## Chainsaw Test Observability Integration
+
+The monitoring stack includes integrated test result tracking for Chainsaw e2e tests:
+
+- **PostgreSQL Database**: Stores test metadata (runs, tests, steps, operations, errors)
+- **Chainsaw Log Stream**: Test execution logs in Loki with `log_type=chainsaw_test`
+- **Test Results Dashboard**: Grafana dashboard for debugging test failures
+- **Automatic Correlation**: Links test failures with pod logs, events, and audit logs
+
+### Quick Start
+
+1. **Run tests** with observability:
+   ```bash
+   ./test/chainsaw/run-tests.sh
+   ```
+
+2. **View results** in Grafana:
+   - Dashboard: **KAIWO Test Results**
+   - Select test run, view failures, drill down to see correlated cluster logs
+
+3. **Query test data**:
+   ```sql
+   -- In PostgreSQL
+   SELECT * FROM test_run_summary;
+   ```
+   ```logql
+   # In Loki
+   {log_type="chainsaw_test", test_name="my-test"}
+   ```
+
+**See:** [Test Observability Documentation](../../test/chainsaw/README-observability.md) for full details.
+
 ## Security Considerations
 
 1. **Grafana Access**: Change default admin password in production
 2. **Audit Logs**: Contain sensitive API request/response data including secrets
 3. **Label Injection**: Labels are trusted input from CI environment
 4. **Access Control**: Consider RBAC for Grafana datasource access
+5. **Test Database**: Default password should be changed in production environments
 
 ## Files in This Directory
 
@@ -432,6 +465,8 @@ After vCluster deletion, historical data remains in Loki/Prometheus for 30 days,
 - `AUDIT_LOGGING_SETUP.md` - **OUTDATED** (describes webhook approach)
 - `alloy-host-config.yaml` - Alloy configuration for host cluster ✅
 - `vcluster-audit-policy.yaml` - K8s audit policy ✅
+- `test-results-schema.yaml` - PostgreSQL schema for test results ✅
+- `event-exporter.yaml` - Kubernetes event exporter deployment ✅
 - `grafana-dashboards/` - Dashboard JSON files ✅
 - `grafana-dashboards/kustomization.yaml` - Dashboard deployment config ✅
 

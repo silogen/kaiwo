@@ -3,6 +3,8 @@ repositories:
     url: https://grafana.github.io/helm-charts
   - name: prometheus-community
     url: https://prometheus-community.github.io/helm-charts
+  - name: bitnami
+    url: https://charts.bitnami.com/bitnami
 
 releases:
   # Grafana Loki - Log aggregation
@@ -119,6 +121,18 @@ releases:
                 jsonData:
                   httpMethod: POST
                   timeInterval: 30s
+              - name: PostgreSQL
+                type: postgres
+                uid: postgres
+                url: test-results-db-postgresql.test-observability.svc.cluster.local:5432
+                access: proxy
+                database: testresults
+                user: chainsaw
+                secureJsonData:
+                  password: chainsawtest
+                jsonData:
+                  sslmode: disable
+                  postgresVersion: 1500
         # Dashboards are auto-loaded by sidecar - don't configure manually
         service:
           type: NodePort
@@ -148,3 +162,30 @@ releases:
           limits:
             cpu: 500m
             memory: 512Mi
+
+  # PostgreSQL - Test results database
+  - name: test-results-db
+    namespace: test-observability
+    chart: bitnami/postgresql
+    version: 15.5.38
+    values:
+      - auth:
+          enablePostgresUser: true
+          postgresPassword: chainsawtest
+          username: chainsaw
+          password: chainsawtest
+          database: testresults
+        primary:
+          persistence:
+            enabled: true
+            storageClass: openebs-hostpath
+            size: 10Gi
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          initdb:
+            scriptsConfigMap: test-results-schema

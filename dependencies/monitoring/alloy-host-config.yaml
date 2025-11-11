@@ -258,16 +258,32 @@ data:
             stage            = "stage",
             status_code      = "responseStatus.code",
             request_uri      = "requestURI",
+            api_version      = "objectRef.apiVersion",
+            api_group        = "objectRef.group",
           }
+        }
+
+        // Map resource to Kind (pods→Pod, deployments→Deployment, aims→AIM)
+        stage.template {
+          source = "object_kind"
+          template = "{{ .resource | title | trimSuffix \"s\" }}"
+        }
+
+        // Map verb/status to standard log level
+        stage.template {
+          source = "level"
+          template = "{{ if eq .verb \"delete\" }}warning{{ else if and .status_code (ge (.status_code | int) 400) }}error{{ else }}info{{ end }}"
         }
 
         // Promote fields to labels
         stage.labels {
           values = {
-            verb      = "",
-            namespace = "",
-            resource  = "",
-            stage     = "",
+            verb        = "",
+            namespace   = "",
+            resource    = "",
+            stage       = "",
+            object_kind = "",
+            level       = "",
           }
         }
 
@@ -275,6 +291,7 @@ data:
         stage.static_labels {
           values = {
             log_type = "k8s_audit_log",
+            source = "k8s_audit_log",
           }
         }
 
@@ -292,13 +309,6 @@ data:
     loki.process "workload_logs" {
       forward_to = [loki.write.loki.receiver]
 
-      // Add log type label
-      stage.static_labels {
-        values = {
-          log_type = "pod_log",
-        }
-      }
-
       // Try to extract JSON logs if present
       stage.json {
         expressions = {
@@ -308,10 +318,26 @@ data:
         }
       }
 
+      // Normalize level field (default to "info" if not present)
+      stage.template {
+        source = "level"
+        template = "{{ if .level }}{{ .level }}{{ else }}info{{ end }}"
+      }
+
       // Promote log level to label
       stage.labels {
         values = {
           level = "",
+        }
+      }
+
+      // Add object_kind label (Pod for pod logs)
+      stage.static_labels {
+        values = {
+          object_kind = "Pod",
+          log_type = "pod_log",
+          source = "pod_log",
+          kind = "Pod",
         }
       }
 
@@ -353,10 +379,17 @@ data:
           }
         }
 
+        // Map event type to standard log level
+        stage.template {
+          source = "level"
+          template = "{{ if eq .type \"Warning\" }}warning{{ else }}info{{ end }}"
+        }
+
         // Add log type label
         stage.static_labels {
           values = {
             log_type = "k8s_event",
+            source = "k8s_event",
           }
         }
 
@@ -367,13 +400,8 @@ data:
             object_kind        = "",
             reason             = "",
             type               = "",
+            level              = "",
           }
-        }
-
-        // Replace log line with just the message for readability
-        stage.template {
-          source   = "message"
-          template = "{{ .Value }}"
         }
       }
     }

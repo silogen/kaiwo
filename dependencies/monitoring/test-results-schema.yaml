@@ -1,0 +1,133 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-results-schema
+  namespace: test-observability
+data:
+  01-schema.sql: |
+    -- Test Results Database Schema
+    -- Stores Chainsaw test execution results for correlation with observability data
+
+    -- Test runs table - one entry per test execution
+    CREATE TABLE IF NOT EXISTS test_runs (
+      run_id VARCHAR(255) PRIMARY KEY,
+      github_run_id VARCHAR(255),
+      github_run_attempt VARCHAR(50),
+      vcluster_namespace VARCHAR(255),
+      installer VARCHAR(50),
+      start_time TIMESTAMP WITH TIME ZONE NOT NULL,
+      end_time TIMESTAMP WITH TIME ZONE,
+      total_tests INTEGER DEFAULT 0,
+      passed_tests INTEGER DEFAULT 0,
+      failed_tests INTEGER DEFAULT 0,
+      report_uploaded_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Create index on github_run_id for quick lookups
+    CREATE INDEX IF NOT EXISTS idx_test_runs_github_run_id ON test_runs(github_run_id);
+    CREATE INDEX IF NOT EXISTS idx_test_runs_start_time ON test_runs(start_time);
+
+    -- Individual tests table - one entry per test case
+    CREATE TABLE IF NOT EXISTS tests (
+      test_id SERIAL PRIMARY KEY,
+      run_id VARCHAR(255) NOT NULL REFERENCES test_runs(run_id) ON DELETE CASCADE,
+      test_name VARCHAR(500) NOT NULL,
+      base_path TEXT,
+      namespace VARCHAR(255),
+      status VARCHAR(50) NOT NULL CHECK (status IN ('passed', 'failed', 'skipped')),
+      start_time TIMESTAMP WITH TIME ZONE NOT NULL,
+      end_time TIMESTAMP WITH TIME ZONE,
+      duration_seconds NUMERIC(10, 3),
+      concurrent BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Create indexes for common queries
+    CREATE INDEX IF NOT EXISTS idx_tests_run_id ON tests(run_id);
+    CREATE INDEX IF NOT EXISTS idx_tests_status ON tests(status);
+    CREATE INDEX IF NOT EXISTS idx_tests_namespace ON tests(namespace);
+    CREATE INDEX IF NOT EXISTS idx_tests_name ON tests(test_name);
+
+    -- Test steps table - one entry per step within a test
+    CREATE TABLE IF NOT EXISTS test_steps (
+      step_id SERIAL PRIMARY KEY,
+      test_id INTEGER NOT NULL REFERENCES tests(test_id) ON DELETE CASCADE,
+      step_name VARCHAR(500) NOT NULL,
+      step_index INTEGER NOT NULL,
+      status VARCHAR(50) CHECK (status IN ('passed', 'failed', 'skipped')),
+      start_time TIMESTAMP WITH TIME ZONE NOT NULL,
+      end_time TIMESTAMP WITH TIME ZONE,
+      duration_seconds NUMERIC(10, 3),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_test_steps_test_id ON test_steps(test_id);
+    CREATE INDEX IF NOT EXISTS idx_test_steps_status ON test_steps(status);
+
+    -- Test operations table - one entry per operation within a step
+    CREATE TABLE IF NOT EXISTS test_operations (
+      operation_id SERIAL PRIMARY KEY,
+      step_id INTEGER NOT NULL REFERENCES test_steps(step_id) ON DELETE CASCADE,
+      operation_name VARCHAR(500) NOT NULL,
+      operation_index INTEGER NOT NULL,
+      operation_type VARCHAR(100),  -- apply, assert, script, delete, command, sleep, etc.
+      status VARCHAR(50) CHECK (status IN ('passed', 'failed', 'skipped')),
+      start_time TIMESTAMP WITH TIME ZONE NOT NULL,
+      end_time TIMESTAMP WITH TIME ZONE,
+      duration_seconds NUMERIC(10, 3),
+      error_message TEXT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_test_operations_step_id ON test_operations(step_id);
+    CREATE INDEX IF NOT EXISTS idx_test_operations_status ON test_operations(status);
+    CREATE INDEX IF NOT EXISTS idx_test_operations_type ON test_operations(operation_type);
+
+    -- View for easy querying of failed tests with details
+    CREATE OR REPLACE VIEW failed_tests_details AS
+    SELECT
+      tr.run_id,
+      tr.github_run_id,
+      tr.vcluster_namespace,
+      t.test_name,
+      t.namespace,
+      t.start_time,
+      t.end_time,
+      t.duration_seconds,
+      ts.step_name,
+      to_.operation_name,
+      to_.operation_type,
+      to_.error_message
+    FROM test_runs tr
+    JOIN tests t ON tr.run_id = t.run_id
+    LEFT JOIN test_steps ts ON t.test_id = ts.test_id
+    LEFT JOIN test_operations to_ ON ts.step_id = to_.step_id
+    WHERE t.status = 'failed'
+    ORDER BY t.start_time DESC, ts.step_index, to_.operation_index;
+
+    -- View for test run summary
+    CREATE OR REPLACE VIEW test_run_summary AS
+    SELECT
+      tr.run_id,
+      tr.github_run_id,
+      tr.github_run_attempt,
+      tr.vcluster_namespace,
+      tr.start_time,
+      tr.end_time,
+      tr.total_tests,
+      tr.passed_tests,
+      tr.failed_tests,
+      EXTRACT(EPOCH FROM (tr.end_time - tr.start_time)) AS duration_seconds,
+      CASE
+        WHEN tr.failed_tests = 0 THEN 'passed'
+        ELSE 'failed'
+      END AS overall_status
+    FROM test_runs tr
+    ORDER BY tr.start_time DESC;
+
+    -- Grant permissions to chainsaw user
+    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO chainsaw;
+    GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO chainsaw;
+    GRANT SELECT ON ALL TABLES IN SCHEMA public TO chainsaw;
