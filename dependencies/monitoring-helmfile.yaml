@@ -119,29 +119,7 @@ releases:
                 jsonData:
                   httpMethod: POST
                   timeInterval: 30s
-        # Pre-configure dashboards
-        dashboardProviders:
-          dashboardproviders.yaml:
-            apiVersion: 1
-            providers:
-              - name: 'default'
-                orgId: 1
-                folder: ''
-                type: file
-                disableDeletion: false
-                editable: true
-                options:
-                  path: /var/lib/grafana/dashboards/default
-              - name: 'kaiwo'
-                orgId: 1
-                folder: 'KAIWO Observability'
-                type: file
-                disableDeletion: false
-                editable: true
-                options:
-                  path: /var/lib/grafana/dashboards/kaiwo
-        dashboardsConfigMaps:
-          kaiwo: grafana-dashboards-kaiwo
+        # Dashboards are auto-loaded by sidecar - don't configure manually
         service:
           type: NodePort
           nodePort: 30300
