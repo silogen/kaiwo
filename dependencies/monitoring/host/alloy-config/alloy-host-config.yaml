@@ -246,6 +246,7 @@ data:
         }
 
         // Parse the audit log JSON
+        // Note: Keeping original field names, will transform to unified schema in Grafana
         stage.json {
           source = "audit_json"
           expressions = {
@@ -254,18 +255,12 @@ data:
             namespace        = "objectRef.namespace",
             resource         = "objectRef.resource",
             name             = "objectRef.name",
-            stage            = "stage",
+            audit_stage      = "stage",
             status_code      = "responseStatus.code",
             request_uri      = "requestURI",
             api_version      = "objectRef.apiVersion",
             api_group        = "objectRef.group",
           }
-        }
-
-        // Map resource to Kind (pods→Pod, deployments→Deployment, aims→AIM)
-        stage.template {
-          source = "object_kind"
-          template = "{{ .resource | title | trimSuffix \"s\" }}"
         }
 
         // Map verb/status to standard log level
@@ -274,22 +269,16 @@ data:
           template = "{{ if eq .verb \"delete\" }}warning{{ else if and .status_code (ge (.status_code | int) 400) }}error{{ else }}info{{ end }}"
         }
 
-        // Promote fields to labels
+        // Promote level to label
         stage.labels {
           values = {
-            verb               = "",
-            workload_namespace = "namespace",
-            resource           = "",
-            stage              = "",
-            object_kind        = "",
-            level              = "",
+            level = "",
           }
         }
 
-        // Add log type label
+        // Add source label
         stage.static_labels {
           values = {
-            log_type = "k8s_audit_log",
             source = "k8s_audit_log",
           }
         }
@@ -303,17 +292,29 @@ data:
     }
 
     // ============================================================================
-    // Process vCluster Workload Logs
+    // Process vCluster Workload Logs - Unified Schema
     // ============================================================================
     loki.process "workload_logs" {
       forward_to = [loki.write.loki.receiver]
+
+      // Drop noisy health check logs early
+      stage.match {
+        selector = "{app=\"kube-probe\"}"
+        action   = "drop"
+      }
 
       // Try to extract JSON logs if present
       stage.json {
         expressions = {
           level = "level",
-          message = "msg",
+          msg   = "msg",
+          message = "message",
           time  = "time",
+          timestamp = "timestamp",
+          name  = "name",
+          namespace = "namespace",
+          kind  = "kind",
+          apiVersion = "apiVersion",
         }
       }
 
@@ -330,20 +331,11 @@ data:
         }
       }
 
-      // Add object_kind label (Pod for pod logs)
+      // Add source label
       stage.static_labels {
         values = {
-          object_kind = "Pod",
-          log_type = "pod_log",
           source = "pod_log",
-          kind = "Pod",
         }
-      }
-
-      // Drop noisy health check logs
-      stage.match {
-        selector = "{app=\"kube-probe\"}"
-        action   = "drop"
       }
     }
 
@@ -369,6 +361,7 @@ data:
         selector = "{app=\"event-exporter\"}"
 
         // Parse the JSON event from event-exporter
+        // Note: Keeping original field names, will transform to unified schema in Grafana
         stage.json {
           expressions = {
             object_name        = "involvedObject.name",
@@ -390,22 +383,17 @@ data:
           template = "{{ if eq .type \"Warning\" }}warning{{ else }}info{{ end }}"
         }
 
-        // Add log type label
-        stage.static_labels {
+        // Promote level to label
+        stage.labels {
           values = {
-            log_type = "k8s_event",
-            source = "k8s_event",
+            level = "",
           }
         }
 
-        // Promote useful fields to labels for filtering
-        stage.labels {
+        // Add source label
+        stage.static_labels {
           values = {
-            workload_namespace = "object_namespace",  // Namespace inside vCluster
-            object_kind        = "",
-            reason             = "",
-            type               = "",
-            level              = "",
+            source = "k8s_event",
           }
         }
       }

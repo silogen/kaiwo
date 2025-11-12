@@ -1,0 +1,393 @@
+// Prometheus remote write endpoint
+prometheus.remote_write "default" {
+  endpoint {
+    url = "http://kube-prometheus-stack-prometheus.test-observability.svc.cluster.local:9090/api/v1/write"
+  }
+}
+
+// ============================================================================
+// AMD GPU Metrics Collection
+// ============================================================================
+// Scrape AMD GPU OpenTelemetry collector
+prometheus.scrape "amd_gpu_metrics" {
+  targets = [
+    {
+      "__address__" = "default-metrics-exporter.kube-amd-gpu.svc.cluster.local:5000",
+      "job" = "amd-gpu-exporter",
+      "gpu_type" = "amd",
+    },
+  ]
+  forward_to = [prometheus.remote_write.default.receiver]
+  scrape_interval = "10s"
+}
+
+// ============================================================================
+// NVIDIA GPU Metrics Collection (Mock for testing)
+// ============================================================================
+// Scrape NVIDIA DCGM exporter (mock in test environments)
+prometheus.scrape "nvidia_gpu_metrics" {
+  targets = discovery.kubernetes.services.targets
+  forward_to = [prometheus.remote_write.default.receiver]
+  scrape_interval = "10s"
+}
+
+discovery.kubernetes "services" {
+  role = "service"
+  namespaces {
+    names = ["gpu-operator"]
+  }
+  selectors {
+    role = "service"
+    label = "app=nvidia-dcgm-exporter"
+  }
+}
+
+// ============================================================================
+// Host Node Metrics - kubelet/cAdvisor
+// ============================================================================
+discovery.kubernetes "nodes" {
+  role = "node"
+}
+
+// Scrape kubelet metrics
+prometheus.scrape "kubelet" {
+  targets    = discovery.kubernetes.nodes.targets
+  scheme     = "https"
+  bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+  tls_config {
+    ca_file = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+    insecure_skip_verify = true
+  }
+  forward_to = [prometheus.remote_write.default.receiver]
+  scrape_interval = "30s"
+}
+
+// Scrape cAdvisor metrics from kubelet
+prometheus.scrape "cadvisor" {
+  targets    = discovery.kubernetes.nodes.targets
+  scheme     = "https"
+  metrics_path = "/metrics/cadvisor"
+  bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+  tls_config {
+    ca_file = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+    insecure_skip_verify = true
+  }
+  forward_to = [prometheus.remote_write.default.receiver]
+  scrape_interval = "30s"
+}
+
+// ============================================================================
+// Node Exporter Metrics - DISABLED
+// Note: Using existing node-exporter from monitoring namespace
+// ============================================================================
+
+// ============================================================================
+// vCluster Audit Logs Collection
+// ============================================================================
+// Loki remote write endpoint (direct to Loki, bypassing crashlooping gateway)
+loki.write "loki" {
+  endpoint {
+    url = "http://loki-0.loki-headless.test-observability.svc.cluster.local:3100/loki/api/v1/push"
+  }
+}
+
+// ============================================================================
+// Discover vCluster Namespaces (to extract labels)
+// ============================================================================
+discovery.kubernetes "vcluster_namespaces" {
+  role = "namespace"
+  selectors {
+    role = "namespace"
+    label = "vcluster-namespace"  // Only namespaces with this label
+  }
+}
+
+// ============================================================================
+// vCluster Control Plane Pod Logs (audit logs + syncer logs)
+// ============================================================================
+discovery.kubernetes "vcluster_pods" {
+  role = "pod"
+  selectors {
+    role = "pod"
+    label = "app=vcluster"
+  }
+}
+
+discovery.relabel "vcluster_logs" {
+  targets = discovery.kubernetes.vcluster_pods.targets
+
+  // Extract namespace as vcluster_namespace label
+  rule {
+    source_labels = ["__meta_kubernetes_namespace"]
+    target_label  = "vcluster_namespace"
+  }
+
+  // Extract namespace labels (github-run-id, etc.)
+  rule {
+    source_labels = ["__meta_kubernetes_namespace_label_github_run_id"]
+    target_label  = "run_id"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_namespace_label_github_run_attempt"]
+    target_label  = "run_attempt"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_namespace_label_installer"]
+    target_label  = "installer"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_name"]
+    target_label  = "pod"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_container_name"]
+    target_label  = "container"
+  }
+}
+
+// ============================================================================
+// vCluster Workload Pod Logs (synced pods from inside vCluster)
+// ============================================================================
+discovery.kubernetes "vcluster_workload_pods" {
+  role = "pod"
+  // These are synced pods that have the vcluster.loft.sh labels
+  selectors {
+    role = "pod"
+    label = "vcluster.loft.sh/managed-by"
+  }
+}
+
+discovery.relabel "vcluster_workload_logs" {
+  targets = discovery.kubernetes.vcluster_workload_pods.targets
+
+  // Extract vCluster namespace
+  rule {
+    source_labels = ["__meta_kubernetes_namespace"]
+    target_label  = "vcluster_namespace"
+  }
+
+  // Extract namespace labels
+  rule {
+    source_labels = ["__meta_kubernetes_namespace_label_github_run_id"]
+    target_label  = "run_id"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_namespace_label_github_run_attempt"]
+    target_label  = "run_attempt"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_namespace_label_installer"]
+    target_label  = "installer"
+  }
+
+  // Extract original vCluster namespace from label
+  rule {
+    source_labels = ["__meta_kubernetes_pod_label_vcluster_loft_sh_namespace"]
+    target_label  = "workload_namespace"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_name"]
+    target_label  = "pod"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_container_name"]
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_label_app"]
+    target_label  = "app"
+  }
+}
+
+// Collect vCluster control plane logs (for audit logs)
+loki.source.kubernetes "vcluster_logs" {
+  targets    = discovery.relabel.vcluster_logs.output
+  forward_to = [loki.process.audit_logs.receiver]
+}
+
+// Collect vCluster workload pod logs (includes event-exporter)
+loki.source.kubernetes "vcluster_workload_logs" {
+  targets    = discovery.relabel.vcluster_workload_logs.output
+  forward_to = [
+    loki.process.workload_logs.receiver,
+    loki.process.event_exporter_logs.receiver,
+  ]
+}
+
+// Process and parse audit logs
+loki.process "audit_logs" {
+  forward_to = [loki.write.loki.receiver]
+
+  // Only process lines that look like audit logs
+  // vCluster syncer logs audit events with INFO prefix
+  stage.match {
+    selector = "{job=\"loki.source.kubernetes.vcluster_logs\", container=\"syncer\"}"
+
+    // Extract audit log JSON from log line
+    // The JSON starts with {"kind":"Event" and ends before the tab followed by {"component"
+    stage.regex {
+      expression = "\\t(?P<audit_json>\\{\"kind\":\"Event\".*?\\})\\t\\{\"component\""
+    }
+
+    // Parse the audit log JSON
+    // Note: Keeping original field names, will transform to unified schema in Grafana
+    stage.json {
+      source = "audit_json"
+      expressions = {
+        verb             = "verb",
+        user             = "user.username",
+        namespace        = "objectRef.namespace",
+        resource         = "objectRef.resource",
+        name             = "objectRef.name",
+        audit_stage      = "stage",
+        status_code      = "responseStatus.code",
+        request_uri      = "requestURI",
+        api_version      = "objectRef.apiVersion",
+        api_group        = "objectRef.group",
+      }
+    }
+
+    // Map verb/status to standard log level
+    stage.template {
+      source = "level"
+      template = "{{ if eq .verb \"delete\" }}warning{{ else if and .status_code (ge (.status_code | int) 400) }}error{{ else }}info{{ end }}"
+    }
+
+    // Promote level to label
+    stage.labels {
+      values = {
+        level = "",
+      }
+    }
+
+    // Add source label
+    stage.static_labels {
+      values = {
+        source = "k8s_audit_log",
+      }
+    }
+
+    // Replace the log line with just the audit JSON
+    stage.output {
+      source = "audit_json"
+    }
+  }
+
+}
+
+// ============================================================================
+// Process vCluster Workload Logs - Unified Schema
+// ============================================================================
+loki.process "workload_logs" {
+  forward_to = [loki.write.loki.receiver]
+
+  // Drop noisy health check logs early
+  stage.match {
+    selector = "{app=\"kube-probe\"}"
+    action   = "drop"
+  }
+
+  // Try to extract JSON logs if present
+  stage.json {
+    expressions = {
+      level = "level",
+      msg   = "msg",
+      message = "message",
+      time  = "time",
+      timestamp = "timestamp",
+      name  = "name",
+      namespace = "namespace",
+      kind  = "kind",
+      apiVersion = "apiVersion",
+    }
+  }
+
+  // Normalize level field (default to "info" if not present)
+  stage.template {
+    source = "level"
+    template = "{{ if .level }}{{ .level }}{{ else }}info{{ end }}"
+  }
+
+  // Promote log level to label
+  stage.labels {
+    values = {
+      level = "",
+    }
+  }
+
+  // Add source label
+  stage.static_labels {
+    values = {
+      source = "pod_log",
+    }
+  }
+}
+
+// ============================================================================
+// Kubernetes Events from event-exporter (inside vClusters)
+// ============================================================================
+// Event-exporter runs inside each vCluster and outputs events as JSON to stdout
+// Alloy collects these logs like any other workload pod logs
+// The event-exporter JSON already contains the original object names/namespaces
+
+// Events are collected via the workload_logs source and processed here
+loki.process "event_exporter_logs" {
+  forward_to = [loki.write.loki.receiver]
+
+  // Drop all logs that are NOT from event-exporter to prevent duplicates
+  stage.match {
+    selector = "{app!=\"event-exporter\"}"
+    action   = "drop"
+  }
+
+  // Only process logs from event-exporter pods
+  stage.match {
+    selector = "{app=\"event-exporter\"}"
+
+    // Parse the JSON event from event-exporter
+    // Note: Keeping original field names, will transform to unified schema in Grafana
+    stage.json {
+      expressions = {
+        object_name        = "involvedObject.name",
+        object_namespace   = "involvedObject.namespace",
+        object_kind        = "involvedObject.kind",
+        object_api_version = "involvedObject.apiVersion",
+        reason             = "reason",
+        type               = "type",
+        message            = "message",
+        count              = "count",
+        first_timestamp    = "firstTimestamp",
+        last_timestamp     = "lastTimestamp",
+      }
+    }
+
+    // Map event type to standard log level
+    stage.template {
+      source = "level"
+      template = "{{ if eq .type \"Warning\" }}warning{{ else }}info{{ end }}"
+    }
+
+    // Promote level to label
+    stage.labels {
+      values = {
+        level = "",
+      }
+    }
+
+    // Add source label
+    stage.static_labels {
+      values = {
+        source = "k8s_event",
+      }
+    }
+  }
+}

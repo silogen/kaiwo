@@ -1,0 +1,4 @@
+resources:
+  - alloy-config
+  - grafana-dashboards
+  - test-db/test-results-schema.yaml
