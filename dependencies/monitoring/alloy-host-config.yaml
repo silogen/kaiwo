@@ -240,10 +240,9 @@ data:
         selector = "{job=\"loki.source.kubernetes.vcluster_logs\", container=\"syncer\"}"
 
         // Extract audit log JSON from log line
-        // The JSON starts with {"kind":"Event" and ends before the last tab
-        // Use a simple greedy capture from the first { to capture the JSON
+        // The JSON starts with {"kind":"Event" and ends before the tab followed by {"component"
         stage.regex {
-          expression = "\\t(?P<audit_json>\\{\"kind\":\"Event\".*\\})\\t"
+          expression = "\\t(?P<audit_json>\\{\"kind\":\"Event\".*?\\})\\t\\{\"component\""
         }
 
         // Parse the audit log JSON
@@ -278,12 +277,12 @@ data:
         // Promote fields to labels
         stage.labels {
           values = {
-            verb        = "",
-            namespace   = "",
-            resource    = "",
-            stage       = "",
-            object_kind = "",
-            level       = "",
+            verb               = "",
+            workload_namespace = "namespace",
+            resource           = "",
+            stage              = "",
+            object_kind        = "",
+            level              = "",
           }
         }
 

@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: audit-log-generator
+  namespace: chainsaw-test-001
+  labels:
+    app: audit-log-generator
+spec:
+  serviceAccountName: default
+  containers:
+  - name: kubectl
+    image: bitnami/kubectl:latest
+    command: ["/bin/bash"]
+    args:
+      - -c
+      - |
+        i=0
+        while true; do
+          # Create a ConfigMap
+          kubectl create configmap test-cm-$i \
+            --from-literal=iteration=$i \
+            --from-literal=timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+            -n chainsaw-test-001 || true
+
+          echo "Created configmap test-cm-$i"
+          sleep 5
+
+          # Update it
+          kubectl patch configmap test-cm-$i \
+            -n chainsaw-test-001 \
+            --type merge \
+            -p "{\"data\":{\"updated\":\"true\"}}" || true
+
+          echo "Updated configmap test-cm-$i"
+          sleep 5
+
+          # Delete it
+          kubectl delete configmap test-cm-$i \
+            -n chainsaw-test-001 || true
+
+          echo "Deleted configmap test-cm-$i"
+
+          # Also create/delete a pod every few iterations
+          if [ $((i % 3)) -eq 0 ]; then
+            kubectl run test-pod-$i \
+              --image=busybox \
+              --restart=Never \
+              --command -- sleep 10 \
+              -n chainsaw-test-001 || true
+
+            echo "Created pod test-pod-$i"
+            sleep 15
+
+            kubectl delete pod test-pod-$i \
+              -n chainsaw-test-001 || true
+
+            echo "Deleted pod test-pod-$i"
+          fi
+
+          i=$((i + 1))
+          sleep 10
+        done
+  restartPolicy: Always

@@ -1,0 +1,23 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: audit-log-generator
+  namespace: chainsaw-test-001
+rules:
+- apiGroups: [""]
+  resources: ["configmaps", "pods"]
+  verbs: ["create", "get", "list", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: audit-log-generator
+  namespace: chainsaw-test-001
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: chainsaw-test-001
+roleRef:
+  kind: Role
+  name: audit-log-generator
+  apiGroup: rbac.authorization.k8s.io
