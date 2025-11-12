@@ -78,6 +78,14 @@ rules:
   - patch
   - update
 - apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - apps
   resources:
   - deployments
@@ -193,6 +201,15 @@ rules:
   - list
   - patch
   - update
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  - roles
+  verbs:
+  - get
+  - list
   - watch
 - apiGroups:
   - serving.kserve.io
