@@ -11,6 +11,7 @@ configMapGenerator:
       - cluster-health-dashboard.json
       - kaiwo-test-debug.json
       - kaiwo-test-results.json
+      - kaiwo-unified-logs.json
     options:
       disableNameSuffixHash: true
       labels:
