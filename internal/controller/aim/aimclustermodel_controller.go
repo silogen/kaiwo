@@ -55,11 +55,11 @@ type AIMClusterModelReconciler struct {
 	Clientset kubernetes.Interface
 }
 
-// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclusterimages,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclusterimages/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclusterimages/finalizers,verbs=update
-// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimruntimeconfigs,verbs=get;list;watch
-// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclusterruntimeconfigs,verbs=get;list;watch
+// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclustermodels,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclustermodels/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclustermodels/finalizers,verbs=update
+// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimruntimeconfigs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclusterruntimeconfigs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclusterservicetemplates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 

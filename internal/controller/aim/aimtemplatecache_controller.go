@@ -59,9 +59,9 @@ type AIMTemplateCacheReconciler struct {
 	Clientset kubernetes.Interface
 }
 
-// RBAC markers
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimtemplatecaches,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimtemplatecaches/status,verbs=get;update;patch
+
 func (r *AIMTemplateCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// Fetch CR
 	var tc aimv1alpha1.AIMTemplateCache
