@@ -312,7 +312,7 @@ data:
       stage.json {
         expressions = {
           level = "level",
-          msg   = "msg",
+          message = "msg",
           time  = "time",
         }
       }
@@ -357,6 +357,12 @@ data:
     // Events are collected via the workload_logs source and processed here
     loki.process "event_exporter_logs" {
       forward_to = [loki.write.loki.receiver]
+
+      // Drop all logs that are NOT from event-exporter to prevent duplicates
+      stage.match {
+        selector = "{app!=\"event-exporter\"}"
+        action   = "drop"
+      }
 
       // Only process logs from event-exporter pods
       stage.match {

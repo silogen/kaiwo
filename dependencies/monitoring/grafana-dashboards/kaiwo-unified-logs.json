@@ -522,7 +522,124 @@
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Level"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "error": {
+                        "color": "red",
+                        "index": 0
+                      }
+                    },
+                    "type": "value"
+                  },
+                  {
+                    "options": {
+                      "warn": {
+                        "color": "orange",
+                        "index": 1
+                      },
+                      "warning": {
+                        "color": "orange",
+                        "index": 2
+                      }
+                    },
+                    "type": "value"
+                  },
+                  {
+                    "options": {
+                      "info": {
+                        "color": "blue",
+                        "index": 3
+                      }
+                    },
+                    "type": "value"
+                  },
+                  {
+                    "options": {
+                      "debug": {
+                        "color": "light-blue",
+                        "index": 4
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Source"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "pod_log": {
+                        "color": "purple",
+                        "index": 0,
+                        "text": "Pod Log"
+                      }
+                    },
+                    "type": "value"
+                  },
+                  {
+                    "options": {
+                      "k8s_event": {
+                        "color": "green",
+                        "index": 1,
+                        "text": "K8s Event"
+                      }
+                    },
+                    "type": "value"
+                  },
+                  {
+                    "options": {
+                      "k8s_audit_log": {
+                        "color": "yellow",
+                        "index": 2,
+                        "text": "Audit Log"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 20,
@@ -576,7 +693,9 @@
       "transformations": [
         {
           "id": "labelsToFields",
-          "options": {}
+          "options": {
+            "valueByField": "Line"
+          }
         },
         {
           "id": "extractFields",
@@ -585,6 +704,42 @@
             "format": "json",
             "keepTime": false,
             "replace": false
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "includeByName": {
+              "Time": true,
+              "source": true,
+              "level": true,
+              "object_kind": true,
+              "message": true,
+              "name": true,
+              "workload_namespace": true,
+              "namespace": true,
+              "Line": true
+            },
+            "indexByName": {
+              "Time": 0,
+              "source": 1,
+              "level": 2,
+              "message": 3,
+              "name": 4,
+              "workload_namespace": 5,
+              "namespace": 5,
+              "Line": 6
+            },
+            "renameByName": {
+              "source": "Source",
+              "level": "Level",
+              "message": "Message",
+              "name": "Name",
+              "workload_namespace": "Namespace",
+              "namespace": "Namespace",
+              "Line": "Payload"
+            }
           }
         }
       ],
