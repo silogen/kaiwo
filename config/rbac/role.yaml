@@ -1,147 +1,257 @@
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  labels:
-    app.kubernetes.io/name: kaiwo
-    app.kubernetes.io/managed-by: kustomize
   name: manager-role
 rules:
-- apiGroups: [""]
+- apiGroups:
+  - ""
   resources:
+  - configmaps
+  - events
+  - namespaces
+  - persistentvolumeclaims
   - pods
   - pods/log
-  - services
-  - configmaps
   - secrets
-  - events
-  - persistentvolumeclaims
-  - namespaces
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-
-- apiGroups: [""]
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
   resources:
   - nodes
-  verbs: ["get", "list", "watch", "update", "patch"]
-
-- apiGroups: ["kaiwo.silogen.ai"]
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - aim.silogen.ai
   resources:
-  - "kaiwojobs"
-  - "kaiwoqueueconfigs"
-  - "kaiwoservices"
-  - "clustermodels"
-  - "aimmodelcaches"
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-
-- apiGroups: ["aim.silogen.ai"]
+  - aimclustermodels
+  - aimclusterruntimeconfigs
+  - aimclusterservicetemplates
+  - aimmodelcaches
+  - aimmodels
+  - aimruntimeconfigs
+  - aimservices
+  - aimservicetemplates
+  - aimtemplatecaches
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - aim.silogen.ai
   resources:
-  - "aimmodels"
-  - "aimclustermodels"
-  - "aimruntimeconfigs"
-  - "aimclusterruntimeconfigs"
-  - "aimservicetemplates"
-  - "aimclusterservicetemplates"
-  - "aimtemplatecaches"
-  - "aimservices"
-  - "aimmodelcaches"
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-
-- apiGroups: ["config.kaiwo.silogen.ai"]
+  - aimclustermodels/finalizers
+  - aimclusterservicetemplates/finalizers
+  - aimmodelcaches/finalizers
+  - aimmodels/finalizers
+  - aimservicetemplates/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - aim.silogen.ai
   resources:
-  - "kaiwoconfigs"
-  - "aimnamespaceconfigs"
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-
-- apiGroups: ["serving.kserve.io"]
-  resources:
-  - "clusterservingruntimes"
-  - "servingruntimes"
-  - "inferenceservices"
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-
-- apiGroups: ["gateway.networking.k8s.io"]
-  resources:
-  - "httproutes"
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-
-- apiGroups: ["aim.silogen.ai"]
-  resources:
-  - "aimmodels/status"
-  - "aimclustermodels/status"
-  - "aimservicetemplates/status"
-  - "aimclusterservicetemplates/status"
-  - "aimtemplatecaches/status"
-  - "aimservices/status"
-  - "aimmodelcaches/status"
-  verbs: ["get", "update", "patch"]
-
-- apiGroups: ["gateway.networking.k8s.io"]
-  resources:
-  - "httproutes/status"
-  verbs: ["get"]
-
-- apiGroups: ["serving.kserve.io"]
-  resources:
-  - "clusterservingruntimes/status"
-  - "servingruntimes/status"
-  - "inferenceservices/status"
-  verbs: ["get", "update", "patch"]
-
-- apiGroups: ["kaiwo.silogen.ai"]
-  resources:
-  - "kaiwojobs/status"
-  - "kaiwoservices/status"
-  - "kaiwoqueueconfigs/status"
-  - "clustermodels/status"
-  - "aimmodelcaches/status"
-  verbs: ["get", "update", "patch"]
-
-- apiGroups: ["batch"]
-  resources: ["jobs"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-
-- apiGroups: ["ray.io"]
-  resources: ["rayjobs"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-
-- apiGroups: ["kueue.x-k8s.io"]
-  resources:
-  - "resourceflavors"
-  - "clusterqueues"
-  - "localqueues"
-  - "workloads"
-  - "admissionchecks"
-  - "workloadpriorityclasses"
-  - "topologies"
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-
-- apiGroups: ["apiextensions.k8s.io"]
+  - aimclustermodels/status
+  - aimclusterservicetemplates/status
+  - aimmodelcaches/status
+  - aimmodels/status
+  - aimservices/status
+  - aimservicetemplates/status
+  - aimtemplatecaches/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - apiextensions.k8s.io
   resources:
   - customresourcedefinitions
-  verbs: ["get", "list", "watch"]
-
-- apiGroups: ["rbac.authorization.k8s.io"]
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apps
   resources:
-  - roles
+  - deployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - config.kaiwo.silogen.ai
+  resources:
+  - kaiwoconfigs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - gateway.networking.k8s.io
+  resources:
+  - httproutes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - gateway.networking.k8s.io
+  resources:
+  - httproutes/status
+  verbs:
+  - get
+- apiGroups:
+  - kaiwo.silogen.ai
+  resources:
+  - kaiwojobs
+  - kaiwoqueueconfigs
+  - kaiwoservices
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - kaiwo.silogen.ai
+  resources:
+  - kaiwojobs/finalizers
+  - kaiwoqueueconfigs/finalizers
+  - kaiwoservices/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - kaiwo.silogen.ai
+  resources:
+  - kaiwojobs/status
+  - kaiwoqueueconfigs/status
+  - kaiwoservices/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - kueue.x-k8s.io
+  resources:
+  - admissionchecks
+  - clusterqueues
+  - localqueues
+  - resourceflavors
+  - topologies
+  - workloadpriorityclasses
+  - workloads
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ray.io
+  resources:
+  - rayjobs
+  - rayservices
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
   - rolebindings
-  verbs: ["get", "list", "watch"]
-- apiGroups: ["apps"]
-  resources: ["deployments"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-
-- apiGroups: ["ray.io"]
-  resources: ["rayservices"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-
-- apiGroups: ["workload.codeflare.dev"]
-  resources: ["appwrappers"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-
-# Leader election permissions
-- apiGroups: ["coordination.k8s.io"]
-  resources: ["leases"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-
-# Validate storageclass
-- apiGroups: ["storage.k8s.io"]
-  resources: ["storageclasses"]
-  verbs: ["get", "list", "watch"]
+  - roles
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - serving.kserve.io
+  resources:
+  - clusterservingruntimes
+  - inferenceservices
+  - servingruntimes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - serving.kserve.io
+  resources:
+  - clusterservingruntimes/status
+  - inferenceservices/status
+  - servingruntimes/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - storage.k8s.io
+  resources:
+  - storageclasses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - workload.codeflare.dev
+  resources:
+  - appwrappers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch

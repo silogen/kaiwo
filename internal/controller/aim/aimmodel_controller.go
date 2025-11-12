@@ -55,9 +55,9 @@ type AIMModelReconciler struct {
 	Clientset kubernetes.Interface
 }
 
-// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimimages,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimimages/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimimages/finalizers,verbs=update
+// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimmodels,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimmodels/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimmodels/finalizers,verbs=update
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimruntimeconfigs,verbs=get;list;watch
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclusterruntimeconfigs,verbs=get;list;watch
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimservicetemplates,verbs=get;list;watch;create;update;patch;delete
