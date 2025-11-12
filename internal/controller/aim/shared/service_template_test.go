@@ -46,18 +46,22 @@ func TestBuildDerivedTemplateAddsDerivedLabelAndClearsOwners(t *testing.T) {
 
 	if template == nil {
 		t.Fatal("expected template to be constructed")
+		return
 	}
 
 	if template.Labels[LabelKeyDerivedTemplate] != LabelValueDerivedTemplate {
 		t.Fatalf("expected derived template label %q to be %q, got %q",
 			LabelKeyDerivedTemplate, LabelValueDerivedTemplate, template.Labels[LabelKeyDerivedTemplate])
+		return
 	}
 
 	if managedBy := template.Labels["app.kubernetes.io/managed-by"]; managedBy != LabelValueManagedBy {
 		t.Fatalf("expected managed-by label to be %q, got %q", LabelValueManagedBy, managedBy)
+		return
 	}
 
 	if len(template.OwnerReferences) != 0 {
 		t.Fatalf("expected no owner references, got %d", len(template.OwnerReferences))
+		return
 	}
 }

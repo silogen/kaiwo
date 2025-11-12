@@ -114,6 +114,7 @@ func TestMergeRuntimeConfigSpecs_MergesRouting(t *testing.T) {
 
 	if merged.Routing == nil {
 		t.Fatal("expected routing config to be merged")
+		return
 	}
 	// Enabled should come from cluster (namespace didn't set it)
 	if merged.Routing.Enabled == nil || *merged.Routing.Enabled != true {
@@ -145,6 +146,7 @@ func TestMergeRoutingConfig_BothPresent(t *testing.T) {
 
 	if merged == nil {
 		t.Fatal("expected merged routing config")
+		return
 	}
 	// Namespace overrides enabled
 	if *merged.Enabled != false {
@@ -174,6 +176,7 @@ func TestMergeRoutingConfig_NamespaceOverridesGateway(t *testing.T) {
 
 	if merged == nil {
 		t.Fatal("expected merged routing config")
+		return
 	}
 	// Enabled from cluster (namespace didn't set it)
 	if merged.Enabled == nil || *merged.Enabled != true {
@@ -196,6 +199,7 @@ func TestMergeRoutingConfig_OnlyCluster(t *testing.T) {
 
 	if merged == nil {
 		t.Fatal("expected merged routing config")
+		return
 	}
 	if merged == clusterRouting {
 		t.Error("expected deep copy, got same pointer")
@@ -218,6 +222,7 @@ func TestMergeRoutingConfig_OnlyNamespace(t *testing.T) {
 
 	if merged == nil {
 		t.Fatal("expected merged routing config")
+		return
 	}
 	if merged == namespaceRouting {
 		t.Error("expected deep copy, got same pointer")
