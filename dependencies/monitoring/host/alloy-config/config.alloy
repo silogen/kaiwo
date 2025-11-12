@@ -250,70 +250,113 @@ loki.process "audit_logs" {
     action   = "drop"
   }
 
-  // Only process lines that look like audit logs
-  // vCluster syncer logs audit events with INFO prefix
+  // Only process lines from the vcluster syncer that contain an audit Event JSON
   stage.match {
     selector = "{job=\"loki.source.kubernetes.vcluster_logs\", container=\"syncer\"}"
 
-    // Extract audit log JSON from log line
-    // The JSON starts with {"kind":"Event" and ends before the tab followed by {"component"
+    // 1) Try to capture UNESCAPED JSON:  {"kind":"Event", ... }
     stage.regex {
-      expression = "\\t(?P<audit_json>\\{\"kind\":\"Event\".*?\\})\\t\\{\"component\""
+      expression = "(?P<audit_unescaped>\\{\\s*\\\"kind\\\"\\s*:\\s*\\\"Event\\\"[\\s\\S]*\\})"
     }
 
-    // Parse the audit log JSON and keep it for details
-    stage.json {
-      source = "audit_json"
-      expressions = {
-        verb             = "verb",
-        user             = "user.username",
-        namespace        = "objectRef.namespace",
-        resource         = "objectRef.resource",
-        name             = "objectRef.name",
-        audit_stage      = "stage",
-        status_code      = "responseStatus.code",
-        request_uri      = "requestURI",
-        api_version      = "objectRef.apiVersion",
-        api_group        = "objectRef.group",
-      }
+    // 2) If logs are DOUBLE-ESCAPED (\"kind\":\"Event\" ...), capture that as well
+    //    This will fire when 1) misses; both can coexist safely.
+    stage.regex {
+      expression = "(?P<audit_escaped>\\{\\\\\\\"kind\\\\\\\"\\s*:\\s*\\\\\\\"Event\\\\\\\"[\\s\\S]*?\\})"
     }
 
-    // Map verb/status to standard log level
+    // 3) Prefer unescaped; otherwise unescape the escaped JSON string
     stage.template {
-      source = "level"
+      source   = "audit_json"
+      template = "{{ if .audit_unescaped }}{{ .audit_unescaped }}{{ end }}"
+    }
+
+    // 4) Bail out early if we still didn't get JSON (keeps noise out)
+    stage.match {
+      selector = "{audit_json=\"\"}"
+      action   = "drop"
+    }
+
+    // 5) Extract fields using regex from the audit_json
+    stage.regex {
+      source     = "audit_json"
+      expression = "\"verb\"\\s*:\\s*\"(?P<verb>[^\"]+)\""
+    }
+
+    stage.regex {
+      source     = "audit_json"
+      expression = "\"username\"\\s*:\\s*\"(?P<user>[^\"]+)\""
+    }
+
+    stage.regex {
+      source     = "audit_json"
+      expression = "\"objectRef\"[^}]*\"namespace\"\\s*:\\s*\"(?P<namespace>[^\"]*)\""
+    }
+
+    stage.regex {
+      source     = "audit_json"
+      expression = "\"objectRef\"[^}]*\"resource\"\\s*:\\s*\"(?P<resource>[^\"]*)\""
+    }
+
+    stage.regex {
+      source     = "audit_json"
+      expression = "\"objectRef\"[^}]*\"name\"\\s*:\\s*\"(?P<name>[^\"]*)\""
+    }
+
+    stage.regex {
+      source     = "audit_json"
+      expression = "\"objectRef\"[^}]*\"apiVersion\"\\s*:\\s*\"(?P<api_version>[^\"]*)\""
+    }
+
+    stage.regex {
+      source     = "audit_json"
+      expression = "\"objectRef\"[^}]*\"apiGroup\"\\s*:\\s*\"(?P<api_group>[^\"]*)\""
+    }
+
+    stage.regex {
+      source     = "audit_json"
+      expression = "\"stage\"\\s*:\\s*\"(?P<audit_stage>[^\"]+)\""
+    }
+
+    stage.regex {
+      source     = "audit_json"
+      expression = "\"code\"\\s*:\\s*(?P<status_code>\\d+)"
+    }
+
+    stage.regex {
+      source     = "audit_json"
+      expression = "\"requestURI\"\\s*:\\s*\"(?P<request_uri>[^\"]+)\""
+    }
+
+    // 7) Keep the raw (now-clean) JSON for details
+    stage.template {
+      source   = "audit_json_for_details"
+      template = "{{ .audit_json }}"
+    }
+
+    // 8) Map to a level
+    stage.template {
+      source   = "level"
       template = "{{ if .verb }}{{ if eq .verb \"delete\" }}warning{{ else if and .status_code (ge (.status_code | int) 400) }}error{{ else }}info{{ end }}{{ else }}info{{ end }}"
     }
 
-    // Build formatted message: "{verb} {resource}/{name} by {user}"
+    // 9) Human-readable message
     stage.template {
-      source = "formatted_message"
+      source   = "formatted_message"
       template = "{{ if and .verb .resource .name .user }}{{ .verb }} {{ .resource }}/{{ .name }} by {{ .user }}{{ else }}audit event{{ end }}"
     }
 
-    // Build unified JSON output - embed raw audit JSON in details
+    // 10) Unified JSON (note: 'kind' uses resource; plural is expected for K8s resources)
     stage.template {
-      source = "unified_log"
-      template = "{\"source\":\"k8s_audit_log\",\"level\":\"{{ if .level }}{{ .level }}{{ else }}info{{ end }}\",\"action\":\"{{ if .verb }}{{ .verb }}{{ end }}\",\"message\":\"{{ if .formatted_message }}{{ .formatted_message }}{{ end }}\",\"object\":{\"name\":\"{{ if .name }}{{ .name }}{{ end }}\",\"namespace\":\"{{ if .namespace }}{{ .namespace }}{{ end }}\",\"kind\":\"{{ if .resource }}{{ .resource }}{{ end }}\",\"apiVersion\":\"{{ if .api_version }}{{ .api_version }}{{ end }}\"},\"pod\":\"\",\"container\":\"\",\"timestamp\":\"{{ if .timestamp }}{{ .timestamp }}{{ end }}\",\"details\":{{ if .audit_json }}{{ .audit_json }}{{ else }}{}{{ end }}}"
+      source   = "unified_log"
+      template = "{\"source\":\"k8s_audit_log\",\"level\":\"{{ if .level }}{{ .level }}{{ else }}info{{ end }}\",\"action\":\"{{ .verb }}\",\"message\":\"{{ .formatted_message }}\",\"object\":{\"name\":\"{{ .name }}\",\"namespace\":\"{{ .namespace }}\",\"kind\":\"{{ .resource }}\",\"apiVersion\":\"{{ .api_version }}\",\"apiGroup\":\"{{ .api_group }}\"},\"pod\":\"\",\"container\":\"\",\"timestamp\":\"{{ .timestamp }}\",\"details\":{{ .audit_json_for_details }}}"
     }
 
-    // Promote level to label
-    stage.labels {
-      values = {
-        level = "",
-      }
-    }
+    stage.labels { values = { level = "" } }
 
-    // Add source label
-    stage.static_labels {
-      values = {
-        source = "k8s_audit_log",
-      }
-    }
+    stage.static_labels { values = { source = "k8s_audit_log" } }
 
-    // Replace the log line with unified JSON
-    stage.output {
-      source = "unified_log"
-    }
+    stage.output { source = "unified_log" }
   }
 
 }
@@ -484,16 +527,16 @@ loki.process "event_exporter_logs" {
       template = "{{ if .type }}{{ if eq .type \"Warning\" }}warning{{ else }}info{{ end }}{{ else }}info{{ end }}"
     }
 
-    // Build formatted message: "{reason}: {message}"
+    // Use event message as-is (reason is in action field)
     stage.template {
       source = "formatted_message"
-      template = "{{ if and .reason .message }}{{ .reason }}: {{ .message }}{{ else if .message }}{{ .message }}{{ else }}event{{ end }}"
+      template = "{{ if .message }}{{ .message }}{{ else }}event{{ end }}"
     }
 
-    // Build unified JSON output - embed raw event JSON in details
+    // Build unified JSON output - embed raw event JSON in details AND use extracted fields
     stage.template {
       source = "unified_log"
-      template = "{\"source\":\"k8s_event\",\"level\":\"{{ if .level }}{{ .level }}{{ else }}info{{ end }}\",\"action\":\"{{ if .reason }}{{ .reason }}{{ end }}\",\"message\":\"{{ if .formatted_message }}{{ .formatted_message }}{{ end }}\",\"object\":{\"name\":\"{{ if .object_name }}{{ .object_name }}{{ end }}\",\"namespace\":\"{{ if .object_namespace }}{{ .object_namespace }}{{ end }}\",\"kind\":\"{{ if .object_kind }}{{ .object_kind }}{{ end }}\",\"apiVersion\":\"{{ if .object_api_version }}{{ .object_api_version }}{{ end }}\"},\"pod\":\"\",\"container\":\"\",\"timestamp\":\"{{ if .timestamp }}{{ .timestamp }}{{ end }}\",\"details\":{{ if .event_json }}{{ .event_json }}{{ else }}{}{{ end }}}"
+      template = "{\"source\":\"k8s_event\",\"level\":\"{{ .level }}\",\"action\":\"{{ .reason }}\",\"message\":\"{{ .formatted_message }}\",\"object\":{\"name\":\"{{ .object_name }}\",\"namespace\":\"{{ .object_namespace }}\",\"kind\":\"{{ .object_kind }}\",\"apiVersion\":\"{{ .object_api_version }}\"},\"pod\":\"\",\"container\":\"\",\"timestamp\":\"{{ .timestamp }}\",\"details\":{{ .event_json }}}"
     }
 
     // Promote level to label
