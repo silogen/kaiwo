@@ -4,7 +4,7 @@ kind: Kustomization
 namespace: test-observability
 
 configMapGenerator:
-  - name: alloy-config
+  - name: alloy-host-config
     behavior: create
     files:
       - config.alloy

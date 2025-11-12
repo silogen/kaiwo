@@ -2,7 +2,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: audit-log-generator
-  namespace: chainsaw-test-001
+  namespace: monitoring
   labels:
     app: audit-log-generator
 spec:
@@ -20,14 +20,14 @@ spec:
           kubectl create configmap test-cm-$i \
             --from-literal=iteration=$i \
             --from-literal=timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
-            -n chainsaw-test-001 || true
+            -n monitoring || true
 
           echo "Created configmap test-cm-$i"
           sleep 5
 
           # Update it
           kubectl patch configmap test-cm-$i \
-            -n chainsaw-test-001 \
+            -n monitoring \
             --type merge \
             -p "{\"data\":{\"updated\":\"true\"}}" || true
 
@@ -36,7 +36,7 @@ spec:
 
           # Delete it
           kubectl delete configmap test-cm-$i \
-            -n chainsaw-test-001 || true
+            -n monitoring || true
 
           echo "Deleted configmap test-cm-$i"
 
@@ -46,13 +46,13 @@ spec:
               --image=busybox \
               --restart=Never \
               --command -- sleep 10 \
-              -n chainsaw-test-001 || true
+              -n monitoring || true
 
             echo "Created pod test-pod-$i"
             sleep 15
 
             kubectl delete pod test-pod-$i \
-              -n chainsaw-test-001 || true
+              -n monitoring || true
 
             echo "Deleted pod test-pod-$i"
           fi

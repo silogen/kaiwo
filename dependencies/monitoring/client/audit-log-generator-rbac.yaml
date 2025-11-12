@@ -2,7 +2,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: audit-log-generator
-  namespace: chainsaw-test-001
+  namespace: monitoring
 rules:
 - apiGroups: [""]
   resources: ["configmaps", "pods"]
@@ -12,11 +12,11 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: audit-log-generator
-  namespace: chainsaw-test-001
+  namespace: monitoring
 subjects:
 - kind: ServiceAccount
   name: default
-  namespace: chainsaw-test-001
+  namespace: monitoring
 roleRef:
   kind: Role
   name: audit-log-generator

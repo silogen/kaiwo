@@ -1,5 +1,5 @@
 resources:
-  - ../vcluster-audit-policy.yaml
+  - namespace.yaml
   - event-exporter.yaml
   - audit-log-generator-rbac.yaml
   - audit-log-generator.yaml

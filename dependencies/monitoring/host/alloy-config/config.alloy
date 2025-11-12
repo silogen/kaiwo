@@ -227,6 +227,29 @@ loki.source.kubernetes "vcluster_workload_logs" {
 loki.process "audit_logs" {
   forward_to = [loki.write.loki.receiver]
 
+  // Extract run metadata from vcluster_namespace
+  // Format: test-{installer}-{run_id}-{run_attempt}
+  // Example: test-manual-999-1 or test-ci-550e8400-e29b-41d4-a89f-446657440000-1
+  stage.regex {
+    source     = "vcluster_namespace"
+    expression = "^test-(?P<installer>[^-]+)-(?P<run_id>.+?)-(?P<run_attempt>\\d+)$"
+  }
+
+  // Promote run metadata to labels
+  stage.labels {
+    values = {
+      installer   = "",
+      run_id      = "",
+      run_attempt = "",
+    }
+  }
+
+  // Drop logs that don't match the new namespace format
+  stage.match {
+    selector = "{installer=\"\"}"
+    action   = "drop"
+  }
+
   // Only process lines that look like audit logs
   // vCluster syncer logs audit events with INFO prefix
   stage.match {
@@ -238,8 +261,7 @@ loki.process "audit_logs" {
       expression = "\\t(?P<audit_json>\\{\"kind\":\"Event\".*?\\})\\t\\{\"component\""
     }
 
-    // Parse the audit log JSON
-    // Note: Keeping original field names, will transform to unified schema in Grafana
+    // Parse the audit log JSON and keep it for details
     stage.json {
       source = "audit_json"
       expressions = {
@@ -259,7 +281,19 @@ loki.process "audit_logs" {
     // Map verb/status to standard log level
     stage.template {
       source = "level"
-      template = "{{ if eq .verb \"delete\" }}warning{{ else if and .status_code (ge (.status_code | int) 400) }}error{{ else }}info{{ end }}"
+      template = "{{ if .verb }}{{ if eq .verb \"delete\" }}warning{{ else if and .status_code (ge (.status_code | int) 400) }}error{{ else }}info{{ end }}{{ else }}info{{ end }}"
+    }
+
+    // Build formatted message: "{verb} {resource}/{name} by {user}"
+    stage.template {
+      source = "formatted_message"
+      template = "{{ if and .verb .resource .name .user }}{{ .verb }} {{ .resource }}/{{ .name }} by {{ .user }}{{ else }}audit event{{ end }}"
+    }
+
+    // Build unified JSON output - embed raw audit JSON in details
+    stage.template {
+      source = "unified_log"
+      template = "{\"source\":\"k8s_audit_log\",\"level\":\"{{ if .level }}{{ .level }}{{ else }}info{{ end }}\",\"action\":\"{{ if .verb }}{{ .verb }}{{ end }}\",\"message\":\"{{ if .formatted_message }}{{ .formatted_message }}{{ end }}\",\"object\":{\"name\":\"{{ if .name }}{{ .name }}{{ end }}\",\"namespace\":\"{{ if .namespace }}{{ .namespace }}{{ end }}\",\"kind\":\"{{ if .resource }}{{ .resource }}{{ end }}\",\"apiVersion\":\"{{ if .api_version }}{{ .api_version }}{{ end }}\"},\"pod\":\"\",\"container\":\"\",\"timestamp\":\"{{ if .timestamp }}{{ .timestamp }}{{ end }}\",\"details\":{{ if .audit_json }}{{ .audit_json }}{{ else }}{}{{ end }}}"
     }
 
     // Promote level to label
@@ -276,9 +310,9 @@ loki.process "audit_logs" {
       }
     }
 
-    // Replace the log line with just the audit JSON
+    // Replace the log line with unified JSON
     stage.output {
-      source = "audit_json"
+      source = "unified_log"
     }
   }
 
@@ -290,10 +324,39 @@ loki.process "audit_logs" {
 loki.process "workload_logs" {
   forward_to = [loki.write.loki.receiver]
 
+  // Extract run metadata from vcluster_namespace
+  // Format: test-{installer}-{run_id}-{run_attempt}
+  // Example: test-manual-999-1 or test-ci-550e8400-e29b-41d4-a89f-446657440000-1
+  stage.regex {
+    source     = "vcluster_namespace"
+    expression = "^test-(?P<installer>[^-]+)-(?P<run_id>.+?)-(?P<run_attempt>\\d+)$"
+  }
+
+  // Promote run metadata to labels
+  stage.labels {
+    values = {
+      installer   = "",
+      run_id      = "",
+      run_attempt = "",
+    }
+  }
+
+  // Drop logs that don't match the new namespace format
+  stage.match {
+    selector = "{installer=\"\"}"
+    action   = "drop"
+  }
+
   // Drop noisy health check logs early
   stage.match {
     selector = "{app=\"kube-probe\"}"
     action   = "drop"
+  }
+
+  // Store original log line for message
+  stage.template {
+    source = "original_line"
+    template = "{{ .Entry }}"
   }
 
   // Try to extract JSON logs if present
@@ -317,6 +380,18 @@ loki.process "workload_logs" {
     template = "{{ if .level }}{{ .level }}{{ else }}info{{ end }}"
   }
 
+  // Build log message (use msg or message field if present, otherwise use original line)
+  stage.template {
+    source = "log_message"
+    template = "{{ if .msg }}{{ .msg }}{{ else if .message }}{{ .message }}{{ else }}{{ .original_line }}{{ end }}"
+  }
+
+  // Build unified JSON output (without raw for pod logs to avoid escaping issues)
+  stage.template {
+    source = "unified_log"
+    template = "{\"source\":\"pod_log\",\"level\":\"{{ if .level }}{{ .level }}{{ else }}info{{ end }}\",\"action\":\"log\",\"message\":\"{{ if .log_message }}{{ .log_message }}{{ end }}\",\"object\":{},\"pod\":\"{{ if .pod }}{{ .pod }}{{ end }}\",\"container\":\"{{ if .container }}{{ .container }}{{ end }}\",\"timestamp\":\"{{ if .timestamp }}{{ .timestamp }}{{ end }}\",\"details\":{}}"
+  }
+
   // Promote log level to label
   stage.labels {
     values = {
@@ -329,6 +404,11 @@ loki.process "workload_logs" {
     values = {
       source = "pod_log",
     }
+  }
+
+  // Replace the log line with unified JSON
+  stage.output {
+    source = "unified_log"
   }
 }
 
@@ -343,6 +423,29 @@ loki.process "workload_logs" {
 loki.process "event_exporter_logs" {
   forward_to = [loki.write.loki.receiver]
 
+  // Extract run metadata from vcluster_namespace
+  // Format: test-{installer}-{run_id}-{run_attempt}
+  // Example: test-manual-999-1 or test-ci-550e8400-e29b-41d4-a89f-446657440000-1
+  stage.regex {
+    source     = "vcluster_namespace"
+    expression = "^test-(?P<installer>[^-]+)-(?P<run_id>.+?)-(?P<run_attempt>\\d+)$"
+  }
+
+  // Promote run metadata to labels
+  stage.labels {
+    values = {
+      installer   = "",
+      run_id      = "",
+      run_attempt = "",
+    }
+  }
+
+  // Drop logs that don't match the new namespace format
+  stage.match {
+    selector = "{installer=\"\"}"
+    action   = "drop"
+  }
+
   // Drop all logs that are NOT from event-exporter to prevent duplicates
   stage.match {
     selector = "{app!=\"event-exporter\"}"
@@ -353,8 +456,13 @@ loki.process "event_exporter_logs" {
   stage.match {
     selector = "{app=\"event-exporter\"}"
 
+    // Store original log line (the full event JSON)
+    stage.template {
+      source = "event_json"
+      template = "{{ .Entry }}"
+    }
+
     // Parse the JSON event from event-exporter
-    // Note: Keeping original field names, will transform to unified schema in Grafana
     stage.json {
       expressions = {
         object_name        = "involvedObject.name",
@@ -373,7 +481,19 @@ loki.process "event_exporter_logs" {
     // Map event type to standard log level
     stage.template {
       source = "level"
-      template = "{{ if eq .type \"Warning\" }}warning{{ else }}info{{ end }}"
+      template = "{{ if .type }}{{ if eq .type \"Warning\" }}warning{{ else }}info{{ end }}{{ else }}info{{ end }}"
+    }
+
+    // Build formatted message: "{reason}: {message}"
+    stage.template {
+      source = "formatted_message"
+      template = "{{ if and .reason .message }}{{ .reason }}: {{ .message }}{{ else if .message }}{{ .message }}{{ else }}event{{ end }}"
+    }
+
+    // Build unified JSON output - embed raw event JSON in details
+    stage.template {
+      source = "unified_log"
+      template = "{\"source\":\"k8s_event\",\"level\":\"{{ if .level }}{{ .level }}{{ else }}info{{ end }}\",\"action\":\"{{ if .reason }}{{ .reason }}{{ end }}\",\"message\":\"{{ if .formatted_message }}{{ .formatted_message }}{{ end }}\",\"object\":{\"name\":\"{{ if .object_name }}{{ .object_name }}{{ end }}\",\"namespace\":\"{{ if .object_namespace }}{{ .object_namespace }}{{ end }}\",\"kind\":\"{{ if .object_kind }}{{ .object_kind }}{{ end }}\",\"apiVersion\":\"{{ if .object_api_version }}{{ .object_api_version }}{{ end }}\"},\"pod\":\"\",\"container\":\"\",\"timestamp\":\"{{ if .timestamp }}{{ .timestamp }}{{ end }}\",\"details\":{{ if .event_json }}{{ .event_json }}{{ else }}{}{{ end }}}"
     }
 
     // Promote level to label
@@ -388,6 +508,11 @@ loki.process "event_exporter_logs" {
       values = {
         source = "k8s_event",
       }
+    }
+
+    // Replace the log line with unified JSON
+    stage.output {
+      source = "unified_log"
     }
   }
 }
