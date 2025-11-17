@@ -365,15 +365,13 @@ func (r *AIMTemplateCacheReconciler) projectStatus(ctx context.Context, tc *aimv
 	statusValues := slices.Collect(maps.Values(obs.CacheStatus))
 	oldStatus := tc.Status.Status
 	if len(statusValues) > 0 {
-		worstCacheStatus := slices.MaxFunc(statusValues, cmpModelCacheStatus)
+		// Use MinFunc to get the worst (lowest rank) status across all model caches
+		// Template cache is only Available when ALL model sources have Available caches
+		worstCacheStatus := slices.MinFunc(statusValues, cmpModelCacheStatus)
 		tc.Status.Status = aimv1alpha1.AIMTemplateCacheStatusEnum(worstCacheStatus)
 	} else {
 		// If there are no caches to track, mark as Pending
 		tc.Status.Status = aimv1alpha1.AIMTemplateCacheStatusPending
-	}
-
-	if obs.AllCachesAvailable {
-		tc.Status.Status = aimv1alpha1.AIMTemplateCacheStatusAvailable
 	}
 
 	// Log only when status changes
