@@ -1,3 +1,4 @@
 resources:
   - namespace.yaml
+  - kube-state-metrics.yaml
   - event-exporter.yaml
