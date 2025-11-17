@@ -10,7 +10,7 @@ spec:
     - apply:
         file: service.yaml
 
-  - name: Verify auto-created model is degraded with ImageNotFound
+  - name: Verify auto-created model is failed with ImageNotFound
     try:
     - assert:
         resource:
