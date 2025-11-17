@@ -1,0 +1,17 @@
+# Filter: Transform audit logs to common format
+# Named with 'zzz-' prefix to run AFTER detect-source
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterFilter
+metadata:
+  name: zzz-transform-audit
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/mode: "k8s"
+spec:
+  match: kube.*
+  filters:
+    - lua:
+        script:
+          key: transform-audit.lua
+          name: fluent-bit-lua-scripts
+        call: transform_audit

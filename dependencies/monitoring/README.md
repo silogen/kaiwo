@@ -15,15 +15,22 @@ cd dependencies/monitoring
 # Create namespace
 kubectl create namespace test-observability
 
-# Apply base resources (RBAC, ConfigMaps)
-kubectl apply -k host/
+# Install Fluent Operator CRDs (required before helmfile)
+kubectl apply --server-side \
+  -f https://raw.githubusercontent.com/fluent/fluent-operator/release-3.5/config/crd/bases/fluentbit.fluent.io_clusterfilters.yaml \
+  -f https://raw.githubusercontent.com/fluent/fluent-operator/release-3.5/config/crd/bases/fluentbit.fluent.io_clusterfluentbitconfigs.yaml \
+  -f https://raw.githubusercontent.com/fluent/fluent-operator/release-3.5/config/crd/bases/fluentbit.fluent.io_clusterinputs.yaml \
+  -f https://raw.githubusercontent.com/fluent/fluent-operator/release-3.5/config/crd/bases/fluentbit.fluent.io_clusteroutputs.yaml \
+  -f https://raw.githubusercontent.com/fluent/fluent-operator/release-3.5/config/crd/bases/fluentbit.fluent.io_clusterparsers.yaml \
+  -f https://raw.githubusercontent.com/fluent/fluent-operator/release-3.5/config/crd/bases/fluentbit.fluent.io_fluentbits.yaml
 
-# Install monitoring components (Loki, Grafana, Prometheus, Alloy)
+# Install monitoring components (Loki, Grafana, Fluent Operator)
 helmfile sync
 ```
 
 This deploys:
-- **Grafana Alloy**: Collects logs and metrics from vClusters
+- **Fluent Operator**: Manages Fluent Bit for log collection
+- **Fluent Bit**: Collects logs and metrics from vClusters via operator
 - **Loki**: Stores and queries logs with unified schema
 - **Grafana**: Visualizes logs and metrics
 - **Prometheus**: Metrics storage (optional)

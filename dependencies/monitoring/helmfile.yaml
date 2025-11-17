@@ -5,6 +5,8 @@ repositories:
     url: https://prometheus-community.github.io/helm-charts
   - name: bitnami
     url: https://charts.bitnami.com/bitnami
+  - name: fluent
+    url: https://fluent.github.io/helm-charts
 
 releases:
   # Grafana Loki - Log aggregation
@@ -138,30 +140,29 @@ releases:
           type: NodePort
           nodePort: 30300
 
-  # Grafana Alloy - Telemetry collector for host cluster
-  - name: alloy-host
+  # Fluent Operator - Manages Fluent Bit for log collection
+  - name: fluent-operator
     namespace: test-observability
-    chart: grafana/alloy
-    version: 0.12.0
+    chart: fluent/fluent-operator
+    version: 3.5.0
     values:
-      - alloy:
-          configMap:
-            name: alloy-host-config
-            create: false  # We'll create this separately
-          clustering:
-            enabled: false
-        controller:
-          type: daemonset
-          tolerations:
-            - effect: NoSchedule
-              operator: Exists
-        resources:
-          requests:
-            cpu: 100m
-            memory: 128Mi
-          limits:
-            cpu: 500m
-            memory: 512Mi
+      - operator:
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+    hooks:
+      # Apply custom kubernetes filter configuration after install/upgrade
+      - events: ["postsync"]
+        showlogs: true
+        command: "kubectl"
+        args:
+          - "apply"
+          - "-f"
+          - "host/fluent-bit/kubernetes-filter-patch.yaml"
 
   # PostgreSQL - Test results database
   - name: test-results-db

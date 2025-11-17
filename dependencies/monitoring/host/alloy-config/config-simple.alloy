@@ -1,0 +1,117 @@
+// Loki remote write endpoint
+loki.write "loki" {
+  endpoint {
+    url = "http://loki-0.loki-headless.test-observability.svc.cluster.local:3100/loki/api/v1/push"
+  }
+}
+
+// ============================================================================
+// 1. vCluster Audit Logs (from control plane pods)
+// ============================================================================
+discovery.kubernetes "vcluster_pods" {
+  role = "pod"
+  selectors {
+    role = "pod"
+    label = "app=vcluster"
+  }
+}
+
+loki.source.kubernetes "vcluster_audit" {
+  targets    = discovery.kubernetes.vcluster_pods.targets
+  forward_to = [loki.process.audit.receiver]
+}
+
+loki.process "audit" {
+  forward_to = [loki.write.loki.receiver]
+
+  // Just extract audit JSON and send it
+  stage.regex {
+    expression = "(?P<audit_json>\\{\\s*\"kind\"\\s*:\\s*\"Event\"[\\s\\S]*\\})"
+  }
+
+  // Only keep logs with audit JSON
+  stage.match {
+    selector = "{audit_json!=\"\"}"
+
+    stage.static_labels {
+      values = {
+        source = "k8s_audit_log",
+      }
+    }
+  }
+}
+
+// ============================================================================
+// 2. Event-Exporter Logs (K8s events as JSON)
+// ============================================================================
+discovery.kubernetes "event_exporter_pods" {
+  role = "pod"
+  selectors {
+    role = "pod"
+    label = "app=event-exporter"
+  }
+}
+
+loki.source.kubernetes "events" {
+  targets    = discovery.kubernetes.event_exporter_pods.targets
+  forward_to = [loki.process.events.receiver]
+}
+
+loki.process "events" {
+  forward_to = [loki.write.loki.receiver]
+
+  // Parse event JSON
+  stage.json {
+    expressions = {
+      reason = "reason",
+    }
+  }
+
+  // Only keep logs that have reason field (actual events, not event-exporter's own logs)
+  stage.match {
+    selector = "{reason!=\"\"}"
+
+    stage.static_labels {
+      values = {
+        source = "k8s_event",
+      }
+    }
+  }
+}
+
+// ============================================================================
+// 3. Other Workload Logs
+// ============================================================================
+discovery.kubernetes "workload_pods" {
+  role = "pod"
+  selectors {
+    role = "pod"
+    label = "vcluster.loft.sh/managed-by"
+  }
+}
+
+discovery.relabel "workload_pods_filtered" {
+  targets = discovery.kubernetes.workload_pods.targets
+
+  // Drop event-exporter pods (handled separately above)
+  rule {
+    source_labels = ["__meta_kubernetes_pod_label_app"]
+    regex = "event-exporter"
+    action = "drop"
+  }
+}
+
+loki.source.kubernetes "workload" {
+  targets    = discovery.relabel.workload_pods_filtered.output
+  forward_to = [loki.process.workload.receiver]
+}
+
+loki.process "workload" {
+  forward_to = [loki.write.loki.receiver]
+
+  stage.static_labels {
+    values = {
+      source = "pod_log",
+    }
+  }
+}

@@ -1,0 +1,17 @@
+# Filter: Parse namespace to extract run ID and attempt
+# Named with 'z-' prefix to run AFTER kubernetes filter
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterFilter
+metadata:
+  name: z-parse-namespace
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/mode: "k8s"
+spec:
+  match: kube.*
+  filters:
+    - lua:
+        script:
+          key: parse-namespace.lua
+          name: fluent-bit-lua-scripts
+        call: parse_namespace

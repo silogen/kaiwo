@@ -1,0 +1,140 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluent-bit-lua-scripts
+  namespace: fluent
+data:
+  parse-namespace.lua: |
+    function parse_namespace(tag, timestamp, record)
+        local namespace = nil
+
+        if record["kubernetes"] and record["kubernetes"]["namespace_name"] then
+            namespace = record["kubernetes"]["namespace_name"]
+        end
+
+        if namespace ~= nil then
+            local run_id, attempt = namespace:match("kaiwo%-test%-(.+)%-(%d+)%-helm")
+
+            if run_id and attempt then
+                record["test_run_id"] = run_id
+                record["test_run_attempt"] = attempt
+            else
+                record["test_run_id"] = "unknown"
+                record["test_run_attempt"] = "0"
+            end
+
+            record["namespace"] = namespace
+        else
+            record["test_run_id"] = "unknown"
+            record["test_run_attempt"] = "0"
+            record["namespace"] = "unknown"
+        end
+
+        return 2, timestamp, record
+    end
+  detect-source.lua: |
+    function detect_source(tag, timestamp, record)
+        local k8s = record["kubernetes"]
+        if not k8s then
+            return 2, timestamp, record
+        end
+
+        local labels = k8s["labels"]
+        local container = k8s["container_name"]
+        local log = record["log"]
+
+        record["source"] = "pod_log"
+        record["pod_name"] = k8s["pod_name"] or "unknown"
+        record["container_name"] = container or "unknown"
+
+        if labels and labels["app"] == "vcluster" and container == "vcluster" then
+            if log and log:match('{%s*"kind"%s*:%s*"Event"') then
+                record["source"] = "k8s_audit_log"
+            end
+        end
+
+        if labels and labels["app"] == "event-exporter" then
+            if log and log:match('"reason"%s*:') then
+                record["source"] = "k8s_event"
+            end
+        end
+
+        return 2, timestamp, record
+    end
+  transform-events.lua: |
+    function transform_event(tag, timestamp, record)
+        if record["source"] ~= "k8s_event" then
+            return 2, timestamp, record
+        end
+
+        local log = record["log"]
+        if not log then
+            return 2, timestamp, record
+        end
+
+        local cjson = require("cjson")
+        local success, event = pcall(cjson.decode, log)
+
+        if not success then
+            return 2, timestamp, record
+        end
+
+        record["message"] = event["message"] or ""
+        record["reason"] = event["reason"] or ""
+        record["event_type"] = event["type"] or ""
+
+        if event["metadata"] then
+            record["event_namespace"] = event["metadata"]["namespace"] or ""
+        end
+
+        if event["involvedObject"] then
+            record["object_kind"] = event["involvedObject"]["kind"] or ""
+            record["object_name"] = event["involvedObject"]["name"] or ""
+        end
+
+        record["log"] = nil
+
+        return 2, timestamp, record
+    end
+  transform-audit.lua: |
+    function transform_audit(tag, timestamp, record)
+        if record["source"] ~= "k8s_audit_log" then
+            return 2, timestamp, record
+        end
+
+        local log = record["log"]
+        if not log then
+            return 2, timestamp, record
+        end
+
+        local audit_json = log:match('{%s*"kind"%s*:%s*"Event".-}')
+        if not audit_json then
+            return 2, timestamp, record
+        end
+
+        local cjson = require("cjson")
+        local success, audit = pcall(cjson.decode, audit_json)
+
+        if not success then
+            return 2, timestamp, record
+        end
+
+        record["message"] = audit["requestURI"] or ""
+        record["audit_verb"] = audit["verb"] or ""
+
+        if audit["user"] then
+            record["audit_user"] = audit["user"]["username"] or ""
+        end
+
+        if audit["objectRef"] then
+            record["audit_namespace"] = audit["objectRef"]["namespace"] or ""
+            record["audit_resource"] = audit["objectRef"]["resource"] or ""
+            record["audit_name"] = audit["objectRef"]["name"] or ""
+        end
+
+        record["audit_stage"] = audit["stage"] or ""
+
+        record["log"] = nil
+
+        return 2, timestamp, record
+    end

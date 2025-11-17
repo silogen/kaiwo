@@ -1,0 +1,14 @@
+# Filter: Only process logs from specific test namespace (for testing)
+# Named with 'm-' to run AFTER kubernetes filter but BEFORE our custom filters
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterFilter
+metadata:
+  name: m-namespace-filter-test
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/mode: "k8s"
+spec:
+  match: kube.*
+  filters:
+    - grep:
+        regex: kubernetes_namespace_name test-ci-550e8400-e29b-41d4-a89f-446657440000-1

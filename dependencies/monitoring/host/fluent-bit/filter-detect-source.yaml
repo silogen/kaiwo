@@ -1,0 +1,17 @@
+# Filter: Detect source type (pod_log, k8s_event, k8s_audit_log)
+# Named with 'zz-' prefix to run AFTER parse-namespace
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterFilter
+metadata:
+  name: zz-detect-source
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/mode: "k8s"
+spec:
+  match: kube.*
+  filters:
+    - lua:
+        script:
+          key: detect-source.lua
+          name: fluent-bit-lua-scripts
+        call: detect_source

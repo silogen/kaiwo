@@ -1,0 +1,12 @@
+# Output: Stdout for testing (comment out or delete when not needed)
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterOutput
+metadata:
+  name: stdout-test
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/mode: "k8s"
+spec:
+  match: kube.*
+  stdout:
+    format: json_lines

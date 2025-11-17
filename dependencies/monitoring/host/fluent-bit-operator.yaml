@@ -1,0 +1,325 @@
+---
+# FluentBit DaemonSet resource
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: FluentBit
+metadata:
+  name: fluent-bit
+  namespace: fluent
+  labels:
+    app.kubernetes.io/name: fluent-bit
+spec:
+  image: ghcr.io/fluent/fluent-bit:3.2.2
+  positionDB:
+    hostPath:
+      path: /var/lib/fluent-bit/
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  tolerations:
+    - operator: Exists
+  fluentBitConfigName: fluent-bit-config
+
+---
+# Main config - ties together inputs, filters, outputs
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterFluentBitConfig
+metadata:
+  name: fluent-bit-config
+  labels:
+    app.kubernetes.io/name: fluent-bit
+spec:
+  service:
+    parsersFile: parsers.conf
+  inputSelector:
+    matchLabels:
+      fluentbit.fluent.io/enabled: "true"
+      fluentbit.fluent.io/mode: "k8s"
+  filterSelector:
+    matchLabels:
+      fluentbit.fluent.io/enabled: "true"
+      fluentbit.fluent.io/mode: "k8s"
+  outputSelector:
+    matchLabels:
+      fluentbit.fluent.io/enabled: "true"
+      fluentbit.fluent.io/mode: "k8s"
+
+---
+# Input: Tail container logs
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterInput
+metadata:
+  name: tail
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/mode: "k8s"
+spec:
+  tail:
+    tag: kube.*
+    path: /var/log/containers/*.log
+    parser: cri
+    refreshIntervalSeconds: 10
+    memBufLimit: 100MB
+    skipLongLines: true
+    db: /fluent-bit/tail/pos.db
+    dbSync: Normal
+
+---
+# Parser: CRI format
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterParser
+metadata:
+  name: cri
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/mode: "k8s"
+spec:
+  regex:
+    regex: '^(?<time>[^ ]+) (?<stream>stdout|stderr) (?<logtag>[^ ]*) (?<log>.*)$'
+    timeKey: time
+    timeFormat: "%Y-%m-%dT%H:%M:%S.%L%z"
+
+---
+# Filter 1: Add Kubernetes metadata
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterFilter
+metadata:
+  name: kubernetes
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/mode: "k8s"
+spec:
+  match: kube.*
+  filters:
+    - kubernetes:
+        kubeURL: https://kubernetes.default.svc:443
+        kubeCAFile: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        kubeTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+        labels: true
+        annotations: false
+        mergeLog: true
+        keepLog: false
+
+---
+# Filter 2: Parse namespace to extract test run ID and attempt
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterFilter
+metadata:
+  name: parse-namespace
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/mode: "k8s"
+spec:
+  match: kube.*
+  filters:
+    - lua:
+        script: |
+          function parse_namespace(tag, timestamp, record)
+              local namespace = nil
+
+              if record["kubernetes"] and record["kubernetes"]["namespace_name"] then
+                  namespace = record["kubernetes"]["namespace_name"]
+              end
+
+              if namespace ~= nil then
+                  local run_id, attempt = namespace:match("kaiwo%-test%-(.+)%-(%d+)%-helm")
+
+                  if run_id and attempt then
+                      record["test_run_id"] = run_id
+                      record["test_run_attempt"] = attempt
+                  else
+                      record["test_run_id"] = "unknown"
+                      record["test_run_attempt"] = "0"
+                  end
+
+                  record["namespace"] = namespace
+              else
+                  record["test_run_id"] = "unknown"
+                  record["test_run_attempt"] = "0"
+                  record["namespace"] = "unknown"
+              end
+
+              return 2, timestamp, record
+          end
+        call: parse_namespace
+
+---
+# Filter 3: Detect source type (pod_log, k8s_event, k8s_audit_log)
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterFilter
+metadata:
+  name: detect-source
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/mode: "k8s"
+spec:
+  match: kube.*
+  filters:
+    - lua:
+        script: |
+          function detect_source(tag, timestamp, record)
+              local k8s = record["kubernetes"]
+              if not k8s then
+                  return 2, timestamp, record
+              end
+
+              local labels = k8s["labels"]
+              local container = k8s["container_name"]
+              local log = record["log"]
+
+              record["source"] = "pod_log"
+              record["pod_name"] = k8s["pod_name"] or "unknown"
+              record["container_name"] = container or "unknown"
+
+              if labels and labels["app"] == "vcluster" and container == "vcluster" then
+                  if log and log:match('{%s*"kind"%s*:%s*"Event"') then
+                      record["source"] = "k8s_audit_log"
+                  end
+              end
+
+              if labels and labels["app"] == "event-exporter" then
+                  if log and log:match('"reason"%s*:') then
+                      record["source"] = "k8s_event"
+                  end
+              end
+
+              return 2, timestamp, record
+          end
+        call: detect_source
+
+---
+# Filter 4: Transform K8s events to common format
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterFilter
+metadata:
+  name: transform-events
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/mode: "k8s"
+spec:
+  match: kube.*
+  filters:
+    - lua:
+        script: |
+          function transform_event(tag, timestamp, record)
+              if record["source"] ~= "k8s_event" then
+                  return 2, timestamp, record
+              end
+
+              local log = record["log"]
+              if not log then
+                  return 2, timestamp, record
+              end
+
+              local cjson = require("cjson")
+              local success, event = pcall(cjson.decode, log)
+
+              if not success then
+                  return 2, timestamp, record
+              end
+
+              record["message"] = event["message"] or ""
+              record["reason"] = event["reason"] or ""
+              record["event_type"] = event["type"] or ""
+
+              if event["metadata"] then
+                  record["event_namespace"] = event["metadata"]["namespace"] or ""
+              end
+
+              if event["involvedObject"] then
+                  record["object_kind"] = event["involvedObject"]["kind"] or ""
+                  record["object_name"] = event["involvedObject"]["name"] or ""
+              end
+
+              record["log"] = nil
+
+              return 2, timestamp, record
+          end
+        call: transform_event
+
+---
+# Filter 5: Transform audit logs to common format
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterFilter
+metadata:
+  name: transform-audit
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/mode: "k8s"
+spec:
+  match: kube.*
+  filters:
+    - lua:
+        script: |
+          function transform_audit(tag, timestamp, record)
+              if record["source"] ~= "k8s_audit_log" then
+                  return 2, timestamp, record
+              end
+
+              local log = record["log"]
+              if not log then
+                  return 2, timestamp, record
+              end
+
+              local audit_json = log:match('{%s*"kind"%s*:%s*"Event".-}')
+              if not audit_json then
+                  return 2, timestamp, record
+              end
+
+              local cjson = require("cjson")
+              local success, audit = pcall(cjson.decode, audit_json)
+
+              if not success then
+                  return 2, timestamp, record
+              end
+
+              record["message"] = audit["requestURI"] or ""
+              record["audit_verb"] = audit["verb"] or ""
+
+              if audit["user"] then
+                  record["audit_user"] = audit["user"]["username"] or ""
+              end
+
+              if audit["objectRef"] then
+                  record["audit_namespace"] = audit["objectRef"]["namespace"] or ""
+                  record["audit_resource"] = audit["objectRef"]["resource"] or ""
+                  record["audit_name"] = audit["objectRef"]["name"] or ""
+              end
+
+              record["audit_stage"] = audit["stage"] or ""
+
+              record["log"] = nil
+
+              return 2, timestamp, record
+          end
+        call: transform_audit
+
+---
+# Output: Send to Loki
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterOutput
+metadata:
+  name: loki
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/mode: "k8s"
+spec:
+  match: kube.*
+  loki:
+    host: loki-0.loki-headless.test-observability.svc.cluster.local
+    port: 3100
+    labels:
+      - job=fluent-bit
+      - source=$source
+      - namespace=$namespace
+      - test_run_id=$test_run_id
+      - test_run_attempt=$test_run_attempt
+    labelKeys:
+      - pod_name
+      - container_name
+    removeKeys:
+      - stream
+      - logtag
