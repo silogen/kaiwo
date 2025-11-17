@@ -245,6 +245,28 @@ jobs:
           KUBECONFIG: ${{ github.workspace }}/vcluster-kubeconfig
         run: kubectl apply -f crd/crds.yaml --server-side
 
+      - name: Wait for Kueue webhook certificates
+        env:
+          KUBECONFIG: ${{ github.workspace }}/vcluster-kubeconfig
+        run: |
+          echo "Waiting for Kueue webhook certificates to be ready..."
+          # Wait for the webhook service to be ready
+          kubectl wait --for=condition=available --timeout=3m deployment/kueue-controller-manager -n kueue-system || true
+
+          # Give cert-manager time to inject the CA bundle into the webhook configuration
+          echo "Waiting for webhook certificate injection..."
+          for i in {1..30}; do
+            if kubectl get validatingwebhookconfiguration kueue-validating-webhook-configuration -o jsonpath='{.webhooks[0].clientConfig.caBundle}' 2>/dev/null | grep -q .; then
+              echo "Webhook certificates ready"
+              break
+            fi
+            echo "Waiting for CA bundle injection (attempt $i/30)..."
+            sleep 2
+          done
+
+          # Additional safety wait for webhook to stabilize
+          sleep 10
+
       - name: Build helm chart
         if: matrix.installer == 'helm'
         run: |

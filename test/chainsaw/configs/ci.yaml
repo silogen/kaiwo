@@ -25,3 +25,11 @@ spec:
         - $NAMESPACE
         - --namespaced-level=debug
         - --cluster-level=info
+    - command:
+        entrypoint: bash
+        env:
+          - name: NAMESPACE
+            value: ($namespace)
+        args:
+        - test/chainsaw/dump-resources.sh
+        - ($NAMESPACE)
