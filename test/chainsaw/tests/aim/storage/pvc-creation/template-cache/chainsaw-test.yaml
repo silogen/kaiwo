@@ -25,15 +25,15 @@ spec:
           kind: AIMServiceTemplate
           metadata:
             labels:
-              aim.silogen.ai/image-name: llama-3-8b-pvc-template-cache
+              aim.silogen.ai/aim-image: llama-3-8b-pvc-template-cache
           status:
-            status: (~(Ready|NotAvailable))
+            (status == 'Ready' || status == 'NotAvailable'): true
 
   - name: Get template name and create cache
     try:
     - script:
         content: |
-          TEMPLATE_NAME=$(kubectl get aimservicetemplates -l aim.silogen.ai/image-name=llama-3-8b-pvc-template-cache -o jsonpath='{.items[0].metadata.name}')
+          TEMPLATE_NAME=$(kubectl get aimservicetemplates -l aim.silogen.ai/aim-image=llama-3-8b-pvc-template-cache -o jsonpath='{.items[0].metadata.name}')
           cat << EOF | kubectl apply -f -
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMTemplateCache
