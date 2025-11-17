@@ -3,5 +3,8 @@ kind: AIMTemplateCache
 metadata:
   name: pvc-template-cache
 spec:
-  templateRef: llama-3-8b-pvc-template-cache-1x-mi300x-lat-fp8-15ca
+  # NOTE: This template name is auto-generated with a hash suffix
+  # This placeholder will be replaced by the test script
+  templateRef: placeholder-will-be-replaced
   storageClassName: rwx-nfs
+  runtimeConfigName: pvc-template-cache
