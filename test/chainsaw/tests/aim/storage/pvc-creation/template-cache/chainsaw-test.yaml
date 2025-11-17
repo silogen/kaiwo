@@ -17,20 +17,43 @@ spec:
     - apply:
         file: model.yaml
 
-  - name: Create template cache
+  - name: Wait for template to be auto-created
     try:
-    - apply:
-        file: template-cache.yaml
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMServiceTemplate
+          metadata:
+            labels:
+              aim.silogen.ai/image-name: llama-3-8b-pvc-template-cache
+          status:
+            status: (~(Ready|NotAvailable))
+
+  - name: Get template name and create cache
+    try:
+    - script:
+        content: |
+          TEMPLATE_NAME=$(kubectl get aimservicetemplates -l aim.silogen.ai/image-name=llama-3-8b-pvc-template-cache -o jsonpath='{.items[0].metadata.name}')
+          cat << EOF | kubectl apply -f -
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMTemplateCache
+          metadata:
+            name: pvc-template-cache
+          spec:
+            templateRef: ${TEMPLATE_NAME}
+            storageClassName: rwx-nfs
+            runtimeConfigName: pvc-template-cache
+          EOF
 
   - name: Verify the PVC was created with the right size
     try:
     - assert:
-#        timeout: 30s
         resource:
           apiVersion: v1
           kind: PersistentVolumeClaim
           metadata:
-            name: huggingfacetb-smollm2-135m-cache
+            labels:
+              aim.silogen.ai/template-cache: pvc-template-cache
           spec:
             resources:
               requests:

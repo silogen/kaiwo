@@ -509,6 +509,13 @@ func (r *AIMModelCacheReconciler) buildPVC(mc *aimv1alpha1.AIMModelCache, pvcNam
 		labels[shared.LabelKeyCacheType] = cacheType
 	}
 
+	// Propagate template-cache label if it exists (for easier querying in tests)
+	if mc.Labels != nil {
+		if templateCacheName, ok := mc.Labels[shared.LabelKeyTemplateCache]; ok {
+			labels[shared.LabelKeyTemplateCache] = templateCacheName
+		}
+	}
+
 	// Extract model name from sourceURI (e.g., "hf://amd/Llama-3.1-8B" → "amd/Llama-3.1-8B")
 	if mc.Spec.SourceURI != "" {
 		if modelName := extractModelFromSourceURI(mc.Spec.SourceURI); modelName != "" {
