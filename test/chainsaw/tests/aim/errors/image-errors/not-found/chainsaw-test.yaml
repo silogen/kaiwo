@@ -17,7 +17,7 @@ spec:
           apiVersion: aim.silogen.ai/v1alpha1
           kind: AIMModel
           metadata:
-            name: aim-qwen-qwen3-this-tag-absolutely-does-not-exist-404-fe47ee1e
+            name: aim-dummy-this-tag-does-not-exist-404-8adb62b9
           status:
             status: Failed
             (conditions[?type == 'MetadataExtracted']):
