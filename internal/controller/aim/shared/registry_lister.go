@@ -88,11 +88,11 @@ func ListDockerHubRepositories(ctx context.Context, namespace string) ([]string,
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch repositories from Docker Hub: %w", err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		if resp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(resp.Body)
-			return nil, fmt.Errorf("Docker Hub API returned status %d: %s", resp.StatusCode, string(body))
+			return nil, fmt.Errorf("docker Hub API returned status %d: %s", resp.StatusCode, string(body))
 		}
 
 		var listResp dockerHubListResponse
