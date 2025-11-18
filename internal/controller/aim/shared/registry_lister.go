@@ -26,7 +26,10 @@ package shared
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"path"
 	"strings"
 
@@ -37,6 +40,99 @@ import (
 	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
+
+// dockerHubRepoResponse represents a single repository in Docker Hub's API response
+type dockerHubRepoResponse struct {
+	Name string `json:"name"`
+}
+
+// dockerHubListResponse represents Docker Hub's paginated repository list response
+type dockerHubListResponse struct {
+	Results []dockerHubRepoResponse `json:"results"`
+	Next    *string                 `json:"next"`
+}
+
+// IsDockerHub checks if the registry is Docker Hub
+func IsDockerHub(registryURL string) bool {
+	normalized := strings.ToLower(registryURL)
+	return normalized == "docker.io" || normalized == "index.docker.io" || normalized == "registry-1.docker.io"
+}
+
+// ListDockerHubRepositories lists repositories from Docker Hub for a specific namespace.
+// Docker Hub doesn't support the standard catalog API, so we use their REST API instead.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - namespace: Docker Hub namespace/organization (e.g., "amdenterpriseai")
+//
+// Returns:
+//   - []string: List of repository names in format "namespace/repo"
+//   - error: Any error encountered while listing repositories
+func ListDockerHubRepositories(ctx context.Context, namespace string) ([]string, error) {
+	logger := ctrl.LoggerFrom(ctx)
+
+	var allRepos []string
+	nextURL := fmt.Sprintf("https://hub.docker.com/v2/namespaces/%s/repositories", namespace)
+
+	client := &http.Client{}
+
+	for nextURL != "" {
+		logger.V(1).Info("Fetching Docker Hub repositories", "url", nextURL)
+
+		req, err := http.NewRequestWithContext(ctx, "GET", nextURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %w", err)
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch repositories from Docker Hub: %w", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			return nil, fmt.Errorf("Docker Hub API returned status %d: %s", resp.StatusCode, string(body))
+		}
+
+		var listResp dockerHubListResponse
+		if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+			return nil, fmt.Errorf("failed to decode Docker Hub response: %w", err)
+		}
+
+		// Add repositories in the format "namespace/repo"
+		for _, repo := range listResp.Results {
+			allRepos = append(allRepos, fmt.Sprintf("%s/%s", namespace, repo.Name))
+		}
+
+		// Check if there's a next page
+		if listResp.Next != nil && *listResp.Next != "" {
+			nextURL = *listResp.Next
+		} else {
+			nextURL = ""
+		}
+	}
+
+	logger.V(1).Info("Listed Docker Hub repositories", "namespace", namespace, "count", len(allRepos))
+	return allRepos, nil
+}
+
+// ExtractNamespaceFromPattern extracts the namespace from a repository pattern.
+// For Docker Hub, patterns like "amdenterpriseai/aim-*" -> "amdenterpriseai"
+// Returns empty string if pattern doesn't contain a namespace.
+func ExtractNamespaceFromPattern(pattern string) string {
+	parts := strings.SplitN(pattern, "/", 2)
+	if len(parts) < 2 {
+		return ""
+	}
+
+	// Check if the first part contains wildcards
+	if strings.Contains(parts[0], "*") || strings.Contains(parts[0], "?") {
+		return ""
+	}
+
+	return parts[0]
+}
 
 // ListRepositories lists all repositories from a container registry.
 // Note: Not all registries support the catalog endpoint. Some (like Docker Hub)

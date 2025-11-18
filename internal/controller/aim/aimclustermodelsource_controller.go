@@ -146,28 +146,51 @@ func (r *AIMClusterModelSourceReconciler) observe(ctx context.Context, source *a
 	// Get operator namespace for secrets
 	operatorNs := shared.GetOperatorNamespace()
 
-	// List repositories from registry
-	logger.V(1).Info("Listing repositories from registry", "registry", source.Spec.Registry)
-	repos, err := shared.ListRepositories(
-		ctx,
-		source.Spec.Registry,
-		r.Clientset,
-		operatorNs,
-		source.Spec.ImagePullSecrets,
-	)
-	if err != nil {
-		obs.RegistryError = err
-		logger.Error(err, "Failed to list repositories from registry")
-		return obs, nil // Return observation with error, don't fail the reconcile
-	}
-
-	logger.V(1).Info("Listed repositories", "count", len(repos))
-
 	// Process each filter to discover matching images
 	for _, filter := range source.Spec.Filters {
-		// Filter repositories by pattern
-		matchingRepos := shared.FilterByPattern(repos, []string{filter.Image}, filter.Exclude)
-		logger.V(1).Info("Filtered repositories", "pattern", filter.Image, "matches", len(matchingRepos))
+		var matchingRepos []string
+
+		// For Docker Hub, use namespace-specific API
+		if shared.IsDockerHub(source.Spec.Registry) {
+			namespace := shared.ExtractNamespaceFromPattern(filter.Image)
+			if namespace == "" {
+				logger.Error(nil, "Docker Hub requires namespace in filter pattern (e.g., 'namespace/repo-*')", "pattern", filter.Image)
+				continue
+			}
+
+			logger.V(1).Info("Listing Docker Hub repositories for namespace", "namespace", namespace)
+			repos, err := shared.ListDockerHubRepositories(ctx, namespace)
+			if err != nil {
+				obs.RegistryError = err
+				logger.Error(err, "Failed to list Docker Hub repositories", "namespace", namespace)
+				return obs, nil // Return observation with error
+			}
+
+			// Filter repositories by pattern
+			matchingRepos = shared.FilterByPattern(repos, []string{filter.Image}, filter.Exclude)
+			logger.V(1).Info("Filtered Docker Hub repositories", "pattern", filter.Image, "matches", len(matchingRepos))
+		} else {
+			// For other registries, use standard catalog API
+			logger.V(1).Info("Listing repositories from registry", "registry", source.Spec.Registry)
+			repos, err := shared.ListRepositories(
+				ctx,
+				source.Spec.Registry,
+				r.Clientset,
+				operatorNs,
+				source.Spec.ImagePullSecrets,
+			)
+			if err != nil {
+				obs.RegistryError = err
+				logger.Error(err, "Failed to list repositories from registry")
+				return obs, nil // Return observation with error
+			}
+
+			logger.V(1).Info("Listed repositories", "count", len(repos))
+
+			// Filter repositories by pattern
+			matchingRepos = shared.FilterByPattern(repos, []string{filter.Image}, filter.Exclude)
+			logger.V(1).Info("Filtered repositories", "pattern", filter.Image, "matches", len(matchingRepos))
+		}
 
 		for _, repo := range matchingRepos {
 			// Construct full repository name
