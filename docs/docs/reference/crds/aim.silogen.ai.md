@@ -11,6 +11,8 @@ Package v1alpha1 contains API Schema definitions for the AIM v1alpha1 API group.
 ### Resource Types
 - [AIMClusterModel](#aimclustermodel)
 - [AIMClusterModelList](#aimclustermodellist)
+- [AIMClusterModelSource](#aimclustermodelsource)
+- [AIMClusterModelSourceList](#aimclustermodelsourcelist)
 - [AIMClusterRuntimeConfig](#aimclusterruntimeconfig)
 - [AIMClusterRuntimeConfigList](#aimclusterruntimeconfiglist)
 - [AIMClusterServiceTemplate](#aimclusterservicetemplate)
@@ -66,6 +68,85 @@ AIMClusterModelList contains a list of AIMClusterModel.
 | `kind` _string_ | `AIMClusterModelList` | | |
 | `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
 | `items` _[AIMClusterModel](#aimclustermodel) array_ |  |  |  |
+
+
+#### AIMClusterModelSource
+
+
+
+AIMClusterModelSource is the Schema for the aimclustermodelsources API.
+It automatically synchronizes container images from a registry and creates
+corresponding AIMClusterModel resources for discovered models.
+
+
+
+_Appears in:_
+- [AIMClusterModelSourceList](#aimclustermodelsourcelist)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `AIMClusterModelSource` | | |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `spec` _[AIMClusterModelSourceSpec](#aimclustermodelsourcespec)_ |  |  |  |
+| `status` _[AIMClusterModelSourceStatus](#aimclustermodelsourcestatus)_ |  |  |  |
+
+
+#### AIMClusterModelSourceList
+
+
+
+AIMClusterModelSourceList contains a list of AIMClusterModelSource
+
+
+
+
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `AIMClusterModelSourceList` | | |
+| `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `items` _[AIMClusterModelSource](#aimclustermodelsource) array_ |  |  |  |
+
+
+#### AIMClusterModelSourceSpec
+
+
+
+AIMClusterModelSourceSpec defines the desired state of AIMClusterModelSource
+
+
+
+_Appears in:_
+- [AIMClusterModelSource](#aimclustermodelsource)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `registry` _string_ | Registry is the container registry to synchronize from.<br />Defaults to docker.io if not specified.<br />Examples: "ghcr.io", "docker.io", "quay.io" | docker.io |  |
+| `versions` _string array_ | Versions are global semantic version constraints applied to filters without specific versions.<br />Uses Masterminds/semver constraint syntax.<br />Examples: ">=1.0.0", "~1.2.0", "^2.0.0", ">=1.0.0 <2.0.0" |  |  |
+| `filters` _[ModelSourceFilter](#modelsourcefilter) array_ | Filters define which container images to synchronize from the registry.<br />Each filter can specify image patterns and version constraints. |  |  |
+| `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets are references to secrets for authenticating to the registry.<br />For cluster-scoped resources, secrets must exist in the operator namespace (kaiwo-system). |  |  |
+| `syncInterval` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#duration-v1-meta)_ | SyncInterval defines how often to check the registry for updates.<br />Defaults to 1 hour. | 1h |  |
+
+
+#### AIMClusterModelSourceStatus
+
+
+
+AIMClusterModelSourceStatus defines the observed state of AIMClusterModelSource
+
+
+
+_Appears in:_
+- [AIMClusterModelSource](#aimclustermodelsource)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `observedGeneration` _integer_ | ObservedGeneration reflects the generation of the most recently observed spec. |  |  |
+| `lastSyncTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | LastSyncTime is the timestamp of the last successful synchronization with the registry. |  |  |
+| `syncedModelCount` _integer_ | SyncedModelCount is the number of AIMClusterModel resources currently managed by this source. |  |  |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest available observations of the source's state. |  |  |
 
 
 #### AIMClusterRuntimeConfig
@@ -1312,6 +1393,24 @@ _Appears in:_
 | `descriptionFull` _string_ | DescriptionFull is the full description.<br />Extracted from: org.amd.silogen.description.full |  |  |
 | `releaseNotes` _string_ | ReleaseNotes contains release notes for this version.<br />Extracted from: org.amd.silogen.release.notes |  |  |
 | `recommendedDeployments` _[RecommendedDeployment](#recommendeddeployment) array_ | RecommendedDeployments contains recommended deployment configurations.<br />Extracted from: org.amd.silogen.model.recommendedDeployments (parsed from JSON array) |  |  |
+
+
+#### ModelSourceFilter
+
+
+
+ModelSourceFilter defines image selection criteria
+
+
+
+_Appears in:_
+- [AIMClusterModelSourceSpec](#aimclustermodelsourcespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `image` _string_ | Image is a wildcard pattern for matching image repository paths.<br />Supports glob-style wildcards with '*' matching any characters.<br />Pattern is matched against the repository path (excluding registry and tag).<br />Examples:<br />  - "aim-models/*" matches all images in the aim-models repository<br />  - "llama-*" matches all images starting with "llama-"<br />  - "*/mixtral-8x22b" matches "mixtral-8x22b" in any repository |  | MinLength: 1 <br /> |
+| `versions` _string array_ | Versions are semantic version constraints for this image pattern.<br />If omitted (nil), uses spec.versions (global constraints).<br />If empty array ([]), includes all valid semver tags (no version filtering).<br />Uses Masterminds/semver constraint syntax.<br />Examples: ">=1.0.0", "~1.2.0", "^2.0.0" |  |  |
+| `exclude` _string array_ | Exclude are wildcard patterns to exclude from matching.<br />Processed after the Image pattern matches.<br />Examples: "*-dev", "*-experimental" |  |  |
 
 
 #### OCIMetadata

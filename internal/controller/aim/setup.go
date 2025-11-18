@@ -105,5 +105,15 @@ func SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
+	// Setup AIMClusterModelSource controller
+	if err := (&AIMClusterModelSourceReconciler{
+		Client:    mgr.GetClient(),
+		Scheme:    mgr.GetScheme(),
+		Recorder:  mgr.GetEventRecorderFor("aim-cluster-model-source-controller"),
+		Clientset: clientset,
+	}).SetupWithManager(mgr); err != nil {
+		return err
+	}
+
 	return nil
 }
