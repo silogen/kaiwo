@@ -9,8 +9,10 @@ resources:
   - 110-filter-include-test-namespace.yaml
   - 120-filter-extract-namespace-fields.yaml
   - 130-filter-classify-log-type.yaml
-  - 135-filter-extract-json.yaml
-  - 136-filter-parse-json-fields.yaml
+  # Adding one at a time for debugging
+  # Skip parser-based extraction - do it in Lua instead
+  # - 135-filter-extract-json.yaml
+  # - 136-filter-parse-json-fields.yaml
   - 140-filter-parse-audit-logs.yaml
   - 150-filter-parse-event-logs.yaml
   - 160-filter-parse-pod-logs.yaml

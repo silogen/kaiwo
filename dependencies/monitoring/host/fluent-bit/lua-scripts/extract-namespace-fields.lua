@@ -2,7 +2,12 @@
 -- Pattern: test-{installer}-{run-id}-{run-attempt}
 -- Example: test-ci-550e8400-e29b-41d4-a89f-446657440000-1
 function extract_namespace_fields(tag, timestamp, record)
-    local namespace = record["kubernetes"]["namespace_name"]
+    local kubernetes = record["kubernetes"]
+    if not kubernetes then
+        return 2, timestamp, record
+    end
+
+    local namespace = kubernetes["namespace_name"]
 
     if namespace then
         -- Pattern: test-{installer}-{run-id}-{run-attempt}

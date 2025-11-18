@@ -12,13 +12,13 @@ function parse_pod_logs(tag, timestamp, record)
     -- Save original log line
     local raw_log = record["log"] or ""
 
-    -- Extract log content from CRI-formatted log
+    -- Extract timestamp and content from CRI-formatted log
     -- Format: "TIMESTAMP STREAM TAG CONTENT"
-    local log_content = raw_log:match("^%S+%s+%S+%s+%S+%s+(.*)$")
-    if not log_content then
-        -- Fallback: use entire log if pattern doesn't match
-        log_content = raw_log
-    end
+    local cri_timestamp, log_content = raw_log:match("^(%S+)%s+%S+%s+%S+%s+(.*)$")
+
+    -- Handle cases where regex doesn't match
+    cri_timestamp = cri_timestamp or ""
+    log_content = log_content or raw_log
 
     local object, time, msg, level
 
@@ -62,8 +62,9 @@ function parse_pod_logs(tag, timestamp, record)
         -- Extract level
         level = json_str:match('"level"%s*:%s*"([^"]+)"') or "info"
 
-        -- Extract time if present
-        time = json_str:match('"time"%s*:%s*"([^"]+)"') or json_str:match('"timestamp"%s*:%s*"([^"]+)"') or json_str:match('"ts"%s*:%s*"([^"]+)"') or ""
+        -- Extract time from JSON if present, otherwise use CRI timestamp
+        local json_time = json_str:match('"time"%s*:%s*"([^"]+)"') or json_str:match('"timestamp"%s*:%s*"([^"]+)"') or json_str:match('"ts"%s*:%s*"([^"]+)"')
+        time = json_time or cri_timestamp
 
     else
         -- Not JSON, treat as plain text
@@ -77,7 +78,7 @@ function parse_pod_logs(tag, timestamp, record)
 
         msg = log_content
         level = "info"
-        time = ""
+        time = cri_timestamp
     end
 
     -- Build unified record

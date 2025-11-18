@@ -12,11 +12,12 @@ function parse_audit_logs(tag, timestamp, record)
     -- Save original log line
     local raw_log = record["log"] or ""
 
-    -- Get the audit_json string (extracted by parser filter)
-    local audit_json = record["audit_json"]
+    -- Extract audit JSON from log line
+    -- Format: "TIMESTAMP STREAM TAG TIMESTAMP LEVEL FILE {JSON} {component}"
+    local audit_json = raw_log:match('(%{"kind":"Event".+)%}%s*%{"component"')
 
     if not audit_json then
-        -- No audit_json extracted, skip
+        -- No audit JSON found, skip (pass through unchanged)
         return 2, timestamp, record
     end
 
