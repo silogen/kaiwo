@@ -1,0 +1,29 @@
+# Output: Loki for log aggregation
+# Sends processed logs to Loki with labels for querying
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterOutput
+metadata:
+  name: loki
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/mode: "k8s"
+spec:
+  match: kube.*
+  loki:
+    host: loki.test-observability.svc.cluster.local
+    port: 3100
+    # Static labels
+    labels:
+      - job=fluent-bit
+    # Extract these fields as labels from the record
+    labelKeys:
+      - $type
+      - $action
+      - $level
+      - $installer
+      - $run_id
+      - $run_attempt
+    # Send full JSON record as log line
+    lineFormat: json
+    # Don't remove keys - send everything to Loki
+    autoKubernetesLabels: "off"

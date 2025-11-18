@@ -19,7 +19,8 @@ resources:
   - filters
 
   # Outputs
-  - output-stdout.yaml
+  - output-loki.yaml
+  # - output-stdout.yaml  # Keep for debugging if needed
 
 # Note: kubernetes-filter-patch.yaml is not included here
 # It is applied separately via helmfile post-sync hook

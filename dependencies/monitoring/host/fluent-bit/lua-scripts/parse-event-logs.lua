@@ -109,6 +109,11 @@ function parse_event_logs(tag, timestamp, record)
         action = action,
         details = details,
         raw = raw_log,
+        -- Keep these at top level for Loki label extraction
+        installer = record["installer"],
+        run_id = record["run_id"],
+        run_attempt = record["run_attempt"],
+        -- Also include in meta for consistency
         meta = {
             installer = record["installer"],
             run_id = record["run_id"],
