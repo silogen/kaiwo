@@ -10,5 +10,5 @@ metadata:
     fluentbit.fluent.io/mode: "k8s"
 spec:
   regex:
-    regex: '.*?(?<audit_json>\{"kind":"Event".*?\}).*'
+    regex: '.*?(?<audit_json>\{"kind":"Event".+)\}\s*\{"component"'
     timeKey: ""

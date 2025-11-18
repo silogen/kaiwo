@@ -1,6 +1,6 @@
 -- Transform audit logs to unified schema
 -- Only processes create, update, delete operations
--- Input: Record with parsed audit fields from Parser filter
+-- Input: Record with audit_json field (JSON string)
 -- Output: Unified schema with object, time, msg, level, type, raw, meta
 
 function parse_audit_logs(tag, timestamp, record)
@@ -12,12 +12,19 @@ function parse_audit_logs(tag, timestamp, record)
     -- Save original log line
     local raw_log = record["log"] or ""
 
-    -- Check if audit fields were parsed (from Parser filter)
-    -- Parser filter adds fields directly to record
-    local verb = record["verb"]
+    -- Get the audit_json string (extracted by parser filter)
+    local audit_json = record["audit_json"]
+
+    if not audit_json then
+        -- No audit_json extracted, skip
+        return 2, timestamp, record
+    end
+
+    -- Extract verb from JSON string using regex
+    local verb = audit_json:match('"verb"%s*:%s*"([^"]+)"')
 
     if not verb then
-        -- Audit JSON wasn't parsed, skip
+        -- No verb found, skip
         return 2, timestamp, record
     end
 
@@ -27,17 +34,32 @@ function parse_audit_logs(tag, timestamp, record)
         return 1, timestamp, record  -- Return code 1 = drop record
     end
 
-    -- Extract object reference from parsed fields
-    -- Parser flattens nested objects, so objectRef.namespace becomes objectRef_namespace
+    -- Extract object reference fields from JSON string
+    -- Need to find the objectRef section first, then extract fields from within it
+    local obj_ref_section = audit_json:match('"objectRef"%s*:%s*(%b{})')
+
+    local obj_api_version = ""
+    local obj_resource = ""
+    local obj_namespace = ""
+    local obj_name = ""
+
+    if obj_ref_section then
+        obj_api_version = obj_ref_section:match('"apiVersion"%s*:%s*"([^"]+)"') or ""
+        obj_resource = obj_ref_section:match('"resource"%s*:%s*"([^"]+)"') or ""
+        obj_namespace = obj_ref_section:match('"namespace"%s*:%s*"([^"]+)"') or ""
+        obj_name = obj_ref_section:match('"name"%s*:%s*"([^"]+)"') or ""
+    end
+
     local object = {
-        apiVersion = record["objectRef_apiVersion"] or record["objectRef.apiVersion"] or "",
-        kind = record["objectRef_resource"] or record["objectRef.resource"] or "",  -- audit uses "resource"
-        namespace = record["objectRef_namespace"] or record["objectRef.namespace"] or "",
-        name = record["objectRef_name"] or record["objectRef.name"] or ""
+        apiVersion = obj_api_version,
+        kind = obj_resource,  -- Note: audit logs use "resource" not "kind"
+        namespace = obj_namespace,
+        name = obj_name
     }
 
     -- Extract time
-    local time = record["requestReceivedTimestamp"] or record["stageTimestamp"] or ""
+    local time = audit_json:match('"requestReceivedTimestamp"%s*:%s*"([^"]*)"') or
+                 audit_json:match('"stageTimestamp"%s*:%s*"([^"]*)"') or ""
 
     -- Construct message
     local msg = string.format("%s %s %s in namespace %s",
@@ -48,12 +70,12 @@ function parse_audit_logs(tag, timestamp, record)
 
     -- Derive level from response status code
     local level = "info"
-    local status_code = record["responseStatus_code"] or record["responseStatus.code"]
-    if status_code then
-        status_code = tonumber(status_code)
-        if status_code and status_code >= 500 then
+    local status_code_str = audit_json:match('"responseStatus"%s*:%s*{.-"code"%s*:%s*(%d+)')
+    if status_code_str then
+        local status_code = tonumber(status_code_str)
+        if status_code >= 500 then
             level = "error"
-        elseif status_code and status_code >= 400 then
+        elseif status_code >= 400 then
             level = "warning"
         else
             level = "info"
