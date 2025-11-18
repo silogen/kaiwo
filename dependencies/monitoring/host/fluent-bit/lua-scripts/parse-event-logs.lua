@@ -113,6 +113,8 @@ function parse_event_logs(tag, timestamp, record)
         installer = record["installer"],
         run_id = record["run_id"],
         run_attempt = record["run_attempt"],
+        resource_kind = object.kind,
+        resource_name = object.name,
         -- Also include in meta for consistency
         meta = {
             installer = record["installer"],

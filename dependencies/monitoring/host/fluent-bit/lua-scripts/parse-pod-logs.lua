@@ -9,6 +9,29 @@ function parse_pod_logs(tag, timestamp, record)
         return 2, timestamp, record  -- Pass through unchanged
     end
 
+    -- Extract pod metadata
+    local pod_name = ""
+    local app = ""
+    local job_name = ""
+    local kubernetes = record["kubernetes"]
+    if kubernetes then
+        -- Try different field name variants
+        pod_name = kubernetes["pod_name"] or kubernetes["pod-name"] or kubernetes["name"] or ""
+        local labels = kubernetes["labels"]
+        if labels then
+            app = labels["app"] or ""
+            -- Check for job name (batch.kubernetes.io/job-name or job-name)
+            job_name = labels["batch.kubernetes.io/job-name"] or labels["job-name"] or ""
+        else
+            -- Debug: labels don't exist
+            app = "NO_LABELS"
+        end
+    else
+        -- Debug: kubernetes field doesn't exist
+        pod_name = "NO_K8S_FIELD"
+        app = "NO_K8S_FIELD"
+    end
+
     -- Save original log line
     local raw_log = record["log"] or ""
 
@@ -95,12 +118,18 @@ function parse_pod_logs(tag, timestamp, record)
         installer = record["installer"],
         run_id = record["run_id"],
         run_attempt = record["run_attempt"],
+        pod_name = pod_name,
+        app = app,
+        job_name = job_name,
         -- Also include in meta for consistency
         meta = {
             installer = record["installer"],
             run_id = record["run_id"],
             run_attempt = record["run_attempt"],
-            log_type = record["log_type"]
+            log_type = record["log_type"],
+            pod_name = pod_name,
+            app = app,
+            job_name = job_name
         }
     }
 

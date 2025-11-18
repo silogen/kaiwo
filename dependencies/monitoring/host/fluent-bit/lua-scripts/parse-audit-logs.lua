@@ -114,6 +114,8 @@ function parse_audit_logs(tag, timestamp, record)
         installer = record["installer"],
         run_id = record["run_id"],
         run_attempt = record["run_attempt"],
+        resource_kind = obj_resource,
+        resource_name = obj_name,
         -- Also include in meta for consistency
         meta = {
             installer = record["installer"],

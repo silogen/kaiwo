@@ -23,6 +23,12 @@ spec:
       - $installer
       - $run_id
       - $run_attempt
+      # Pod-specific labels (empty for audit/event)
+      - $app
+      - $job_name
+      # Resource labels (empty for pod)
+      - $resource_kind
+      # Note: pod_name and resource_name are kept in JSON only to avoid high cardinality
     # Send full JSON record as log line
     lineFormat: json
     # Don't remove keys - send everything to Loki
