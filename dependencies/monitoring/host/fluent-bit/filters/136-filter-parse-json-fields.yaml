@@ -1,0 +1,21 @@
+# Filter: Parse extracted JSON fields
+# Ordinal: 136 (after JSON extraction)
+# Parses audit_json field into structured data using JSON parser
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterFilter
+metadata:
+  name: parse-json-fields
+  namespace: test-observability
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/mode: "k8s"
+spec:
+  match: kube.*
+  ordinal: 136
+  filters:
+    # Parse audit JSON if extracted
+    - parser:
+        keyName: audit_json
+        parser: audit-json-parser
+        reserveData: true
+        preserveKey: false

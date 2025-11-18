@@ -152,6 +152,9 @@ func requestsFromNamespaceTemplates(templates []aimv1alpha1.AIMServiceTemplate) 
 // observe gathers current cluster state (read-only)
 func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *aimv1alpha1.AIMServiceTemplate) (*namespaceTemplateObservation, error) {
 	logger := log.FromContext(ctx)
+
+	baseutils.Debug(logger, "Observing template")
+
 	observation, err := shared.ObserveTemplate(ctx, shared.TemplateObservationOptions[*servingv1alpha1.ServingRuntime]{
 		K8sClient: r.Client,
 		GetRuntime: func(ctx context.Context) (*servingv1alpha1.ServingRuntime, error) {
@@ -187,17 +190,12 @@ func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *ai
 		OnRuntimeConfigResolved: func(resolution *shared.RuntimeConfigResolution) {
 			if resolution.NamespaceConfig == nil && resolution.ClusterConfig == nil && resolution.Name == shared.DefaultRuntimeConfigName {
 				baseutils.Debug(logger, "Default AIMRuntimeConfig not found, proceeding without overrides")
-				controllerutils.EmitWarningEvent(r.Recorder, template, "DefaultRuntimeConfigNotFound",
-					"Default AIMRuntimeConfig not found, proceeding with controller defaults.")
 				return
 			}
 
 			baseutils.Debug(logger, "Resolved AIMRuntimeConfig",
 				"name", resolution.Name,
 				"sources", shared.JoinRuntimeConfigSources(resolution, template.Namespace))
-
-			controllerutils.EmitNormalEvent(r.Recorder, template, "RuntimeConfigResolved",
-				fmt.Sprintf("Using AIMRuntimeConfig %q from %s", resolution.Name, shared.JoinRuntimeConfigSources(resolution, template.Namespace)))
 		},
 		GetImagePullSecrets: func() []corev1.LocalObjectReference {
 			return template.Spec.ImagePullSecrets
@@ -233,6 +231,10 @@ func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *ai
 
 // plan computes desired state (pure function)
 func (r *AIMServiceTemplateReconciler) plan(ctx context.Context, template *aimv1alpha1.AIMServiceTemplate, obs *namespaceTemplateObservation) ([]client.Object, error) {
+	logger := log.FromContext(ctx)
+
+	baseutils.Debug(logger, "Planning template resources")
+
 	var observation *shared.TemplateObservation
 	if obs != nil {
 		observation = &obs.TemplateObservation
@@ -287,8 +289,13 @@ func (r *AIMServiceTemplateReconciler) plan(ctx context.Context, template *aimv1
 
 		// Caching is enabled, and didn't find ours - create one
 		if !cacheFound {
+			baseutils.Debug(logger,
+				fmt.Sprintf("Creating TemplateCache %s", template.Name),
+				"templateCache", template.Name)
 			newCache := buildTemplateCache(template, obs.RuntimeConfig)
 			desired = append(desired, newCache)
+		} else {
+			baseutils.Debug(logger, "TemplateCache already exists")
 		}
 
 	}
@@ -298,11 +305,51 @@ func (r *AIMServiceTemplateReconciler) plan(ctx context.Context, template *aimv1
 
 func buildTemplateCache(template *aimv1alpha1.AIMServiceTemplate, runtimeConfigResolution *shared.RuntimeConfigResolution) *aimv1alpha1.AIMTemplateCache {
 	cBool := true
+
+	// Build labels - inherit hierarchical labels from template
+	labels := map[string]string{
+		"app.kubernetes.io/managed-by": shared.LabelValueManagedBy,
+		shared.LabelKeyTemplateCache:   template.Name,
+		shared.LabelKeyCacheType:       shared.LabelValueCacheTypeTemplateCache,
+	}
+
+	// Inherit hierarchical labels from template
+	if template.Labels != nil {
+		// Model properties
+		if modelID, ok := template.Labels[shared.LabelKeyModelID]; ok {
+			labels[shared.LabelKeyModelID] = modelID
+		}
+		if modelName, ok := template.Labels[shared.LabelKeyModelName]; ok {
+			labels[shared.LabelKeyModelName] = modelName
+		}
+		if modelImage, ok := template.Labels[shared.LabelKeyModelImage]; ok {
+			labels[shared.LabelKeyModelImage] = modelImage
+		}
+		if canonicalName, ok := template.Labels[shared.LabelKeyModelCanonicalName]; ok {
+			labels[shared.LabelKeyModelCanonicalName] = canonicalName
+		}
+
+		// Template properties
+		if metric, ok := template.Labels[shared.LabelKeyMetric]; ok {
+			labels[shared.LabelKeyMetric] = metric
+		}
+		if precision, ok := template.Labels[shared.LabelKeyPrecision]; ok {
+			labels[shared.LabelKeyPrecision] = precision
+		}
+		if gpuModel, ok := template.Labels[shared.LabelKeyTemplateGPUModel]; ok {
+			labels[shared.LabelKeyTemplateGPUModel] = gpuModel
+		}
+		if gpuCount, ok := template.Labels[shared.LabelKeyTemplateGPUCount]; ok {
+			labels[shared.LabelKeyTemplateGPUCount] = gpuCount
+		}
+	}
+
 	return &aimv1alpha1.AIMTemplateCache{
 		TypeMeta: metav1.TypeMeta{APIVersion: "aimv1alpha1", Kind: "AIMModelCache"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      template.Name,
 			Namespace: template.Namespace,
+			Labels:    labels,
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion: template.APIVersion,
@@ -329,6 +376,9 @@ func (r *AIMServiceTemplateReconciler) projectStatus(
 	obs *namespaceTemplateObservation,
 	errs controllerutils.ReconcileErrors,
 ) error {
+	logger := log.FromContext(ctx)
+
+	baseutils.Debug(logger, "Projecting template status")
 	imageNotFoundMsg := fmt.Sprintf("No AIMModel or AIMClusterModel found for image name %q", template.Spec.ModelName)
 	var templateObs *shared.TemplateObservation
 	if obs != nil {

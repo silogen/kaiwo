@@ -6,3 +6,14 @@ resources:
 
 patches:
 - path: ci-patches.yaml
+
+# Exclude ServiceMonitor from CI/test deployments
+# The monitoring.coreos.com/v1 CRD is not installed in test environments
+# (similar to how the Helm chart doesn't include ServiceMonitor)
+- patch: |-
+    $patch: delete
+    apiVersion: monitoring.coreos.com/v1
+    kind: ServiceMonitor
+    metadata:
+      name: kaiwo-controller-manager-metrics-monitor
+      namespace: kaiwo-system

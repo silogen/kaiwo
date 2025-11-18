@@ -1,0 +1,20 @@
+# Filter: Parse event logs to unified schema
+# Ordinal: 150 (after classification)
+# Processes only event logs (K8s events and event-exporter errors)
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterFilter
+metadata:
+  name: parse-event-logs
+  namespace: test-observability
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/mode: "k8s"
+spec:
+  match: kube.*
+  ordinal: 150
+  filters:
+    - lua:
+        script:
+          key: parse-event-logs.lua
+          name: fluent-bit-lua-scripts
+        call: parse_event_logs

@@ -1,0 +1,20 @@
+# Filter: Parse audit logs to unified schema
+# Ordinal: 140 (after classification)
+# Processes only audit logs (create, update, delete operations)
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterFilter
+metadata:
+  name: parse-audit-logs
+  namespace: test-observability
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/mode: "k8s"
+spec:
+  match: kube.*
+  ordinal: 140
+  filters:
+    - lua:
+        script:
+          key: parse-audit-logs.lua
+          name: fluent-bit-lua-scripts
+        call: parse_audit_logs

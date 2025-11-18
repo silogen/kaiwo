@@ -4,14 +4,12 @@ metadata:
   name: routing-gateway-not-exists
 spec:
   description: Test that HTTPRoute is created even if Gateway doesn't exist (Gateway API validates parent)
-  timeouts:
-    assert: 60s
+
   steps:
-  - name: Ensure template is available
+  - name: Create model and template
     try:
-    - assert:
-        timeout: 5s
-        file: ../../_shared/template-available.yaml
+    - apply:
+        file: ../../_shared/default-model-and-template.yaml
 
   - name: Create AIMService with non-existent gatewayRef
     try:

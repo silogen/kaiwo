@@ -1,0 +1,58 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: logger-pod
+  namespace: chainsaw-test-001
+  labels:
+    app: test-logger
+spec:
+  containers:
+  - name: logger
+    image: busybox
+    command: ["/bin/sh"]
+    args:
+      - -c
+      - |
+        i=0
+        while true; do
+          # Random number for variation
+          rand=$((i % 10))
+
+          # 20% chance of non-JSON log
+          if [ $rand -eq 0 ]; then
+            echo "Plain text log message at $(date)"
+
+          # 30% chance of controller-style log (reconciling objects)
+          elif [ $rand -lt 4 ]; then
+            # 85% info, 10% warn, 5% error
+            level_rand=$((i % 20))
+            if [ $level_rand -lt 17 ]; then
+              level="info"
+            elif [ $level_rand -lt 19 ]; then
+              level="warn"
+            else
+              level="error"
+            fi
+            obj=$(echo "my-aim-1 my-rayservice-2 my-appwrapper-3" | cut -d' ' -f$((1 + i % 3)))
+            ns=$(echo "chainsaw-test-001 chainsaw-test-002 production" | cut -d' ' -f$((1 + i % 3)))
+            echo "{\"level\":\"$level\",\"msg\":\"Reconciling object\",\"namespace\":\"$ns\",\"name\":\"$obj\",\"kind\":\"AIM\",\"controller\":\"kaiwo-controller\"}"
+
+          # 50% chance of regular pod log (no namespace/name - just pod metadata)
+          else
+            # 85% info, 10% warn, 5% error
+            level_rand=$((i % 20))
+            if [ $level_rand -lt 17 ]; then
+              level="info"
+            elif [ $level_rand -lt 19 ]; then
+              level="warn"
+            else
+              level="error"
+            fi
+            msg=$(echo "Processing request|Database query completed|Cache hit|Background job started|Request timeout|Connection failed" | cut -d'|' -f$((1 + i % 6)))
+            echo "{\"level\":\"$level\",\"msg\":\"$msg\",\"duration_ms\":$((100 + i % 900))}"
+          fi
+
+          i=$((i + 1))
+          sleep 3
+        done
+  restartPolicy: Always

@@ -1,8 +1,0 @@
-apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMClusterModel
-metadata:
-  name: test-prefers-latency
-spec:
-  image: ghcr.io/silogen/aim-dummy:0.1.1
-  discovery:
-    enabled: false

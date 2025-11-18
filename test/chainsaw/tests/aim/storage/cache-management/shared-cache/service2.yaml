@@ -1,0 +1,8 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: shared-cache-service2
+spec:
+  model:
+    ref: shared-cache-model
+  cacheModel: true  # Will reuse existing cache from service1

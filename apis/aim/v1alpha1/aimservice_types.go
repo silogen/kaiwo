@@ -28,6 +28,25 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
+// ModelScope defines the search scope for model/template selection.
+// +kubebuilder:validation:Enum=Auto;Namespace;Cluster
+type ModelScope string
+
+const (
+	// ModelScopeAuto searches both namespace and cluster scopes (default).
+	// Namespace-scoped resources are checked first, then cluster-scoped resources.
+	ModelScopeAuto ModelScope = "Auto"
+
+	// ModelScopeNamespace limits search to namespace-scoped resources only.
+	// Only AIMModel and AIMServiceTemplate resources in the same namespace are considered.
+	ModelScopeNamespace ModelScope = "Namespace"
+
+	// ModelScopeCluster limits search to cluster-scoped resources only.
+	// Only AIMClusterModel and AIMClusterServiceTemplate resources are considered.
+	// When this scope is set, the controller will never auto-create models.
+	ModelScopeCluster ModelScope = "Cluster"
+)
+
 // AIMServiceModel specifies which model to deploy. Exactly one field must be set.
 // +kubebuilder:validation:XValidation:rule="(has(self.ref) && !has(self.image)) || (!has(self.ref) && has(self.image))",message="exactly one of ref or image must be specified"
 type AIMServiceModel struct {
@@ -43,6 +62,14 @@ type AIMServiceModel struct {
 	// Example: `ghcr.io/silogen/llama-3-8b:v1.2.0`.
 	// +optional
 	Image *string `json:"image,omitempty"`
+
+	// Scope controls which types of models and templates are considered when resolving model references.
+	// - Auto (default): searches namespace-scoped first, then falls back to cluster-scoped. Auto-creates namespace-scoped models.
+	// - Namespace: only searches namespace-scoped resources. Auto-creates namespace-scoped models.
+	// - Cluster: only searches cluster-scoped resources. Never auto-creates models.
+	// +kubebuilder:default=Auto
+	// +optional
+	Scope *ModelScope `json:"scope,omitempty"`
 }
 
 // AIMServiceOverrides allows overriding template parameters at the service level.
@@ -130,9 +157,9 @@ type AIMServiceStatus struct {
 	// +optional
 	ResolvedRuntimeConfig *AIMResolvedRuntimeConfig `json:"resolvedRuntimeConfig,omitempty"`
 
-	// ResolvedImage captures metadata about the image that was resolved.
+	// ResolvedModel captures metadata about the model that was resolved.
 	// +optional
-	ResolvedImage *AIMResolvedReference `json:"resolvedImage,omitempty"`
+	ResolvedModel *AIMResolvedReference `json:"resolvedModel,omitempty"`
 
 	// Status represents the current high‑level status of the service lifecycle.
 	// Values: `Pending`, `Starting`, `Running`, `Failed`, `Degraded`.

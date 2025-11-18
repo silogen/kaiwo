@@ -1,8 +1,7 @@
 apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMService
 metadata:
-  name: template-override-service
+  name: template-override
 spec:
   model:
-    ref: template-override-image
-  templateRef: template-override-template
+    ref: template-override

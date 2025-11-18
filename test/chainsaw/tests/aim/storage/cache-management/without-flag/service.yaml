@@ -1,0 +1,8 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: cache-without-flag-service
+spec:
+  model:
+    ref: cache-without-flag-model
+  # Cache flag is not set, but template cache exists - should still use it

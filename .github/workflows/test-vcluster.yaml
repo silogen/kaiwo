@@ -1,0 +1,340 @@
+name: test-vcluster
+
+on:
+  pull_request: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
+env:
+  TTL_TAG: 1h
+  GO_VERSION_FILE: go.mod
+  # Lint toolchains (pinned)
+  GOLANGCI_LINT_VERSION: v1.64.2   # use action v6 with v1.x
+  PY_VERSION: '3.12'
+  # E2E tool versions (pinned)
+  KUBECTL_VERSION: 'v1.30.4'
+  VCLUSTER_VERSION: 'v0.20.0'
+  HELMFILE_VERSION: 'v1.1.5'
+
+defaults:
+  run:
+    shell: bash -euo pipefail {0}
+
+jobs:
+  build-image:
+    name: Build & push (ttl.sh)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    outputs:
+      image: ${{ steps.vars.outputs.full_image }}
+      repo: ${{ steps.vars.outputs.repo }}
+      tag: ${{ steps.vars.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { clean: true }
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Compute ttl.sh image ref
+        id: vars
+        run: |
+          ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
+          REPO="ttl.sh/${ID}"
+          TAG="${{ env.TTL_TAG }}"
+          echo "repo=${REPO}"              >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}"                >> "$GITHUB_OUTPUT"
+          echo "full_image=${REPO}:${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.vars.outputs.full_image }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build CLI artifact
+        run: |
+          make build-cli
+          make build-log
+          mkdir -p builds
+          cp bin/kaiwo builds/
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kaiwo-builds
+          path: builds
+          if-no-files-found: error
+          retention-days: 5
+
+  e2e-vcluster:
+    name: E2E on vcluster (self-hosted only)
+    needs: build-image
+    runs-on: self-hosted
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        installer: [kustomization, helm]
+    env:
+      KUBECONFIG_CONTENT: ${{ secrets.TW038_KUBECONFIG }}
+      VCLUSTER_NAMESPACE: kaiwo-test-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.installer }}
+      VCLUSTER_NAME: kaiwo-test-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.installer }}
+      IMAGE_NAME: ${{ needs.build-image.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { clean: true }
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ env.GO_VERSION_FILE }}
+
+      - name: Set up kubectl (pinned)
+        uses: azure/setup-kubectl@v4
+        with:
+          version: ${{ env.KUBECTL_VERSION }}
+
+      - name: Download CLI artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: kaiwo-builds
+          path: builds
+
+      - name: Make CLI executable
+        run: |
+          chmod +x builds/kaiwo
+          chmod +x builds/log
+          ls -l builds
+
+      - name: Install Chainsaw
+        uses: kyverno/action-install-chainsaw@v0.2.12
+        with:
+          release: v0.2.12
+
+      - name: Install yq
+        run: |
+          curl -fsSL https://github.com/mikefarah/yq/releases/download/v4.44.6/yq_linux_amd64 -o yq
+          chmod +x yq
+          sudo mv yq /usr/local/bin/yq
+          yq --version
+
+      - name: Install Helm (pinned)
+        run: |
+          curl -fsSL https://get.helm.sh/helm-v3.16.4-linux-amd64.tar.gz -o helm.tar.gz
+          tar -xzf helm.tar.gz
+          sudo mv linux-amd64/helm /usr/local/bin/helm
+          rm -rf helm.tar.gz linux-amd64
+          helm version
+
+      - name: Install Helmfile (pinned)
+        run: |
+          curl -L -o helmfile.tar.gz https://github.com/helmfile/helmfile/releases/download/${HELMFILE_VERSION}/helmfile_${HELMFILE_VERSION#v}_linux_amd64.tar.gz
+          tar -xzf helmfile.tar.gz
+          chmod +x ./helmfile
+          sudo mv ./helmfile /usr/local/bin/helmfile
+          rm -f helmfile.tar.gz
+          helmfile version
+
+      - name: Write host kubeconfig
+        run: |
+          echo "$KUBECONFIG_CONTENT" > host-kubeconfig
+          KUBECONFIG=$(pwd)/host-kubeconfig kubectl get nodes
+
+      - name: Install vcluster CLI (pinned)
+        run: |
+          curl -L -o vcluster "https://github.com/loft-sh/vcluster/releases/download/${VCLUSTER_VERSION}/vcluster-linux-amd64"
+          chmod +x vcluster
+          sudo mv vcluster /usr/local/bin/vcluster
+          vcluster --version
+
+      - name: Create namespace & deploy audit components
+        env: { KUBECONFIG: host-kubeconfig }
+        run: |
+          kubectl get ns "$VCLUSTER_NAMESPACE" >/dev/null 2>&1 || kubectl create namespace "$VCLUSTER_NAMESPACE"
+
+          # Deploy audit logging components (Alloy receiver, ConfigMaps)
+          export VCLUSTER_NAMESPACE="$VCLUSTER_NAMESPACE"
+          export GITHUB_RUN_ID="${{ github.run_id }}"
+          export GITHUB_RUN_ATTEMPT="${{ github.run_attempt }}"
+          export INSTALLER="${{ matrix.installer }}"
+          bash ./dependencies/deploy-vcluster-audit.sh
+
+      - name: Create vcluster
+        env: { KUBECONFIG: host-kubeconfig }
+        run: |
+          vcluster create "$VCLUSTER_NAME" \
+            --namespace "$VCLUSTER_NAMESPACE" \
+            --values dependencies/vcluster.yaml \
+            --connect=false \
+            --update-current=false
+
+          # Wait for vcluster StatefulSet to be ready (official labels from chart)
+          echo "Waiting for vcluster StatefulSet to be ready..."
+          kubectl -n "$VCLUSTER_NAMESPACE" wait --for=condition=ready pod \
+            -l app=vcluster,release="$VCLUSTER_NAME" \
+            --timeout=5m
+
+          echo "Vcluster pods:"
+          kubectl -n "$VCLUSTER_NAMESPACE" get pods -l app=vcluster,release="$VCLUSTER_NAME" -o wide
+
+      - name: Connect to vcluster
+        env: { KUBECONFIG: host-kubeconfig }
+        run: |
+          # Start vcluster connect in background (creates port-forward)
+          vcluster connect "$VCLUSTER_NAME" \
+            --namespace "$VCLUSTER_NAMESPACE" \
+            --update-current=false \
+            --kube-config=./vcluster-kubeconfig &
+
+          VCLUSTER_PID=$!
+          echo "VCLUSTER_PID=$VCLUSTER_PID" >> "$GITHUB_ENV"
+
+          # Wait for kubeconfig to be written
+          for i in {1..30}; do
+            if [[ -f ./vcluster-kubeconfig ]]; then
+              echo "Kubeconfig file created"
+              break
+            fi
+            sleep 1
+          done
+
+          # Wait for connection to be ready
+          echo "Waiting for vcluster connection to be ready..."
+          for i in {1..30}; do
+            if KUBECONFIG=$(pwd)/vcluster-kubeconfig kubectl get ns >/dev/null 2>&1; then
+              echo "Successfully connected to vcluster"
+              break
+            fi
+            sleep 2
+          done
+
+          # Verify connection
+          KUBECONFIG=$(pwd)/vcluster-kubeconfig kubectl get ns
+
+      - name: Install dependencies
+        env:
+          KUBECONFIG: ${{ github.workspace }}/vcluster-kubeconfig
+          TMPDIR: ${{ github.workspace }}/tmp
+        run: |
+          # Use workspace for temp files to avoid /tmp cleanup issues on self-hosted runners
+          mkdir -p "$TMPDIR"
+          bash ./dependencies/deploy.sh vcluster up
+
+      - name: Deploy vCluster monitoring
+        env:
+          KUBECONFIG: ${{ github.workspace }}/vcluster-kubeconfig
+          VCLUSTER_NAMESPACE: ${{ env.VCLUSTER_NAMESPACE }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          INSTALLER: ${{ matrix.installer }}
+        run: |
+          bash ./dependencies/deploy-vcluster-monitoring.sh
+
+      - name: Install CRDs
+        env:
+          KUBECONFIG: ${{ github.workspace }}/vcluster-kubeconfig
+        run: kubectl apply -f crd/crds.yaml --server-side
+
+      - name: Wait for Kueue webhook certificates
+        env:
+          KUBECONFIG: ${{ github.workspace }}/vcluster-kubeconfig
+        run: |
+          echo "Waiting for Kueue webhook certificates to be ready..."
+          # Wait for the webhook service to be ready
+          kubectl wait --for=condition=available --timeout=3m deployment/kueue-controller-manager -n kueue-system || true
+
+          # Give cert-manager time to inject the CA bundle into the webhook configuration
+          echo "Waiting for webhook certificate injection..."
+          for i in {1..30}; do
+            if kubectl get validatingwebhookconfiguration kueue-validating-webhook-configuration -o jsonpath='{.webhooks[0].clientConfig.caBundle}' 2>/dev/null | grep -q .; then
+              echo "Webhook certificates ready"
+              break
+            fi
+            echo "Waiting for CA bundle injection (attempt $i/30)..."
+            sleep 2
+          done
+
+          # Additional safety wait for webhook to stabilize
+          sleep 10
+
+      - name: Build helm chart
+        if: matrix.installer == 'helm'
+        run: |
+          mkdir -p dist
+#          make helm-package
+
+      - name: Deploy operator (${{ matrix.installer }})
+        env:
+          KUBECONFIG: ${{ github.workspace }}/vcluster-kubeconfig
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+        run: bash ./kaiwo.sh --deploy-via=${{ matrix.installer }} up
+
+      - name: Wait for rollout
+        env:
+          KUBECONFIG: ${{ github.workspace }}/vcluster-kubeconfig
+        run: |
+          kubectl -n kaiwo-system rollout status deployment/kaiwo-controller-manager --timeout=300s
+          kubectl -n kube-system rollout status deployment/kaiwo-scheduler --timeout=300s
+          kubectl -n kaiwo-system get pods -o wide
+
+      - name: Debug rollout failure
+        if: failure()
+        env:
+          KUBECONFIG: ${{ github.workspace }}/vcluster-kubeconfig
+        run: |
+          echo "=== Deployment status ==="
+          kubectl -n kaiwo-system get deployments -o wide || true
+          kubectl -n kube-system get deployments -o wide || true
+          
+          echo "=== Pod status ==="
+          kubectl -n kaiwo-system get pods -o wide || true
+          kubectl -n kube-system get pods -o wide || true
+          
+          echo "=== Controller manager details ==="
+          kubectl -n kaiwo-system describe deployment kaiwo-controller-manager || true
+          kubectl -n kaiwo-system describe pods -l control-plane=controller-manager || true
+          
+          echo "=== Scheduler details ==="
+          kubectl -n kube-system describe deployment kaiwo-scheduler || true
+          kubectl -n kube-system describe pods -l component=kaiwo-scheduler || true
+          
+          echo "=== Controller manager logs ==="
+          kubectl -n kaiwo-system logs -l control-plane=controller-manager --tail=200 --all-containers=true || true
+          
+          echo "=== Scheduler logs ==="
+          kubectl -n kube-system logs -l component=kaiwo-scheduler --tail=200 --all-containers=true || true
+          
+          echo "=== Events ==="
+          kubectl -n kaiwo-system get events --sort-by='.lastTimestamp' || true
+          kubectl -n kube-system get events --sort-by='.lastTimestamp' || true
+
+      - name: Run E2E tests
+        env:
+          KUBECONFIG: ${{ github.workspace }}/vcluster-kubeconfig
+        run: |
+          cd test
+          make test-kind CHAINSAW_CONFIG=chainsaw/configs/ci.yaml
+
+      - name: Cleanup
+        if: always()
+        env: { KUBECONFIG: host-kubeconfig }
+        run: |
+          # Kill the vcluster connect port-forward process
+          if [[ -n "${VCLUSTER_PID:-}" ]]; then
+            kill "$VCLUSTER_PID" 2>/dev/null || true
+          fi
+
+          # Delete the vcluster
+          vcluster delete "$VCLUSTER_NAME" --namespace "$VCLUSTER_NAMESPACE" || true
+          kubectl delete namespace "$VCLUSTER_NAMESPACE" --ignore-not-found=true || true
+          rm -f host-kubeconfig vcluster-kubeconfig

@@ -3,7 +3,7 @@ kind: AIMClusterModel
 metadata:
   name: default-testing-llama-3-8b
 spec:
-  image: ghcr.io/silogen/aim-dummy:0.1.1
+  image: ghcr.io/silogen/aim-dummy:0.1.3
   defaultServiceTemplate: default-testing-llama-3-8b
   # Don't auto-generate templates, since we just need a single manual one
   discovery:

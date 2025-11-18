@@ -1,0 +1,9 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-service-image-not-found
+spec:
+  model:
+    # Use a public repo with a tag that definitely doesn't exist
+    # Private repos return auth errors before checking tag existence
+    image: ghcr.io/silogen/aim-dummy:this-tag-does-not-exist-404

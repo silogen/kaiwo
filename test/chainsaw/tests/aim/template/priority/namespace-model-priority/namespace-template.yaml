@@ -1,0 +1,10 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMServiceTemplate
+metadata:
+  name: llama-3-8b-throughput
+spec:
+  modelName: namespace-model-priority
+  metric: throughput
+  gpuSelector:
+    count: 1
+    model: MI300X

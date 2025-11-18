@@ -1,0 +1,15 @@
+# Parser: Extract JSON from pod log (optional, may fail)
+# Attempts to extract JSON from CRI format: "TIMESTAMP STREAM TAG {JSON}"
+# It's ok if this fails - pod logs may be plain text
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterParser
+metadata:
+  name: pod-json-extractor
+  namespace: test-observability
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/mode: "k8s"
+spec:
+  regex:
+    regex: '^.*?\s+.*?\s+.*?\s+(?<pod_json>\{.+\})\s*$'
+    timeKey: ""

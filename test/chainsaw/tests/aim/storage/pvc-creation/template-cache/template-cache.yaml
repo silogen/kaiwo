@@ -1,0 +1,10 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMTemplateCache
+metadata:
+  name: pvc-template-cache
+spec:
+  # NOTE: This template name is auto-generated with a hash suffix
+  # This placeholder will be replaced by the test script
+  templateRef: placeholder-will-be-replaced
+  storageClassName: rwx-nfs
+  runtimeConfigName: pvc-template-cache

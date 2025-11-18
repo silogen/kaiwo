@@ -4,5 +4,5 @@ metadata:
   name: cluster-auto-creation-service
 spec:
   model:
-    image: ghcr.io/amd/mistral-7b-instruct:latest
+    image: ghcr.io/silogen/aim-dummy:0.1.3
   runtimeConfigName: cluster-auto-creation-config

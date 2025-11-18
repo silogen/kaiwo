@@ -51,6 +51,7 @@ nav:
       - "AIM Models": "aim/concepts/models.md"
       - "AIM Service Templates": "aim/concepts/templates.md"
       - "AIM Runtime Configuration": "aim/concepts/runtime-config.md"
+      - "Architecture": "aim/concepts/architecture.md"
   - "Reference":
       - "API": "reference/crds/aim.silogen.ai.md"
 - "Reference":

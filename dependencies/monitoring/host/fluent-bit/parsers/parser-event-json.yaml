@@ -1,0 +1,14 @@
+# Parser: Extract JSON from event log
+# Extracts JSON from CRI format: "TIMESTAMP STREAM TAG {JSON}"
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterParser
+metadata:
+  name: event-json-extractor
+  namespace: test-observability
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/mode: "k8s"
+spec:
+  regex:
+    regex: '^.*?\s+.*?\s+.*?\s+(?<event_json>\{.+\})\s*$'
+    timeKey: ""

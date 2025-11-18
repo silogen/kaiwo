@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: test-observability
+
+configMapGenerator:
+  - name: fluent-bit-lua-scripts
+    behavior: create
+    files:
+      - classify-log-type.lua
+      - extract-namespace-fields.lua
+      - parse-audit-logs.lua
+      - parse-event-logs.lua
+      - parse-pod-logs.lua
+    options:
+      disableNameSuffixHash: true
+      labels:
+        fluentbit.fluent.io/enabled: "true"
+        fluentbit.fluent.io/mode: "k8s"

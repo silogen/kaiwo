@@ -6,3 +6,37 @@ sync:
         all: true
     storageClasses:
       enabled: true
+
+# Force vcluster's StatefulSet to use fast RWO storage instead of slow NFS
+# This uses SQLite but on openebs-hostpath (much faster than NFS)
+controlPlane:
+  statefulSet:
+    persistence:
+      volumeClaim:
+        enabled: "true"
+        accessModes: ["ReadWriteOnce"]
+        storageClass: "openebs-hostpath"
+        size: 5Gi
+      # Add audit policy volume
+      addVolumes:
+        - name: audit-policy
+          configMap:
+            name: vcluster-audit-policy
+      addVolumeMounts:
+        - name: audit-policy
+          mountPath: /etc/kubernetes/audit
+          readOnly: true
+
+  # K8s distribution configuration with audit logging
+  distro:
+    k8s:
+      enabled: true
+      apiServer:
+        extraArgs:
+          - --audit-policy-file=/etc/kubernetes/audit/policy.yaml
+          - --audit-log-path=-
+          - --audit-log-format=json
+
+# API server configuration for audit logging
+policies:
+  podSecurityStandard: baseline

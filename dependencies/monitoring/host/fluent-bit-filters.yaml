@@ -1,0 +1,71 @@
+---
+# Filter 2: Parse namespace to extract test run ID and attempt
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterFilter
+metadata:
+  name: parse-namespace
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/mode: "k8s"
+spec:
+  match: kube.*
+  filters:
+    - lua:
+        script:
+          key: parse-namespace.lua
+          name: fluent-bit-lua-scripts
+        call: parse_namespace
+
+---
+# Filter 3: Detect source type (pod_log, k8s_event, k8s_audit_log)
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterFilter
+metadata:
+  name: detect-source
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/mode: "k8s"
+spec:
+  match: kube.*
+  filters:
+    - lua:
+        script:
+          key: detect-source.lua
+          name: fluent-bit-lua-scripts
+        call: detect_source
+
+---
+# Filter 4: Transform K8s events to common format
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterFilter
+metadata:
+  name: transform-events
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/mode: "k8s"
+spec:
+  match: kube.*
+  filters:
+    - lua:
+        script:
+          key: transform-events.lua
+          name: fluent-bit-lua-scripts
+        call: transform_event
+
+---
+# Filter 5: Transform audit logs to common format
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterFilter
+metadata:
+  name: transform-audit
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/mode: "k8s"
+spec:
+  match: kube.*
+  filters:
+    - lua:
+        script:
+          key: transform-audit.lua
+          name: fluent-bit-lua-scripts
+        call: transform_audit

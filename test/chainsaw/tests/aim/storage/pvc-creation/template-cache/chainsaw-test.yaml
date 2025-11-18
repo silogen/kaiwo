@@ -1,0 +1,61 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: pvc-template-cache
+spec:
+  description: Ensure that the PVC is correctly created for pre-created template caches
+  timeouts:
+    assert: 180s
+  steps:
+  - name: Create runtime config
+    try:
+    - apply:
+        file: runtimeconfig.yaml
+
+  - name: Create model
+    try:
+    - apply:
+        file: model.yaml
+
+  - name: Wait for template to be auto-created
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMServiceTemplate
+          metadata:
+            labels:
+              aim.silogen.ai/aim-image: llama-3-8b-pvc-template-cache
+          status:
+            (status == 'Ready' || status == 'NotAvailable'): true
+
+  - name: Get template name and create cache
+    try:
+    - script:
+        content: |
+          TEMPLATE_NAME=$(kubectl get aimservicetemplates -l aim.silogen.ai/aim-image=llama-3-8b-pvc-template-cache -o jsonpath='{.items[0].metadata.name}')
+          cat << EOF | kubectl apply -f -
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMTemplateCache
+          metadata:
+            name: pvc-template-cache
+          spec:
+            templateRef: ${TEMPLATE_NAME}
+            storageClassName: rwx-nfs
+            runtimeConfigName: pvc-template-cache
+          EOF
+
+  - name: Verify the PVC was created with the right size
+    try:
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            labels:
+              aim.silogen.ai/template-cache: pvc-template-cache
+          spec:
+            resources:
+              requests:
+                # 20 % of 0.5 Gi, rounded up
+                storage: "1Gi"
