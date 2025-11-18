@@ -1,0 +1,12 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterModelSource
+metadata:
+  name: test
+spec:
+  filters:
+    - image: "amdenterpriseai/aim-*"
+      exclude:
+        - "amdenterpriseai/aim-base"
+      versions:
+        - ">=0.8.0"
+  syncInterval: 1h
