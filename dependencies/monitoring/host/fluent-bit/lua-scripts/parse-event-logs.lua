@@ -1,7 +1,7 @@
 -- Transform event logs to unified schema
 -- Handles both K8s Event objects and event-exporter error logs
 -- Input: Record with log field containing JSON string
--- Output: Unified schema with object, time, msg, level, type, raw, meta
+-- Output: Unified schema with object, time, msg, level, type, action, details, raw, meta
 
 function parse_event_logs(tag, timestamp, record)
     -- Only process event logs
@@ -24,7 +24,7 @@ function parse_event_logs(tag, timestamp, record)
     -- Since we can't use cjson, we'll parse fields using string matching
     -- This is a workaround for basic JSON field extraction
 
-    local object, time, msg, level
+    local object, time, msg, level, action, details
 
     -- Check for K8s Event format (has involvedObject field)
     if json_str:match('"involvedObject"%s*:') then
@@ -43,11 +43,29 @@ function parse_event_logs(tag, timestamp, record)
         }
 
         -- Extract other fields
-        time = json_str:match('"lastTimestamp"%s*:%s*"([^"]+)"') or json_str:match('"firstTimestamp"%s*:%s*"([^"]+)"') or ""
+        local first_timestamp = json_str:match('"firstTimestamp"%s*:%s*"([^"]+)"') or ""
+        local last_timestamp = json_str:match('"lastTimestamp"%s*:%s*"([^"]+)"') or ""
+        time = last_timestamp ~= "" and last_timestamp or first_timestamp
         msg = json_str:match('"message"%s*:%s*"([^"]+)"') or ""
+        action = json_str:match('"reason"%s*:%s*"([^"]+)"') or ""
+
+        -- Extract count and source for details
+        local count = json_str:match('"count"%s*:%s*(%d+)') or "1"
+        local event_type = json_str:match('"type"%s*:%s*"([^"]+)"') or ""
+        local source_component = json_str:match('"source"%s*:%s*{.-"component"%s*:%s*"([^"]+)"') or ""
+        local source_host = json_str:match('"source"%s*:%s*{.-"host"%s*:%s*"([^"]+)"') or ""
+
+        -- Build details
+        details = {
+            count = count,
+            firstTimestamp = first_timestamp,
+            lastTimestamp = last_timestamp,
+            type = event_type,
+            sourceComponent = source_component,
+            sourceHost = source_host
+        }
 
         -- Map event type to level
-        local event_type = json_str:match('"type"%s*:%s*"([^"]+)"')
         if event_type == "Warning" then
             level = "warning"
         else
@@ -67,6 +85,8 @@ function parse_event_logs(tag, timestamp, record)
         time = json_str:match('"time"%s*:%s*"([^"]+)"') or ""
         msg = json_str:match('"message"%s*:%s*"([^"]+)"') or ""
         level = json_str:match('"level"%s*:%s*"([^"]+)"') or "info"
+        action = ""  -- No action for error logs
+        details = {}  -- No additional details for error logs
 
         -- Append error details if present
         local error_details = json_str:match('"error"%s*:%s*"([^"]+)"')
@@ -86,7 +106,8 @@ function parse_event_logs(tag, timestamp, record)
         msg = msg,
         level = level,
         type = "event",
-        details = {},  -- Will populate later
+        action = action,
+        details = details,
         raw = raw_log,
         meta = {
             installer = record["installer"],

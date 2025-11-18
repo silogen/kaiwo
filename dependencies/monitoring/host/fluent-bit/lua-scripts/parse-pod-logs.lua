@@ -1,7 +1,7 @@
 -- Transform pod logs to unified schema
 -- Attempts JSON parse and detects controller logs
 -- Input: Pod log line (plain text or JSON)
--- Output: Unified schema with object, time, msg, level, type, raw, meta
+-- Output: Unified schema with object, time, msg, level, type, action, details, raw, meta
 
 function parse_pod_logs(tag, timestamp, record)
     -- Only process pod logs
@@ -87,7 +87,8 @@ function parse_pod_logs(tag, timestamp, record)
         msg = msg,
         level = level,
         type = "pod",
-        details = {},  -- Will populate later
+        action = "",  -- Pod logs don't have an action
+        details = {},
         raw = raw_log,
         meta = {
             installer = record["installer"],

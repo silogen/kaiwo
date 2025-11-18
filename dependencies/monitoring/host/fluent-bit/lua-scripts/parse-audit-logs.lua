@@ -1,7 +1,7 @@
 -- Transform audit logs to unified schema
 -- Only processes create, update, delete operations
 -- Input: Record with audit_json field (JSON string)
--- Output: Unified schema with object, time, msg, level, type, raw, meta
+-- Output: Unified schema with object, time, msg, level, type, action, details, raw, meta
 
 function parse_audit_logs(tag, timestamp, record)
     -- Only process audit logs
@@ -82,6 +82,23 @@ function parse_audit_logs(tag, timestamp, record)
         end
     end
 
+    -- Extract request body if present (for create/update operations)
+    local request_object_section = audit_json:match('"requestObject"%s*:%s*(%b{})')
+    local request_object = request_object_section or ""
+
+    -- Extract response object if present
+    local response_object_section = audit_json:match('"responseObject"%s*:%s*(%b{})')
+    local response_object = response_object_section or ""
+
+    -- Build details with request/response bodies
+    local details = {}
+    if request_object ~= "" then
+        details.requestBody = request_object
+    end
+    if response_object ~= "" then
+        details.responseBody = response_object
+    end
+
     -- Build unified record
     local unified = {
         object = object,
@@ -89,7 +106,8 @@ function parse_audit_logs(tag, timestamp, record)
         msg = msg,
         level = level,
         type = "audit",
-        details = {},  -- Will populate later
+        action = verb,
+        details = details,
         raw = raw_log,
         meta = {
             installer = record["installer"],
