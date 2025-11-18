@@ -37,6 +37,7 @@ rules:
   - aim.silogen.ai
   resources:
   - aimclustermodels
+  - aimclustermodelsources
   - aimclusterruntimeconfigs
   - aimclusterservicetemplates
   - aimmodelcaches
@@ -57,6 +58,7 @@ rules:
   - aim.silogen.ai
   resources:
   - aimclustermodels/finalizers
+  - aimclustermodelsources/finalizers
   - aimclusterservicetemplates/finalizers
   - aimmodelcaches/finalizers
   - aimmodels/finalizers
@@ -67,6 +69,7 @@ rules:
   - aim.silogen.ai
   resources:
   - aimclustermodels/status
+  - aimclustermodelsources/status
   - aimclusterservicetemplates/status
   - aimmodelcaches/status
   - aimmodels/status
