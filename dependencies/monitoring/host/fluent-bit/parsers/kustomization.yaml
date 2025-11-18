@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: test-observability
+
+resources:
+  - parser-audit-json-extractor.yaml
+  - parser-audit-json.yaml
+  - parser-event-json.yaml
+  - parser-pod-json.yaml

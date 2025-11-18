@@ -1,0 +1,18 @@
+# Filter: Include only test namespaces
+# Matches namespaces with pattern: test-{installer}-{run-id}-{run-attempt}
+# Example: test-ci-550e8400-e29b-41d4-a89f-446657440000-1
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterFilter
+metadata:
+  name: include-test-namespace
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/mode: "k8s"
+spec:
+  match: kube.*
+  ordinal: 110
+  filters:
+    - grep:
+        # Match namespaces with pattern: test-{installer}-{run-id}-{run-attempt}
+        # Using record accessor syntax to access nested kubernetes.namespace_name field
+        regex: "$kubernetes['namespace_name'] ^test-[^-]+-.*-\\d+$"

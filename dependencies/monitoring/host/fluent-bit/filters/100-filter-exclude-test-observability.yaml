@@ -1,0 +1,15 @@
+# Filter: Exclude test-observability namespace
+# Prevents recursive logging from Fluent Bit's own logs
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterFilter
+metadata:
+  name: exclude-test-observability
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/mode: "k8s"
+spec:
+  match: kube.*
+  ordinal: 100
+  filters:
+    - grep:
+        exclude: "$kubernetes['namespace_name'] test-observability"

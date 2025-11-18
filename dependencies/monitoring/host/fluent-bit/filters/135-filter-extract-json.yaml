@@ -1,0 +1,21 @@
+# Filter: Extract JSON from log fields for all types
+# Ordinal: 135 (before parsing transformations)
+# Uses parser filter to extract JSON strings from log field
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterFilter
+metadata:
+  name: extract-json
+  namespace: test-observability
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/mode: "k8s"
+spec:
+  match: kube.*
+  ordinal: 135
+  filters:
+    # Extract JSON from audit logs (has wrapper)
+    - parser:
+        keyName: log
+        parser: audit-json-extractor
+        reserveData: true
+        preserveKey: true

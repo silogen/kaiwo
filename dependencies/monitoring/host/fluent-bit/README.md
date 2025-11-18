@@ -2,19 +2,29 @@
 
 This directory contains custom Fluent Bit configurations for collecting logs from test environments.
 
-## Files
+## File Structure
 
-- **kubernetes-filter-patch.yaml**: Patches the default kubernetes filter to enable pod labels (required for log classification)
-- **test-simple.yaml**: Main configuration for test namespace log collection
-  - Namespace filtering by pattern `test-{installer}-{run-id}-{run-attempt}`
-  - Field extraction (installer, run_id, run_attempt)
-  - Log type classification (audit, event, pod)
+### Configuration Files (Kustomize-managed)
+
+- **kustomization.yaml**: Kustomize configuration that ties all resources together
+- **configmap-lua-scripts.yaml**: Lua scripts for field extraction and log classification
+- **100-filter-exclude-test-observability.yaml**: [ordinal 100] Excludes test-observability namespace
+- **101-filter-include-test-namespace.yaml**: [ordinal 101] Includes only test namespaces matching pattern
+- **102-filter-extract-namespace-fields.yaml**: [ordinal 102] Extracts installer, run_id, run_attempt fields
+- **103-filter-classify-log-type.yaml**: [ordinal 103] Classifies logs as audit/event/pod
+- **output-stdout.yaml**: Stdout output for testing (replace with Loki for production)
+
+### Supplementary Files
+
+- **kubernetes-filter-patch.yaml**: Patches default kubernetes filter to enable pod labels
+- **README.md**: This file
 
 ## Installation
 
 The configuration is automatically applied via helmfile hooks. When you run:
 
 ```bash
+cd dependencies/monitoring
 helmfile sync
 ```
 
@@ -23,7 +33,8 @@ The following happens:
 2. Post-sync hook applies `kubernetes-filter-patch.yaml` to enable labels
 3. Apply test configuration:
    ```bash
-   kubectl apply -f test-simple.yaml
+   cd host/fluent-bit
+   kubectl apply -k .
    ```
 
 ## Manual Application
@@ -34,8 +45,8 @@ If you need to apply the configuration manually:
 # Apply kubernetes filter patch (enables labels)
 kubectl apply -f kubernetes-filter-patch.yaml
 
-# Apply test log collection configuration
-kubectl apply -f test-simple.yaml
+# Apply all test log collection configuration via Kustomize
+kubectl apply -k .
 ```
 
 ## Log Classification

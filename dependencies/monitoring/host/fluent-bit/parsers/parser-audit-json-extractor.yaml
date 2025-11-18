@@ -1,0 +1,14 @@
+# Parser: Extract JSON from audit log wrapper
+# Extracts JSON from format: "TIMESTAMP STREAM TAG TIMESTAMP LEVEL FILE {JSON} {component}"
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterParser
+metadata:
+  name: audit-json-extractor
+  namespace: test-observability
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/mode: "k8s"
+spec:
+  regex:
+    regex: '.*?(?<audit_json>\{"kind":"Event".*?\}).*'
+    timeKey: ""

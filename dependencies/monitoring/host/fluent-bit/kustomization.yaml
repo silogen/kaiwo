@@ -1,12 +1,25 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+# Fluent Bit configuration for test log collection
+# Collects logs from test namespaces matching pattern: test-{installer}-{run-id}-{run-attempt}
+# Extracts fields: installer, run_id, run_attempt
+# Classifies logs into types: audit, event, pod
+
+namespace: test-observability
+
 resources:
-  - configmap-lua-scripts.yaml
-  - filter-exclude-fluent-bit.yaml
-  - filter-namespace-test.yaml
-  - filter-parse-namespace.yaml
-  - filter-detect-source.yaml
-  - filter-transform-events.yaml
-  - filter-transform-audit.yaml
+  # Lua scripts for log processing
+  - lua-scripts
+
+  # Parsers
+  - parsers
+
+  # Filters
+  - filters
+
+  # Outputs
   - output-stdout.yaml
+
+# Note: kubernetes-filter-patch.yaml is not included here
+# It is applied separately via helmfile post-sync hook

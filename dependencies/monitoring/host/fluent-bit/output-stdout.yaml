@@ -1,4 +1,6 @@
-# Output: Stdout for testing (comment out or delete when not needed)
+# Output: Stdout for testing and verification
+# Outputs all processed logs to stdout for inspection
+# NOTE: This is for testing only - replace with Loki output for production
 apiVersion: fluentbit.fluent.io/v1alpha2
 kind: ClusterOutput
 metadata:
@@ -8,5 +10,4 @@ metadata:
     fluentbit.fluent.io/mode: "k8s"
 spec:
   match: kube.*
-  stdout:
-    format: json_lines
+  stdout: {}
