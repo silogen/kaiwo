@@ -15,6 +15,8 @@ Package v1alpha1 contains API Schema definitions for the AIM v1alpha1 API group.
 - [AIMClusterRuntimeConfigList](#aimclusterruntimeconfiglist)
 - [AIMClusterServiceTemplate](#aimclusterservicetemplate)
 - [AIMClusterServiceTemplateList](#aimclusterservicetemplatelist)
+- [AIMKVCache](#aimkvcache)
+- [AIMKVCacheList](#aimkvcachelist)
 - [AIMModel](#aimmodel)
 - [AIMModelCache](#aimmodelcache)
 - [AIMModelCacheList](#aimmodelcachelist)
@@ -232,6 +234,101 @@ _Appears in:_
 | `count` _integer_ | Count is the number of GPU resources requested per replica.<br />Must be at least 1. |  | Minimum: 1 <br /> |
 | `model` _string_ | Model is the GPU model name required for this deployment.<br />Examples: "MI300X", "MI325X" |  | MinLength: 1 <br /> |
 | `resourceName` _string_ | ResourceName is the Kubernetes resource name for GPU resources.<br />Defaults to "amd.com/gpu" if not specified. | amd.com/gpu |  |
+
+
+#### AIMKVCache
+
+
+
+AIMKVCache is the Schema for the KV caches API
+
+
+
+_Appears in:_
+- [AIMKVCacheList](#aimkvcachelist)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `AIMKVCache` | | |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `spec` _[AIMKVCacheSpec](#aimkvcachespec)_ |  |  |  |
+| `status` _[AIMKVCacheStatus](#aimkvcachestatus)_ |  |  |  |
+
+
+#### AIMKVCacheList
+
+
+
+AIMKVCacheList contains a list of AIMKVCache
+
+
+
+
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `AIMKVCacheList` | | |
+| `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `items` _[AIMKVCache](#aimkvcache) array_ |  |  |  |
+
+
+#### AIMKVCacheSpec
+
+
+
+AIMKVCacheSpec defines the desired state of AIMKVCache
+
+
+
+_Appears in:_
+- [AIMKVCache](#aimkvcache)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `kvCacheType` _string_ | KVCacheType specifies the type of key-value cache to create | redis | Enum: [redis mooncake] <br /> |
+| `storage` _[StorageSpec](#storagespec)_ | Storage defines the persistent storage configuration for the KV cache |  |  |
+
+
+#### AIMKVCacheStatus
+
+
+
+AIMKVCacheStatus defines the observed state of AIMKVCache
+
+
+
+_Appears in:_
+- [AIMKVCache](#aimkvcache)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `observedGeneration` _integer_ |  |  |  |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest available observations of the KV cache's state |  |  |
+| `status` _[AIMKVCacheStatusEnum](#aimkvcachestatusenum)_ | Status represents the current status of the KV cache | Pending | Enum: [Pending Progressing Ready Failed] <br /> |
+| `statefulSetName` _string_ | StatefulSetName represents the name of the created statefulset |  |  |
+| `serviceName` _string_ | ServiceName represents the name of the created service |  |  |
+
+
+#### AIMKVCacheStatusEnum
+
+_Underlying type:_ _string_
+
+
+
+_Validation:_
+- Enum: [Pending Progressing Ready Failed]
+
+_Appears in:_
+- [AIMKVCacheStatus](#aimkvcachestatus)
+
+| Field | Description |
+| --- | --- |
+| `Pending` | AIMKVCacheStatusPending denotes that the KV cache is being created<br /> |
+| `Progressing` | AIMKVCacheStatusProgressing denotes that the KV cache is being deployed<br /> |
+| `Ready` | AIMKVCacheStatusReady denotes that the KV cache is ready to be used<br /> |
+| `Failed` | AIMKVCacheStatusFailed denotes that the KV cache deployment has failed<br /> |
 
 
 #### AIMMetric
@@ -827,6 +924,24 @@ _Appears in:_
 | `status` _[AIMServiceStatus](#aimservicestatus)_ |  |  |  |
 
 
+#### AIMServiceKVCache
+
+
+
+AIMServiceKVCache specifies KV cache configuration for the service.
+The controller will use an existing AIMKVCache if found, otherwise it will create one.
+
+
+
+_Appears in:_
+- [AIMServiceSpec](#aimservicespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | Name specifies the name of the AIMKVCache resource to use.<br />If an AIMKVCache with this name exists, it will be used.<br />If it doesn't exist, a new AIMKVCache will be created with this name.<br />If not specified, defaults to "kvcache-\{service-name\}". |  |  |
+| `type` _string_ | Type specifies the type of KV cache backend.<br />Only used when creating a new AIMKVCache (ignored if referencing existing). | redis | Enum: [redis mooncake] <br /> |
+
+
 #### AIMServiceList
 
 
@@ -962,6 +1077,7 @@ _Appears in:_
 | `replicas` _integer_ | Replicas overrides the number of replicas for this service.<br />Other runtime settings remain governed by the template unless overridden. | 1 |  |
 | `runtimeConfigName` _string_ | RuntimeConfigName references the AIM runtime configuration (by name) to use for this service. | default |  |
 | `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core)_ | Resources overrides the container resource requirements for this service.<br />When specified, these values take precedence over the template and image defaults. |  |  |
+| `kvCache` _[AIMServiceKVCache](#aimservicekvcache)_ | KVCache specifies KV cache configuration for the service.<br />When specified, enables LMCache with the configured KV cache backend. |  |  |
 | `overrides` _[AIMServiceOverrides](#aimserviceoverrides)_ | Overrides allows overriding specific template parameters for this service.<br />When specified, these values take precedence over the template values. |  |  |
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to use for authentication when downloading models.<br />These variables are used for authentication with model registries (e.g., HuggingFace tokens). |  |  |
 | `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets references secrets for pulling AIM container images. |  |  |
@@ -990,6 +1106,7 @@ _Appears in:_
 | `routing` _[AIMServiceRoutingStatus](#aimserviceroutingstatus)_ | Routing surfaces information about the configured HTTP routing, when enabled. |  |  |
 | `resolvedTemplate` _[AIMServiceResolvedTemplate](#aimserviceresolvedtemplate)_ | ResolvedTemplate captures metadata about the template that satisfied the reference. |  |  |
 | `resolvedTemplateCache` _[AIMResolvedReference](#aimresolvedreference)_ | ResolvedTemplateCache captures metadata about the template cache being used, if any. |  |  |
+| `resolvedKVCache` _[AIMResolvedReference](#aimresolvedreference)_ | ResolvedKVCache captures metadata about the KV cache being used, if any. |  |  |
 
 
 #### AIMServiceStatusEnum
@@ -1359,5 +1476,23 @@ _Appears in:_
 | `precision` _string_ | Precision is the recommended precision (e.g., fp8, fp16, bf16) |  |  |
 | `metric` _string_ | Metric is the optimization target (e.g., latency, throughput) |  |  |
 | `description` _string_ | Description provides additional context about this deployment configuration |  |  |
+
+
+#### StorageSpec
+
+
+
+StorageSpec defines the persistent storage configuration
+
+
+
+_Appears in:_
+- [AIMKVCacheSpec](#aimkvcachespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#quantity-resource-api)_ | Size specifies the storage size for the persistent volume | 1Gi |  |
+| `storageClassName` _string_ | StorageClassName specifies the storage class to use for the persistent volume<br />If not specified, the cluster's default storage class will be used |  |  |
+| `accessModes` _[PersistentVolumeAccessMode](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#persistentvolumeaccessmode-v1-core) array_ | AccessModes specifies the access modes for the persistent volume | [ReadWriteOnce] |  |
 
 

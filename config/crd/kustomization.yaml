@@ -16,6 +16,7 @@ resources:
 - bases/aim.silogen.ai_aimmodelcaches.yaml
 - bases/aim.silogen.ai_aimclusterruntimeconfigs.yaml
 - bases/aim.silogen.ai_aimruntimeconfigs.yaml
+- bases/aim.silogen.ai_aimkvcaches.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches: null
