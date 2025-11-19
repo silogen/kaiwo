@@ -39,6 +39,11 @@ const (
 	// MaxConcurrentDiscoveryJobs is the global limit for concurrent discovery jobs across all namespaces
 	MaxConcurrentDiscoveryJobs = 10
 
+	// DefaultPVCHeadroomPercent is the default percentage of extra space to add to PVCs
+	// for model storage. This accounts for filesystem overhead and temporary files during
+	// model loading. The value represents a percentage (e.g., 10 means 10% extra space).
+	DefaultPVCHeadroomPercent = 10
+
 	// AimLabelDomain is the base domain used for AIM-specific labels.
 	AimLabelDomain = "aim.silogen.ai"
 

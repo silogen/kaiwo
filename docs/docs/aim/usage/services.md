@@ -84,6 +84,49 @@ Runtime configurations provide:
 
 See [Runtime Configuration](runtime-config.md) for details.
 
+## KV Cache
+
+### Creating a New KV Cache
+
+The service automatically creates a KV cache when you specify the `type`:
+
+```yaml
+spec:
+  model:
+    image: ghcr.io/silogen/aim-meta-llama-llama-3-1-8b-instruct:0.7.0
+  kvCache:
+    type: redis  # Creates 'kvcache-llama-chat' automatically
+```
+
+With custom storage:
+
+```yaml
+spec:
+  model:
+    image: ghcr.io/silogen/aim-meta-llama-llama-3-1-70b-instruct:0.7.0
+  kvCache:
+    type: redis
+    storage:
+      size: 100Gi                  # Minimum 1Gi, adjust based on model size
+      storageClassName: fast-ssd   # Optional, uses cluster default if omitted
+```
+
+### Referencing an Existing KV Cache
+
+Multiple services can share a single KV cache:
+
+```yaml
+spec:
+  model:
+    image: ghcr.io/silogen/aim-meta-llama-llama-3-1-8b-instruct:0.7.0
+  kvCache:
+    name: shared-cache  # References existing AIMKVCache resource
+```
+
+This is useful when running multiple services with the same model or overlapping use cases.
+
+See [KV Cache](kv-cache.md) for detailed configuration and sizing guidance.
+
 ## HTTP Routing
 
 Enable external HTTP access through Gateway API:
@@ -379,6 +422,7 @@ If using `spec.model.image` directly, verify the image URI is accessible and the
 
 ## Related Documentation
 
+- [KV Cache](kv-cache.md) - Configure KV caching for improved performance
 - [Runtime Configuration](runtime-config.md) - Configure runtime settings and credentials
 - [Models](../concepts/models.md) - Understanding the model catalog
 - [Templates](../concepts/templates.md) - Deep dive on templates and discovery

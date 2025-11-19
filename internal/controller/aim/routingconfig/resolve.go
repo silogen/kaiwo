@@ -38,16 +38,18 @@ type ResolvedRouting struct {
 }
 
 // Resolve determines the effective routing configuration by merging runtime config defaults
-// with service-level overrides. Service fields take precedence when explicitly set.
+// with service-level overrides. The precedence order is:
+// 1. Runtime config (base layer)
+// 2. Service.Spec.Routing (override layer)
 func Resolve(service *aimv1alpha1.AIMService, runtime *aimv1alpha1.AIMRuntimeRoutingConfig) ResolvedRouting {
 	var resolved ResolvedRouting
-	var serviceRouting *aimv1alpha1.AIMServiceRouting
+	var runtimeOverrideRouting *aimv1alpha1.AIMRuntimeRoutingConfig
 
 	if service != nil {
-		serviceRouting = service.Spec.Routing
+		runtimeOverrideRouting = service.Spec.Routing
 	}
 
-	// Start with runtime config defaults
+	// Layer 1: Start with runtime config defaults
 	if runtime != nil {
 		if runtime.Enabled != nil {
 			resolved.Enabled = *runtime.Enabled
@@ -56,32 +58,42 @@ func Resolve(service *aimv1alpha1.AIMService, runtime *aimv1alpha1.AIMRuntimeRou
 			resolved.GatewayRef = runtime.GatewayRef.DeepCopy()
 		}
 		resolved.PathTemplate = runtime.PathTemplate
-	}
 
-	// Override with service-level config when present
-	if serviceRouting != nil {
-		// Only override enabled if explicitly set (non-nil)
-		// nil means inherit from runtime config
-		if serviceRouting.Enabled != nil {
-			resolved.Enabled = *serviceRouting.Enabled
-		}
-
-		// Override GatewayRef if service specifies one
-		if serviceRouting.GatewayRef != nil {
-			resolved.GatewayRef = serviceRouting.GatewayRef.DeepCopy()
-		}
-
-		// Service annotations (only service level has annotations)
-		if len(serviceRouting.Annotations) > 0 {
-			resolved.Annotations = make(map[string]string, len(serviceRouting.Annotations))
-			for k, v := range serviceRouting.Annotations {
+		// Copy annotations from runtime config
+		if len(runtime.Annotations) > 0 {
+			resolved.Annotations = make(map[string]string, len(runtime.Annotations))
+			for k, v := range runtime.Annotations {
 				resolved.Annotations[k] = v
 			}
 		}
+	}
+
+	// Layer 2: Apply runtime overrides from service (highest priority)
+	if runtimeOverrideRouting != nil {
+		// Only override enabled if explicitly set (non-nil)
+		// nil means inherit from runtime config
+		if runtimeOverrideRouting.Enabled != nil {
+			resolved.Enabled = *runtimeOverrideRouting.Enabled
+		}
+
+		// Override GatewayRef if service specifies one
+		if runtimeOverrideRouting.GatewayRef != nil {
+			resolved.GatewayRef = runtimeOverrideRouting.GatewayRef.DeepCopy()
+		}
 
 		// Override PathTemplate if service specifies one
-		if serviceRouting.PathTemplate != "" {
-			resolved.PathTemplate = serviceRouting.PathTemplate
+		if runtimeOverrideRouting.PathTemplate != "" {
+			resolved.PathTemplate = runtimeOverrideRouting.PathTemplate
+		}
+
+		// Merge annotations (runtime override annotations take precedence)
+		if len(runtimeOverrideRouting.Annotations) > 0 {
+			if resolved.Annotations == nil {
+				resolved.Annotations = make(map[string]string)
+			}
+			for k, v := range runtimeOverrideRouting.Annotations {
+				resolved.Annotations[k] = v
+			}
 		}
 	}
 

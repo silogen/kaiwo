@@ -589,6 +589,7 @@ func initializeStatusReferences(status *aimv1alpha1.AIMServiceStatus, obs *Servi
 	status.ResolvedImage = nil
 	status.Routing = nil
 	status.ResolvedTemplateCache = nil
+	status.ResolvedKVCache = nil
 
 	if obs != nil && obs.ResolvedRuntimeConfig != nil {
 		status.ResolvedRuntimeConfig = obs.ResolvedRuntimeConfig
@@ -610,6 +611,15 @@ func initializeStatusReferences(status *aimv1alpha1.AIMServiceStatus, obs *Servi
 			UID: obs.TemplateCache.UID,
 		}
 	}
+	if obs != nil && obs.KVCache != nil {
+		status.ResolvedKVCache = &aimv1alpha1.AIMResolvedReference{
+			Name:      obs.KVCache.Name,
+			Namespace: obs.KVCache.Namespace,
+			Kind:      "AIMKVCache",
+			Scope:     aimv1alpha1.AIMResolutionScopeNamespace, // KVCache is always namespace-scoped
+			UID:       obs.KVCache.UID,
+		}
+	}
 }
 
 // setupCacheCondition sets the cache condition based on whether caching is requested.
@@ -621,6 +631,18 @@ func setupCacheCondition(
 		setCondition(aimv1alpha1.AIMServiceConditionCacheReady, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonCacheWarm, "Caching not requested")
 	} else {
 		setCondition(aimv1alpha1.AIMServiceConditionCacheReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonWaitingForCache, "Waiting for cache warm-up")
+	}
+}
+
+// setupKVCacheCondition sets the KV cache condition based on whether KV cache is requested.
+func setupKVCacheCondition(
+	service *aimv1alpha1.AIMService,
+	setCondition func(conditionType string, conditionStatus metav1.ConditionStatus, reason, message string),
+) {
+	if service.Spec.KVCache == nil {
+		setCondition(aimv1alpha1.AIMServiceConditionKVCacheReady, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonKVCacheNotRequested, "KV cache not requested")
+	} else {
+		setCondition(aimv1alpha1.AIMServiceConditionKVCacheReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonWaitingForKVCache, "Waiting for KV cache to be ready")
 	}
 }
 
@@ -745,6 +767,7 @@ func ProjectServiceStatus(
 	}
 
 	setupCacheCondition(service, setCondition)
+	setupKVCacheCondition(service, setCondition)
 	setupResolvedTemplate(obs, status)
 
 	routingEnabled, routingReady, routingHasFatalError := EvaluateRoutingStatus(service, obs, status, setCondition)
@@ -814,6 +837,24 @@ func ProjectServiceStatus(
 	// Check for model cache readiness
 	if HandleModelCacheReadiness(service, status, obs, setCondition) {
 		return
+	}
+
+	// Handle KV cache status
+	if service.Spec.KVCache != nil {
+		if obs.KVCacheErr != nil {
+			setCondition(aimv1alpha1.AIMServiceConditionKVCacheReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonKVCacheFailed, fmt.Sprintf("KV cache error: %v", obs.KVCacheErr))
+			status.Status = aimv1alpha1.AIMServiceStatusDegraded
+		} else if obs.KVCache == nil {
+			setCondition(aimv1alpha1.AIMServiceConditionKVCacheReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonWaitingForKVCache, "Waiting for KV cache to be created")
+		} else if obs.KVCache.Status.Status == aimv1alpha1.AIMKVCacheStatusFailed {
+			setCondition(aimv1alpha1.AIMServiceConditionKVCacheReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonKVCacheFailed, fmt.Sprintf("KV cache failed: %s", obs.KVCache.Status.StatefulSetName))
+			status.Status = aimv1alpha1.AIMServiceStatusDegraded
+		} else if obs.KVCache.Status.Status == aimv1alpha1.AIMKVCacheStatusReady {
+			setCondition(aimv1alpha1.AIMServiceConditionKVCacheReady, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonKVCacheReady, "KV cache is ready")
+		} else {
+			// Pending or Progressing
+			setCondition(aimv1alpha1.AIMServiceConditionKVCacheReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonKVCacheProgressing, fmt.Sprintf("KV cache status: %s", obs.KVCache.Status.Status))
+		}
 	}
 
 	EvaluateInferenceServiceStatus(status, obs, inferenceService, httpRoute, routingEnabled, routingReady, setCondition)

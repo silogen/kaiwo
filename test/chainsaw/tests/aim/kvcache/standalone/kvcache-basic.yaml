@@ -1,0 +1,9 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMKVCache
+metadata:
+  name: basic-kvcache
+spec:
+  kvCacheType: redis
+  storage:
+    storageClassName: ($values.storageClass)
+

@@ -1,0 +1,16 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMKVCache
+metadata:
+  name: updateable-kvcache
+spec:
+  kvCacheType: redis
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+  storage:
+    storageClassName: ($values.storageClass)
+

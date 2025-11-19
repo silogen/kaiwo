@@ -115,5 +115,15 @@ func SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
+	// Setup AIMKVCache controller
+	if err := (&AIMKVCacheReconciler{
+		Client:    mgr.GetClient(),
+		Scheme:    mgr.GetScheme(),
+		Recorder:  mgr.GetEventRecorderFor("aimkvcache-controller"),
+		Clientset: clientset,
+	}).SetupWithManager(mgr); err != nil {
+		return err
+	}
+
 	return nil
 }
