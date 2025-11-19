@@ -204,7 +204,7 @@ func (r *AIMKVCacheReconciler) getStorageAccessModes(kvc *aimv1alpha1.AIMKVCache
 	return []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
 }
 
-func (r *AIMKVCacheReconciler) plan(ctx context.Context, kvc *aimv1alpha1.AIMKVCache, obs *kvObservation) ([]client.Object, error) {
+func (r *AIMKVCacheReconciler) plan(_ context.Context, kvc *aimv1alpha1.AIMKVCache, _ *kvObservation) ([]client.Object, error) {
 	var desired []client.Object
 
 	// Only support Redis for now
@@ -337,7 +337,9 @@ func (r *AIMKVCacheReconciler) buildRedisStatefulSet(kvc *aimv1alpha1.AIMKVCache
 	}
 
 	// Set controller reference
-	ctrl.SetControllerReference(kvc, statefulSet, r.Scheme)
+	if err := ctrl.SetControllerReference(kvc, statefulSet, r.Scheme); err != nil {
+		return nil
+	}
 
 	return statefulSet
 }
@@ -372,12 +374,14 @@ func (r *AIMKVCacheReconciler) buildRedisService(kvc *aimv1alpha1.AIMKVCache) *c
 	}
 
 	// Set controller reference
-	ctrl.SetControllerReference(kvc, service, r.Scheme)
+	if err := ctrl.SetControllerReference(kvc, service, r.Scheme); err != nil {
+		return nil
+	}
 
 	return service
 }
 
-func (r *AIMKVCacheReconciler) projectStatus(ctx context.Context, kvc *aimv1alpha1.AIMKVCache, obs *kvObservation, errs controllerutils.ReconcileErrors) error {
+func (r *AIMKVCacheReconciler) projectStatus(_ context.Context, kvc *aimv1alpha1.AIMKVCache, obs *kvObservation, errs controllerutils.ReconcileErrors) error {
 	status := kvc.GetStatus()
 
 	// Set observed generation
