@@ -52,6 +52,35 @@ type AIMServiceOverrides struct {
 	AIMRuntimeParameters `json:",inline"`
 }
 
+// AIMServiceKVCache specifies KV cache configuration for the service.
+// Allows either referencing an existing AIMKVCache or creating a new one.
+// +kubebuilder:validation:XValidation:rule="(has(self.ref) && !has(self.create)) || (!has(self.ref) && has(self.create))",message="exactly one of ref or create must be specified"
+type AIMServiceKVCache struct {
+	// Ref references an existing AIMKVCache by name in the same namespace.
+	// If specified, the service will use the existing cache.
+	// +optional
+	Ref *string `json:"ref,omitempty"`
+
+	// Create specifies parameters for creating a new AIMKVCache.
+	// If specified, a new AIMKVCache will be created for this service.
+	// +optional
+	Create *AIMServiceKVCacheCreate `json:"create,omitempty"`
+}
+
+// AIMServiceKVCacheCreate defines parameters for creating a new AIMKVCache.
+// +kubebuilder:validation:XValidation:rule="has(self.type)",message="type must be specified when creating KV cache"
+type AIMServiceKVCacheCreate struct {
+	// Type specifies the type of KV cache to create.
+	// +kubebuilder:validation:Enum=redis;mooncake
+	// +kubebuilder:default=redis
+	Type string `json:"type"`
+
+	// Name specifies the name for the created AIMKVCache.
+	// If not specified, defaults to the service name with "-kvcache" suffix.
+	// +optional
+	Name *string `json:"name,omitempty"`
+}
+
 // AIMServiceSpec defines the desired state of AIMService.
 //
 // Binds a canonical model to an AIMServiceTemplate and configures replicas,
@@ -88,6 +117,11 @@ type AIMServiceSpec struct {
 	// When specified, these values take precedence over the template and image defaults.
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// KVCache specifies KV cache configuration for the service.
+	// When specified, enables LMCache with the configured KV cache backend.
+	// +optional
+	KVCache *AIMServiceKVCache `json:"kvCache,omitempty"`
 
 	// Overrides allows overriding specific template parameters for this service.
 	// When specified, these values take precedence over the template values.

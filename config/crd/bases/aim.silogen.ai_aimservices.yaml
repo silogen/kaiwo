@@ -218,6 +218,44 @@ spec:
                   type: object
                   x-kubernetes-map-type: atomic
                 type: array
+              kvCache:
+                description: |-
+                  KVCache specifies KV cache configuration for the service.
+                  When specified, enables LMCache with the configured KV cache backend.
+                properties:
+                  create:
+                    description: |-
+                      Create specifies parameters for creating a new AIMKVCache.
+                      If specified, a new AIMKVCache will be created for this service.
+                    properties:
+                      name:
+                        description: |-
+                          Name specifies the name for the created AIMKVCache.
+                          If not specified, defaults to the service name with "-kvcache" suffix.
+                        type: string
+                      type:
+                        default: redis
+                        description: Type specifies the type of KV cache to create.
+                        enum:
+                        - redis
+                        - mooncake
+                        type: string
+                    required:
+                    - type
+                    type: object
+                    x-kubernetes-validations:
+                    - message: type must be specified when creating KV cache
+                      rule: has(self.type)
+                  ref:
+                    description: |-
+                      Ref references an existing AIMKVCache by name in the same namespace.
+                      If specified, the service will use the existing cache.
+                    type: string
+                type: object
+                x-kubernetes-validations:
+                - message: exactly one of ref or create must be specified
+                  rule: (has(self.ref) && !has(self.create)) || (!has(self.ref) &&
+                    has(self.create))
               model:
                 description: |-
                   Model specifies which model to deploy using one of the available reference methods.

@@ -39,6 +39,7 @@ rules:
   - aimclustermodels
   - aimclusterruntimeconfigs
   - aimclusterservicetemplates
+  - aimkvcaches
   - aimmodelcaches
   - aimmodels
   - aimruntimeconfigs
@@ -58,6 +59,7 @@ rules:
   resources:
   - aimclustermodels/finalizers
   - aimclusterservicetemplates/finalizers
+  - aimkvcaches/finalizers
   - aimmodelcaches/finalizers
   - aimmodels/finalizers
   - aimservicetemplates/finalizers
@@ -68,6 +70,7 @@ rules:
   resources:
   - aimclustermodels/status
   - aimclusterservicetemplates/status
+  - aimkvcaches/status
   - aimmodelcaches/status
   - aimmodels/status
   - aimservices/status
