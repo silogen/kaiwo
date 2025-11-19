@@ -223,39 +223,23 @@ spec:
                   KVCache specifies KV cache configuration for the service.
                   When specified, enables LMCache with the configured KV cache backend.
                 properties:
-                  create:
+                  name:
                     description: |-
-                      Create specifies parameters for creating a new AIMKVCache.
-                      If specified, a new AIMKVCache will be created for this service.
-                    properties:
-                      name:
-                        description: |-
-                          Name specifies the name for the created AIMKVCache.
-                          If not specified, defaults to the service name with "-kvcache" suffix.
-                        type: string
-                      type:
-                        default: redis
-                        description: Type specifies the type of KV cache to create.
-                        enum:
-                        - redis
-                        - mooncake
-                        type: string
-                    required:
-                    - type
-                    type: object
-                    x-kubernetes-validations:
-                    - message: type must be specified when creating KV cache
-                      rule: has(self.type)
-                  ref:
+                      Name specifies the name of the AIMKVCache resource to use.
+                      If an AIMKVCache with this name exists, it will be used.
+                      If it doesn't exist, a new AIMKVCache will be created with this name.
+                      If not specified, defaults to "kvcache-{service-name}".
+                    type: string
+                  type:
+                    default: redis
                     description: |-
-                      Ref references an existing AIMKVCache by name in the same namespace.
-                      If specified, the service will use the existing cache.
+                      Type specifies the type of KV cache backend.
+                      Only used when creating a new AIMKVCache (ignored if referencing existing).
+                    enum:
+                    - redis
+                    - mooncake
                     type: string
                 type: object
-                x-kubernetes-validations:
-                - message: exactly one of ref or create must be specified
-                  rule: (has(self.ref) && !has(self.create)) || (!has(self.ref) &&
-                    has(self.create))
               model:
                 description: |-
                   Model specifies which model to deploy using one of the available reference methods.
@@ -631,6 +615,36 @@ spec:
               resolvedImage:
                 description: ResolvedImage captures metadata about the image that
                   was resolved.
+                properties:
+                  kind:
+                    description: Kind is the fully-qualified kind of the resolved
+                      reference, when known.
+                    type: string
+                  name:
+                    description: Name is the resource name that satisfied the reference.
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace identifies where the resource was found when namespace-scoped.
+                      Empty indicates a cluster-scoped resource.
+                    type: string
+                  scope:
+                    description: Scope indicates whether the resolved resource was
+                      namespace or cluster scoped.
+                    enum:
+                    - Namespace
+                    - Cluster
+                    - Merged
+                    - Unknown
+                    type: string
+                  uid:
+                    description: UID captures the unique identifier of the resolved
+                      reference, when known.
+                    type: string
+                type: object
+              resolvedKVCache:
+                description: ResolvedKVCache captures metadata about the KV cache
+                  being used, if any.
                 properties:
                   kind:
                     description: Kind is the fully-qualified kind of the resolved

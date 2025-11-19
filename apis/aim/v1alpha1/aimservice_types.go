@@ -53,32 +53,20 @@ type AIMServiceOverrides struct {
 }
 
 // AIMServiceKVCache specifies KV cache configuration for the service.
-// Allows either referencing an existing AIMKVCache or creating a new one.
-// +kubebuilder:validation:XValidation:rule="(has(self.ref) && !has(self.create)) || (!has(self.ref) && has(self.create))",message="exactly one of ref or create must be specified"
+// The controller will use an existing AIMKVCache if found, otherwise it will create one.
 type AIMServiceKVCache struct {
-	// Ref references an existing AIMKVCache by name in the same namespace.
-	// If specified, the service will use the existing cache.
+	// Name specifies the name of the AIMKVCache resource to use.
+	// If an AIMKVCache with this name exists, it will be used.
+	// If it doesn't exist, a new AIMKVCache will be created with this name.
+	// If not specified, defaults to "kvcache-{service-name}".
 	// +optional
-	Ref *string `json:"ref,omitempty"`
+	Name string `json:"name,omitempty"`
 
-	// Create specifies parameters for creating a new AIMKVCache.
-	// If specified, a new AIMKVCache will be created for this service.
-	// +optional
-	Create *AIMServiceKVCacheCreate `json:"create,omitempty"`
-}
-
-// AIMServiceKVCacheCreate defines parameters for creating a new AIMKVCache.
-// +kubebuilder:validation:XValidation:rule="has(self.type)",message="type must be specified when creating KV cache"
-type AIMServiceKVCacheCreate struct {
-	// Type specifies the type of KV cache to create.
+	// Type specifies the type of KV cache backend.
+	// Only used when creating a new AIMKVCache (ignored if referencing existing).
 	// +kubebuilder:validation:Enum=redis;mooncake
 	// +kubebuilder:default=redis
-	Type string `json:"type"`
-
-	// Name specifies the name for the created AIMKVCache.
-	// If not specified, defaults to the service name with "-kvcache" suffix.
-	// +optional
-	Name *string `json:"name,omitempty"`
+	Type string `json:"type,omitempty"`
 }
 
 // AIMServiceSpec defines the desired state of AIMService.
@@ -183,6 +171,10 @@ type AIMServiceStatus struct {
 	// ResolvedTemplateCache captures metadata about the template cache being used, if any.
 	// +optional
 	ResolvedTemplateCache *AIMResolvedReference `json:"resolvedTemplateCache,omitempty"`
+
+	// ResolvedKVCache captures metadata about the KV cache being used, if any.
+	// +optional
+	ResolvedKVCache *AIMResolvedReference `json:"resolvedKVCache,omitempty"`
 }
 
 // AIMServiceStatusEnum defines coarse-grained states for a service.
@@ -213,6 +205,9 @@ const (
 
 	// ConditionCacheReady is True when required caches are present or warmed as requested.
 	AIMServiceConditionCacheReady = "CacheReady"
+
+	// ConditionCacheReady is True when required KVCache is ready.
+	AIMServiceConditionKVCacheReady = "KVCacheReady"
 
 	// ConditionRuntimeReady is True when the underlying KServe runtime and InferenceService are ready.
 	AIMServiceConditionRuntimeReady = "RuntimeReady"
@@ -246,6 +241,13 @@ const (
 	AIMServiceReasonCacheWarming    = "CacheWarming"
 	AIMServiceReasonCacheWarm       = "CacheWarm"
 	AIMServiceReasonCacheFailed     = "CacheFailed"
+
+	// KVCache
+	AIMServiceReasonWaitingForKVCache   = "WaitingForKVCache"
+	AIMServiceReasonKVCacheProgressing  = "KVCacheProgressing"
+	AIMServiceReasonKVCacheReady        = "KVCacheReady"
+	AIMServiceReasonKVCacheFailed       = "KVCacheFailed"
+	AIMServiceReasonKVCacheNotRequested = "KVCacheNotRequested"
 
 	// Runtime
 	AIMServiceReasonCreatingRuntime      = "CreatingRuntime"

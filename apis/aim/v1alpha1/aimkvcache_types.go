@@ -23,6 +23,8 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -32,6 +34,28 @@ type AIMKVCacheSpec struct {
 	// +kubebuilder:validation:Enum=redis;mooncake
 	// +kubebuilder:default=redis
 	KVCacheType string `json:"kvCacheType"` // redis or mooncake
+
+	// Storage defines the persistent storage configuration for the KV cache
+	// +optional
+	Storage *StorageSpec `json:"storage,omitempty"`
+}
+
+// StorageSpec defines the persistent storage configuration
+type StorageSpec struct {
+	// Size specifies the storage size for the persistent volume
+	// +kubebuilder:default="1Gi"
+	// +optional
+	Size *resource.Quantity `json:"size,omitempty"`
+
+	// StorageClassName specifies the storage class to use for the persistent volume
+	// If not specified, the cluster's default storage class will be used
+	// +optional
+	StorageClassName *string `json:"storageClassName,omitempty"`
+
+	// AccessModes specifies the access modes for the persistent volume
+	// +kubebuilder:default={ReadWriteOnce}
+	// +optional
+	AccessModes []corev1.PersistentVolumeAccessMode `json:"accessModes,omitempty"`
 }
 
 // +kubebuilder:validation:Enum=Pending;Progressing;Ready;Failed
@@ -64,8 +88,8 @@ type AIMKVCacheStatus struct {
 	// +kubebuilder:default=Pending
 	Status AIMKVCacheStatusEnum `json:"status,omitempty"`
 
-	// DeploymentName represents the name of the created deployment
-	DeploymentName string `json:"deploymentName,omitempty"`
+	// StatefulSetName represents the name of the created statefulset
+	StatefulSetName string `json:"statefulSetName,omitempty"`
 
 	// ServiceName represents the name of the created service
 	ServiceName string `json:"serviceName,omitempty"`
@@ -90,16 +114,16 @@ const (
 // Condition reasons for AIMKVCache
 const (
 	// Progressing-related reasons
-	AIMKVCacheReasonDeploymentCreated = "DeploymentCreated"
-	AIMKVCacheReasonWaitingForPods    = "WaitingForPods"
+	AIMKVCacheReasonStatefulSetCreated = "StatefulSetCreated"
+	AIMKVCacheReasonWaitingForPods     = "WaitingForPods"
 
 	// Ready-related reasons
-	AIMKVCacheReasonDeploymentReady   = "DeploymentReady"
-	AIMKVCacheReasonDeploymentPending = "DeploymentPending"
+	AIMKVCacheReasonStatefulSetReady   = "StatefulSetReady"
+	AIMKVCacheReasonStatefulSetPending = "StatefulSetPending"
 
 	// Failure-related reasons
-	AIMKVCacheReasonNoFailure        = "NoFailure"
-	AIMKVCacheReasonDeploymentFailed = "DeploymentFailed"
+	AIMKVCacheReasonNoFailure         = "NoFailure"
+	AIMKVCacheReasonStatefulSetFailed = "StatefulSetFailed"
 )
 
 // +kubebuilder:object:root=true
@@ -107,7 +131,7 @@ const (
 // +kubebuilder:resource:shortName=aimkvc,categories=aim;all
 // +kubebuilder:printcolumn:name="Type",type=string,JSONPath=`.spec.kvCacheType`
 // +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.status`
-// +kubebuilder:printcolumn:name="Deployment",type=string,JSONPath=`.status.deploymentName`
+// +kubebuilder:printcolumn:name="StatefulSet",type=string,JSONPath=`.status.statefulSetName`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // AIMKVCache is the Schema for the KV caches API

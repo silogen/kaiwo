@@ -64,7 +64,7 @@ const (
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimkvcaches,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimkvcaches/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimkvcaches/finalizers,verbs=update
-// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 
 func (r *AIMKVCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -109,41 +109,44 @@ func (r *AIMKVCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			}
 			return r.projectStatus(ctx, &kvc, o, errs)
 		},
-		FinalizeFn: nil,
+		FinalizeFn: func(ctx context.Context, obs any) error {
+			_, err := r.finalize(ctx, &kvc)
+			return err
+		},
 	})
 }
 
 // observation holds read-only snapshot of dependent resources
 type kvObservation struct {
-	deploymentFound bool
-	deployment      appsv1.Deployment
-	serviceFound    bool
-	service         corev1.Service
+	statefulSetFound bool
+	statefulSet      appsv1.StatefulSet
+	serviceFound     bool
+	service          corev1.Service
 
 	// derived states
-	deploymentReady bool
-	serviceReady    bool
+	statefulSetReady bool
+	serviceReady     bool
 }
 
 func (r *AIMKVCacheReconciler) observe(ctx context.Context, kvc *aimv1alpha1.AIMKVCache) (*kvObservation, error) {
 	logger := log.FromContext(ctx)
 	obs := &kvObservation{}
 
-	// Observe Deployment
-	deploymentName := r.getDeploymentName(kvc)
-	var deployment appsv1.Deployment
+	// Observe StatefulSet
+	statefulSetName := r.getStatefulSetName(kvc)
+	var statefulSet appsv1.StatefulSet
 	if err := r.Get(ctx, client.ObjectKey{
 		Namespace: kvc.Namespace,
-		Name:      deploymentName,
-	}, &deployment); err != nil {
+		Name:      statefulSetName,
+	}, &statefulSet); err != nil {
 		if client.IgnoreNotFound(err) != nil {
-			logger.Error(err, "Failed to get Deployment", "name", deploymentName)
+			logger.Error(err, "Failed to get StatefulSet", "name", statefulSetName)
 			return nil, err
 		}
 	} else {
-		obs.deploymentFound = true
-		obs.deployment = deployment
-		obs.deploymentReady = deployment.Status.ReadyReplicas > 0
+		obs.statefulSetFound = true
+		obs.statefulSet = statefulSet
+		obs.statefulSetReady = statefulSet.Status.ReadyReplicas > 0
 	}
 
 	// Observe Service
@@ -166,12 +169,39 @@ func (r *AIMKVCacheReconciler) observe(ctx context.Context, kvc *aimv1alpha1.AIM
 	return obs, nil
 }
 
-func (r *AIMKVCacheReconciler) getDeploymentName(kvc *aimv1alpha1.AIMKVCache) string {
+func (r *AIMKVCacheReconciler) getStatefulSetName(kvc *aimv1alpha1.AIMKVCache) string {
 	return fmt.Sprintf("%s-%s", kvc.Name, kvc.Spec.KVCacheType)
 }
 
 func (r *AIMKVCacheReconciler) getServiceName(kvc *aimv1alpha1.AIMKVCache) string {
 	return fmt.Sprintf("%s-%s-svc", kvc.Name, kvc.Spec.KVCacheType)
+}
+
+func (r *AIMKVCacheReconciler) getStorageSize(kvc *aimv1alpha1.AIMKVCache) resource.Quantity {
+	// Return user-specified size if provided
+	if kvc.Spec.Storage != nil && kvc.Spec.Storage.Size != nil {
+		return *kvc.Spec.Storage.Size
+	}
+	// Default to 1Gi
+	return resource.MustParse("1Gi")
+}
+
+func (r *AIMKVCacheReconciler) getStorageClassName(kvc *aimv1alpha1.AIMKVCache) *string {
+	// Return user-specified storage class if provided
+	if kvc.Spec.Storage != nil && kvc.Spec.Storage.StorageClassName != nil {
+		return kvc.Spec.Storage.StorageClassName
+	}
+	// Return nil to use cluster default
+	return nil
+}
+
+func (r *AIMKVCacheReconciler) getStorageAccessModes(kvc *aimv1alpha1.AIMKVCache) []corev1.PersistentVolumeAccessMode {
+	// Return user-specified access modes if provided
+	if kvc.Spec.Storage != nil && len(kvc.Spec.Storage.AccessModes) > 0 {
+		return kvc.Spec.Storage.AccessModes
+	}
+	// Default to ReadWriteOnce for StatefulSet PVCs
+	return []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
 }
 
 func (r *AIMKVCacheReconciler) plan(ctx context.Context, kvc *aimv1alpha1.AIMKVCache, obs *kvObservation) ([]client.Object, error) {
@@ -182,19 +212,26 @@ func (r *AIMKVCacheReconciler) plan(ctx context.Context, kvc *aimv1alpha1.AIMKVC
 		return nil, fmt.Errorf("unsupported KVCacheType: %s, only 'redis' is supported", kvc.Spec.KVCacheType)
 	}
 
-	// Create Redis Deployment
-	deployment := r.createRedisDeployment(kvc)
-	desired = append(desired, deployment)
-
-	// Create Redis Service
-	service := r.createRedisService(kvc)
+	// Build Redis Service (must be created before StatefulSet)
+	service := r.buildRedisService(kvc)
 	desired = append(desired, service)
+
+	// Build Redis StatefulSet
+	statefulSet := r.buildRedisStatefulSet(kvc)
+	desired = append(desired, statefulSet)
 
 	return desired, nil
 }
 
-func (r *AIMKVCacheReconciler) createRedisDeployment(kvc *aimv1alpha1.AIMKVCache) *appsv1.Deployment {
-	name := r.getDeploymentName(kvc)
+// finalize handles cleanup when the resource is being deleted
+func (r *AIMKVCacheReconciler) finalize(ctx context.Context, kvc *aimv1alpha1.AIMKVCache) (bool, error) {
+	// Currently no finalization logic needed
+	return true, nil
+}
+
+func (r *AIMKVCacheReconciler) buildRedisStatefulSet(kvc *aimv1alpha1.AIMKVCache) *appsv1.StatefulSet {
+	name := r.getStatefulSetName(kvc)
+	serviceName := r.getServiceName(kvc)
 	labels := map[string]string{
 		"app":                         "redis",
 		"aim.silogen.ai/kvcache":      kvc.Name,
@@ -203,17 +240,19 @@ func (r *AIMKVCacheReconciler) createRedisDeployment(kvc *aimv1alpha1.AIMKVCache
 
 	replicas := int32(1)
 
-	deployment := &appsv1.Deployment{
+	statefulSet := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: kvc.Namespace,
 			Labels:    labels,
 		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+		Spec: appsv1.StatefulSetSpec{
+			Replicas:    &replicas,
+			ServiceName: serviceName,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
 			},
+			PodManagementPolicy: appsv1.OrderedReadyPodManagement,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,
@@ -223,6 +262,12 @@ func (r *AIMKVCacheReconciler) createRedisDeployment(kvc *aimv1alpha1.AIMKVCache
 						{
 							Name:  "redis",
 							Image: "redis:latest",
+							Command: []string{
+								"redis-server",
+								"--appendonly", "yes",
+								"--save", "60", "1",
+								"--loglevel", "notice",
+							},
 							Resources: corev1.ResourceRequirements{
 								Limits: corev1.ResourceList{
 									corev1.ResourceCPU:    resource.MustParse("1"),
@@ -240,6 +285,50 @@ func (r *AIMKVCacheReconciler) createRedisDeployment(kvc *aimv1alpha1.AIMKVCache
 									Protocol:      corev1.ProtocolTCP,
 								},
 							},
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "redis-data",
+									MountPath: "/data",
+								},
+							},
+							LivenessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									TCPSocket: &corev1.TCPSocketAction{
+										Port: intstr.FromInt(6379),
+									},
+								},
+								InitialDelaySeconds: 30,
+								PeriodSeconds:       10,
+								TimeoutSeconds:      5,
+								FailureThreshold:    3,
+							},
+							ReadinessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									Exec: &corev1.ExecAction{
+										Command: []string{"redis-cli", "ping"},
+									},
+								},
+								InitialDelaySeconds: 5,
+								PeriodSeconds:       5,
+								TimeoutSeconds:      3,
+								FailureThreshold:    3,
+							},
+						},
+					},
+				},
+			},
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "redis-data",
+					},
+					Spec: corev1.PersistentVolumeClaimSpec{
+						AccessModes:      r.getStorageAccessModes(kvc),
+						StorageClassName: r.getStorageClassName(kvc),
+						Resources: corev1.VolumeResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceStorage: r.getStorageSize(kvc),
+							},
 						},
 					},
 				},
@@ -248,12 +337,12 @@ func (r *AIMKVCacheReconciler) createRedisDeployment(kvc *aimv1alpha1.AIMKVCache
 	}
 
 	// Set controller reference
-	ctrl.SetControllerReference(kvc, deployment, r.Scheme)
+	ctrl.SetControllerReference(kvc, statefulSet, r.Scheme)
 
-	return deployment
+	return statefulSet
 }
 
-func (r *AIMKVCacheReconciler) createRedisService(kvc *aimv1alpha1.AIMKVCache) *corev1.Service {
+func (r *AIMKVCacheReconciler) buildRedisService(kvc *aimv1alpha1.AIMKVCache) *corev1.Service {
 	name := r.getServiceName(kvc)
 	labels := map[string]string{
 		"app":                         "redis",
@@ -268,7 +357,8 @@ func (r *AIMKVCacheReconciler) createRedisService(kvc *aimv1alpha1.AIMKVCache) *
 			Labels:    labels,
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: labels,
+			ClusterIP: "None", // Headless service for StatefulSet
+			Selector:  labels,
 			Ports: []corev1.ServicePort{
 				{
 					Protocol:   corev1.ProtocolTCP,
@@ -277,7 +367,7 @@ func (r *AIMKVCacheReconciler) createRedisService(kvc *aimv1alpha1.AIMKVCache) *
 					Name:       "redis",
 				},
 			},
-			Type: corev1.ServiceTypeClusterIP,
+			PublishNotReadyAddresses: true, // Allow DNS records for pods before they are ready
 		},
 	}
 
@@ -293,18 +383,18 @@ func (r *AIMKVCacheReconciler) projectStatus(ctx context.Context, kvc *aimv1alph
 	// Set observed generation
 	status.ObservedGeneration = kvc.Generation
 
-	// Set deployment and service names
-	status.DeploymentName = r.getDeploymentName(kvc)
+	// Set statefulset and service names
+	status.StatefulSetName = r.getStatefulSetName(kvc)
 	status.ServiceName = r.getServiceName(kvc)
 
 	// Determine overall status
 	if errs.HasError() {
 		status.Status = aimv1alpha1.AIMKVCacheStatusFailed
 		r.setFailureCondition(status, errs)
-	} else if obs != nil && obs.deploymentReady && obs.serviceReady {
+	} else if obs != nil && obs.statefulSetReady && obs.serviceReady {
 		status.Status = aimv1alpha1.AIMKVCacheStatusReady
 		r.setReadyCondition(status)
-	} else if obs != nil && obs.deploymentFound {
+	} else if obs != nil && obs.statefulSetFound {
 		status.Status = aimv1alpha1.AIMKVCacheStatusProgressing
 		r.setProgressingCondition(status, obs)
 	} else {
@@ -319,15 +409,15 @@ func (r *AIMKVCacheReconciler) setReadyCondition(status *aimv1alpha1.AIMKVCacheS
 	r.setCondition(status, metav1.Condition{
 		Type:    aimv1alpha1.AIMKVCacheConditionReady,
 		Status:  metav1.ConditionTrue,
-		Reason:  aimv1alpha1.AIMKVCacheReasonDeploymentReady,
-		Message: "Redis deployment and service are ready",
+		Reason:  aimv1alpha1.AIMKVCacheReasonStatefulSetReady,
+		Message: "Redis StatefulSet and service are ready",
 	})
 
 	r.setCondition(status, metav1.Condition{
 		Type:    aimv1alpha1.AIMKVCacheConditionProgressing,
 		Status:  metav1.ConditionFalse,
-		Reason:  aimv1alpha1.AIMKVCacheReasonDeploymentReady,
-		Message: "Deployment is ready",
+		Reason:  aimv1alpha1.AIMKVCacheReasonStatefulSetReady,
+		Message: "StatefulSet is ready",
 	})
 
 	r.setCondition(status, metav1.Condition{
@@ -339,16 +429,16 @@ func (r *AIMKVCacheReconciler) setReadyCondition(status *aimv1alpha1.AIMKVCacheS
 }
 
 func (r *AIMKVCacheReconciler) setProgressingCondition(status *aimv1alpha1.AIMKVCacheStatus, obs *kvObservation) {
-	message := "Redis deployment is progressing"
+	message := "Redis StatefulSet is progressing"
 	reason := aimv1alpha1.AIMKVCacheReasonWaitingForPods
 
 	if obs != nil {
-		if obs.deploymentFound && !obs.deploymentReady {
-			message = "Deployment exists but pods are not ready"
+		if obs.statefulSetFound && !obs.statefulSetReady {
+			message = "StatefulSet exists but pods are not ready"
 			reason = aimv1alpha1.AIMKVCacheReasonWaitingForPods
-		} else if obs.deploymentFound && !obs.serviceFound {
-			message = "Deployment ready, creating service"
-			reason = aimv1alpha1.AIMKVCacheReasonDeploymentCreated
+		} else if obs.statefulSetFound && !obs.serviceFound {
+			message = "StatefulSet ready, creating service"
+			reason = aimv1alpha1.AIMKVCacheReasonStatefulSetCreated
 		}
 	}
 
@@ -363,7 +453,7 @@ func (r *AIMKVCacheReconciler) setProgressingCondition(status *aimv1alpha1.AIMKV
 		Type:    aimv1alpha1.AIMKVCacheConditionReady,
 		Status:  metav1.ConditionFalse,
 		Reason:  aimv1alpha1.AIMKVCacheReasonWaitingForPods,
-		Message: "Deployment is progressing",
+		Message: "StatefulSet is progressing",
 	})
 
 	r.setCondition(status, metav1.Condition{
@@ -375,12 +465,12 @@ func (r *AIMKVCacheReconciler) setProgressingCondition(status *aimv1alpha1.AIMKV
 }
 
 func (r *AIMKVCacheReconciler) setPendingCondition(status *aimv1alpha1.AIMKVCacheStatus, obs *kvObservation) {
-	message := "Waiting for deployment to be ready"
+	message := "Waiting for StatefulSet to be ready"
 	if obs != nil {
-		if !obs.deploymentFound {
-			message = "Deployment not found, creating"
-		} else if !obs.deploymentReady {
-			message = "Deployment found but not ready"
+		if !obs.statefulSetFound {
+			message = "StatefulSet not found, creating"
+		} else if !obs.statefulSetReady {
+			message = "StatefulSet found but not ready"
 		} else if !obs.serviceFound {
 			message = "Service not found, creating"
 		}
@@ -389,15 +479,15 @@ func (r *AIMKVCacheReconciler) setPendingCondition(status *aimv1alpha1.AIMKVCach
 	r.setCondition(status, metav1.Condition{
 		Type:    aimv1alpha1.AIMKVCacheConditionReady,
 		Status:  metav1.ConditionFalse,
-		Reason:  aimv1alpha1.AIMKVCacheReasonDeploymentPending,
+		Reason:  aimv1alpha1.AIMKVCacheReasonStatefulSetPending,
 		Message: message,
 	})
 
 	r.setCondition(status, metav1.Condition{
 		Type:    aimv1alpha1.AIMKVCacheConditionProgressing,
 		Status:  metav1.ConditionFalse,
-		Reason:  aimv1alpha1.AIMKVCacheReasonDeploymentPending,
-		Message: "Deployment not started yet",
+		Reason:  aimv1alpha1.AIMKVCacheReasonStatefulSetPending,
+		Message: "StatefulSet not started yet",
 	})
 
 	r.setCondition(status, metav1.Condition{
@@ -421,21 +511,21 @@ func (r *AIMKVCacheReconciler) setFailureCondition(status *aimv1alpha1.AIMKVCach
 	r.setCondition(status, metav1.Condition{
 		Type:    aimv1alpha1.AIMKVCacheConditionReady,
 		Status:  metav1.ConditionFalse,
-		Reason:  aimv1alpha1.AIMKVCacheReasonDeploymentFailed,
-		Message: "Deployment failed",
+		Reason:  aimv1alpha1.AIMKVCacheReasonStatefulSetFailed,
+		Message: "StatefulSet failed",
 	})
 
 	r.setCondition(status, metav1.Condition{
 		Type:    aimv1alpha1.AIMKVCacheConditionProgressing,
 		Status:  metav1.ConditionFalse,
-		Reason:  aimv1alpha1.AIMKVCacheReasonDeploymentFailed,
-		Message: "Deployment failed",
+		Reason:  aimv1alpha1.AIMKVCacheReasonStatefulSetFailed,
+		Message: "StatefulSet failed",
 	})
 
 	r.setCondition(status, metav1.Condition{
 		Type:    aimv1alpha1.AIMKVCacheConditionFailure,
 		Status:  metav1.ConditionTrue,
-		Reason:  aimv1alpha1.AIMKVCacheReasonDeploymentFailed,
+		Reason:  aimv1alpha1.AIMKVCacheReasonStatefulSetFailed,
 		Message: message,
 	})
 }
@@ -462,7 +552,7 @@ func (r *AIMKVCacheReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Recorder = mgr.GetEventRecorderFor("aimkvcache-controller")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&aimv1alpha1.AIMKVCache{}).
-		Owns(&appsv1.Deployment{}).
+		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
 		WithOptions(controller.Options{MaxConcurrentReconciles: 2}).
 		Named("aimkvcache-controller").
