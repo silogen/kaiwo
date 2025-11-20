@@ -309,6 +309,11 @@ _Appears in:_
 | `status` _[AIMKVCacheStatusEnum](#aimkvcachestatusenum)_ | Status represents the current status of the KV cache | Pending | Enum: [Pending Progressing Ready Failed] <br /> |
 | `statefulSetName` _string_ | StatefulSetName represents the name of the created statefulset |  |  |
 | `serviceName` _string_ | ServiceName represents the name of the created service |  |  |
+| `endpoint` _string_ | Endpoint provides the connection information for accessing the KV cache.<br />Format depends on the backend type (e.g., "redis://service-name:6379" for Redis). |  |  |
+| `replicas` _integer_ | Replicas is the total number of replicas configured for the StatefulSet. |  |  |
+| `readyReplicas` _integer_ | ReadyReplicas is the number of pods that are ready and serving traffic. |  |  |
+| `storageSize` _string_ | StorageSize represents the total storage capacity allocated for the KV cache.<br />This reflects the size specified in the PersistentVolumeClaim. |  |  |
+| `lastError` _string_ | LastError contains details about the most recent error encountered.<br />This field is cleared when the error is resolved. |  |  |
 
 
 #### AIMKVCacheStatusEnum
@@ -940,6 +945,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `name` _string_ | Name specifies the name of the AIMKVCache resource to use.<br />If an AIMKVCache with this name exists, it will be used.<br />If it doesn't exist, a new AIMKVCache will be created with this name.<br />If not specified, defaults to "kvcache-\{service-name\}". |  |  |
 | `type` _string_ | Type specifies the type of KV cache backend.<br />Only used when creating a new AIMKVCache (ignored if referencing existing). | redis | Enum: [redis mooncake] <br /> |
+| `storage` _[StorageSpec](#storagespec)_ | Storage defines the persistent storage configuration for the KV cache.<br />Only used when creating a new AIMKVCache (ignored if referencing existing). |  |  |
 
 
 #### AIMServiceList
@@ -1488,11 +1494,12 @@ StorageSpec defines the persistent storage configuration
 
 _Appears in:_
 - [AIMKVCacheSpec](#aimkvcachespec)
+- [AIMServiceKVCache](#aimservicekvcache)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#quantity-resource-api)_ | Size specifies the storage size for the persistent volume | 1Gi |  |
-| `storageClassName` _string_ | StorageClassName specifies the storage class to use for the persistent volume<br />If not specified, the cluster's default storage class will be used |  |  |
-| `accessModes` _[PersistentVolumeAccessMode](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#persistentvolumeaccessmode-v1-core) array_ | AccessModes specifies the access modes for the persistent volume | [ReadWriteOnce] |  |
+| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#quantity-resource-api)_ | Size specifies the storage size for the persistent volume.<br />Minimum recommended size is 1Gi for Redis to function properly.<br />If not specified, defaults to 1Gi. | 1Gi |  |
+| `storageClassName` _string_ | StorageClassName specifies the storage class to use for the persistent volume.<br />If not specified, the cluster's default storage class will be used.<br />Ensure your cluster has a default storage class configured or specify one explicitly. |  |  |
+| `accessModes` _[PersistentVolumeAccessMode](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#persistentvolumeaccessmode-v1-core) array_ | AccessModes specifies the access modes for the persistent volume.<br />Defaults to ReadWriteOnce if not specified. | [ReadWriteOnce] |  |
 
 
