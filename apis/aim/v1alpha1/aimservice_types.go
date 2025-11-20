@@ -67,6 +67,11 @@ type AIMServiceKVCache struct {
 	// +kubebuilder:validation:Enum=redis;mooncake
 	// +kubebuilder:default=redis
 	Type string `json:"type,omitempty"`
+
+	// Storage defines the persistent storage configuration for the KV cache.
+	// Only used when creating a new AIMKVCache (ignored if referencing existing).
+	// +optional
+	Storage *StorageSpec `json:"storage,omitempty"`
 }
 
 // AIMServiceSpec defines the desired state of AIMService.
@@ -206,7 +211,7 @@ const (
 	// ConditionCacheReady is True when required caches are present or warmed as requested.
 	AIMServiceConditionCacheReady = "CacheReady"
 
-	// ConditionCacheReady is True when required KVCache is ready.
+	// ConditionKVCacheReady is True when required KVCache is ready.
 	AIMServiceConditionKVCacheReady = "KVCacheReady"
 
 	// ConditionRuntimeReady is True when the underlying KServe runtime and InferenceService are ready.

@@ -28,10 +28,6 @@ import (
 	"context"
 	"fmt"
 
-	"k8s.io/client-go/tools/record"
-
-	baseutils "github.com/silogen/kaiwo/pkg/utils"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -39,6 +35,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -46,6 +43,11 @@ import (
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
+)
+
+const (
+	kvCacheFieldOwner = "aimkvcache-controller"
 )
 
 // AIMKVCacheReconciler reconciles a AIMKVCache object
@@ -56,11 +58,6 @@ type AIMKVCacheReconciler struct {
 	Clientset kubernetes.Interface
 }
 
-const (
-	kvCacheFieldOwner = "aimkvcache-controller"
-)
-
-// RBAC markers
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimkvcaches,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimkvcaches/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimkvcaches/finalizers,verbs=update
@@ -79,14 +76,16 @@ func (r *AIMKVCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	baseutils.Debug(logger, "Reconciling AIMKVCache", "name", kvc.Name, "namespace", kvc.Namespace, "kvCacheType", kvc.Spec.KVCacheType)
 
 	return controllerutils.Reconcile(ctx, controllerutils.ReconcileSpec[*aimv1alpha1.AIMKVCache, aimv1alpha1.AIMKVCacheStatus]{
-		Client:   r.Client,
-		Scheme:   r.Scheme,
-		Object:   &kvc,
-		Recorder: r.Recorder,
+		Client:     r.Client,
+		Scheme:     r.Scheme,
+		Object:     &kvc,
+		Recorder:   r.Recorder,
+		FieldOwner: kvCacheFieldOwner,
+
 		ObserveFn: func(ctx context.Context) (any, error) {
 			return r.observe(ctx, &kvc)
 		},
-		FieldOwner: kvCacheFieldOwner,
+
 		PlanFn: func(ctx context.Context, obs any) ([]client.Object, error) {
 			var o *kvObservation
 			if obs != nil {
@@ -98,6 +97,7 @@ func (r *AIMKVCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			}
 			return r.plan(ctx, &kvc, o)
 		},
+
 		ProjectFn: func(ctx context.Context, obs any, errs controllerutils.ReconcileErrors) error {
 			var o *kvObservation
 			if obs != nil {
@@ -109,6 +109,7 @@ func (r *AIMKVCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			}
 			return r.projectStatus(ctx, &kvc, o, errs)
 		},
+
 		FinalizeFn: func(ctx context.Context, obs any) error {
 			_, err := r.finalize(ctx, &kvc)
 			return err
@@ -116,7 +117,7 @@ func (r *AIMKVCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	})
 }
 
-// observation holds read-only snapshot of dependent resources
+// kvObservation holds read-only snapshot of dependent resources
 type kvObservation struct {
 	statefulSetFound bool
 	statefulSet      appsv1.StatefulSet
@@ -169,41 +170,6 @@ func (r *AIMKVCacheReconciler) observe(ctx context.Context, kvc *aimv1alpha1.AIM
 	return obs, nil
 }
 
-func (r *AIMKVCacheReconciler) getStatefulSetName(kvc *aimv1alpha1.AIMKVCache) string {
-	return fmt.Sprintf("%s-%s", kvc.Name, kvc.Spec.KVCacheType)
-}
-
-func (r *AIMKVCacheReconciler) getServiceName(kvc *aimv1alpha1.AIMKVCache) string {
-	return fmt.Sprintf("%s-%s-svc", kvc.Name, kvc.Spec.KVCacheType)
-}
-
-func (r *AIMKVCacheReconciler) getStorageSize(kvc *aimv1alpha1.AIMKVCache) resource.Quantity {
-	// Return user-specified size if provided
-	if kvc.Spec.Storage != nil && kvc.Spec.Storage.Size != nil {
-		return *kvc.Spec.Storage.Size
-	}
-	// Default to 1Gi
-	return resource.MustParse("1Gi")
-}
-
-func (r *AIMKVCacheReconciler) getStorageClassName(kvc *aimv1alpha1.AIMKVCache) *string {
-	// Return user-specified storage class if provided
-	if kvc.Spec.Storage != nil && kvc.Spec.Storage.StorageClassName != nil {
-		return kvc.Spec.Storage.StorageClassName
-	}
-	// Return nil to use cluster default
-	return nil
-}
-
-func (r *AIMKVCacheReconciler) getStorageAccessModes(kvc *aimv1alpha1.AIMKVCache) []corev1.PersistentVolumeAccessMode {
-	// Return user-specified access modes if provided
-	if kvc.Spec.Storage != nil && len(kvc.Spec.Storage.AccessModes) > 0 {
-		return kvc.Spec.Storage.AccessModes
-	}
-	// Default to ReadWriteOnce for StatefulSet PVCs
-	return []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
-}
-
 func (r *AIMKVCacheReconciler) plan(_ context.Context, kvc *aimv1alpha1.AIMKVCache, _ *kvObservation) ([]client.Object, error) {
 	var desired []client.Object
 
@@ -223,7 +189,76 @@ func (r *AIMKVCacheReconciler) plan(_ context.Context, kvc *aimv1alpha1.AIMKVCac
 	return desired, nil
 }
 
-// finalize handles cleanup when the resource is being deleted
+func (r *AIMKVCacheReconciler) projectStatus(_ context.Context, kvc *aimv1alpha1.AIMKVCache, obs *kvObservation, errs controllerutils.ReconcileErrors) error {
+	status := kvc.GetStatus()
+
+	// Set observed generation
+	status.ObservedGeneration = kvc.Generation
+
+	// Set statefulset and service names
+	status.StatefulSetName = r.getStatefulSetName(kvc)
+	status.ServiceName = r.getServiceName(kvc)
+
+	// Populate status fields from observation
+	if obs != nil {
+		// Set replica counts from StatefulSet
+		if obs.statefulSetFound {
+			if obs.statefulSet.Spec.Replicas != nil {
+				status.Replicas = *obs.statefulSet.Spec.Replicas
+			}
+			status.ReadyReplicas = obs.statefulSet.Status.ReadyReplicas
+
+			// Extract storage size from StatefulSet VolumeClaimTemplate
+			if len(obs.statefulSet.Spec.VolumeClaimTemplates) > 0 {
+				if size, ok := obs.statefulSet.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage]; ok {
+					status.StorageSize = size.String()
+				}
+			}
+		}
+
+		// Set endpoint from Service
+		if obs.serviceFound {
+			port := 6379 // Default Redis port
+			if len(obs.service.Spec.Ports) > 0 {
+				port = int(obs.service.Spec.Ports[0].Port)
+			}
+
+			// Format based on backend type
+			switch kvc.Spec.KVCacheType {
+			case "redis":
+				status.Endpoint = fmt.Sprintf("redis://%s:%d", obs.service.Name, port)
+			case "mooncake":
+				status.Endpoint = fmt.Sprintf("mooncake://%s:%d", obs.service.Name, port)
+			default:
+				status.Endpoint = fmt.Sprintf("%s:%d", obs.service.Name, port)
+			}
+		}
+	}
+
+	// Determine overall status and set error information
+	if errs.HasError() {
+		status.LastError = r.getErrorMessage(errs)
+		status.Status = aimv1alpha1.AIMKVCacheStatusFailed
+		r.setFailureCondition(status, errs)
+	} else {
+		// Clear error on success
+		status.LastError = ""
+
+		if obs != nil && obs.statefulSetReady && obs.serviceReady {
+			status.Status = aimv1alpha1.AIMKVCacheStatusReady
+			r.setReadyCondition(status)
+		} else if obs != nil && obs.statefulSetFound {
+			status.Status = aimv1alpha1.AIMKVCacheStatusProgressing
+			r.setProgressingCondition(status, obs)
+		} else {
+			status.Status = aimv1alpha1.AIMKVCacheStatusPending
+			r.setPendingCondition(status, obs)
+		}
+	}
+
+	return nil
+}
+
 func (r *AIMKVCacheReconciler) finalize(ctx context.Context, kvc *aimv1alpha1.AIMKVCache) (bool, error) {
 	// Currently no finalization logic needed
 	return true, nil
@@ -381,32 +416,49 @@ func (r *AIMKVCacheReconciler) buildRedisService(kvc *aimv1alpha1.AIMKVCache) *c
 	return service
 }
 
-func (r *AIMKVCacheReconciler) projectStatus(_ context.Context, kvc *aimv1alpha1.AIMKVCache, obs *kvObservation, errs controllerutils.ReconcileErrors) error {
-	status := kvc.GetStatus()
+func (r *AIMKVCacheReconciler) getStatefulSetName(kvc *aimv1alpha1.AIMKVCache) string {
+	return fmt.Sprintf("%s-%s", kvc.Name, kvc.Spec.KVCacheType)
+}
 
-	// Set observed generation
-	status.ObservedGeneration = kvc.Generation
+func (r *AIMKVCacheReconciler) getServiceName(kvc *aimv1alpha1.AIMKVCache) string {
+	return fmt.Sprintf("%s-%s-svc", kvc.Name, kvc.Spec.KVCacheType)
+}
 
-	// Set statefulset and service names
-	status.StatefulSetName = r.getStatefulSetName(kvc)
-	status.ServiceName = r.getServiceName(kvc)
-
-	// Determine overall status
-	if errs.HasError() {
-		status.Status = aimv1alpha1.AIMKVCacheStatusFailed
-		r.setFailureCondition(status, errs)
-	} else if obs != nil && obs.statefulSetReady && obs.serviceReady {
-		status.Status = aimv1alpha1.AIMKVCacheStatusReady
-		r.setReadyCondition(status)
-	} else if obs != nil && obs.statefulSetFound {
-		status.Status = aimv1alpha1.AIMKVCacheStatusProgressing
-		r.setProgressingCondition(status, obs)
-	} else {
-		status.Status = aimv1alpha1.AIMKVCacheStatusPending
-		r.setPendingCondition(status, obs)
+func (r *AIMKVCacheReconciler) getStorageSize(kvc *aimv1alpha1.AIMKVCache) resource.Quantity {
+	if kvc.Spec.Storage != nil && kvc.Spec.Storage.Size != nil {
+		return *kvc.Spec.Storage.Size
 	}
+	return resource.MustParse("1Gi")
+}
 
+func (r *AIMKVCacheReconciler) getStorageClassName(kvc *aimv1alpha1.AIMKVCache) *string {
+	if kvc.Spec.Storage != nil && kvc.Spec.Storage.StorageClassName != nil {
+		return kvc.Spec.Storage.StorageClassName
+	}
 	return nil
+}
+
+func (r *AIMKVCacheReconciler) getStorageAccessModes(kvc *aimv1alpha1.AIMKVCache) []corev1.PersistentVolumeAccessMode {
+	if kvc.Spec.Storage != nil && len(kvc.Spec.Storage.AccessModes) > 0 {
+		return kvc.Spec.Storage.AccessModes
+	}
+	return []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
+}
+
+func (r *AIMKVCacheReconciler) getErrorMessage(errs controllerutils.ReconcileErrors) string {
+	if errs.PlanErr != nil {
+		return fmt.Sprintf("Planning failed: %v", errs.PlanErr)
+	}
+	if errs.ApplyErr != nil {
+		return fmt.Sprintf("Apply failed: %v", errs.ApplyErr)
+	}
+	if errs.ObserveErr != nil {
+		return fmt.Sprintf("Observation failed: %v", errs.ObserveErr)
+	}
+	if errs.FinalizeErr != nil {
+		return fmt.Sprintf("Finalization failed: %v", errs.FinalizeErr)
+	}
+	return "Unknown error"
 }
 
 func (r *AIMKVCacheReconciler) setReadyCondition(status *aimv1alpha1.AIMKVCacheStatus) {
@@ -503,14 +555,7 @@ func (r *AIMKVCacheReconciler) setPendingCondition(status *aimv1alpha1.AIMKVCach
 }
 
 func (r *AIMKVCacheReconciler) setFailureCondition(status *aimv1alpha1.AIMKVCacheStatus, errs controllerutils.ReconcileErrors) {
-	message := "Unknown failure"
-	if errs.PlanErr != nil {
-		message = fmt.Sprintf("Planning failed: %v", errs.PlanErr)
-	} else if errs.ApplyErr != nil {
-		message = fmt.Sprintf("Apply failed: %v", errs.ApplyErr)
-	} else if errs.ObserveErr != nil {
-		message = fmt.Sprintf("Observation failed: %v", errs.ObserveErr)
-	}
+	message := r.getErrorMessage(errs)
 
 	r.setCondition(status, metav1.Condition{
 		Type:    aimv1alpha1.AIMKVCacheConditionReady,
@@ -540,7 +585,7 @@ func (r *AIMKVCacheReconciler) setCondition(status *aimv1alpha1.AIMKVCacheStatus
 	// Find existing condition
 	for i, existing := range status.Conditions {
 		if existing.Type == newCondition.Type {
-			// Update if status changed
+			// Update if status or reason changed
 			if existing.Status != newCondition.Status || existing.Reason != newCondition.Reason {
 				status.Conditions[i] = newCondition
 			}

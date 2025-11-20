@@ -42,17 +42,21 @@ type AIMKVCacheSpec struct {
 
 // StorageSpec defines the persistent storage configuration
 type StorageSpec struct {
-	// Size specifies the storage size for the persistent volume
+	// Size specifies the storage size for the persistent volume.
+	// Minimum recommended size is 1Gi for Redis to function properly.
+	// If not specified, defaults to 1Gi.
 	// +kubebuilder:default="1Gi"
 	// +optional
 	Size *resource.Quantity `json:"size,omitempty"`
 
-	// StorageClassName specifies the storage class to use for the persistent volume
-	// If not specified, the cluster's default storage class will be used
+	// StorageClassName specifies the storage class to use for the persistent volume.
+	// If not specified, the cluster's default storage class will be used.
+	// Ensure your cluster has a default storage class configured or specify one explicitly.
 	// +optional
 	StorageClassName *string `json:"storageClassName,omitempty"`
 
-	// AccessModes specifies the access modes for the persistent volume
+	// AccessModes specifies the access modes for the persistent volume.
+	// Defaults to ReadWriteOnce if not specified.
 	// +kubebuilder:default={ReadWriteOnce}
 	// +optional
 	AccessModes []corev1.PersistentVolumeAccessMode `json:"accessModes,omitempty"`
@@ -93,6 +97,29 @@ type AIMKVCacheStatus struct {
 
 	// ServiceName represents the name of the created service
 	ServiceName string `json:"serviceName,omitempty"`
+
+	// Endpoint provides the connection information for accessing the KV cache.
+	// Format depends on the backend type (e.g., "redis://service-name:6379" for Redis).
+	// +optional
+	Endpoint string `json:"endpoint,omitempty"`
+
+	// Replicas is the total number of replicas configured for the StatefulSet.
+	// +optional
+	Replicas int32 `json:"replicas,omitempty"`
+
+	// ReadyReplicas is the number of pods that are ready and serving traffic.
+	// +optional
+	ReadyReplicas int32 `json:"readyReplicas,omitempty"`
+
+	// StorageSize represents the total storage capacity allocated for the KV cache.
+	// This reflects the size specified in the PersistentVolumeClaim.
+	// +optional
+	StorageSize string `json:"storageSize,omitempty"`
+
+	// LastError contains details about the most recent error encountered.
+	// This field is cleared when the error is resolved.
+	// +optional
+	LastError string `json:"lastError,omitempty"`
 }
 
 func (m *AIMKVCache) GetStatus() *AIMKVCacheStatus {
@@ -131,7 +158,8 @@ const (
 // +kubebuilder:resource:shortName=aimkvc,categories=aim;all
 // +kubebuilder:printcolumn:name="Type",type=string,JSONPath=`.spec.kvCacheType`
 // +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.status`
-// +kubebuilder:printcolumn:name="StatefulSet",type=string,JSONPath=`.status.statefulSetName`
+// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.readyReplicas`
+// +kubebuilder:printcolumn:name="Endpoint",type=string,JSONPath=`.status.endpoint`,priority=1
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // AIMKVCache is the Schema for the KV caches API

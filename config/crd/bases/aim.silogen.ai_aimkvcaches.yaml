@@ -26,8 +26,12 @@ spec:
     - jsonPath: .status.status
       name: Status
       type: string
-    - jsonPath: .status.statefulSetName
-      name: StatefulSet
+    - jsonPath: .status.readyReplicas
+      name: Ready
+      type: string
+    - jsonPath: .status.endpoint
+      name: Endpoint
+      priority: 1
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
@@ -72,8 +76,9 @@ spec:
                   accessModes:
                     default:
                     - ReadWriteOnce
-                    description: AccessModes specifies the access modes for the persistent
-                      volume
+                    description: |-
+                      AccessModes specifies the access modes for the persistent volume.
+                      Defaults to ReadWriteOnce if not specified.
                     items:
                       type: string
                     type: array
@@ -82,14 +87,17 @@ spec:
                     - type: integer
                     - type: string
                     default: 1Gi
-                    description: Size specifies the storage size for the persistent
-                      volume
+                    description: |-
+                      Size specifies the storage size for the persistent volume.
+                      Minimum recommended size is 1Gi for Redis to function properly.
+                      If not specified, defaults to 1Gi.
                     pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                     x-kubernetes-int-or-string: true
                   storageClassName:
                     description: |-
-                      StorageClassName specifies the storage class to use for the persistent volume
-                      If not specified, the cluster's default storage class will be used
+                      StorageClassName specifies the storage class to use for the persistent volume.
+                      If not specified, the cluster's default storage class will be used.
+                      Ensure your cluster has a default storage class configured or specify one explicitly.
                     type: string
                 type: object
             required:
@@ -159,8 +167,28 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              endpoint:
+                description: |-
+                  Endpoint provides the connection information for accessing the KV cache.
+                  Format depends on the backend type (e.g., "redis://service-name:6379" for Redis).
+                type: string
+              lastError:
+                description: |-
+                  LastError contains details about the most recent error encountered.
+                  This field is cleared when the error is resolved.
+                type: string
               observedGeneration:
                 format: int64
+                type: integer
+              readyReplicas:
+                description: ReadyReplicas is the number of pods that are ready and
+                  serving traffic.
+                format: int32
+                type: integer
+              replicas:
+                description: Replicas is the total number of replicas configured for
+                  the StatefulSet.
+                format: int32
                 type: integer
               serviceName:
                 description: ServiceName represents the name of the created service
@@ -176,6 +204,11 @@ spec:
                 - Progressing
                 - Ready
                 - Failed
+                type: string
+              storageSize:
+                description: |-
+                  StorageSize represents the total storage capacity allocated for the KV cache.
+                  This reflects the size specified in the PersistentVolumeClaim.
                 type: string
             type: object
         type: object
