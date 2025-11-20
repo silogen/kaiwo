@@ -457,6 +457,7 @@ func buildKVCache(service *aimv1alpha1.AIMService, ownerRef metav1.OwnerReferenc
 		},
 		Spec: aimv1alpha1.AIMKVCacheSpec{
 			KVCacheType: kvCacheType,
+			Image:       service.Spec.KVCache.Image,
 			Storage:     service.Spec.KVCache.Storage,
 		},
 	}

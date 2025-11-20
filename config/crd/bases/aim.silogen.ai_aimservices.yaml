@@ -223,6 +223,12 @@ spec:
                   KVCache specifies KV cache configuration for the service.
                   When specified, enables LMCache with the configured KV cache backend.
                 properties:
+                  image:
+                    description: |-
+                      Image specifies the container image to use for the KV cache service.
+                      Only used when creating a new AIMKVCache (ignored if referencing existing).
+                      If not specified, defaults to appropriate images based on Type.
+                    type: string
                   name:
                     description: |-
                       Name specifies the name of the AIMKVCache resource to use.

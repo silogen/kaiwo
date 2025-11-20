@@ -61,6 +61,13 @@ spec:
           spec:
             description: AIMKVCacheSpec defines the desired state of AIMKVCache
             properties:
+              image:
+                description: |-
+                  Image specifies the container image to use for the KV cache service.
+                  If not specified, defaults to appropriate images based on KVCacheType:
+                  - redis: redis:7.2.4
+                  - mooncake: ghcr.io/mooncake-dev/mooncake:v0.1.0
+                type: string
               kvCacheType:
                 default: redis
                 description: KVCacheType specifies the type of key-value cache to

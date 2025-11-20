@@ -68,6 +68,12 @@ type AIMServiceKVCache struct {
 	// +kubebuilder:default=redis
 	Type string `json:"type,omitempty"`
 
+	// Image specifies the container image to use for the KV cache service.
+	// Only used when creating a new AIMKVCache (ignored if referencing existing).
+	// If not specified, defaults to appropriate images based on Type.
+	// +optional
+	Image *string `json:"image,omitempty"`
+
 	// Storage defines the persistent storage configuration for the KV cache.
 	// Only used when creating a new AIMKVCache (ignored if referencing existing).
 	// +optional

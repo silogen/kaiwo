@@ -35,6 +35,13 @@ type AIMKVCacheSpec struct {
 	// +kubebuilder:default=redis
 	KVCacheType string `json:"kvCacheType"` // redis or mooncake
 
+	// Image specifies the container image to use for the KV cache service.
+	// If not specified, defaults to appropriate images based on KVCacheType:
+	// - redis: redis:7.2.4
+	// - mooncake: ghcr.io/mooncake-dev/mooncake:v0.1.0
+	// +optional
+	Image *string `json:"image,omitempty"`
+
 	// Storage defines the persistent storage configuration for the KV cache
 	// +optional
 	Storage *StorageSpec `json:"storage,omitempty"`

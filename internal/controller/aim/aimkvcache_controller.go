@@ -329,7 +329,7 @@ func (r *AIMKVCacheReconciler) buildRedisStatefulSet(kvc *aimv1alpha1.AIMKVCache
 					Containers: []corev1.Container{
 						{
 							Name:  "redis",
-							Image: "redis:latest",
+							Image: r.getImage(kvc),
 							Command: []string{
 								"redis-server",
 								"--appendonly", "yes",
@@ -476,6 +476,24 @@ func (r *AIMKVCacheReconciler) getStorageAccessModes(kvc *aimv1alpha1.AIMKVCache
 		return kvc.Spec.Storage.AccessModes
 	}
 	return []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
+}
+
+func (r *AIMKVCacheReconciler) getImage(kvc *aimv1alpha1.AIMKVCache) string {
+	// If image is explicitly set, use it
+	if kvc.Spec.Image != nil && *kvc.Spec.Image != "" {
+		return *kvc.Spec.Image
+	}
+
+	// Otherwise, use defaults based on KVCacheType
+	switch kvc.Spec.KVCacheType {
+	case "redis":
+		return "redis:7.2.4"
+	case "mooncake":
+		return "ghcr.io/mooncake-dev/mooncake:v0.1.0"
+	default:
+		// Fallback to redis if type is not recognized
+		return "redis:7.2.4"
+	}
 }
 
 func (r *AIMKVCacheReconciler) getErrorMessage(errs controllerutils.ReconcileErrors) string {

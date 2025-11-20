@@ -288,6 +288,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `kvCacheType` _string_ | KVCacheType specifies the type of key-value cache to create | redis | Enum: [redis mooncake] <br /> |
+| `image` _string_ | Image specifies the container image to use for the KV cache service.<br />If not specified, defaults to appropriate images based on KVCacheType:<br />- redis: redis:7.2.4<br />- mooncake: ghcr.io/mooncake-dev/mooncake:v0.1.0 |  |  |
 | `storage` _[StorageSpec](#storagespec)_ | Storage defines the persistent storage configuration for the KV cache |  |  |
 
 
@@ -945,6 +946,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `name` _string_ | Name specifies the name of the AIMKVCache resource to use.<br />If an AIMKVCache with this name exists, it will be used.<br />If it doesn't exist, a new AIMKVCache will be created with this name.<br />If not specified, defaults to "kvcache-\{service-name\}". |  |  |
 | `type` _string_ | Type specifies the type of KV cache backend.<br />Only used when creating a new AIMKVCache (ignored if referencing existing). | redis | Enum: [redis mooncake] <br /> |
+| `image` _string_ | Image specifies the container image to use for the KV cache service.<br />Only used when creating a new AIMKVCache (ignored if referencing existing).<br />If not specified, defaults to appropriate images based on Type. |  |  |
 | `storage` _[StorageSpec](#storagespec)_ | Storage defines the persistent storage configuration for the KV cache.<br />Only used when creating a new AIMKVCache (ignored if referencing existing). |  |  |
 
 
