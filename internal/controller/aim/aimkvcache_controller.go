@@ -191,6 +191,7 @@ func (r *AIMKVCacheReconciler) plan(_ context.Context, kvc *aimv1alpha1.AIMKVCac
 
 func (r *AIMKVCacheReconciler) projectStatus(_ context.Context, kvc *aimv1alpha1.AIMKVCache, obs *kvObservation, errs controllerutils.ReconcileErrors) error {
 	status := kvc.GetStatus()
+	previousStatus := status.Status
 
 	// Set observed generation
 	status.ObservedGeneration = kvc.Generation
@@ -237,9 +238,13 @@ func (r *AIMKVCacheReconciler) projectStatus(_ context.Context, kvc *aimv1alpha1
 
 	// Determine overall status and set error information
 	if errs.HasError() {
-		status.LastError = r.getErrorMessage(errs)
+		errorMsg := r.getErrorMessage(errs)
+		status.LastError = errorMsg
 		status.Status = aimv1alpha1.AIMKVCacheStatusFailed
 		r.setFailureCondition(status, errs)
+
+		// Emit error event
+		r.Recorder.Event(kvc, corev1.EventTypeWarning, "ReconciliationFailed", errorMsg)
 	} else {
 		// Clear error on success
 		status.LastError = ""
@@ -247,12 +252,36 @@ func (r *AIMKVCacheReconciler) projectStatus(_ context.Context, kvc *aimv1alpha1
 		if obs != nil && obs.statefulSetReady && obs.serviceReady {
 			status.Status = aimv1alpha1.AIMKVCacheStatusReady
 			r.setReadyCondition(status)
+
+			// Emit event on transition to Ready
+			if previousStatus != aimv1alpha1.AIMKVCacheStatusReady {
+				r.Recorder.Eventf(kvc, corev1.EventTypeNormal, "KVCacheReady",
+					"KVCache is ready with %d/%d replicas at endpoint %s",
+					status.ReadyReplicas, status.Replicas, status.Endpoint)
+			}
 		} else if obs != nil && obs.statefulSetFound {
 			status.Status = aimv1alpha1.AIMKVCacheStatusProgressing
 			r.setProgressingCondition(status, obs)
+
+			// Emit event on transition to Progressing
+			if previousStatus != aimv1alpha1.AIMKVCacheStatusProgressing {
+				r.Recorder.Eventf(kvc, corev1.EventTypeNormal, "KVCacheProgressing",
+					"KVCache is progressing: %d/%d replicas ready",
+					status.ReadyReplicas, status.Replicas)
+			}
 		} else {
 			status.Status = aimv1alpha1.AIMKVCacheStatusPending
 			r.setPendingCondition(status, obs)
+
+			// Emit event on transition to Pending
+			if previousStatus != aimv1alpha1.AIMKVCacheStatusPending && previousStatus != "" {
+				r.Recorder.Event(kvc, corev1.EventTypeNormal, "KVCachePending",
+					"Waiting for StatefulSet and Service to be created")
+			} else if previousStatus == "" {
+				// Initial creation
+				r.Recorder.Eventf(kvc, corev1.EventTypeNormal, "KVCacheCreating",
+					"Creating KVCache with type %s", kvc.Spec.KVCacheType)
+			}
 		}
 	}
 
