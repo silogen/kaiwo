@@ -368,6 +368,13 @@ func (in *AIMKVCacheSpec) DeepCopyInto(out *AIMKVCacheSpec) {
 		*out = new(string)
 		**out = **in
 	}
+	if in.Env != nil {
+		in, out := &in.Env, &out.Env
+		*out = make([]v1.EnvVar, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	if in.Storage != nil {
 		in, out := &in.Storage, &out.Storage
 		*out = new(StorageSpec)
@@ -993,6 +1000,13 @@ func (in *AIMServiceKVCache) DeepCopyInto(out *AIMServiceKVCache) {
 		in, out := &in.Image, &out.Image
 		*out = new(string)
 		**out = **in
+	}
+	if in.Env != nil {
+		in, out := &in.Env, &out.Env
+		*out = make([]v1.EnvVar, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
 	}
 	if in.Storage != nil {
 		in, out := &in.Storage, &out.Storage

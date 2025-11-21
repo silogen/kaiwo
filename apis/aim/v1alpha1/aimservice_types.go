@@ -74,6 +74,15 @@ type AIMServiceKVCache struct {
 	// +optional
 	Image *string `json:"image,omitempty"`
 
+	// Env specifies environment variables to set in the KV cache container.
+	// Only used when creating a new AIMKVCache (ignored if referencing existing).
+	// If not specified (nil), no additional environment variables are set.
+	// If explicitly set to an empty array, no environment variables are added.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	Env []corev1.EnvVar `json:"env,omitempty"`
+
 	// Storage defines the persistent storage configuration for the KV cache.
 	// Only used when creating a new AIMKVCache (ignored if referencing existing).
 	// +optional

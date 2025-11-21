@@ -336,6 +336,7 @@ func (r *AIMKVCacheReconciler) buildRedisStatefulSet(kvc *aimv1alpha1.AIMKVCache
 								"--save", "60", "1",
 								"--loglevel", "notice",
 							},
+							Env: r.getEnv(kvc),
 							Resources: corev1.ResourceRequirements{
 								Limits: corev1.ResourceList{
 									corev1.ResourceCPU:    resource.MustParse("1"),
@@ -494,6 +495,16 @@ func (r *AIMKVCacheReconciler) getImage(kvc *aimv1alpha1.AIMKVCache) string {
 		// Fallback to redis if type is not recognized
 		return "redis:7.2.4"
 	}
+}
+
+func (r *AIMKVCacheReconciler) getEnv(kvc *aimv1alpha1.AIMKVCache) []corev1.EnvVar {
+	// If Env is explicitly set
+	if kvc.Spec.Env != nil {
+		return kvc.Spec.Env
+	}
+
+	// Env not set, no defaults set for now - return nil
+	return nil
 }
 
 func (r *AIMKVCacheReconciler) getErrorMessage(errs controllerutils.ReconcileErrors) string {
