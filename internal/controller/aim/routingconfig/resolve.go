@@ -38,16 +38,23 @@ type ResolvedRouting struct {
 }
 
 // Resolve determines the effective routing configuration by merging runtime config defaults
-// with service-level overrides. Service fields take precedence when explicitly set.
+// with service-level overrides. The precedence order is:
+// 1. Runtime config (base layer)
+// 2. Service.Spec.RuntimeOverrides.Routing (middle layer - overrides runtime config)
+// 3. Service.Spec.Routing (highest priority - overrides everything)
 func Resolve(service *aimv1alpha1.AIMService, runtime *aimv1alpha1.AIMRuntimeRoutingConfig) ResolvedRouting {
 	var resolved ResolvedRouting
 	var serviceRouting *aimv1alpha1.AIMServiceRouting
+	var runtimeOverrideRouting *aimv1alpha1.AIMRuntimeRoutingConfig
 
 	if service != nil {
 		serviceRouting = service.Spec.Routing
+		if service.Spec.RuntimeOverrides != nil {
+			runtimeOverrideRouting = service.Spec.RuntimeOverrides.Routing
+		}
 	}
 
-	// Start with runtime config defaults
+	// Layer 1: Start with runtime config defaults
 	if runtime != nil {
 		if runtime.Enabled != nil {
 			resolved.Enabled = *runtime.Enabled
@@ -58,10 +65,23 @@ func Resolve(service *aimv1alpha1.AIMService, runtime *aimv1alpha1.AIMRuntimeRou
 		resolved.PathTemplate = runtime.PathTemplate
 	}
 
-	// Override with service-level config when present
+	// Layer 2: Apply runtime overrides from service
+	if runtimeOverrideRouting != nil {
+		if runtimeOverrideRouting.Enabled != nil {
+			resolved.Enabled = *runtimeOverrideRouting.Enabled
+		}
+		if runtimeOverrideRouting.GatewayRef != nil {
+			resolved.GatewayRef = runtimeOverrideRouting.GatewayRef.DeepCopy()
+		}
+		if runtimeOverrideRouting.PathTemplate != "" {
+			resolved.PathTemplate = runtimeOverrideRouting.PathTemplate
+		}
+	}
+
+	// Layer 3: Apply service-level routing config (highest priority)
 	if serviceRouting != nil {
 		// Only override enabled if explicitly set (non-nil)
-		// nil means inherit from runtime config
+		// nil means inherit from previous layers
 		if serviceRouting.Enabled != nil {
 			resolved.Enabled = *serviceRouting.Enabled
 		}

@@ -45,6 +45,39 @@ type AIMServiceModel struct {
 	Image *string `json:"image,omitempty"`
 }
 
+// AIMServiceRuntimeOverrides allows overriding runtime configuration at the service level.
+// All fields are optional. When specified, they override the corresponding values
+// from the resolved runtime configuration (namespace or cluster-scoped).
+// The precedence order is:
+// 1. AIMService.Spec.RuntimeOverrides (highest priority)
+// 2. AIMRuntimeConfig (namespace-level)
+// 3. AIMClusterRuntimeConfig (cluster-level)
+type AIMServiceRuntimeOverrides struct {
+	// StorageClassName specifies the storage class to use for this service's model cache and PVCs.
+	// When specified, overrides the defaultStorageClassName from the runtime configuration.
+	// +optional
+	StorageClassName string `json:"storageClassName,omitempty"`
+
+	// Model controls model creation and discovery behavior for this service.
+	// When specified, overrides the model configuration from the runtime configuration.
+	// +optional
+	Model *AIMModelConfig `json:"model,omitempty"`
+
+	// Routing controls HTTP routing configuration for this service.
+	// When specified, overrides the routing configuration from the runtime configuration.
+	// Note: For more granular routing control, use spec.routing instead.
+	// +optional
+	Routing *AIMRuntimeRoutingConfig `json:"routing,omitempty"`
+
+	// PVCHeadroomPercent specifies the percentage of extra space to add to PVCs
+	// for model storage. This accounts for filesystem overhead and temporary files
+	// during model loading. The value represents a percentage (e.g., 10 means 10% extra space).
+	// When specified, overrides the pvcHeadroomPercent from the runtime configuration.
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	PVCHeadroomPercent *int32 `json:"pvcHeadroomPercent,omitempty"`
+}
+
 // AIMServiceOverrides allows overriding template parameters at the service level.
 // All fields are optional. When specified, they override the corresponding values
 // from the referenced AIMServiceTemplate.
@@ -156,6 +189,12 @@ type AIMServiceSpec struct {
 	// Routing enables HTTP routing through Gateway API for this service.
 	// +optional
 	Routing *AIMServiceRouting `json:"routing,omitempty"`
+
+	// RuntimeOverrides allows overriding runtime configuration settings for this service.
+	// When specified, these values take precedence over both namespace and cluster-level runtime configs.
+	// This provides fine-grained control over storage, model behavior, and other runtime settings.
+	// +optional
+	RuntimeOverrides *AIMServiceRuntimeOverrides `json:"runtimeOverrides,omitempty"`
 }
 
 // AIMServiceStatus defines the observed state of AIMService.
@@ -334,13 +373,6 @@ type AIMServiceRouting struct {
 	// The value is rendered against the AIMService object using JSONPath expressions.
 	// +optional
 	PathTemplate string `json:"pathTemplate,omitempty"`
-
-	// RequestTimeout overrides the HTTP request timeout for routes.
-	// This sets the maximum duration for a request to complete before timing out.
-	// The timeout applies to the entire request/response cycle.
-	// If not specified, inherits from runtime config. If neither is set, no timeout is configured.
-	// +optional
-	RequestTimeout *metav1.Duration `json:"requestTimeout,omitempty"`
 }
 
 // AIMServiceRoutingStatus captures observed routing details.

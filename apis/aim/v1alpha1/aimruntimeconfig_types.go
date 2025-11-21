@@ -117,7 +117,7 @@ type AIMRuntimeRoutingConfig struct {
 	// This sets the maximum duration for a request to complete before timing out.
 	// The timeout applies to the entire request/response cycle.
 	// If not specified, no timeout is set on the route.
-	// Individual services can override this value via spec.routing.requestTimeout.
+	// Individual services can override this value via spec.runtimeOverrides.routing.requestTimeout.
 	// +optional
 	RequestTimeout *metav1.Duration `json:"requestTimeout,omitempty"`
 }

@@ -322,6 +322,46 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 	return obs, nil
 }
 
+// resolveStorageClassName determines the storage class to use for a service.
+// It follows this precedence order (highest to lowest):
+// 1. Service.Spec.RuntimeOverrides.StorageClassName
+// 2. RuntimeConfig.DefaultStorageClassName (from obs)
+// 3. Empty string (which will use the cluster's default storage class)
+func resolveStorageClassName(service *aimv1alpha1.AIMService, obs *shared.ServiceObservation) string {
+	// Service-level runtime override takes highest precedence
+	if service.Spec.RuntimeOverrides != nil && service.Spec.RuntimeOverrides.StorageClassName != "" {
+		return service.Spec.RuntimeOverrides.StorageClassName
+	}
+
+	// Fall back to runtime config (which already handles namespace vs cluster precedence)
+	if obs != nil && obs.RuntimeConfigSpec.DefaultStorageClassName != "" {
+		return obs.RuntimeConfigSpec.DefaultStorageClassName
+	}
+
+	// Empty string will use cluster default
+	return ""
+}
+
+// resolvePVCHeadroomPercent determines the PVC headroom percentage to use for a service.
+// It follows this precedence order (highest to lowest):
+// 1. Service.Spec.RuntimeOverrides.PVCHeadroomPercent
+// 2. RuntimeConfig.PVCHeadroomPercent (from obs)
+// 3. Default value (defined in shared.DefaultPVCHeadroomPercent)
+func resolvePVCHeadroomPercent(service *aimv1alpha1.AIMService, obs *shared.ServiceObservation) int32 {
+	// Service-level runtime override takes highest precedence
+	if service.Spec.RuntimeOverrides != nil && service.Spec.RuntimeOverrides.PVCHeadroomPercent != nil {
+		return *service.Spec.RuntimeOverrides.PVCHeadroomPercent
+	}
+
+	// Fall back to runtime config (which already handles namespace vs cluster precedence)
+	if obs != nil && obs.RuntimeConfigSpec.PVCHeadroomPercent != nil {
+		return *obs.RuntimeConfigSpec.PVCHeadroomPercent
+	}
+
+	// Use shared default constant
+	return shared.DefaultPVCHeadroomPercent
+}
+
 func (r *AIMServiceReconciler) planDerivedTemplate(logger logr.Logger, service *aimv1alpha1.AIMService, obs *shared.ServiceObservation) client.Object {
 	// Manage namespace-scoped template if we created it or need to create it.
 	if obs.ShouldCreateTemplate || (obs.Scope == shared.TemplateScopeNamespace && obs.TemplateOwnedByService) {
@@ -350,6 +390,7 @@ func (r *AIMServiceReconciler) planTemplateCache(ctx context.Context, logger log
 		baseutils.Debug(logger, "Service requests caching but no template cache exists, creating one",
 			"templateName", obs.TemplateName, "scope", obs.Scope)
 
+		storageClassName := resolveStorageClassName(service, obs)
 		cache := &aimv1alpha1.AIMTemplateCache{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: "aim.silogen.ai/v1alpha1",
@@ -361,7 +402,7 @@ func (r *AIMServiceReconciler) planTemplateCache(ctx context.Context, logger log
 			},
 			Spec: aimv1alpha1.AIMTemplateCacheSpec{
 				TemplateRef:      obs.TemplateName,
-				StorageClassName: obs.RuntimeConfigSpec.DefaultStorageClassName,
+				StorageClassName: storageClassName,
 				Env:              service.Spec.Env,
 			},
 		}
@@ -564,8 +605,9 @@ func (r *AIMServiceReconciler) planInferenceServiceAndRoute(logger logr.Logger, 
 	var servicePVC *v1.PersistentVolumeClaim
 	var servicePVCErr error
 	if !service.Spec.CacheModel && obs.TemplateCache == nil {
-		headroomPercent := shared.GetPVCHeadroomPercent(obs.RuntimeConfigSpec)
-		servicePVC, servicePVCErr = buildServicePVC(service, templateState, obs.RuntimeConfigSpec.DefaultStorageClassName, headroomPercent)
+		headroomPercent := resolvePVCHeadroomPercent(service, obs)
+		storageClassName := resolveStorageClassName(service, obs)
+		servicePVC, servicePVCErr = buildServicePVC(service, templateState, storageClassName, headroomPercent)
 		if servicePVCErr != nil {
 			baseutils.Debug(logger, "Failed to build service PVC", "error", servicePVCErr)
 			// This error will be handled in status projection

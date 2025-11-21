@@ -50,11 +50,21 @@ var (
 )
 
 // ResolveServiceRoutePath renders the HTTP route prefix using service and runtime config context.
+// The precedence order is:
+// 1. Service.Spec.Routing.PathTemplate (highest priority)
+// 2. Service.Spec.RuntimeOverrides.Routing.PathTemplate (middle layer)
+// 3. RuntimeConfig.Routing.PathTemplate (base layer)
 func ResolveServiceRoutePath(service *aimv1alpha1.AIMService, runtimeConfig aimv1alpha1.AIMRuntimeConfigSpec) (string, error) {
 	template := ""
+
+	// Highest priority: service.Spec.Routing.PathTemplate
 	if service.Spec.Routing != nil && service.Spec.Routing.PathTemplate != "" {
 		template = service.Spec.Routing.PathTemplate
+	} else if service.Spec.RuntimeOverrides != nil && service.Spec.RuntimeOverrides.Routing != nil && service.Spec.RuntimeOverrides.Routing.PathTemplate != "" {
+		// Middle priority: service.Spec.RuntimeOverrides.Routing.PathTemplate
+		template = service.Spec.RuntimeOverrides.Routing.PathTemplate
 	} else if runtimeConfig.Routing != nil && runtimeConfig.Routing.PathTemplate != "" {
+		// Base priority: runtimeConfig.Routing.PathTemplate
 		template = runtimeConfig.Routing.PathTemplate
 	}
 
@@ -80,19 +90,24 @@ func DefaultRoutePath(service *aimv1alpha1.AIMService) string {
 }
 
 // ResolveServiceRouteTimeout resolves the HTTP route timeout using service and runtime config context.
-// Returns the timeout from the service if set, otherwise from runtime config, otherwise nil (no timeout).
+// The precedence order is:
+// 1. Service.Spec.RuntimeOverrides.Routing.RequestTimeout (highest priority)
+// 2. RuntimeConfig.Routing.RequestTimeout (base layer)
+// Returns nil if no timeout is configured at any level.
 func ResolveServiceRouteTimeout(service *aimv1alpha1.AIMService, runtimeConfig aimv1alpha1.AIMRuntimeConfigSpec) *string {
-	// AIMService.Spec.Routing.RequestTimeout has priority
-	if service.Spec.Routing != nil && service.Spec.Routing.RequestTimeout != nil {
-		timeout := service.Spec.Routing.RequestTimeout.Duration.String()
+	// Highest priority: AIMService.Spec.RuntimeOverrides.Routing.RequestTimeout
+	if service.Spec.RuntimeOverrides != nil && service.Spec.RuntimeOverrides.Routing != nil && service.Spec.RuntimeOverrides.Routing.RequestTimeout != nil {
+		timeout := service.Spec.RuntimeOverrides.Routing.RequestTimeout.Duration.String()
 		return &timeout
 	}
-	// Falls back to runtime config
+
+	// Base priority: RuntimeConfig.Routing.RequestTimeout
 	if runtimeConfig.Routing != nil && runtimeConfig.Routing.RequestTimeout != nil {
 		timeout := runtimeConfig.Routing.RequestTimeout.Duration.String()
 		return &timeout
 	}
-	// If neither defined, no timeout is set
+
+	// If not defined at any level, no timeout is set
 	return nil
 }
 
