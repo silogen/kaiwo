@@ -605,25 +605,42 @@ func (r *AIMServiceReconciler) planInferenceServiceAndRoute(logger logr.Logger, 
 	if serviceReady {
 		inferenceService := shared.BuildInferenceService(serviceState, ownerRef)
 
-		// Set AIM_CACHE_PATH env var for all services
-		inferenceService.Spec.Predictor.Model.Env = append(
-			inferenceService.Spec.Predictor.Model.Env,
-			v1.EnvVar{
+		// Collect all environment variables
+		envVars := []v1.EnvVar{
+			{
 				Name:  "AIM_CACHE_PATH",
 				Value: AIMCacheBasePath,
-			})
+			},
+		}
+
+		// Add LMCache env vars if ConfigMap is available
+		if obs.KVCacheConfigMap != nil {
+			envVars = append(envVars,
+				v1.EnvVar{
+					Name:  "LMCACHE_USE_EXPERIMENTAL",
+					Value: "True",
+				},
+				v1.EnvVar{
+					Name:  "LMCACHE_CONFIG_FILE",
+					Value: "/lmcache/lmcache_config.yaml",
+				},
+				v1.EnvVar{
+					Name:  "LMCACHE_LOG_LEVEL",
+					Value: "INFO",
+				},
+				v1.EnvVar{
+					Name:  "AIM_ENGINE_ARGS",
+					Value: `{"kv-transfer-config": {"kv_connector":"LMCacheConnectorV1", "kv_role":"kv_both"}}`,
+				},
+			)
+		}
+
+		// Merge in custom env vars from service spec (allows overriding defaults)
+		inferenceService.Spec.Predictor.Model.Env = mergeEnvVars(envVars, service.Spec.Env)
 
 		// Mount LMCache ConfigMap if available
 		if obs.KVCacheConfigMap != nil {
 			addLMCacheConfigMount(inferenceService, obs.KVCacheConfigMap.Name)
-
-			// Add AIM_ENGINE_ARGS for KV cache configuration
-			inferenceService.Spec.Predictor.Model.Env = append(
-				inferenceService.Spec.Predictor.Model.Env,
-				v1.EnvVar{
-					Name:  "AIM_ENGINE_ARGS",
-					Value: `{"kv-transfer-config": {"kv_connector":"LMCacheConnectorV1", "kv_role":"kv_both"}}`,
-				})
 		}
 
 		// Mount either template cache PVCs or service PVC
@@ -867,22 +884,37 @@ func addLMCacheConfigMount(inferenceService *servingv1beta1.InferenceService, co
 		MountPath: "/lmcache",
 		ReadOnly:  true,
 	})
+}
 
-	// Set the LMCache configuration environment variables
-	inferenceService.Spec.Predictor.Model.Env = append(
-		inferenceService.Spec.Predictor.Model.Env,
-		v1.EnvVar{
-			Name:  "LMCACHE_USE_EXPERIMENTAL",
-			Value: "True",
-		},
-		v1.EnvVar{
-			Name:  "LMCACHE_CONFIG_FILE",
-			Value: "/lmcache/lmcache_config.yaml",
-		},
-		v1.EnvVar{
-			Name:  "LMCACHE_LOG_LEVEL",
-			Value: "INFO",
-		})
+// mergeEnvVars combines default env vars with service-specific overrides.
+// Service env vars take precedence over defaults when env var names match.
+func mergeEnvVars(defaults []v1.EnvVar, overrides []v1.EnvVar) []v1.EnvVar {
+	// Create a map for quick lookup of overrides
+	overrideMap := make(map[string]v1.EnvVar)
+	for _, env := range overrides {
+		overrideMap[env.Name] = env
+	}
+
+	// Start with defaults, replacing any that are overridden
+	merged := make([]v1.EnvVar, 0, len(defaults)+len(overrides))
+	for _, env := range defaults {
+		if override, exists := overrideMap[env.Name]; exists {
+			merged = append(merged, override)
+			delete(overrideMap, env.Name) // Mark as processed
+		} else {
+			merged = append(merged, env)
+		}
+	}
+
+	// Add any remaining overrides that weren't in defaults
+	for _, env := range overrides {
+		if _, processed := overrideMap[env.Name]; !processed {
+			continue // Already added in the loop above
+		}
+		merged = append(merged, env)
+	}
+
+	return merged
 }
 
 func (r *AIMServiceReconciler) projectStatus(
