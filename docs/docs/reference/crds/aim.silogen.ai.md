@@ -953,6 +953,7 @@ _Appears in:_
 | `image` _string_ | Image specifies the container image to use for the KV cache service.<br />Only used when creating a new AIMKVCache (ignored if referencing existing).<br />If not specified, defaults to appropriate images based on Type. |  |  |
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to set in the KV cache container.<br />Only used when creating a new AIMKVCache (ignored if referencing existing).<br />If not specified (nil), no additional environment variables are set.<br />If explicitly set to an empty array, no environment variables are added. |  |  |
 | `storage` _[StorageSpec](#storagespec)_ | Storage defines the persistent storage configuration for the KV cache.<br />Only used when creating a new AIMKVCache (ignored if referencing existing). |  |  |
+| `lmCacheConfig` _string_ | LMCacheConfig specifies the custom LMCache configuration YAML content.<br />When specified, this exact configuration is used for the lmcache_config.yaml file.<br />When empty, a default configuration is generated with standard LMCache settings.<br />Note: The remote_url field in custom configs will have the \{SERVICE_URL\} placeholder<br />replaced with the actual KV cache service URL. |  |  |
 
 
 #### AIMServiceList

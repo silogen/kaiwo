@@ -86,6 +86,14 @@ type AIMServiceKVCache struct {
 	// Only used when creating a new AIMKVCache (ignored if referencing existing).
 	// +optional
 	Storage *StorageSpec `json:"storage,omitempty"`
+
+	// LMCacheConfig specifies the custom LMCache configuration YAML content.
+	// When specified, this exact configuration is used for the lmcache_config.yaml file.
+	// When empty, a default configuration is generated with standard LMCache settings.
+	// Note: The remote_url field in custom configs will have the {SERVICE_URL} placeholder
+	// replaced with the actual KV cache service URL.
+	// +optional
+	LMCacheConfig string `json:"lmCacheConfig,omitempty"`
 }
 
 // AIMServiceSpec defines the desired state of AIMService.

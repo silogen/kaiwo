@@ -356,6 +356,14 @@ spec:
                       Only used when creating a new AIMKVCache (ignored if referencing existing).
                       If not specified, defaults to appropriate images based on Type.
                     type: string
+                  lmCacheConfig:
+                    description: |-
+                      LMCacheConfig specifies the custom LMCache configuration YAML content.
+                      When specified, this exact configuration is used for the lmcache_config.yaml file.
+                      When empty, a default configuration is generated with standard LMCache settings.
+                      Note: The remote_url field in custom configs will have the {SERVICE_URL} placeholder
+                      replaced with the actual KV cache service URL.
+                    type: string
                   name:
                     description: |-
                       Name specifies the name of the AIMKVCache resource to use.

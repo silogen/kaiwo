@@ -507,14 +507,21 @@ func buildKVCache(service *aimv1alpha1.AIMService, ownerRef metav1.OwnerReferenc
 
 func buildLMCacheConfigMap(service *aimv1alpha1.AIMService, kvCache *aimv1alpha1.AIMKVCache, ownerRef metav1.OwnerReference) *v1.ConfigMap {
 	// Service name follows AIMKVCache controller pattern: {name}-{type}-svc
-	redisURL := fmt.Sprintf("redis://%s-%s-svc:6379", kvCache.Name, kvCache.Spec.KVCacheType)
+	serviceURL := fmt.Sprintf("redis://%s-%s-svc:6379", kvCache.Name, kvCache.Spec.KVCacheType)
 	configMapName := fmt.Sprintf("lmcache-%s", service.Name)
 
-	lmcacheConfig := fmt.Sprintf("local_cpu: true\n"+
-		"chunk_size: 50\n"+
-		"max_local_cpu_size: 1.0\n"+
-		"remote_url: %q\n"+
-		"remote_serde: \"naive\"\n", redisURL)
+	var lmcacheConfig string
+	if service.Spec.KVCache.LMCacheConfig != "" {
+		// Use custom config, replacing {SERVICE_URL} placeholder if present
+		lmcacheConfig = strings.ReplaceAll(service.Spec.KVCache.LMCacheConfig, "{SERVICE_URL}", serviceURL)
+	} else {
+		// Use default config
+		lmcacheConfig = fmt.Sprintf("local_cpu: true\n"+
+			"chunk_size: 50\n"+
+			"max_local_cpu_size: 1.0\n"+
+			"remote_url: %q\n"+
+			"remote_serde: \"naive\"\n", serviceURL)
+	}
 
 	return &v1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
