@@ -25,7 +25,6 @@ package v1alpha1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 // AIMServiceModel specifies which model to deploy. Exactly one field must be set.
@@ -43,39 +42,6 @@ type AIMServiceModel struct {
 	// Example: `ghcr.io/silogen/llama-3-8b:v1.2.0`.
 	// +optional
 	Image *string `json:"image,omitempty"`
-}
-
-// AIMServiceRuntimeOverrides allows overriding runtime configuration at the service level.
-// All fields are optional. When specified, they override the corresponding values
-// from the resolved runtime configuration (namespace or cluster-scoped).
-// The precedence order is:
-// 1. AIMService.Spec.RuntimeOverrides (highest priority)
-// 2. AIMRuntimeConfig (namespace-level)
-// 3. AIMClusterRuntimeConfig (cluster-level)
-type AIMServiceRuntimeOverrides struct {
-	// StorageClassName specifies the storage class to use for this service's model cache and PVCs.
-	// When specified, overrides the defaultStorageClassName from the runtime configuration.
-	// +optional
-	StorageClassName string `json:"storageClassName,omitempty"`
-
-	// Model controls model creation and discovery behavior for this service.
-	// When specified, overrides the model configuration from the runtime configuration.
-	// +optional
-	Model *AIMModelConfig `json:"model,omitempty"`
-
-	// Routing controls HTTP routing configuration for this service.
-	// When specified, overrides the routing configuration from the runtime configuration.
-	// Note: For more granular routing control, use spec.routing instead.
-	// +optional
-	Routing *AIMRuntimeRoutingConfig `json:"routing,omitempty"`
-
-	// PVCHeadroomPercent specifies the percentage of extra space to add to PVCs
-	// for model storage. This accounts for filesystem overhead and temporary files
-	// during model loading. The value represents a percentage (e.g., 10 means 10% extra space).
-	// When specified, overrides the pvcHeadroomPercent from the runtime configuration.
-	// +kubebuilder:validation:Minimum=0
-	// +optional
-	PVCHeadroomPercent *int32 `json:"pvcHeadroomPercent,omitempty"`
 }
 
 // AIMServiceOverrides allows overriding template parameters at the service level.
@@ -186,15 +152,16 @@ type AIMServiceSpec struct {
 	// +optional
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 
-	// Routing enables HTTP routing through Gateway API for this service.
-	// +optional
-	Routing *AIMServiceRouting `json:"routing,omitempty"`
-
 	// RuntimeOverrides allows overriding runtime configuration settings for this service.
 	// When specified, these values take precedence over both namespace and cluster-level runtime configs.
-	// This provides fine-grained control over storage, model behavior, and other runtime settings.
+	// This provides fine-grained control over storage, model behavior, routing, and other runtime settings.
+	//
+	// The precedence order is:
+	// 1. AIMService.Spec.RuntimeOverrides (highest priority)
+	// 2. AIMRuntimeConfig (namespace-level)
+	// 3. AIMClusterRuntimeConfig (cluster-level)
 	// +optional
-	RuntimeOverrides *AIMServiceRuntimeOverrides `json:"runtimeOverrides,omitempty"`
+	RuntimeOverrides *AIMRuntimeConfigCommon `json:"runtimeOverrides,omitempty"`
 }
 
 // AIMServiceStatus defines the observed state of AIMService.
@@ -349,30 +316,6 @@ type AIMServiceList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []AIMService `json:"items"`
-}
-
-// AIMServiceRouting configures optional HTTP routing for the service.
-type AIMServiceRouting struct {
-	// Enabled toggles HTTP routing management.
-	// When nil, inherits the enabled state from the runtime configuration.
-	// When false, explicitly disables routing regardless of runtime config.
-	// When true, explicitly enables routing regardless of runtime config.
-	// +optional
-	Enabled *bool `json:"enabled,omitempty"`
-
-	// GatewayRef identifies the Gateway parent that should receive the HTTPRoute.
-	// When omitted while routing is enabled, reconciliation will report a failure.
-	// +optional
-	GatewayRef *gatewayapiv1.ParentReference `json:"gatewayRef,omitempty"`
-
-	// Annotations to add to the HTTPRoute resource.
-	// +optional
-	Annotations map[string]string `json:"annotations,omitempty"`
-
-	// PathTemplate overrides the HTTP path template used for routing.
-	// The value is rendered against the AIMService object using JSONPath expressions.
-	// +optional
-	PathTemplate string `json:"pathTemplate,omitempty"`
 }
 
 // AIMServiceRoutingStatus captures observed routing details.

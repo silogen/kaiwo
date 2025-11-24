@@ -324,13 +324,13 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 
 // resolveStorageClassName determines the storage class to use for a service.
 // It follows this precedence order (highest to lowest):
-// 1. Service.Spec.RuntimeOverrides.StorageClassName
+// 1. Service.Spec.RuntimeOverrides.DefaultStorageClassName
 // 2. RuntimeConfig.DefaultStorageClassName (from obs)
 // 3. Empty string (which will use the cluster's default storage class)
 func resolveStorageClassName(service *aimv1alpha1.AIMService, obs *shared.ServiceObservation) string {
 	// Service-level runtime override takes highest precedence
-	if service.Spec.RuntimeOverrides != nil && service.Spec.RuntimeOverrides.StorageClassName != "" {
-		return service.Spec.RuntimeOverrides.StorageClassName
+	if service.Spec.RuntimeOverrides != nil && service.Spec.RuntimeOverrides.DefaultStorageClassName != "" {
+		return service.Spec.RuntimeOverrides.DefaultStorageClassName
 	}
 
 	// Fall back to runtime config (which already handles namespace vs cluster precedence)

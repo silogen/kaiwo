@@ -494,6 +494,7 @@ _Appears in:_
 - [AIMClusterRuntimeConfigSpec](#aimclusterruntimeconfigspec)
 - [AIMRuntimeConfigCommon](#aimruntimeconfigcommon)
 - [AIMRuntimeConfigSpec](#aimruntimeconfigspec)
+- [AIMServiceRuntimeOverrides](#aimserviceruntimeoverrides)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -902,12 +903,14 @@ _Appears in:_
 - [AIMClusterRuntimeConfigSpec](#aimclusterruntimeconfigspec)
 - [AIMRuntimeConfigCommon](#aimruntimeconfigcommon)
 - [AIMRuntimeConfigSpec](#aimruntimeconfigspec)
+- [AIMServiceRuntimeOverrides](#aimserviceruntimeoverrides)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | Enabled controls whether HTTP routing is managed for inference services using this config.<br />When true, the operator creates HTTPRoute resources for services that reference this config.<br />When false or unset, routing must be explicitly enabled on each service.<br />This provides a namespace or cluster-wide default that individual services can override. |  |  |
 | `gatewayRef` _[ParentReference](#parentreference)_ | GatewayRef specifies the Gateway API Gateway resource that should receive HTTPRoutes.<br />This identifies the parent gateway for routing traffic to inference services.<br />The gateway can be in any namespace (cross-namespace references are supported).<br />If routing is enabled but GatewayRef is not specified, service reconciliation will fail<br />with a validation error. |  |  |
-| `pathTemplate` _string_ | PathTemplate defines the HTTP path template for routes, evaluated using JSONPath expressions.<br />The template is rendered against the AIMService object to generate unique paths.<br />Example templates:<br />- `/\{.metadata.namespace\}/\{.metadata.name\}` - namespace and service name<br />- `/\{.metadata.namespace\}/\{.metadata.labels['team']\}/inference` - with label<br />- `/models/\{.spec.aimModelName\}` - based on model name<br />The template must:<br />- Use valid JSONPath expressions wrapped in \{...\}<br />- Reference fields that exist on the service<br />- Produce a path ≤ 200 characters after rendering<br />- Result in valid URL path segments (lowercase, RFC 1123 compliant)<br />If evaluation fails, the service enters Degraded state with PathTemplateInvalid reason.<br />Individual services can override this template via spec.routing.pathTemplate. |  |  |
+| `pathTemplate` _string_ | PathTemplate defines the HTTP path template for routes, evaluated using JSONPath expressions.<br />The template is rendered against the AIMService object to generate unique paths.<br />Example templates:<br />- `/\{.metadata.namespace\}/\{.metadata.name\}` - namespace and service name<br />- `/\{.metadata.namespace\}/\{.metadata.labels['team']\}/inference` - with label<br />- `/models/\{.spec.aimModelName\}` - based on model name<br />The template must:<br />- Use valid JSONPath expressions wrapped in \{...\}<br />- Reference fields that exist on the service<br />- Produce a path ≤ 200 characters after rendering<br />- Result in valid URL path segments (lowercase, RFC 1123 compliant)<br />If evaluation fails, the service enters Degraded state with PathTemplateInvalid reason.<br />Individual services can override this template via spec.runtimeOverrides.routing.pathTemplate. |  |  |
+| `annotations` _object (keys:string, values:string)_ | Annotations defines additional annotations to add to the HTTPRoute resource.<br />These annotations can be used for various purposes such as configuring ingress<br />behavior, adding metadata, or triggering external integrations.<br />Individual services can override these via spec.runtimeOverrides.routing.annotations. |  |  |
 | `requestTimeout` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#duration-v1-meta)_ | RequestTimeout defines the HTTP request timeout for routes.<br />This sets the maximum duration for a request to complete before timing out.<br />The timeout applies to the entire request/response cycle.<br />If not specified, no timeout is set on the route.<br />Individual services can override this value via spec.runtimeOverrides.routing.requestTimeout. |  |  |
 
 
@@ -1027,25 +1030,6 @@ _Appears in:_
 | `uid` _[UID](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#uid-types-pkg)_ | UID captures the unique identifier of the resolved reference, when known. |  |  |
 
 
-#### AIMServiceRouting
-
-
-
-AIMServiceRouting configures optional HTTP routing for the service.
-
-
-
-_Appears in:_
-- [AIMServiceSpec](#aimservicespec)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `enabled` _boolean_ | Enabled toggles HTTP routing management.<br />When nil, inherits the enabled state from the runtime configuration.<br />When false, explicitly disables routing regardless of runtime config.<br />When true, explicitly enables routing regardless of runtime config. |  |  |
-| `gatewayRef` _[ParentReference](#parentreference)_ | GatewayRef identifies the Gateway parent that should receive the HTTPRoute.<br />When omitted while routing is enabled, reconciliation will report a failure. |  |  |
-| `annotations` _object (keys:string, values:string)_ | Annotations to add to the HTTPRoute resource. |  |  |
-| `pathTemplate` _string_ | PathTemplate overrides the HTTP path template used for routing.<br />The value is rendered against the AIMService object using JSONPath expressions. |  |  |
-
-
 #### AIMServiceRoutingStatus
 
 
@@ -1060,6 +1044,31 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `path` _string_ | Path is the HTTP path prefix used when routing is enabled.<br />Example: `/tenant/svc-uuid`. |  |  |
+
+
+#### AIMServiceRuntimeOverrides
+
+
+
+AIMServiceRuntimeOverrides allows overriding runtime configuration at the service level.
+All fields are optional. When specified, they override the corresponding values
+from the resolved runtime configuration (namespace or cluster-scoped).
+The precedence order is:
+1. AIMService.Spec.RuntimeOverrides (highest priority)
+2. AIMRuntimeConfig (namespace-level)
+3. AIMClusterRuntimeConfig (cluster-level)
+
+
+
+_Appears in:_
+- [AIMServiceSpec](#aimservicespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `storageClassName` _string_ | StorageClassName specifies the storage class to use for this service's model cache and PVCs.<br />When specified, overrides the defaultStorageClassName from the runtime configuration. |  |  |
+| `model` _[AIMModelConfig](#aimmodelconfig)_ | Model controls model creation and discovery behavior for this service.<br />When specified, overrides the model configuration from the runtime configuration. |  |  |
+| `routing` _[AIMRuntimeRoutingConfig](#aimruntimeroutingconfig)_ | Routing controls HTTP routing configuration for this service.<br />When specified, overrides the routing configuration from the runtime configuration.<br />This allows complete control over routing behavior including enabled state, gateway reference,<br />path template, annotations, and request timeout. |  |  |
+| `pvcHeadroomPercent` _integer_ | PVCHeadroomPercent specifies the percentage of extra space to add to PVCs<br />for model storage. This accounts for filesystem overhead and temporary files<br />during model loading. The value represents a percentage (e.g., 10 means 10% extra space).<br />When specified, overrides the pvcHeadroomPercent from the runtime configuration. |  | Minimum: 0 <br /> |
 
 
 #### AIMServiceSpec
@@ -1091,7 +1100,7 @@ _Appears in:_
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to use for authentication when downloading models.<br />These variables are used for authentication with model registries (e.g., HuggingFace tokens). |  |  |
 | `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets references secrets for pulling AIM container images. |  |  |
 | `serviceAccountName` _string_ | ServiceAccountName specifies the Kubernetes service account to use for the inference workload.<br />This service account is used by the deployed inference pods.<br />If empty, the default service account for the namespace is used. |  |  |
-| `routing` _[AIMServiceRouting](#aimservicerouting)_ | Routing enables HTTP routing through Gateway API for this service. |  |  |
+| `runtimeOverrides` _[AIMServiceRuntimeOverrides](#aimserviceruntimeoverrides)_ | RuntimeOverrides allows overriding runtime configuration settings for this service.<br />When specified, these values take precedence over both namespace and cluster-level runtime configs.<br />This provides fine-grained control over storage, model behavior, routing, and other runtime settings. |  |  |
 
 
 #### AIMServiceStatus

@@ -51,20 +51,16 @@ var (
 
 // ResolveServiceRoutePath renders the HTTP route prefix using service and runtime config context.
 // The precedence order is:
-// 1. Service.Spec.Routing.PathTemplate (highest priority)
-// 2. Service.Spec.RuntimeOverrides.Routing.PathTemplate (middle layer)
-// 3. RuntimeConfig.Routing.PathTemplate (base layer)
+// 1. Service.Spec.RuntimeOverrides.Routing.PathTemplate (highest priority)
+// 2. RuntimeConfig.Routing.PathTemplate (base layer)
 func ResolveServiceRoutePath(service *aimv1alpha1.AIMService, runtimeConfig aimv1alpha1.AIMRuntimeConfigSpec) (string, error) {
 	template := ""
 
-	// Highest priority: service.Spec.Routing.PathTemplate
-	if service.Spec.Routing != nil && service.Spec.Routing.PathTemplate != "" {
-		template = service.Spec.Routing.PathTemplate
-	} else if service.Spec.RuntimeOverrides != nil && service.Spec.RuntimeOverrides.Routing != nil && service.Spec.RuntimeOverrides.Routing.PathTemplate != "" {
-		// Middle priority: service.Spec.RuntimeOverrides.Routing.PathTemplate
+	// Check for runtime override first (highest priority)
+	if service.Spec.RuntimeOverrides != nil && service.Spec.RuntimeOverrides.Routing != nil && service.Spec.RuntimeOverrides.Routing.PathTemplate != "" {
 		template = service.Spec.RuntimeOverrides.Routing.PathTemplate
 	} else if runtimeConfig.Routing != nil && runtimeConfig.Routing.PathTemplate != "" {
-		// Base priority: runtimeConfig.Routing.PathTemplate
+		// Fallback to runtime config
 		template = runtimeConfig.Routing.PathTemplate
 	}
 

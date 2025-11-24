@@ -109,9 +109,16 @@ type AIMRuntimeRoutingConfig struct {
 	// - Result in valid URL path segments (lowercase, RFC 1123 compliant)
 	//
 	// If evaluation fails, the service enters Degraded state with PathTemplateInvalid reason.
-	// Individual services can override this template via spec.routing.pathTemplate.
+	// Individual services can override this template via spec.runtimeOverrides.routing.pathTemplate.
 	// +optional
 	PathTemplate string `json:"pathTemplate,omitempty"`
+
+	// Annotations defines additional annotations to add to the HTTPRoute resource.
+	// These annotations can be used for various purposes such as configuring ingress
+	// behavior, adding metadata, or triggering external integrations.
+	// Individual services can override these via spec.runtimeOverrides.routing.annotations.
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
 
 	// RequestTimeout defines the HTTP request timeout for routes.
 	// This sets the maximum duration for a request to complete before timing out.
