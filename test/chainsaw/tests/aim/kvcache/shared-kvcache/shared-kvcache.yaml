@@ -1,0 +1,11 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMKVCache
+metadata:
+  name: shared-kvcache
+spec:
+  kvCacheType: redis
+  storage:
+    size: 2Gi
+    storageClassName: openebs-hostpath
+
+

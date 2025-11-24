@@ -1,0 +1,34 @@
+# AIMKVCache Tests
+
+Tests for the KVCache controller that manages Redis/Mooncake backends for LMCache.
+
+## Tests
+
+**basic/** - Creates a KVCache with defaults and checks it becomes Ready with the correct endpoint.
+
+**custom-image-env/** - Uses custom Redis image and environment variables to verify container configuration.
+
+**custom-resources/** - Sets custom CPU/memory requests and limits, verifies pods use them.
+
+**custom-storage/** - Configures custom storage size and storage class, checks PVC matches.
+
+**default-name/** - When AIMService doesn't specify a KVCache name, it should default to `kvcache-{service-name}`.
+
+**default-resources/** - Without specifying resources, KVCache should use defaults (1 CPU, 1Gi memory).
+
+**service-integration/** - AIMService creates a KVCache, generates LMCache config, and mounts it into InferenceService.
+
+**shared-kvcache/** - Multiple AIMServices reference the same pre-created KVCache instance.
+
+**status-progression/** - Tracks status transitions from Pending → Progressing → Ready as resources come up.
+
+## Running
+
+```bash
+# All tests
+chainsaw test --test-dir test/chainsaw/tests/aim/kvcache
+
+# Single test
+chainsaw test --test-dir test/chainsaw/tests/aim/kvcache/basic
+```
+

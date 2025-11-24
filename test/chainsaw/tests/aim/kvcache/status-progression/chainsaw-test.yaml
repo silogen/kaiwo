@@ -1,0 +1,140 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: kvcache-status-progression
+spec:
+  description: Verify AIMKVCache status progresses from Pending to Progressing to Ready
+  concurrent: true
+  timeouts:
+    assert: 90s
+  steps:
+  - name: Create AIMKVCache
+    try:
+    - apply:
+        file: kvcache.yaml
+
+  - name: Verify initial status is Pending or Progressing
+    try:
+    - assert:
+        timeout: 10s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMKVCache
+          metadata:
+            name: status-test
+          status:
+            observedGeneration: 1
+            (status == 'Pending' || status == 'Progressing'): true
+
+  - name: Verify StatefulSet is eventually created
+    try:
+    - assert:
+        timeout: 20s
+        resource:
+          apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            name: status-test-redis
+            ownerReferences:
+            - name: status-test
+              kind: AIMKVCache
+
+  - name: Verify Service is eventually created
+    try:
+    - assert:
+        timeout: 20s
+        resource:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: status-test-redis-svc
+            ownerReferences:
+            - name: status-test
+              kind: AIMKVCache
+
+  - name: Verify status becomes Progressing when StatefulSet exists
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMKVCache
+          metadata:
+            name: status-test
+          status:
+            (status == 'Progressing' || status == 'Ready'): true
+            statefulSetName: status-test-redis
+            serviceName: status-test-redis-svc
+
+  - name: Verify Progressing condition exists
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMKVCache
+          metadata:
+            name: status-test
+          status:
+            (conditions[?type == 'Progressing']):
+            - type: Progressing
+
+  - name: Verify status becomes Ready when pods are running
+    try:
+    - assert:
+        timeout: 90s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMKVCache
+          metadata:
+            name: status-test
+          status:
+            status: Ready
+            replicas: 1
+            readyReplicas: 1
+
+  - name: Verify Ready condition is True
+    try:
+    - assert:
+        timeout: 5s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMKVCache
+          metadata:
+            name: status-test
+          status:
+            (conditions[?type == 'Ready']):
+            - type: Ready
+              status: "True"
+              reason: StatefulSetReady
+
+  - name: Verify Progressing condition is False when Ready
+    try:
+    - assert:
+        timeout: 5s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMKVCache
+          metadata:
+            name: status-test
+          status:
+            (conditions[?type == 'Progressing']):
+            - type: Progressing
+              status: "False"
+              reason: StatefulSetReady
+
+  - name: Verify Failure condition is False
+    try:
+    - assert:
+        timeout: 5s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMKVCache
+          metadata:
+            name: status-test
+          status:
+            (conditions[?type == 'Failure']):
+            - type: Failure
+              status: "False"
+              reason: NoFailure
+

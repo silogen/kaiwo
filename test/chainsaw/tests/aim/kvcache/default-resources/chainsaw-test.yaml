@@ -1,0 +1,70 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: kvcache-default-resources
+spec:
+  description: Verify AIMKVCache uses default resource requirements when not specified
+  concurrent: true
+  timeouts:
+    assert: 90s
+  steps:
+  - name: Create AIMKVCache without specifying resources
+    try:
+    - apply:
+        file: kvcache-no-resources.yaml
+
+  - name: Verify StatefulSet has default resource requirements (1 CPU, 1Gi)
+    try:
+    - assert:
+        timeout: 15s
+        resource:
+          apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            name: default-resources-kvcache-redis
+          spec:
+            template:
+              spec:
+                containers:
+                - name: redis
+                  resources:
+                    requests:
+                      cpu: "1"
+                      memory: "1Gi"
+                    limits:
+                      cpu: "1"
+                      memory: "1Gi"
+
+  - name: Verify AIMKVCache becomes Ready
+    try:
+    - assert:
+        timeout: 90s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMKVCache
+          metadata:
+            name: default-resources-kvcache
+          status:
+            status: Ready
+            readyReplicas: 1
+
+  - name: Verify Pod uses default resources
+    try:
+    - assert:
+        timeout: 15s
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: default-resources-kvcache-redis-0
+          spec:
+            containers:
+            - name: redis
+              resources:
+                requests:
+                  cpu: "1"
+                  memory: "1Gi"
+                limits:
+                  cpu: "1"
+                  memory: "1Gi"
+

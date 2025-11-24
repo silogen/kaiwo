@@ -1,0 +1,16 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMKVCache
+metadata:
+  name: custom-resources-kvcache
+spec:
+  kvCacheType: redis
+  storage:
+    storageClassName: openebs-hostpath
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "2"
+      memory: "2Gi"
+

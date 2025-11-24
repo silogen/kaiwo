@@ -1,0 +1,10 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMKVCache
+metadata:
+  name: default-resources-kvcache
+spec:
+  kvCacheType: redis
+  storage:
+    storageClassName: openebs-hostpath
+  # No resources specified - should use defaults (1 CPU, 1Gi memory)
+

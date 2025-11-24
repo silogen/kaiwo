@@ -1,0 +1,88 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: kvcache-custom-image-env
+spec:
+  description: AIMKVCache with custom image and environment variables
+  concurrent: true
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create AIMKVCache with custom image and env vars
+    try:
+    - apply:
+        file: kvcache-custom.yaml
+    
+  - name: Verify StatefulSet uses custom image
+    try:
+    - assert:
+        timeout: 10s
+        resource:
+          apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            name: custom-kvcache-redis
+          spec:
+            template:
+              spec:
+                containers:
+                - name: redis
+                  image: redis:7.4.0
+
+  - name: Verify StatefulSet has custom environment variables
+    try:
+    - assert:
+        timeout: 10s
+        resource:
+          apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            name: custom-kvcache-redis
+          spec:
+            template:
+              spec:
+                containers:
+                - name: redis
+                  env:
+                  - name: REDIS_PASSWORD
+                    value: testpassword
+                  - name: REDIS_MAX_MEMORY
+                    value: 512mb
+
+  - name: Verify AIMKVCache becomes Ready
+    try:
+    - assert:
+        timeout: 60s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMKVCache
+          metadata:
+            name: custom-kvcache
+          status:
+            status: Ready
+            readyReplicas: 1
+
+  - name: Verify Pod is running with custom configuration
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            labels:
+              app: redis
+              aim.silogen.ai/kvcache: custom-kvcache
+          spec:
+            containers:
+            - name: redis
+              image: redis:7.4.0
+              env:
+              - name: REDIS_PASSWORD
+                value: testpassword
+              - name: REDIS_MAX_MEMORY
+                value: 512mb
+          status:
+            phase: Running
+
+

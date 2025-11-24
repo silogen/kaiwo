@@ -1,0 +1,142 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: kvcache-custom-resources
+spec:
+  description: AIMKVCache with custom resource requirements (CPU and memory)
+  concurrent: true
+  timeouts:
+    assert: 90s
+  steps:
+  - name: Create AIMKVCache with custom resources
+    try:
+    - apply:
+        file: kvcache-custom-resources.yaml
+
+  - name: Verify StatefulSet has custom resource requirements
+    try:
+    - assert:
+        timeout: 15s
+        resource:
+          apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            name: custom-resources-kvcache-redis
+          spec:
+            template:
+              spec:
+                containers:
+                - name: redis
+                  resources:
+                    requests:
+                      cpu: "500m"
+                      memory: "512Mi"
+                    limits:
+                      cpu: "2"
+                      memory: "2Gi"
+
+  - name: Verify AIMKVCache becomes Ready
+    try:
+    - assert:
+        timeout: 90s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMKVCache
+          metadata:
+            name: custom-resources-kvcache
+          status:
+            status: Ready
+            readyReplicas: 1
+
+  - name: Verify Pod uses custom resources
+    try:
+    - assert:
+        timeout: 15s
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: custom-resources-kvcache-redis-0
+          spec:
+            containers:
+            - name: redis
+              resources:
+                requests:
+                  cpu: "500m"
+                  memory: "512Mi"
+                limits:
+                  cpu: "2"
+                  memory: "2Gi"
+
+  # Test 2: AIMService creating KVCache with custom resources
+  - name: Ensure default cluster model is available
+    try:
+    - assert:
+        timeout: 5s
+        file: ../../../aim/service/_shared/default-cluster-image.yaml
+
+  - name: Ensure default template is available
+    try:
+    - assert:
+        timeout: 5s
+        file: ../../../aim/service/_shared/template-available.yaml
+
+  - name: Create AIMService with KVCache custom resources
+    try:
+    - apply:
+        file: service-with-resources.yaml
+
+  - name: Verify service-created KVCache has custom resources
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMKVCache
+          metadata:
+            name: kvcache-from-service-resources
+          spec:
+            kvCacheType: redis
+            resources:
+              requests:
+                cpu: "250m"
+                memory: "256Mi"
+              limits:
+                cpu: "1500m"
+                memory: "1536Mi"
+
+  - name: Verify service-created KVCache StatefulSet uses custom resources
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            name: kvcache-from-service-resources-redis
+          spec:
+            template:
+              spec:
+                containers:
+                - name: redis
+                  resources:
+                    requests:
+                      cpu: "250m"
+                      memory: "256Mi"
+                    limits:
+                      cpu: "1500m"
+                      memory: "1536Mi"
+
+  - name: Verify service-created KVCache becomes Ready
+    try:
+    - assert:
+        timeout: 90s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMKVCache
+          metadata:
+            name: kvcache-from-service-resources
+          status:
+            status: Ready
+            readyReplicas: 1
+

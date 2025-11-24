@@ -1,0 +1,74 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: kvcache-default-name
+spec:
+  description: AIMService creates KVCache with default name when not specified
+  timeouts:
+    assert: 90s
+  steps:
+  - name: Ensure default cluster model is available
+    try:
+    - assert:
+        timeout: 5s
+        file: ../../service/_shared/default-cluster-image.yaml
+
+  - name: Ensure default template is available
+    try:
+    - assert:
+        timeout: 5s
+        file: ../../service/_shared/template-available.yaml
+
+  - name: Create AIMService with KVCache but no name specified
+    try:
+    - apply:
+        file: service-without-name.yaml
+    
+  - name: Verify AIMKVCache is created with default name pattern
+    try:
+    - assert:
+        timeout: 15s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMKVCache
+          metadata:
+            name: kvcache-default-name-service
+            ownerReferences:
+            - name: default-name-service
+              kind: AIMService
+          spec:
+            kvCacheType: redis
+
+  - name: Verify StatefulSet name follows pattern
+    try:
+    - assert:
+        timeout: 15s
+        resource:
+          apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            name: kvcache-default-name-service-redis
+
+  - name: Verify Service name follows pattern
+    try:
+    - assert:
+        timeout: 15s
+        resource:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: kvcache-default-name-service-redis-svc
+
+  - name: Verify AIMKVCache becomes Ready
+    try:
+    - assert:
+        timeout: 90s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMKVCache
+          metadata:
+            name: kvcache-default-name-service
+          status:
+            status: Ready
+            endpoint: redis://kvcache-default-name-service-redis-svc:6379
+
