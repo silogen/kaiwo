@@ -291,6 +291,7 @@ _Appears in:_
 | `image` _string_ | Image specifies the container image to use for the KV cache service.<br />If not specified, defaults to appropriate images based on KVCacheType:<br />- redis: redis:7.2.4<br />- mooncake: ghcr.io/mooncake-dev/mooncake:v0.1.0 |  |  |
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to set in the KV cache container.<br />If not specified (nil), no additional environment variables are set.<br />If explicitly set to an empty array, no environment variables are added. |  |  |
 | `storage` _[StorageSpec](#storagespec)_ | Storage defines the persistent storage configuration for the KV cache |  |  |
+| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core)_ | Resources defines the resource requirements for the KV cache container.<br />If not specified, defaults to 1 CPU and 1Gi memory for both requests and limits. |  |  |
 
 
 #### AIMKVCacheStatus
@@ -494,7 +495,6 @@ _Appears in:_
 - [AIMClusterRuntimeConfigSpec](#aimclusterruntimeconfigspec)
 - [AIMRuntimeConfigCommon](#aimruntimeconfigcommon)
 - [AIMRuntimeConfigSpec](#aimruntimeconfigspec)
-- [AIMServiceRuntimeOverrides](#aimserviceruntimeoverrides)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -803,6 +803,7 @@ These settings apply to both AIMRuntimeConfig (namespace-scoped) and AIMClusterR
 _Appears in:_
 - [AIMClusterRuntimeConfigSpec](#aimclusterruntimeconfigspec)
 - [AIMRuntimeConfigSpec](#aimruntimeconfigspec)
+- [AIMServiceSpec](#aimservicespec)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -903,7 +904,6 @@ _Appears in:_
 - [AIMClusterRuntimeConfigSpec](#aimclusterruntimeconfigspec)
 - [AIMRuntimeConfigCommon](#aimruntimeconfigcommon)
 - [AIMRuntimeConfigSpec](#aimruntimeconfigspec)
-- [AIMServiceRuntimeOverrides](#aimserviceruntimeoverrides)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -953,6 +953,7 @@ _Appears in:_
 | `image` _string_ | Image specifies the container image to use for the KV cache service.<br />Only used when creating a new AIMKVCache (ignored if referencing existing).<br />If not specified, defaults to appropriate images based on Type. |  |  |
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to set in the KV cache container.<br />Only used when creating a new AIMKVCache (ignored if referencing existing).<br />If not specified (nil), no additional environment variables are set.<br />If explicitly set to an empty array, no environment variables are added. |  |  |
 | `storage` _[StorageSpec](#storagespec)_ | Storage defines the persistent storage configuration for the KV cache.<br />Only used when creating a new AIMKVCache (ignored if referencing existing). |  |  |
+| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core)_ | Resources defines the resource requirements for the KV cache container.<br />Only used when creating a new AIMKVCache (ignored if referencing existing).<br />If not specified, defaults to 1 CPU and 1Gi memory for both requests and limits. |  |  |
 | `lmCacheConfig` _string_ | LMCacheConfig specifies the custom LMCache configuration YAML content.<br />When specified, this exact configuration is used for the lmcache_config.yaml file.<br />When empty, a default configuration is generated with standard LMCache settings.<br />Note: The remote_url field in custom configs will have the \{SERVICE_URL\} placeholder<br />replaced with the actual KV cache service URL. |  |  |
 
 
@@ -1047,31 +1048,6 @@ _Appears in:_
 | `path` _string_ | Path is the HTTP path prefix used when routing is enabled.<br />Example: `/tenant/svc-uuid`. |  |  |
 
 
-#### AIMServiceRuntimeOverrides
-
-
-
-AIMServiceRuntimeOverrides allows overriding runtime configuration at the service level.
-All fields are optional. When specified, they override the corresponding values
-from the resolved runtime configuration (namespace or cluster-scoped).
-The precedence order is:
-1. AIMService.Spec.RuntimeOverrides (highest priority)
-2. AIMRuntimeConfig (namespace-level)
-3. AIMClusterRuntimeConfig (cluster-level)
-
-
-
-_Appears in:_
-- [AIMServiceSpec](#aimservicespec)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `storageClassName` _string_ | StorageClassName specifies the storage class to use for this service's model cache and PVCs.<br />When specified, overrides the defaultStorageClassName from the runtime configuration. |  |  |
-| `model` _[AIMModelConfig](#aimmodelconfig)_ | Model controls model creation and discovery behavior for this service.<br />When specified, overrides the model configuration from the runtime configuration. |  |  |
-| `routing` _[AIMRuntimeRoutingConfig](#aimruntimeroutingconfig)_ | Routing controls HTTP routing configuration for this service.<br />When specified, overrides the routing configuration from the runtime configuration.<br />This allows complete control over routing behavior including enabled state, gateway reference,<br />path template, annotations, and request timeout. |  |  |
-| `pvcHeadroomPercent` _integer_ | PVCHeadroomPercent specifies the percentage of extra space to add to PVCs<br />for model storage. This accounts for filesystem overhead and temporary files<br />during model loading. The value represents a percentage (e.g., 10 means 10% extra space).<br />When specified, overrides the pvcHeadroomPercent from the runtime configuration. |  | Minimum: 0 <br /> |
-
-
 #### AIMServiceSpec
 
 
@@ -1101,7 +1077,7 @@ _Appears in:_
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to use for authentication when downloading models.<br />These variables are used for authentication with model registries (e.g., HuggingFace tokens). |  |  |
 | `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets references secrets for pulling AIM container images. |  |  |
 | `serviceAccountName` _string_ | ServiceAccountName specifies the Kubernetes service account to use for the inference workload.<br />This service account is used by the deployed inference pods.<br />If empty, the default service account for the namespace is used. |  |  |
-| `runtimeOverrides` _[AIMServiceRuntimeOverrides](#aimserviceruntimeoverrides)_ | RuntimeOverrides allows overriding runtime configuration settings for this service.<br />When specified, these values take precedence over both namespace and cluster-level runtime configs.<br />This provides fine-grained control over storage, model behavior, routing, and other runtime settings. |  |  |
+| `runtimeOverrides` _[AIMRuntimeConfigCommon](#aimruntimeconfigcommon)_ | RuntimeOverrides allows overriding runtime configuration settings for this service.<br />When specified, these values take precedence over both namespace and cluster-level runtime configs.<br />This provides fine-grained control over storage, model behavior, routing, and other runtime settings.<br />The precedence order is:<br />1. AIMService.Spec.RuntimeOverrides (highest priority)<br />2. AIMRuntimeConfig (namespace-level)<br />3. AIMClusterRuntimeConfig (cluster-level) |  |  |
 
 
 #### AIMServiceStatus

@@ -336,17 +336,8 @@ func (r *AIMKVCacheReconciler) buildRedisStatefulSet(kvc *aimv1alpha1.AIMKVCache
 								"--save", "60", "1",
 								"--loglevel", "notice",
 							},
-							Env: r.getEnv(kvc),
-							Resources: corev1.ResourceRequirements{
-								Limits: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse("1"),
-									corev1.ResourceMemory: resource.MustParse("1Gi"),
-								},
-								Requests: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse("1"),
-									corev1.ResourceMemory: resource.MustParse("1Gi"),
-								},
-							},
+							Env:       r.getEnv(kvc),
+							Resources: r.getResources(kvc),
 							Ports: []corev1.ContainerPort{
 								{
 									ContainerPort: 6379,
@@ -505,6 +496,25 @@ func (r *AIMKVCacheReconciler) getEnv(kvc *aimv1alpha1.AIMKVCache) []corev1.EnvV
 
 	// Env not set, no defaults set for now - return nil
 	return nil
+}
+
+func (r *AIMKVCacheReconciler) getResources(kvc *aimv1alpha1.AIMKVCache) corev1.ResourceRequirements {
+	// If Resources is explicitly set, use it
+	if kvc.Spec.Resources != nil {
+		return *kvc.Spec.Resources
+	}
+
+	// Otherwise, use defaults
+	return corev1.ResourceRequirements{
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("1"),
+			corev1.ResourceMemory: resource.MustParse("1Gi"),
+		},
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("1"),
+			corev1.ResourceMemory: resource.MustParse("1Gi"),
+		},
+	}
 }
 
 func (r *AIMKVCacheReconciler) getErrorMessage(errs controllerutils.ReconcileErrors) string {

@@ -53,6 +53,11 @@ type AIMKVCacheSpec struct {
 	// Storage defines the persistent storage configuration for the KV cache
 	// +optional
 	Storage *StorageSpec `json:"storage,omitempty"`
+
+	// Resources defines the resource requirements for the KV cache container.
+	// If not specified, defaults to 1 CPU and 1Gi memory for both requests and limits.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 // StorageSpec defines the persistent storage configuration

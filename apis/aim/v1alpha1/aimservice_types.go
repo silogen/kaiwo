@@ -87,6 +87,12 @@ type AIMServiceKVCache struct {
 	// +optional
 	Storage *StorageSpec `json:"storage,omitempty"`
 
+	// Resources defines the resource requirements for the KV cache container.
+	// Only used when creating a new AIMKVCache (ignored if referencing existing).
+	// If not specified, defaults to 1 CPU and 1Gi memory for both requests and limits.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
 	// LMCacheConfig specifies the custom LMCache configuration YAML content.
 	// When specified, this exact configuration is used for the lmcache_config.yaml file.
 	// When empty, a default configuration is generated with standard LMCache settings.
