@@ -9,6 +9,6 @@ spec:
     # name not specified - should default to "kvcache-{service-name}"
     type: redis
     storage:
-      storageClassName: openebs-hostpath
+      storageClassName: ($values.storageClass)
 
 

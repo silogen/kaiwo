@@ -6,6 +6,6 @@ spec:
   kvCacheType: redis
   storage:
     size: 2Gi
-    storageClassName: openebs-hostpath
+    storageClassName: ($values.storageClass)
 
 

@@ -9,7 +9,7 @@ spec:
     name: kvcache-from-service-resources
     type: redis
     storage:
-      storageClassName: openebs-hostpath
+      storageClassName: ($values.storageClass)
     resources:
       requests:
         cpu: "250m"

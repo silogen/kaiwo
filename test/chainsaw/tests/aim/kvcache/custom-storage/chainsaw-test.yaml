@@ -32,7 +32,7 @@ spec:
                 resources:
                   requests:
                     storage: 5Gi
-                storageClassName: openebs-hostpath
+                storageClassName: ($values.storageClass)
 
   - name: Verify AIMKVCache becomes Ready
     try:
@@ -60,7 +60,7 @@ spec:
             resources:
               requests:
                 storage: 5Gi
-            storageClassName: openebs-hostpath
+            storageClassName: ($values.storageClass)
           status:
             phase: Bound
 

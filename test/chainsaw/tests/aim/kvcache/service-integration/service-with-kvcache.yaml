@@ -9,6 +9,6 @@ spec:
     name: kvcache-test-service
     type: redis
     storage:
-      storageClassName: openebs-hostpath
+      storageClassName: ($values.storageClass)
 
 

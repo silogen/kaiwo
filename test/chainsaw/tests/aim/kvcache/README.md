@@ -22,13 +22,31 @@ Tests for the KVCache controller that manages Redis/Mooncake backends for LMCach
 
 **status-progression/** - Tracks status transitions from Pending → Progressing → Ready as resources come up.
 
+## Configuration
+
+**Storage Class**: Configured via `test/chainsaw/values/kvcache.yaml` (default: `openebs-hostpath`).
+
+Override by creating a custom values file:
+```yaml
+# custom-values.yaml
+storageClass: your-storage-class
+```
+
 ## Running
 
 ```bash
-# All tests
-chainsaw test --test-dir test/chainsaw/tests/aim/kvcache
+# All kvcache tests
+chainsaw test --test-dir test/chainsaw/tests/aim/kvcache \
+  --values=test/chainsaw/values/kvcache.yaml
+
+# With custom storage class
+chainsaw test --test-dir test/chainsaw/tests/aim/kvcache \
+  --values=custom-values.yaml
 
 # Single test
-chainsaw test --test-dir test/chainsaw/tests/aim/kvcache/basic
+chainsaw test --test-dir test/chainsaw/tests/aim/kvcache/basic \
+  --values=test/chainsaw/values/kvcache.yaml
 ```
+
+**Note**: The `--values` flag is required for these tests. YAMLs use `($values.storageClass)` templating.
 
