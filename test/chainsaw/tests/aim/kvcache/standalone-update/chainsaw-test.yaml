@@ -1,0 +1,107 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: kvcache-standalone-update
+spec:
+  description: Standalone AIMKVCache can be updated (resources, image, etc.)
+  timeouts:
+    assert: 120s
+  steps:
+  - name: Create initial standalone AIMKVCache
+    try:
+    - apply:
+        file: kvcache-initial.yaml
+
+  - name: Verify initial StatefulSet is created with 500m CPU
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            name: standalone-update-cache-redis
+          spec:
+            template:
+              spec:
+                containers:
+                - name: redis
+                  resources:
+                    requests:
+                      cpu: "500m"
+                      memory: "512Mi"
+                    limits:
+                      cpu: "1"
+                      memory: "1Gi"
+
+  - name: Verify AIMKVCache becomes Ready with initial config
+    try:
+    - assert:
+        timeout: 90s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMKVCache
+          metadata:
+            name: standalone-update-cache
+          status:
+            status: Ready
+            readyReplicas: 1
+
+  - name: Update AIMKVCache with new resource values
+    try:
+    - apply:
+        file: kvcache-updated.yaml
+
+  - name: Verify StatefulSet is updated with 1 CPU (increased from 500m)
+    try:
+    - assert:
+        timeout: 60s
+        resource:
+          apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            name: standalone-update-cache-redis
+          spec:
+            template:
+              spec:
+                containers:
+                - name: redis
+                  resources:
+                    requests:
+                      cpu: "1"
+                      memory: "1Gi"
+                    limits:
+                      cpu: "2"
+                      memory: "2Gi"
+
+  - name: Verify AIMKVCache spec reflects the update
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMKVCache
+          metadata:
+            name: standalone-update-cache
+          spec:
+            resources:
+              requests:
+                cpu: "1"
+                memory: "1Gi"
+              limits:
+                cpu: "2"
+                memory: "2Gi"
+
+  - name: Verify AIMKVCache remains Ready after update
+    try:
+    - assert:
+        timeout: 90s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMKVCache
+          metadata:
+            name: standalone-update-cache
+          status:
+            status: Ready
+            readyReplicas: 1
+

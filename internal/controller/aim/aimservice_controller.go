@@ -446,11 +446,14 @@ func (r *AIMServiceReconciler) planKVCache(logger logr.Logger, service *aimv1alp
 
 	var desired []client.Object
 
-	// Plan AIMKVCache if it doesn't exist yet
+	// Plan AIMKVCache only if it doesn't exist
+	// If it exists, do NOT update it (AIMKVCache controller handles its own updates)
 	if obs.KVCache == nil && obs.KVCacheErr == nil {
 		kvCache := buildKVCache(service, ownerRef)
 		desired = append(desired, kvCache)
 		baseutils.Debug(logger, "Planning to create AIMKVCache", "name", kvCache.Name, "type", kvCache.Spec.KVCacheType)
+	} else if obs.KVCache != nil {
+		baseutils.Debug(logger, "AIMKVCache already exists, skipping update", "name", obs.KVCache.Name)
 	}
 
 	// Plan LMCache ConfigMap if KV cache is ready and ConfigMap doesn't exist

@@ -1,0 +1,132 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: kvcache-manual-update-service-created
+spec:
+  description: Manually updating a service-created KVCache works (controller applies updates)
+  timeouts:
+    assert: 120s
+  steps:
+  - name: Ensure default cluster model is available
+    try:
+    - assert:
+        timeout: 5s
+        file: ../../service/_shared/default-cluster-image.yaml
+
+  - name: Ensure default template is available
+    try:
+    - assert:
+        timeout: 5s
+        file: ../../service/_shared/template-available.yaml
+
+  - name: Create AIMService which creates a KVCache
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify KVCache is created by AIMService with initial resources
+    try:
+    - assert:
+        timeout: 60s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMKVCache
+          metadata:
+            name: kvcache-manual-update-service
+          spec:
+            kvCacheType: redis
+            resources:
+              requests:
+                cpu: "500m"
+                memory: "512Mi"
+
+  - name: Verify KVCache becomes Ready
+    try:
+    - assert:
+        timeout: 90s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMKVCache
+          metadata:
+            name: kvcache-manual-update-service
+          status:
+            status: Ready
+            readyReplicas: 1
+
+  - name: Verify initial StatefulSet resources
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            name: kvcache-manual-update-service-redis
+          spec:
+            template:
+              spec:
+                containers:
+                - name: redis
+                  resources:
+                    requests:
+                      cpu: "500m"
+                      memory: "512Mi"
+
+  - name: Manually update the KVCache CRD directly
+    try:
+    - apply:
+        file: kvcache-manual-update.yaml
+
+  - name: Verify KVCache spec is updated
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMKVCache
+          metadata:
+            name: kvcache-manual-update-service
+          spec:
+            resources:
+              requests:
+                cpu: "2"
+                memory: "2Gi"
+              limits:
+                cpu: "2"
+                memory: "2Gi"
+
+  - name: Verify StatefulSet is updated with new resources
+    try:
+    - assert:
+        timeout: 60s
+        resource:
+          apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            name: kvcache-manual-update-service-redis
+          spec:
+            template:
+              spec:
+                containers:
+                - name: redis
+                  resources:
+                    requests:
+                      cpu: "2"
+                      memory: "2Gi"
+                    limits:
+                      cpu: "2"
+                      memory: "2Gi"
+
+  - name: Verify KVCache remains Ready after manual update
+    try:
+    - assert:
+        timeout: 90s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMKVCache
+          metadata:
+            name: kvcache-manual-update-service
+          status:
+            status: Ready
+            readyReplicas: 1
+

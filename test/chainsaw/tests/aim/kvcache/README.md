@@ -22,6 +22,14 @@ Tests for the KVCache controller that manages Redis/Mooncake backends for LMCach
 
 **status-progression/** - Tracks status transitions from Pending → Progressing → Ready as resources come up.
 
+**standalone-update/** - Updates a standalone KVCache with new resources; verifies StatefulSet is updated.
+
+**service-no-update/** - AIMService does NOT update existing KVCache when service spec changes.
+
+**manual-update-service-created/** - Manually updating a service-created KVCache works (controller applies updates).
+
+**preexisting-no-update/** - AIMService does NOT update pre-existing KVCache when referencing with different settings.
+
 ## Configuration
 
 **Storage Class**: Configured via `test/chainsaw/values/kvcache.yaml` (default: `openebs-hostpath`).

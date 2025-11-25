@@ -1,0 +1,17 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMKVCache
+metadata:
+  name: standalone-update-cache
+spec:
+  kvCacheType: redis
+  storage:
+    size: 1Gi  # Storage size unchanged (immutable in StatefulSets)
+    storageClassName: ($values.storageClass)
+  resources:
+    requests:
+      cpu: "1"       # Updated from 500m
+      memory: "1Gi"  # Updated from 512Mi
+    limits:
+      cpu: "2"       # Updated from 1
+      memory: "2Gi"  # Updated from 1Gi
+

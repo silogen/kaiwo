@@ -1,0 +1,21 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: service-referencing-existing
+spec:
+  model:
+    ref: default-testing-llama-3-8b
+  kvCache:
+    name: preexisting-shared-cache  # References existing KVCache
+    type: redis
+    storage:
+      size: 2Gi  # Same as existing (would be ignored anyway)
+      storageClassName: ($values.storageClass)
+    resources:
+      requests:
+        cpu: "4"       # Different settings - should be IGNORED
+        memory: "4Gi"
+      limits:
+        cpu: "4"
+        memory: "4Gi"
+

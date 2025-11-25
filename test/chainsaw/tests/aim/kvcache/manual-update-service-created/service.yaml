@@ -1,0 +1,21 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: manual-update-service
+spec:
+  model:
+    ref: default-testing-llama-3-8b
+  kvCache:
+    name: kvcache-manual-update-service
+    type: redis
+    storage:
+      size: 1Gi
+      storageClassName: ($values.storageClass)
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "512Mi"
+      limits:
+        cpu: "1"
+        memory: "1Gi"
+

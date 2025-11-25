@@ -170,7 +170,7 @@ func (r *AIMKVCacheReconciler) observe(ctx context.Context, kvc *aimv1alpha1.AIM
 	return obs, nil
 }
 
-func (r *AIMKVCacheReconciler) plan(_ context.Context, kvc *aimv1alpha1.AIMKVCache, _ *kvObservation) ([]client.Object, error) {
+func (r *AIMKVCacheReconciler) plan(_ context.Context, kvc *aimv1alpha1.AIMKVCache, obs *kvObservation) ([]client.Object, error) {
 	var desired []client.Object
 
 	// Only support Redis for now
@@ -178,15 +178,62 @@ func (r *AIMKVCacheReconciler) plan(_ context.Context, kvc *aimv1alpha1.AIMKVCac
 		return nil, fmt.Errorf("unsupported KVCacheType: %s, only 'redis' is supported", kvc.Spec.KVCacheType)
 	}
 
-	// Build Redis Service (must be created before StatefulSet)
-	service := r.buildRedisService(kvc)
-	desired = append(desired, service)
+	// Build Redis Service
+	desiredService := r.buildRedisService(kvc)
+	if !obs.serviceFound {
+		desired = append(desired, desiredService)
+	} else if r.isOwnedByKVCache(&obs.service, kvc) && r.serviceNeedsUpdate(obs.service, desiredService) {
+		desired = append(desired, desiredService)
+		r.Recorder.Event(kvc, corev1.EventTypeNormal, "ServiceUpdated", "Service parameters changed, updating")
+	}
 
 	// Build Redis StatefulSet
-	statefulSet := r.buildRedisStatefulSet(kvc)
-	desired = append(desired, statefulSet)
+	desiredStatefulSet := r.buildRedisStatefulSet(kvc)
+	if !obs.statefulSetFound {
+		desired = append(desired, desiredStatefulSet)
+	} else if r.isOwnedByKVCache(&obs.statefulSet, kvc) && r.statefulSetNeedsUpdate(obs.statefulSet, desiredStatefulSet) {
+		desired = append(desired, desiredStatefulSet)
+		r.Recorder.Event(kvc, corev1.EventTypeNormal, "StatefulSetUpdated", "StatefulSet parameters changed, updating")
+	}
 
 	return desired, nil
+}
+
+func (r *AIMKVCacheReconciler) isOwnedByKVCache(obj client.Object, kvc *aimv1alpha1.AIMKVCache) bool {
+	for _, ref := range obj.GetOwnerReferences() {
+		if ref.UID == kvc.UID {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *AIMKVCacheReconciler) serviceNeedsUpdate(existing corev1.Service, desired *corev1.Service) bool {
+	// Compare key fields that matter
+	return existing.Spec.ClusterIP != desired.Spec.ClusterIP ||
+		len(existing.Spec.Ports) != len(desired.Spec.Ports)
+}
+
+func (r *AIMKVCacheReconciler) statefulSetNeedsUpdate(existing appsv1.StatefulSet, desired *appsv1.StatefulSet) bool {
+	// Only compare fields that can be updated in a StatefulSet
+	// VolumeClaimTemplates are IMMUTABLE and cannot be changed after creation
+
+	// Compare resource requirements in pod template (this is allowed)
+	if len(existing.Spec.Template.Spec.Containers) > 0 && len(desired.Spec.Template.Spec.Containers) > 0 {
+		existingRes := existing.Spec.Template.Spec.Containers[0].Resources
+		desiredRes := desired.Spec.Template.Spec.Containers[0].Resources
+		if !existingRes.Requests.Cpu().Equal(*desiredRes.Requests.Cpu()) ||
+			!existingRes.Requests.Memory().Equal(*desiredRes.Requests.Memory()) ||
+			!existingRes.Limits.Cpu().Equal(*desiredRes.Limits.Cpu()) ||
+			!existingRes.Limits.Memory().Equal(*desiredRes.Limits.Memory()) {
+			return true
+		}
+	}
+
+	// Note: We deliberately do NOT check VolumeClaimTemplates because they are immutable
+	// Storage size changes require manual PVC expansion or StatefulSet recreation
+
+	return false
 }
 
 func (r *AIMKVCacheReconciler) projectStatus(_ context.Context, kvc *aimv1alpha1.AIMKVCache, obs *kvObservation, errs controllerutils.ReconcileErrors) error {

@@ -1,0 +1,18 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMKVCache
+metadata:
+  name: kvcache-manual-update-service
+  # Note: ownerReference to AIMService is preserved automatically
+spec:
+  kvCacheType: redis
+  storage:
+    size: 1Gi  # UNCHANGED (storage size is immutable in StatefulSets)
+    storageClassName: ($values.storageClass)
+  resources:
+    requests:
+      cpu: "2"       # Manually updated to 2 CPU
+      memory: "2Gi"  # Manually updated to 2Gi
+    limits:
+      cpu: "2"
+      memory: "2Gi"
+

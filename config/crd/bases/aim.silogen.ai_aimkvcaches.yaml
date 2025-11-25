@@ -271,6 +271,7 @@ spec:
                     description: |-
                       AccessModes specifies the access modes for the persistent volume.
                       Defaults to ReadWriteOnce if not specified.
+                      WARNING: This field is immutable after creation due to StatefulSet VolumeClaimTemplate limitations.
                     items:
                       type: string
                     type: array
@@ -283,6 +284,7 @@ spec:
                       Size specifies the storage size for the persistent volume.
                       Minimum recommended size is 1Gi for Redis to function properly.
                       If not specified, defaults to 1Gi.
+                      WARNING: This field is immutable after creation due to StatefulSet VolumeClaimTemplate limitations.
                     pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                     x-kubernetes-int-or-string: true
                   storageClassName:
@@ -290,8 +292,17 @@ spec:
                       StorageClassName specifies the storage class to use for the persistent volume.
                       If not specified, the cluster's default storage class will be used.
                       Ensure your cluster has a default storage class configured or specify one explicitly.
+                      WARNING: This field is immutable after creation due to StatefulSet VolumeClaimTemplate limitations.
                     type: string
                 type: object
+                x-kubernetes-validations:
+                - message: storage size is immutable once set
+                  rule: '!has(oldSelf.size) || !has(self.size) || self.size == oldSelf.size'
+                - message: storage class name is immutable once set
+                  rule: '!has(oldSelf.storageClassName) || !has(self.storageClassName)
+                    || self.storageClassName == oldSelf.storageClassName'
+                - message: access modes are immutable once set
+                  rule: '!has(oldSelf.accessModes) || self.accessModes == oldSelf.accessModes'
             required:
             - kvCacheType
             type: object

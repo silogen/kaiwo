@@ -61,10 +61,14 @@ type AIMKVCacheSpec struct {
 }
 
 // StorageSpec defines the persistent storage configuration
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.size) || !has(self.size) || self.size == oldSelf.size",message="storage size is immutable once set"
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.storageClassName) || !has(self.storageClassName) || self.storageClassName == oldSelf.storageClassName",message="storage class name is immutable once set"
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.accessModes) || self.accessModes == oldSelf.accessModes",message="access modes are immutable once set"
 type StorageSpec struct {
 	// Size specifies the storage size for the persistent volume.
 	// Minimum recommended size is 1Gi for Redis to function properly.
 	// If not specified, defaults to 1Gi.
+	// WARNING: This field is immutable after creation due to StatefulSet VolumeClaimTemplate limitations.
 	// +kubebuilder:default="1Gi"
 	// +optional
 	Size *resource.Quantity `json:"size,omitempty"`
@@ -72,11 +76,13 @@ type StorageSpec struct {
 	// StorageClassName specifies the storage class to use for the persistent volume.
 	// If not specified, the cluster's default storage class will be used.
 	// Ensure your cluster has a default storage class configured or specify one explicitly.
+	// WARNING: This field is immutable after creation due to StatefulSet VolumeClaimTemplate limitations.
 	// +optional
 	StorageClassName *string `json:"storageClassName,omitempty"`
 
 	// AccessModes specifies the access modes for the persistent volume.
 	// Defaults to ReadWriteOnce if not specified.
+	// WARNING: This field is immutable after creation due to StatefulSet VolumeClaimTemplate limitations.
 	// +kubebuilder:default={ReadWriteOnce}
 	// +optional
 	AccessModes []corev1.PersistentVolumeAccessMode `json:"accessModes,omitempty"`
