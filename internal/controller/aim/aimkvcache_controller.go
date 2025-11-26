@@ -275,8 +275,6 @@ func (r *AIMKVCacheReconciler) projectStatus(_ context.Context, kvc *aimv1alpha1
 			switch kvc.Spec.KVCacheType {
 			case "redis":
 				status.Endpoint = fmt.Sprintf("redis://%s:%d", obs.service.Name, port)
-			case "mooncake":
-				status.Endpoint = fmt.Sprintf("mooncake://%s:%d", obs.service.Name, port)
 			default:
 				status.Endpoint = fmt.Sprintf("%s:%d", obs.service.Name, port)
 			}
@@ -680,14 +678,14 @@ func (r *AIMKVCacheReconciler) setFailureCondition(status *aimv1alpha1.AIMKVCach
 		Type:    aimv1alpha1.AIMKVCacheConditionReady,
 		Status:  metav1.ConditionFalse,
 		Reason:  aimv1alpha1.AIMKVCacheReasonStatefulSetFailed,
-		Message: "StatefulSet failed",
+		Message: message,
 	})
 
 	r.setCondition(status, metav1.Condition{
 		Type:    aimv1alpha1.AIMKVCacheConditionProgressing,
 		Status:  metav1.ConditionFalse,
 		Reason:  aimv1alpha1.AIMKVCacheReasonStatefulSetFailed,
-		Message: "StatefulSet failed",
+		Message: message,
 	})
 
 	r.setCondition(status, metav1.Condition{

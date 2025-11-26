@@ -6,9 +6,10 @@ spec:
   model:
     ref: default-testing-llama-3-8b
   runtimeConfigName: routing-template-service
-  routing:
-    enabled: true
-    gatewayRef:
-      name: kserve-ingress-gateway
-      namespace: kgateway-system
-    pathTemplate: "/custom/{.metadata.namespace}/{.metadata.name}/"
+  runtimeOverrides:
+    routing:
+      enabled: true
+      gatewayRef:
+        name: kserve-ingress-gateway
+        namespace: kgateway-system
+      pathTemplate: "/custom/{.metadata.namespace}/{.metadata.name}/"
