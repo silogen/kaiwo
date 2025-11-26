@@ -1487,8 +1487,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#quantity-resource-api)_ | Size specifies the storage size for the persistent volume.<br />Minimum recommended size is 1Gi for Redis to function properly.<br />If not specified, defaults to 1Gi. | 1Gi |  |
-| `storageClassName` _string_ | StorageClassName specifies the storage class to use for the persistent volume.<br />If not specified, the cluster's default storage class will be used.<br />Ensure your cluster has a default storage class configured or specify one explicitly. |  |  |
-| `accessModes` _[PersistentVolumeAccessMode](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#persistentvolumeaccessmode-v1-core) array_ | AccessModes specifies the access modes for the persistent volume.<br />Defaults to ReadWriteOnce if not specified. | [ReadWriteOnce] |  |
+| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#quantity-resource-api)_ | Size specifies the storage size for the persistent volume.<br />Minimum recommended size is 1Gi for Redis to function properly.<br />If not specified, defaults to 1Gi.<br />WARNING: This field is immutable after creation due to StatefulSet VolumeClaimTemplate limitations. | 1Gi |  |
+| `storageClassName` _string_ | StorageClassName specifies the storage class to use for the persistent volume.<br />If not specified, the cluster's default storage class will be used.<br />Ensure your cluster has a default storage class configured or specify one explicitly.<br />WARNING: This field is immutable after creation due to StatefulSet VolumeClaimTemplate limitations. |  |  |
+| `accessModes` _[PersistentVolumeAccessMode](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#persistentvolumeaccessmode-v1-core) array_ | AccessModes specifies the access modes for the persistent volume.<br />Defaults to ReadWriteOnce if not specified.<br />WARNING: This field is immutable after creation due to StatefulSet VolumeClaimTemplate limitations. | [ReadWriteOnce] |  |
 
 

@@ -278,7 +278,7 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 		// Determine the KVCache name (use specified name or default)
 		kvCacheName := service.Spec.KVCache.Name
 		if kvCacheName == "" {
-			kvCacheName = fmt.Sprintf("kvcache-%s", service.Name)
+			kvCacheName = fmt.Sprintf("kvcache-%s", service.Namespace)
 		}
 
 		// Observe the AIMKVCache
@@ -480,7 +480,7 @@ func buildKVCache(service *aimv1alpha1.AIMService, ownerRef metav1.OwnerReferenc
 	// Use specified name or default
 	kvCacheName := service.Spec.KVCache.Name
 	if kvCacheName == "" {
-		kvCacheName = fmt.Sprintf("kvcache-%s", service.Name)
+		kvCacheName = fmt.Sprintf("kvcache-%s", service.Namespace)
 	}
 
 	// Use specified type or default to redis
