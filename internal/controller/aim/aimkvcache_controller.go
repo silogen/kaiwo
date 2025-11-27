@@ -613,14 +613,14 @@ func (r *AIMKVCacheReconciler) setReadyCondition(status *aimv1alpha1.AIMKVCacheS
 		Type:    aimv1alpha1.AIMKVCacheConditionReady,
 		Status:  metav1.ConditionTrue,
 		Reason:  aimv1alpha1.AIMKVCacheReasonStatefulSetReady,
-		Message: "Redis StatefulSet and service are ready",
+		Message: "StatefulSet and service are ready",
 	})
 
 	r.setCondition(status, metav1.Condition{
 		Type:    aimv1alpha1.AIMKVCacheConditionProgressing,
 		Status:  metav1.ConditionFalse,
 		Reason:  aimv1alpha1.AIMKVCacheReasonStatefulSetReady,
-		Message: "StatefulSet is ready",
+		Message: "StatefulSet and service are ready",
 	})
 
 	r.setCondition(status, metav1.Condition{
@@ -632,7 +632,7 @@ func (r *AIMKVCacheReconciler) setReadyCondition(status *aimv1alpha1.AIMKVCacheS
 }
 
 func (r *AIMKVCacheReconciler) setProgressingCondition(status *aimv1alpha1.AIMKVCacheStatus, obs *kvObservation) {
-	message := "Redis StatefulSet is progressing"
+	message := "StatefulSet is progressing"
 	reason := aimv1alpha1.AIMKVCacheReasonWaitingForPods
 
 	if obs != nil {
@@ -656,7 +656,7 @@ func (r *AIMKVCacheReconciler) setProgressingCondition(status *aimv1alpha1.AIMKV
 		Type:    aimv1alpha1.AIMKVCacheConditionReady,
 		Status:  metav1.ConditionFalse,
 		Reason:  aimv1alpha1.AIMKVCacheReasonWaitingForPods,
-		Message: "StatefulSet is progressing",
+		Message: message,
 	})
 
 	r.setCondition(status, metav1.Condition{
@@ -690,7 +690,7 @@ func (r *AIMKVCacheReconciler) setPendingCondition(status *aimv1alpha1.AIMKVCach
 		Type:    aimv1alpha1.AIMKVCacheConditionProgressing,
 		Status:  metav1.ConditionFalse,
 		Reason:  aimv1alpha1.AIMKVCacheReasonStatefulSetPending,
-		Message: "StatefulSet not started yet",
+		Message: message,
 	})
 
 	r.setCondition(status, metav1.Condition{
