@@ -212,8 +212,36 @@ func (r *AIMKVCacheReconciler) isOwnedByKVCache(obj client.Object, kvc *aimv1alp
 
 func (r *AIMKVCacheReconciler) serviceNeedsUpdate(existing corev1.Service, desired *corev1.Service) bool {
 	// Compare key fields that matter
-	return existing.Spec.ClusterIP != desired.Spec.ClusterIP ||
-		len(existing.Spec.Ports) != len(desired.Spec.Ports)
+	if existing.Spec.ClusterIP != desired.Spec.ClusterIP {
+		return true
+	}
+
+	// Compare ports length
+	if len(existing.Spec.Ports) != len(desired.Spec.Ports) {
+		return true
+	}
+
+	// Compare exact port specifications
+	existingPorts := make(map[string]corev1.ServicePort)
+	for _, port := range existing.Spec.Ports {
+		existingPorts[port.Name] = port
+	}
+
+	for _, desiredPort := range desired.Spec.Ports {
+		existingPort, found := existingPorts[desiredPort.Name]
+		if !found {
+			return true
+		}
+
+		// Compare port fields
+		if existingPort.Port != desiredPort.Port ||
+			existingPort.Protocol != desiredPort.Protocol ||
+			existingPort.TargetPort != desiredPort.TargetPort {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (r *AIMKVCacheReconciler) statefulSetNeedsUpdate(existing appsv1.StatefulSet, desired *appsv1.StatefulSet) bool {
