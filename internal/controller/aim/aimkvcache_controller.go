@@ -48,6 +48,7 @@ import (
 
 const (
 	kvCacheFieldOwner = "aimkvcache-controller"
+	kvCacheTypeRedis  = "redis"
 )
 
 // AIMKVCacheReconciler reconciles a AIMKVCache object
@@ -170,32 +171,37 @@ func (r *AIMKVCacheReconciler) observe(ctx context.Context, kvc *aimv1alpha1.AIM
 	return obs, nil
 }
 
-func (r *AIMKVCacheReconciler) plan(_ context.Context, kvc *aimv1alpha1.AIMKVCache, obs *kvObservation) ([]client.Object, error) {
+func (r *AIMKVCacheReconciler) plan(ctx context.Context, kvc *aimv1alpha1.AIMKVCache, obs *kvObservation) ([]client.Object, error) {
+	logger := log.FromContext(ctx)
 	var desired []client.Object
 
 	// Only support Redis for now
-	if kvc.Spec.KVCacheType != "redis" && kvc.Spec.KVCacheType != "" {
-		return nil, fmt.Errorf("unsupported KVCacheType: %s, only 'redis' is supported", kvc.Spec.KVCacheType)
+	if kvc.Spec.KVCacheType != kvCacheTypeRedis && kvc.Spec.KVCacheType != "" {
+		return nil, fmt.Errorf("unsupported KVCacheType: %s, only '%s' is supported", kvc.Spec.KVCacheType, kvCacheTypeRedis)
 	}
 
 	// Build Redis Service
 	desiredService := r.buildRedisService(kvc)
 	if !obs.serviceFound {
 		desired = append(desired, desiredService)
-		r.Recorder.Event(kvc, corev1.EventTypeNormal, "ServiceCreation", "Service creation requested")
+		baseutils.Debug(logger, "Planning to create Service", "name", desiredService.Name)
+		r.Recorder.Eventf(kvc, corev1.EventTypeNormal, "ServiceCreation", "Service creation requested: %s (type: %s)", desiredService.Name, kvc.Spec.KVCacheType)
 	} else if r.isOwnedByKVCache(&obs.service, kvc) && r.serviceNeedsUpdate(obs.service, desiredService) {
 		desired = append(desired, desiredService)
-		r.Recorder.Event(kvc, corev1.EventTypeNormal, "ServiceUpdated", "Service parameters changed, updating")
+		baseutils.Debug(logger, "Planning to update Service", "name", desiredService.Name)
+		r.Recorder.Eventf(kvc, corev1.EventTypeNormal, "ServiceUpdated", "Service parameters changed, updating: %s (type: %s)", desiredService.Name, kvc.Spec.KVCacheType)
 	}
 
 	// Build Redis StatefulSet
 	desiredStatefulSet := r.buildRedisStatefulSet(kvc)
 	if !obs.statefulSetFound {
 		desired = append(desired, desiredStatefulSet)
-		r.Recorder.Event(kvc, corev1.EventTypeNormal, "StatefulSetCreation", "StatefulSet creation requested")
+		baseutils.Debug(logger, "Planning to create StatefulSet", "name", desiredStatefulSet.Name)
+		r.Recorder.Eventf(kvc, corev1.EventTypeNormal, "StatefulSetCreation", "StatefulSet creation requested: %s (type: %s)", desiredStatefulSet.Name, kvc.Spec.KVCacheType)
 	} else if r.isOwnedByKVCache(&obs.statefulSet, kvc) && r.statefulSetNeedsUpdate(obs.statefulSet, desiredStatefulSet) {
 		desired = append(desired, desiredStatefulSet)
-		r.Recorder.Event(kvc, corev1.EventTypeNormal, "StatefulSetUpdated", "StatefulSet parameters changed, updating")
+		baseutils.Debug(logger, "Planning to update StatefulSet", "name", desiredStatefulSet.Name)
+		r.Recorder.Eventf(kvc, corev1.EventTypeNormal, "StatefulSetUpdated", "StatefulSet parameters changed, updating: %s (type: %s)", desiredStatefulSet.Name, kvc.Spec.KVCacheType)
 	}
 
 	return desired, nil
@@ -303,7 +309,7 @@ func (r *AIMKVCacheReconciler) projectStatus(_ context.Context, kvc *aimv1alpha1
 
 			// Format based on backend type
 			switch kvc.Spec.KVCacheType {
-			case "redis":
+			case kvCacheTypeRedis:
 				status.Endpoint = fmt.Sprintf("redis://%s:%d", obs.service.Name, port)
 			default:
 				status.Endpoint = fmt.Sprintf("%s:%d", obs.service.Name, port)
@@ -553,7 +559,7 @@ func (r *AIMKVCacheReconciler) getImage(kvc *aimv1alpha1.AIMKVCache) string {
 
 	// Otherwise, use defaults based on KVCacheType
 	switch kvc.Spec.KVCacheType {
-	case "redis":
+	case kvCacheTypeRedis:
 		return "redis:7.2.4"
 	default:
 		// Fallback to redis if type is not recognized

@@ -452,6 +452,7 @@ func (r *AIMServiceReconciler) planKVCache(logger logr.Logger, service *aimv1alp
 		kvCache := buildKVCache(service, ownerRef)
 		desired = append(desired, kvCache)
 		baseutils.Debug(logger, "Planning to create AIMKVCache", "name", kvCache.Name, "type", kvCache.Spec.KVCacheType)
+		r.Recorder.Eventf(service, v1.EventTypeNormal, "KVCacheCreation", "AIMKVCache creation requested: %s (type: %s)", kvCache.Name, kvCache.Spec.KVCacheType)
 	} else if obs.KVCache != nil {
 		baseutils.Debug(logger, "AIMKVCache already exists, skipping update", "name", obs.KVCache.Name)
 	}
@@ -471,6 +472,7 @@ func (r *AIMServiceReconciler) planKVCache(logger logr.Logger, service *aimv1alp
 		configMap := buildLMCacheConfigMap(service, obs.KVCache, ownerRef)
 		desired = append(desired, configMap)
 		baseutils.Debug(logger, "Planning to create LMCache ConfigMap", "name", configMap.Name)
+		r.Recorder.Eventf(service, v1.EventTypeNormal, "LMCacheConfigMapCreation", "LMCache ConfigMap creation requested: %s", configMap.Name)
 	}
 
 	return desired
@@ -486,7 +488,7 @@ func buildKVCache(service *aimv1alpha1.AIMService, ownerRef metav1.OwnerReferenc
 	// Use specified type or default to redis
 	kvCacheType := service.Spec.KVCache.Type
 	if kvCacheType == "" {
-		kvCacheType = "redis"
+		kvCacheType = kvCacheTypeRedis
 	}
 
 	return &aimv1alpha1.AIMKVCache{
