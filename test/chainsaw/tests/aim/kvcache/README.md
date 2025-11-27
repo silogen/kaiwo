@@ -1,6 +1,6 @@
 # AIMKVCache Tests
 
-Tests for the KVCache controller that manages Redis/Mooncake backends for LMCache.
+Tests for the KVCache controller that manages Redis backends for LMCache.
 
 ## Tests
 

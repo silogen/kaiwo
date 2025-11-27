@@ -31,7 +31,7 @@ The KV cache implementation in Kaiwo consists of two key components:
                               │   StatefulSet    │
                               │   + Service      │
                               │                  │
-                              │  Redis/Mooncake  │
+                              │  Redis  │
                               │  Backend         │
                               └──────────────────┘
 ```
@@ -47,10 +47,10 @@ The KV cache implementation in Kaiwo consists of two key components:
 - Manages the lifecycle of a KV cache backend
 - Creates and maintains a StatefulSet with persistent storage
 - Provides a stable Service endpoint for cache access
-- Supports Redis and Mooncake backends
+- Supports Redis backends
 
 **Backend (StatefulSet)**
-- Runs the actual KV cache storage (Redis or Mooncake)
+- Runs the actual KV cache storage (Redis)
 - Uses persistent volumes for durability
 - Provides network endpoint for cache operations
 
@@ -109,13 +109,6 @@ The storage size for a KV cache depends on several factors:
 - **Batch size**: Higher batch sizes increase cache requirements
 - **Expected request volume**: More concurrent requests need more cache space
 
-**Minimum**: 1Gi (required for Redis to function properly)
-
-**Recommended starting sizes**:
-- Small models (< 7B parameters): 10Gi
-- Medium models (7B - 70B): 50Gi
-- Large models (> 70B): 100Gi+
-
 Monitor actual usage and adjust accordingly.
 
 ### Storage Classes
@@ -135,21 +128,6 @@ Redis is the default and currently supported backend. It provides:
 - High-performance in-memory caching with disk persistence
 - Mature, battle-tested reliability
 - Straightforward configuration
-
-### Mooncake
-
-Mooncake support is planned for future releases. This will provide an alternative backend optimized for specific use cases.
-
-## Performance Benefits
-
-Enabling KV cache can provide:
-
-- **2-10x throughput improvement** for requests with shared prefixes
-- **50-80% latency reduction** for common prompts
-- **Lower GPU utilization** due to reduced redundant computation
-- **Better resource efficiency** in multi-tenant environments
-
-Actual performance gains depend on your specific workload characteristics and prefix-sharing patterns.
 
 ## Best Practices
 

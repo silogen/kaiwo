@@ -31,14 +31,13 @@ import (
 // AIMKVCacheSpec defines the desired state of AIMKVCache
 type AIMKVCacheSpec struct {
 	// KVCacheType specifies the type of key-value cache to create
-	// +kubebuilder:validation:Enum=redis;mooncake
+	// +kubebuilder:validation:Enum=redis
 	// +kubebuilder:default=redis
-	KVCacheType string `json:"kvCacheType"` // redis or mooncake
+	KVCacheType string `json:"kvCacheType"` // redis
 
 	// Image specifies the container image to use for the KV cache service.
 	// If not specified, defaults to appropriate images based on KVCacheType:
 	// - redis: redis:7.2.4
-	// - mooncake: ghcr.io/mooncake-dev/mooncake:v0.1.0
 	// +optional
 	Image *string `json:"image,omitempty"`
 

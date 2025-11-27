@@ -63,7 +63,7 @@ type AIMServiceKVCache struct {
 
 	// Type specifies the type of KV cache backend.
 	// Only used when creating a new AIMKVCache (ignored if referencing existing).
-	// +kubebuilder:validation:Enum=redis;mooncake
+	// +kubebuilder:validation:Enum=redis
 	// +kubebuilder:default=redis
 	Type string `json:"type,omitempty"`
 

@@ -555,8 +555,6 @@ func (r *AIMKVCacheReconciler) getImage(kvc *aimv1alpha1.AIMKVCache) string {
 	switch kvc.Spec.KVCacheType {
 	case "redis":
 		return "redis:7.2.4"
-	case "mooncake":
-		return "ghcr.io/mooncake-dev/mooncake:v0.1.0"
 	default:
 		// Fallback to redis if type is not recognized
 		return "redis:7.2.4"

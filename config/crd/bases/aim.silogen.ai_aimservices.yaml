@@ -484,7 +484,6 @@ spec:
                       Only used when creating a new AIMKVCache (ignored if referencing existing).
                     enum:
                     - redis
-                    - mooncake
                     type: string
                 type: object
               model:

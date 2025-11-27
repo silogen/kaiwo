@@ -190,7 +190,6 @@ spec:
                   Image specifies the container image to use for the KV cache service.
                   If not specified, defaults to appropriate images based on KVCacheType:
                   - redis: redis:7.2.4
-                  - mooncake: ghcr.io/mooncake-dev/mooncake:v0.1.0
                 type: string
               kvCacheType:
                 default: redis
@@ -198,7 +197,6 @@ spec:
                   create
                 enum:
                 - redis
-                - mooncake
                 type: string
               resources:
                 description: |-
