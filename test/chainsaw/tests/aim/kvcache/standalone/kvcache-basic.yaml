@@ -1,13 +1,9 @@
 apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMKVCache
 metadata:
-  name: storage-test
+  name: basic-kvcache
 spec:
   kvCacheType: redis
   storage:
-    size: 5Gi
     storageClassName: ($values.storageClass)
-    accessModes:
-    - ReadWriteOnce
-
 

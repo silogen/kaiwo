@@ -1,17 +1,17 @@
 apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMKVCache
 metadata:
-  name: standalone-update-cache
+  name: custom-resources
 spec:
   kvCacheType: redis
-  storage:
-    size: 1Gi
-    storageClassName: ($values.storageClass)
   resources:
     requests:
       cpu: "500m"
       memory: "512Mi"
     limits:
-      cpu: "1"
-      memory: "1Gi"
+      cpu: "1500m"
+      memory: "1536Mi"
+  storage:
+    storageClassName: ($values.storageClass)
+    size: 5Gi
 

@@ -4,33 +4,16 @@ Tests for the KVCache controller that manages Redis backends for LMCache.
 
 ## Tests
 
-**basic/** - Creates a KVCache with defaults and checks it becomes Ready with the correct endpoint.
+### **standalone/**
+Comprehensive standalone AIMKVCache lifecycle test covering:
+- Basic creation with defaults (default resources: requests=1 CPU/1Gi memory, limits=1 CPU/1Gi memory)
+- Custom image and environment variables
+- Custom resource requests/limits
+- Custom storage size and storage class
+- Status progression (Pending → Progressing → Ready)
+- Updates to standalone KVCache (verifies StatefulSet updates)
 
-**custom-image-env/** - Uses custom Redis image and environment variables to verify container configuration.
-
-**custom-resources/** - Sets custom CPU/memory requests and limits, verifies pods use them.
-
-**custom-storage/** - Configures custom storage size and storage class, checks PVC matches.
-
-**default-name/** - When AIMService doesn't specify a KVCache name, it should default to `kvcache-{service-name}`.
-
-**default-resources/** - Without specifying resources, KVCache should use defaults (1 CPU, 1Gi memory).
-
-**service-integration/** - AIMService creates a KVCache, generates LMCache config, and mounts it into InferenceService.
-
-**custom-lmcache-config/** - AIMService with custom LMCacheConfig using {SERVICE_URL} placeholder, verifies proper substitution.
-
-**shared-kvcache/** - Multiple AIMServices reference the same pre-created KVCache instance.
-
-**status-progression/** - Tracks status transitions from Pending → Progressing → Ready as resources come up.
-
-**standalone-update/** - Updates a standalone KVCache with new resources; verifies StatefulSet is updated.
-
-**service-no-update/** - AIMService does NOT update existing KVCache when service spec changes.
-
-**manual-update-service-created/** - Manually updating a service-created KVCache works (controller applies updates).
-
-**preexisting-no-update/** - AIMService does NOT update pre-existing KVCache when referencing with different settings.
+This single comprehensive test covers all critical KVCache controller functionality in ~2 minutes.
 
 ## Configuration
 
@@ -45,7 +28,7 @@ storageClass: your-storage-class
 ## Running
 
 ```bash
-# All kvcache tests
+# Run the comprehensive kvcache test
 chainsaw test --test-dir test/chainsaw/tests/aim/kvcache \
   --values=test/chainsaw/values/kvcache.yaml
 
@@ -53,10 +36,10 @@ chainsaw test --test-dir test/chainsaw/tests/aim/kvcache \
 chainsaw test --test-dir test/chainsaw/tests/aim/kvcache \
   --values=custom-values.yaml
 
-# Single test
-chainsaw test --test-dir test/chainsaw/tests/aim/kvcache/basic \
+# Or run directly
+chainsaw test --test-dir test/chainsaw/tests/aim/kvcache/standalone \
   --values=test/chainsaw/values/kvcache.yaml
 ```
 
-**Note**: The `--values` flag is required for these tests. YAMLs use `($values.storageClass)` templating.
+**Note**: The `--values` flag is required. YAMLs use `($values.storageClass)` templating.
 

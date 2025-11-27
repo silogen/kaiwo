@@ -1,10 +1,9 @@
 apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMKVCache
 metadata:
-  name: test-kvcache
+  name: status-test
 spec:
   kvCacheType: redis
   storage:
     storageClassName: ($values.storageClass)
-
 

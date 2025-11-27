@@ -1,17 +1,16 @@
 apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMKVCache
 metadata:
-  name: preexisting-shared-cache
+  name: updateable-kvcache
 spec:
   kvCacheType: redis
-  storage:
-    size: 2Gi
-    storageClassName: ($values.storageClass)
   resources:
     requests:
-      cpu: "1"
-      memory: "1Gi"
+      cpu: "500m"
+      memory: "512Mi"
     limits:
       cpu: "1"
       memory: "1Gi"
+  storage:
+    storageClassName: ($values.storageClass)
 

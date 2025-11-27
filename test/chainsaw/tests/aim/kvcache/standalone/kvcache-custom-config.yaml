@@ -1,16 +1,15 @@
 apiVersion: aim.silogen.ai/v1alpha1
 kind: AIMKVCache
 metadata:
-  name: custom-resources-kvcache
+  name: custom-config
 spec:
   kvCacheType: redis
+  image: redis:7.4.0
+  env:
+  - name: REDIS_PASSWORD
+    value: testpassword
+  - name: REDIS_MAX_MEMORY
+    value: 512mb
   storage:
     storageClassName: ($values.storageClass)
-  resources:
-    requests:
-      cpu: "500m"
-      memory: "512Mi"
-    limits:
-      cpu: "2"
-      memory: "2Gi"
 
