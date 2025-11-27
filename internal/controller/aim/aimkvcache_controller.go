@@ -182,6 +182,7 @@ func (r *AIMKVCacheReconciler) plan(_ context.Context, kvc *aimv1alpha1.AIMKVCac
 	desiredService := r.buildRedisService(kvc)
 	if !obs.serviceFound {
 		desired = append(desired, desiredService)
+		r.Recorder.Event(kvc, corev1.EventTypeNormal, "ServiceCreation", "Service creation requested")
 	} else if r.isOwnedByKVCache(&obs.service, kvc) && r.serviceNeedsUpdate(obs.service, desiredService) {
 		desired = append(desired, desiredService)
 		r.Recorder.Event(kvc, corev1.EventTypeNormal, "ServiceUpdated", "Service parameters changed, updating")
@@ -191,6 +192,7 @@ func (r *AIMKVCacheReconciler) plan(_ context.Context, kvc *aimv1alpha1.AIMKVCac
 	desiredStatefulSet := r.buildRedisStatefulSet(kvc)
 	if !obs.statefulSetFound {
 		desired = append(desired, desiredStatefulSet)
+		r.Recorder.Event(kvc, corev1.EventTypeNormal, "StatefulSetCreation", "StatefulSet creation requested")
 	} else if r.isOwnedByKVCache(&obs.statefulSet, kvc) && r.statefulSetNeedsUpdate(obs.statefulSet, desiredStatefulSet) {
 		desired = append(desired, desiredStatefulSet)
 		r.Recorder.Event(kvc, corev1.EventTypeNormal, "StatefulSetUpdated", "StatefulSet parameters changed, updating")
