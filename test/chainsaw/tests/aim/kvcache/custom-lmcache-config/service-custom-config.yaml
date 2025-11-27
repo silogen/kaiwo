@@ -1,0 +1,22 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: custom-config
+spec:
+  model:
+    image: quay.io/amd/aim-llama3-1-8b-instruct:0.7.0-vllm0.6.4-lmcache
+  kvCache:
+    type: redis
+    storage:
+      size: 10Gi
+      storageClassName: ($values.storageClass)
+    # Custom LMCache configuration with {SERVICE_URL} placeholder
+    # The placeholder will be replaced with the actual Redis service URL
+    lmCacheConfig: |
+      local_cpu: true
+      chunk_size: 256
+      max_local_cpu_size: 2.0
+      remote_url: "{SERVICE_URL}"
+      remote_serde: "cachegen"
+      pipelined_backend: true
+
