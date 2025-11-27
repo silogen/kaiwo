@@ -107,6 +107,9 @@ type ServiceObservation struct {
 	InferenceServicePodImageError *ImagePullError // Categorized image pull error from InferenceService pods
 	TemplateCache                 *aimv1alpha1.AIMTemplateCache
 	ModelCaches                   *aimv1alpha1.AIMModelCacheList
+	KVCache                       *aimv1alpha1.AIMKVCache // Observed AIMKVCache resource
+	KVCacheConfigMap              *corev1.ConfigMap       // ConfigMap with KV cache configuration
+	KVCacheErr                    error                   // Error from observing KV cache resources
 }
 
 // TemplateFound returns true if a template was resolved (namespace or cluster scope).

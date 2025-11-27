@@ -1,0 +1,360 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: standalone-kvcache-comprehensive
+spec:
+  description: |
+    Comprehensive standalone AIMKVCache test covering:
+    - Basic creation with defaults
+    - Custom image, env vars, resources, storage
+    - Status progression (Pending → Progressing → Ready)
+    - Updates to standalone KVCache
+  concurrent: true
+  timeouts:
+    assert: 120s
+  steps:
+  # ==================== BASIC CREATION WITH DEFAULTS ====================
+  - name: Create basic AIMKVCache with defaults
+    try:
+    - apply:
+        file: kvcache-basic.yaml
+    
+  - name: Verify basic StatefulSet and Service are created
+    try:
+    - assert:
+        timeout: 15s
+        resource:
+          apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            name: basic-kvcache-redis
+          spec:
+            replicas: 1
+            serviceName: basic-kvcache-redis-svc
+    - assert:
+        timeout: 10s
+        resource:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: basic-kvcache-redis-svc
+          spec:
+            clusterIP: None
+            ports:
+            - port: 6379
+              name: redis
+
+  - name: Verify basic KVCache has default resources (1 CPU, 1Gi memory)
+    try:
+    - assert:
+        timeout: 15s
+        resource:
+          apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            name: basic-kvcache-redis
+          spec:
+            template:
+              spec:
+                containers:
+                - name: redis
+                  resources:
+                    requests:
+                      cpu: "1"
+                      memory: "1Gi"
+                    limits:
+                      cpu: "1"
+                      memory: "1Gi"
+
+  - name: Verify basic AIMKVCache becomes Ready with endpoint
+    try:
+    - assert:
+        timeout: 90s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMKVCache
+          metadata:
+            name: basic-kvcache
+          status:
+            status: Ready
+            readyReplicas: 1
+            endpoint: redis://basic-kvcache-redis-svc:6379
+            (conditions[?type == 'Ready']):
+            - status: "True"
+              reason: StatefulSetReady
+
+  # ==================== CUSTOM IMAGE & ENV VARS ====================
+  - name: Create KVCache with custom image and environment variables
+    try:
+    - apply:
+        file: kvcache-custom-config.yaml
+    
+  - name: Verify custom StatefulSet uses specified image and env vars
+    try:
+    - assert:
+        timeout: 15s
+        resource:
+          apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            name: custom-config-redis
+          spec:
+            template:
+              spec:
+                containers:
+                - name: redis
+                  image: redis:7.4.0
+                  env:
+                  - name: REDIS_PASSWORD
+                    value: testpassword
+                  - name: REDIS_MAX_MEMORY
+                    value: 512mb
+
+  - name: Verify custom KVCache becomes Ready
+    try:
+    - assert:
+        timeout: 90s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMKVCache
+          metadata:
+            name: custom-config
+          status:
+            status: Ready
+            readyReplicas: 1
+
+  # ==================== CUSTOM RESOURCES & STORAGE ====================
+  - name: Create KVCache with custom resources and storage
+    try:
+    - apply:
+        file: kvcache-custom-resources.yaml
+    
+  - name: Verify StatefulSet has custom resource requirements
+    try:
+    - assert:
+        timeout: 15s
+        resource:
+          apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            name: custom-resources-redis
+          spec:
+            template:
+              spec:
+                containers:
+                - name: redis
+                  resources:
+                    requests:
+                      cpu: "500m"
+                      memory: "512Mi"
+                    limits:
+                      cpu: "1500m"
+                      memory: "1536Mi"
+
+  - name: Verify StatefulSet has custom storage configuration
+    try:
+    - assert:
+        timeout: 15s
+        resource:
+          apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            name: custom-resources-redis
+          spec:
+            volumeClaimTemplates:
+            - metadata:
+                name: redis-data
+              spec:
+                accessModes:
+                - ReadWriteOnce
+                resources:
+                  requests:
+                    storage: 5Gi
+                storageClassName: ($values.storageClass)
+
+  - name: Verify custom resources KVCache becomes Ready
+    try:
+    - assert:
+        timeout: 90s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMKVCache
+          metadata:
+            name: custom-resources
+          status:
+            status: Ready
+            storageSize: 5Gi
+
+  - name: Verify PVC is created with correct size
+    try:
+    - assert:
+        timeout: 15s
+        resource:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: redis-data-custom-resources-redis-0
+          spec:
+            resources:
+              requests:
+                storage: 5Gi
+            storageClassName: ($values.storageClass)
+          status:
+            phase: Bound
+
+  # ==================== STATUS PROGRESSION ====================
+  - name: Create KVCache to track status progression
+    try:
+    - apply:
+        file: kvcache-status-test.yaml
+
+  - name: Verify initial status is Pending or Progressing
+    try:
+    - assert:
+        timeout: 10s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMKVCache
+          metadata:
+            name: status-test
+          status:
+            observedGeneration: 1
+            (status == 'Pending' || status == 'Progressing'): true
+
+  - name: Verify resources are created with ownership
+    try:
+    - assert:
+        timeout: 20s
+        resource:
+          apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            name: status-test-redis
+            ownerReferences:
+            - name: status-test
+              kind: AIMKVCache
+    - assert:
+        timeout: 20s
+        resource:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: status-test-redis-svc
+            ownerReferences:
+            - name: status-test
+              kind: AIMKVCache
+
+  - name: Verify status becomes Progressing with resource names
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMKVCache
+          metadata:
+            name: status-test
+          status:
+            (status == 'Progressing' || status == 'Ready'): true
+            statefulSetName: status-test-redis
+            serviceName: status-test-redis-svc
+
+  - name: Verify status becomes Ready when pods are running
+    try:
+    - assert:
+        timeout: 90s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMKVCache
+          metadata:
+            name: status-test
+          status:
+            status: Ready
+            replicas: 1
+            readyReplicas: 1
+            (conditions[?type == 'Ready']):
+            - type: Ready
+              status: "True"
+              reason: StatefulSetReady
+            (conditions[?type == 'Progressing']):
+            - type: Progressing
+              status: "False"
+              reason: StatefulSetReady
+
+  # ==================== STANDALONE UPDATE ====================
+  - name: Create initial standalone KVCache for update testing
+    try:
+    - apply:
+        file: kvcache-updateable-initial.yaml
+
+  - name: Verify initial configuration (500m CPU)
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            name: updateable-kvcache-redis
+          spec:
+            template:
+              spec:
+                containers:
+                - name: redis
+                  resources:
+                    requests:
+                      cpu: "500m"
+                      memory: "512Mi"
+
+  - name: Verify updateable KVCache becomes Ready
+    try:
+    - assert:
+        timeout: 90s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMKVCache
+          metadata:
+            name: updateable-kvcache
+          status:
+            status: Ready
+            readyReplicas: 1
+
+  - name: Update standalone KVCache with new resources
+    try:
+    - apply:
+        file: kvcache-updateable-updated.yaml
+
+  - name: Verify StatefulSet is updated with new resources (1 CPU)
+    try:
+    - assert:
+        timeout: 60s
+        resource:
+          apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            name: updateable-kvcache-redis
+          spec:
+            template:
+              spec:
+                containers:
+                - name: redis
+                  resources:
+                    requests:
+                      cpu: "1"
+                      memory: "1Gi"
+                    limits:
+                      cpu: "1"
+                      memory: "1Gi"
+
+  - name: Verify KVCache remains Ready after update
+    try:
+    - assert:
+        timeout: 90s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMKVCache
+          metadata:
+            name: updateable-kvcache
+          status:
+            status: Ready
+            readyReplicas: 1
+

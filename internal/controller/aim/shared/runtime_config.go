@@ -208,10 +208,10 @@ func NormalizeRuntimeConfigName(name string) string {
 }
 
 // GetPVCHeadroomPercent returns the PVC headroom percentage from the runtime config spec.
-// If not set, returns the default value of 10%.
+// If not set, returns the default value defined in DefaultPVCHeadroomPercent.
 func GetPVCHeadroomPercent(spec aimv1alpha1.AIMRuntimeConfigSpec) int32 {
 	if spec.PVCHeadroomPercent != nil {
 		return *spec.PVCHeadroomPercent
 	}
-	return 10 // Default 10% headroom
+	return DefaultPVCHeadroomPercent
 }

@@ -15,10 +15,14 @@ kubectl apply -f service/_shared/default-cluster-template.yaml
 
 Run all AIM tests:
 ```bash
-chainsaw test test/chainsaw/tests/standard/aim/
+chainsaw test --test-dir test/chainsaw/tests/aim/ \
+  --values=test/chainsaw/values/kvcache.yaml
 ```
 
 Run a specific test:
 ```bash
-chainsaw test test/chainsaw/tests/standard/aim/01-cluster-template-no-image.yaml
+chainsaw test --test-dir test/chainsaw/tests/aim/kvcache/basic \
+  --values=test/chainsaw/values/kvcache.yaml
 ```
+
+**Note**: The `--values` flag is required for kvcache tests. YAMLs use `($values.storageClass)` templating.
