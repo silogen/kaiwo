@@ -18,6 +18,8 @@ Tests for the KVCache controller that manages Redis backends for LMCache.
 
 **service-integration/** - AIMService creates a KVCache, generates LMCache config, and mounts it into InferenceService.
 
+**custom-lmcache-config/** - AIMService with custom LMCacheConfig using {SERVICE_URL} placeholder, verifies proper substitution.
+
 **shared-kvcache/** - Multiple AIMServices reference the same pre-created KVCache instance.
 
 **status-progression/** - Tracks status transitions from Pending → Progressing → Ready as resources come up.

@@ -114,6 +114,101 @@ spec:
     name: shared-cache  # Same cache, shared across services
 ```
 
+## Advanced Configuration
+
+### Custom LMCache Configuration
+
+By default, Kaiwo generates a standard LMCache configuration file for your service. For advanced use cases, you can provide a custom LMCache configuration by specifying the `lmCacheConfig` field. This allows you to fine-tune caching behavior, serialization methods, and other LMCache-specific settings.
+
+#### Using the {SERVICE_URL} Placeholder
+
+When specifying a custom configuration, you should use the `{SERVICE_URL}` placeholder for the `remote_url` field instead of hardcoding the cache endpoint. Kaiwo will automatically replace this placeholder with the actual KV cache service URL at runtime.
+
+**Example with custom configuration:**
+
+```yaml
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: llama-chat
+  namespace: ml-team
+spec:
+  model:
+    image: ghcr.io/silogen/aim-meta-llama-llama-3-1-8b-instruct:0.7.0
+  kvCache:
+    type: redis
+    storage:
+      size: 50Gi
+    lmCacheConfig: |
+      local_cpu: true
+      chunk_size: 256
+      max_local_cpu_size: 2.0
+      remote_url: "{SERVICE_URL}"
+      remote_serde: "cachegen"
+```
+
+The `{SERVICE_URL}` placeholder will be automatically replaced with the actual Redis service URL (e.g., `redis://kvcache-llama-chat-redis-svc:6379`).
+
+#### Configuration Options
+
+Common LMCache configuration options include:
+
+| Field | Type | Description | Default |
+|-------|------|-------------|---------|
+| `local_cpu` | boolean | Enable local CPU RAM cache for fast access | `true` |
+| `chunk_size` | integer | Size of cache chunks in tokens | `50` |
+| `max_local_cpu_size` | float | Maximum size (GB) for local CPU cache | `1.0` |
+| `remote_url` | string | URL of the remote cache backend (use `{SERVICE_URL}`) | - |
+| `remote_serde` | string | Serialization method: `"naive"` or `"cachegen"` | `"naive"` |
+| `pipelined_backend` | boolean | Enable pipelined backend for better performance | `false` |
+| `save_decode_cache` | boolean | Whether to cache decode phase KV pairs | `false` |
+
+#### Default Configuration
+
+When `lmCacheConfig` is not specified, the following default configuration is used:
+
+```yaml
+local_cpu: true
+chunk_size: 50
+max_local_cpu_size: 1.0
+remote_url: "{SERVICE_URL}"  # Automatically filled in
+remote_serde: "naive"
+```
+
+#### Optimized Configuration Example
+
+For high-throughput workloads, you might want to increase chunk size and local cache:
+
+```yaml
+spec:
+  model:
+    image: ghcr.io/silogen/aim-meta-llama-llama-3-1-70b-instruct:0.7.0
+  kvCache:
+    type: redis
+    storage:
+      size: 100Gi
+    lmCacheConfig: |
+      local_cpu: true
+      chunk_size: 256
+      max_local_cpu_size: 5.0
+      remote_url: "{SERVICE_URL}"
+      remote_serde: "cachegen"
+```
+
+**Key tuning considerations:**
+
+- **`chunk_size`**: Larger chunks (256) can improve cache hit rates for longer prompts but use more memory
+- **`max_local_cpu_size`**: Increase for better local cache hit rates (monitor actual usage)
+- **`remote_serde`**: Use `"cachegen"` for better compression and network efficiency
+
+#### Complete Working Example
+
+For a complete working example with test assertions, see the [custom-lmcache-config test](https://github.com/ROCm/kaiwo/tree/main/test/chainsaw/tests/aim/kvcache/custom-lmcache-config) which demonstrates:
+
+- Using the `{SERVICE_URL}` placeholder in a custom configuration
+- Verification that the placeholder is correctly replaced with the actual Redis service URL
+- Custom LMCache settings including `chunk_size`, `remote_serde`
+
 ## Storage Sizing Guide
 
 Choose storage size based on your model and expected usage:
