@@ -108,18 +108,6 @@ type AIMTemplateCacheStatus struct {
 	ModelCaches map[string]AIMResolvedModelCache `json:"modelCaches,omitempty"`
 }
 
-// AIMResolvedModelCache contains reference info and status for a cached model.
-type AIMResolvedModelCache struct {
-	// UID of the AIMModelCache resource
-	UID string `json:"uid"`
-	// Name of the AIMModelCache resource
-	Name string `json:"name"`
-	// Status of the model cache
-	Status AIMModelCacheStatusEnum `json:"status"`
-	// PersistentVolumeClaim name if available
-	PersistentVolumeClaim string `json:"persistentVolumeClaim,omitempty"`
-}
-
 // Condition types for AIMTemplateCache
 const (
 	// AIMTemplateCacheConditionResolved is True when the template reference has been resolved.

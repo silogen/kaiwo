@@ -585,6 +585,43 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              modelCaches:
+                additionalProperties:
+                  description: AIMResolvedModelCache contains reference info and status
+                    for a cached model.
+                  properties:
+                    model:
+                      description: Model is the name of the model that is cached
+                      type: string
+                    mountPoint:
+                      description: MountPoint is the mount point for the model cache
+                      type: string
+                    name:
+                      description: Name of the AIMModelCache resource
+                      type: string
+                    persistentVolumeClaim:
+                      description: PersistentVolumeClaim name if available
+                      type: string
+                    status:
+                      description: Status of the model cache
+                      enum:
+                      - Pending
+                      - Progressing
+                      - Available
+                      - Failed
+                      type: string
+                    uid:
+                      description: UID of the AIMModelCache resource
+                      type: string
+                  required:
+                  - model
+                  - name
+                  - status
+                  - uid
+                  type: object
+                description: ModelCaches maps model names to their resolved AIMModelCache
+                  resources if they exist.
+                type: object
               observedGeneration:
                 description: ObservedGeneration is the most recent generation observed
                   by the controller.

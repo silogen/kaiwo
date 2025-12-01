@@ -152,6 +152,7 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 		"candidateCount", selectionStatus.CandidateCount)
 
 	obs := &shared.ServiceObservation{
+		InferenceService:          &servingv1beta1.InferenceService{},
 		TemplateName:              resolution.FinalName,
 		BaseTemplateName:          resolution.BaseName,
 		Scope:                     shared.TemplateScopeNone,
@@ -222,6 +223,20 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 			"serviceName", service.Name)
 		// Use the same naming function that we use when creating the InferenceService
 		isvcName := shared.GenerateInferenceServiceName(service.Name, service.Namespace)
+
+		// Check if the InferenceService exists
+		inferenceService := &servingv1beta1.InferenceService{}
+		err := r.Get(ctx, client.ObjectKey{
+			Namespace: service.Namespace,
+			Name:      isvcName,
+		}, inferenceService)
+		if err != nil && !apierrors.IsNotFound(err) {
+			return nil, err
+		}
+		if err == nil {
+			obs.InferenceService = inferenceService
+		}
+
 		obs.InferenceServicePodImageError = shared.CheckInferenceServicePodImagePullStatus(
 			ctx, r.Client, isvcName, service.Namespace)
 		if obs.InferenceServicePodImageError != nil {
@@ -437,7 +452,7 @@ func (r *AIMServiceReconciler) planInferenceServiceAndRoute(logger logr.Logger, 
 	serviceReady := modelsReady && (!service.Spec.CacheModel || templateCacheReady) && (templateCacheReady || servicePVC != nil)
 
 	// Only create InferenceService if we have a model source and storage
-	if serviceReady {
+	if serviceReady && obs.InferenceService != nil {
 		inferenceService := shared.BuildInferenceService(serviceState, ownerRef)
 
 		// Set AIM_CACHE_PATH env var for all services

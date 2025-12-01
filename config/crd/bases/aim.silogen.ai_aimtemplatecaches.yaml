@@ -330,6 +330,12 @@ spec:
                   description: AIMResolvedModelCache contains reference info and status
                     for a cached model.
                   properties:
+                    model:
+                      description: Model is the name of the model that is cached
+                      type: string
+                    mountPoint:
+                      description: MountPoint is the mount point for the model cache
+                      type: string
                     name:
                       description: Name of the AIMModelCache resource
                       type: string
@@ -348,6 +354,7 @@ spec:
                       description: UID of the AIMModelCache resource
                       type: string
                   required:
+                  - model
                   - name
                   - status
                   - uid
