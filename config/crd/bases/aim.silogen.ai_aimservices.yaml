@@ -67,6 +67,116 @@ spec:
               runtime selection knobs, while the overrides field allows service-specific
               customization.
             properties:
+              autoScaling:
+                description: |-
+                  AutoScaling configures advanced autoscaling behavior using HPA or KEDA.
+                  Supports custom metrics from various backends (Prometheus, OpenTelemetry, etc.)
+                  When specified, MinReplicas and MaxReplicas should also be set.
+                properties:
+                  metrics:
+                    description: |-
+                      Metrics is a list of metrics spec to be used for autoscaling.
+                      Each metric defines a source (Resource, External, or PodMetric) and target values.
+                    items:
+                      description: |-
+                        AIMServiceMetricsSpec defines a single metric for autoscaling.
+                        Specifies the metric source type and configuration.
+                      properties:
+                        podmetric:
+                          description: |-
+                            PodMetric refers to a metric describing each pod in the current scale target.
+                            Used when Type is "PodMetric". Supports backends like OpenTelemetry for custom metrics.
+                          properties:
+                            metric:
+                              description: |-
+                                Metric contains the metric identification and backend configuration.
+                                Defines which metrics to collect and how to query them.
+                              properties:
+                                backend:
+                                  description: |-
+                                    Backend defines the metrics backend to use.
+                                    Example: "opentelemetry" for OpenTelemetry-based metrics.
+                                  type: string
+                                metricNames:
+                                  description: |-
+                                    MetricNames is the list of metric names to collect from the backend.
+                                    Example: ["vllm:num_requests_running"] for vLLM request metrics.
+                                  items:
+                                    type: string
+                                  type: array
+                                operationOverTime:
+                                  description: |-
+                                    OperationOverTime specifies the operation to aggregate metrics over time.
+                                    Valid values: "last_one", "avg", "max", "min", "rate", "count"
+                                    Default: "last_one"
+                                  type: string
+                                query:
+                                  description: |-
+                                    Query specifies the query to run to retrieve metrics from the backend.
+                                    The query syntax depends on the backend being used.
+                                    Example: "vllm:num_requests_running" for OpenTelemetry.
+                                  type: string
+                                serverAddress:
+                                  description: |-
+                                    ServerAddress specifies the address of the metrics backend server.
+                                    Example: "http://otel-collector:9090" for OpenTelemetry Collector.
+                                    If not specified, the default server address for the backend will be used.
+                                  type: string
+                              type: object
+                            target:
+                              description: |-
+                                Target specifies the target value for the metric.
+                                The autoscaler will scale to maintain this target value.
+                              properties:
+                                averageUtilization:
+                                  description: |-
+                                    AverageUtilization is the target value of the average of the resource metric across all relevant pods,
+                                    represented as a percentage of the requested value of the resource for the pods.
+                                    Used when Type is "Utilization". Only valid for Resource metric source type.
+                                    Example: 80 for 80% utilization
+                                  format: int32
+                                  type: integer
+                                averageValue:
+                                  description: |-
+                                    AverageValue is the target value of the average of the metric across all relevant pods (as a quantity).
+                                    Used when Type is "AverageValue".
+                                    Example: "100m" for 100 millicores per pod
+                                  type: string
+                                type:
+                                  description: |-
+                                    Type specifies how to interpret the metric value.
+                                    "Value": absolute value target (use Value field)
+                                    "AverageValue": average value across all pods (use AverageValue field)
+                                    "Utilization": percentage utilization for resource metrics (use AverageUtilization field)
+                                  enum:
+                                  - Value
+                                  - AverageValue
+                                  - Utilization
+                                  type: string
+                                value:
+                                  description: |-
+                                    Value is the target value of the metric (as a quantity).
+                                    Used when Type is "Value".
+                                    Example: "1" for 1 request, "100m" for 100 millicores
+                                  type: string
+                              required:
+                              - type
+                              type: object
+                          type: object
+                        type:
+                          description: |-
+                            Type is the type of metric source.
+                            Valid values: "Resource" (CPU/memory), "External" (external metrics), "PodMetric" (per-pod custom metrics)
+                          enum:
+                          - Resource
+                          - External
+                          - PodMetric
+                          type: string
+                      required:
+                      - type
+                      type: object
+                    type: array
+                type: object
               cacheModel:
                 default: false
                 description: |-
@@ -486,6 +596,21 @@ spec:
                     - redis
                     type: string
                 type: object
+              maxReplicas:
+                description: |-
+                  MaxReplicas specifies the maximum number of replicas for autoscaling.
+                  Required when MinReplicas is set or when AutoScaling configuration is provided.
+                format: int32
+                minimum: 1
+                type: integer
+              minReplicas:
+                description: |-
+                  MinReplicas specifies the minimum number of replicas for autoscaling.
+                  Defaults to 1 but can be set to 0 to enable scale-to-zero.
+                  When specified with MaxReplicas, enables autoscaling for the service.
+                format: int32
+                minimum: 0
+                type: integer
               model:
                 description: |-
                   Model specifies which model to deploy using one of the available reference methods.
