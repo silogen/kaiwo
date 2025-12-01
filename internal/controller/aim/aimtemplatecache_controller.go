@@ -27,7 +27,6 @@ package aim
 import (
 	"context"
 	"fmt"
-	"maps"
 	"slices"
 	"strings"
 
@@ -108,7 +107,7 @@ func (r *AIMTemplateCacheReconciler) Reconcile(ctx context.Context, req ctrl.Req
 type templateCacheObservation struct {
 	AllCachesAvailable bool
 	MissingCaches      []aimv1alpha1.AIMModelSource
-	CacheStatus        map[string]aimv1alpha1.AIMModelCacheStatusEnum
+	BestModelCaches    map[string]aimv1alpha1.AIMModelCache
 	TemplateNotFound   bool
 	TemplateError      string
 }
@@ -128,7 +127,7 @@ func cmpModelCacheStatus(a aimv1alpha1.AIMModelCacheStatusEnum, b aimv1alpha1.AI
 
 func (r *AIMTemplateCacheReconciler) observe(ctx context.Context, tc *aimv1alpha1.AIMTemplateCache) (*templateCacheObservation, error) {
 	var obs templateCacheObservation
-	obs.CacheStatus = map[string]aimv1alpha1.AIMModelCacheStatusEnum{}
+	obs.BestModelCaches = map[string]aimv1alpha1.AIMModelCache{}
 
 	// Resolve the template reference to get model sources
 	modelSources, err := r.getModelSourcesFromTemplate(ctx, tc)
@@ -148,21 +147,21 @@ func (r *AIMTemplateCacheReconciler) observe(ctx context.Context, tc *aimv1alpha
 	// Loop through model sources from the template and check with what's available in our namespace
 	for _, model := range modelSources {
 		found := false
-		bestStatus := aimv1alpha1.AIMModelCacheStatusFailed
+		bestStatusModelCache := aimv1alpha1.AIMModelCache{}
 		for _, cached := range caches.Items {
 			// ModelCache is a match if it has the same SourceURI and a StorageClass matching our config
 			if cached.Spec.SourceURI == model.SourceURI &&
 				(tc.Spec.StorageClassName == "" || tc.Spec.StorageClassName == cached.Spec.StorageClassName) {
-				if cmpModelCacheStatus(bestStatus, cached.Status.Status) < 0 {
-					bestStatus = cached.Status.Status
+				if cmpModelCacheStatus(bestStatusModelCache.Status.Status, cached.Status.Status) < 0 {
+					bestStatusModelCache = cached
 					found = true
 				}
 			}
 		}
 		if found {
-			obs.CacheStatus[model.Name] = bestStatus
+			obs.BestModelCaches[model.Name] = bestStatusModelCache
 		} else {
-			obs.CacheStatus[model.Name] = aimv1alpha1.AIMModelCacheStatusPending
+			// obs.BestModelCaches[model.Name] = aimv1alpha1.AIMModelCache{}
 			obs.MissingCaches = append(obs.MissingCaches, model)
 		}
 	}
@@ -298,7 +297,25 @@ func (r *AIMTemplateCacheReconciler) projectStatus(_ context.Context, tc *aimv1a
 		meta.SetStatusCondition(&tc.Status.Conditions, cond)
 	}
 
-	statusValues := slices.Collect(maps.Values(obs.CacheStatus))
+	statusValues := []aimv1alpha1.AIMModelCacheStatusEnum{}
+	// Populate ModelCaches from observation and store status values in statusValues
+	if obs != nil && len(obs.BestModelCaches) > 0 {
+		tc.Status.ModelCaches = make(map[string]aimv1alpha1.AIMResolvedModelCache, len(obs.BestModelCaches))
+		for modelName, mc := range obs.BestModelCaches {
+			statusValues = append(statusValues, mc.Status.Status)
+
+			tc.Status.ModelCaches[modelName] = aimv1alpha1.AIMResolvedModelCache{
+				UID:                   string(mc.UID),
+				Name:                  mc.Name,
+				Status:                mc.Status.Status,
+				PersistentVolumeClaim: mc.Status.PersistentVolumeClaim,
+			}
+		}
+	} else {
+		tc.Status.ModelCaches = nil
+	}
+
+	// Set combined status based on the worst status of the model caches
 	if len(statusValues) > 0 {
 		worstCacheStatus := slices.MinFunc(statusValues, cmpModelCacheStatus)
 		tc.Status.Status = aimv1alpha1.AIMTemplateCacheStatusEnum(worstCacheStatus)

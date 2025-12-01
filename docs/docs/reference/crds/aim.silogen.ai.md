@@ -369,6 +369,7 @@ _Validation:_
 
 _Appears in:_
 - [AIMModelCacheStatus](#aimmodelcachestatus)
+- [AIMResolvedModelCache](#aimresolvedmodelcache)
 
 | Field | Description |
 | --- | --- |
@@ -617,6 +618,25 @@ _Appears in:_
 | `Cluster` | AIMResolutionScopeCluster denotes a cluster-scoped resource.<br /> |
 | `Merged` | AIMResolutionScopeMerged denotes that both cluster and namespace configs were merged.<br /> |
 | `Unknown` | AIMResolutionScopeUnknown denotes that the scope could not be determined.<br /> |
+
+
+#### AIMResolvedModelCache
+
+
+
+AIMResolvedModelCache contains reference info and status for a cached model.
+
+
+
+_Appears in:_
+- [AIMTemplateCacheStatus](#aimtemplatecachestatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `uid` _string_ | UID of the AIMModelCache resource |  |  |
+| `name` _string_ | Name of the AIMModelCache resource |  |  |
+| `status` _[AIMModelCacheStatusEnum](#aimmodelcachestatusenum)_ | Status of the model cache |  | Enum: [Pending Progressing Available Failed] <br /> |
+| `persistentVolumeClaim` _string_ | PersistentVolumeClaim name if available |  |  |
 
 
 #### AIMResolvedReference
@@ -1211,6 +1231,7 @@ _Appears in:_
 | `resolvedRuntimeConfig` _[AIMResolvedRuntimeConfig](#aimresolvedruntimeconfig)_ | ResolvedRuntimeConfig captures metadata about the runtime config that was resolved. |  |  |
 | `status` _[AIMTemplateCacheStatusEnum](#aimtemplatecachestatusenum)_ | Status represents the current high-level status of the template cache. | Pending | Enum: [Pending Progressing Available Failed] <br /> |
 | `resolvedTemplateKind` _string_ | ResolvedTemplateKind indicates whether the template resolved to a namespace-scoped<br />AIMServiceTemplate or cluster-scoped AIMClusterServiceTemplate.<br />Values: "AIMServiceTemplate", "AIMClusterServiceTemplate" |  |  |
+| `modelCaches` _object (keys:string, values:[AIMResolvedModelCache](#aimresolvedmodelcache))_ | ModelCaches maps model names to their resolved AIMModelCache resources. |  |  |
 
 
 #### AIMTemplateCacheStatusEnum
