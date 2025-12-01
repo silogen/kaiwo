@@ -304,9 +304,10 @@ func (r *AIMTemplateCacheReconciler) projectStatus(_ context.Context, tc *aimv1a
 		for modelName, mc := range obs.BestModelCaches {
 			statusValues = append(statusValues, mc.Status.Status)
 
-			tc.Status.ModelCaches[modelName] = aimv1alpha1.AIMResolvedModelCache{
+			tc.Status.ModelCaches[mc.Name] = aimv1alpha1.AIMResolvedModelCache{
 				UID:                   string(mc.UID),
 				Name:                  mc.Name,
+				Model:                 modelName,
 				Status:                mc.Status.Status,
 				PersistentVolumeClaim: mc.Status.PersistentVolumeClaim,
 			}

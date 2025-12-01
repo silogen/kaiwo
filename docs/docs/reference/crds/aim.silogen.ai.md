@@ -629,14 +629,17 @@ AIMResolvedModelCache contains reference info and status for a cached model.
 
 
 _Appears in:_
+- [AIMServiceStatus](#aimservicestatus)
 - [AIMTemplateCacheStatus](#aimtemplatecachestatus)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `uid` _string_ | UID of the AIMModelCache resource |  |  |
 | `name` _string_ | Name of the AIMModelCache resource |  |  |
+| `model` _string_ | Model is the name of the model that is cached |  |  |
 | `status` _[AIMModelCacheStatusEnum](#aimmodelcachestatusenum)_ | Status of the model cache |  | Enum: [Pending Progressing Available Failed] <br /> |
 | `persistentVolumeClaim` _string_ | PersistentVolumeClaim name if available |  |  |
+| `mountPoint` _string_ | MountPoint is the mount point for the model cache |  |  |
 
 
 #### AIMResolvedReference
@@ -1010,6 +1013,7 @@ _Appears in:_
 | `routing` _[AIMServiceRoutingStatus](#aimserviceroutingstatus)_ | Routing surfaces information about the configured HTTP routing, when enabled. |  |  |
 | `resolvedTemplate` _[AIMServiceResolvedTemplate](#aimserviceresolvedtemplate)_ | ResolvedTemplate captures metadata about the template that satisfied the reference. |  |  |
 | `resolvedTemplateCache` _[AIMResolvedReference](#aimresolvedreference)_ | ResolvedTemplateCache captures metadata about the template cache being used, if any. |  |  |
+| `modelCaches` _object (keys:string, values:[AIMResolvedModelCache](#aimresolvedmodelcache))_ | ModelCaches maps model names to their resolved AIMModelCache resources if they exist. |  |  |
 
 
 #### AIMServiceStatusEnum

@@ -149,6 +149,10 @@ type AIMServiceStatus struct {
 	// ResolvedTemplateCache captures metadata about the template cache being used, if any.
 	// +optional
 	ResolvedTemplateCache *AIMResolvedReference `json:"resolvedTemplateCache,omitempty"`
+
+	// ModelCaches maps model names to their resolved AIMModelCache resources if they exist.
+	// +optional
+	ModelCaches map[string]AIMResolvedModelCache `json:"modelCaches,omitempty"`
 }
 
 // AIMServiceStatusEnum defines coarse-grained states for a service.

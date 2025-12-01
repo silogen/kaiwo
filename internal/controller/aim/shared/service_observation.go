@@ -32,6 +32,7 @@ import (
 	"fmt"
 	"strings"
 
+	servingv1beta1 "github.com/kserve/kserve/pkg/apis/serving/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -76,6 +77,7 @@ type TemplateSelectionStatus struct {
 
 // ServiceObservation holds observed state for an AIMService reconciliation.
 type ServiceObservation struct {
+	InferenceService              *servingv1beta1.InferenceService
 	TemplateName                  string
 	BaseTemplateName              string
 	Scope                         TemplateScope
