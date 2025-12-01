@@ -180,6 +180,9 @@ const (
 	// ConditionCacheReady is True when required caches are present or warmed as requested.
 	AIMServiceConditionCacheReady = "CacheReady"
 
+	// ConditionCacheReady is True when required caches have failed.
+	AIMServiceConditionCacheFailed = "CacheFailed"
+
 	// ConditionRuntimeReady is True when the underlying KServe runtime and InferenceService are ready.
 	AIMServiceConditionRuntimeReady = "RuntimeReady"
 
