@@ -1287,6 +1287,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `model` _[ModelMetadata](#modelmetadata)_ | Model contains AMD Silogen model-specific metadata. |  |  |
 | `oci` _[OCIMetadata](#ocimetadata)_ | OCI contains standard OCI image metadata. |  |  |
+| `originalLabels` _[JSON](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#json-v1-apiextensions-k8s-io)_ | OriginalLabels contains the originally parsed metadata from the image registry.<br />This is stored as JSON to preserve the raw label data. |  | Type: object <br /> |
 
 
 #### ModelMetadata
