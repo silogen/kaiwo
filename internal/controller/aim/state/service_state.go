@@ -129,7 +129,7 @@ func NewServiceState(service *aimv1alpha1.AIMService, template TemplateState, op
 	}
 
 	if service.Spec.AutoScaling != nil {
-		state.AutoScaling = copyAutoScaling(service.Spec.AutoScaling)
+		state.AutoScaling = service.Spec.AutoScaling.DeepCopy()
 	}
 
 	resolvedRouting := routingconfig.Resolve(service, template.RuntimeConfigSpec.Routing)
@@ -181,52 +181,4 @@ func mergePullSecretRefs(base []corev1.LocalObjectReference, extras []corev1.Loc
 	}
 
 	return base
-}
-
-// copyAutoScaling creates a deep copy of AIMServiceAutoScaling.
-// This manual copy is needed until kubebuilder generates DeepCopy methods for the type.
-func copyAutoScaling(src *aimv1alpha1.AIMServiceAutoScaling) *aimv1alpha1.AIMServiceAutoScaling {
-	if src == nil {
-		return nil
-	}
-
-	dst := &aimv1alpha1.AIMServiceAutoScaling{}
-
-	if len(src.Metrics) > 0 {
-		dst.Metrics = make([]aimv1alpha1.AIMServiceMetricsSpec, len(src.Metrics))
-		for i, metric := range src.Metrics {
-			dst.Metrics[i] = aimv1alpha1.AIMServiceMetricsSpec{
-				Type: metric.Type,
-			}
-
-			if metric.PodMetric != nil {
-				dst.Metrics[i].PodMetric = &aimv1alpha1.AIMServicePodMetricSource{}
-
-				if metric.PodMetric.Metric != nil {
-					dst.Metrics[i].PodMetric.Metric = &aimv1alpha1.AIMServicePodMetric{
-						Backend:           metric.PodMetric.Metric.Backend,
-						ServerAddress:     metric.PodMetric.Metric.ServerAddress,
-						MetricNames:       append([]string(nil), metric.PodMetric.Metric.MetricNames...),
-						Query:             metric.PodMetric.Metric.Query,
-						OperationOverTime: metric.PodMetric.Metric.OperationOverTime,
-					}
-				}
-
-				if metric.PodMetric.Target != nil {
-					target := &aimv1alpha1.AIMServiceMetricTarget{
-						Type:         metric.PodMetric.Target.Type,
-						Value:        metric.PodMetric.Target.Value,
-						AverageValue: metric.PodMetric.Target.AverageValue,
-					}
-					if metric.PodMetric.Target.AverageUtilization != nil {
-						avgUtil := *metric.PodMetric.Target.AverageUtilization
-						target.AverageUtilization = &avgUtil
-					}
-					dst.Metrics[i].PodMetric.Target = target
-				}
-			}
-		}
-	}
-
-	return dst
 }
