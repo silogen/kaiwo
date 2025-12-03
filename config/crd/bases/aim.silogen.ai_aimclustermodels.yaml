@@ -444,6 +444,7 @@ spec:
                 - Pending
                 - Progressing
                 - Ready
+                - NotAvailable
                 - Degraded
                 - Failed
                 type: string

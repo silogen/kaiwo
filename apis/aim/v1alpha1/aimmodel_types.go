@@ -74,7 +74,7 @@ type AIMModelDiscoveryConfig struct {
 }
 
 // AIMModelStatusEnum represents the overall status of an AIMModel.
-// +kubebuilder:validation:Enum=Pending;Progressing;Ready;Degraded;Failed
+// +kubebuilder:validation:Enum=Pending;Progressing;Ready;NotAvailable;Degraded;Failed
 type AIMModelStatusEnum string
 
 const (
@@ -86,6 +86,9 @@ const (
 
 	// AIMModelStatusReady indicates all templates are available and ready.
 	AIMModelStatusReady AIMModelStatusEnum = "Ready"
+
+	// AIMModelStatusNotAvailable indicates all templates are not available (e.g., required GPUs not present in cluster).
+	AIMModelStatusNotAvailable AIMModelStatusEnum = "NotAvailable"
 
 	// AIMModelStatusDegraded indicates one or more templates are degraded or failed.
 	AIMModelStatusDegraded AIMModelStatusEnum = "Degraded"
