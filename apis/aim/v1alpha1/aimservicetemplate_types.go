@@ -275,6 +275,7 @@ const (
 // +kubebuilder:printcolumn:name="Engine",type=string,JSONPath=`.status.profile.metadata.engine`
 // +kubebuilder:printcolumn:name="Metric",type=string,JSONPath=`.status.profile.metadata.metric`
 // +kubebuilder:printcolumn:name="Precision",type=string,JSONPath=`.status.profile.metadata.precision`
+// +kubebuilder:printcolumn:name="Profile",type=string,JSONPath=`.status.profile.metadata.type`
 // +kubebuilder:printcolumn:name="GPUs/replica",type=integer,JSONPath=`.status.profile.metadata.gpu_count`
 // +kubebuilder:printcolumn:name="GPU",type=string,JSONPath=`.status.profile.metadata.gpu`
 
@@ -300,6 +301,7 @@ type AIMServiceTemplateList struct {
 // +kubebuilder:printcolumn:name="Engine",type=string,JSONPath=`.status.profile.metadata.engine`
 // +kubebuilder:printcolumn:name="Metric",type=string,JSONPath=`.status.profile.metadata.metric`
 // +kubebuilder:printcolumn:name="Precision",type=string,JSONPath=`.status.profile.metadata.precision`
+// +kubebuilder:printcolumn:name="Profile",type=string,JSONPath=`.status.profile.metadata.type`
 // +kubebuilder:printcolumn:name="GPUs/replica",type=integer,JSONPath=`.status.profile.metadata.gpu_count`
 // +kubebuilder:printcolumn:name="GPU",type=string,JSONPath=`.status.profile.metadata.gpu`
 type AIMClusterServiceTemplate struct {

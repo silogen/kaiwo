@@ -32,6 +32,9 @@ spec:
     - jsonPath: .spec.replicas
       name: Replicas
       type: integer
+    - jsonPath: .status.resolvedTemplate.profile.metadata.type
+      name: Profile
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date

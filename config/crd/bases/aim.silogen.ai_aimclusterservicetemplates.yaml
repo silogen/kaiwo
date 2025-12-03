@@ -32,6 +32,9 @@ spec:
     - jsonPath: .status.profile.metadata.precision
       name: Precision
       type: string
+    - jsonPath: .status.profile.metadata.type
+      name: Profile
+      type: string
     - jsonPath: .status.profile.metadata.gpu_count
       name: GPUs/replica
       type: integer

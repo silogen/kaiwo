@@ -254,6 +254,7 @@ const (
 // +kubebuilder:printcolumn:name="Model",type=string,JSONPath=`.status.resolvedImage.name`
 // +kubebuilder:printcolumn:name="Template",type=string,JSONPath=`.status.resolvedTemplate.name`
 // +kubebuilder:printcolumn:name="Replicas",type=integer,JSONPath=`.spec.replicas`
+// +kubebuilder:printcolumn:name="Profile",type=string,JSONPath=`.status.resolvedTemplate.profile.metadata.type`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 type AIMService struct {
 	metav1.TypeMeta   `json:",inline"`
