@@ -515,7 +515,7 @@ _Appears in:_
 | `Pending` | AIMModelStatusPending indicates the image has been created but template generation has not started.<br /> |
 | `Progressing` | AIMModelStatusProgressing indicates one or more templates are still being discovered.<br /> |
 | `Ready` | AIMModelStatusReady indicates all templates are available and ready.<br /> |
-| `NotAvailable` | AIMModelStatusNotAvailable indicates all templates are not available (e.g., required GPUs not present in cluster).<br /> |
+| `NotAvailable` | AIMModelStatusNotAvailable indicates no templates are available (e.g., required GPUs not present in cluster).<br /> |
 | `Degraded` | AIMModelStatusDegraded indicates one or more templates are degraded or failed.<br /> |
 | `Failed` | AIMModelStatusFailed indicates all templates are degraded or failed.<br /> |
 
