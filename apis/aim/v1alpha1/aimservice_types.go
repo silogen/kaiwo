@@ -131,10 +131,10 @@ type AIMServiceSpec struct {
 	Replicas *int32 `json:"replicas,omitempty"`
 
 	// MinReplicas specifies the minimum number of replicas for autoscaling.
-	// Defaults to 1 but can be set to 0 to enable scale-to-zero.
+	// Defaults to 1. Scale to zero not supported.
 	// When specified with MaxReplicas, enables autoscaling for the service.
 	// +optional
-	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Minimum=1
 	MinReplicas *int32 `json:"minReplicas,omitempty"`
 
 	// MaxReplicas specifies the maximum number of replicas for autoscaling.
@@ -210,8 +210,8 @@ type AIMServiceAutoScaling struct {
 // Specifies the metric source type and configuration.
 type AIMServiceMetricsSpec struct {
 	// Type is the type of metric source.
-	// Valid values: "Resource" (CPU/memory), "External" (external metrics), "PodMetric" (per-pod custom metrics)
-	// +kubebuilder:validation:Enum=Resource;External;PodMetric
+	// Valid values: "PodMetric" (per-pod custom metrics). Features to come: Resource, External
+	// +kubebuilder:validation:Enum=PodMetric
 	Type string `json:"type"`
 
 	// PodMetric refers to a metric describing each pod in the current scale target.
@@ -225,13 +225,11 @@ type AIMServiceMetricsSpec struct {
 type AIMServicePodMetricSource struct {
 	// Metric contains the metric identification and backend configuration.
 	// Defines which metrics to collect and how to query them.
-	// +optional
-	Metric *AIMServicePodMetric `json:"metric,omitempty"`
+	Metric *AIMServicePodMetric `json:"metric"`
 
 	// Target specifies the target value for the metric.
 	// The autoscaler will scale to maintain this target value.
-	// +optional
-	Target *AIMServiceMetricTarget `json:"target,omitempty"`
+	Target *AIMServiceMetricTarget `json:"target"`
 }
 
 // AIMServicePodMetric identifies the pod metric and its backend.
@@ -243,13 +241,12 @@ type AIMServicePodMetric struct {
 	Backend string `json:"backend,omitempty"`
 
 	// ServerAddress specifies the address of the metrics backend server.
-	// Example: "http://otel-collector:9090" for OpenTelemetry Collector.
-	// If not specified, the default server address for the backend will be used.
+	// If not specified, defaults to "keda-otel-scaler.keda.svc:4317" for OpenTelemetry backend.
 	// +optional
 	ServerAddress string `json:"serverAddress,omitempty"`
 
-	// MetricNames is the list of metric names to collect from the backend.
-	// Example: ["vllm:num_requests_running"] for vLLM request metrics.
+	// MetricNames specifies which metrics to collect from pods and send to ServerAddress.
+	// Example: ["vllm:num_requests_running"]
 	// +optional
 	MetricNames []string `json:"metricNames,omitempty"`
 
