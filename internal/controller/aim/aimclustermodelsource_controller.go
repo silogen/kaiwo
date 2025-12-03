@@ -275,6 +275,7 @@ func (r *ClusterModelSourceReconciler) SetupWithManager(mgr ctrl.Manager) error 
 	r.Recorder = mgr.GetEventRecorderFor("aim-cluster-image-source-controller")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&aimv1alpha1.AIMClusterModelSource{}).
+		Owns(&aimv1alpha1.AIMClusterModel{}).
 		Named("aim-cluster-image-source").
 		Complete(r)
 }
