@@ -1,0 +1,164 @@
+// MIT License
+//
+// Copyright (c) 2025 Advanced Micro Devices, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+package aimclustermodelsource
+
+import (
+	"fmt"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
+	"github.com/silogen/kaiwo/internal/controller/aim/shared"
+	baseutils "github.com/silogen/kaiwo/pkg/utils"
+)
+
+// buildClusterModel creates an AIMClusterModel resource from a discovered registry image.
+// The model name is generated deterministically using the repository and tag.
+// Labels and annotations track the source and original image details.
+func BuildClusterModel(
+	source *aimv1alpha1.AIMClusterModelSource,
+	img RegistryImage,
+) *aimv1alpha1.AIMClusterModel {
+	// Generate deterministic name using existing naming utility
+	// Format: {repository}-{tag}-{hash} (hash ensures uniqueness and handles length limits)
+	modelName, _ := baseutils.GenerateDerivedNameWithHashLength(
+		[]string{img.Repository, img.Tag},
+		6,                                     // 6-char hash for collision avoidance
+		img.Registry, img.Repository, img.Tag, // Hash inputs for determinism
+	)
+
+	imageURI := img.ToImageURI()
+
+	return &aimv1alpha1.AIMClusterModel{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: modelName,
+			Labels: map[string]string{
+				shared.LabelKeyModelSource: source.Name,
+				shared.LabelAutoCreated:    "true",
+			},
+			Annotations: map[string]string{
+				"aim.eai.amd.com/source-registry":   img.Registry,
+				"aim.eai.amd.com/source-repository": img.Repository,
+				"aim.eai.amd.com/source-tag":        img.Tag,
+			},
+		},
+		Spec: aimv1alpha1.AIMModelSpec{
+			Image:            imageURI,
+			ImagePullSecrets: source.Spec.ImagePullSecrets,
+		},
+	}
+}
+
+// BuildDiscoveredImagesSummary creates a summary of discovered images for the status.
+// Limited to the most recent 50 images to avoid excessive status size.
+func BuildDiscoveredImagesSummary(
+	filteredImages []RegistryImage,
+	existingByURI map[string]*aimv1alpha1.AIMClusterModel,
+) []aimv1alpha1.DiscoveredImageInfo {
+	const maxSummarySize = 50
+
+	var summary []aimv1alpha1.DiscoveredImageInfo
+
+	for _, img := range filteredImages {
+		if len(summary) >= maxSummarySize {
+			break
+		}
+
+		imageURI := img.ToImageURI()
+		model, exists := existingByURI[imageURI]
+
+		var modelName string
+		var createdAt metav1.Time
+
+		if exists {
+			modelName = model.Name
+			createdAt = model.CreationTimestamp
+		} else {
+			// New image - generate name but no creation time yet
+			modelName, _ = baseutils.GenerateDerivedNameWithHashLength(
+				[]string{img.Repository, img.Tag},
+				6,
+				img.Registry, img.Repository, img.Tag,
+			)
+			createdAt = metav1.Now()
+		}
+
+		summary = append(summary, aimv1alpha1.DiscoveredImageInfo{
+			Image:     imageURI,
+			Tag:       img.Tag,
+			ModelName: modelName,
+			CreatedAt: createdAt,
+		})
+	}
+
+	return summary
+}
+
+// RegistryImage represents a container image discovered in a registry.
+type RegistryImage struct {
+	Registry   string
+	Repository string
+	Tag        string
+	Digest     string
+}
+
+// ToImageURI converts a RegistryImage to a full image URI.
+// Special handling for docker.io which doesn't require the registry prefix.
+func (ri RegistryImage) ToImageURI() string {
+	// Docker Hub special case - no registry prefix
+	if ri.Registry == DockerRegistry || ri.Registry == "" {
+		return fmt.Sprintf("%s:%s", ri.Repository, ri.Tag)
+	}
+	return fmt.Sprintf("%s/%s:%s", ri.Registry, ri.Repository, ri.Tag)
+}
+
+// extractStaticImages converts filters that are exact image references (no wildcards, with tag)
+// into RegistryImage objects. This allows bypassing registry queries for static image lists.
+// Returns only the filters that are static - filters with wildcards or no tag are skipped.
+func ExtractStaticImages(filters []aimv1alpha1.ModelSourceFilter) []RegistryImage {
+	var images []RegistryImage
+
+	for _, filter := range filters {
+		// Parse the filter to check if it's a static reference
+		parsed := parseImageFilter(filter.Image)
+
+		// Skip if it has wildcards or no tag specified
+		if parsed.hasWildcard || parsed.tag == "" {
+			continue
+		}
+
+		// Static image reference - convert to RegistryImage
+		registry := parsed.registry
+		if registry == "" {
+			registry = DockerRegistry
+		}
+
+		images = append(images, RegistryImage{
+			Registry:   registry,
+			Repository: parsed.repository,
+			Tag:        parsed.tag,
+		})
+	}
+
+	return images
+}
