@@ -72,9 +72,9 @@ type ClusterModelSourceFetchResult struct {
 	registryError  error // Non-fatal, captured for status
 }
 
-// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclustermodels,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclustermodels/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclustermodels/finalizers,verbs=update
+// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclustermodelsources,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclustermodelsources/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclustermodelsources/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 
 func (r *ClusterModelSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -272,10 +272,10 @@ func (r *ClusterModelSourceReconciler) Project(
 }
 
 func (r *ClusterModelSourceReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.Recorder = mgr.GetEventRecorderFor("aim-cluster-image-source-controller")
+	r.Recorder = mgr.GetEventRecorderFor("aim-cluster-model-source-controller")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&aimv1alpha1.AIMClusterModelSource{}).
 		Owns(&aimv1alpha1.AIMClusterModel{}).
-		Named("aim-cluster-image-source").
+		Named("aim-cluster-model-source").
 		Complete(r)
 }
