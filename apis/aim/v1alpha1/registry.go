@@ -22,6 +22,10 @@
 
 package v1alpha1
 
+import (
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+)
+
 // RecommendedDeployment describes a recommended deployment configuration for a model.
 type RecommendedDeployment struct {
 	// GPUModel is the GPU model name (e.g., MI300X, MI325X)
@@ -54,6 +58,13 @@ type ImageMetadata struct {
 	// OCI contains standard OCI image metadata.
 	// +optional
 	OCI *OCIMetadata `json:"oci,omitempty"`
+
+	// OriginalLabels contains the originally parsed metadata from the image registry.
+	// This is stored as JSON to preserve the raw label data.
+	// +optional
+	// +kubebuilder:validation:Type=object
+	// +kubebuilder:pruning:PreserveUnknownFields
+	OriginalLabels *apiextensionsv1.JSON `json:"originalLabels,omitempty"`
 }
 
 // ModelMetadata contains AMD Silogen model-specific metadata extracted from image labels.
