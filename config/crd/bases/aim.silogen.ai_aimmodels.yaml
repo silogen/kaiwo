@@ -394,6 +394,12 @@ spec:
                           Extracted from: org.opencontainers.image.version
                         type: string
                     type: object
+                  originalLabels:
+                    description: |-
+                      OriginalLabels contains the originally parsed metadata from the image registry.
+                      This is stored as JSON to preserve the raw label data.
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
                 type: object
               observedGeneration:
                 description: ObservedGeneration is the most recent generation observed
