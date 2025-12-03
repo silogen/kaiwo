@@ -513,6 +513,14 @@ spec:
                   This service account is used by the deployed inference pods.
                   If empty, the default service account for the namespace is used.
                 type: string
+              template:
+                description: Template contains the AIMServiceTemplate selection configuration
+                properties:
+                  allowUnoptimized:
+                    description: AllowUnoptimized, if true, will allow automatic selection
+                      of templates that resolve to an unoptimized profile.
+                    type: boolean
+                type: object
               templateRef:
                 description: |-
                   TemplateRef is the name of the AIMServiceTemplate or AIMClusterServiceTemplate to use.

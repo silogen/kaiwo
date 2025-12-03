@@ -47,6 +47,9 @@ type RecommendedDeployment struct {
 	// Description provides additional context about this deployment configuration
 	// +optional
 	Description string `json:"description,omitempty"`
+
+	// ProfileId is an optional override to select a particular AIM profile by ID
+	ProfileId string `json:"profileId,omitempty"`
 }
 
 // ImageMetadata contains metadata extracted from or provided for a container image.

@@ -209,6 +209,10 @@ spec:
                 x-kubernetes-validations:
                 - message: precision is immutable
                   rule: self == oldSelf
+              profileId:
+                description: ProfileId is the specific AIM profile ID that this template
+                  should use
+                type: string
               resources:
                 description: |-
                   Resources defines the default container resource requirements applied to services derived from this template.
@@ -439,6 +443,9 @@ spec:
                         - fp16
                         - fp8
                         - int8
+                        type: string
+                      type:
+                        description: Type specifies the designation of the profile
                         type: string
                     type: object
                 type: object

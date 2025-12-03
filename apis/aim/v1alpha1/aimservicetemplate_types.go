@@ -72,6 +72,9 @@ type AIMServiceTemplateSpecCommon struct {
 	// If omitted, a discovery job will be run to automatically determine the required model sources.
 	// +optional
 	ModelSources []AIMModelSource `json:"modelSources,omitempty"`
+
+	// ProfileId is the specific AIM profile ID that this template should use
+	ProfileId string `json:"profileId,omitempty"`
 }
 
 // AIMTemplateCachingConfig configures model caching behavior for namespace-scoped templates.
@@ -177,6 +180,14 @@ type AIMProfile struct {
 	Metadata AIMProfileMetadata `json:"metadata,omitempty"`
 }
 
+type AIMProfileType string
+
+const (
+	AIMProfileTypeOptimized   AIMProfileType = "optimized"
+	AIMProfileTypeUnoptimized AIMProfileType = "unoptimized"
+	AIMProfileTypePreview     AIMProfileType = "preview"
+)
+
 // AIMProfileMetadata describes the characteristics of a cached deployment profile.
 // This is identical to AIMDiscoveryProfileMetadata but exists in the template status namespace.
 type AIMProfileMetadata struct {
@@ -199,6 +210,9 @@ type AIMProfileMetadata struct {
 	// Precision specifies the numeric precision used in this profile (e.g., "fp16", "fp8").
 	// +optional
 	Precision AIMPrecision `json:"precision,omitempty"`
+
+	// Type specifies the designation of the profile
+	Type AIMProfileType `json:"type,omitempty"`
 }
 
 // AIMTemplateStatusEnum defines coarse-grained states for a template.
