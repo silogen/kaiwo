@@ -688,7 +688,7 @@ spec:
                         description: GPU specifies the GPU model this profile is optimized
                           for (e.g., "MI300X", "MI325X").
                         type: string
-                      gpu_count:
+                      gpuCount:
                         description: GPUCount indicates how many GPUs are required
                           per replica for this profile.
                         format: int32

@@ -672,12 +672,13 @@ This is identical to AIMDiscoveryProfileMetadata but exists in the template stat
 
 _Appears in:_
 - [AIMProfile](#aimprofile)
+- [AIMServiceResolvedTemplateProfile](#aimserviceresolvedtemplateprofile)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `engine` _string_ | Engine identifies the inference engine used for this profile (e.g., "vllm", "tgi"). |  |  |
 | `gpu` _string_ | GPU specifies the GPU model this profile is optimized for (e.g., "MI300X", "MI325X"). |  |  |
-| `gpu_count` _integer_ | GPUCount indicates how many GPUs are required per replica for this profile. |  |  |
+| `gpuCount` _integer_ | GPUCount indicates how many GPUs are required per replica for this profile. |  |  |
 | `metric` _[AIMMetric](#aimmetric)_ | Metric indicates the optimization goal for this profile ("latency" or "throughput"). |  | Enum: [latency throughput] <br /> |
 | `precision` _[AIMPrecision](#aimprecision)_ | Precision specifies the numeric precision used in this profile (e.g., "fp16", "fp8"). |  | Enum: [bf16 fp16 fp8 int8] <br /> |
 | `type` _[AIMProfileType](#aimprofiletype)_ | Type specifies the designation of the profile |  |  |
@@ -1027,6 +1028,23 @@ _Appears in:_
 | `scope` _[AIMResolutionScope](#aimresolutionscope)_ | Scope indicates whether the resolved resource was namespace or cluster scoped. |  | Enum: [Namespace Cluster Merged Unknown] <br /> |
 | `kind` _string_ | Kind is the fully-qualified kind of the resolved reference, when known. |  |  |
 | `uid` _[UID](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#uid-types-pkg)_ | UID captures the unique identifier of the resolved reference, when known. |  |  |
+| `profile` _[AIMServiceResolvedTemplateProfile](#aimserviceresolvedtemplateprofile)_ | Profile is the profile that the resolved template points to |  |  |
+
+
+#### AIMServiceResolvedTemplateProfile
+
+
+
+
+
+
+
+_Appears in:_
+- [AIMServiceResolvedTemplate](#aimserviceresolvedtemplate)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `metadata` _[AIMProfileMetadata](#aimprofilemetadata)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
 
 
 #### AIMServiceRouting

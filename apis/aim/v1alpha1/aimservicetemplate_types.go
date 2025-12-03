@@ -201,7 +201,7 @@ type AIMProfileMetadata struct {
 
 	// GPUCount indicates how many GPUs are required per replica for this profile.
 	// +optional
-	GPUCount int32 `json:"gpu_count,omitempty"`
+	GPUCount int32 `json:"gpuCount,omitempty"`
 
 	// Metric indicates the optimization goal for this profile ("latency" or "throughput").
 	// +optional
