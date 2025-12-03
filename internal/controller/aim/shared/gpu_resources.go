@@ -27,6 +27,7 @@ package shared
 import (
 	"context"
 	"regexp"
+	"sort"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -34,6 +35,47 @@ import (
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 )
+
+var KnownAmdGpuDevices = map[string]string{
+	// AMD Instinct
+	"738c": "MI100",
+	"738e": "MI100",
+	"7408": "MI250X",
+	"740c": "MI250X", // MI250/MI250X
+	"740f": "MI210",
+	"7410": "MI210", // MI210 VF
+	"74a0": "MI300A",
+	"74a1": "MI300X",
+	"74a2": "MI308X",
+	"74a5": "MI325X",
+	"74a8": "MI308X", // MI308X HF
+	"74a9": "MI300X", // MI300X HF
+	"74b5": "MI300X", // MI300X VF
+	"74b6": "MI308X",
+	"74b9": "MI325X", // MI325X VF
+	"74bd": "MI300X", // MI300X HF
+	"75a0": "MI350X",
+	"75a3": "MI355X",
+	"75b0": "MI350X", // MI350X VF
+	"75b3": "MI355X", // MI355X VF
+	// AMD Radeon Pro
+	"7460": "V710",
+	"7461": "V710", // Radeon Pro V710 MxGPU
+	"7448": "W7900",
+	"744a": "W7900", // W7900 Dual Slot
+	"7449": "W7800", // W7800 48GB
+	"745e": "W7800",
+	"73a2": "W6900X",
+	"73a3": "W6800",  // W6800 GL-XL
+	"73ab": "W6800X", // W6800X / W6800X Duo
+	"73a1": "V620",
+	"73ae": "V620", // Radeon Pro V620 MxGPU
+	// AMD Radeon
+	"7550": "RX9070", // RX 9070 / 9070 XT
+	"744c": "RX7900", // RX 7900 XT / 7900 XTX / 7900 GRE / 7900M
+	"73af": "RX6900",
+	"73bf": "RX6800", // RX 6800 / 6800 XT / 6900 XT
+}
 
 // GPUResourceInfo contains GPU resource information for a specific GPU model.
 type GPUResourceInfo struct {
@@ -127,48 +169,7 @@ func mapAMDDeviceIDToModel(deviceID string) string {
 	// Remove "0x" prefix if present
 	deviceID = strings.TrimPrefix(strings.ToLower(deviceID), "0x")
 
-	knownDevices := map[string]string{
-		// AMD Instinct
-		"738c": "MI100",
-		"738e": "MI100",
-		"7408": "MI250X",
-		"740c": "MI250X", // MI250/MI250X
-		"740f": "MI210",
-		"7410": "MI210", // MI210 VF
-		"74a0": "MI300A",
-		"74a1": "MI300X",
-		"74a2": "MI308X",
-		"74a5": "MI325X",
-		"74a8": "MI308X", // MI308X HF
-		"74a9": "MI300X", // MI300X HF
-		"74b5": "MI300X", // MI300X VF
-		"74b6": "MI308X",
-		"74b9": "MI325X", // MI325X VF
-		"74bd": "MI300X", // MI300X HF
-		"75a0": "MI350X",
-		"75a3": "MI355X",
-		"75b0": "MI350X", // MI350X VF
-		"75b3": "MI355X", // MI355X VF
-		// AMD Radeon Pro
-		"7460": "V710",
-		"7461": "V710", // Radeon Pro V710 MxGPU
-		"7448": "W7900",
-		"744a": "W7900", // W7900 Dual Slot
-		"7449": "W7800", // W7800 48GB
-		"745e": "W7800",
-		"73a2": "W6900X",
-		"73a3": "W6800",  // W6800 GL-XL
-		"73ab": "W6800X", // W6800X / W6800X Duo
-		"73a1": "V620",
-		"73ae": "V620", // Radeon Pro V620 MxGPU
-		// AMD Radeon
-		"7550": "RX9070", // RX 9070 / 9070 XT
-		"744c": "RX7900", // RX 7900 XT / 7900 XTX / 7900 GRE / 7900M
-		"73af": "RX6900",
-		"73bf": "RX6800", // RX 6800 / 6800 XT / 6900 XT
-	}
-
-	if model, ok := knownDevices[deviceID]; ok {
+	if model, ok := KnownAmdGpuDevices[deviceID]; ok {
 		return model
 	}
 
@@ -331,6 +332,29 @@ func ListAvailableGPUs(ctx context.Context, k8sClient client.Client) ([]string, 
 	}
 
 	return gpuTypes, nil
+}
+
+// GetAMDDeviceIDsForModel returns all AMD device IDs that map to a given GPU model name.
+// This is the inverse of mapAMDDeviceIDToModel, allowing lookup of all device IDs for a model.
+// Example: GetAMDDeviceIDsForModel("MI300X") returns ["74a1", "74a9", "74b5", "74bd"]
+// Returns empty slice if the model is not found or is not an AMD GPU.
+func GetAMDDeviceIDsForModel(modelName string) []string {
+	// Normalize the model name for comparison
+	normalized := normalizeGPUModel(modelName)
+
+	var deviceIDs []string
+	for deviceID, model := range KnownAmdGpuDevices {
+		if model == normalized {
+			deviceIDs = append(deviceIDs, deviceID)
+		}
+	}
+
+	// Sort device IDs to ensure consistent ordering across reconciliations
+	// Map iteration order in Go is randomized, so we must sort to avoid
+	// triggering unnecessary updates when the list is semantically identical
+	sort.Strings(deviceIDs)
+
+	return deviceIDs
 }
 
 // TemplateRequiresGPU returns true if the template spec declares a GPU selector with a model.
