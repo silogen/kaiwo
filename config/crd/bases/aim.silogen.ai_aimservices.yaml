@@ -99,8 +99,8 @@ spec:
                                   type: string
                                 metricNames:
                                   description: |-
-                                    MetricNames is the list of metric names to collect from the backend.
-                                    Example: ["vllm:num_requests_running"] for vLLM request metrics.
+                                    MetricNames specifies which metrics to collect from pods and send to ServerAddress.
+                                    Example: ["vllm:num_requests_running"]
                                   items:
                                     type: string
                                   type: array
@@ -119,8 +119,7 @@ spec:
                                 serverAddress:
                                   description: |-
                                     ServerAddress specifies the address of the metrics backend server.
-                                    Example: "http://otel-collector:9090" for OpenTelemetry Collector.
-                                    If not specified, the default server address for the backend will be used.
+                                    If not specified, defaults to "keda-otel-scaler.keda.svc:4317" for OpenTelemetry backend.
                                   type: string
                               type: object
                             target:
@@ -162,14 +161,15 @@ spec:
                               required:
                               - type
                               type: object
+                          required:
+                          - metric
+                          - target
                           type: object
                         type:
                           description: |-
                             Type is the type of metric source.
-                            Valid values: "Resource" (CPU/memory), "External" (external metrics), "PodMetric" (per-pod custom metrics)
+                            Valid values: "PodMetric" (per-pod custom metrics). Features to come: Resource, External
                           enum:
-                          - Resource
-                          - External
                           - PodMetric
                           type: string
                       required:
@@ -606,10 +606,10 @@ spec:
               minReplicas:
                 description: |-
                   MinReplicas specifies the minimum number of replicas for autoscaling.
-                  Defaults to 1 but can be set to 0 to enable scale-to-zero.
+                  Defaults to 1. Scale to zero not supported.
                   When specified with MaxReplicas, enables autoscaling for the service.
                 format: int32
-                minimum: 0
+                minimum: 1
                 type: integer
               model:
                 description: |-

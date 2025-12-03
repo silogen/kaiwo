@@ -350,7 +350,7 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 
 	// Auto-inject autoscaling-related annotations when AutoScaling is configured
 	if serviceState.AutoScaling != nil {
-		injectAutoscalingAnnotations(inferenceService, serviceState.Name)
+		injectAutoscalingAnnotations(inferenceService)
 	}
 
 	// Handle replica configuration with priority: AutoScaling config > explicit min/max > legacy Replicas field
@@ -444,7 +444,7 @@ func convertToKServeAutoScaling(aimAutoScaling *aimv1alpha1.AIMServiceAutoScalin
 // injectAutoscalingAnnotations automatically adds required annotations when autoscaling is enabled.
 // This includes KEDA autoscaler class, OpenTelemetry sidecar injection, and Prometheus metrics port.
 // These annotations are only added if they don't already exist, allowing users to override defaults.
-func injectAutoscalingAnnotations(inferenceService *servingv1beta1.InferenceService, serviceName string) {
+func injectAutoscalingAnnotations(inferenceService *servingv1beta1.InferenceService) {
 	if inferenceService.Annotations == nil {
 		inferenceService.Annotations = make(map[string]string)
 	}

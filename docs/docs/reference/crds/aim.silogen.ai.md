@@ -288,7 +288,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `kvCacheType` _string_ | KVCacheType specifies the type of key-value cache to create | redis | Enum: [redis] <br /> |
-| `image` _string_ | Image specifies the container image to use for the KV cache service.<br />If not specified, defaults to appropriate images based on KVCacheType:<br />- redis: redis:7.2.4<br />|  |  |
+| `image` _string_ | Image specifies the container image to use for the KV cache service.<br />If not specified, defaults to appropriate images based on KVCacheType:<br />- redis: redis:7.2.4 |  |  |
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to set in the KV cache container.<br />If not specified (nil), no additional environment variables are set.<br />If explicitly set to an empty array, no environment variables are added. |  |  |
 | `storage` _[StorageSpec](#storagespec)_ | Storage defines the persistent storage configuration for the KV cache |  |  |
 | `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core)_ | Resources defines the resource requirements for the KV cache container.<br />If not specified, defaults to 1 CPU and 1Gi memory for both requests and limits. |  |  |
@@ -934,6 +934,23 @@ _Appears in:_
 | `status` _[AIMServiceStatus](#aimservicestatus)_ |  |  |  |
 
 
+#### AIMServiceAutoScaling
+
+
+
+AIMServiceAutoScaling mirrors KServe's AutoScalingSpec for advanced autoscaling configuration.
+Supports custom metrics from various backends including Prometheus, OpenTelemetry, and KEDA.
+
+
+
+_Appears in:_
+- [AIMServiceSpec](#aimservicespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `metrics` _[AIMServiceMetricsSpec](#aimservicemetricsspec) array_ | Metrics is a list of metrics spec to be used for autoscaling.<br />Each metric defines a source (Resource, External, or PodMetric) and target values. |  |  |
+
+
 #### AIMServiceKVCache
 
 
@@ -975,6 +992,44 @@ AIMServiceList contains a list of AIMService.
 | `items` _[AIMService](#aimservice) array_ |  |  |  |
 
 
+#### AIMServiceMetricTarget
+
+
+
+AIMServiceMetricTarget defines the target value for a metric.
+Specifies how the metric value should be interpreted and what target to maintain.
+
+
+
+_Appears in:_
+- [AIMServicePodMetricSource](#aimservicepodmetricsource)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `type` _string_ | Type specifies how to interpret the metric value.<br />"Value": absolute value target (use Value field)<br />"AverageValue": average value across all pods (use AverageValue field)<br />"Utilization": percentage utilization for resource metrics (use AverageUtilization field) |  | Enum: [Value AverageValue Utilization] <br /> |
+| `value` _string_ | Value is the target value of the metric (as a quantity).<br />Used when Type is "Value".<br />Example: "1" for 1 request, "100m" for 100 millicores |  |  |
+| `averageValue` _string_ | AverageValue is the target value of the average of the metric across all relevant pods (as a quantity).<br />Used when Type is "AverageValue".<br />Example: "100m" for 100 millicores per pod |  |  |
+| `averageUtilization` _integer_ | AverageUtilization is the target value of the average of the resource metric across all relevant pods,<br />represented as a percentage of the requested value of the resource for the pods.<br />Used when Type is "Utilization". Only valid for Resource metric source type.<br />Example: 80 for 80% utilization |  |  |
+
+
+#### AIMServiceMetricsSpec
+
+
+
+AIMServiceMetricsSpec defines a single metric for autoscaling.
+Specifies the metric source type and configuration.
+
+
+
+_Appears in:_
+- [AIMServiceAutoScaling](#aimserviceautoscaling)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `type` _string_ | Type is the type of metric source.<br />Valid values: "PodMetric" (per-pod custom metrics). Features to come: Resource, External |  | Enum: [PodMetric] <br /> |
+| `podmetric` _[AIMServicePodMetricSource](#aimservicepodmetricsource)_ | PodMetric refers to a metric describing each pod in the current scale target.<br />Used when Type is "PodMetric". Supports backends like OpenTelemetry for custom metrics. |  |  |
+
+
 #### AIMServiceModel
 
 
@@ -1010,6 +1065,45 @@ _Appears in:_
 | `metric` _[AIMMetric](#aimmetric)_ | Metric selects the optimization goal.<br />- `latency`: prioritize low end‑to‑end latency<br />- `throughput`: prioritize sustained requests/second |  | Enum: [latency throughput] <br /> |
 | `precision` _[AIMPrecision](#aimprecision)_ | Precision selects the numeric precision used by the runtime. |  | Enum: [auto fp4 fp8 fp16 fp32 bf16 int4 int8] <br /> |
 | `gpuSelector` _[AIMGpuSelector](#aimgpuselector)_ | GpuSelector specifies GPU requirements for each replica.<br />Defines the GPU count and model type required for deployment.<br />This field is immutable after creation. |  |  |
+
+
+#### AIMServicePodMetric
+
+
+
+AIMServicePodMetric identifies the pod metric and its backend.
+Supports multiple metrics backends including OpenTelemetry, Prometheus, etc.
+
+
+
+_Appears in:_
+- [AIMServicePodMetricSource](#aimservicepodmetricsource)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `backend` _string_ | Backend defines the metrics backend to use.<br />Example: "opentelemetry" for OpenTelemetry-based metrics. |  |  |
+| `serverAddress` _string_ | ServerAddress specifies the address of the metrics backend server.<br />If not specified, defaults to "keda-otel-scaler.keda.svc:4317" for OpenTelemetry backend. |  |  |
+| `metricNames` _string array_ | MetricNames specifies which metrics to collect from pods and send to ServerAddress.<br />Example: ["vllm:num_requests_running"] |  |  |
+| `query` _string_ | Query specifies the query to run to retrieve metrics from the backend.<br />The query syntax depends on the backend being used.<br />Example: "vllm:num_requests_running" for OpenTelemetry. |  |  |
+| `operationOverTime` _string_ | OperationOverTime specifies the operation to aggregate metrics over time.<br />Valid values: "last_one", "avg", "max", "min", "rate", "count"<br />Default: "last_one" |  |  |
+
+
+#### AIMServicePodMetricSource
+
+
+
+AIMServicePodMetricSource defines pod-level metrics configuration.
+Specifies the metric identification and target values for pod-based autoscaling.
+
+
+
+_Appears in:_
+- [AIMServiceMetricsSpec](#aimservicemetricsspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `metric` _[AIMServicePodMetric](#aimservicepodmetric)_ | Metric contains the metric identification and backend configuration.<br />Defines which metrics to collect and how to query them. |  |  |
+| `target` _[AIMServiceMetricTarget](#aimservicemetrictarget)_ | Target specifies the target value for the metric.<br />The autoscaler will scale to maintain this target value. |  |  |
 
 
 #### AIMServiceResolvedTemplate
@@ -1070,6 +1164,9 @@ _Appears in:_
 | `templateRef` _string_ | TemplateRef is the name of the AIMServiceTemplate or AIMClusterServiceTemplate to use.<br />The template selects the runtime profile and GPU parameters. |  |  |
 | `cacheModel` _boolean_ | CacheModel requests that model sources be cached when starting the service<br />if the template itself does not warm the cache.<br />When `warmCache: false` on the template, this setting ensures caching is<br />performed before the service becomes ready. | false |  |
 | `replicas` _integer_ | Replicas overrides the number of replicas for this service.<br />Other runtime settings remain governed by the template unless overridden. | 1 |  |
+| `minReplicas` _integer_ | MinReplicas specifies the minimum number of replicas for autoscaling.<br />Defaults to 1. Scale to zero not supported.<br />When specified with MaxReplicas, enables autoscaling for the service. |  | Minimum: 1 <br /> |
+| `maxReplicas` _integer_ | MaxReplicas specifies the maximum number of replicas for autoscaling.<br />Required when MinReplicas is set or when AutoScaling configuration is provided. |  | Minimum: 1 <br /> |
+| `autoScaling` _[AIMServiceAutoScaling](#aimserviceautoscaling)_ | AutoScaling configures advanced autoscaling behavior using HPA or KEDA.<br />Supports custom metrics from various backends (Prometheus, OpenTelemetry, etc.)<br />When specified, MinReplicas and MaxReplicas should also be set. |  |  |
 | `runtimeConfigName` _string_ | RuntimeConfigName references the AIM runtime configuration (by name) to use for this service. | default |  |
 | `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core)_ | Resources overrides the container resource requirements for this service.<br />When specified, these values take precedence over the template and image defaults. |  |  |
 | `kvCache` _[AIMServiceKVCache](#aimservicekvcache)_ | KVCache specifies KV cache configuration for the service.<br />When specified, enables LMCache with the configured KV cache backend. |  |  |
