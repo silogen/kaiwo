@@ -492,7 +492,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `observedGeneration` _integer_ | ObservedGeneration is the most recent generation observed by the controller |  |  |
-| `status` _[AIMModelStatusEnum](#aimmodelstatusenum)_ | Status represents the overall status of the image based on its templates | Pending | Enum: [Pending Progressing Ready Degraded Failed] <br /> |
+| `status` _[AIMModelStatusEnum](#aimmodelstatusenum)_ | Status represents the overall status of the image based on its templates | Pending | Enum: [Pending Progressing Ready NotAvailable Degraded Failed] <br /> |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest available observations of the model's state |  |  |
 | `resolvedRuntimeConfig` _[AIMResolvedRuntimeConfig](#aimresolvedruntimeconfig)_ | ResolvedRuntimeConfig captures metadata about the runtime config that was resolved. |  |  |
 | `imageMetadata` _[ImageMetadata](#imagemetadata)_ | ImageMetadata is the metadata extracted from an AIM image |  |  |
@@ -505,7 +505,7 @@ _Underlying type:_ _string_
 AIMModelStatusEnum represents the overall status of an AIMModel.
 
 _Validation:_
-- Enum: [Pending Progressing Ready Degraded Failed]
+- Enum: [Pending Progressing Ready NotAvailable Degraded Failed]
 
 _Appears in:_
 - [AIMModelStatus](#aimmodelstatus)
@@ -515,6 +515,7 @@ _Appears in:_
 | `Pending` | AIMModelStatusPending indicates the image has been created but template generation has not started.<br /> |
 | `Progressing` | AIMModelStatusProgressing indicates one or more templates are still being discovered.<br /> |
 | `Ready` | AIMModelStatusReady indicates all templates are available and ready.<br /> |
+| `NotAvailable` | AIMModelStatusNotAvailable indicates no templates are available (e.g., required GPUs not present in cluster).<br /> |
 | `Degraded` | AIMModelStatusDegraded indicates one or more templates are degraded or failed.<br /> |
 | `Failed` | AIMModelStatusFailed indicates all templates are degraded or failed.<br /> |
 
