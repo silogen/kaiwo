@@ -37,6 +37,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
 
@@ -283,6 +284,15 @@ func parseImageLabels(labels map[string]string) (*aimv1alpha1.ImageMetadata, err
 	metadata := &aimv1alpha1.ImageMetadata{
 		OCI:   &aimv1alpha1.OCIMetadata{},
 		Model: &aimv1alpha1.ModelMetadata{},
+	}
+
+	// Store the original labels as JSON
+	if len(labels) > 0 {
+		labelsJSON, err := json.Marshal(labels)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal original labels: %w", err)
+		}
+		metadata.OriginalLabels = &apiextensionsv1.JSON{Raw: labelsJSON}
 	}
 
 	// Parse OCI standard labels

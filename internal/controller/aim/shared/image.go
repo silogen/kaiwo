@@ -880,7 +880,8 @@ func ProjectImageStatus(
 
 // updateImageStatusFromTemplates aggregates template statuses and sets conditions on the image.
 // Logic:
-// - Ready: All templates are Available or NotAvailable (terminal non-problematic states)
+// - Ready: All templates are Available, or a mix of Available and NotAvailable
+// - NotAvailable: All templates are NotAvailable (required GPUs not present in cluster)
 // - Progressing: At least one template is Progressing (and none are Failed/Degraded)
 // - Degraded: One or more templates are Degraded or Failed (but not all)
 // - Failed: All templates are Degraded or Failed
@@ -1003,6 +1004,32 @@ func updateImageStatusFromTemplates(status *aimv1alpha1.AIMModelStatus, template
 			Type:               "Degraded",
 			Status:             metav1.ConditionFalse,
 			Reason:             "TemplatesProgressing",
+			Message:            "No templates are degraded",
+			ObservedGeneration: observedGeneration,
+		})
+	} else if notAvailableCount == totalTemplates {
+		// All templates are not available (e.g., required GPUs not present)
+		status.Status = aimv1alpha1.AIMModelStatusNotAvailable
+
+		msg := fmt.Sprintf("All %d template(s) not available (GPU not in cluster)", totalTemplates)
+		setCondition(&status.Conditions, metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionFalse,
+			Reason:             "AllTemplatesNotAvailable",
+			Message:            msg,
+			ObservedGeneration: observedGeneration,
+		})
+		setCondition(&status.Conditions, metav1.Condition{
+			Type:               "Progressing",
+			Status:             metav1.ConditionFalse,
+			Reason:             "AllTemplatesNotAvailable",
+			Message:            "All templates have completed discovery",
+			ObservedGeneration: observedGeneration,
+		})
+		setCondition(&status.Conditions, metav1.Condition{
+			Type:               "Degraded",
+			Status:             metav1.ConditionFalse,
+			Reason:             "AllTemplatesNotAvailable",
 			Message:            "No templates are degraded",
 			ObservedGeneration: observedGeneration,
 		})
