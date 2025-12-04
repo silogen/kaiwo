@@ -57,11 +57,13 @@ local_resource(
     labels=['setup'],
 )
 
-# Apply everything else with regular k8s_yaml
-k8s_yaml(kustomize('config/tilt'))
+# Generate YAML and apply with server-side apply for everything
+yaml = kustomize('config/tilt')
+k8s_yaml(yaml)
 
 k8s_resource(
-    'kaiwo-controller-manager',
+    workload='kaiwo-controller-manager',
+    new_name='kaiwo-controller',
     port_forwards=[
         '8080:8080',  # metrics
         '9443:9443',  # webhook
