@@ -1252,11 +1252,8 @@ _Appears in:_
 | `routing` _[AIMServiceRoutingStatus](#aimserviceroutingstatus)_ | Routing surfaces information about the configured HTTP routing, when enabled. |  |  |
 | `resolvedTemplate` _[AIMServiceResolvedTemplate](#aimserviceresolvedtemplate)_ | ResolvedTemplate captures metadata about the template that satisfied the reference. |  |  |
 | `resolvedTemplateCache` _[AIMResolvedReference](#aimresolvedreference)_ | ResolvedTemplateCache captures metadata about the template cache being used, if any. |  |  |
-<<<<<<< HEAD
 | `modelCaches` _object (keys:string, values:[AIMResolvedModelCache](#aimresolvedmodelcache))_ | ModelCaches maps model names to their resolved AIMModelCache resources if they exist. |  |  |
-=======
 | `resolvedKVCache` _[AIMResolvedReference](#aimresolvedreference)_ | ResolvedKVCache captures metadata about the KV cache being used, if any. |  |  |
->>>>>>> b33ff052 (Add AIMKVCache CRD)
 
 
 #### AIMServiceStatusEnum

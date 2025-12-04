@@ -293,6 +293,16 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 	}
 
 	// Observe KV cache resources if configured
+	if err := r.observeKVCache(ctx, service, obs); err != nil {
+		return nil, err
+	}
+
+	return obs, nil
+}
+
+func (r *AIMServiceReconciler) observeKVCache(ctx context.Context, service *aimv1alpha1.AIMService, obs *shared.ServiceObservation) error {
+	logger := log.FromContext(ctx)
+
 	if service.Spec.KVCache != nil {
 		baseutils.Debug(logger, "Observing KV cache configuration", "kvCacheConfig", service.Spec.KVCache)
 
@@ -323,7 +333,7 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 		// Observe the LMCache ConfigMap
 		configMapName, err := controllerutils.GenerateDerivedName([]string{"lmcache", "service.Name"}, service.Namespace, service.Name)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		configMap := &v1.ConfigMap{}
 		err = r.Get(ctx, client.ObjectKey{
@@ -342,8 +352,7 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 			baseutils.Debug(logger, "Found LMCache ConfigMap", "name", configMapName)
 		}
 	}
-
-	return obs, nil
+	return nil
 }
 
 // resolveStorageClassName determines the storage class to use for a service.
