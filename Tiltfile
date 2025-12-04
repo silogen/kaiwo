@@ -13,13 +13,11 @@ update_settings(max_parallel_updates=3, k8s_upsert_timeout_secs=60)
 # Image configuration
 # ---------------------------------------------------------------------------
 
-# Dev image built by Tilt and pushed to ttl.sh
-# Example:
-#   DEV_IMG=ttl.sh/kaiwo-operator-dev tilt up
-IMAGE = os.getenv('DEV_IMG', 'ttl.sh/kaiwo-operator-dev')
+# Use ttl.sh as default registry for development
+default_registry('ttl.sh/kaiwo-operator-dev')
 
-# The image hard-coded in your kustomize config that we want to override
-ORIGINAL_IMAGE = 'ghcr.io/silogen/kaiwo-operator:v-e2e'
+# The image as referenced in your kustomize config
+IMAGE = 'ghcr.io/silogen/kaiwo-operator:v-e2e'
 
 # ---------------------------------------------------------------------------
 # Thin docker build on top of your base image
@@ -48,37 +46,22 @@ docker_build(
 )
 
 # ---------------------------------------------------------------------------
-# K8s resources – server-side apply via k8s_custom_deploy
+# K8s resources
 # ---------------------------------------------------------------------------
 
-apply_cmd = """
-bash -lc '
-  set -euo pipefail
-  kustomize build config/tilt \\
-    | sed "s#{ORIGINAL_IMAGE}#{IMAGE}#g" \\
-    | tee >(kubectl apply --server-side --force-conflicts -f -)
-'
-""".format(ORIGINAL_IMAGE=ORIGINAL_IMAGE, IMAGE=IMAGE)
-
-delete_cmd = """
-bash -lc '
-  set -euo pipefail
-  kustomize build config/tilt \\
-    | sed "s#{ORIGINAL_IMAGE}#{IMAGE}#g" \\
-    | kubectl delete -f - || true
-'
-""".format(ORIGINAL_IMAGE=ORIGINAL_IMAGE, IMAGE=IMAGE)
-
-k8s_custom_deploy(
-    'kaiwo-controller',          # Tilt resource name
-    apply_cmd=apply_cmd,
-    delete_cmd=delete_cmd,
-    deps=['config/tilt'],        # rerun when manifests change
-    image_selector=IMAGE,        # tie this deploy to IMAGE / Live Update
+# Apply CRDs with server-side apply (they're too large for client-side)
+local_resource(
+    'apply-crds',
+    cmd='kustomize build config/crd | kubectl apply --server-side --force-conflicts -f -',
+    deps=['config/crd'],
+    labels=['setup'],
 )
 
+# Apply everything else with regular k8s_yaml
+k8s_yaml(kustomize('config/tilt'))
+
 k8s_resource(
-    'kaiwo-controller',
+    'kaiwo-controller-manager',
     port_forwards=[
         '8080:8080',  # metrics
         '9443:9443',  # webhook
