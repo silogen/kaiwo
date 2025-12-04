@@ -1,0 +1,46 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-service
+spec:
+  model:
+    image: ghcr.io/silogen/aim-openai-gpt-oss-20b:0.9.0-rc2
+
+  # Allow unoptimized templates since discovery created unoptimized profiles
+  env:
+    - name: AIM_PROFILE_ID
+      value: vllm-mi300x-fp16-tp1-latency
+  template:
+    allowUnoptimized: true
+  imagePullSecrets:
+    - name: ghcr-regcred
+  kvCache:
+    type: redis
+  # Autoscaling configuration
+  minReplicas: 1
+  maxReplicas: 3
+  resources:
+    requests:
+      memory: 64Gi
+      cpu: 4
+      amd.com/gpu: 1
+    limits:
+      memory: 128Gi
+      cpu: 8
+      amd.com/gpu: 1
+
+  # Advanced autoscaling with custom metrics
+  autoScaling:
+    metrics:
+      - type: PodMetric
+        podmetric:
+          metric:
+            backend: "opentelemetry"
+            metricNames:
+              - vllm:num_requests_running
+            query: "vllm:num_requests_running"
+            operationOverTime: "avg"
+          target:
+            type: Value
+            value: "1"
+

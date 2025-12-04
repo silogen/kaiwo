@@ -230,11 +230,6 @@ func (r *AIMKVCacheReconciler) isOwnedByKVCache(obj client.Object, kvc *aimv1alp
 }
 
 func (r *AIMKVCacheReconciler) serviceNeedsUpdate(existing corev1.Service, desired *corev1.Service) bool {
-	// Compare key fields that matter
-	if existing.Spec.ClusterIP != desired.Spec.ClusterIP {
-		return true
-	}
-
 	// Compare ports length
 	if len(existing.Spec.Ports) != len(desired.Spec.Ports) {
 		return true
@@ -522,8 +517,7 @@ func (r *AIMKVCacheReconciler) buildRedisService(kvc *aimv1alpha1.AIMKVCache) *c
 			Labels:    labels,
 		},
 		Spec: corev1.ServiceSpec{
-			ClusterIP: "None", // Headless service for StatefulSet
-			Selector:  labels,
+			Selector: labels,
 			Ports: []corev1.ServicePort{
 				{
 					Protocol:   corev1.ProtocolTCP,
@@ -532,7 +526,6 @@ func (r *AIMKVCacheReconciler) buildRedisService(kvc *aimv1alpha1.AIMKVCache) *c
 					Name:       "redis",
 				},
 			},
-			PublishNotReadyAddresses: true, // Allow DNS records for pods before they are ready
 		},
 	}
 
