@@ -74,7 +74,6 @@ spec:
                     type: boolean
                 type: object
               pvcHeadroomPercent:
-                default: 10
                 description: |-
                   PVCHeadroomPercent specifies the percentage of extra space to add to PVCs
                   for model storage. This accounts for filesystem overhead and temporary files
@@ -96,7 +95,7 @@ spec:
                       Annotations defines additional annotations to add to the HTTPRoute resource.
                       These annotations can be used for various purposes such as configuring ingress
                       behavior, adding metadata, or triggering external integrations.
-                      Individual services can override these via spec.runtimeOverrides.routing.annotations.
+                      Individual services can override these via spec.routing.annotations.
                     type: object
                   enabled:
                     description: |-

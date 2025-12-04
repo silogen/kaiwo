@@ -35,6 +35,9 @@ spec:
     - jsonPath: .status.profile.metadata.precision
       name: Precision
       type: string
+    - jsonPath: .status.profile.metadata.type
+      name: Profile
+      type: string
     - jsonPath: .status.profile.metadata.gpu_count
       name: GPUs/replica
       type: integer
@@ -474,6 +477,10 @@ spec:
                 x-kubernetes-validations:
                 - message: precision is immutable
                   rule: self == oldSelf
+              profileId:
+                description: ProfileId is the specific AIM profile ID that this template
+                  should use
+                type: string
               resources:
                 description: |-
                   Resources defines the default container resource requirements applied to services derived from this template.
@@ -684,7 +691,7 @@ spec:
                         description: GPU specifies the GPU model this profile is optimized
                           for (e.g., "MI300X", "MI325X").
                         type: string
-                      gpu_count:
+                      gpuCount:
                         description: GPUCount indicates how many GPUs are required
                           per replica for this profile.
                         format: int32
@@ -704,6 +711,9 @@ spec:
                         - fp16
                         - fp8
                         - int8
+                        type: string
+                      type:
+                        description: Type specifies the designation of the profile
                         type: string
                     type: object
                 type: object

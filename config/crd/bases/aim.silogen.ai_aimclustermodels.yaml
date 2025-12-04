@@ -301,6 +301,10 @@ spec:
                               description: Precision is the recommended precision
                                 (e.g., fp8, fp16, bf16)
                               type: string
+                            profileId:
+                              description: ProfileId is an optional override to select
+                                a particular AIM profile by ID
+                              type: string
                           type: object
                         type: array
                       releaseNotes:
@@ -394,6 +398,12 @@ spec:
                           Extracted from: org.opencontainers.image.version
                         type: string
                     type: object
+                  originalLabels:
+                    description: |-
+                      OriginalLabels contains the originally parsed metadata from the image registry.
+                      This is stored as JSON to preserve the raw label data.
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
                 type: object
               observedGeneration:
                 description: ObservedGeneration is the most recent generation observed
@@ -438,6 +448,7 @@ spec:
                 - Pending
                 - Progressing
                 - Ready
+                - NotAvailable
                 - Degraded
                 - Failed
                 type: string

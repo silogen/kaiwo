@@ -40,13 +40,13 @@ type ResolvedRouting struct {
 // Resolve determines the effective routing configuration by merging runtime config defaults
 // with service-level overrides. The precedence order is:
 // 1. Runtime config (base layer)
-// 2. Service.Spec.RuntimeOverrides.Routing (override layer)
+// 2. Service.Spec.Routing (override layer)
 func Resolve(service *aimv1alpha1.AIMService, runtime *aimv1alpha1.AIMRuntimeRoutingConfig) ResolvedRouting {
 	var resolved ResolvedRouting
 	var runtimeOverrideRouting *aimv1alpha1.AIMRuntimeRoutingConfig
 
-	if service != nil && service.Spec.RuntimeOverrides != nil {
-		runtimeOverrideRouting = service.Spec.RuntimeOverrides.Routing
+	if service != nil {
+		runtimeOverrideRouting = service.Spec.Routing
 	}
 
 	// Layer 1: Start with runtime config defaults

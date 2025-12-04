@@ -32,6 +32,22 @@ const (
 	DefaultDownloadImage = "kserve/storage-initializer:v0.16.0-rc0"
 )
 
+// AIMResolvedModelCache contains reference info and status for a cached model.
+type AIMResolvedModelCache struct {
+	// UID of the AIMModelCache resource
+	UID string `json:"uid"`
+	// Name of the AIMModelCache resource
+	Name string `json:"name"`
+	// Model is the name of the model that is cached
+	Model string `json:"model"`
+	// Status of the model cache
+	Status AIMModelCacheStatusEnum `json:"status"`
+	// PersistentVolumeClaim name if available
+	PersistentVolumeClaim string `json:"persistentVolumeClaim,omitempty"`
+	// MountPoint is the mount point for the model cache
+	MountPoint string `json:"mountPoint,omitempty"`
+}
+
 // AIMModelCacheSpec defines the desired state of AIMModelCache
 type AIMModelCacheSpec struct {
 	// SourceURI is the source of the model to be downloaded. This is the only

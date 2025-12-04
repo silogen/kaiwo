@@ -51,14 +51,14 @@ var (
 
 // ResolveServiceRoutePath renders the HTTP route prefix using service and runtime config context.
 // The precedence order is:
-// 1. Service.Spec.RuntimeOverrides.Routing.PathTemplate (highest priority)
+// 1. Service.Spec.Routing.PathTemplate (highest priority)
 // 2. RuntimeConfig.Routing.PathTemplate (base layer)
 func ResolveServiceRoutePath(service *aimv1alpha1.AIMService, runtimeConfig aimv1alpha1.AIMRuntimeConfigSpec) (string, error) {
 	template := ""
 
 	// Check for runtime override first (highest priority)
-	if service.Spec.RuntimeOverrides != nil && service.Spec.RuntimeOverrides.Routing != nil && service.Spec.RuntimeOverrides.Routing.PathTemplate != "" {
-		template = service.Spec.RuntimeOverrides.Routing.PathTemplate
+	if service.Spec.Routing != nil && service.Spec.Routing.PathTemplate != "" {
+		template = service.Spec.Routing.PathTemplate
 	} else if runtimeConfig.Routing != nil && runtimeConfig.Routing.PathTemplate != "" {
 		// Fallback to runtime config
 		template = runtimeConfig.Routing.PathTemplate
@@ -87,13 +87,13 @@ func DefaultRoutePath(service *aimv1alpha1.AIMService) string {
 
 // ResolveServiceRouteTimeout resolves the HTTP route timeout using service and runtime config context.
 // The precedence order is:
-// 1. Service.Spec.RuntimeOverrides.Routing.RequestTimeout (highest priority)
+// 1. Service.Spec.Routing.RequestTimeout (highest priority)
 // 2. RuntimeConfig.Routing.RequestTimeout (base layer)
 // Returns nil if no timeout is configured at any level.
 func ResolveServiceRouteTimeout(service *aimv1alpha1.AIMService, runtimeConfig aimv1alpha1.AIMRuntimeConfigSpec) *string {
-	// Highest priority: AIMService.Spec.RuntimeOverrides.Routing.RequestTimeout
-	if service.Spec.RuntimeOverrides != nil && service.Spec.RuntimeOverrides.Routing != nil && service.Spec.RuntimeOverrides.Routing.RequestTimeout != nil {
-		timeout := service.Spec.RuntimeOverrides.Routing.RequestTimeout.Duration.String()
+	// Highest priority: AIMService.Spec.Routing.RequestTimeout
+	if service.Spec.Routing != nil && service.Spec.Routing.RequestTimeout != nil {
+		timeout := service.Spec.Routing.RequestTimeout.Duration.String()
 		return &timeout
 	}
 

@@ -86,8 +86,6 @@ See [Runtime Configuration](runtime-config.md) for details.
 
 ## KV Cache
 
-Enable KV caching to improve inference performance by caching intermediate key-value computations. This significantly boosts throughput for requests with shared prompt prefixes.
-
 ### Creating a New KV Cache
 
 The service automatically creates a KV cache when you specify the `type`:
@@ -356,6 +354,35 @@ spec:
           key: token
 ```
 
+## Model Caching
+
+Enable model caching to pre-download model artifacts:
+
+```yaml
+spec:
+  model:
+    image: ghcr.io/silogen/aim-meta-llama-llama-3-1-8b-instruct:0.7.0
+  cacheModel: true
+```
+
+When `cacheModel: true`:
+
+1. An `AIMTemplateCache` is created for the service's template, if it doesn't already exist
+2. The AIMTemplate will create `AIMModelCache` resources that download model artifacts to PVCs
+3. The service waits for caches to become Available before starting
+4. Cached models are mounted directly into the inference container
+
+### Cache Preservation on Deletion
+
+When you delete an `AIMService`:
+
+- **Available caches are preserved** - they can be reused by future services
+- **Non-available caches are cleaned up** - failed or incomplete downloads are removed
+
+This means if you recreate the same service, it will immediately use the existing cached models without re-downloading.
+
+See [Model Caching](../concepts/caching.md) for detailed information on cache lifecycle and management.
+
 ## Troubleshooting
 
 ### Service stuck in Pending
@@ -399,3 +426,4 @@ If using `spec.model.image` directly, verify the image URI is accessible and the
 - [Runtime Configuration](runtime-config.md) - Configure runtime settings and credentials
 - [Models](../concepts/models.md) - Understanding the model catalog
 - [Templates](../concepts/templates.md) - Deep dive on templates and discovery
+- [Model Caching](../concepts/caching.md) - Cache lifecycle and deletion behavior

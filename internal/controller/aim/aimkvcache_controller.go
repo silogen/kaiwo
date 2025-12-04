@@ -47,8 +47,9 @@ import (
 )
 
 const (
-	kvCacheFieldOwner = "aimkvcache-controller"
-	kvCacheTypeRedis  = "redis"
+	kvCacheFieldOwner        = "aimkvcache-controller"
+	kvCacheTypeRedis         = "redis"
+	kvCacheDefaultRedisImage = "redis:7.2.4"
 )
 
 // AIMKVCacheReconciler reconciles a AIMKVCache object
@@ -135,7 +136,10 @@ func (r *AIMKVCacheReconciler) observe(ctx context.Context, kvc *aimv1alpha1.AIM
 	obs := &kvObservation{}
 
 	// Observe StatefulSet
-	statefulSetName := r.getStatefulSetName(kvc)
+	statefulSetName, err := r.getStatefulSetName(kvc)
+	if err != nil {
+		return nil, err
+	}
 	var statefulSet appsv1.StatefulSet
 	if err := r.Get(ctx, client.ObjectKey{
 		Namespace: kvc.Namespace,
@@ -152,7 +156,10 @@ func (r *AIMKVCacheReconciler) observe(ctx context.Context, kvc *aimv1alpha1.AIM
 	}
 
 	// Observe Service
-	serviceName := r.getServiceName(kvc)
+	serviceName, err := r.getServiceName(kvc)
+	if err != nil {
+		return nil, err
+	}
 	var service corev1.Service
 	if err := r.Get(ctx, client.ObjectKey{
 		Namespace: kvc.Namespace,
@@ -182,6 +189,9 @@ func (r *AIMKVCacheReconciler) plan(ctx context.Context, kvc *aimv1alpha1.AIMKVC
 
 	// Build Redis Service
 	desiredService := r.buildRedisService(kvc)
+	if desiredService == nil {
+		return nil, fmt.Errorf("failed to build Redis Service")
+	}
 	if !obs.serviceFound {
 		desired = append(desired, desiredService)
 		baseutils.Debug(logger, "Planning to create Service", "name", desiredService.Name)
@@ -194,6 +204,9 @@ func (r *AIMKVCacheReconciler) plan(ctx context.Context, kvc *aimv1alpha1.AIMKVC
 
 	// Build Redis StatefulSet
 	desiredStatefulSet := r.buildRedisStatefulSet(kvc)
+	if desiredStatefulSet == nil {
+		return nil, fmt.Errorf("failed to build Redis StatefulSet")
+	}
 	if !obs.statefulSetFound {
 		desired = append(desired, desiredStatefulSet)
 		baseutils.Debug(logger, "Planning to create StatefulSet", "name", desiredStatefulSet.Name)
@@ -280,8 +293,8 @@ func (r *AIMKVCacheReconciler) projectStatus(_ context.Context, kvc *aimv1alpha1
 	status.ObservedGeneration = kvc.Generation
 
 	// Set statefulset and service names
-	status.StatefulSetName = r.getStatefulSetName(kvc)
-	status.ServiceName = r.getServiceName(kvc)
+	status.StatefulSetName, _ = r.getStatefulSetName(kvc)
+	status.ServiceName, _ = r.getServiceName(kvc)
 
 	// Populate status fields from observation
 	if obs != nil {
@@ -375,8 +388,14 @@ func (r *AIMKVCacheReconciler) finalize(ctx context.Context, kvc *aimv1alpha1.AI
 }
 
 func (r *AIMKVCacheReconciler) buildRedisStatefulSet(kvc *aimv1alpha1.AIMKVCache) *appsv1.StatefulSet {
-	name := r.getStatefulSetName(kvc)
-	serviceName := r.getServiceName(kvc)
+	name, err := r.getStatefulSetName(kvc)
+	if err != nil {
+		return nil
+	}
+	serviceName, err := r.getServiceName(kvc)
+	if err != nil {
+		return nil
+	}
 	labels := map[string]string{
 		"app":                         "redis",
 		"aim.silogen.ai/kvcache":      kvc.Name,
@@ -486,7 +505,10 @@ func (r *AIMKVCacheReconciler) buildRedisStatefulSet(kvc *aimv1alpha1.AIMKVCache
 }
 
 func (r *AIMKVCacheReconciler) buildRedisService(kvc *aimv1alpha1.AIMKVCache) *corev1.Service {
-	name := r.getServiceName(kvc)
+	name, err := r.getServiceName(kvc)
+	if err != nil {
+		return nil
+	}
 	labels := map[string]string{
 		"app":                         "redis",
 		"aim.silogen.ai/kvcache":      kvc.Name,
@@ -522,12 +544,12 @@ func (r *AIMKVCacheReconciler) buildRedisService(kvc *aimv1alpha1.AIMKVCache) *c
 	return service
 }
 
-func (r *AIMKVCacheReconciler) getStatefulSetName(kvc *aimv1alpha1.AIMKVCache) string {
-	return fmt.Sprintf("%s-%s", kvc.Name, kvc.Spec.KVCacheType)
+func (r *AIMKVCacheReconciler) getStatefulSetName(kvc *aimv1alpha1.AIMKVCache) (string, error) {
+	return controllerutils.GenerateDerivedName([]string{kvc.Name, kvc.Spec.KVCacheType}, kvc.Namespace, kvc.Name)
 }
 
-func (r *AIMKVCacheReconciler) getServiceName(kvc *aimv1alpha1.AIMKVCache) string {
-	return fmt.Sprintf("%s-%s-svc", kvc.Name, kvc.Spec.KVCacheType)
+func (r *AIMKVCacheReconciler) getServiceName(kvc *aimv1alpha1.AIMKVCache) (string, error) {
+	return controllerutils.GenerateDerivedName([]string{kvc.Name, kvc.Spec.KVCacheType, "svc"}, kvc.Namespace, kvc.Name)
 }
 
 func (r *AIMKVCacheReconciler) getStorageSize(kvc *aimv1alpha1.AIMKVCache) resource.Quantity {
@@ -560,10 +582,10 @@ func (r *AIMKVCacheReconciler) getImage(kvc *aimv1alpha1.AIMKVCache) string {
 	// Otherwise, use defaults based on KVCacheType
 	switch kvc.Spec.KVCacheType {
 	case kvCacheTypeRedis:
-		return "redis:7.2.4"
+		return kvCacheDefaultRedisImage
 	default:
 		// Fallback to redis if type is not recognized
-		return "redis:7.2.4"
+		return kvCacheDefaultRedisImage
 	}
 }
 

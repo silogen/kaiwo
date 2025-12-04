@@ -32,6 +32,9 @@ spec:
     - jsonPath: .spec.replicas
       name: Replicas
       type: integer
+    - jsonPath: .status.resolvedTemplate.profile.metadata.type
+      name: Profile
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -188,6 +191,12 @@ spec:
                   When `warmCache: false` on the template, this setting ensures caching is
                   performed before the service becomes ready.
                 type: boolean
+              defaultStorageClassName:
+                description: |-
+                  DefaultStorageClassName specifies the storage class to use for model caches and PVCs
+                  when the consuming resource (AIMModelCache, AIMTemplateCache, AIMServiceTemplate) does not
+                  specify a storage class. If this field is empty, the cluster's default storage class is used.
+                type: string
               env:
                 description: |-
                   Env specifies environment variables to use for authentication when downloading models.
@@ -615,11 +624,15 @@ spec:
                 minimum: 1
                 type: integer
               model:
-                description: |-
-                  Model specifies which model to deploy using one of the available reference methods.
-                  Use `ref` to reference an existing AIMModel/AIMClusterModel by name, or use `image`
-                  to specify a container image URI directly (which will auto-create a model if needed).
+                description: Model controls model creation and discovery defaults.
                 properties:
+                  autoDiscovery:
+                    default: true
+                    description: |-
+                      AutoDiscovery controls whether models run discovery by default.
+                      When true, models run discovery jobs to extract metadata and auto-create templates.
+                      When false, discovery is skipped. Discovery failures are non-fatal and reported via conditions.
+                    type: boolean
                   image:
                     description: |-
                       Image specifies a container image URI directly.
@@ -715,6 +728,15 @@ spec:
                     - message: precision is immutable
                       rule: self == oldSelf
                 type: object
+              pvcHeadroomPercent:
+                description: |-
+                  PVCHeadroomPercent specifies the percentage of extra space to add to PVCs
+                  for model storage. This accounts for filesystem overhead and temporary files
+                  during model loading. The value represents a percentage (e.g., 10 means 10% extra space).
+                  If not specified, defaults to 10%.
+                format: int32
+                minimum: 0
+                type: integer
               replicas:
                 default: 1
                 description: |-
@@ -783,189 +805,158 @@ spec:
                       More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                     type: object
                 type: object
+              routing:
+                description: |-
+                  Routing controls HTTP routing defaults applied to AIM resources.
+                  When set, these defaults are used for AIMService resources that enable routing
+                  but do not specify their own routing configuration.
+                properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      Annotations defines additional annotations to add to the HTTPRoute resource.
+                      These annotations can be used for various purposes such as configuring ingress
+                      behavior, adding metadata, or triggering external integrations.
+                      Individual services can override these via spec.routing.annotations.
+                    type: object
+                  enabled:
+                    description: |-
+                      Enabled controls whether HTTP routing is managed for inference services using this config.
+                      When true, the operator creates HTTPRoute resources for services that reference this config.
+                      When false or unset, routing must be explicitly enabled on each service.
+                      This provides a namespace or cluster-wide default that individual services can override.
+                    type: boolean
+                  gatewayRef:
+                    description: |-
+                      GatewayRef specifies the Gateway API Gateway resource that should receive HTTPRoutes.
+                      This identifies the parent gateway for routing traffic to inference services.
+                      The gateway can be in any namespace (cross-namespace references are supported).
+                      If routing is enabled but GatewayRef is not specified, service reconciliation will fail
+                      with a validation error.
+                    properties:
+                      group:
+                        default: gateway.networking.k8s.io
+                        description: |-
+                          Group is the group of the referent.
+                          When unspecified, "gateway.networking.k8s.io" is inferred.
+                          To set the core API group (such as for a "Service" kind referent),
+                          Group must be explicitly set to "" (empty string).
+
+                          Support: Core
+                        maxLength: 253
+                        pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                        type: string
+                      kind:
+                        default: Gateway
+                        description: |-
+                          Kind is kind of the referent.
+
+                          There are two kinds of parent resources with "Core" support:
+
+                          * Gateway (Gateway conformance profile)
+                          * Service (Mesh conformance profile, ClusterIP Services only)
+
+                          Support for other resources is Implementation-Specific.
+                        maxLength: 63
+                        minLength: 1
+                        pattern: ^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$
+                        type: string
+                      name:
+                        description: |-
+                          Name is the name of the referent.
+
+                          Support: Core
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                      namespace:
+                        description: |-
+                          Namespace is the namespace of the referent. When unspecified, this refers
+                          to the local namespace of the Route.
+
+                          Note that there are specific rules for ParentRefs which cross namespace
+                          boundaries. Cross-namespace references are only valid if they are explicitly
+                          allowed by something in the namespace they are referring to. For example:
+                          Gateway has the AllowedRoutes field, and ReferenceGrant provides a
+                          generic way to enable any other kind of cross-namespace reference.
+                        maxLength: 63
+                        minLength: 1
+                        pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                        type: string
+                      port:
+                        description: |-
+                          Port is the network port this Route targets. It can be interpreted
+                          differently based on the type of parent resource.
+
+                          When the parent resource is a Gateway, this targets all listeners
+                          listening on the specified port that also support this kind of Route(and
+                          select this Route). It's not recommended to set `Port` unless the
+                          networking behaviors specified in a Route must apply to a specific port
+                          as opposed to a listener(s) whose port(s) may be changed.
+                        format: int32
+                        maximum: 65535
+                        minimum: 1
+                        type: integer
+                      sectionName:
+                        description: |-
+                          SectionName is the name of a section within the target resource. In the
+                          following resources, SectionName is interpreted as the following:
+
+                          * Gateway: Listener name. When both Port (experimental) and SectionName
+                          are specified, the name and port of the selected listener must match
+                          both specified values.
+                          * Service: Port name. When both Port (experimental) and SectionName
+                          are specified, the name and port of the selected listener must match
+                          both specified values.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  pathTemplate:
+                    description: |-
+                      PathTemplate defines the HTTP path template for routes, evaluated using JSONPath expressions.
+                      The template is rendered against the AIMService object to generate unique paths.
+
+                      Example templates:
+                      - `/{.metadata.namespace}/{.metadata.name}` - namespace and service name
+                      - `/{.metadata.namespace}/{.metadata.labels['team']}/inference` - with label
+                      - `/models/{.spec.aimModelName}` - based on model name
+
+                      The template must:
+                      - Use valid JSONPath expressions wrapped in {...
+                    type: string
+                  requestTimeout:
+                    description: |-
+                      RequestTimeout defines the HTTP request timeout for routes.
+                      This sets the maximum duration for a request to complete before timing out.
+                      The timeout applies to the entire request/response cycle.
+                      If not specified, no timeout is set on the route.
+                      Individual services can override this value via spec.runtimeOverrides.routing.requestTimeout.
+                    type: string
+                type: object
               runtimeConfigName:
                 default: default
                 description: RuntimeConfigName references the AIM runtime configuration
                   (by name) to use for this service.
                 type: string
-              runtimeOverrides:
-                description: |-
-                  RuntimeOverrides allows overriding runtime configuration settings for this service.
-                  When specified, these values take precedence over both namespace and cluster-level runtime configs.
-                  This provides fine-grained control over storage, model behavior, routing, and other runtime settings.
-
-                  The precedence order is:
-                  1. AIMService.Spec.RuntimeOverrides (highest priority)
-                  2. AIMRuntimeConfig (namespace-level)
-                  3. AIMClusterRuntimeConfig (cluster-level)
-                properties:
-                  defaultStorageClassName:
-                    description: |-
-                      DefaultStorageClassName specifies the storage class to use for model caches and PVCs
-                      when the consuming resource (AIMModelCache, AIMTemplateCache, AIMServiceTemplate) does not
-                      specify a storage class. If this field is empty, the cluster's default storage class is used.
-                    type: string
-                  model:
-                    description: Model controls model creation and discovery defaults.
-                    properties:
-                      autoDiscovery:
-                        default: true
-                        description: |-
-                          AutoDiscovery controls whether models run discovery by default.
-                          When true, models run discovery jobs to extract metadata and auto-create templates.
-                          When false, discovery is skipped. Discovery failures are non-fatal and reported via conditions.
-                        type: boolean
-                    type: object
-                  pvcHeadroomPercent:
-                    default: 10
-                    description: |-
-                      PVCHeadroomPercent specifies the percentage of extra space to add to PVCs
-                      for model storage. This accounts for filesystem overhead and temporary files
-                      during model loading. The value represents a percentage (e.g., 10 means 10% extra space).
-                      If not specified, defaults to 10%.
-                    format: int32
-                    minimum: 0
-                    type: integer
-                  routing:
-                    description: |-
-                      Routing controls HTTP routing defaults applied to AIM resources.
-                      When set, these defaults are used for AIMService resources that enable routing
-                      but do not specify their own routing configuration.
-                    properties:
-                      annotations:
-                        additionalProperties:
-                          type: string
-                        description: |-
-                          Annotations defines additional annotations to add to the HTTPRoute resource.
-                          These annotations can be used for various purposes such as configuring ingress
-                          behavior, adding metadata, or triggering external integrations.
-                          Individual services can override these via spec.runtimeOverrides.routing.annotations.
-                        type: object
-                      enabled:
-                        description: |-
-                          Enabled controls whether HTTP routing is managed for inference services using this config.
-                          When true, the operator creates HTTPRoute resources for services that reference this config.
-                          When false or unset, routing must be explicitly enabled on each service.
-                          This provides a namespace or cluster-wide default that individual services can override.
-                        type: boolean
-                      gatewayRef:
-                        description: |-
-                          GatewayRef specifies the Gateway API Gateway resource that should receive HTTPRoutes.
-                          This identifies the parent gateway for routing traffic to inference services.
-                          The gateway can be in any namespace (cross-namespace references are supported).
-                          If routing is enabled but GatewayRef is not specified, service reconciliation will fail
-                          with a validation error.
-                        properties:
-                          group:
-                            default: gateway.networking.k8s.io
-                            description: |-
-                              Group is the group of the referent.
-                              When unspecified, "gateway.networking.k8s.io" is inferred.
-                              To set the core API group (such as for a "Service" kind referent),
-                              Group must be explicitly set to "" (empty string).
-
-                              Support: Core
-                            maxLength: 253
-                            pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
-                            type: string
-                          kind:
-                            default: Gateway
-                            description: |-
-                              Kind is kind of the referent.
-
-                              There are two kinds of parent resources with "Core" support:
-
-                              * Gateway (Gateway conformance profile)
-                              * Service (Mesh conformance profile, ClusterIP Services only)
-
-                              Support for other resources is Implementation-Specific.
-                            maxLength: 63
-                            minLength: 1
-                            pattern: ^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$
-                            type: string
-                          name:
-                            description: |-
-                              Name is the name of the referent.
-
-                              Support: Core
-                            maxLength: 253
-                            minLength: 1
-                            type: string
-                          namespace:
-                            description: |-
-                              Namespace is the namespace of the referent. When unspecified, this refers
-                              to the local namespace of the Route.
-
-                              Note that there are specific rules for ParentRefs which cross namespace
-                              boundaries. Cross-namespace references are only valid if they are explicitly
-                              allowed by something in the namespace they are referring to. For example:
-                              Gateway has the AllowedRoutes field, and ReferenceGrant provides a
-                              generic way to enable any other kind of cross-namespace reference.
-                            maxLength: 63
-                            minLength: 1
-                            pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
-                            type: string
-                          port:
-                            description: |-
-                              Port is the network port this Route targets. It can be interpreted
-                              differently based on the type of parent resource.
-
-                              When the parent resource is a Gateway, this targets all listeners
-                              listening on the specified port that also support this kind of Route(and
-                              select this Route). It's not recommended to set `Port` unless the
-                              networking behaviors specified in a Route must apply to a specific port
-                              as opposed to a listener(s) whose port(s) may be changed.
-                            format: int32
-                            maximum: 65535
-                            minimum: 1
-                            type: integer
-                          sectionName:
-                            description: |-
-                              SectionName is the name of a section within the target resource. In the
-                              following resources, SectionName is interpreted as the following:
-
-                              * Gateway: Listener name. When both Port (experimental) and SectionName
-                              are specified, the name and port of the selected listener must match
-                              both specified values.
-                              * Service: Port name. When both Port (experimental) and SectionName
-                              are specified, the name and port of the selected listener must match
-                              both specified values.
-                            maxLength: 253
-                            minLength: 1
-                            pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
-                            type: string
-                        required:
-                        - name
-                        type: object
-                      pathTemplate:
-                        description: |-
-                          PathTemplate defines the HTTP path template for routes, evaluated using JSONPath expressions.
-                          The template is rendered against the AIMService object to generate unique paths.
-
-                          Example templates:
-                          - `/{.metadata.namespace}/{.metadata.name}` - namespace and service name
-                          - `/{.metadata.namespace}/{.metadata.labels['team']}/inference` - with label
-                          - `/models/{.spec.aimModelName}` - based on model name
-
-                          The template must:
-                          - Use valid JSONPath expressions wrapped in {...
-                        type: string
-                      requestTimeout:
-                        description: |-
-                          RequestTimeout defines the HTTP request timeout for routes.
-                          This sets the maximum duration for a request to complete before timing out.
-                          The timeout applies to the entire request/response cycle.
-                          If not specified, no timeout is set on the route.
-                          Individual services can override this value via spec.runtimeOverrides.routing.requestTimeout.
-                        type: string
-                    type: object
-                type: object
               serviceAccountName:
                 description: |-
                   ServiceAccountName specifies the Kubernetes service account to use for the inference workload.
                   This service account is used by the deployed inference pods.
                   If empty, the default service account for the namespace is used.
                 type: string
+              template:
+                description: Template contains the AIMServiceTemplate selection configuration
+                properties:
+                  allowUnoptimized:
+                    description: AllowUnoptimized, if true, will allow automatic selection
+                      of templates that resolve to an unoptimized profile.
+                    type: boolean
+                type: object
               templateRef:
                 description: |-
                   TemplateRef is the name of the AIMServiceTemplate or AIMClusterServiceTemplate to use.
@@ -1038,6 +1029,43 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              modelCaches:
+                additionalProperties:
+                  description: AIMResolvedModelCache contains reference info and status
+                    for a cached model.
+                  properties:
+                    model:
+                      description: Model is the name of the model that is cached
+                      type: string
+                    mountPoint:
+                      description: MountPoint is the mount point for the model cache
+                      type: string
+                    name:
+                      description: Name of the AIMModelCache resource
+                      type: string
+                    persistentVolumeClaim:
+                      description: PersistentVolumeClaim name if available
+                      type: string
+                    status:
+                      description: Status of the model cache
+                      enum:
+                      - Pending
+                      - Progressing
+                      - Available
+                      - Failed
+                      type: string
+                    uid:
+                      description: UID of the AIMModelCache resource
+                      type: string
+                  required:
+                  - model
+                  - name
+                  - status
+                  - uid
+                  type: object
+                description: ModelCaches maps model names to their resolved AIMModelCache
+                  resources if they exist.
+                type: object
               observedGeneration:
                 description: ObservedGeneration is the most recent generation observed
                   by the controller.
@@ -1149,6 +1177,49 @@ spec:
                       Namespace identifies where the resource was found when namespace-scoped.
                       Empty indicates a cluster-scoped resource.
                     type: string
+                  profile:
+                    description: Profile is the profile that the resolved template
+                      points to
+                    properties:
+                      metadata:
+                        description: |-
+                          AIMProfileMetadata describes the characteristics of a cached deployment profile.
+                          This is identical to AIMDiscoveryProfileMetadata but exists in the template status namespace.
+                        properties:
+                          engine:
+                            description: Engine identifies the inference engine used
+                              for this profile (e.g., "vllm", "tgi").
+                            type: string
+                          gpu:
+                            description: GPU specifies the GPU model this profile
+                              is optimized for (e.g., "MI300X", "MI325X").
+                            type: string
+                          gpuCount:
+                            description: GPUCount indicates how many GPUs are required
+                              per replica for this profile.
+                            format: int32
+                            type: integer
+                          metric:
+                            description: Metric indicates the optimization goal for
+                              this profile ("latency" or "throughput").
+                            enum:
+                            - latency
+                            - throughput
+                            type: string
+                          precision:
+                            description: Precision specifies the numeric precision
+                              used in this profile (e.g., "fp16", "fp8").
+                            enum:
+                            - bf16
+                            - fp16
+                            - fp8
+                            - int8
+                            type: string
+                          type:
+                            description: Type specifies the designation of the profile
+                            type: string
+                        type: object
+                    type: object
                   scope:
                     description: Scope indicates whether the resolved resource was
                       namespace or cluster scoped.

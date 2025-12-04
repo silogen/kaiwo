@@ -51,6 +51,7 @@ AIM Engine automatically:
     - [Models](concepts/models.md) - Model catalog and discovery mechanism
     - [Templates](concepts/templates.md) - Runtime profiles and discovery
     - [Runtime Config](concepts/runtime-config.md) - Resolution algorithm and architecture
+    - [Model Caching](concepts/caching.md) - Cache lifecycle and deletion behavior
 
 ## Getting Started
 

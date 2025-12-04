@@ -57,10 +57,8 @@ func TestResolveUsesRuntimeDefaultsWhenServiceMissing(t *testing.T) {
 
 func TestResolvePrefersServiceOverrides(t *testing.T) {
 	service := &aimv1alpha1.AIMService{}
-	service.Spec.RuntimeOverrides = &aimv1alpha1.AIMRuntimeConfigCommon{
-		Routing: &aimv1alpha1.AIMRuntimeRoutingConfig{
-			Enabled: boolPtr(false),
-		},
+	service.Spec.Routing = &aimv1alpha1.AIMRuntimeRoutingConfig{
+		Enabled: boolPtr(false),
 	}
 	runtimeCfg := &aimv1alpha1.AIMRuntimeRoutingConfig{
 		Enabled: boolPtr(true),
@@ -75,10 +73,8 @@ func TestResolvePrefersServiceOverrides(t *testing.T) {
 
 func TestResolveFallsBackGatewayWhenServiceMissing(t *testing.T) {
 	service := &aimv1alpha1.AIMService{}
-	service.Spec.RuntimeOverrides = &aimv1alpha1.AIMRuntimeConfigCommon{
-		Routing: &aimv1alpha1.AIMRuntimeRoutingConfig{
-			Enabled: boolPtr(true),
-		},
+	service.Spec.Routing = &aimv1alpha1.AIMRuntimeRoutingConfig{
+		Enabled: boolPtr(true),
 	}
 	runtimeCfg := &aimv1alpha1.AIMRuntimeRoutingConfig{
 		GatewayRef: &gatewayapiv1.ParentReference{Name: "shared-gateway"},
@@ -99,12 +95,10 @@ func TestResolveFallsBackGatewayWhenServiceMissing(t *testing.T) {
 
 func TestResolveMergesAnnotations(t *testing.T) {
 	service := &aimv1alpha1.AIMService{}
-	service.Spec.RuntimeOverrides = &aimv1alpha1.AIMRuntimeConfigCommon{
-		Routing: &aimv1alpha1.AIMRuntimeRoutingConfig{
-			Enabled: boolPtr(true),
-			Annotations: map[string]string{
-				"service-annotation": "service-value",
-			},
+	service.Spec.Routing = &aimv1alpha1.AIMRuntimeRoutingConfig{
+		Enabled: boolPtr(true),
+		Annotations: map[string]string{
+			"service-annotation": "service-value",
 		},
 	}
 	runtimeCfg := &aimv1alpha1.AIMRuntimeRoutingConfig{
@@ -132,11 +126,9 @@ func TestResolveMergesAnnotations(t *testing.T) {
 
 func TestResolveMergesPathTemplate(t *testing.T) {
 	service := &aimv1alpha1.AIMService{}
-	service.Spec.RuntimeOverrides = &aimv1alpha1.AIMRuntimeConfigCommon{
-		Routing: &aimv1alpha1.AIMRuntimeRoutingConfig{
-			Enabled:      boolPtr(true),
-			PathTemplate: "/custom/{.metadata.name}",
-		},
+	service.Spec.Routing = &aimv1alpha1.AIMRuntimeRoutingConfig{
+		Enabled:      boolPtr(true),
+		PathTemplate: "/custom/{.metadata.name}",
 	}
 	runtimeCfg := &aimv1alpha1.AIMRuntimeRoutingConfig{
 		Enabled:      boolPtr(true),
@@ -155,10 +147,8 @@ func TestResolveMergesPathTemplate(t *testing.T) {
 
 func TestResolveUsesRuntimePathTemplateWhenServiceEmpty(t *testing.T) {
 	service := &aimv1alpha1.AIMService{}
-	service.Spec.RuntimeOverrides = &aimv1alpha1.AIMRuntimeConfigCommon{
-		Routing: &aimv1alpha1.AIMRuntimeRoutingConfig{
-			Enabled: boolPtr(true),
-		},
+	service.Spec.Routing = &aimv1alpha1.AIMRuntimeRoutingConfig{
+		Enabled: boolPtr(true),
 	}
 	runtimeCfg := &aimv1alpha1.AIMRuntimeRoutingConfig{
 		Enabled:      boolPtr(true),
@@ -177,11 +167,9 @@ func TestResolveUsesRuntimePathTemplateWhenServiceEmpty(t *testing.T) {
 
 func TestResolveServiceOverridesGatewayRef(t *testing.T) {
 	service := &aimv1alpha1.AIMService{}
-	service.Spec.RuntimeOverrides = &aimv1alpha1.AIMRuntimeConfigCommon{
-		Routing: &aimv1alpha1.AIMRuntimeRoutingConfig{
-			Enabled:    boolPtr(true),
-			GatewayRef: &gatewayapiv1.ParentReference{Name: "service-gateway"},
-		},
+	service.Spec.Routing = &aimv1alpha1.AIMRuntimeRoutingConfig{
+		Enabled:    boolPtr(true),
+		GatewayRef: &gatewayapiv1.ParentReference{Name: "service-gateway"},
 	}
 	runtimeCfg := &aimv1alpha1.AIMRuntimeRoutingConfig{
 		Enabled:    boolPtr(true),
@@ -203,15 +191,13 @@ func TestResolveServiceOverridesGatewayRef(t *testing.T) {
 
 func TestResolveCompleteServiceOverride(t *testing.T) {
 	service := &aimv1alpha1.AIMService{}
-	service.Spec.RuntimeOverrides = &aimv1alpha1.AIMRuntimeConfigCommon{
-		Routing: &aimv1alpha1.AIMRuntimeRoutingConfig{
-			Enabled:      boolPtr(false),
-			GatewayRef:   &gatewayapiv1.ParentReference{Name: "service-gateway"},
-			PathTemplate: "/service/{.metadata.name}",
-			Annotations: map[string]string{
-				"key1": "value1",
-				"key2": "value2",
-			},
+	service.Spec.Routing = &aimv1alpha1.AIMRuntimeRoutingConfig{
+		Enabled:      boolPtr(false),
+		GatewayRef:   &gatewayapiv1.ParentReference{Name: "service-gateway"},
+		PathTemplate: "/service/{.metadata.name}",
+		Annotations: map[string]string{
+			"key1": "value1",
+			"key2": "value2",
 		},
 	}
 	runtimeCfg := &aimv1alpha1.AIMRuntimeRoutingConfig{
@@ -242,12 +228,10 @@ func TestResolveCompleteServiceOverride(t *testing.T) {
 
 func TestResolveInheritsEnabledWhenServiceDoesNotSpecify(t *testing.T) {
 	service := &aimv1alpha1.AIMService{}
-	service.Spec.RuntimeOverrides = &aimv1alpha1.AIMRuntimeConfigCommon{
-		Routing: &aimv1alpha1.AIMRuntimeRoutingConfig{
-			// Enabled is nil - should inherit from runtime
-			Annotations: map[string]string{
-				"my-annotation": "my-value",
-			},
+	service.Spec.Routing = &aimv1alpha1.AIMRuntimeRoutingConfig{
+		// Enabled is nil - should inherit from runtime
+		Annotations: map[string]string{
+			"my-annotation": "my-value",
 		},
 	}
 	runtimeCfg := &aimv1alpha1.AIMRuntimeRoutingConfig{
@@ -269,11 +253,9 @@ func TestResolveInheritsEnabledWhenServiceDoesNotSpecify(t *testing.T) {
 
 func TestResolveInheritsEnabledFalseWhenServiceDoesNotSpecify(t *testing.T) {
 	service := &aimv1alpha1.AIMService{}
-	service.Spec.RuntimeOverrides = &aimv1alpha1.AIMRuntimeConfigCommon{
-		Routing: &aimv1alpha1.AIMRuntimeRoutingConfig{
-			// Enabled is nil - should inherit from runtime
-			GatewayRef: &gatewayapiv1.ParentReference{Name: "my-gateway"},
-		},
+	service.Spec.Routing = &aimv1alpha1.AIMRuntimeRoutingConfig{
+		// Enabled is nil - should inherit from runtime
+		GatewayRef: &gatewayapiv1.ParentReference{Name: "my-gateway"},
 	}
 	runtimeCfg := &aimv1alpha1.AIMRuntimeRoutingConfig{
 		Enabled: boolPtr(false),
@@ -291,10 +273,8 @@ func TestResolveInheritsEnabledFalseWhenServiceDoesNotSpecify(t *testing.T) {
 
 func TestResolveServiceExplicitlyDisablesOverridingRuntimeTrue(t *testing.T) {
 	service := &aimv1alpha1.AIMService{}
-	service.Spec.RuntimeOverrides = &aimv1alpha1.AIMRuntimeConfigCommon{
-		Routing: &aimv1alpha1.AIMRuntimeRoutingConfig{
-			Enabled: boolPtr(false),
-		},
+	service.Spec.Routing = &aimv1alpha1.AIMRuntimeRoutingConfig{
+		Enabled: boolPtr(false),
 	}
 	runtimeCfg := &aimv1alpha1.AIMRuntimeRoutingConfig{
 		Enabled: boolPtr(true),
@@ -309,10 +289,8 @@ func TestResolveServiceExplicitlyDisablesOverridingRuntimeTrue(t *testing.T) {
 
 func TestResolveServiceExplicitlyEnablesOverridingRuntimeFalse(t *testing.T) {
 	service := &aimv1alpha1.AIMService{}
-	service.Spec.RuntimeOverrides = &aimv1alpha1.AIMRuntimeConfigCommon{
-		Routing: &aimv1alpha1.AIMRuntimeRoutingConfig{
-			Enabled: boolPtr(true),
-		},
+	service.Spec.Routing = &aimv1alpha1.AIMRuntimeRoutingConfig{
+		Enabled: boolPtr(true),
 	}
 	runtimeCfg := &aimv1alpha1.AIMRuntimeRoutingConfig{
 		Enabled: boolPtr(false),
