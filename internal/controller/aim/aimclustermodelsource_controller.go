@@ -213,16 +213,26 @@ func (r *ClusterModelSourceReconciler) Fetch(
 	}
 	result.existingModels = modelList.Items
 
-	// 2. Check if we can skip registry queries (all filters are exact image references)
-	staticImages := aimclustermodelsource.ExtractStaticImages(source.Spec.Filters)
-	if len(staticImages) > 0 && len(staticImages) == len(source.Spec.Filters) {
-		// All filters are exact references - no registry query needed
+	// 2. Check if we can skip registry queries (all filters can be resolved to static images)
+	staticImages := aimclustermodelsource.ExtractStaticImages(source.Spec)
+	if len(staticImages) > 0 {
+		// We have static images - use them and skip registry queries
+		// This is especially important for registries like ghcr.io that don't support catalog API
 		result.registryImages = staticImages
 		return result, nil
 	}
 
-	// 3. Query registry for available images
+	// 3. Try to use tags list API for exact repositories with version constraints
+	// This works for registries like ghcr.io that support /v2/<repo>/tags/list but not catalog
 	registryClient := aimclustermodelsource.NewRegistryClient(r.Clientset, shared.GetOperatorNamespace())
+	tagsListImages := aimclustermodelsource.FetchImagesUsingTagsList(ctx, registryClient, source.Spec)
+	if len(tagsListImages) > 0 {
+		// Successfully fetched images using tags list API
+		result.registryImages = tagsListImages
+		return result, nil
+	}
+
+	// 4. Fall back to full registry catalog query (only works for Docker Hub and some registries)
 	images, err := registryClient.ListImages(ctx, source.Spec)
 	if err != nil {
 		// Capture error but don't fail - will be handled in Observe
@@ -240,7 +250,7 @@ func (r *ClusterModelSourceReconciler) plan(
 	source *aimv1alpha1.AIMClusterModelSource,
 	obs ClusterModelSourceObservation,
 ) ([]client.Object, error) {
-	result := []client.Object{}
+	var result []client.Object
 
 	// Only create models for new images (append-only lifecycle)
 	for _, img := range obs.newImages {

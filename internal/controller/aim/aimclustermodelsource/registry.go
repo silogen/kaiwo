@@ -39,6 +39,10 @@ import (
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
 )
 
+const (
+	dockerHost = "docker.io"
+)
+
 // RegistryClient provides methods for listing images from container registries.
 type RegistryClient struct {
 	clientset       kubernetes.Interface
@@ -62,11 +66,11 @@ func (rc *RegistryClient) ListImages(
 ) ([]RegistryImage, error) {
 	reg := spec.Registry
 	if reg == "" {
-		reg = "docker.io"
+		reg = dockerHost
 	}
 
 	// Route to appropriate implementation based on registry
-	if reg == "docker.io" || strings.Contains(reg, "hub.docker.com") {
+	if reg == dockerHost || strings.Contains(reg, "hub.docker.com") {
 		return rc.listDockerHubImages(ctx, spec)
 	}
 	return rc.listRegistryV2Images(ctx, spec)
@@ -99,7 +103,7 @@ func (rc *RegistryClient) listDockerHubImages(
 
 			for _, tag := range tags {
 				allImages = append(allImages, RegistryImage{
-					Registry:   "docker.io",
+					Registry:   dockerHost,
 					Repository: repo,
 					Tag:        tag,
 				})
@@ -255,4 +259,83 @@ func (rc *RegistryClient) listRegistryV2Images(
 	}
 
 	return allImages, nil
+}
+
+// FetchImagesUsingTagsList queries specific repositories using the tags list API when:
+// - Filters have exact repository names (no wildcards)
+// - Version constraints are specified (can be ranges)
+// This allows version ranges to work on registries like ghcr.io that don't support catalog API.
+func FetchImagesUsingTagsList(ctx context.Context, client *RegistryClient, spec aimv1alpha1.AIMClusterModelSourceSpec) []RegistryImage {
+	var allImages []RegistryImage
+
+	// Determine the registry to use
+	registry := spec.Registry
+	if registry == "" {
+		registry = dockerHost
+	}
+
+	for _, filter := range spec.Filters {
+		// Parse filter to check if it's suitable for tags list API
+		parsed := parseImageFilter(filter.Image)
+
+		// Skip wildcards - these need catalog API
+		if parsed.hasWildcard {
+			continue
+		}
+
+		// Skip if explicit tag is already in the filter - handled by ExtractStaticImages
+		if parsed.tag != "" {
+			continue
+		}
+
+		// Determine which versions to use
+		versions := filter.Versions
+		if len(versions) == 0 {
+			versions = spec.Versions
+		}
+
+		// Skip if no version constraints - would need catalog to discover tags
+		if len(versions) == 0 {
+			continue
+		}
+		// Determine the registry for this filter
+		filterRegistry := parsed.registry
+		if filterRegistry == "" {
+			filterRegistry = registry
+		}
+
+		// Build full repository reference
+		var fullRepo string
+		if filterRegistry == dockerHost {
+			fullRepo = parsed.repository
+		} else {
+			fullRepo = fmt.Sprintf("%s/%s", filterRegistry, parsed.repository)
+		}
+
+		// Fetch all tags for this repository
+		tags, err := client.fetchImageTags(ctx, fullRepo, spec.ImagePullSecrets)
+		if err != nil {
+			// Failed to fetch tags - skip this filter
+			continue
+		}
+
+		// Filter tags by version constraints and build RegistryImage list
+		matchedCount := 0
+		for _, tag := range tags {
+			img := RegistryImage{
+				Registry:   filterRegistry,
+				Repository: parsed.repository,
+				Tag:        tag,
+			}
+
+			// Check if this tag matches the version constraints and other filter criteria
+			matches := MatchesFilters(img, []aimv1alpha1.ModelSourceFilter{filter}, versions)
+			if matches {
+				allImages = append(allImages, img)
+				matchedCount++
+			}
+		}
+	}
+
+	return allImages
 }

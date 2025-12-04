@@ -304,14 +304,16 @@ func TestBuildDiscoveredImagesSummaryLimit(t *testing.T) {
 
 func TestExtractStaticImages(t *testing.T) {
 	tests := []struct {
-		name    string
-		filters []aimv1alpha1.ModelSourceFilter
-		want    []RegistryImage
+		name string
+		spec aimv1alpha1.AIMClusterModelSourceSpec
+		want []RegistryImage
 	}{
 		{
 			name: "single exact image reference",
-			filters: []aimv1alpha1.ModelSourceFilter{
-				{Image: "ghcr.io/silogen/aim-google-gemma-3-1b-it:0.8.1-rc1"},
+			spec: aimv1alpha1.AIMClusterModelSourceSpec{
+				Filters: []aimv1alpha1.ModelSourceFilter{
+					{Image: "ghcr.io/silogen/aim-google-gemma-3-1b-it:0.8.1-rc1"},
+				},
 			},
 			want: []RegistryImage{
 				{
@@ -323,8 +325,10 @@ func TestExtractStaticImages(t *testing.T) {
 		},
 		{
 			name: "docker.io image with tag",
-			filters: []aimv1alpha1.ModelSourceFilter{
-				{Image: "silogen/aim-llama:1.0.0"},
+			spec: aimv1alpha1.AIMClusterModelSourceSpec{
+				Filters: []aimv1alpha1.ModelSourceFilter{
+					{Image: "silogen/aim-llama:1.0.0"},
+				},
 			},
 			want: []RegistryImage{
 				{
@@ -336,9 +340,11 @@ func TestExtractStaticImages(t *testing.T) {
 		},
 		{
 			name: "multiple exact references",
-			filters: []aimv1alpha1.ModelSourceFilter{
-				{Image: "ghcr.io/org/model1:v1"},
-				{Image: "gcr.io/org/model2:v2"},
+			spec: aimv1alpha1.AIMClusterModelSourceSpec{
+				Filters: []aimv1alpha1.ModelSourceFilter{
+					{Image: "ghcr.io/org/model1:v1"},
+					{Image: "gcr.io/org/model2:v2"},
+				},
 			},
 			want: []RegistryImage{
 				{
@@ -355,25 +361,53 @@ func TestExtractStaticImages(t *testing.T) {
 		},
 		{
 			name: "wildcard filter skipped",
-			filters: []aimv1alpha1.ModelSourceFilter{
-				{Image: "ghcr.io/silogen/aim-*"},
+			spec: aimv1alpha1.AIMClusterModelSourceSpec{
+				Filters: []aimv1alpha1.ModelSourceFilter{
+					{Image: "ghcr.io/silogen/aim-*"},
+				},
 			},
 			want: nil,
 		},
 		{
-			name: "filter without tag skipped",
-			filters: []aimv1alpha1.ModelSourceFilter{
-				{Image: "ghcr.io/silogen/aim-llama"},
+			name: "filter without tag or versions skipped",
+			spec: aimv1alpha1.AIMClusterModelSourceSpec{
+				Filters: []aimv1alpha1.ModelSourceFilter{
+					{Image: "ghcr.io/silogen/aim-llama"},
+				},
 			},
 			want: nil,
+		},
+		{
+			name: "filter without tag but with global versions",
+			spec: aimv1alpha1.AIMClusterModelSourceSpec{
+				Registry: "ghcr.io",
+				Filters: []aimv1alpha1.ModelSourceFilter{
+					{Image: "silogen/aim-openai-gpt-oss-20b"},
+				},
+				Versions: []string{"0.9.0-rc2", "0.9.0-rc3"},
+			},
+			want: []RegistryImage{
+				{
+					Registry:   "ghcr.io",
+					Repository: "silogen/aim-openai-gpt-oss-20b",
+					Tag:        "0.9.0-rc2",
+				},
+				{
+					Registry:   "ghcr.io",
+					Repository: "silogen/aim-openai-gpt-oss-20b",
+					Tag:        "0.9.0-rc3",
+				},
+			},
 		},
 		{
 			name: "mixed static and dynamic filters",
-			filters: []aimv1alpha1.ModelSourceFilter{
-				{Image: "ghcr.io/org/model:v1"},    // static - included
-				{Image: "ghcr.io/org/aim-*"},       // wildcard - skipped
-				{Image: "docker.io/org/model2:v2"}, // static - included
-				{Image: "docker.io/org/model3"},    // no tag - skipped
+			spec: aimv1alpha1.AIMClusterModelSourceSpec{
+				Filters: []aimv1alpha1.ModelSourceFilter{
+					{Image: "ghcr.io/org/model:v1"},    // static - included
+					{Image: "ghcr.io/org/aim-*"},       // wildcard - skipped
+					{Image: "docker.io/org/model2:v2"}, // static - included
+					{Image: "docker.io/org/model3"},    // no tag, no versions - skipped
+				},
 			},
 			want: []RegistryImage{
 				{
@@ -389,15 +423,63 @@ func TestExtractStaticImages(t *testing.T) {
 			},
 		},
 		{
-			name:    "empty filters",
-			filters: []aimv1alpha1.ModelSourceFilter{},
-			want:    nil,
+			name: "empty filters",
+			spec: aimv1alpha1.AIMClusterModelSourceSpec{
+				Filters: []aimv1alpha1.ModelSourceFilter{},
+			},
+			want: nil,
+		},
+		{
+			name: "version constraint in global versions - skipped",
+			spec: aimv1alpha1.AIMClusterModelSourceSpec{
+				Registry: "ghcr.io",
+				Filters: []aimv1alpha1.ModelSourceFilter{
+					{Image: "silogen/aim-openai-gpt-oss-20b"},
+				},
+				Versions: []string{">=0.9.0"},
+			},
+			want: nil, // Version constraint should be skipped, not treated as a tag
+		},
+		{
+			name: "mixed exact versions and constraints in global versions",
+			spec: aimv1alpha1.AIMClusterModelSourceSpec{
+				Registry: "ghcr.io",
+				Filters: []aimv1alpha1.ModelSourceFilter{
+					{Image: "silogen/aim-openai-gpt-oss-20b"},
+				},
+				Versions: []string{"0.9.0-rc2", ">=0.9.0", "0.9.0-rc3", "<1.0.0"},
+			},
+			want: []RegistryImage{
+				{
+					Registry:   "ghcr.io",
+					Repository: "silogen/aim-openai-gpt-oss-20b",
+					Tag:        "0.9.0-rc2",
+				},
+				{
+					Registry:   "ghcr.io",
+					Repository: "silogen/aim-openai-gpt-oss-20b",
+					Tag:        "0.9.0-rc3",
+				},
+			},
+		},
+		{
+			name: "version constraint in filter versions - skipped",
+			spec: aimv1alpha1.AIMClusterModelSourceSpec{
+				Registry: "ghcr.io",
+				Filters: []aimv1alpha1.ModelSourceFilter{
+					{
+						Image:    "silogen/aim-openai-gpt-oss-20b",
+						Versions: []string{"~1.0.0"},
+					},
+				},
+			},
+			want: nil,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ExtractStaticImages(tt.filters)
+			got := ExtractStaticImages(tt.spec)
 			if len(got) != len(tt.want) {
 				t.Errorf("extractStaticImages() returned %d images, want %d", len(got), len(tt.want))
 				return

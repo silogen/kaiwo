@@ -234,3 +234,61 @@ func TestFetchJSONInvalidJSON(t *testing.T) {
 		t.Error("fetchJSON() expected error for invalid JSON, got nil")
 	}
 }
+
+func TestFetchImagesUsingTagsList(t *testing.T) {
+	// This is an integration-style test that would require mocking the registry client
+	// For now, we just verify the function exists and handles edge cases
+
+	ctx := context.Background()
+	client := &RegistryClient{}
+
+	// Test with empty spec
+	spec := aimv1alpha1.AIMClusterModelSourceSpec{
+		Filters: []aimv1alpha1.ModelSourceFilter{},
+	}
+
+	result := FetchImagesUsingTagsList(ctx, client, spec)
+	if len(result) != 0 {
+		t.Errorf("Expected empty result for empty filters, got %d images", len(result))
+	}
+
+	// Test with wildcard filter (should skip)
+	spec = aimv1alpha1.AIMClusterModelSourceSpec{
+		Registry: "ghcr.io",
+		Filters: []aimv1alpha1.ModelSourceFilter{
+			{Image: "silogen/aim-*"},
+		},
+		Versions: []string{">=0.9.0"},
+	}
+
+	result = FetchImagesUsingTagsList(ctx, client, spec)
+	if len(result) != 0 {
+		t.Errorf("Expected empty result for wildcard filter, got %d images", len(result))
+	}
+
+	// Test with filter that has explicit tag (should skip - handled by ExtractStaticImages)
+	spec = aimv1alpha1.AIMClusterModelSourceSpec{
+		Registry: "ghcr.io",
+		Filters: []aimv1alpha1.ModelSourceFilter{
+			{Image: "silogen/aim-llama:1.0.0"},
+		},
+	}
+
+	result = FetchImagesUsingTagsList(ctx, client, spec)
+	if len(result) != 0 {
+		t.Errorf("Expected empty result for filter with explicit tag, got %d images", len(result))
+	}
+
+	// Test with no versions (should skip - can't filter tags)
+	spec = aimv1alpha1.AIMClusterModelSourceSpec{
+		Registry: "ghcr.io",
+		Filters: []aimv1alpha1.ModelSourceFilter{
+			{Image: "silogen/aim-llama"},
+		},
+	}
+
+	result = FetchImagesUsingTagsList(ctx, client, spec)
+	if len(result) != 0 {
+		t.Errorf("Expected empty result for filter without versions, got %d images", len(result))
+	}
+}

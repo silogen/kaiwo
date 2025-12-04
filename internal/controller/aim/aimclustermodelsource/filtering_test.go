@@ -556,6 +556,84 @@ func TestMatchesFilter_FullURISupport(t *testing.T) {
 	}
 }
 
+func TestIsVersionConstraint(t *testing.T) {
+	tests := []struct {
+		name    string
+		version string
+		want    bool
+	}{
+		{
+			name:    "exact version",
+			version: "1.0.0",
+			want:    false,
+		},
+		{
+			name:    "exact version with v prefix",
+			version: "v1.0.0",
+			want:    false,
+		},
+		{
+			name:    "prerelease version",
+			version: "0.9.0-rc2",
+			want:    false,
+		},
+		{
+			name:    "greater than or equal",
+			version: ">=1.0.0",
+			want:    true,
+		},
+		{
+			name:    "greater than",
+			version: ">1.0.0",
+			want:    true,
+		},
+		{
+			name:    "less than or equal",
+			version: "<=2.0.0",
+			want:    true,
+		},
+		{
+			name:    "less than",
+			version: "<2.0.0",
+			want:    true,
+		},
+		{
+			name:    "tilde range",
+			version: "~1.2.0",
+			want:    true,
+		},
+		{
+			name:    "caret range",
+			version: "^1.0.0",
+			want:    true,
+		},
+		{
+			name:    "or operator",
+			version: ">=1.0.0 || <0.5.0",
+			want:    true,
+		},
+		{
+			name:    "hyphen range",
+			version: "1.0.0 - 2.0.0",
+			want:    true,
+		},
+		{
+			name:    "partial version",
+			version: ">=0.9",
+			want:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isVersionConstraint(tt.version)
+			if got != tt.want {
+				t.Errorf("isVersionConstraint(%q) = %v, want %v", tt.version, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestMatchesFilters(t *testing.T) {
 	tests := []struct {
 		name           string

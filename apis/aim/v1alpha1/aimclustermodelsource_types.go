@@ -61,6 +61,7 @@ type AIMClusterModelSource struct {
 }
 
 // AIMClusterModelSourceSpec defines the desired state of AIMClusterModelSource.
+// +kubebuilder:validation:XValidation:rule="(self.registry == ” || self.registry == 'docker.io' || self.registry == 'hub.docker.com' || self.registry == 'index.docker.io') || !self.filters.exists(f, f.image.contains('*'))",message="Wildcard patterns in filters are only supported for docker.io registry. Other registries (ghcr.io, gcr.io, etc.) do not support repository discovery. Use exact repository names or switch to docker.io."
 type AIMClusterModelSourceSpec struct {
 	// Registry to sync from (e.g., docker.io, ghcr.io, gcr.io).
 	// Defaults to docker.io if not specified.
@@ -78,6 +79,7 @@ type AIMClusterModelSourceSpec struct {
 	// Each filter specifies an image pattern with optional version constraints and exclusions.
 	// Multiple filters are combined with OR logic (any match includes the image).
 	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=100
 	Filters []ModelSourceFilter `json:"filters"`
 
 	// SyncInterval defines how often to sync with the registry.
@@ -91,6 +93,13 @@ type AIMClusterModelSourceSpec struct {
 	// Individual filters can override this with their own version constraints.
 	// Constraints use semver syntax: >=1.0.0, <2.0.0, ~1.2.0, ^1.0.0, etc.
 	// Non-semver tags (e.g., "latest", "dev") are silently skipped.
+	//
+	// Version ranges work on all registries (including ghcr.io, gcr.io) when combined with
+	// exact repository names (no wildcards). The controller uses the Tags List API to fetch
+	// all tags for the repository and filters them by the semver constraint.
+	//
+	// Example: registry=ghcr.io, filters=[{image: "silogen/aim-llama"}], versions=[">=1.0.0"]
+	// will fetch all tags from ghcr.io/silogen/aim-llama and include only those >=1.0.0.
 	// +optional
 	Versions []string `json:"versions,omitempty"`
 }
@@ -114,6 +123,7 @@ type ModelSourceFilter struct {
 	// registry will match. When a tag is included, it takes precedence over the versions field.
 	//
 	// Wildcard: * matches any sequence of characters.
+	// +kubebuilder:validation:MaxLength=512
 	Image string `json:"image"`
 
 	// Exclude lists specific repository names to skip (exact match on repository name only, not registry).

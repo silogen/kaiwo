@@ -160,7 +160,7 @@ func matchesWildcard(pattern, str string) bool {
 	return true
 }
 
-// matchesFilters checks if an image matches any of the provided filters.
+// MatchesFilters checks if an image matches any of the provided filters.
 // Filters are combined with OR logic - if any filter matches, the image is included.
 func MatchesFilters(
 	img RegistryImage,
@@ -213,7 +213,8 @@ func matchesFilter(
 	// Otherwise, use version constraints from the filter or global versions
 	if parsed.tag != "" {
 		// Exact tag match required
-		return img.Tag == parsed.tag
+		match := img.Tag == parsed.tag
+		return match
 	}
 
 	// Use filter-specific versions if provided, otherwise use global versions
@@ -224,7 +225,8 @@ func matchesFilter(
 
 	// If version constraints are specified, apply them
 	if len(versionConstraints) > 0 {
-		return matchesSemver(img.Tag, versionConstraints)
+		result := matchesSemver(img.Tag, versionConstraints)
+		return result
 	}
 
 	// No version constraints - all versions match
@@ -288,4 +290,22 @@ func normalizeConstraint(constraint string) string {
 		}
 	}
 	return constraint
+}
+
+// isVersionConstraint checks if a version string is a constraint (like ">=1.0.0")
+// rather than an exact version (like "1.0.0" or "0.9.0-rc2").
+// Returns true for constraints, false for exact versions.
+func isVersionConstraint(version string) bool {
+	// Check for common constraint operators
+	if strings.HasPrefix(version, ">=") ||
+		strings.HasPrefix(version, "<=") ||
+		strings.HasPrefix(version, ">") ||
+		strings.HasPrefix(version, "<") ||
+		strings.HasPrefix(version, "~") ||
+		strings.HasPrefix(version, "^") ||
+		strings.Contains(version, " || ") ||
+		strings.Contains(version, " - ") {
+		return true
+	}
+	return false
 }

@@ -97,6 +97,7 @@ spec:
 
                         When a full URI is specified (including registry like ghcr.io), only images from that
                         registry will match.
+                      maxLength: 512
                       type: string
                     versions:
                       description: |-
@@ -115,6 +116,7 @@ spec:
                   required:
                   - image
                   type: object
+                maxItems: 100
                 minItems: 1
                 type: array
               imagePullSecrets:
@@ -158,12 +160,22 @@ spec:
                   Individual filters can override this with their own version constraints.
                   Constraints use semver syntax: >=1.0.0, <2.0.0, ~1.2.0, ^1.0.0, etc.
                   Non-semver tags (e.g., "latest", "dev") are silently skipped.
+
+                  Version ranges work on all registries (including ghcr.io, gcr.io) when combined with
+                  exact repository names (no wildcards).
                 items:
                   type: string
                 type: array
             required:
             - filters
             type: object
+            x-kubernetes-validations:
+            - message: Wildcard patterns in filters are only supported for docker.io
+                registry. Other registries (ghcr.io, gcr.io, etc.) do not support
+                repository discovery. Use exact repository names or switch to docker.io.
+              rule: (self.registry == ” || self.registry == 'docker.io' || self.registry
+                == 'hub.docker.com' || self.registry == 'index.docker.io') || !self.filters.exists(f,
+                f.image.contains('*'))
           status:
             description: AIMClusterModelSourceStatus defines the observed state of
               AIMClusterModelSource.
