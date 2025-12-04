@@ -61,7 +61,7 @@ type AIMClusterModelSource struct {
 }
 
 // AIMClusterModelSourceSpec defines the desired state of AIMClusterModelSource.
-// +kubebuilder:validation:XValidation:rule="(self.registry == ” || self.registry == 'docker.io' || self.registry == 'hub.docker.com' || self.registry == 'index.docker.io') || !self.filters.exists(f, f.image.contains('*'))",message="Wildcard patterns in filters are only supported for docker.io registry. Other registries (ghcr.io, gcr.io, etc.) do not support repository discovery. Use exact repository names or switch to docker.io."
+// +kubebuilder:validation:XValidation:rule="(self.registry == \"\" || self.registry == 'docker.io' || self.registry == 'hub.docker.com' || self.registry == 'index.docker.io') || !self.filters.exists(f, f.image.contains('*'))",message="Wildcard patterns in filters are only supported for docker.io registry. Other registries (ghcr.io, gcr.io, etc.) do not support repository discovery. Use exact repository names or switch to docker.io."
 type AIMClusterModelSourceSpec struct {
 	// Registry to sync from (e.g., docker.io, ghcr.io, gcr.io).
 	// Defaults to docker.io if not specified.
