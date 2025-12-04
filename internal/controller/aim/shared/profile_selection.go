@@ -105,7 +105,7 @@ func filterAvailableTemplates(candidates []TemplateCandidate) []TemplateCandidat
 func filterUnoptimizedTemplates(candidates []TemplateCandidate, allowUnoptimized bool) []TemplateCandidate {
 	result := make([]TemplateCandidate, 0, len(candidates))
 	for _, candidate := range candidates {
-		if candidate.Status.Profile.Metadata.Type != aimv1alpha1.AIMProfileTypeUnoptimized || allowUnoptimized {
+		if candidate.Status.Profile.Metadata.Type == aimv1alpha1.AIMProfileTypeOptimized || allowUnoptimized {
 			result = append(result, candidate)
 		}
 	}
