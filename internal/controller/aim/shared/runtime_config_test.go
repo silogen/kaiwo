@@ -35,6 +35,8 @@ const (
 	testNamespaceGateway     = "namespace-gateway"
 	testClusterRouteTemplate = "/cluster/{.metadata.name}"
 	testNsRouteTemplate      = "/namespace/{.metadata.name}"
+	testTeamPlatform         = "platform"
+	testCostCenterEng        = "engineering"
 )
 
 func boolPtr(b bool) *bool {
@@ -240,5 +242,255 @@ func TestMergeRoutingConfig_BothNil(t *testing.T) {
 
 	if merged != nil {
 		t.Error("expected nil when both inputs are nil")
+	}
+}
+
+func TestPropagateLabels_Disabled(t *testing.T) {
+	parent := &aimv1alpha1.AIMService{}
+	parent.SetLabels(map[string]string{
+		"team":        testTeamPlatform,
+		"cost-center": testCostCenterEng,
+		"environment": "production",
+	})
+
+	child := &aimv1alpha1.AIMService{}
+
+	config := &aimv1alpha1.AIMRuntimeConfigCommon{
+		LabelPropagation: &aimv1alpha1.AIMRuntimeConfigLabelPropagationSpec{
+			Enabled: false,
+			Match:   []string{"team", "cost-center"},
+		},
+	}
+
+	PropagateLabels(parent, child, config)
+
+	childLabels := child.GetLabels()
+	if len(childLabels) != 0 {
+		t.Errorf("expected no labels to be propagated when disabled, got %v", childLabels)
+	}
+}
+
+func TestPropagateLabels_NilConfig(t *testing.T) {
+	parent := &aimv1alpha1.AIMService{}
+	parent.SetLabels(map[string]string{"team": "platform"})
+
+	child := &aimv1alpha1.AIMService{}
+
+	PropagateLabels(parent, child, nil)
+
+	childLabels := child.GetLabels()
+	if len(childLabels) != 0 {
+		t.Errorf("expected no labels when config is nil, got %v", childLabels)
+	}
+}
+
+func TestPropagateLabels_ExactMatch(t *testing.T) {
+	parent := &aimv1alpha1.AIMService{}
+	parent.SetLabels(map[string]string{
+		"team":        testTeamPlatform,
+		"cost-center": testCostCenterEng,
+		"environment": "production",
+	})
+
+	child := &aimv1alpha1.AIMService{}
+
+	config := &aimv1alpha1.AIMRuntimeConfigCommon{
+		LabelPropagation: &aimv1alpha1.AIMRuntimeConfigLabelPropagationSpec{
+			Enabled: true,
+			Match:   []string{"team", "cost-center"},
+		},
+	}
+
+	PropagateLabels(parent, child, config)
+
+	childLabels := child.GetLabels()
+	if len(childLabels) != 2 {
+		t.Errorf("expected 2 labels, got %d", len(childLabels))
+	}
+	if childLabels["team"] != testTeamPlatform {
+		t.Errorf("expected team=%s, got %s", testTeamPlatform, childLabels["team"])
+	}
+	if childLabels["cost-center"] != testCostCenterEng {
+		t.Errorf("expected cost-center=%s, got %s", testCostCenterEng, childLabels["cost-center"])
+	}
+	if _, exists := childLabels["environment"]; exists {
+		t.Error("environment label should not be propagated")
+	}
+}
+
+func TestPropagateLabels_WildcardMatch(t *testing.T) {
+	parent := &aimv1alpha1.AIMService{}
+	parent.SetLabels(map[string]string{
+		"org.acme/team":         testTeamPlatform,
+		"org.acme/cost-center":  testCostCenterEng,
+		"org.acme/environment":  "production",
+		"kubernetes.io/managed": "true",
+	})
+
+	child := &aimv1alpha1.AIMService{}
+
+	config := &aimv1alpha1.AIMRuntimeConfigCommon{
+		LabelPropagation: &aimv1alpha1.AIMRuntimeConfigLabelPropagationSpec{
+			Enabled: true,
+			Match:   []string{"org.acme/*"},
+		},
+	}
+
+	PropagateLabels(parent, child, config)
+
+	childLabels := child.GetLabels()
+	if len(childLabels) != 3 {
+		t.Errorf("expected 3 labels matching org.acme/*, got %d: %v", len(childLabels), childLabels)
+	}
+	if childLabels["org.acme/team"] != testTeamPlatform {
+		t.Errorf("expected org.acme/team=%s, got %s", testTeamPlatform, childLabels["org.acme/team"])
+	}
+	if _, exists := childLabels["kubernetes.io/managed"]; exists {
+		t.Error("kubernetes.io/managed label should not be propagated")
+	}
+}
+
+func TestPropagateLabels_MultiplePatterns(t *testing.T) {
+	parent := &aimv1alpha1.AIMService{}
+	parent.SetLabels(map[string]string{
+		"org.acme/team":          testTeamPlatform,
+		"cost-center":            testCostCenterEng,
+		"environment":            "production",
+		"app.kubernetes.io/name": "myapp",
+	})
+
+	child := &aimv1alpha1.AIMService{}
+
+	config := &aimv1alpha1.AIMRuntimeConfigCommon{
+		LabelPropagation: &aimv1alpha1.AIMRuntimeConfigLabelPropagationSpec{
+			Enabled: true,
+			Match:   []string{"org.acme/*", "cost-center", "app.kubernetes.io/*"},
+		},
+	}
+
+	PropagateLabels(parent, child, config)
+
+	childLabels := child.GetLabels()
+	if len(childLabels) != 3 {
+		t.Errorf("expected 3 labels, got %d: %v", len(childLabels), childLabels)
+	}
+	if childLabels["org.acme/team"] != testTeamPlatform {
+		t.Error("org.acme/team should be propagated")
+	}
+	if childLabels["cost-center"] != testCostCenterEng {
+		t.Error("cost-center should be propagated")
+	}
+	if childLabels["app.kubernetes.io/name"] != "myapp" {
+		t.Error("app.kubernetes.io/name should be propagated")
+	}
+	if _, exists := childLabels["environment"]; exists {
+		t.Error("environment label should not be propagated")
+	}
+}
+
+func TestPropagateLabels_PreservesExistingChildLabels(t *testing.T) {
+	parent := &aimv1alpha1.AIMService{}
+	parent.SetLabels(map[string]string{
+		"team":        testTeamPlatform,
+		"cost-center": testCostCenterEng,
+	})
+
+	child := &aimv1alpha1.AIMService{}
+	child.SetLabels(map[string]string{
+		"team":           "infrastructure", // Should not be overwritten
+		"child-specific": "value",
+	})
+
+	config := &aimv1alpha1.AIMRuntimeConfigCommon{
+		LabelPropagation: &aimv1alpha1.AIMRuntimeConfigLabelPropagationSpec{
+			Enabled: true,
+			Match:   []string{"team", "cost-center"},
+		},
+	}
+
+	PropagateLabels(parent, child, config)
+
+	childLabels := child.GetLabels()
+	if len(childLabels) != 3 {
+		t.Errorf("expected 3 labels, got %d", len(childLabels))
+	}
+	if childLabels["team"] != "infrastructure" {
+		t.Errorf("existing team label should not be overwritten, got %s", childLabels["team"])
+	}
+	if childLabels["cost-center"] != testCostCenterEng {
+		t.Errorf("cost-center should be added, got %s", childLabels["cost-center"])
+	}
+	if childLabels["child-specific"] != "value" {
+		t.Error("child-specific label should be preserved")
+	}
+}
+
+func TestPropagateLabels_NoParentLabels(t *testing.T) {
+	parent := &aimv1alpha1.AIMService{}
+
+	child := &aimv1alpha1.AIMService{}
+	child.SetLabels(map[string]string{"existing": "value"})
+
+	config := &aimv1alpha1.AIMRuntimeConfigCommon{
+		LabelPropagation: &aimv1alpha1.AIMRuntimeConfigLabelPropagationSpec{
+			Enabled: true,
+			Match:   []string{"team"},
+		},
+	}
+
+	PropagateLabels(parent, child, config)
+
+	childLabels := child.GetLabels()
+	if len(childLabels) != 1 {
+		t.Errorf("expected 1 label, got %d", len(childLabels))
+	}
+	if childLabels["existing"] != "value" {
+		t.Error("existing label should be preserved")
+	}
+}
+
+func TestPropagateLabels_EmptyMatchPatterns(t *testing.T) {
+	parent := &aimv1alpha1.AIMService{}
+	parent.SetLabels(map[string]string{"team": "platform"})
+
+	child := &aimv1alpha1.AIMService{}
+
+	config := &aimv1alpha1.AIMRuntimeConfigCommon{
+		LabelPropagation: &aimv1alpha1.AIMRuntimeConfigLabelPropagationSpec{
+			Enabled: true,
+			Match:   []string{},
+		},
+	}
+
+	PropagateLabels(parent, child, config)
+
+	childLabels := child.GetLabels()
+	if len(childLabels) != 0 {
+		t.Errorf("expected no labels when match is empty, got %v", childLabels)
+	}
+}
+
+func TestMatchesAnyPattern_ExactMatch(t *testing.T) {
+	if !matchesAnyPattern("team", []string{"team", "cost-center"}) {
+		t.Error("expected exact match for 'team'")
+	}
+}
+
+func TestMatchesAnyPattern_WildcardMatch(t *testing.T) {
+	if !matchesAnyPattern("org.acme/team", []string{"org.acme/*"}) {
+		t.Error("expected wildcard match for 'org.acme/team'")
+	}
+}
+
+func TestMatchesAnyPattern_NoMatch(t *testing.T) {
+	if matchesAnyPattern("environment", []string{"team", "cost-center"}) {
+		t.Error("expected no match for 'environment'")
+	}
+}
+
+func TestMatchesAnyPattern_InvalidPattern(t *testing.T) {
+	// filepath.Match treats [ as a special character, so this is an invalid pattern
+	if matchesAnyPattern("team", []string{"team[invalid"}) {
+		t.Error("expected no match for invalid pattern")
 	}
 }

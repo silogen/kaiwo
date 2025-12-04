@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -214,4 +215,72 @@ func GetPVCHeadroomPercent(spec aimv1alpha1.AIMRuntimeConfigSpec) int32 {
 		return *spec.PVCHeadroomPercent
 	}
 	return DefaultPVCHeadroomPercent
+}
+
+// PropagateLabels propagates labels from a parent resource to a child resource based on the runtime config's
+// label propagation settings. Only labels whose keys match the patterns defined in the config are copied.
+// The child's existing labels are preserved and only new labels are added.
+//
+// Parameters:
+//   - parent: The source resource whose labels should be propagated
+//   - child: The target resource that will receive the propagated labels
+//   - config: The runtime config common spec containing label propagation settings
+//
+// The function does nothing if:
+//   - Label propagation is not enabled in the config
+//   - The config is nil or has no label propagation settings
+//   - The parent has no labels
+func PropagateLabels(parent, child client.Object, config *aimv1alpha1.AIMRuntimeConfigCommon) {
+	// Early exit if label propagation is not configured or not enabled
+	if config == nil || config.LabelPropagation == nil || !config.LabelPropagation.Enabled {
+		return
+	}
+
+	// Early exit if there are no match patterns
+	if len(config.LabelPropagation.Match) == 0 {
+		return
+	}
+
+	parentLabels := parent.GetLabels()
+	if len(parentLabels) == 0 {
+		return
+	}
+
+	// Initialize child labels if nil
+	childLabels := child.GetLabels()
+	if childLabels == nil {
+		childLabels = make(map[string]string)
+	}
+
+	// Iterate through parent labels and propagate matching ones
+	for key, value := range parentLabels {
+		// Skip if child already has this label
+		if _, exists := childLabels[key]; exists {
+			continue
+		}
+
+		// Check if this label key matches any of the patterns
+		if matchesAnyPattern(key, config.LabelPropagation.Match) {
+			childLabels[key] = value
+		}
+	}
+
+	child.SetLabels(childLabels)
+}
+
+// matchesAnyPattern checks if a label key matches any of the provided patterns.
+// Patterns support wildcards using filepath.Match semantics (e.g., "org.my/*", "team-*").
+func matchesAnyPattern(key string, patterns []string) bool {
+	for _, pattern := range patterns {
+		// filepath.Match supports * and ? wildcards
+		matched, err := filepath.Match(pattern, key)
+		if err != nil {
+			// Invalid pattern, skip it
+			continue
+		}
+		if matched {
+			return true
+		}
+	}
+	return false
 }
