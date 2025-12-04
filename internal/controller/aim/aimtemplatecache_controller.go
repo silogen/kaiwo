@@ -147,21 +147,24 @@ func (r *AIMTemplateCacheReconciler) observe(ctx context.Context, tc *aimv1alpha
 
 	// Loop through model sources from the template and check with what's available in our namespace
 	for _, model := range modelSources {
-		bestStatus := aimv1alpha1.AIMModelCacheStatusPending
+		found := false
+		bestStatus := aimv1alpha1.AIMModelCacheStatusFailed
 		for _, cached := range caches.Items {
 			// ModelCache is a match if it has the same SourceURI and a StorageClass matching our config
 			if cached.Spec.SourceURI == model.SourceURI &&
 				(tc.Spec.StorageClassName == "" || tc.Spec.StorageClassName == cached.Spec.StorageClassName) {
 				if cmpModelCacheStatus(bestStatus, cached.Status.Status) < 0 {
 					bestStatus = cached.Status.Status
+					found = true
 				}
 			}
 		}
-		obs.CacheStatus[model.Name] = bestStatus
-		if bestStatus == aimv1alpha1.AIMModelCacheStatusPending {
+		if found {
+			obs.CacheStatus[model.Name] = bestStatus
+		} else {
+			obs.CacheStatus[model.Name] = aimv1alpha1.AIMModelCacheStatusPending
 			obs.MissingCaches = append(obs.MissingCaches, model)
 		}
-
 	}
 
 	return &obs, nil
@@ -297,7 +300,7 @@ func (r *AIMTemplateCacheReconciler) projectStatus(_ context.Context, tc *aimv1a
 
 	statusValues := slices.Collect(maps.Values(obs.CacheStatus))
 	if len(statusValues) > 0 {
-		worstCacheStatus := slices.MaxFunc(statusValues, cmpModelCacheStatus)
+		worstCacheStatus := slices.MinFunc(statusValues, cmpModelCacheStatus)
 		tc.Status.Status = aimv1alpha1.AIMTemplateCacheStatusEnum(worstCacheStatus)
 	} else {
 		// If there are no caches to track, mark as Pending

@@ -752,11 +752,19 @@ func ProjectServiceStatus(
 		return
 	}
 
-	if service.Spec.CacheModel {
+	if service.Spec.CacheModel || obs.TemplateCache != nil {
+		// We are trying to use a template cache - check if the cache is warm, failed or pending
 		if obs.TemplateCache != nil && obs.TemplateCache.Status.Status == aimv1alpha1.AIMTemplateCacheStatusAvailable {
 			setCondition(aimv1alpha1.AIMServiceConditionCacheReady, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonCacheWarm, "Template cache is warm")
+			setCondition(aimv1alpha1.AIMServiceConditionCacheFailed, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonCacheFailed, "Template cache is warm")
+		} else if obs.TemplateCache != nil && obs.TemplateCache.Status.Status == aimv1alpha1.AIMTemplateCacheStatusFailed {
+			setCondition(aimv1alpha1.AIMServiceConditionCacheReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonCacheWarm, "Template cache failed")
+			setCondition(aimv1alpha1.AIMServiceConditionCacheFailed, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonCacheFailed, "Template cache failed")
+			status.Status = aimv1alpha1.AIMServiceStatusFailed
+			return
 		} else {
 			setCondition(aimv1alpha1.AIMServiceConditionCacheReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonCacheWarm, "Template caching is enabled")
+			setCondition(aimv1alpha1.AIMServiceConditionCacheFailed, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonCacheFailed, "Template caching is enabled")
 		}
 	}
 
