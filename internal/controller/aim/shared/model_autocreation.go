@@ -42,7 +42,8 @@ import (
 
 const (
 	// LabelAutoCreated marks models that were automatically created from service image references
-	LabelAutoCreated = "aim.silogen.ai/auto-created"
+	LabelAutoCreated    = "aim.silogen.ai/auto-created"
+	LabelKeyModelSource = "aim.silogen.ai/model-source"
 
 	maxModelNameLength = 63
 	hashSuffixLength   = 8
