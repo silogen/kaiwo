@@ -57,13 +57,24 @@ local_resource(
     labels=['setup'],
 )
 
-# Generate YAML and apply with server-side apply for everything
+# Generate YAML and apply manifests
+local_resource(
+    'config',
+    cmd='kustomize build config/tilt | kubectl apply -f -',
+    deps=['config/tilt'],
+    labels=['setup'],
+    resource_deps=['apply-crds'],  # Apply CRDs first
+)
+
+# Load YAML for Tilt to track resources
 yaml = kustomize('config/tilt')
 k8s_yaml(yaml)
 
+# Configure the controller resource
 k8s_resource(
     workload='kaiwo-controller-manager',
-    new_name='kaiwo-controller',
+    new_name='controller',
+    labels=['controller'],
     port_forwards=[
         '8080:8080',  # metrics
         '9443:9443',  # webhook
