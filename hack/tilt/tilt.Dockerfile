@@ -1,11 +1,11 @@
 # Dockerfile (dev)
-FROM ghcr.io/silogen/kaiwo-dev-base:0.0.3
+FROM kaiwo-dev-base:latest
 
 # Switch to root to install entrypoint (base image ends as USER 65532)
 USER root
 
 # Dev entrypoint: build + run the manager inside the container (cached layer)
-COPY hack/dev-entrypoint.sh /usr/local/bin/dev-entrypoint.sh
+COPY hack/tilt/dev-entrypoint.sh /usr/local/bin/dev-entrypoint.sh
 RUN chmod +x /usr/local/bin/dev-entrypoint.sh
 
 WORKDIR /workspace

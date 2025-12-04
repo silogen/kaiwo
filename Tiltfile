@@ -9,6 +9,9 @@ allow_k8s_contexts([
 
 update_settings(max_parallel_updates=3, k8s_upsert_timeout_secs=60)
 
+# Load restart_process extension for live updates
+load('ext://restart_process', 'docker_build_with_restart')
+
 # ---------------------------------------------------------------------------
 # Image configuration
 # ---------------------------------------------------------------------------
@@ -23,10 +26,11 @@ IMAGE = 'ghcr.io/silogen/kaiwo-operator:v-e2e'
 # Thin docker build on top of your base image
 # ---------------------------------------------------------------------------
 
-docker_build(
+docker_build_with_restart(
     IMAGE,
     context='.',
-    dockerfile='hack/tilt.Dockerfile',  # uses your base image + copies source + dev entrypoint
+    dockerfile='hack/tilt/tilt.Dockerfile',
+    entrypoint=['/usr/local/bin/dev-entrypoint.sh'],
     live_update=[
         # If deps or Dockerfile change, fall back to full rebuild + redeploy
         fall_back_on(['go.mod', 'go.sum', 'Dockerfile']),
@@ -39,8 +43,8 @@ docker_build(
 
         # Rebuild the manager binary in-place on source changes
         run(
-            'cd /workspace && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o manager ./cmd/main.go',
-            trigger=['./cmd', './internal', './api'],
+            'cd /workspace && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o manager ./cmd/operator/main.go',
+            trigger=['./cmd', './internal', './apis', './pkg'],
         ),
     ],
 )
@@ -60,14 +64,14 @@ local_resource(
 # Generate YAML and apply manifests
 local_resource(
     'config',
-    cmd='kustomize build config/tilt | kubectl apply -f -',
-    deps=['config/tilt'],
+    cmd='kustomize build hack/tilt | kubectl apply -f -',
+    deps=['hack/tilt'],
     labels=['setup'],
     resource_deps=['crds'],  # Apply CRDs first
 )
 
 # Load YAML for Tilt to track resources
-yaml = kustomize('config/tilt')
+yaml = kustomize('hack/tilt')
 k8s_yaml(yaml)
 
 # Configure the controller resource
