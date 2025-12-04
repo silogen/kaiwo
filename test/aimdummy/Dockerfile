@@ -17,7 +17,7 @@ ENV CGO_ENABLED=0
 RUN go build -o server -ldflags="-extldflags=-static"
 
 # Final stage
-FROM scratch
+FROM alpine:3
 
 LABEL com.amd.aim.hfToken.required=False \
       com.amd.aim.model.canonicalName="HuggingFaceTB/SmolLM2-135M" \
@@ -31,7 +31,7 @@ LABEL com.amd.aim.hfToken.required=False \
 
 
 
-ENV PATH="/"
+ENV PATH="/bin:/"
 COPY --from=profile-builder /app/dry-run /
 COPY --from=server-builder /app/server /
 
