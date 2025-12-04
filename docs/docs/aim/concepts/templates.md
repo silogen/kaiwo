@@ -464,4 +464,5 @@ Ensure the base template exists and is available.
 
 - [Models](models.md) - Understanding the model catalog and discovery
 - [Runtime Config Concepts](runtime-config.md) - Resolution algorithm
+- [Model Caching](caching.md) - Cache lifecycle and deletion behavior
 - [Services Usage](../usage/services.md) - Deploying services with templates

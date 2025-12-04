@@ -417,6 +417,62 @@ func HandleMissingModelSource(
 	return true
 }
 
+func HandleModelCacheReadiness(service *aimv1alpha1.AIMService, status *aimv1alpha1.AIMServiceStatus, obs *ServiceObservation, setCondition func(conditionType string, conditionStatus metav1.ConditionStatus, reason, message string)) bool {
+	if obs == nil || obs.ModelCaches == nil {
+		return false
+	}
+
+	if status.ModelCaches == nil {
+		status.ModelCaches = make(map[string]aimv1alpha1.AIMResolvedModelCache)
+	}
+
+	// If we use model caching, display the state of the caches - and add mount if it's present
+	if obs.TemplateCache != nil {
+		// Add status of model caches from the template cache if they are not already mounted
+		for mcName, mc := range obs.TemplateCache.Status.ModelCaches {
+			if obs.InferenceService != nil {
+				if entry, ok := status.ModelCaches[mcName]; ok {
+					if entry.MountPoint != "" {
+						// Model cache already mounted, don't change
+						continue
+					}
+				}
+			}
+			// We didn't find a mounted cache, copy info from template cache
+			status.ModelCaches[mcName] = mc
+		}
+
+		// Go through all mounted models and attach the mount point to the model cache status if present
+		if obs.InferenceService != nil && obs.InferenceService.Spec.Predictor.Model != nil {
+			for _, model := range obs.InferenceService.Spec.Predictor.Model.VolumeMounts {
+				if entry, ok := status.ModelCaches[model.Name]; ok {
+					entry.MountPoint = model.MountPath
+					status.ModelCaches[model.Name] = entry
+				}
+			}
+		}
+
+	}
+
+	if service.Spec.CacheModel || obs.TemplateCache != nil {
+		// We are trying to use a template cache - check if the cache is warm, failed or pending
+		if obs.TemplateCache != nil && obs.TemplateCache.Status.Status == aimv1alpha1.AIMTemplateCacheStatusAvailable {
+			setCondition(aimv1alpha1.AIMServiceConditionCacheReady, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonCacheWarm, "Template cache is warm")
+			setCondition(aimv1alpha1.AIMServiceConditionCacheFailed, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonCacheFailed, "Template cache is warm")
+		} else if obs.TemplateCache != nil && obs.TemplateCache.Status.Status == aimv1alpha1.AIMTemplateCacheStatusFailed {
+			setCondition(aimv1alpha1.AIMServiceConditionCacheReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonCacheWarm, "Template cache failed")
+			setCondition(aimv1alpha1.AIMServiceConditionCacheFailed, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonCacheFailed, "Template cache failed")
+			status.Status = aimv1alpha1.AIMServiceStatusFailed
+			return true
+		} else {
+			setCondition(aimv1alpha1.AIMServiceConditionCacheReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonCacheWarm, "Template caching is enabled")
+			setCondition(aimv1alpha1.AIMServiceConditionCacheFailed, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonCacheFailed, "Template caching is enabled")
+		}
+	}
+
+	return false
+}
+
 // HandleInferenceServicePodImageError checks for image pull errors in InferenceService pods.
 // Returns true if an image pull error was detected.
 func HandleInferenceServicePodImageError(
@@ -752,20 +808,9 @@ func ProjectServiceStatus(
 		return
 	}
 
-	if service.Spec.CacheModel || obs.TemplateCache != nil {
-		// We are trying to use a template cache - check if the cache is warm, failed or pending
-		if obs.TemplateCache != nil && obs.TemplateCache.Status.Status == aimv1alpha1.AIMTemplateCacheStatusAvailable {
-			setCondition(aimv1alpha1.AIMServiceConditionCacheReady, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonCacheWarm, "Template cache is warm")
-			setCondition(aimv1alpha1.AIMServiceConditionCacheFailed, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonCacheFailed, "Template cache is warm")
-		} else if obs.TemplateCache != nil && obs.TemplateCache.Status.Status == aimv1alpha1.AIMTemplateCacheStatusFailed {
-			setCondition(aimv1alpha1.AIMServiceConditionCacheReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonCacheWarm, "Template cache failed")
-			setCondition(aimv1alpha1.AIMServiceConditionCacheFailed, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonCacheFailed, "Template cache failed")
-			status.Status = aimv1alpha1.AIMServiceStatusFailed
-			return
-		} else {
-			setCondition(aimv1alpha1.AIMServiceConditionCacheReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonCacheWarm, "Template caching is enabled")
-			setCondition(aimv1alpha1.AIMServiceConditionCacheFailed, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonCacheFailed, "Template caching is enabled")
-		}
+	// Check for model cache readiness
+	if HandleModelCacheReadiness(service, status, obs, setCondition) {
+		return
 	}
 
 	EvaluateInferenceServiceStatus(status, obs, inferenceService, httpRoute, routingEnabled, routingReady, setCondition)
