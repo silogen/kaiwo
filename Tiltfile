@@ -51,7 +51,7 @@ docker_build(
 
 # Apply CRDs with server-side apply (they're too large for client-side)
 local_resource(
-    'apply-crds',
+    'crds',
     cmd='kustomize build config/crd | kubectl apply --server-side --force-conflicts -f -',
     deps=['config/crd'],
     labels=['setup'],
@@ -63,7 +63,7 @@ local_resource(
     cmd='kustomize build config/tilt | kubectl apply -f -',
     deps=['config/tilt'],
     labels=['setup'],
-    resource_deps=['apply-crds'],  # Apply CRDs first
+    resource_deps=['crds'],  # Apply CRDs first
 )
 
 # Load YAML for Tilt to track resources

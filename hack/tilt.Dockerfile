@@ -1,5 +1,5 @@
 # Dockerfile (dev)
-FROM ghcr.io/silogen/kaiwo-dev-base:0.0.2
+FROM ghcr.io/silogen/kaiwo-dev-base:0.0.3
 
 # Switch to root to install entrypoint (base image ends as USER 65532)
 USER root
