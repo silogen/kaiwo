@@ -68,6 +68,9 @@ type AIMServiceSpec struct {
 	// The template selects the runtime profile and GPU parameters.
 	TemplateRef string `json:"templateRef,omitempty"`
 
+	// Template contains the AIMServiceTemplate selection configuration
+	Template AIMServiceTemplateConfig `json:"template,omitempty"`
+
 	// CacheModel requests that model sources be cached when starting the service
 	// if the template itself does not warm the cache.
 	// When `warmCache: false` on the template, this setting ensures caching is
@@ -114,6 +117,11 @@ type AIMServiceSpec struct {
 	// Routing enables HTTP routing through Gateway API for this service.
 	// +optional
 	Routing *AIMServiceRouting `json:"routing,omitempty"`
+}
+
+type AIMServiceTemplateConfig struct {
+	// AllowUnoptimized, if true, will allow automatic selection of templates that resolve to an unoptimized profile.
+	AllowUnoptimized bool `json:"allowUnoptimized,omitempty"`
 }
 
 // AIMServiceStatus defines the observed state of AIMService.
@@ -246,6 +254,7 @@ const (
 // +kubebuilder:printcolumn:name="Model",type=string,JSONPath=`.status.resolvedImage.name`
 // +kubebuilder:printcolumn:name="Template",type=string,JSONPath=`.status.resolvedTemplate.name`
 // +kubebuilder:printcolumn:name="Replicas",type=integer,JSONPath=`.spec.replicas`
+// +kubebuilder:printcolumn:name="Profile",type=string,JSONPath=`.status.resolvedTemplate.profile.metadata.type`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 type AIMService struct {
 	metav1.TypeMeta   `json:",inline"`

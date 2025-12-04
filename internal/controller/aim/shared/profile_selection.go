@@ -60,8 +60,14 @@ func SelectBestTemplate(
 	candidates []TemplateCandidate,
 	overrides *aimv1alpha1.AIMServiceOverrides,
 	availableGPUs []string,
+	allowUnoptimized bool,
 ) (*TemplateCandidate, int) {
 	filtered := filterAvailableTemplates(candidates)
+	if len(filtered) == 0 {
+		return nil, 0
+	}
+
+	filtered = filterUnoptimizedTemplates(filtered, allowUnoptimized)
 	if len(filtered) == 0 {
 		return nil, 0
 	}
@@ -90,6 +96,16 @@ func filterAvailableTemplates(candidates []TemplateCandidate) []TemplateCandidat
 	result := make([]TemplateCandidate, 0, len(candidates))
 	for _, candidate := range candidates {
 		if candidate.Status.Status == aimv1alpha1.AIMTemplateStatusReady {
+			result = append(result, candidate)
+		}
+	}
+	return result
+}
+
+func filterUnoptimizedTemplates(candidates []TemplateCandidate, allowUnoptimized bool) []TemplateCandidate {
+	result := make([]TemplateCandidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		if candidate.Status.Profile.Metadata.Type != aimv1alpha1.AIMProfileTypeUnoptimized || allowUnoptimized {
 			result = append(result, candidate)
 		}
 	}
@@ -191,16 +207,30 @@ func choosePreferredTemplate(candidates []TemplateCandidate) (*TemplateCandidate
 	gpuPref := makePreferenceMap(GPUPreferenceOrder)
 	metricPref := makePreferenceMap(MetricPreferenceOrder)
 	precisionPref := makePreferenceMap(PrecisionPreferenceOrder)
+	profileTypePref := makePreferenceMap(ProfileTypePreferenceOrder)
 
 	bestIndex := 0
 	bestGPUScore := getPreferenceScore(candidateGPUModel(candidates[0]), gpuPref)
 	bestMetricScore := getPreferenceScore(candidateMetric(candidates[0]), metricPref)
 	bestPrecisionScore := getPreferenceScore(candidatePrecision(candidates[0]), precisionPref)
+	bestProfileTypeScore := getPreferenceScore(candidateProfileType(candidates[0]), profileTypePref)
 
 	for i := 1; i < len(candidates); i++ {
 		currentGPUScore := getPreferenceScore(candidateGPUModel(candidates[i]), gpuPref)
 		currentMetricScore := getPreferenceScore(candidateMetric(candidates[i]), metricPref)
 		currentPrecisionScore := getPreferenceScore(candidatePrecision(candidates[i]), precisionPref)
+		currentProfileTypeScore := getPreferenceScore(candidateProfileType(candidates[i]), profileTypePref)
+
+		if currentProfileTypeScore < bestProfileTypeScore {
+			bestIndex = i
+			bestGPUScore = currentGPUScore
+			bestMetricScore = currentMetricScore
+			bestPrecisionScore = currentPrecisionScore
+			bestProfileTypeScore = currentProfileTypeScore
+		}
+		if currentProfileTypeScore > bestProfileTypeScore {
+			continue
+		}
 
 		if currentGPUScore < bestGPUScore {
 			bestIndex = i
@@ -278,6 +308,10 @@ func candidateGPUModel(candidate TemplateCandidate) string {
 	return ""
 }
 
+func candidateProfileType(candidate TemplateCandidate) string {
+	return string(candidate.Status.Profile.Metadata.Type)
+}
+
 // GPUPreferenceOrder defines the preference order for GPU models when selecting templates.
 // GPUs earlier in the list are preferred over later ones.
 // TODO: Fill in the complete preference order based on performance characteristics.
@@ -305,6 +339,12 @@ var PrecisionPreferenceOrder = []string{
 	"fp16",
 	"bf16",
 	"fp32",
+}
+
+var ProfileTypePreferenceOrder = []string{
+	string(aimv1alpha1.AIMProfileTypeOptimized),
+	string(aimv1alpha1.AIMProfileTypePreview),
+	string(aimv1alpha1.AIMProfileTypeUnoptimized),
 }
 
 // makePreferenceMap creates a map from preference list to index (lower index = higher preference).

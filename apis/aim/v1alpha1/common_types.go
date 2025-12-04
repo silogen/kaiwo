@@ -63,6 +63,13 @@ type AIMResolvedReference struct {
 // AIMServiceResolvedTemplate retains the historical name while reusing the shared structure.
 type AIMServiceResolvedTemplate struct {
 	AIMResolvedReference `json:",inline"`
+
+	// Profile is the profile that the resolved template points to
+	Profile AIMServiceResolvedTemplateProfile `json:"profile,omitempty"`
+}
+
+type AIMServiceResolvedTemplateProfile struct {
+	Metadata AIMProfileMetadata `json:"metadata,omitempty"`
 }
 
 // AIMServiceTemplateScope is retained for backwards compatibility with existing consumers.

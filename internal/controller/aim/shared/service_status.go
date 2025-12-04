@@ -635,6 +635,9 @@ func setupResolvedTemplate(obs *ServiceObservation, status *aimv1alpha1.AIMServi
 				Scope:     convertTemplateScope(obs.Scope),
 				Kind:      "AIMServiceTemplate",
 			},
+			Profile: aimv1alpha1.AIMServiceResolvedTemplateProfile{
+				Metadata: obs.TemplateStatus.Profile.Metadata,
+			},
 		}
 	}
 	// Don't set resolvedTemplate if no template was actually resolved

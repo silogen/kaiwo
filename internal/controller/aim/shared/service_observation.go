@@ -194,7 +194,7 @@ func ResolveTemplateNameForService(
 
 	// When auto-selecting, don't filter by overrides - we're selecting a base template
 	// to potentially derive from. The derived template will have the overrides applied.
-	selected, count := SelectBestTemplate(candidates, nil, availableGPUs)
+	selected, count := SelectBestTemplate(candidates, nil, availableGPUs, service.Spec.Template.AllowUnoptimized)
 	status.CandidateCount = count
 
 	if count != 1 {

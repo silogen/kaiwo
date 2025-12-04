@@ -301,6 +301,10 @@ spec:
                               description: Precision is the recommended precision
                                 (e.g., fp8, fp16, bf16)
                               type: string
+                            profileId:
+                              description: ProfileId is an optional override to select
+                                a particular AIM profile by ID
+                              type: string
                           type: object
                         type: array
                       releaseNotes:

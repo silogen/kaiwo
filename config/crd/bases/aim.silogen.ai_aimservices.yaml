@@ -32,6 +32,9 @@ spec:
     - jsonPath: .spec.replicas
       name: Replicas
       type: integer
+    - jsonPath: .status.resolvedTemplate.profile.metadata.type
+      name: Profile
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -513,6 +516,14 @@ spec:
                   This service account is used by the deployed inference pods.
                   If empty, the default service account for the namespace is used.
                 type: string
+              template:
+                description: Template contains the AIMServiceTemplate selection configuration
+                properties:
+                  allowUnoptimized:
+                    description: AllowUnoptimized, if true, will allow automatic selection
+                      of templates that resolve to an unoptimized profile.
+                    type: boolean
+                type: object
               templateRef:
                 description: |-
                   TemplateRef is the name of the AIMServiceTemplate or AIMClusterServiceTemplate to use.
@@ -703,6 +714,49 @@ spec:
                       Namespace identifies where the resource was found when namespace-scoped.
                       Empty indicates a cluster-scoped resource.
                     type: string
+                  profile:
+                    description: Profile is the profile that the resolved template
+                      points to
+                    properties:
+                      metadata:
+                        description: |-
+                          AIMProfileMetadata describes the characteristics of a cached deployment profile.
+                          This is identical to AIMDiscoveryProfileMetadata but exists in the template status namespace.
+                        properties:
+                          engine:
+                            description: Engine identifies the inference engine used
+                              for this profile (e.g., "vllm", "tgi").
+                            type: string
+                          gpu:
+                            description: GPU specifies the GPU model this profile
+                              is optimized for (e.g., "MI300X", "MI325X").
+                            type: string
+                          gpuCount:
+                            description: GPUCount indicates how many GPUs are required
+                              per replica for this profile.
+                            format: int32
+                            type: integer
+                          metric:
+                            description: Metric indicates the optimization goal for
+                              this profile ("latency" or "throughput").
+                            enum:
+                            - latency
+                            - throughput
+                            type: string
+                          precision:
+                            description: Precision specifies the numeric precision
+                              used in this profile (e.g., "fp16", "fp8").
+                            enum:
+                            - bf16
+                            - fp16
+                            - fp8
+                            - int8
+                            type: string
+                          type:
+                            description: Type specifies the designation of the profile
+                            type: string
+                        type: object
+                    type: object
                   scope:
                     description: Scope indicates whether the resolved resource was
                       namespace or cluster scoped.
