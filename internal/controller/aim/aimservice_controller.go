@@ -79,12 +79,15 @@ type AIMServiceReconciler struct {
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimservices/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimservicetemplates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclusterservicetemplates,verbs=get;list;watch
+// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimkvcaches,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimkvcaches/status,verbs=get
 // +kubebuilder:rbac:groups=serving.kserve.io,resources=inferenceservices,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=serving.kserve.io,resources=inferenceservices/status,verbs=get
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes/status,verbs=get
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 
 func (r *AIMServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -289,7 +292,107 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 		}
 	}
 
+	// Observe KV cache resources if configured
+	if err := r.observeKVCache(ctx, service, obs); err != nil {
+		return nil, err
+	}
+
 	return obs, nil
+}
+
+func (r *AIMServiceReconciler) observeKVCache(ctx context.Context, service *aimv1alpha1.AIMService, obs *shared.ServiceObservation) error {
+	logger := log.FromContext(ctx)
+
+	if service.Spec.KVCache != nil {
+		baseutils.Debug(logger, "Observing KV cache configuration", "kvCacheConfig", service.Spec.KVCache)
+
+		// Determine the KVCache name (use specified name or default)
+		kvCacheName := service.Spec.KVCache.Name
+		if kvCacheName == "" {
+			kvCacheName = fmt.Sprintf("kvcache-%s", service.Namespace)
+		}
+
+		// Observe the AIMKVCache
+		kvCache := &aimv1alpha1.AIMKVCache{}
+		err := r.Get(ctx, client.ObjectKey{
+			Name:      kvCacheName,
+			Namespace: service.Namespace,
+		}, kvCache)
+		if err != nil {
+			if client.IgnoreNotFound(err) != nil {
+				obs.KVCacheErr = err
+				baseutils.Debug(logger, "Error observing AIMKVCache", "error", err, "name", kvCacheName)
+			} else {
+				baseutils.Debug(logger, "AIMKVCache not found", "name", kvCacheName)
+			}
+		} else {
+			obs.KVCache = kvCache
+			baseutils.Debug(logger, "Found AIMKVCache", "name", kvCache.Name, "status", kvCache.Status.Status)
+		}
+
+		// Observe the LMCache ConfigMap
+		configMapName, err := controllerutils.GenerateDerivedName([]string{"lmcache", "service.Name"}, service.Namespace, service.Name)
+		if err != nil {
+			return err
+		}
+		configMap := &v1.ConfigMap{}
+		err = r.Get(ctx, client.ObjectKey{
+			Name:      configMapName,
+			Namespace: service.Namespace,
+		}, configMap)
+		if err != nil {
+			if client.IgnoreNotFound(err) != nil {
+				obs.KVCacheErr = err
+				baseutils.Debug(logger, "Error observing LMCache ConfigMap", "error", err)
+			} else {
+				baseutils.Debug(logger, "LMCache ConfigMap not found", "name", configMapName)
+			}
+		} else {
+			obs.KVCacheConfigMap = configMap
+			baseutils.Debug(logger, "Found LMCache ConfigMap", "name", configMapName)
+		}
+	}
+	return nil
+}
+
+// resolveStorageClassName determines the storage class to use for a service.
+// It follows this precedence order (highest to lowest):
+// 1. Service.Spec.DefaultStorageClassName
+// 2. RuntimeConfig.DefaultStorageClassName (from obs)
+// 3. Empty string (which will use the cluster's default storage class)
+func resolveStorageClassName(service *aimv1alpha1.AIMService, obs *shared.ServiceObservation) string {
+	// Service-level runtime override takes highest precedence
+	if service.Spec.DefaultStorageClassName != "" {
+		return service.Spec.DefaultStorageClassName
+	}
+
+	// Fall back to runtime config (which already handles namespace vs cluster precedence)
+	if obs != nil && obs.RuntimeConfigSpec.DefaultStorageClassName != "" {
+		return obs.RuntimeConfigSpec.DefaultStorageClassName
+	}
+
+	// Empty string will use cluster default
+	return ""
+}
+
+// resolvePVCHeadroomPercent determines the PVC headroom percentage to use for a service.
+// It follows this precedence order (highest to lowest):
+// 1. Service.Spec.PVCHeadroomPercent
+// 2. RuntimeConfig.PVCHeadroomPercent (from obs)
+// 3. Default value (defined in shared.DefaultPVCHeadroomPercent)
+func resolvePVCHeadroomPercent(service *aimv1alpha1.AIMService, obs *shared.ServiceObservation) int32 {
+	// Service-level runtime override takes highest precedence
+	if service.Spec.PVCHeadroomPercent != nil {
+		return *service.Spec.PVCHeadroomPercent
+	}
+
+	// Fall back to runtime config (which already handles namespace vs cluster precedence)
+	if obs != nil && obs.RuntimeConfigSpec.PVCHeadroomPercent != nil {
+		return *obs.RuntimeConfigSpec.PVCHeadroomPercent
+	}
+
+	// Use shared default constant
+	return shared.DefaultPVCHeadroomPercent
 }
 
 func (r *AIMServiceReconciler) planDerivedTemplate(logger logr.Logger, service *aimv1alpha1.AIMService, obs *shared.ServiceObservation) client.Object {
@@ -320,6 +423,7 @@ func (r *AIMServiceReconciler) planTemplateCache(ctx context.Context, logger log
 		baseutils.Debug(logger, "Service requests caching but no template cache exists, creating one",
 			"templateName", obs.TemplateName, "scope", obs.Scope)
 
+		storageClassName := resolveStorageClassName(service, obs)
 		cache := &aimv1alpha1.AIMTemplateCache{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: "aim.silogen.ai/v1alpha1",
@@ -334,7 +438,7 @@ func (r *AIMServiceReconciler) planTemplateCache(ctx context.Context, logger log
 			},
 			Spec: aimv1alpha1.AIMTemplateCacheSpec{
 				TemplateRef:      obs.TemplateName,
-				StorageClassName: obs.RuntimeConfigSpec.DefaultStorageClassName,
+				StorageClassName: storageClassName,
 				Env:              service.Spec.Env,
 			},
 		}
@@ -369,6 +473,119 @@ func (r *AIMServiceReconciler) planTemplateCache(ctx context.Context, logger log
 		return cache
 	}
 	return nil
+}
+
+func (r *AIMServiceReconciler) planKVCache(logger logr.Logger, service *aimv1alpha1.AIMService, obs *shared.ServiceObservation, ownerRef metav1.OwnerReference) []client.Object {
+	if service.Spec.KVCache == nil {
+		return nil
+	}
+
+	var desired []client.Object
+
+	// Plan AIMKVCache only if it doesn't exist
+	// If it exists, do NOT update it (AIMKVCache controller handles its own updates)
+	if obs.KVCache == nil && obs.KVCacheErr == nil {
+		kvCache := buildKVCache(service, ownerRef)
+		desired = append(desired, kvCache)
+		baseutils.Debug(logger, "Planning to create AIMKVCache", "name", kvCache.Name, "type", kvCache.Spec.KVCacheType)
+		r.Recorder.Eventf(service, v1.EventTypeNormal, "KVCacheCreation", "AIMKVCache creation requested: %s (type: %s)", kvCache.Name, kvCache.Spec.KVCacheType)
+	} else if obs.KVCache != nil {
+		baseutils.Debug(logger, "AIMKVCache already exists, skipping update", "name", obs.KVCache.Name)
+	}
+
+	kvCacheStatusStr := "not found"
+	if obs.KVCache != nil {
+		kvCacheStatusStr = string(obs.KVCache.Status.Status)
+	}
+
+	// Plan LMCache ConfigMap if KV cache is ready and ConfigMap doesn't exist
+	baseutils.Debug(logger, "Checking KV cache ConfigMap creation conditions",
+		"kvCacheExists", obs.KVCache != nil,
+		"kvCacheStatus", kvCacheStatusStr,
+		"configMapExists", obs.KVCacheConfigMap != nil)
+
+	if obs.KVCache != nil && obs.KVCache.Status.Status == aimv1alpha1.AIMKVCacheStatusReady && obs.KVCacheConfigMap == nil {
+		configMap := buildLMCacheConfigMap(service, obs.KVCache, ownerRef)
+		if configMap == nil {
+			baseutils.Debug(logger, "Failed to build LMCache ConfigMap")
+			return nil
+		}
+		desired = append(desired, configMap)
+		baseutils.Debug(logger, "Planning to create LMCache ConfigMap", "name", configMap.Name)
+		r.Recorder.Eventf(service, v1.EventTypeNormal, "LMCacheConfigMapCreation", "LMCache ConfigMap creation requested: %s", configMap.Name)
+	}
+
+	return desired
+}
+
+func buildKVCache(service *aimv1alpha1.AIMService, ownerRef metav1.OwnerReference) *aimv1alpha1.AIMKVCache {
+	// Use specified name or default
+	kvCacheName := service.Spec.KVCache.Name
+	if kvCacheName == "" {
+		kvCacheName = fmt.Sprintf("kvcache-%s", service.Namespace)
+	}
+
+	// Use specified type or default to redis
+	kvCacheType := service.Spec.KVCache.Type
+	if kvCacheType == "" {
+		kvCacheType = kvCacheTypeRedis
+	}
+
+	return &aimv1alpha1.AIMKVCache{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "aim.silogen.ai/v1alpha1",
+			Kind:       "AIMKVCache",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            kvCacheName,
+			Namespace:       service.Namespace,
+			OwnerReferences: []metav1.OwnerReference{ownerRef},
+		},
+		Spec: aimv1alpha1.AIMKVCacheSpec{
+			KVCacheType: kvCacheType,
+			Image:       service.Spec.KVCache.Image,
+			Env:         service.Spec.KVCache.Env,
+			Storage:     service.Spec.KVCache.Storage,
+			Resources:   service.Spec.KVCache.Resources,
+		},
+	}
+}
+
+func buildLMCacheConfigMap(service *aimv1alpha1.AIMService, kvCache *aimv1alpha1.AIMKVCache, ownerRef metav1.OwnerReference) *v1.ConfigMap {
+	// Service name follows AIMKVCache controller pattern: {name}-{type}-svc
+	serviceURL := fmt.Sprintf("redis://%s-%s-svc:6379", kvCache.Name, kvCache.Spec.KVCacheType)
+	configMapName, err := controllerutils.GenerateDerivedName([]string{"lmcache", service.Name}, service.Namespace, service.Name)
+	if err != nil {
+		return nil
+	}
+
+	var lmcacheConfig string
+	if service.Spec.KVCache.LMCacheConfig != "" {
+		// Use custom config, replacing {SERVICE_URL} placeholder if present
+		lmcacheConfig = strings.ReplaceAll(service.Spec.KVCache.LMCacheConfig, "{SERVICE_URL}", serviceURL)
+	} else {
+		// Use default config
+		lmcacheConfig = fmt.Sprintf("local_cpu: true\n"+
+			"chunk_size: 50\n"+
+			"max_local_cpu_size: 1.0\n"+
+			"remote_url: %q\n"+
+			"remote_serde: \"naive\"\n", serviceURL)
+	}
+
+	return &v1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            configMapName,
+			Namespace:       service.Namespace,
+			OwnerReferences: []metav1.OwnerReference{ownerRef},
+		},
+		Data: map[string]string{
+			"lmcache_config.yaml": lmcacheConfig,
+		},
+	}
 }
 
 type cacheMount struct {
@@ -444,8 +661,9 @@ func (r *AIMServiceReconciler) planInferenceServiceAndRoute(logger logr.Logger, 
 	var servicePVC *v1.PersistentVolumeClaim
 	var servicePVCErr error
 	if !service.Spec.CacheModel && obs.TemplateCache == nil {
-		headroomPercent := shared.GetPVCHeadroomPercent(obs.RuntimeConfigSpec)
-		servicePVC, servicePVCErr = buildServicePVC(service, templateState, obs.RuntimeConfigSpec.DefaultStorageClassName, headroomPercent)
+		headroomPercent := resolvePVCHeadroomPercent(service, obs)
+		storageClassName := resolveStorageClassName(service, obs)
+		servicePVC, servicePVCErr = buildServicePVC(service, templateState, storageClassName, headroomPercent)
 		if servicePVCErr != nil {
 			baseutils.Debug(logger, "Failed to build service PVC", "error", servicePVCErr)
 			// This error will be handled in status projection
@@ -454,23 +672,73 @@ func (r *AIMServiceReconciler) planInferenceServiceAndRoute(logger logr.Logger, 
 		}
 	}
 
+	// Check if KV cache is ready (if requested)
+	kvCacheReady := true
+	kvCacheStatusStr := "not found"
+	if obs.KVCache != nil {
+		kvCacheStatusStr = string(obs.KVCache.Status.Status)
+	}
+	if service.Spec.KVCache != nil {
+		// KV cache is ready when both the AIMKVCache is Ready AND the ConfigMap exists
+		kvCacheReady = obs.KVCache != nil &&
+			obs.KVCache.Status.Status == aimv1alpha1.AIMKVCacheStatusReady &&
+			obs.KVCacheConfigMap != nil
+		baseutils.Debug(logger, "KV cache status check",
+			"kvCacheRequested", true,
+			"kvCacheExists", obs.KVCache != nil,
+			"kvCacheStatus", kvCacheStatusStr,
+			"configMapExists", obs.KVCacheConfigMap != nil,
+			"kvCacheReady", kvCacheReady)
+	}
+
 	// Service is ready if:
 	// - Models are ready AND
 	// - Either we don't need caching OR cache is ready
 	// - AND either we have a template cache OR we successfully created a service PVC
-	serviceReady := modelsReady && (!service.Spec.CacheModel || templateCacheReady) && (templateCacheReady || servicePVC != nil)
+	// - AND KV cache is ready (if requested)
+	serviceReady := modelsReady && (!service.Spec.CacheModel || templateCacheReady) && (templateCacheReady || servicePVC != nil) && kvCacheReady
 
 	// Only create InferenceService if we have a model source and storage
 	if serviceReady && obs.InferenceService != nil {
 		inferenceService := shared.BuildInferenceService(serviceState, ownerRef)
 
-		// Set AIM_CACHE_PATH env var for all services
-		inferenceService.Spec.Predictor.Model.Env = append(
-			inferenceService.Spec.Predictor.Model.Env,
-			v1.EnvVar{
+		// Collect all environment variables
+		envVars := []v1.EnvVar{
+			{
 				Name:  "AIM_CACHE_PATH",
 				Value: AIMCacheBasePath,
-			})
+			},
+		}
+
+		// Add LMCache env vars if ConfigMap is available
+		if obs.KVCacheConfigMap != nil {
+			envVars = append(envVars,
+				v1.EnvVar{
+					Name:  "LMCACHE_USE_EXPERIMENTAL",
+					Value: "True",
+				},
+				v1.EnvVar{
+					Name:  "LMCACHE_CONFIG_FILE",
+					Value: "/lmcache/lmcache_config.yaml",
+				},
+				v1.EnvVar{
+					Name:  "LMCACHE_LOG_LEVEL",
+					Value: "INFO",
+				},
+				v1.EnvVar{
+					Name:  "AIM_ENGINE_ARGS",
+					Value: `{"kv-transfer-config": {"kv_connector":"LMCacheConnectorV1", "kv_role":"kv_both"}}`,
+				},
+			)
+		}
+
+		// Merge in custom env vars from service spec (allows overriding defaults)
+		inferenceService.Spec.Predictor.Model.Env = mergeEnvVars(envVars, service.Spec.Env)
+
+		// Mount LMCache ConfigMap if available
+		if obs.KVCacheConfigMap != nil {
+			addLMCacheConfigMount(inferenceService, obs.KVCacheConfigMap.Name)
+		}
 
 		// Mount either template cache PVCs or service PVC
 		if len(modelCachesToMount) > 0 {
@@ -487,6 +755,10 @@ func (r *AIMServiceReconciler) planInferenceServiceAndRoute(logger logr.Logger, 
 	} else {
 		if servicePVCErr != nil {
 			baseutils.Debug(logger, "Service not ready due to PVC creation error", "error", servicePVCErr)
+		} else if !kvCacheReady {
+			baseutils.Debug(logger, "Service not ready - waiting for KV cache",
+				"kvCacheExists", obs.KVCache != nil,
+				"kvCacheStatus", kvCacheStatusStr)
 		} else {
 			baseutils.Debug(logger, "Model source not available, skipping InferenceService creation")
 		}
@@ -529,6 +801,11 @@ func (r *AIMServiceReconciler) plan(ctx context.Context, service *aimv1alpha1.AI
 	// Plan template cache if needed
 	if templateCache := r.planTemplateCache(ctx, logger, service, obs); templateCache != nil {
 		desired = append(desired, templateCache)
+	}
+
+	// Plan KV cache resources if needed
+	if kvCacheObjects := r.planKVCache(logger, service, obs, ownerRef); len(kvCacheObjects) > 0 {
+		desired = append(desired, kvCacheObjects...)
 	}
 
 	// Plan InferenceService and HTTPRoute if template is ready
@@ -670,6 +947,66 @@ func addModelCacheMount(inferenceService *servingv1beta1.InferenceService, model
 			Name:      volumeName,
 			MountPath: mountPath,
 		})
+}
+
+func addLMCacheConfigMount(inferenceService *servingv1beta1.InferenceService, configMapName string) {
+	volumeName := "lmcache-config-volume"
+
+	// Add the ConfigMap volume
+	inferenceService.Spec.Predictor.Volumes = append(inferenceService.Spec.Predictor.Volumes, v1.Volume{
+		Name: volumeName,
+		VolumeSource: v1.VolumeSource{
+			ConfigMap: &v1.ConfigMapVolumeSource{
+				LocalObjectReference: v1.LocalObjectReference{
+					Name: configMapName,
+				},
+				Items: []v1.KeyToPath{
+					{
+						Key:  "lmcache_config.yaml",
+						Path: "lmcache_config.yaml",
+					},
+				},
+			},
+		},
+	})
+
+	// Mount the ConfigMap at /lmcache/
+	inferenceService.Spec.Predictor.Model.VolumeMounts = append(inferenceService.Spec.Predictor.Model.VolumeMounts, v1.VolumeMount{
+		Name:      volumeName,
+		MountPath: "/lmcache",
+		ReadOnly:  true,
+	})
+}
+
+// mergeEnvVars combines default env vars with service-specific overrides.
+// Service env vars take precedence over defaults when env var names match.
+func mergeEnvVars(defaults []v1.EnvVar, overrides []v1.EnvVar) []v1.EnvVar {
+	// Create a map for quick lookup of overrides
+	overrideMap := make(map[string]v1.EnvVar)
+	for _, env := range overrides {
+		overrideMap[env.Name] = env
+	}
+
+	// Start with defaults, replacing any that are overridden
+	merged := make([]v1.EnvVar, 0, len(defaults)+len(overrides))
+	for _, env := range defaults {
+		if override, exists := overrideMap[env.Name]; exists {
+			merged = append(merged, override)
+			delete(overrideMap, env.Name) // Mark as processed
+		} else {
+			merged = append(merged, env)
+		}
+	}
+
+	// Add any remaining overrides that weren't in defaults
+	for _, env := range overrides {
+		if _, processed := overrideMap[env.Name]; !processed {
+			continue // Already added in the loop above
+		}
+		merged = append(merged, env)
+	}
+
+	return merged
 }
 
 func (r *AIMServiceReconciler) projectStatus(
@@ -1083,6 +1420,8 @@ func (r *AIMServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&aimv1alpha1.AIMService{}).
 		Owns(&servingv1beta1.InferenceService{}).
 		Owns(&aimv1alpha1.AIMServiceTemplate{}).
+		Owns(&aimv1alpha1.AIMKVCache{}).
+		Owns(&v1.ConfigMap{}).
 		Owns(&gatewayapiv1.HTTPRoute{}).
 		Watches(&aimv1alpha1.AIMServiceTemplate{}, handler.EnqueueRequestsFromMapFunc(r.templateHandlerFunc())).
 		Watches(&aimv1alpha1.AIMClusterServiceTemplate{}, handler.EnqueueRequestsFromMapFunc(r.clusterTemplateHandlerFunc())).

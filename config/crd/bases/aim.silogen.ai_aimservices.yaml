@@ -78,6 +78,12 @@ spec:
                   When `warmCache: false` on the template, this setting ensures caching is
                   performed before the service becomes ready.
                 type: boolean
+              defaultStorageClassName:
+                description: |-
+                  DefaultStorageClassName specifies the storage class to use for model caches and PVCs
+                  when the consuming resource (AIMModelCache, AIMTemplateCache, AIMServiceTemplate) does not
+                  specify a storage class. If this field is empty, the cluster's default storage class is used.
+                type: string
               env:
                 description: |-
                   Env specifies environment variables to use for authentication when downloading models.
@@ -221,12 +227,284 @@ spec:
                   type: object
                   x-kubernetes-map-type: atomic
                 type: array
-              model:
+              kvCache:
                 description: |-
-                  Model specifies which model to deploy using one of the available reference methods.
-                  Use `ref` to reference an existing AIMModel/AIMClusterModel by name, or use `image`
-                  to specify a container image URI directly (which will auto-create a model if needed).
+                  KVCache specifies KV cache configuration for the service.
+                  When specified, enables LMCache with the configured KV cache backend.
                 properties:
+                  env:
+                    description: |-
+                      Env specifies environment variables to set in the KV cache container.
+                      Only used when creating a new AIMKVCache (ignored if referencing existing).
+                      If not specified (nil), no additional environment variables are set.
+                      If explicitly set to an empty array, no environment variables are added.
+                    items:
+                      description: EnvVar represents an environment variable present
+                        in a Container.
+                      properties:
+                        name:
+                          description: Name of the environment variable. Must be a
+                            C_IDENTIFIER.
+                          type: string
+                        value:
+                          description: |-
+                            Variable references $(VAR_NAME) are expanded
+                            using the previously defined environment variables in the container and
+                            any service environment variables. If a variable cannot be resolved,
+                            the reference in the input string will be unchanged. Double $$ are reduced
+                            to a single $, which allows for escaping the $(VAR_NAME) syntax: i.e.
+                            "$$(VAR_NAME)" will produce the string literal "$(VAR_NAME)".
+                            Escaped references will never be expanded, regardless of whether the variable
+                            exists or not.
+                            Defaults to "".
+                          type: string
+                        valueFrom:
+                          description: Source for the environment variable's value.
+                            Cannot be used if value is not empty.
+                          properties:
+                            configMapKeyRef:
+                              description: Selects a key of a ConfigMap.
+                              properties:
+                                key:
+                                  description: The key to select.
+                                  type: string
+                                name:
+                                  default: ""
+                                  description: |-
+                                    Name of the referent.
+                                    This field is effectively required, but due to backwards compatibility is
+                                    allowed to be empty. Instances of this type with an empty value here are
+                                    almost certainly wrong.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  type: string
+                                optional:
+                                  description: Specify whether the ConfigMap or its
+                                    key must be defined
+                                  type: boolean
+                              required:
+                              - key
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            fieldRef:
+                              description: |-
+                                Selects a field of the pod: supports metadata.name, metadata.namespace, `metadata.labels['<KEY>']`, `metadata.annotations['<KEY>']`,
+                                spec.nodeName, spec.serviceAccountName, status.hostIP, status.podIP, status.podIPs.
+                              properties:
+                                apiVersion:
+                                  description: Version of the schema the FieldPath
+                                    is written in terms of, defaults to "v1".
+                                  type: string
+                                fieldPath:
+                                  description: Path of the field to select in the
+                                    specified API version.
+                                  type: string
+                              required:
+                              - fieldPath
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            resourceFieldRef:
+                              description: |-
+                                Selects a resource of the container: only resources limits and requests
+                                (limits.cpu, limits.memory, limits.ephemeral-storage, requests.cpu, requests.memory and requests.ephemeral-storage) are currently supported.
+                              properties:
+                                containerName:
+                                  description: 'Container name: required for volumes,
+                                    optional for env vars'
+                                  type: string
+                                divisor:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  description: Specifies the output format of the
+                                    exposed resources, defaults to "1"
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                resource:
+                                  description: 'Required: resource to select'
+                                  type: string
+                              required:
+                              - resource
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            secretKeyRef:
+                              description: Selects a key of a secret in the pod's
+                                namespace
+                              properties:
+                                key:
+                                  description: The key of the secret to select from.  Must
+                                    be a valid secret key.
+                                  type: string
+                                name:
+                                  default: ""
+                                  description: |-
+                                    Name of the referent.
+                                    This field is effectively required, but due to backwards compatibility is
+                                    allowed to be empty. Instances of this type with an empty value here are
+                                    almost certainly wrong.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  type: string
+                                optional:
+                                  description: Specify whether the Secret or its key
+                                    must be defined
+                                  type: boolean
+                              required:
+                              - key
+                              type: object
+                              x-kubernetes-map-type: atomic
+                          type: object
+                      required:
+                      - name
+                      type: object
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  image:
+                    description: |-
+                      Image specifies the container image to use for the KV cache service.
+                      Only used when creating a new AIMKVCache (ignored if referencing existing).
+                      If not specified, defaults to appropriate images based on Type.
+                    type: string
+                  lmCacheConfig:
+                    description: |-
+                      LMCacheConfig specifies the custom LMCache configuration YAML content.
+                      When specified, this exact configuration is used for the lmcache_config.yaml file.
+                      When empty, a default configuration is generated with standard LMCache settings.
+                      Note: The remote_url field in custom configs will have the {SERVICE_URL} placeholder
+                      replaced with the actual KV cache service URL.
+                    type: string
+                  name:
+                    description: |-
+                      Name specifies the name of the AIMKVCache resource to use.
+                      If an AIMKVCache with this name exists, it will be used.
+                      If it doesn't exist, a new AIMKVCache will be created with this name.
+                      If not specified, defaults to "kvcache-{service-name}".
+                    type: string
+                  resources:
+                    description: |-
+                      Resources defines the resource requirements for the KV cache container.
+                      Only used when creating a new AIMKVCache (ignored if referencing existing).
+                      If not specified, defaults to 1 CPU and 1Gi memory for both requests and limits.
+                    properties:
+                      claims:
+                        description: |-
+                          Claims lists the names of resources, defined in spec.resourceClaims,
+                          that are used by this container.
+
+                          This is an alpha field and requires enabling the
+                          DynamicResourceAllocation feature gate.
+
+                          This field is immutable. It can only be set for containers.
+                        items:
+                          description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                          properties:
+                            name:
+                              description: |-
+                                Name must match the name of one entry in pod.spec.resourceClaims of
+                                the Pod where this field is used. It makes that resource available
+                                inside a container.
+                              type: string
+                            request:
+                              description: |-
+                                Request is the name chosen for a request in the referenced claim.
+                                If empty, everything from the claim is made available, otherwise
+                                only the result of this request.
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        type: array
+                        x-kubernetes-list-map-keys:
+                        - name
+                        x-kubernetes-list-type: map
+                      limits:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Limits describes the maximum amount of compute resources allowed.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
+                      requests:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Requests describes the minimum amount of compute resources required.
+                          If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                          otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
+                    type: object
+                  storage:
+                    description: |-
+                      Storage defines the persistent storage configuration for the KV cache.
+                      Only used when creating a new AIMKVCache (ignored if referencing existing).
+                    properties:
+                      accessModes:
+                        default:
+                        - ReadWriteOnce
+                        description: |-
+                          AccessModes specifies the access modes for the persistent volume.
+                          Defaults to ReadWriteOnce if not specified.
+                          WARNING: This field is immutable after creation due to StatefulSet VolumeClaimTemplate limitations.
+                        items:
+                          type: string
+                        type: array
+                      size:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        default: 1Gi
+                        description: |-
+                          Size specifies the storage size for the persistent volume.
+                          Minimum recommended size is 1Gi for Redis to function properly.
+                          If not specified, defaults to 1Gi.
+                          WARNING: This field is immutable after creation due to StatefulSet VolumeClaimTemplate limitations.
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      storageClassName:
+                        description: |-
+                          StorageClassName specifies the storage class to use for the persistent volume.
+                          If not specified, the cluster's default storage class will be used.
+                          Ensure your cluster has a default storage class configured or specify one explicitly.
+                          WARNING: This field is immutable after creation due to StatefulSet VolumeClaimTemplate limitations.
+                        type: string
+                    type: object
+                    x-kubernetes-validations:
+                    - message: storage size is immutable once set
+                      rule: '!has(oldSelf.size) || !has(self.size) || self.size ==
+                        oldSelf.size'
+                    - message: storage class name is immutable once set
+                      rule: '!has(oldSelf.storageClassName) || !has(self.storageClassName)
+                        || self.storageClassName == oldSelf.storageClassName'
+                    - message: access modes are immutable once set
+                      rule: '!has(oldSelf.accessModes) || self.accessModes == oldSelf.accessModes'
+                  type:
+                    default: redis
+                    description: |-
+                      Type specifies the type of KV cache backend.
+                      Only used when creating a new AIMKVCache (ignored if referencing existing).
+                    enum:
+                    - redis
+                    type: string
+                type: object
+              model:
+                description: Model controls model creation and discovery defaults.
+                properties:
+                  autoDiscovery:
+                    default: true
+                    description: |-
+                      AutoDiscovery controls whether models run discovery by default.
+                      When true, models run discovery jobs to extract metadata and auto-create templates.
+                      When false, discovery is skipped. Discovery failures are non-fatal and reported via conditions.
+                    type: boolean
                   image:
                     description: |-
                       Image specifies a container image URI directly.
@@ -322,6 +600,15 @@ spec:
                     - message: precision is immutable
                       rule: self == oldSelf
                 type: object
+              pvcHeadroomPercent:
+                description: |-
+                  PVCHeadroomPercent specifies the percentage of extra space to add to PVCs
+                  for model storage. This accounts for filesystem overhead and temporary files
+                  during model loading. The value represents a percentage (e.g., 10 means 10% extra space).
+                  If not specified, defaults to 10%.
+                format: int32
+                minimum: 0
+                type: integer
               replicas:
                 default: 1
                 description: |-
@@ -391,25 +678,34 @@ spec:
                     type: object
                 type: object
               routing:
-                description: Routing enables HTTP routing through Gateway API for
-                  this service.
+                description: |-
+                  Routing controls HTTP routing defaults applied to AIM resources.
+                  When set, these defaults are used for AIMService resources that enable routing
+                  but do not specify their own routing configuration.
                 properties:
                   annotations:
                     additionalProperties:
                       type: string
-                    description: Annotations to add to the HTTPRoute resource.
+                    description: |-
+                      Annotations defines additional annotations to add to the HTTPRoute resource.
+                      These annotations can be used for various purposes such as configuring ingress
+                      behavior, adding metadata, or triggering external integrations.
+                      Individual services can override these via spec.routing.annotations.
                     type: object
                   enabled:
                     description: |-
-                      Enabled toggles HTTP routing management.
-                      When nil, inherits the enabled state from the runtime configuration.
-                      When false, explicitly disables routing regardless of runtime config.
-                      When true, explicitly enables routing regardless of runtime config.
+                      Enabled controls whether HTTP routing is managed for inference services using this config.
+                      When true, the operator creates HTTPRoute resources for services that reference this config.
+                      When false or unset, routing must be explicitly enabled on each service.
+                      This provides a namespace or cluster-wide default that individual services can override.
                     type: boolean
                   gatewayRef:
                     description: |-
-                      GatewayRef identifies the Gateway parent that should receive the HTTPRoute.
-                      When omitted while routing is enabled, reconciliation will report a failure.
+                      GatewayRef specifies the Gateway API Gateway resource that should receive HTTPRoutes.
+                      This identifies the parent gateway for routing traffic to inference services.
+                      The gateway can be in any namespace (cross-namespace references are supported).
+                      If routing is enabled but GatewayRef is not specified, service reconciliation will fail
+                      with a validation error.
                     properties:
                       group:
                         default: gateway.networking.k8s.io
@@ -494,15 +790,24 @@ spec:
                     type: object
                   pathTemplate:
                     description: |-
-                      PathTemplate overrides the HTTP path template used for routing.
-                      The value is rendered against the AIMService object using JSONPath expressions.
+                      PathTemplate defines the HTTP path template for routes, evaluated using JSONPath expressions.
+                      The template is rendered against the AIMService object to generate unique paths.
+
+                      Example templates:
+                      - `/{.metadata.namespace}/{.metadata.name}` - namespace and service name
+                      - `/{.metadata.namespace}/{.metadata.labels['team']}/inference` - with label
+                      - `/models/{.spec.aimModelName}` - based on model name
+
+                      The template must:
+                      - Use valid JSONPath expressions wrapped in {...
                     type: string
                   requestTimeout:
                     description: |-
-                      RequestTimeout overrides the HTTP request timeout for routes.
+                      RequestTimeout defines the HTTP request timeout for routes.
                       This sets the maximum duration for a request to complete before timing out.
                       The timeout applies to the entire request/response cycle.
-                      If not specified, inherits from runtime config. If neither is set, no timeout is configured.
+                      If not specified, no timeout is set on the route.
+                      Individual services can override this value via spec.routing.requestTimeout.
                     type: string
                 type: object
               runtimeConfigName:
@@ -641,6 +946,36 @@ spec:
               resolvedImage:
                 description: ResolvedImage captures metadata about the image that
                   was resolved.
+                properties:
+                  kind:
+                    description: Kind is the fully-qualified kind of the resolved
+                      reference, when known.
+                    type: string
+                  name:
+                    description: Name is the resource name that satisfied the reference.
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace identifies where the resource was found when namespace-scoped.
+                      Empty indicates a cluster-scoped resource.
+                    type: string
+                  scope:
+                    description: Scope indicates whether the resolved resource was
+                      namespace or cluster scoped.
+                    enum:
+                    - Namespace
+                    - Cluster
+                    - Merged
+                    - Unknown
+                    type: string
+                  uid:
+                    description: UID captures the unique identifier of the resolved
+                      reference, when known.
+                    type: string
+                type: object
+              resolvedKVCache:
+                description: ResolvedKVCache captures metadata about the KV cache
+                  being used, if any.
                 properties:
                   kind:
                     description: Kind is the fully-qualified kind of the resolved

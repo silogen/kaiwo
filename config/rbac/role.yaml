@@ -40,6 +40,7 @@ rules:
   - aimclustermodelsources
   - aimclusterruntimeconfigs
   - aimclusterservicetemplates
+  - aimkvcaches
   - aimmodelcaches
   - aimmodels
   - aimruntimeconfigs
@@ -60,6 +61,7 @@ rules:
   - aimclustermodels/finalizers
   - aimclustermodelsources/finalizers
   - aimclusterservicetemplates/finalizers
+  - aimkvcaches/finalizers
   - aimmodelcaches/finalizers
   - aimmodels/finalizers
   - aimservicetemplates/finalizers
@@ -71,6 +73,7 @@ rules:
   - aimclustermodels/status
   - aimclustermodelsources/status
   - aimclusterservicetemplates/status
+  - aimkvcaches/status
   - aimmodelcaches/status
   - aimmodels/status
   - aimservices/status
@@ -92,6 +95,7 @@ rules:
   - apps
   resources:
   - deployments
+  - statefulsets
   verbs:
   - create
   - delete

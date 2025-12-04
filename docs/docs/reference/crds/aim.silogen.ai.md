@@ -17,6 +17,8 @@ Package v1alpha1 contains API Schema definitions for the AIM v1alpha1 API group.
 - [AIMClusterRuntimeConfigList](#aimclusterruntimeconfiglist)
 - [AIMClusterServiceTemplate](#aimclusterservicetemplate)
 - [AIMClusterServiceTemplateList](#aimclusterservicetemplatelist)
+- [AIMKVCache](#aimkvcache)
+- [AIMKVCacheList](#aimkvcachelist)
 - [AIMModel](#aimmodel)
 - [AIMModelCache](#aimmodelcache)
 - [AIMModelCacheList](#aimmodelcachelist)
@@ -203,7 +205,7 @@ _Appears in:_
 | `defaultStorageClassName` _string_ | DefaultStorageClassName specifies the storage class to use for model caches and PVCs<br />when the consuming resource (AIMModelCache, AIMTemplateCache, AIMServiceTemplate) does not<br />specify a storage class. If this field is empty, the cluster's default storage class is used. |  |  |
 | `model` _[AIMModelConfig](#aimmodelconfig)_ | Model controls model creation and discovery defaults. |  |  |
 | `routing` _[AIMRuntimeRoutingConfig](#aimruntimeroutingconfig)_ | Routing controls HTTP routing defaults applied to AIM resources.<br />When set, these defaults are used for AIMService resources that enable routing<br />but do not specify their own routing configuration. |  |  |
-| `pvcHeadroomPercent` _integer_ | PVCHeadroomPercent specifies the percentage of extra space to add to PVCs<br />for model storage. This accounts for filesystem overhead and temporary files<br />during model loading. The value represents a percentage (e.g., 10 means 10% extra space).<br />If not specified, defaults to 10%. | 10 | Minimum: 0 <br /> |
+| `pvcHeadroomPercent` _integer_ | PVCHeadroomPercent specifies the percentage of extra space to add to PVCs<br />for model storage. This accounts for filesystem overhead and temporary files<br />during model loading. The value represents a percentage (e.g., 10 means 10% extra space).<br />If not specified, defaults to 10%. |  | Minimum: 0 <br /> |
 
 
 #### AIMClusterServiceTemplate
@@ -315,6 +317,109 @@ _Appears in:_
 | `count` _integer_ | Count is the number of GPU resources requested per replica.<br />Must be at least 1. |  | Minimum: 1 <br /> |
 | `model` _string_ | Model is the GPU model name required for this deployment.<br />Examples: "MI300X", "MI325X" |  | MinLength: 1 <br /> |
 | `resourceName` _string_ | ResourceName is the Kubernetes resource name for GPU resources.<br />Defaults to "amd.com/gpu" if not specified. | amd.com/gpu |  |
+
+
+#### AIMKVCache
+
+
+
+AIMKVCache is the Schema for the KV caches API
+
+
+
+_Appears in:_
+- [AIMKVCacheList](#aimkvcachelist)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `AIMKVCache` | | |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `spec` _[AIMKVCacheSpec](#aimkvcachespec)_ |  |  |  |
+| `status` _[AIMKVCacheStatus](#aimkvcachestatus)_ |  |  |  |
+
+
+#### AIMKVCacheList
+
+
+
+AIMKVCacheList contains a list of AIMKVCache
+
+
+
+
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `aim.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `AIMKVCacheList` | | |
+| `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `items` _[AIMKVCache](#aimkvcache) array_ |  |  |  |
+
+
+#### AIMKVCacheSpec
+
+
+
+AIMKVCacheSpec defines the desired state of AIMKVCache
+
+
+
+_Appears in:_
+- [AIMKVCache](#aimkvcache)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `kvCacheType` _string_ | KVCacheType specifies the type of key-value cache to create | redis | Enum: [redis] <br /> |
+| `image` _string_ | Image specifies the container image to use for the KV cache service.<br />If not specified, defaults to appropriate images based on KVCacheType:<br />- redis: redis:7.2.4 |  |  |
+| `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to set in the KV cache container.<br />If not specified (nil), no additional environment variables are set.<br />If explicitly set to an empty array, no environment variables are added. |  |  |
+| `storage` _[StorageSpec](#storagespec)_ | Storage defines the persistent storage configuration for the KV cache |  |  |
+| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core)_ | Resources defines the resource requirements for the KV cache container.<br />If not specified, defaults to 1 CPU and 1Gi memory for both requests and limits. |  |  |
+
+
+#### AIMKVCacheStatus
+
+
+
+AIMKVCacheStatus defines the observed state of AIMKVCache
+
+
+
+_Appears in:_
+- [AIMKVCache](#aimkvcache)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `observedGeneration` _integer_ |  |  |  |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest available observations of the KV cache's state |  |  |
+| `status` _[AIMKVCacheStatusEnum](#aimkvcachestatusenum)_ | Status represents the current status of the KV cache | Pending | Enum: [Pending Progressing Ready Failed] <br /> |
+| `statefulSetName` _string_ | StatefulSetName represents the name of the created statefulset |  |  |
+| `serviceName` _string_ | ServiceName represents the name of the created service |  |  |
+| `endpoint` _string_ | Endpoint provides the connection information for accessing the KV cache.<br />Format depends on the backend type (e.g., "redis://service-name:6379" for Redis). |  |  |
+| `replicas` _integer_ | Replicas is the total number of replicas configured for the StatefulSet. |  |  |
+| `readyReplicas` _integer_ | ReadyReplicas is the number of pods that are ready and serving traffic. |  |  |
+| `storageSize` _string_ | StorageSize represents the total storage capacity allocated for the KV cache.<br />This reflects the size specified in the PersistentVolumeClaim. |  |  |
+| `lastError` _string_ | LastError contains details about the most recent error encountered.<br />This field is cleared when the error is resolved. |  |  |
+
+
+#### AIMKVCacheStatusEnum
+
+_Underlying type:_ _string_
+
+
+
+_Validation:_
+- Enum: [Pending Progressing Ready Failed]
+
+_Appears in:_
+- [AIMKVCacheStatus](#aimkvcachestatus)
+
+| Field | Description |
+| --- | --- |
+| `Pending` | AIMKVCacheStatusPending denotes that the KV cache is being created<br /> |
+| `Progressing` | AIMKVCacheStatusProgressing denotes that the KV cache is being deployed<br /> |
+| `Ready` | AIMKVCacheStatusReady denotes that the KV cache is ready to be used<br /> |
+| `Failed` | AIMKVCacheStatusFailed denotes that the KV cache deployment has failed<br /> |
 
 
 #### AIMMetric
@@ -474,6 +579,7 @@ _Appears in:_
 - [AIMClusterRuntimeConfigSpec](#aimclusterruntimeconfigspec)
 - [AIMRuntimeConfigCommon](#aimruntimeconfigcommon)
 - [AIMRuntimeConfigSpec](#aimruntimeconfigspec)
+- [AIMServiceSpec](#aimservicespec)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -599,7 +705,7 @@ _Appears in:_
 | `Pending` | AIMModelStatusPending indicates the image has been created but template generation has not started.<br /> |
 | `Progressing` | AIMModelStatusProgressing indicates one or more templates are still being discovered.<br /> |
 | `Ready` | AIMModelStatusReady indicates all templates are available and ready.<br /> |
-| `NotAvailable` | AIMModelStatusNotAvailable indicates no templates are available (e.g., required GPUs not present in cluster).<br /> |
+| `NotAvailable` | AIMModelStatusNotAvailable indicates all templates are not available (e.g., required GPUs not present in cluster).<br /> |
 | `Degraded` | AIMModelStatusDegraded indicates one or more templates are degraded or failed.<br /> |
 | `Failed` | AIMModelStatusFailed indicates all templates are degraded or failed.<br /> |
 
@@ -826,13 +932,14 @@ These settings apply to both AIMRuntimeConfig (namespace-scoped) and AIMClusterR
 _Appears in:_
 - [AIMClusterRuntimeConfigSpec](#aimclusterruntimeconfigspec)
 - [AIMRuntimeConfigSpec](#aimruntimeconfigspec)
+- [AIMServiceSpec](#aimservicespec)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `defaultStorageClassName` _string_ | DefaultStorageClassName specifies the storage class to use for model caches and PVCs<br />when the consuming resource (AIMModelCache, AIMTemplateCache, AIMServiceTemplate) does not<br />specify a storage class. If this field is empty, the cluster's default storage class is used. |  |  |
 | `model` _[AIMModelConfig](#aimmodelconfig)_ | Model controls model creation and discovery defaults. |  |  |
 | `routing` _[AIMRuntimeRoutingConfig](#aimruntimeroutingconfig)_ | Routing controls HTTP routing defaults applied to AIM resources.<br />When set, these defaults are used for AIMService resources that enable routing<br />but do not specify their own routing configuration. |  |  |
-| `pvcHeadroomPercent` _integer_ | PVCHeadroomPercent specifies the percentage of extra space to add to PVCs<br />for model storage. This accounts for filesystem overhead and temporary files<br />during model loading. The value represents a percentage (e.g., 10 means 10% extra space).<br />If not specified, defaults to 10%. | 10 | Minimum: 0 <br /> |
+| `pvcHeadroomPercent` _integer_ | PVCHeadroomPercent specifies the percentage of extra space to add to PVCs<br />for model storage. This accounts for filesystem overhead and temporary files<br />during model loading. The value represents a percentage (e.g., 10 means 10% extra space).<br />If not specified, defaults to 10%. |  | Minimum: 0 <br /> |
 
 
 #### AIMRuntimeConfigList
@@ -869,7 +976,7 @@ _Appears in:_
 | `defaultStorageClassName` _string_ | DefaultStorageClassName specifies the storage class to use for model caches and PVCs<br />when the consuming resource (AIMModelCache, AIMTemplateCache, AIMServiceTemplate) does not<br />specify a storage class. If this field is empty, the cluster's default storage class is used. |  |  |
 | `model` _[AIMModelConfig](#aimmodelconfig)_ | Model controls model creation and discovery defaults. |  |  |
 | `routing` _[AIMRuntimeRoutingConfig](#aimruntimeroutingconfig)_ | Routing controls HTTP routing defaults applied to AIM resources.<br />When set, these defaults are used for AIMService resources that enable routing<br />but do not specify their own routing configuration. |  |  |
-| `pvcHeadroomPercent` _integer_ | PVCHeadroomPercent specifies the percentage of extra space to add to PVCs<br />for model storage. This accounts for filesystem overhead and temporary files<br />during model loading. The value represents a percentage (e.g., 10 means 10% extra space).<br />If not specified, defaults to 10%. | 10 | Minimum: 0 <br /> |
+| `pvcHeadroomPercent` _integer_ | PVCHeadroomPercent specifies the percentage of extra space to add to PVCs<br />for model storage. This accounts for filesystem overhead and temporary files<br />during model loading. The value represents a percentage (e.g., 10 means 10% extra space).<br />If not specified, defaults to 10%. |  | Minimum: 0 <br /> |
 
 
 #### AIMRuntimeConfigStatus
@@ -926,12 +1033,14 @@ _Appears in:_
 - [AIMClusterRuntimeConfigSpec](#aimclusterruntimeconfigspec)
 - [AIMRuntimeConfigCommon](#aimruntimeconfigcommon)
 - [AIMRuntimeConfigSpec](#aimruntimeconfigspec)
+- [AIMServiceSpec](#aimservicespec)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | Enabled controls whether HTTP routing is managed for inference services using this config.<br />When true, the operator creates HTTPRoute resources for services that reference this config.<br />When false or unset, routing must be explicitly enabled on each service.<br />This provides a namespace or cluster-wide default that individual services can override. |  |  |
 | `gatewayRef` _[ParentReference](#parentreference)_ | GatewayRef specifies the Gateway API Gateway resource that should receive HTTPRoutes.<br />This identifies the parent gateway for routing traffic to inference services.<br />The gateway can be in any namespace (cross-namespace references are supported).<br />If routing is enabled but GatewayRef is not specified, service reconciliation will fail<br />with a validation error. |  |  |
 | `pathTemplate` _string_ | PathTemplate defines the HTTP path template for routes, evaluated using JSONPath expressions.<br />The template is rendered against the AIMService object to generate unique paths.<br />Example templates:<br />- `/\{.metadata.namespace\}/\{.metadata.name\}` - namespace and service name<br />- `/\{.metadata.namespace\}/\{.metadata.labels['team']\}/inference` - with label<br />- `/models/\{.spec.aimModelName\}` - based on model name<br />The template must:<br />- Use valid JSONPath expressions wrapped in \{...\}<br />- Reference fields that exist on the service<br />- Produce a path ≤ 200 characters after rendering<br />- Result in valid URL path segments (lowercase, RFC 1123 compliant)<br />If evaluation fails, the service enters Degraded state with PathTemplateInvalid reason.<br />Individual services can override this template via spec.routing.pathTemplate. |  |  |
+| `annotations` _object (keys:string, values:string)_ | Annotations defines additional annotations to add to the HTTPRoute resource.<br />These annotations can be used for various purposes such as configuring ingress<br />behavior, adding metadata, or triggering external integrations.<br />Individual services can override these via spec.routing.annotations. |  |  |
 | `requestTimeout` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#duration-v1-meta)_ | RequestTimeout defines the HTTP request timeout for routes.<br />This sets the maximum duration for a request to complete before timing out.<br />The timeout applies to the entire request/response cycle.<br />If not specified, no timeout is set on the route.<br />Individual services can override this value via spec.routing.requestTimeout. |  |  |
 
 
@@ -953,6 +1062,29 @@ _Appears in:_
 | `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
 | `spec` _[AIMServiceSpec](#aimservicespec)_ |  |  |  |
 | `status` _[AIMServiceStatus](#aimservicestatus)_ |  |  |  |
+
+
+#### AIMServiceKVCache
+
+
+
+AIMServiceKVCache specifies KV cache configuration for the service.
+The controller will use an existing AIMKVCache if found, otherwise it will create one.
+
+
+
+_Appears in:_
+- [AIMServiceSpec](#aimservicespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | Name specifies the name of the AIMKVCache resource to use.<br />If an AIMKVCache with this name exists, it will be used.<br />If it doesn't exist, a new AIMKVCache will be created with this name.<br />If not specified, defaults to "kvcache-\{service-name\}". |  |  |
+| `type` _string_ | Type specifies the type of KV cache backend.<br />Only used when creating a new AIMKVCache (ignored if referencing existing). | redis | Enum: [redis] <br /> |
+| `image` _string_ | Image specifies the container image to use for the KV cache service.<br />Only used when creating a new AIMKVCache (ignored if referencing existing).<br />If not specified, defaults to appropriate images based on Type. |  |  |
+| `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to set in the KV cache container.<br />Only used when creating a new AIMKVCache (ignored if referencing existing).<br />If not specified (nil), no additional environment variables are set.<br />If explicitly set to an empty array, no environment variables are added. |  |  |
+| `storage` _[StorageSpec](#storagespec)_ | Storage defines the persistent storage configuration for the KV cache.<br />Only used when creating a new AIMKVCache (ignored if referencing existing). |  |  |
+| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core)_ | Resources defines the resource requirements for the KV cache container.<br />Only used when creating a new AIMKVCache (ignored if referencing existing).<br />If not specified, defaults to 1 CPU and 1Gi memory for both requests and limits. |  |  |
+| `lmCacheConfig` _string_ | LMCacheConfig specifies the custom LMCache configuration YAML content.<br />When specified, this exact configuration is used for the lmcache_config.yaml file.<br />When empty, a default configuration is generated with standard LMCache settings.<br />Note: The remote_url field in custom configs will have the \{SERVICE_URL\} placeholder<br />replaced with the actual KV cache service URL. |  |  |
 
 
 #### AIMServiceList
@@ -1047,26 +1179,6 @@ _Appears in:_
 | `metadata` _[AIMProfileMetadata](#aimprofilemetadata)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
 
 
-#### AIMServiceRouting
-
-
-
-AIMServiceRouting configures optional HTTP routing for the service.
-
-
-
-_Appears in:_
-- [AIMServiceSpec](#aimservicespec)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `enabled` _boolean_ | Enabled toggles HTTP routing management.<br />When nil, inherits the enabled state from the runtime configuration.<br />When false, explicitly disables routing regardless of runtime config.<br />When true, explicitly enables routing regardless of runtime config. |  |  |
-| `gatewayRef` _[ParentReference](#parentreference)_ | GatewayRef identifies the Gateway parent that should receive the HTTPRoute.<br />When omitted while routing is enabled, reconciliation will report a failure. |  |  |
-| `annotations` _object (keys:string, values:string)_ | Annotations to add to the HTTPRoute resource. |  |  |
-| `pathTemplate` _string_ | PathTemplate overrides the HTTP path template used for routing.<br />The value is rendered against the AIMService object using JSONPath expressions. |  |  |
-| `requestTimeout` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#duration-v1-meta)_ | RequestTimeout overrides the HTTP request timeout for routes.<br />This sets the maximum duration for a request to complete before timing out.<br />The timeout applies to the entire request/response cycle.<br />If not specified, inherits from runtime config. If neither is set, no timeout is configured. |  |  |
-
-
 #### AIMServiceRoutingStatus
 
 
@@ -1108,11 +1220,15 @@ _Appears in:_
 | `replicas` _integer_ | Replicas overrides the number of replicas for this service.<br />Other runtime settings remain governed by the template unless overridden. | 1 |  |
 | `runtimeConfigName` _string_ | RuntimeConfigName references the AIM runtime configuration (by name) to use for this service. | default |  |
 | `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core)_ | Resources overrides the container resource requirements for this service.<br />When specified, these values take precedence over the template and image defaults. |  |  |
+| `kvCache` _[AIMServiceKVCache](#aimservicekvcache)_ | KVCache specifies KV cache configuration for the service.<br />When specified, enables LMCache with the configured KV cache backend. |  |  |
 | `overrides` _[AIMServiceOverrides](#aimserviceoverrides)_ | Overrides allows overriding specific template parameters for this service.<br />When specified, these values take precedence over the template values. |  |  |
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to use for authentication when downloading models.<br />These variables are used for authentication with model registries (e.g., HuggingFace tokens). |  |  |
 | `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets references secrets for pulling AIM container images. |  |  |
 | `serviceAccountName` _string_ | ServiceAccountName specifies the Kubernetes service account to use for the inference workload.<br />This service account is used by the deployed inference pods.<br />If empty, the default service account for the namespace is used. |  |  |
-| `routing` _[AIMServiceRouting](#aimservicerouting)_ | Routing enables HTTP routing through Gateway API for this service. |  |  |
+| `defaultStorageClassName` _string_ | DefaultStorageClassName specifies the storage class to use for model caches and PVCs<br />when the consuming resource (AIMModelCache, AIMTemplateCache, AIMServiceTemplate) does not<br />specify a storage class. If this field is empty, the cluster's default storage class is used. |  |  |
+| `model` _[AIMModelConfig](#aimmodelconfig)_ | Model controls model creation and discovery defaults. |  |  |
+| `routing` _[AIMRuntimeRoutingConfig](#aimruntimeroutingconfig)_ | Routing controls HTTP routing defaults applied to AIM resources.<br />When set, these defaults are used for AIMService resources that enable routing<br />but do not specify their own routing configuration. |  |  |
+| `pvcHeadroomPercent` _integer_ | PVCHeadroomPercent specifies the percentage of extra space to add to PVCs<br />for model storage. This accounts for filesystem overhead and temporary files<br />during model loading. The value represents a percentage (e.g., 10 means 10% extra space).<br />If not specified, defaults to 10%. |  | Minimum: 0 <br /> |
 
 
 #### AIMServiceStatus
@@ -1137,6 +1253,7 @@ _Appears in:_
 | `resolvedTemplate` _[AIMServiceResolvedTemplate](#aimserviceresolvedtemplate)_ | ResolvedTemplate captures metadata about the template that satisfied the reference. |  |  |
 | `resolvedTemplateCache` _[AIMResolvedReference](#aimresolvedreference)_ | ResolvedTemplateCache captures metadata about the template cache being used, if any. |  |  |
 | `modelCaches` _object (keys:string, values:[AIMResolvedModelCache](#aimresolvedmodelcache))_ | ModelCaches maps model names to their resolved AIMModelCache resources if they exist. |  |  |
+| `resolvedKVCache` _[AIMResolvedReference](#aimresolvedreference)_ | ResolvedKVCache captures metadata about the KV cache being used, if any. |  |  |
 
 
 #### AIMServiceStatusEnum
@@ -1571,5 +1688,24 @@ _Appears in:_
 | `metric` _string_ | Metric is the optimization target (e.g., latency, throughput) |  |  |
 | `description` _string_ | Description provides additional context about this deployment configuration |  |  |
 | `profileId` _string_ | ProfileId is an optional override to select a particular AIM profile by ID |  |  |
+
+
+#### StorageSpec
+
+
+
+StorageSpec defines the persistent storage configuration
+
+
+
+_Appears in:_
+- [AIMKVCacheSpec](#aimkvcachespec)
+- [AIMServiceKVCache](#aimservicekvcache)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#quantity-resource-api)_ | Size specifies the storage size for the persistent volume.<br />Minimum recommended size is 1Gi for Redis to function properly.<br />If not specified, defaults to 1Gi.<br />WARNING: This field is immutable after creation due to StatefulSet VolumeClaimTemplate limitations. | 1Gi |  |
+| `storageClassName` _string_ | StorageClassName specifies the storage class to use for the persistent volume.<br />If not specified, the cluster's default storage class will be used.<br />Ensure your cluster has a default storage class configured or specify one explicitly.<br />WARNING: This field is immutable after creation due to StatefulSet VolumeClaimTemplate limitations. |  |  |
+| `accessModes` _[PersistentVolumeAccessMode](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#persistentvolumeaccessmode-v1-core) array_ | AccessModes specifies the access modes for the persistent volume.<br />Defaults to ReadWriteOnce if not specified.<br />WARNING: This field is immutable after creation due to StatefulSet VolumeClaimTemplate limitations. | [ReadWriteOnce] |  |
 
 

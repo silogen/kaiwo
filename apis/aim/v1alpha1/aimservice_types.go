@@ -25,7 +25,6 @@ package v1alpha1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 // AIMServiceModel specifies which model to deploy. Exactly one field must be set.
@@ -50,6 +49,57 @@ type AIMServiceModel struct {
 // from the referenced AIMServiceTemplate.
 type AIMServiceOverrides struct {
 	AIMRuntimeParameters `json:",inline"`
+}
+
+// AIMServiceKVCache specifies KV cache configuration for the service.
+// The controller will use an existing AIMKVCache if found, otherwise it will create one.
+type AIMServiceKVCache struct {
+	// Name specifies the name of the AIMKVCache resource to use.
+	// If an AIMKVCache with this name exists, it will be used.
+	// If it doesn't exist, a new AIMKVCache will be created with this name.
+	// If not specified, defaults to "kvcache-{service-name}".
+	// +optional
+	Name string `json:"name,omitempty"`
+
+	// Type specifies the type of KV cache backend.
+	// Only used when creating a new AIMKVCache (ignored if referencing existing).
+	// +kubebuilder:validation:Enum=redis
+	// +kubebuilder:default=redis
+	Type string `json:"type,omitempty"`
+
+	// Image specifies the container image to use for the KV cache service.
+	// Only used when creating a new AIMKVCache (ignored if referencing existing).
+	// If not specified, defaults to appropriate images based on Type.
+	// +optional
+	Image *string `json:"image,omitempty"`
+
+	// Env specifies environment variables to set in the KV cache container.
+	// Only used when creating a new AIMKVCache (ignored if referencing existing).
+	// If not specified (nil), no additional environment variables are set.
+	// If explicitly set to an empty array, no environment variables are added.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	Env []corev1.EnvVar `json:"env,omitempty"`
+
+	// Storage defines the persistent storage configuration for the KV cache.
+	// Only used when creating a new AIMKVCache (ignored if referencing existing).
+	// +optional
+	Storage *StorageSpec `json:"storage,omitempty"`
+
+	// Resources defines the resource requirements for the KV cache container.
+	// Only used when creating a new AIMKVCache (ignored if referencing existing).
+	// If not specified, defaults to 1 CPU and 1Gi memory for both requests and limits.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// LMCacheConfig specifies the custom LMCache configuration YAML content.
+	// When specified, this exact configuration is used for the lmcache_config.yaml file.
+	// When empty, a default configuration is generated with standard LMCache settings.
+	// Note: The remote_url field in custom configs will have the {SERVICE_URL} placeholder
+	// replaced with the actual KV cache service URL.
+	// +optional
+	LMCacheConfig string `json:"lmCacheConfig,omitempty"`
 }
 
 // AIMServiceSpec defines the desired state of AIMService.
@@ -92,6 +142,11 @@ type AIMServiceSpec struct {
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 
+	// KVCache specifies KV cache configuration for the service.
+	// When specified, enables LMCache with the configured KV cache backend.
+	// +optional
+	KVCache *AIMServiceKVCache `json:"kvCache,omitempty"`
+
 	// Overrides allows overriding specific template parameters for this service.
 	// When specified, these values take precedence over the template values.
 	// +optional
@@ -114,9 +169,8 @@ type AIMServiceSpec struct {
 	// +optional
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 
-	// Routing enables HTTP routing through Gateway API for this service.
-	// +optional
-	Routing *AIMServiceRouting `json:"routing,omitempty"`
+	// Inline AIMRuntimeConfigCommon fields for cleaner access
+	AIMRuntimeConfigCommon `json:",inline"`
 }
 
 type AIMServiceTemplateConfig struct {
@@ -161,6 +215,10 @@ type AIMServiceStatus struct {
 	// ModelCaches maps model names to their resolved AIMModelCache resources if they exist.
 	// +optional
 	ModelCaches map[string]AIMResolvedModelCache `json:"modelCaches,omitempty"`
+
+	// ResolvedKVCache captures metadata about the KV cache being used, if any.
+	// +optional
+	ResolvedKVCache *AIMResolvedReference `json:"resolvedKVCache,omitempty"`
 }
 
 // AIMServiceStatusEnum defines coarse-grained states for a service.
@@ -192,8 +250,11 @@ const (
 	// ConditionCacheReady is True when required caches are present or warmed as requested.
 	AIMServiceConditionCacheReady = "CacheReady"
 
-	// ConditionCacheReady is True when required caches have failed.
+	// ConditionCacheFailed is True when required caches have failed.
 	AIMServiceConditionCacheFailed = "CacheFailed"
+
+	// ConditionKVCacheReady is True when required KVCache is ready.
+	AIMServiceConditionKVCacheReady = "KVCacheReady"
 
 	// ConditionRuntimeReady is True when the underlying KServe runtime and InferenceService are ready.
 	AIMServiceConditionRuntimeReady = "RuntimeReady"
@@ -227,6 +288,13 @@ const (
 	AIMServiceReasonCacheWarming    = "CacheWarming"
 	AIMServiceReasonCacheWarm       = "CacheWarm"
 	AIMServiceReasonCacheFailed     = "CacheFailed"
+
+	// KVCache
+	AIMServiceReasonWaitingForKVCache   = "WaitingForKVCache"
+	AIMServiceReasonKVCacheProgressing  = "KVCacheProgressing"
+	AIMServiceReasonKVCacheReady        = "KVCacheReady"
+	AIMServiceReasonKVCacheFailed       = "KVCacheFailed"
+	AIMServiceReasonKVCacheNotRequested = "KVCacheNotRequested"
 
 	// Runtime
 	AIMServiceReasonCreatingRuntime      = "CreatingRuntime"
@@ -270,37 +338,6 @@ type AIMServiceList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []AIMService `json:"items"`
-}
-
-// AIMServiceRouting configures optional HTTP routing for the service.
-type AIMServiceRouting struct {
-	// Enabled toggles HTTP routing management.
-	// When nil, inherits the enabled state from the runtime configuration.
-	// When false, explicitly disables routing regardless of runtime config.
-	// When true, explicitly enables routing regardless of runtime config.
-	// +optional
-	Enabled *bool `json:"enabled,omitempty"`
-
-	// GatewayRef identifies the Gateway parent that should receive the HTTPRoute.
-	// When omitted while routing is enabled, reconciliation will report a failure.
-	// +optional
-	GatewayRef *gatewayapiv1.ParentReference `json:"gatewayRef,omitempty"`
-
-	// Annotations to add to the HTTPRoute resource.
-	// +optional
-	Annotations map[string]string `json:"annotations,omitempty"`
-
-	// PathTemplate overrides the HTTP path template used for routing.
-	// The value is rendered against the AIMService object using JSONPath expressions.
-	// +optional
-	PathTemplate string `json:"pathTemplate,omitempty"`
-
-	// RequestTimeout overrides the HTTP request timeout for routes.
-	// This sets the maximum duration for a request to complete before timing out.
-	// The timeout applies to the entire request/response cycle.
-	// If not specified, inherits from runtime config. If neither is set, no timeout is configured.
-	// +optional
-	RequestTimeout *metav1.Duration `json:"requestTimeout,omitempty"`
 }
 
 // AIMServiceRoutingStatus captures observed routing details.

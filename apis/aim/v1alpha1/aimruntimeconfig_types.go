@@ -60,7 +60,6 @@ type AIMRuntimeConfigCommon struct {
 	// for model storage. This accounts for filesystem overhead and temporary files
 	// during model loading. The value represents a percentage (e.g., 10 means 10% extra space).
 	// If not specified, defaults to 10%.
-	// +kubebuilder:default=10
 	// +kubebuilder:validation:Minimum=0
 	// +optional
 	PVCHeadroomPercent *int32 `json:"pvcHeadroomPercent,omitempty"`
@@ -112,6 +111,13 @@ type AIMRuntimeRoutingConfig struct {
 	// Individual services can override this template via spec.routing.pathTemplate.
 	// +optional
 	PathTemplate string `json:"pathTemplate,omitempty"`
+
+	// Annotations defines additional annotations to add to the HTTPRoute resource.
+	// These annotations can be used for various purposes such as configuring ingress
+	// behavior, adding metadata, or triggering external integrations.
+	// Individual services can override these via spec.routing.annotations.
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
 
 	// RequestTimeout defines the HTTP request timeout for routes.
 	// This sets the maximum duration for a request to complete before timing out.
