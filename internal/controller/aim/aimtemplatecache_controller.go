@@ -58,6 +58,8 @@ type AIMTemplateCacheReconciler struct {
 	Clientset kubernetes.Interface
 }
 
+const templateCacheFinalizer = "aim.silogen.ai/template-cache-cleanup"
+
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimtemplatecaches,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimtemplatecaches/status,verbs=get;update;patch
 
@@ -69,10 +71,11 @@ func (r *AIMTemplateCacheReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	return controllerutils.Reconcile(ctx, controllerutils.ReconcileSpec[*aimv1alpha1.AIMTemplateCache, aimv1alpha1.AIMTemplateCacheStatus]{
-		Client:   r.Client,
-		Scheme:   r.Scheme,
-		Object:   &tc,
-		Recorder: r.Recorder,
+		Client:        r.Client,
+		Scheme:        r.Scheme,
+		Object:        &tc,
+		Recorder:      r.Recorder,
+		FinalizerName: templateCacheFinalizer,
 		ObserveFn: func(ctx context.Context) (any, error) {
 			return r.observe(ctx, &tc)
 		},
@@ -99,7 +102,9 @@ func (r *AIMTemplateCacheReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 			return r.projectStatus(ctx, &tc, o, errs)
 		},
-		FinalizeFn: nil,
+		FinalizeFn: func(ctx context.Context, obs any) error { // Add this
+			return r.cleanupFailedModelCaches(ctx, &tc)
+		},
 	})
 }
 
@@ -330,6 +335,37 @@ func (r *AIMTemplateCacheReconciler) projectStatus(_ context.Context, tc *aimv1a
 	}
 
 	return err
+}
+
+func (r *AIMTemplateCacheReconciler) cleanupFailedModelCaches(ctx context.Context, tc *aimv1alpha1.AIMTemplateCache) error {
+	// List all AIMModelCaches created by this AIMTemplateCache
+	var modelCaches aimv1alpha1.AIMModelCacheList
+	if err := r.List(ctx, &modelCaches,
+		client.InNamespace(tc.Namespace),
+		client.MatchingLabels{
+			shared.LabelKeyTemplateCache: tc.Name,
+		},
+	); err != nil {
+		return fmt.Errorf("failed to list model caches for cleanup: %w", err)
+	}
+
+	// Delete only the ones that are not Available
+	var errs []error
+	for _, mc := range modelCaches.Items {
+		if mc.Status.Status != aimv1alpha1.AIMModelCacheStatusAvailable {
+			if err := r.Delete(ctx, &mc); err != nil && !apierrors.IsNotFound(err) {
+				errs = append(errs, fmt.Errorf("failed to delete model cache %s: %w", mc.Name, err))
+			} else {
+				ctrl.LoggerFrom(ctx).Info("Deleted failed model cache during template cache cleanup",
+					"modelCache", mc.Name, "templateCache", tc.Name)
+			}
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("cleanup errors: %v", errs)
+	}
+	return nil
 }
 
 func requestsFromTemplateCaches(templateCaches []aimv1alpha1.AIMTemplateCache) []reconcile.Request {
