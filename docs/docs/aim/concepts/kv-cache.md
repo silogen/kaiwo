@@ -1,8 +1,6 @@
 # KV Cache
 
-KV Cache (Key-Value Cache) is a performance optimization technique for Large Language Model (LLM) inference that has the potential of significantly improving throughput and reduce latency by caching intermediate computation results.
-
-Note that any performance boost of shared KV cache depends on networking, such as RDMA support.
+KV Cache (Key-Value Cache) is a performance optimization technique for Large Language Model (LLM) inference that significantly improves throughput and reduces latency by caching intermediate computation results.
 
 ## Overview
 

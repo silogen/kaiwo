@@ -108,7 +108,7 @@ type AIMRuntimeRoutingConfig struct {
 	// - Result in valid URL path segments (lowercase, RFC 1123 compliant)
 	//
 	// If evaluation fails, the service enters Degraded state with PathTemplateInvalid reason.
-	// Individual services can override this template via spec.routing.pathTemplate.
+	// Individual services can override this template via spec.runtimeOverrides.routing.pathTemplate.
 	// +optional
 	PathTemplate string `json:"pathTemplate,omitempty"`
 
@@ -123,7 +123,7 @@ type AIMRuntimeRoutingConfig struct {
 	// This sets the maximum duration for a request to complete before timing out.
 	// The timeout applies to the entire request/response cycle.
 	// If not specified, no timeout is set on the route.
-	// Individual services can override this value via spec.routing.requestTimeout.
+	// Individual services can override this value via spec.runtimeOverrides.routing.requestTimeout.
 	// +optional
 	RequestTimeout *metav1.Duration `json:"requestTimeout,omitempty"`
 }

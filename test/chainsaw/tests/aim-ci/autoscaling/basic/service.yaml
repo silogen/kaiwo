@@ -1,0 +1,27 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-service
+spec:
+  model:
+    image: ghcr.io/silogen/aim-dummy:0.1.3
+  
+  # Autoscaling configuration
+  minReplicas: 1
+  maxReplicas: 3
+  
+  # Advanced autoscaling with custom metrics
+  autoScaling:
+    metrics:
+      - type: PodMetric
+        podmetric:
+          metric:
+            backend: "opentelemetry"
+            metricNames:
+              - vllm:num_requests_running
+            query: "vllm:num_requests_running"
+            operationOverTime: "avg"
+          target:
+            type: Value
+            value: "1"
+

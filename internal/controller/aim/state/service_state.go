@@ -43,6 +43,9 @@ type ServiceState struct {
 	Env                []corev1.EnvVar
 	Resources          *corev1.ResourceRequirements
 	Replicas           *int32
+	MinReplicas        *int32
+	MaxReplicas        *int32
+	AutoScaling        *aimv1alpha1.AIMServiceAutoScaling
 	ImagePullSecrets   []corev1.LocalObjectReference
 	ServiceAccountName string
 	Template           TemplateState
@@ -112,6 +115,21 @@ func NewServiceState(service *aimv1alpha1.AIMService, template TemplateState, op
 	if service.Spec.Replicas != nil {
 		replicas := *service.Spec.Replicas
 		state.Replicas = &replicas
+	}
+
+	// Handle autoscaling configuration
+	if service.Spec.MinReplicas != nil {
+		minReplicas := *service.Spec.MinReplicas
+		state.MinReplicas = &minReplicas
+	}
+
+	if service.Spec.MaxReplicas != nil {
+		maxReplicas := *service.Spec.MaxReplicas
+		state.MaxReplicas = &maxReplicas
+	}
+
+	if service.Spec.AutoScaling != nil {
+		state.AutoScaling = service.Spec.AutoScaling.DeepCopy()
 	}
 
 	resolvedRouting := routingconfig.Resolve(service, template.RuntimeConfigSpec.Routing)

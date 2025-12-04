@@ -331,7 +331,7 @@ func (r *AIMServiceReconciler) observeKVCache(ctx context.Context, service *aimv
 		}
 
 		// Observe the LMCache ConfigMap
-		configMapName, err := controllerutils.GenerateDerivedName([]string{"lmcache", "service.Name"}, service.Namespace, service.Name)
+		configMapName, err := controllerutils.GenerateDerivedName([]string{"lmcache", service.Name}, service.Namespace, service.Name)
 		if err != nil {
 			return err
 		}
@@ -552,8 +552,8 @@ func buildKVCache(service *aimv1alpha1.AIMService, ownerRef metav1.OwnerReferenc
 }
 
 func buildLMCacheConfigMap(service *aimv1alpha1.AIMService, kvCache *aimv1alpha1.AIMKVCache, ownerRef metav1.OwnerReference) *v1.ConfigMap {
-	// Service name follows AIMKVCache controller pattern: {name}-{type}-svc
-	serviceURL := fmt.Sprintf("redis://%s-%s-svc:6379", kvCache.Name, kvCache.Spec.KVCacheType)
+	servicename, _ := controllerutils.GenerateDerivedName([]string{kvCache.Name, kvCache.Spec.KVCacheType, "svc"}, kvCache.Namespace, kvCache.Name)
+	serviceURL := fmt.Sprintf("redis://%s.%s.svc.cluster.local:6379", servicename, kvCache.Namespace)
 	configMapName, err := controllerutils.GenerateDerivedName([]string{"lmcache", service.Name}, service.Namespace, service.Name)
 	if err != nil {
 		return nil
@@ -699,7 +699,7 @@ func (r *AIMServiceReconciler) planInferenceServiceAndRoute(logger logr.Logger, 
 	serviceReady := modelsReady && (!service.Spec.CacheModel || templateCacheReady) && (templateCacheReady || servicePVC != nil) && kvCacheReady
 
 	// Only create InferenceService if we have a model source and storage
-	if serviceReady && obs.InferenceService != nil {
+	if serviceReady {
 		inferenceService := shared.BuildInferenceService(serviceState, ownerRef)
 
 		// Collect all environment variables
@@ -728,6 +728,10 @@ func (r *AIMServiceReconciler) planInferenceServiceAndRoute(logger logr.Logger, 
 				v1.EnvVar{
 					Name:  "AIM_ENGINE_ARGS",
 					Value: `{"kv-transfer-config": {"kv_connector":"LMCacheConnectorV1", "kv_role":"kv_both"}}`,
+				},
+				v1.EnvVar{
+					Name:  "PYTHONHASHSEED",
+					Value: "0",
 				},
 			)
 		}

@@ -40,6 +40,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 	"github.com/silogen/kaiwo/internal/controller/aim/helpers"
 	aimstate "github.com/silogen/kaiwo/internal/controller/aim/state"
 	baseutils "github.com/silogen/kaiwo/pkg/utils"
@@ -357,7 +358,27 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 		inferenceService.Labels[LabelKeyPrecision] = SanitizeLabelValue(string(*precision))
 	}
 
-	if serviceState.Replicas != nil {
+	// Auto-inject autoscaling-related annotations when AutoScaling is configured
+	if serviceState.AutoScaling != nil {
+		injectAutoscalingAnnotations(inferenceService)
+	}
+
+	// Handle replica configuration with priority: AutoScaling config > explicit min/max > legacy Replicas field
+	if serviceState.AutoScaling != nil || serviceState.MinReplicas != nil || serviceState.MaxReplicas != nil {
+		// Use explicit min/max replicas if provided
+		if serviceState.MinReplicas != nil {
+			inferenceService.Spec.Predictor.MinReplicas = serviceState.MinReplicas
+		}
+		if serviceState.MaxReplicas != nil {
+			inferenceService.Spec.Predictor.MaxReplicas = *serviceState.MaxReplicas
+		}
+
+		// Apply autoscaling configuration if provided
+		if serviceState.AutoScaling != nil {
+			inferenceService.Spec.Predictor.AutoScaling = convertToKServeAutoScaling(serviceState.AutoScaling)
+		}
+	} else if serviceState.Replicas != nil {
+		// Legacy: Use Replicas field for both min and max (backwards compatible)
 		inferenceService.Spec.Predictor.MinReplicas = serviceState.Replicas
 		inferenceService.Spec.Predictor.MaxReplicas = *serviceState.Replicas
 	}
@@ -366,6 +387,100 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 	addGPUNodeSelector(inferenceService, serviceState.Template)
 
 	return inferenceService
+}
+
+// convertToKServeAutoScaling converts AIM autoscaling config to KServe AutoScalingSpec format.
+// Maps AIM's simplified autoscaling API to KServe's native autoscaling types, supporting
+// various metric sources including PodMetric, Resource, and External metrics.
+func convertToKServeAutoScaling(aimAutoScaling *aimv1alpha1.AIMServiceAutoScaling) *servingv1beta1.AutoScalingSpec {
+	if aimAutoScaling == nil {
+		return nil
+	}
+
+	kserveAutoScaling := &servingv1beta1.AutoScalingSpec{}
+
+	if len(aimAutoScaling.Metrics) > 0 {
+		kserveAutoScaling.Metrics = make([]servingv1beta1.MetricsSpec, len(aimAutoScaling.Metrics))
+		for i, metric := range aimAutoScaling.Metrics {
+			kserveMetric := servingv1beta1.MetricsSpec{
+				Type: servingv1beta1.MetricSourceType(metric.Type),
+			}
+
+			// Handle PodMetric type - used for custom per-pod metrics (e.g., from OpenTelemetry)
+			if metric.Type == "PodMetric" && metric.PodMetric != nil {
+				kserveMetric.PodMetric = &servingv1beta1.PodMetricSource{}
+
+				// Map metric identification and backend configuration
+				if metric.PodMetric.Metric != nil {
+					kserveMetric.PodMetric.Metric = servingv1beta1.PodMetrics{
+						Backend:           servingv1beta1.PodsMetricsBackend(metric.PodMetric.Metric.Backend),
+						ServerAddress:     metric.PodMetric.Metric.ServerAddress,
+						MetricNames:       metric.PodMetric.Metric.MetricNames,
+						Query:             metric.PodMetric.Metric.Query,
+						OperationOverTime: metric.PodMetric.Metric.OperationOverTime,
+					}
+				}
+
+				// Map target value configuration
+				if metric.PodMetric.Target != nil {
+					kserveMetric.PodMetric.Target = servingv1beta1.MetricTarget{
+						Type: servingv1beta1.MetricTargetType(metric.PodMetric.Target.Type),
+					}
+
+					// Convert Value field (for "Value" type targets)
+					if metric.PodMetric.Target.Value != "" {
+						kserveMetric.PodMetric.Target.Value = servingv1beta1.NewMetricQuantity(metric.PodMetric.Target.Value)
+					}
+
+					// Convert AverageValue field (for "AverageValue" type targets)
+					if metric.PodMetric.Target.AverageValue != "" {
+						kserveMetric.PodMetric.Target.AverageValue = servingv1beta1.NewMetricQuantity(metric.PodMetric.Target.AverageValue)
+					}
+
+					// Copy AverageUtilization field (for "Utilization" type targets)
+					if metric.PodMetric.Target.AverageUtilization != nil {
+						kserveMetric.PodMetric.Target.AverageUtilization = metric.PodMetric.Target.AverageUtilization
+					}
+				}
+			}
+
+			// Future: Add support for Resource and External metric types here
+			// For now, PodMetric covers the most common custom metrics use case
+
+			kserveAutoScaling.Metrics[i] = kserveMetric
+		}
+	}
+
+	return kserveAutoScaling
+}
+
+// injectAutoscalingAnnotations automatically adds required annotations when autoscaling is enabled.
+// This includes KEDA autoscaler class, OpenTelemetry sidecar injection, and Prometheus metrics port.
+// These annotations are only added if they don't already exist, allowing users to override defaults.
+func injectAutoscalingAnnotations(inferenceService *servingv1beta1.InferenceService) {
+	if inferenceService.Annotations == nil {
+		inferenceService.Annotations = make(map[string]string)
+	}
+
+	// Add KEDA autoscaler class annotation if not already present
+	// This tells KServe to use KEDA for autoscaling instead of default HPA
+	if _, exists := inferenceService.Annotations["serving.kserve.io/autoscalerClass"]; !exists {
+		inferenceService.Annotations["serving.kserve.io/autoscalerClass"] = "keda"
+	}
+
+	// Add OpenTelemetry sidecar injection annotation if not already present
+	// This injects the OTel collector sidecar to collect metrics from the inference container
+	// The sidecar name follows KServe naming convention: <service-name>-predictor
+	if _, exists := inferenceService.Annotations["sidecar.opentelemetry.io/inject"]; !exists {
+		predictorName := inferenceService.Name + "-predictor"
+		inferenceService.Annotations["sidecar.opentelemetry.io/inject"] = predictorName
+	}
+
+	// Add Prometheus metrics port annotation if not already present
+	// vLLM exposes metrics on port 8000 by default
+	if _, exists := inferenceService.Annotations["prometheus.kserve.io/port"]; !exists {
+		inferenceService.Annotations["prometheus.kserve.io/port"] = "8000"
+	}
 }
 
 func resolveServiceResources(serviceState aimstate.ServiceState) corev1.ResourceRequirements {

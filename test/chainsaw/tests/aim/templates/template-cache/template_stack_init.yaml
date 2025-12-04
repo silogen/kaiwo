@@ -42,9 +42,10 @@ spec:
   templateRef: aimdummy-template
   cacheModel: true
   replicas: 1
-  routing:
-    enabled: true
-    gatewayRef:
-      name: inference-gateway
-      namespace: gateways
-    pathTemplate: "/{.metadata.namespace}/{.metadata.labels['team']}/chat"
+  runtimeOverrides:
+    routing:
+      enabled: true
+      gatewayRef:
+        name: inference-gateway
+        namespace: gateways
+      pathTemplate: "/{.metadata.namespace}/{.metadata.labels['team']}/chat"
