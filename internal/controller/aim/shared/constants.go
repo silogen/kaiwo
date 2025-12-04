@@ -70,6 +70,9 @@ const (
 	// Cache type label values.
 	LabelValueCacheTypeTemplateCache = "template-cache"
 	LabelValueCacheTypeTempService   = "temporary-service-cache"
+
+	// NodeLabelAMDGPUDeviceID is the primary node label for AMD GPU device IDs (e.g., "74a1" for MI300X)
+	NodeLabelAMDGPUDeviceID = "amd.com/gpu.device-id"
 )
 
 var (
