@@ -271,6 +271,9 @@ type ImagePlanInput struct {
 
 	// IsClusterScoped indicates if this is a cluster-scoped image.
 	IsClusterScoped bool
+
+	// ParentObject is the AIMModel or AIMClusterModel for label propagation.
+	ParentObject client.Object
 }
 
 // PlanImageResources plans the desired state for an image resource.
@@ -419,6 +422,12 @@ func PlanImageResources(ctx context.Context, input ImagePlanInput) ([]client.Obj
 	// Only create templates if we have valid metadata
 	if shouldCreateTemplates && extractedMetadata != nil && extractedMetadata.Model != nil {
 		createdTemplates := false
+		// Get runtime config for label propagation
+		var runtimeConfig *aimv1alpha1.AIMRuntimeConfigCommon
+		if observation.RuntimeConfigResolution != nil {
+			runtimeConfig = &observation.RuntimeConfigResolution.EffectiveSpec.AIMRuntimeConfigCommon
+		}
+
 		for _, deployment := range extractedMetadata.Model.RecommendedDeployments {
 			template := buildServiceTemplateFromDeployment(
 				input.ImageName,
@@ -429,6 +438,12 @@ func PlanImageResources(ctx context.Context, input ImagePlanInput) ([]client.Obj
 				input.ImageSpec.ImagePullSecrets,
 				input.ImageSpec.ServiceAccountName,
 			)
+
+			// Propagate labels from model/image to template based on runtime config
+			if input.ParentObject != nil {
+				PropagateLabels(input.ParentObject, template, runtimeConfig)
+			}
+
 			desired = append(desired, template)
 			createdTemplates = true
 		}

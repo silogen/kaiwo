@@ -69,6 +69,7 @@ func ResolveOrCreateModelFromImage(
 	runtimeConfig *aimv1alpha1.AIMRuntimeConfigSpec,
 	imagePullSecrets []corev1.LocalObjectReference,
 	serviceAccountName string,
+	parentService *aimv1alpha1.AIMService,
 ) (modelName string, scope TemplateScope, err error) {
 	if imageURI == "" {
 		return "", TemplateScopeNone, fmt.Errorf("image URI is empty")
@@ -83,7 +84,7 @@ func ResolveOrCreateModelFromImage(
 	switch len(models) {
 	case 0:
 		// No models found - create one
-		return createModelForImage(ctx, k8sClient, serviceNamespace, imageURI, runtimeConfig, imagePullSecrets, serviceAccountName)
+		return createModelForImage(ctx, k8sClient, serviceNamespace, imageURI, runtimeConfig, imagePullSecrets, serviceAccountName, parentService)
 	case 1:
 		// Single match - use it
 		return models[0].Name, models[0].Scope, nil
@@ -159,6 +160,7 @@ func createModelForImage(
 	runtimeConfig *aimv1alpha1.AIMRuntimeConfigSpec,
 	imagePullSecrets []corev1.LocalObjectReference,
 	serviceAccountName string,
+	parentService *aimv1alpha1.AIMService,
 ) (modelName string, scope TemplateScope, err error) {
 	// Generate model name from image URI
 	modelName = generateModelName(imageURI)
@@ -187,6 +189,11 @@ func createModelForImage(
 			ServiceAccountName: serviceAccountName,
 			Resources:          corev1.ResourceRequirements{},
 		},
+	}
+
+	// Propagate labels from service to auto-created model based on runtime config
+	if parentService != nil && runtimeConfig != nil {
+		PropagateLabels(parentService, model, &runtimeConfig.AIMRuntimeConfigCommon)
 	}
 
 	if err := k8sClient.Create(ctx, model); err != nil {

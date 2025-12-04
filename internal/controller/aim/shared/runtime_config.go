@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	batchv1 "k8s.io/api/batch/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -230,6 +231,8 @@ func GetPVCHeadroomPercent(spec aimv1alpha1.AIMRuntimeConfigSpec) int32 {
 //   - Label propagation is not enabled in the config
 //   - The config is nil or has no label propagation settings
 //   - The parent has no labels
+//
+// Special handling for Jobs: Labels are also propagated to the PodTemplateSpec.
 func PropagateLabels(parent, child client.Object, config *aimv1alpha1.AIMRuntimeConfigCommon) {
 	// Early exit if label propagation is not configured or not enabled
 	if config == nil || config.LabelPropagation == nil || !config.LabelPropagation.Enabled {
@@ -252,7 +255,10 @@ func PropagateLabels(parent, child client.Object, config *aimv1alpha1.AIMRuntime
 		childLabels = make(map[string]string)
 	}
 
-	// Iterate through parent labels and propagate matching ones
+	// Collect labels to propagate
+	labelsToPropagate := make(map[string]string)
+
+	// Iterate through parent labels and collect matching ones
 	for key, value := range parentLabels {
 		// Skip if child already has this label
 		if _, exists := childLabels[key]; exists {
@@ -262,10 +268,24 @@ func PropagateLabels(parent, child client.Object, config *aimv1alpha1.AIMRuntime
 		// Check if this label key matches any of the patterns
 		if matchesAnyPattern(key, config.LabelPropagation.Match) {
 			childLabels[key] = value
+			labelsToPropagate[key] = value
 		}
 	}
 
 	child.SetLabels(childLabels)
+
+	// Special handling for Jobs: also propagate to PodTemplateSpec
+	if job, ok := child.(*batchv1.Job); ok && len(labelsToPropagate) > 0 {
+		if job.Spec.Template.Labels == nil {
+			job.Spec.Template.Labels = make(map[string]string)
+		}
+		for key, value := range labelsToPropagate {
+			// Only add if not already present in pod template
+			if _, exists := job.Spec.Template.Labels[key]; !exists {
+				job.Spec.Template.Labels[key] = value
+			}
+		}
+	}
 }
 
 // matchesAnyPattern checks if a label key matches any of the provided patterns.

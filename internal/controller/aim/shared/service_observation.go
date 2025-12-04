@@ -327,7 +327,7 @@ func resolveModelNameFromService(
 		serviceAccountName := service.Spec.ServiceAccountName
 
 		// Resolve or create model from image
-		modelName, _, err := ResolveOrCreateModelFromImage(ctx, k8sClient, service.Namespace, imageURI, runtimeConfig, imagePullSecrets, serviceAccountName)
+		modelName, _, err := ResolveOrCreateModelFromImage(ctx, k8sClient, service.Namespace, imageURI, runtimeConfig, imagePullSecrets, serviceAccountName, service)
 		if err != nil {
 			return "", fmt.Errorf("failed to resolve/create model from image %q: %w", imageURI, err)
 		}

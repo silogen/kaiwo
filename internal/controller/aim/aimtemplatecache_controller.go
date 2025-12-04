@@ -115,6 +115,7 @@ type templateCacheObservation struct {
 	BestModelCaches    map[string]aimv1alpha1.AIMModelCache
 	TemplateNotFound   bool
 	TemplateError      string
+	RuntimeConfig      *aimv1alpha1.AIMRuntimeConfigCommon
 }
 
 func cmpModelCacheStatus(a aimv1alpha1.AIMModelCacheStatusEnum, b aimv1alpha1.AIMModelCacheStatusEnum) int {
@@ -171,6 +172,14 @@ func (r *AIMTemplateCacheReconciler) observe(ctx context.Context, tc *aimv1alpha
 		}
 	}
 
+	// Resolve runtime config for label propagation settings
+	if tc.Spec.RuntimeConfigName != "" {
+		resolution, err := shared.ResolveRuntimeConfig(ctx, r.Client, tc.Namespace, tc.Spec.RuntimeConfigName)
+		if err == nil && resolution != nil {
+			obs.RuntimeConfig = &resolution.EffectiveSpec.AIMRuntimeConfigCommon
+		}
+	}
+
 	return &obs, nil
 }
 
@@ -212,28 +221,30 @@ func BuildMissingModelCaches(tc *aimv1alpha1.AIMTemplateCache, obs *templateCach
 		nameWithoutDots := strings.ReplaceAll(cache.Name, ".", "-")
 		sanitizedName := baseutils.MakeRFC1123Compliant(nameWithoutDots)
 
-		caches = append(caches,
-			&aimv1alpha1.AIMModelCache{
-				TypeMeta: metav1.TypeMeta{APIVersion: "aimv1alpha1", Kind: "AIMModelCache"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      sanitizedName,
-					Namespace: tc.Namespace,
-					Labels: map[string]string{
-						"template-created":           "true", // Backward compatibility
-						shared.LabelKeyTemplateCache: tc.Name,
-						shared.LabelKeySourceModel:   shared.SanitizeLabelValue(cache.Name),
-					},
-				},
-				Spec: aimv1alpha1.AIMModelCacheSpec{
-					StorageClassName:  tc.Spec.StorageClassName,
-					SourceURI:         cache.SourceURI,
-					Size:              cache.Size,
-					Env:               tc.Spec.Env,
-					RuntimeConfigName: tc.Spec.RuntimeConfigName,
+		mc := &aimv1alpha1.AIMModelCache{
+			TypeMeta: metav1.TypeMeta{APIVersion: "aimv1alpha1", Kind: "AIMModelCache"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      sanitizedName,
+				Namespace: tc.Namespace,
+				Labels: map[string]string{
+					"template-created":           "true", // Backward compatibility
+					shared.LabelKeyTemplateCache: tc.Name,
+					shared.LabelKeySourceModel:   shared.SanitizeLabelValue(cache.Name),
 				},
 			},
-		)
+			Spec: aimv1alpha1.AIMModelCacheSpec{
+				StorageClassName:  tc.Spec.StorageClassName,
+				SourceURI:         cache.SourceURI,
+				Size:              cache.Size,
+				Env:               tc.Spec.Env,
+				RuntimeConfigName: tc.Spec.RuntimeConfigName,
+			},
+		}
 
+		// Propagate labels from template cache to model cache based on runtime config
+		shared.PropagateLabels(tc, mc, obs.RuntimeConfig)
+
+		caches = append(caches, mc)
 	}
 	return caches
 }
