@@ -458,6 +458,7 @@ func buildServiceTemplateFromDeployment(
 		ModelName:          imageName,
 		ImagePullSecrets:   imagePullSecrets,
 		ServiceAccountName: serviceAccountName,
+		ProfileId:          deployment.ProfileId,
 	}
 
 	// Set runtime parameters from deployment

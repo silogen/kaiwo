@@ -64,6 +64,8 @@ const (
 	aimServiceTemplateIndexKey = ".spec.templateRef"
 	// AIMCacheBasePath is the base directory where AIM expects to find cached models
 	AIMCacheBasePath = "/workspace/model-cache"
+	// aimServiceFinalizer is used to clean up template caches on deletion
+	aimServiceFinalizer = "aim.silogen.ai/service-cache-cleanup"
 )
 
 // AIMServiceReconciler reconciles AIMService resources into KServe InferenceServices.
@@ -98,11 +100,12 @@ func (r *AIMServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	baseutils.Debug(logger, "Reconciling AIMService", "name", service.Name, "namespace", service.Namespace)
 
 	return controllerutils.Reconcile(ctx, controllerutils.ReconcileSpec[*aimv1alpha1.AIMService, aimv1alpha1.AIMServiceStatus]{
-		Client:     r.Client,
-		Scheme:     r.Scheme,
-		Object:     &service,
-		Recorder:   r.Recorder,
-		FieldOwner: aimServiceFieldOwner,
+		Client:        r.Client,
+		Scheme:        r.Scheme,
+		Object:        &service,
+		Recorder:      r.Recorder,
+		FieldOwner:    aimServiceFieldOwner,
+		FinalizerName: aimServiceFinalizer,
 		ObserveFn: func(ctx context.Context) (any, error) {
 			obs, err := r.observe(ctx, &service)
 			if err != nil {
@@ -134,6 +137,9 @@ func (r *AIMServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			}
 			return r.projectStatus(ctx, &service, observation, errs)
 		},
+		FinalizeFn: func(ctx context.Context, obs any) error {
+			return r.cleanupTemplateCaches(ctx, &service)
+		},
 	})
 }
 
@@ -152,6 +158,7 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 		"candidateCount", selectionStatus.CandidateCount)
 
 	obs := &shared.ServiceObservation{
+		InferenceService:          &servingv1beta1.InferenceService{},
 		TemplateName:              resolution.FinalName,
 		BaseTemplateName:          resolution.BaseName,
 		Scope:                     shared.TemplateScopeNone,
@@ -222,6 +229,20 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 			"serviceName", service.Name)
 		// Use the same naming function that we use when creating the InferenceService
 		isvcName := shared.GenerateInferenceServiceName(service.Name, service.Namespace)
+
+		// Check if the InferenceService exists
+		inferenceService := &servingv1beta1.InferenceService{}
+		err := r.Get(ctx, client.ObjectKey{
+			Namespace: service.Namespace,
+			Name:      isvcName,
+		}, inferenceService)
+		if err != nil && !apierrors.IsNotFound(err) {
+			return nil, err
+		}
+		if err == nil {
+			obs.InferenceService = inferenceService
+		}
+
 		obs.InferenceServicePodImageError = shared.CheckInferenceServicePodImagePullStatus(
 			ctx, r.Client, isvcName, service.Namespace)
 		if obs.InferenceServicePodImageError != nil {
@@ -307,6 +328,9 @@ func (r *AIMServiceReconciler) planTemplateCache(ctx context.Context, logger log
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      obs.TemplateName,
 				Namespace: service.Namespace,
+				Labels: map[string]string{
+					shared.LabelKeyServiceName: shared.SanitizeLabelValue(service.Name),
+				},
 			},
 			Spec: aimv1alpha1.AIMTemplateCacheSpec{
 				TemplateRef:      obs.TemplateName,
@@ -437,7 +461,7 @@ func (r *AIMServiceReconciler) planInferenceServiceAndRoute(logger logr.Logger, 
 	serviceReady := modelsReady && (!service.Spec.CacheModel || templateCacheReady) && (templateCacheReady || servicePVC != nil)
 
 	// Only create InferenceService if we have a model source and storage
-	if serviceReady {
+	if serviceReady && obs.InferenceService != nil {
 		inferenceService := shared.BuildInferenceService(serviceState, ownerRef)
 
 		// Set AIM_CACHE_PATH env var for all services
@@ -685,6 +709,40 @@ func (r *AIMServiceReconciler) projectStatus(
 
 	// Delegate status projection to shared function
 	shared.ProjectServiceStatus(service, obs, inferenceService, httpRoute, errs)
+	return nil
+}
+
+// cleanupTemplateCaches deletes AIMTemplateCaches created by this service that are not Available
+func (r *AIMServiceReconciler) cleanupTemplateCaches(ctx context.Context, service *aimv1alpha1.AIMService) error {
+	logger := log.FromContext(ctx)
+
+	// List all AIMTemplateCaches created by this AIMService
+	var templateCaches aimv1alpha1.AIMTemplateCacheList
+	if err := r.List(ctx, &templateCaches,
+		client.InNamespace(service.Namespace),
+		client.MatchingLabels{
+			shared.LabelKeyServiceName: shared.SanitizeLabelValue(service.Name),
+		},
+	); err != nil {
+		return fmt.Errorf("failed to list template caches for cleanup: %w", err)
+	}
+
+	// Delete only the ones that are not Available
+	var errs []error
+	for _, tc := range templateCaches.Items {
+		if tc.Status.Status != aimv1alpha1.AIMTemplateCacheStatusAvailable {
+			if err := r.Delete(ctx, &tc); err != nil && !apierrors.IsNotFound(err) {
+				errs = append(errs, fmt.Errorf("failed to delete template cache %s: %w", tc.Name, err))
+			} else {
+				logger.Info("Deleted non-available template cache during service cleanup",
+					"templateCache", tc.Name, "service", service.Name)
+			}
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("cleanup errors: %v", errs)
+	}
 	return nil
 }
 

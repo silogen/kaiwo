@@ -54,6 +54,7 @@ type profileMetadata struct {
 	Precision string `json:"precision"`
 	GPUCount  int32  `json:"gpu_count"`
 	Metric    string `json:"metric"`
+	Type      string `json:"type"`
 }
 
 // discoveryModelResult represents a model in the raw discovery output
@@ -76,6 +77,12 @@ func main() {
 	precision := getEnv("AIM_PRECISION", "fp8")
 	gpuModel := getEnv("AIM_GPU_MODEL", "MI300X")
 
+	profileType := "optimized"
+
+	if profileId := os.Getenv("AIM_PROFILE_ID"); profileId != "" {
+		profileType = "unoptimized"
+	}
+
 	qwen := discoveryModelResult{Name: "HuggingFaceTB/SmolLM2-135M", Source: "hf://HuggingFaceTB/SmolLM2-135M", SizeGB: 0.5}
 	fakeprofilemeta := profileMetadata{
 		Engine:    "vllm",
@@ -83,6 +90,7 @@ func main() {
 		Precision: precision,
 		GPUCount:  0,
 		Metric:    metric,
+		Type:      profileType,
 	}
 	engine_args := map[string]any{"distributed_executor_backend": "mp", "gpu-memory-utilization": 0.95, "tensor-parallel-size": 1}
 	fakeprofileresult := discoveryProfileResult{

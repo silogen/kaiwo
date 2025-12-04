@@ -69,6 +69,7 @@ type profileMetadata struct {
 	Precision string `json:"precision"`
 	GPUCount  int32  `json:"gpu_count"`
 	Metric    string `json:"metric"`
+	Type      string `json:"type"`
 }
 
 // discoveryModelResult represents a model in the raw discovery output
@@ -95,6 +96,7 @@ func convertToAIMProfile(raw discoveryProfileResult) (*aimv1alpha1.AIMProfile, e
 			GPUCount:  raw.Metadata.GPUCount,
 			Metric:    aimv1alpha1.AIMMetric(raw.Metadata.Metric),
 			Precision: aimv1alpha1.AIMPrecision(raw.Metadata.Precision),
+			Type:      aimv1alpha1.AIMProfileType(raw.Metadata.Type),
 		},
 	}, nil
 }
@@ -243,6 +245,14 @@ func BuildDiscoveryJob(spec DiscoveryJobSpec) *batchv1.Job {
 				Value: strconv.Itoa(int(spec.TemplateSpec.GpuSelector.Count)),
 			})
 		}
+	}
+
+	// If a profile ID is set, propagate it
+	if profileId := spec.TemplateSpec.ProfileId; profileId != "" {
+		env = append(env, corev1.EnvVar{
+			Name:  "AIM_PROFILE_ID",
+			Value: profileId,
+		})
 	}
 
 	// Security context for pod security standards compliance

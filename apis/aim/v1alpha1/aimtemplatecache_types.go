@@ -102,6 +102,10 @@ type AIMTemplateCacheStatus struct {
 	// AIMServiceTemplate or cluster-scoped AIMClusterServiceTemplate.
 	// Values: "AIMServiceTemplate", "AIMClusterServiceTemplate"
 	ResolvedTemplateKind string `json:"resolvedTemplateKind,omitempty"`
+
+	// ModelCaches maps model names to their resolved AIMModelCache resources.
+	// +optional
+	ModelCaches map[string]AIMResolvedModelCache `json:"modelCaches,omitempty"`
 }
 
 // Condition types for AIMTemplateCache

@@ -301,6 +301,16 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 		labels[k] = v
 	}
 
+	env := helpers.CopyEnvVars(serviceState.Env)
+
+	// If a profile ID is set, propagate it
+	if profileId := serviceState.Template.SpecCommon.ProfileId; profileId != "" {
+		env = append(env, corev1.EnvVar{
+			Name:  "AIM_PROFILE_ID",
+			Value: profileId,
+		})
+	}
+
 	inferenceService := &servingv1beta1.InferenceService{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: servingv1beta1.SchemeGroupVersion.String(),
@@ -328,7 +338,7 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 					Runtime: baseutils.Pointer(serviceState.RuntimeName),
 					PredictorExtensionSpec: servingv1beta1.PredictorExtensionSpec{
 						Container: corev1.Container{
-							Env: helpers.CopyEnvVars(serviceState.Env),
+							Env: env,
 						},
 					},
 				},
@@ -351,6 +361,9 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 		inferenceService.Spec.Predictor.MinReplicas = serviceState.Replicas
 		inferenceService.Spec.Predictor.MaxReplicas = *serviceState.Replicas
 	}
+
+	// Add GPU node selector based on template GPU model
+	addGPUNodeSelector(inferenceService, serviceState.Template)
 
 	return inferenceService
 }
@@ -453,6 +466,65 @@ func quantityGi(value int64) resource.Quantity {
 		return resource.Quantity{}
 	}
 	return resource.MustParse(fmt.Sprintf("%dGi", value))
+}
+
+// addGPUNodeSelector adds node selector based on GPU model from template.
+// Uses AMD GPU device ID labels to ensure the pod lands on compatible nodes.
+// Supports multiple device IDs per GPU model (e.g., MI300X has 74a1, 74a9, 74b5, 74bd).
+// Uses node affinity with RequiredDuringSchedulingIgnoredDuringExecution for strict placement.
+func addGPUNodeSelector(isvc *servingv1beta1.InferenceService, template aimstate.TemplateState) {
+	if template.Status == nil {
+		return
+	}
+
+	gpuModel := template.Status.Profile.Metadata.GPU
+	if gpuModel == "" {
+		return
+	}
+
+	// Get all device IDs that match this GPU model
+	deviceIDs := GetAMDDeviceIDsForModel(gpuModel)
+	if len(deviceIDs) == 0 {
+		// Not an AMD GPU or unknown model - skip node selector
+		return
+	}
+
+	// Always use node affinity (handles both single and multiple device IDs uniformly)
+	addGPUNodeAffinity(isvc, deviceIDs)
+}
+
+// addGPUNodeAffinity adds node affinity rules to match any of the given AMD GPU device IDs.
+// Uses RequiredDuringSchedulingIgnoredDuringExecution for strict placement requirements.
+// Works for both single device IDs (e.g., MI300A) and multiple device IDs (e.g., MI300X).
+func addGPUNodeAffinity(isvc *servingv1beta1.InferenceService, deviceIDs []string) {
+	// Build match expression for device ID label
+	var matchExpressions []corev1.NodeSelectorRequirement
+
+	// Match against primary label (amd.com/gpu.device-id) with In operator
+	// This allows matching any of the provided device IDs
+	matchExpressions = append(matchExpressions, corev1.NodeSelectorRequirement{
+		Key:      NodeLabelAMDGPUDeviceID,
+		Operator: corev1.NodeSelectorOpIn,
+		Values:   deviceIDs,
+	})
+
+	// Initialize affinity if not present
+	if isvc.Spec.Predictor.Affinity == nil {
+		isvc.Spec.Predictor.Affinity = &corev1.Affinity{}
+	}
+	if isvc.Spec.Predictor.Affinity.NodeAffinity == nil {
+		isvc.Spec.Predictor.Affinity.NodeAffinity = &corev1.NodeAffinity{}
+	}
+	if isvc.Spec.Predictor.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil {
+		isvc.Spec.Predictor.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution = &corev1.NodeSelector{}
+	}
+
+	// Set node selector term with match expressions (replace, not append, to avoid growing on each reconcile)
+	isvc.Spec.Predictor.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms = []corev1.NodeSelectorTerm{
+		{
+			MatchExpressions: matchExpressions,
+		},
+	}
 }
 
 // GetClusterServingRuntime fetches a ClusterServingRuntime by name

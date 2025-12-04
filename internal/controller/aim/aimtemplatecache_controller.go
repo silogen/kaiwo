@@ -27,7 +27,6 @@ package aim
 import (
 	"context"
 	"fmt"
-	"maps"
 	"slices"
 	"strings"
 
@@ -59,6 +58,8 @@ type AIMTemplateCacheReconciler struct {
 	Clientset kubernetes.Interface
 }
 
+const templateCacheFinalizer = "aim.silogen.ai/template-cache-cleanup"
+
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimtemplatecaches,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimtemplatecaches/status,verbs=get;update;patch
 
@@ -70,10 +71,11 @@ func (r *AIMTemplateCacheReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	return controllerutils.Reconcile(ctx, controllerutils.ReconcileSpec[*aimv1alpha1.AIMTemplateCache, aimv1alpha1.AIMTemplateCacheStatus]{
-		Client:   r.Client,
-		Scheme:   r.Scheme,
-		Object:   &tc,
-		Recorder: r.Recorder,
+		Client:        r.Client,
+		Scheme:        r.Scheme,
+		Object:        &tc,
+		Recorder:      r.Recorder,
+		FinalizerName: templateCacheFinalizer,
 		ObserveFn: func(ctx context.Context) (any, error) {
 			return r.observe(ctx, &tc)
 		},
@@ -100,7 +102,9 @@ func (r *AIMTemplateCacheReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 			return r.projectStatus(ctx, &tc, o, errs)
 		},
-		FinalizeFn: nil,
+		FinalizeFn: func(ctx context.Context, obs any) error { // Add this
+			return r.cleanupFailedModelCaches(ctx, &tc)
+		},
 	})
 }
 
@@ -108,7 +112,7 @@ func (r *AIMTemplateCacheReconciler) Reconcile(ctx context.Context, req ctrl.Req
 type templateCacheObservation struct {
 	AllCachesAvailable bool
 	MissingCaches      []aimv1alpha1.AIMModelSource
-	CacheStatus        map[string]aimv1alpha1.AIMModelCacheStatusEnum
+	BestModelCaches    map[string]aimv1alpha1.AIMModelCache
 	TemplateNotFound   bool
 	TemplateError      string
 }
@@ -128,7 +132,7 @@ func cmpModelCacheStatus(a aimv1alpha1.AIMModelCacheStatusEnum, b aimv1alpha1.AI
 
 func (r *AIMTemplateCacheReconciler) observe(ctx context.Context, tc *aimv1alpha1.AIMTemplateCache) (*templateCacheObservation, error) {
 	var obs templateCacheObservation
-	obs.CacheStatus = map[string]aimv1alpha1.AIMModelCacheStatusEnum{}
+	obs.BestModelCaches = map[string]aimv1alpha1.AIMModelCache{}
 
 	// Resolve the template reference to get model sources
 	modelSources, err := r.getModelSourcesFromTemplate(ctx, tc)
@@ -147,21 +151,24 @@ func (r *AIMTemplateCacheReconciler) observe(ctx context.Context, tc *aimv1alpha
 
 	// Loop through model sources from the template and check with what's available in our namespace
 	for _, model := range modelSources {
-		bestStatus := aimv1alpha1.AIMModelCacheStatusPending
+		found := false
+		bestStatusModelCache := aimv1alpha1.AIMModelCache{}
 		for _, cached := range caches.Items {
 			// ModelCache is a match if it has the same SourceURI and a StorageClass matching our config
 			if cached.Spec.SourceURI == model.SourceURI &&
 				(tc.Spec.StorageClassName == "" || tc.Spec.StorageClassName == cached.Spec.StorageClassName) {
-				if cmpModelCacheStatus(bestStatus, cached.Status.Status) < 0 {
-					bestStatus = cached.Status.Status
+				if cmpModelCacheStatus(bestStatusModelCache.Status.Status, cached.Status.Status) < 0 {
+					bestStatusModelCache = cached
+					found = true
 				}
 			}
 		}
-		obs.CacheStatus[model.Name] = bestStatus
-		if bestStatus == aimv1alpha1.AIMModelCacheStatusPending {
+		if found {
+			obs.BestModelCaches[model.Name] = bestStatusModelCache
+		} else {
+			// obs.BestModelCaches[model.Name] = aimv1alpha1.AIMModelCache{}
 			obs.MissingCaches = append(obs.MissingCaches, model)
 		}
-
 	}
 
 	return &obs, nil
@@ -295,9 +302,28 @@ func (r *AIMTemplateCacheReconciler) projectStatus(_ context.Context, tc *aimv1a
 		meta.SetStatusCondition(&tc.Status.Conditions, cond)
 	}
 
-	statusValues := slices.Collect(maps.Values(obs.CacheStatus))
+	statusValues := []aimv1alpha1.AIMModelCacheStatusEnum{}
+	// Populate ModelCaches from observation and store status values in statusValues
+	if obs != nil && len(obs.BestModelCaches) > 0 {
+		tc.Status.ModelCaches = make(map[string]aimv1alpha1.AIMResolvedModelCache, len(obs.BestModelCaches))
+		for modelName, mc := range obs.BestModelCaches {
+			statusValues = append(statusValues, mc.Status.Status)
+
+			tc.Status.ModelCaches[mc.Name] = aimv1alpha1.AIMResolvedModelCache{
+				UID:                   string(mc.UID),
+				Name:                  mc.Name,
+				Model:                 modelName,
+				Status:                mc.Status.Status,
+				PersistentVolumeClaim: mc.Status.PersistentVolumeClaim,
+			}
+		}
+	} else {
+		tc.Status.ModelCaches = nil
+	}
+
+	// Set combined status based on the worst status of the model caches
 	if len(statusValues) > 0 {
-		worstCacheStatus := slices.MaxFunc(statusValues, cmpModelCacheStatus)
+		worstCacheStatus := slices.MinFunc(statusValues, cmpModelCacheStatus)
 		tc.Status.Status = aimv1alpha1.AIMTemplateCacheStatusEnum(worstCacheStatus)
 	} else {
 		// If there are no caches to track, mark as Pending
@@ -309,6 +335,37 @@ func (r *AIMTemplateCacheReconciler) projectStatus(_ context.Context, tc *aimv1a
 	}
 
 	return err
+}
+
+func (r *AIMTemplateCacheReconciler) cleanupFailedModelCaches(ctx context.Context, tc *aimv1alpha1.AIMTemplateCache) error {
+	// List all AIMModelCaches created by this AIMTemplateCache
+	var modelCaches aimv1alpha1.AIMModelCacheList
+	if err := r.List(ctx, &modelCaches,
+		client.InNamespace(tc.Namespace),
+		client.MatchingLabels{
+			shared.LabelKeyTemplateCache: tc.Name,
+		},
+	); err != nil {
+		return fmt.Errorf("failed to list model caches for cleanup: %w", err)
+	}
+
+	// Delete only the ones that are not Available
+	var errs []error
+	for _, mc := range modelCaches.Items {
+		if mc.Status.Status != aimv1alpha1.AIMModelCacheStatusAvailable {
+			if err := r.Delete(ctx, &mc); err != nil && !apierrors.IsNotFound(err) {
+				errs = append(errs, fmt.Errorf("failed to delete model cache %s: %w", mc.Name, err))
+			} else {
+				ctrl.LoggerFrom(ctx).Info("Deleted failed model cache during template cache cleanup",
+					"modelCache", mc.Name, "templateCache", tc.Name)
+			}
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("cleanup errors: %v", errs)
+	}
+	return nil
 }
 
 func requestsFromTemplateCaches(templateCaches []aimv1alpha1.AIMTemplateCache) []reconcile.Request {

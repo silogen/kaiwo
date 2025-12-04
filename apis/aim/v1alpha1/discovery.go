@@ -114,6 +114,9 @@ type AIMDiscoveryProfileMetadata struct {
 	// Precision specifies the numeric precision used in this profile (e.g., "fp16", "fp8").
 	// +optional
 	Precision AIMPrecision `json:"precision,omitempty"`
+
+	// Type specifies the optimization level of this profile
+	Type AIMProfileType `json:"type,omitempty"`
 }
 
 // AIMModelSource describes a model artifact that must be downloaded for inference.
