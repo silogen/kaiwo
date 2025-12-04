@@ -93,9 +93,12 @@ spec:
                                 Defines which metrics to collect and how to query them.
                               properties:
                                 backend:
+                                  default: opentelemetry
                                   description: |-
                                     Backend defines the metrics backend to use.
-                                    Example: "opentelemetry" for OpenTelemetry-based metrics.
+                                    If not specified, defaults to "opentelemetry".
+                                  enum:
+                                  - opentelemetry
                                   type: string
                                 metricNames:
                                   description: |-

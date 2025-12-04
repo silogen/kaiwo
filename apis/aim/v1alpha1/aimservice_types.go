@@ -236,7 +236,9 @@ type AIMServicePodMetricSource struct {
 // Supports multiple metrics backends including OpenTelemetry, Prometheus, etc.
 type AIMServicePodMetric struct {
 	// Backend defines the metrics backend to use.
-	// Example: "opentelemetry" for OpenTelemetry-based metrics.
+	// If not specified, defaults to "opentelemetry".
+	// +kubebuilder:validation:Enum=opentelemetry
+	// +kubebuilder:default=opentelemetry
 	// +optional
 	Backend string `json:"backend,omitempty"`
 

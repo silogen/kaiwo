@@ -1081,7 +1081,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `backend` _string_ | Backend defines the metrics backend to use.<br />Example: "opentelemetry" for OpenTelemetry-based metrics. |  |  |
+| `backend` _string_ | Backend defines the metrics backend to use.<br />If not specified, defaults to "opentelemetry". | opentelemetry | Enum: [opentelemetry] <br /> |
 | `serverAddress` _string_ | ServerAddress specifies the address of the metrics backend server.<br />If not specified, defaults to "keda-otel-scaler.keda.svc:4317" for OpenTelemetry backend. |  |  |
 | `metricNames` _string array_ | MetricNames specifies which metrics to collect from pods and send to ServerAddress.<br />Example: ["vllm:num_requests_running"] |  |  |
 | `query` _string_ | Query specifies the query to run to retrieve metrics from the backend.<br />The query syntax depends on the backend being used.<br />Example: "vllm:num_requests_running" for OpenTelemetry. |  |  |
