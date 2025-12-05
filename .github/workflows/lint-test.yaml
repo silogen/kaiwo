@@ -3,8 +3,12 @@ name: lint-test-and-e2e
 
 on:
   push:
+    paths-ignore:
+      - 'docs/**'
     branches: [main, master]
-  pull_request: {}
+  pull_request:
+    paths-ignore:
+      - 'docs/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
