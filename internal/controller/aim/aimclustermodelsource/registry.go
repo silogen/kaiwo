@@ -498,9 +498,8 @@ func (rc *RegistryClient) fetchGitHubPackages(ctx context.Context, token, org st
 		}
 
 		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
 			_ = resp.Body.Close()
-			return nil, fmt.Errorf("unexpected status %d from GitHub API: %s", resp.StatusCode, string(body))
+			return nil, fmt.Errorf("unexpected status %d from GitHub API", resp.StatusCode)
 		}
 
 		var result []struct {

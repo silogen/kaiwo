@@ -194,6 +194,82 @@ spec:
 
 Secrets must exist in the operator namespace (typically `kaiwo-system`).
 
+#### GitHub Container Registry (GHCR) Authentication
+
+For GitHub Container Registry, use a GitHub Personal Access Token (PAT) with the minimal required scope:
+
+**Required Scope:**
+- `read:packages` - Read access to container packages
+
+**Recommended: Use Fine-Grained Personal Access Tokens**
+
+1. Create a fine-grained PAT at: https://github.com/settings/tokens
+2. Set repository access or organization permissions
+3. Grant only `read:packages` permission
+4. Set expiration date
+5. Create the secret:
+
+```bash
+kubectl create secret docker-registry ghcr-secret \
+  --docker-server=ghcr.io \
+  --docker-username=YOUR_GITHUB_USERNAME \
+  --docker-password=YOUR_GITHUB_PAT \
+  --namespace=kaiwo-system
+```
+
+**Security Best Practices:**
+- Use fine-grained PATs instead of classic PATs when possible
+- Grant minimal permissions (`read:packages` only)
+- Set expiration dates on tokens
+- Rotate tokens regularly
+- Use separate tokens for different environments (dev/staging/prod)
+- Enable encryption at rest for Kubernetes Secrets in production
+- Limit Secret access via RBAC to only the operator namespace
+
+**Token Scopes to Avoid:**
+- ❌ `repo` - Grants read/write access to repositories (too broad)
+- ❌ `write:packages` - Write access not needed for discovery
+- ❌ `admin:org` - Organization admin access (unnecessary)
+- ❌ `delete:packages` - Delete permission (unnecessary risk)
+
+### Max Models Limit
+
+Control the maximum number of models created to prevent runaway resource creation:
+
+```yaml
+spec:
+  maxModels: 100  # default: 100, range: 1-10000
+  filters:
+    - image: org/very-broad-pattern-*
+```
+
+When the limit is reached:
+
+- No new models are created, even if more matching images exist
+- Existing models are never deleted
+- Status shows `modelsLimitReached: true`
+- `availableModels` shows total images found vs `discoveredModels` created
+
+**Use Cases:**
+
+- Prevent accidental model explosion from overly broad filters
+- Enforce resource quotas in multi-tenant environments
+- Limit cluster resource consumption during initial sync
+
+**Example Status:**
+
+```yaml
+status:
+  status: Ready
+  discoveredModels: 100
+  availableModels: 250
+  modelsLimitReached: true
+  conditions:
+    - type: MaxModelsLimitReached
+      status: "True"
+      message: "Model creation limit reached (100 models created). 150 available images not created as models."
+```
+
 ## Status
 
 The status field tracks sync progress and discovered models:
@@ -223,11 +299,12 @@ kubectl get aimclustermodelsource silogen-models -o yaml
 
 Key status fields:
 
-- `status`: Overall state
+- `status`: Overall state (Ready, Degraded, Failed, etc.)
 - `discoveredModels`: Count of AIMClusterModel resources created
+- `availableModels`: Total count of images matching filters in registry
+- `modelsLimitReached`: Boolean indicating if maxModels limit was reached
 - `lastSyncTime`: Timestamp of last successful sync
-- `discoveredImages`: Summary of recently discovered images (limited to 50)
-- `conditions`: Detailed conditions including Ready and Degraded
+- `conditions`: Detailed conditions including Ready, Degraded, and MaxModelsLimitReached
 
 ## Examples
 
