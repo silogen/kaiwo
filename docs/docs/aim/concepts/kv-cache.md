@@ -59,7 +59,7 @@ The KV cache implementation in Kaiwo consists of two key components:
 ### Creation Patterns
 
 **Pattern 1: AIMService Creates KV Cache**
-When an `AIMService` specifies `kvCache.type` without a `name`, a new `AIMKVCache` resource is automatically created with the name `kvcache-{service-name}`.
+When an `AIMService` specifies `kvCache.type` without a `name`, a new `AIMKVCache` resource is automatically created with the name `kvcache-{namespace}`.
 
 **Pattern 2: Shared KV Cache**
 Multiple `AIMService` resources can reference the same `AIMKVCache` by specifying `kvCache.name`. This enables cache sharing across multiple inference endpoints.
