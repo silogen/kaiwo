@@ -78,6 +78,7 @@ type AIMClusterModelSourceSpec struct {
 	// Each filter specifies an image pattern with optional version constraints and exclusions.
 	// Multiple filters are combined with OR logic (any match includes the image).
 	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=100
 	Filters []ModelSourceFilter `json:"filters"`
 
 	// SyncInterval defines how often to sync with the registry.
@@ -91,8 +92,25 @@ type AIMClusterModelSourceSpec struct {
 	// Individual filters can override this with their own version constraints.
 	// Constraints use semver syntax: >=1.0.0, <2.0.0, ~1.2.0, ^1.0.0, etc.
 	// Non-semver tags (e.g., "latest", "dev") are silently skipped.
+	//
+	// Version ranges work on all registries (including ghcr.io, gcr.io) when combined with
+	// exact repository names (no wildcards). The controller uses the Tags List API to fetch
+	// all tags for the repository and filters them by the semver constraint.
+	//
+	// Example: registry=ghcr.io, filters=[{image: "silogen/aim-llama"}], versions=[">=1.0.0"]
+	// will fetch all tags from ghcr.io/silogen/aim-llama and include only those >=1.0.0.
 	// +optional
 	Versions []string `json:"versions,omitempty"`
+
+	// MaxModels is the maximum number of AIMClusterModel resources to create from this source.
+	// Once this limit is reached, no new models will be created, even if more matching images are discovered.
+	// Existing models are never deleted.
+	// This prevents runaway model creation from overly broad filters.
+	// +kubebuilder:default=100
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=10000
+	// +optional
+	MaxModels *int `json:"maxModels,omitempty"`
 }
 
 // ModelSourceFilter defines a pattern for discovering images.
@@ -114,6 +132,7 @@ type ModelSourceFilter struct {
 	// registry will match. When a tag is included, it takes precedence over the versions field.
 	//
 	// Wildcard: * matches any sequence of characters.
+	// +kubebuilder:validation:MaxLength=512
 	Image string `json:"image"`
 
 	// Exclude lists specific repository names to skip (exact match on repository name only, not registry).
@@ -159,10 +178,15 @@ type AIMClusterModelSourceStatus struct {
 	// +optional
 	DiscoveredModels int `json:"discoveredModels,omitempty"`
 
-	// DiscoveredImages provides a summary of recently discovered images.
-	// Limited to avoid excessive status size. Typically shows the most recent 50 images.
+	// AvailableModels is the total count of images discovered in the registry that match the filters.
+	// This may be higher than DiscoveredModels if maxModels limit was reached.
 	// +optional
-	DiscoveredImages []DiscoveredImageInfo `json:"discoveredImages,omitempty"`
+	AvailableModels int `json:"availableModels,omitempty"`
+
+	// ModelsLimitReached indicates whether the maxModels limit has been reached.
+	// When true, no new models will be created even if more matching images are discovered.
+	// +optional
+	ModelsLimitReached bool `json:"modelsLimitReached,omitempty"`
 
 	// Conditions represent the latest available observations of the source's state.
 	// Standard conditions: Ready, Syncing, RegistryReachable.
@@ -176,24 +200,17 @@ type AIMClusterModelSourceStatus struct {
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
-// DiscoveredImageInfo provides information about a discovered image.
-type DiscoveredImageInfo struct {
-	// Image is the full image reference (repository:tag).
-	Image string `json:"image"`
-
-	// Tag is the image tag.
-	Tag string `json:"tag"`
-
-	// ModelName is the name of the generated AIMClusterModel resource.
-	ModelName string `json:"modelName"`
-
-	// CreatedAt is when this image was first discovered.
-	CreatedAt metav1.Time `json:"createdAt"`
-}
-
 // GetStatus returns a pointer to the status for use with the controller pipeline.
 func (s *AIMClusterModelSource) GetStatus() *AIMClusterModelSourceStatus {
 	return &s.Status
+}
+
+// GetMaxModels returns the maximum number of models, defaulting to 100 if not set.
+func (s *AIMClusterModelSource) GetMaxModels() int {
+	if s.Spec.MaxModels == nil {
+		return 100
+	}
+	return *s.Spec.MaxModels
 }
 
 // GetConditions returns the status conditions.

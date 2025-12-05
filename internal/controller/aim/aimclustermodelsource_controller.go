@@ -27,6 +27,7 @@ package aim
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -56,23 +57,30 @@ type ClusterModelSourceReconciler struct {
 	Clientset kubernetes.Interface
 }
 
+// FilterResult captures the result of processing a single filter.
+type FilterResult struct {
+	Filter aimv1alpha1.ModelSourceFilter
+	Images []aimclustermodelsource.RegistryImage
+	Error  error // Error encountered while processing this filter
+}
+
 // ClusterModelSourceObservation contains interpreted state from fetched data.
 type ClusterModelSourceObservation struct {
-	filteredImages    []aimclustermodelsource.RegistryImage   // After all filters applied
-	newImages         []aimclustermodelsource.RegistryImage   // Need model creation
-	existingByURI     map[string]*aimv1alpha1.AIMClusterModel // Lookup map
-	registryReachable bool
-	registryError     error
-	totalScanned      int
-	totalFiltered     int
-	runtimeConfig     *aimv1alpha1.AIMRuntimeConfigCommon // For label propagation
+	filteredImages   []aimclustermodelsource.RegistryImage   // After all filters applied
+	newImages        []aimclustermodelsource.RegistryImage   // Need model creation
+	existingByURI    map[string]*aimv1alpha1.AIMClusterModel // Lookup map
+	filterResults    []FilterResult                          // Per-filter results
+	failedFilters    int                                     // Count of filters that failed
+	succeededFilters int                                     // Count of filters that succeeded
+	totalScanned     int
+	totalFiltered    int
+	runtimeConfig    *aimv1alpha1.AIMRuntimeConfigCommon // For label propagation
 }
 
 // ClusterModelSourceFetchResult contains data gathered during the Fetch phase.
 type ClusterModelSourceFetchResult struct {
 	existingModels []aimv1alpha1.AIMClusterModel
-	registryImages []aimclustermodelsource.RegistryImage
-	registryError  error // Non-fatal, captured for status
+	filterResults  []FilterResult // Per-filter results with errors
 }
 
 // +kubebuilder:rbac:groups=aim.silogen.ai,resources=aimclustermodelsources,verbs=get;list;watch;create;update;patch;delete
@@ -124,8 +132,11 @@ func (r *ClusterModelSourceReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 			r.Project(&source.Status, observation)
 
-			if observation.registryError != nil {
-				logger.Error(observation.registryError, "Registry interaction failed")
+			// Log any filter errors
+			for _, result := range observation.filterResults {
+				if result.Error != nil {
+					logger.Error(result.Error, "Filter failed", "filter", result.Filter.Image)
+				}
 			}
 
 			return nil
@@ -154,6 +165,7 @@ func (r *ClusterModelSourceReconciler) observe(
 ) ClusterModelSourceObservation {
 	obs := ClusterModelSourceObservation{
 		existingByURI: make(map[string]*aimv1alpha1.AIMClusterModel),
+		filterResults: fetched.filterResults,
 	}
 
 	// Build lookup map of existing models by image URI
@@ -162,25 +174,30 @@ func (r *ClusterModelSourceReconciler) observe(
 		obs.existingByURI[model.Spec.Image] = model
 	}
 
-	// Handle registry errors
-	if fetched.registryError != nil {
-		obs.registryReachable = false
-		obs.registryError = fetched.registryError
-		return obs
-	}
+	// Get the max models limit
+	maxModels := source.GetMaxModels()
+	existingCount := len(fetched.existingModels)
 
-	obs.registryReachable = true
-	obs.totalScanned = len(fetched.registryImages)
+	// Process filter results
+	for _, result := range fetched.filterResults {
+		if result.Error != nil {
+			obs.failedFilters++
+		} else {
+			obs.succeededFilters++
+			obs.totalScanned += len(result.Images)
 
-	// Apply filters to registry images
-	for _, img := range fetched.registryImages {
-		if aimclustermodelsource.MatchesFilters(img, source.Spec.Filters, source.Spec.Versions) {
-			obs.filteredImages = append(obs.filteredImages, img)
+			// Collect all successful images
+			for _, img := range result.Images {
+				obs.filteredImages = append(obs.filteredImages, img)
 
-			// Check if model already exists
-			imageURI := img.ToImageURI()
-			if _, exists := obs.existingByURI[imageURI]; !exists {
-				obs.newImages = append(obs.newImages, img)
+				// Check if model already exists
+				imageURI := img.ToImageURI()
+				if _, exists := obs.existingByURI[imageURI]; !exists {
+					// Only add to newImages if we haven't hit the limit
+					if existingCount+len(obs.newImages) < maxModels {
+						obs.newImages = append(obs.newImages, img)
+					}
+				}
 			}
 		}
 	}
@@ -196,7 +213,8 @@ func (r *ClusterModelSourceReconciler) observe(
 }
 
 // Fetch gathers all data needed for reconciliation.
-// This includes existing AIMClusterModel resources and available images from the registry.
+// This includes existing AIMClusterModel resources and images from the registry per filter.
+// Each filter is processed independently - failures in one filter don't affect others.
 func (r *ClusterModelSourceReconciler) Fetch(
 	ctx context.Context,
 	c client.Client,
@@ -213,25 +231,62 @@ func (r *ClusterModelSourceReconciler) Fetch(
 	}
 	result.existingModels = modelList.Items
 
-	// 2. Check if we can skip registry queries (all filters are exact image references)
-	staticImages := aimclustermodelsource.ExtractStaticImages(source.Spec.Filters)
-	if len(staticImages) > 0 && len(staticImages) == len(source.Spec.Filters) {
-		// All filters are exact references - no registry query needed
-		result.registryImages = staticImages
-		return result, nil
-	}
-
-	// 3. Query registry for available images
+	// 2. Process each filter independently
 	registryClient := aimclustermodelsource.NewRegistryClient(r.Clientset, shared.GetOperatorNamespace())
-	images, err := registryClient.ListImages(ctx, source.Spec)
-	if err != nil {
-		// Capture error but don't fail - will be handled in Observe
-		result.registryError = err
-	} else {
-		result.registryImages = images
+
+	for _, filter := range source.Spec.Filters {
+		filterResult := r.fetchFilter(ctx, registryClient, source.Spec, filter)
+		result.filterResults = append(result.filterResults, filterResult)
 	}
 
 	return result, nil
+}
+
+// fetchFilter processes a single filter and returns its result.
+// This tries multiple strategies in order and captures errors appropriately.
+func (r *ClusterModelSourceReconciler) fetchFilter(
+	ctx context.Context,
+	registryClient *aimclustermodelsource.RegistryClient,
+	spec aimv1alpha1.AIMClusterModelSourceSpec,
+	filter aimv1alpha1.ModelSourceFilter,
+) FilterResult {
+	result := FilterResult{Filter: filter}
+
+	// Create a temporary spec with just this one filter for processing
+	singleFilterSpec := spec
+	singleFilterSpec.Filters = []aimv1alpha1.ModelSourceFilter{filter}
+
+	// Strategy 1: Try static images (exact versions, no registry query needed)
+	staticImages := aimclustermodelsource.ExtractStaticImages(singleFilterSpec)
+	if len(staticImages) > 0 {
+		result.Images = staticImages
+		return result
+	}
+
+	// Strategy 2: Try tags list API (works for exact repos with version ranges)
+	tagsListImages := aimclustermodelsource.FetchImagesUsingTagsList(ctx, registryClient, singleFilterSpec)
+	if len(tagsListImages) > 0 {
+		result.Images = tagsListImages
+		return result
+	}
+
+	// Strategy 3: Try catalog API (works for wildcards on Docker Hub/Harbor/etc)
+	catalogImages, err := registryClient.ListImages(ctx, singleFilterSpec)
+	if err != nil {
+		// Check if this filter has wildcards - if so, catalog API failure is a real error
+		hasWildcard := aimclustermodelsource.FilterHasWildcard(filter)
+		if hasWildcard {
+			result.Error = fmt.Errorf("catalog API failed for wildcard filter %q: %w", filter.Image, err)
+		} else {
+			// No wildcards - catalog API is not required, this is a fallback failure
+			// Treat as empty result, not an error
+			result.Images = []aimclustermodelsource.RegistryImage{}
+		}
+		return result
+	}
+
+	result.Images = catalogImages
+	return result
 }
 
 // Plan derives desired state changes based on observations.
@@ -240,7 +295,7 @@ func (r *ClusterModelSourceReconciler) plan(
 	source *aimv1alpha1.AIMClusterModelSource,
 	obs ClusterModelSourceObservation,
 ) ([]client.Object, error) {
-	result := []client.Object{}
+	var result []client.Object
 
 	// Only create models for new images (append-only lifecycle)
 	for _, img := range obs.newImages {
@@ -268,31 +323,147 @@ func (r *ClusterModelSourceReconciler) Project(
 	status *aimv1alpha1.AIMClusterModelSourceStatus,
 	obs ClusterModelSourceObservation,
 ) {
-	// Ready condition and overall status
-	if !obs.registryReachable {
-		if len(obs.existingByURI) > 0 {
-			status.Status = string(aimv1alpha1.AIMStatusDegraded)
-		} else {
-			status.Status = string(aimv1alpha1.AIMStatusFailed)
-		}
+	totalFilters := obs.failedFilters + obs.succeededFilters
+
+	// Determine overall status based on filter success/failure
+	if obs.failedFilters == totalFilters && obs.failedFilters > 0 {
+		// All filters failed
+		status.Status = string(aimv1alpha1.AIMStatusFailed)
+		r.setFailedConditions(status, obs)
+	} else if obs.failedFilters > 0 {
+		// Some filters failed, some succeeded
+		status.Status = string(aimv1alpha1.AIMStatusDegraded)
+		r.setDegradedConditions(status, obs)
 	} else if obs.totalFiltered == 0 {
+		// No filters, or no images matched
 		status.Status = string(aimv1alpha1.AIMStatusPending)
+		r.setPendingConditions(status, obs)
 	} else {
+		// All filters succeeded
 		status.Status = string(aimv1alpha1.AIMStatusReady)
+		r.setReadyConditions(status, obs)
 	}
 
 	// Update metrics
 	status.DiscoveredModels = len(obs.existingByURI) + len(obs.newImages)
+	status.AvailableModels = obs.totalFiltered
+	status.ModelsLimitReached = status.AvailableModels > status.DiscoveredModels
 
-	// Update LastSyncTime on every successful sync
-	// Status updates don't trigger reconciliations due to GenerationChangedPredicate
-	if obs.registryReachable {
-		now := metav1.NewTime(time.Now())
-		status.LastSyncTime = &now
+	// Update LastSyncTime on every sync attempt (successful or not)
+	now := metav1.NewTime(time.Now())
+	status.LastSyncTime = &now
+
+	// Set MaxModelsLimitReached condition (applies to all statuses)
+	r.setMaxModelsCondition(status)
+}
+
+func (r *ClusterModelSourceReconciler) setReadyConditions(
+	status *aimv1alpha1.AIMClusterModelSourceStatus,
+	obs ClusterModelSourceObservation,
+) {
+	shared.SetCondition(&status.Conditions, metav1.Condition{
+		Type:    "Ready",
+		Status:  metav1.ConditionTrue,
+		Reason:  "AllFiltersSucceeded",
+		Message: fmt.Sprintf("Successfully discovered %d model(s) from %d filter(s)", obs.totalFiltered, obs.succeededFilters),
+	})
+	shared.SetCondition(&status.Conditions, metav1.Condition{
+		Type:    "Degraded",
+		Status:  metav1.ConditionFalse,
+		Reason:  "AllFiltersSucceeded",
+		Message: "All filters processed successfully",
+	})
+}
+
+func (r *ClusterModelSourceReconciler) setMaxModelsCondition(
+	status *aimv1alpha1.AIMClusterModelSourceStatus,
+) {
+	// Set MaxModelsLimitReached condition
+	if status.ModelsLimitReached {
+		shared.SetCondition(&status.Conditions, metav1.Condition{
+			Type:    "MaxModelsLimitReached",
+			Status:  metav1.ConditionTrue,
+			Reason:  "LimitReached",
+			Message: fmt.Sprintf("Model creation limit reached (%d models created). %d available images not created as models.", status.DiscoveredModels, status.AvailableModels-status.DiscoveredModels),
+		})
+	} else {
+		shared.SetCondition(&status.Conditions, metav1.Condition{
+			Type:    "MaxModelsLimitReached",
+			Status:  metav1.ConditionFalse,
+			Reason:  "LimitNotReached",
+			Message: fmt.Sprintf("Created %d models, within limit", status.DiscoveredModels),
+		})
+	}
+}
+
+func (r *ClusterModelSourceReconciler) setDegradedConditions(
+	status *aimv1alpha1.AIMClusterModelSourceStatus,
+	obs ClusterModelSourceObservation,
+) {
+	// Collect error messages from failed filters
+	var errorMsgs []string
+	for _, result := range obs.filterResults {
+		if result.Error != nil {
+			errorMsgs = append(errorMsgs, fmt.Sprintf("filter %q: %v", result.Filter.Image, result.Error))
+		}
 	}
 
-	// Update discovered images summary (limited to most recent 50)
-	status.DiscoveredImages = aimclustermodelsource.BuildDiscoveredImagesSummary(obs.filteredImages, obs.existingByURI)
+	shared.SetCondition(&status.Conditions, metav1.Condition{
+		Type:    "Ready",
+		Status:  metav1.ConditionFalse,
+		Reason:  "SomeFiltersFailed",
+		Message: fmt.Sprintf("%d of %d filter(s) failed", obs.failedFilters, obs.failedFilters+obs.succeededFilters),
+	})
+	shared.SetCondition(&status.Conditions, metav1.Condition{
+		Type:    "Degraded",
+		Status:  metav1.ConditionTrue,
+		Reason:  "SomeFiltersFailed",
+		Message: fmt.Sprintf("%d filter(s) failed: %s", obs.failedFilters, strings.Join(errorMsgs, "; ")),
+	})
+}
+
+func (r *ClusterModelSourceReconciler) setFailedConditions(
+	status *aimv1alpha1.AIMClusterModelSourceStatus,
+	obs ClusterModelSourceObservation,
+) {
+	// Collect error messages from failed filters
+	var errorMsgs []string
+	for _, result := range obs.filterResults {
+		if result.Error != nil {
+			errorMsgs = append(errorMsgs, fmt.Sprintf("filter %q: %v", result.Filter.Image, result.Error))
+		}
+	}
+
+	shared.SetCondition(&status.Conditions, metav1.Condition{
+		Type:    "Ready",
+		Status:  metav1.ConditionFalse,
+		Reason:  "AllFiltersFailed",
+		Message: fmt.Sprintf("All %d filter(s) failed", obs.failedFilters),
+	})
+	shared.SetCondition(&status.Conditions, metav1.Condition{
+		Type:    "Degraded",
+		Status:  metav1.ConditionTrue,
+		Reason:  "AllFiltersFailed",
+		Message: fmt.Sprintf("All filters failed: %s", strings.Join(errorMsgs, "; ")),
+	})
+}
+
+func (r *ClusterModelSourceReconciler) setPendingConditions(
+	status *aimv1alpha1.AIMClusterModelSourceStatus,
+	_ ClusterModelSourceObservation,
+) {
+	shared.SetCondition(&status.Conditions, metav1.Condition{
+		Type:    "Ready",
+		Status:  metav1.ConditionFalse,
+		Reason:  "NoImagesDiscovered",
+		Message: "No images matched the configured filters",
+	})
+	shared.SetCondition(&status.Conditions, metav1.Condition{
+		Type:    "Degraded",
+		Status:  metav1.ConditionFalse,
+		Reason:  "NoImagesDiscovered",
+		Message: "No filter failures",
+	})
 }
 
 func (r *ClusterModelSourceReconciler) SetupWithManager(mgr ctrl.Manager) error {

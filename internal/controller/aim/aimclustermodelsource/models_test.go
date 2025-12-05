@@ -205,113 +205,18 @@ func TestBuildClusterModelUniqueness(t *testing.T) {
 	}
 }
 
-func TestBuildDiscoveredImagesSummary(t *testing.T) {
-	filteredImages := []RegistryImage{
-		{
-			Registry:   "docker.io",
-			Repository: "amdenterpriseai/aim-llama3",
-			Tag:        "1.0.0",
-		},
-		{
-			Registry:   "docker.io",
-			Repository: "amdenterpriseai/aim-llama3",
-			Tag:        "2.0.0",
-		},
-	}
-
-	existingByURI := make(map[string]*aimv1alpha1.AIMClusterModel)
-
-	summary := BuildDiscoveredImagesSummary(filteredImages, existingByURI)
-
-	if len(summary) != 2 {
-		t.Errorf("Summary length = %d, want 2", len(summary))
-	}
-
-	// Check first image
-	if summary[0].Tag != "1.0.0" {
-		t.Errorf("First image tag = %v, want 1.0.0", summary[0].Tag)
-	}
-
-	if summary[0].Image != "amdenterpriseai/aim-llama3:1.0.0" {
-		t.Errorf("First image URI = %v, want amdenterpriseai/aim-llama3:1.0.0",
-			summary[0].Image)
-	}
-
-	// Check second image
-	if summary[1].Tag != "2.0.0" {
-		t.Errorf("Second image tag = %v, want 2.0.0", summary[1].Tag)
-	}
-}
-
-func TestBuildDiscoveredImagesSummaryWithExisting(t *testing.T) {
-	filteredImages := []RegistryImage{
-		{
-			Registry:   "docker.io",
-			Repository: "amdenterpriseai/aim-llama3",
-			Tag:        "1.0.0",
-		},
-	}
-
-	existingModel := &aimv1alpha1.AIMClusterModel{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "existing-model",
-			CreationTimestamp: metav1.Time{
-				Time: metav1.Now().Add(-24 * 60 * 60 * 1000000000), // 24h ago
-			},
-		},
-	}
-
-	existingByURI := map[string]*aimv1alpha1.AIMClusterModel{
-		"amdenterpriseai/aim-llama3:1.0.0": existingModel,
-	}
-
-	summary := BuildDiscoveredImagesSummary(filteredImages, existingByURI)
-
-	if len(summary) != 1 {
-		t.Fatalf("Summary length = %d, want 1", len(summary))
-	}
-
-	// Should use existing model's name and creation time
-	if summary[0].ModelName != "existing-model" {
-		t.Errorf("Model name = %v, want existing-model", summary[0].ModelName)
-	}
-
-	if summary[0].CreatedAt != existingModel.CreationTimestamp {
-		t.Errorf("CreatedAt doesn't match existing model timestamp")
-	}
-}
-
-func TestBuildDiscoveredImagesSummaryLimit(t *testing.T) {
-	// Create 100 images
-	var filteredImages []RegistryImage
-	for i := 0; i < 100; i++ {
-		filteredImages = append(filteredImages, RegistryImage{
-			Registry:   "docker.io",
-			Repository: "amdenterpriseai/aim-llama3",
-			Tag:        "1.0." + string(rune('0'+i%10)),
-		})
-	}
-
-	existingByURI := make(map[string]*aimv1alpha1.AIMClusterModel)
-
-	summary := BuildDiscoveredImagesSummary(filteredImages, existingByURI)
-
-	// Should be limited to 50
-	if len(summary) != 50 {
-		t.Errorf("Summary length = %d, want 50 (max limit)", len(summary))
-	}
-}
-
 func TestExtractStaticImages(t *testing.T) {
 	tests := []struct {
-		name    string
-		filters []aimv1alpha1.ModelSourceFilter
-		want    []RegistryImage
+		name string
+		spec aimv1alpha1.AIMClusterModelSourceSpec
+		want []RegistryImage
 	}{
 		{
 			name: "single exact image reference",
-			filters: []aimv1alpha1.ModelSourceFilter{
-				{Image: "ghcr.io/silogen/aim-google-gemma-3-1b-it:0.8.1-rc1"},
+			spec: aimv1alpha1.AIMClusterModelSourceSpec{
+				Filters: []aimv1alpha1.ModelSourceFilter{
+					{Image: "ghcr.io/silogen/aim-google-gemma-3-1b-it:0.8.1-rc1"},
+				},
 			},
 			want: []RegistryImage{
 				{
@@ -323,8 +228,10 @@ func TestExtractStaticImages(t *testing.T) {
 		},
 		{
 			name: "docker.io image with tag",
-			filters: []aimv1alpha1.ModelSourceFilter{
-				{Image: "silogen/aim-llama:1.0.0"},
+			spec: aimv1alpha1.AIMClusterModelSourceSpec{
+				Filters: []aimv1alpha1.ModelSourceFilter{
+					{Image: "silogen/aim-llama:1.0.0"},
+				},
 			},
 			want: []RegistryImage{
 				{
@@ -336,9 +243,11 @@ func TestExtractStaticImages(t *testing.T) {
 		},
 		{
 			name: "multiple exact references",
-			filters: []aimv1alpha1.ModelSourceFilter{
-				{Image: "ghcr.io/org/model1:v1"},
-				{Image: "gcr.io/org/model2:v2"},
+			spec: aimv1alpha1.AIMClusterModelSourceSpec{
+				Filters: []aimv1alpha1.ModelSourceFilter{
+					{Image: "ghcr.io/org/model1:v1"},
+					{Image: "gcr.io/org/model2:v2"},
+				},
 			},
 			want: []RegistryImage{
 				{
@@ -355,25 +264,53 @@ func TestExtractStaticImages(t *testing.T) {
 		},
 		{
 			name: "wildcard filter skipped",
-			filters: []aimv1alpha1.ModelSourceFilter{
-				{Image: "ghcr.io/silogen/aim-*"},
+			spec: aimv1alpha1.AIMClusterModelSourceSpec{
+				Filters: []aimv1alpha1.ModelSourceFilter{
+					{Image: "ghcr.io/silogen/aim-*"},
+				},
 			},
 			want: nil,
 		},
 		{
-			name: "filter without tag skipped",
-			filters: []aimv1alpha1.ModelSourceFilter{
-				{Image: "ghcr.io/silogen/aim-llama"},
+			name: "filter without tag or versions skipped",
+			spec: aimv1alpha1.AIMClusterModelSourceSpec{
+				Filters: []aimv1alpha1.ModelSourceFilter{
+					{Image: "ghcr.io/silogen/aim-llama"},
+				},
 			},
 			want: nil,
+		},
+		{
+			name: "filter without tag but with global versions",
+			spec: aimv1alpha1.AIMClusterModelSourceSpec{
+				Registry: "ghcr.io",
+				Filters: []aimv1alpha1.ModelSourceFilter{
+					{Image: "silogen/aim-openai-gpt-oss-20b"},
+				},
+				Versions: []string{"0.9.0-rc2", "0.9.0-rc3"},
+			},
+			want: []RegistryImage{
+				{
+					Registry:   "ghcr.io",
+					Repository: "silogen/aim-openai-gpt-oss-20b",
+					Tag:        "0.9.0-rc2",
+				},
+				{
+					Registry:   "ghcr.io",
+					Repository: "silogen/aim-openai-gpt-oss-20b",
+					Tag:        "0.9.0-rc3",
+				},
+			},
 		},
 		{
 			name: "mixed static and dynamic filters",
-			filters: []aimv1alpha1.ModelSourceFilter{
-				{Image: "ghcr.io/org/model:v1"},    // static - included
-				{Image: "ghcr.io/org/aim-*"},       // wildcard - skipped
-				{Image: "docker.io/org/model2:v2"}, // static - included
-				{Image: "docker.io/org/model3"},    // no tag - skipped
+			spec: aimv1alpha1.AIMClusterModelSourceSpec{
+				Filters: []aimv1alpha1.ModelSourceFilter{
+					{Image: "ghcr.io/org/model:v1"},    // static - included
+					{Image: "ghcr.io/org/aim-*"},       // wildcard - skipped
+					{Image: "docker.io/org/model2:v2"}, // static - included
+					{Image: "docker.io/org/model3"},    // no tag, no versions - skipped
+				},
 			},
 			want: []RegistryImage{
 				{
@@ -389,15 +326,63 @@ func TestExtractStaticImages(t *testing.T) {
 			},
 		},
 		{
-			name:    "empty filters",
-			filters: []aimv1alpha1.ModelSourceFilter{},
-			want:    nil,
+			name: "empty filters",
+			spec: aimv1alpha1.AIMClusterModelSourceSpec{
+				Filters: []aimv1alpha1.ModelSourceFilter{},
+			},
+			want: nil,
+		},
+		{
+			name: "version constraint in global versions - skipped",
+			spec: aimv1alpha1.AIMClusterModelSourceSpec{
+				Registry: "ghcr.io",
+				Filters: []aimv1alpha1.ModelSourceFilter{
+					{Image: "silogen/aim-openai-gpt-oss-20b"},
+				},
+				Versions: []string{">=0.9.0"},
+			},
+			want: nil, // Version constraint should be skipped, not treated as a tag
+		},
+		{
+			name: "mixed exact versions and constraints in global versions",
+			spec: aimv1alpha1.AIMClusterModelSourceSpec{
+				Registry: "ghcr.io",
+				Filters: []aimv1alpha1.ModelSourceFilter{
+					{Image: "silogen/aim-openai-gpt-oss-20b"},
+				},
+				Versions: []string{"0.9.0-rc2", ">=0.9.0", "0.9.0-rc3", "<1.0.0"},
+			},
+			want: []RegistryImage{
+				{
+					Registry:   "ghcr.io",
+					Repository: "silogen/aim-openai-gpt-oss-20b",
+					Tag:        "0.9.0-rc2",
+				},
+				{
+					Registry:   "ghcr.io",
+					Repository: "silogen/aim-openai-gpt-oss-20b",
+					Tag:        "0.9.0-rc3",
+				},
+			},
+		},
+		{
+			name: "version constraint in filter versions - skipped",
+			spec: aimv1alpha1.AIMClusterModelSourceSpec{
+				Registry: "ghcr.io",
+				Filters: []aimv1alpha1.ModelSourceFilter{
+					{
+						Image:    "silogen/aim-openai-gpt-oss-20b",
+						Versions: []string{"~1.0.0"},
+					},
+				},
+			},
+			want: nil,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ExtractStaticImages(tt.filters)
+			got := ExtractStaticImages(tt.spec)
 			if len(got) != len(tt.want) {
 				t.Errorf("extractStaticImages() returned %d images, want %d", len(got), len(tt.want))
 				return

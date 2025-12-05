@@ -69,51 +69,6 @@ func BuildClusterModel(
 	}
 }
 
-// BuildDiscoveredImagesSummary creates a summary of discovered images for the status.
-// Limited to the most recent 50 images to avoid excessive status size.
-func BuildDiscoveredImagesSummary(
-	filteredImages []RegistryImage,
-	existingByURI map[string]*aimv1alpha1.AIMClusterModel,
-) []aimv1alpha1.DiscoveredImageInfo {
-	const maxSummarySize = 50
-
-	var summary []aimv1alpha1.DiscoveredImageInfo
-
-	for _, img := range filteredImages {
-		if len(summary) >= maxSummarySize {
-			break
-		}
-
-		imageURI := img.ToImageURI()
-		model, exists := existingByURI[imageURI]
-
-		var modelName string
-		var createdAt metav1.Time
-
-		if exists {
-			modelName = model.Name
-			createdAt = model.CreationTimestamp
-		} else {
-			// New image - generate name but no creation time yet
-			modelName, _ = baseutils.GenerateDerivedNameWithHashLength(
-				[]string{img.Repository, img.Tag},
-				6,
-				img.Registry, img.Repository, img.Tag,
-			)
-			createdAt = metav1.Now()
-		}
-
-		summary = append(summary, aimv1alpha1.DiscoveredImageInfo{
-			Image:     imageURI,
-			Tag:       img.Tag,
-			ModelName: modelName,
-			CreatedAt: createdAt,
-		})
-	}
-
-	return summary
-}
-
 // RegistryImage represents a container image discovered in a registry.
 type RegistryImage struct {
 	Registry   string
@@ -132,32 +87,66 @@ func (ri RegistryImage) ToImageURI() string {
 	return fmt.Sprintf("%s/%s:%s", ri.Registry, ri.Repository, ri.Tag)
 }
 
-// extractStaticImages converts filters that are exact image references (no wildcards, with tag)
+// ExtractStaticImages converts filters that are exact image references (no wildcards, with tag)
 // into RegistryImage objects. This allows bypassing registry queries for static image lists.
-// Returns only the filters that are static - filters with wildcards or no tag are skipped.
-func ExtractStaticImages(filters []aimv1alpha1.ModelSourceFilter) []RegistryImage {
+// When a filter has no explicit tag but spec.versions are specified, it generates static images
+// for each version. This is especially useful for registries like ghcr.io that don't support catalog API.
+// Returns only the filters that can be converted to static references.
+func ExtractStaticImages(spec aimv1alpha1.AIMClusterModelSourceSpec) []RegistryImage {
 	var images []RegistryImage
 
-	for _, filter := range filters {
+	for _, filter := range spec.Filters {
 		// Parse the filter to check if it's a static reference
 		parsed := parseImageFilter(filter.Image)
 
-		// Skip if it has wildcards or no tag specified
-		if parsed.hasWildcard || parsed.tag == "" {
+		// Skip filters with wildcards - these require registry queries
+		if parsed.hasWildcard {
 			continue
 		}
 
-		// Static image reference - convert to RegistryImage
+		// Determine which registry to use
 		registry := parsed.registry
 		if registry == "" {
-			registry = DockerRegistry
+			registry = spec.Registry
+			if registry == "" {
+				registry = DockerRegistry
+			}
 		}
 
-		images = append(images, RegistryImage{
-			Registry:   registry,
-			Repository: parsed.repository,
-			Tag:        parsed.tag,
-		})
+		// Determine which versions/tags to use
+		var tags []string
+		if parsed.tag != "" {
+			// Filter has explicit tag - use it
+			tags = []string{parsed.tag}
+		} else if len(filter.Versions) > 0 {
+			// Filter has per-filter versions - only use exact versions, not constraints
+			for _, v := range filter.Versions {
+				if !isVersionConstraint(v) {
+					tags = append(tags, v)
+				}
+			}
+		} else if len(spec.Versions) > 0 {
+			// Use global versions from spec - only exact versions, not constraints
+			for _, v := range spec.Versions {
+				if !isVersionConstraint(v) {
+					tags = append(tags, v)
+				}
+			}
+		}
+
+		// If no exact versions found, skip this filter (let it be handled by FetchImagesUsingTagsList)
+		if len(tags) == 0 {
+			continue
+		}
+
+		// Generate a RegistryImage for each tag
+		for _, tag := range tags {
+			images = append(images, RegistryImage{
+				Registry:   registry,
+				Repository: parsed.repository,
+				Tag:        tag,
+			})
+		}
 	}
 
 	return images
