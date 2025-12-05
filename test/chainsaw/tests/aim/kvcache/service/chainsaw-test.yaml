@@ -1,0 +1,147 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: aimservice-kvcache-integration
+spec:
+  description: |
+    Test AIMService with embedded KVCache configuration
+  timeouts:
+    assert: 120s
+  steps:
+  # ==================== CREATE SERVICE ====================
+  - name: Create AIMService with KVCache
+    try:
+    - apply:
+        file: aimservice-kvcache.yaml
+  # ==================== VERIFY KVCACHE CREATION ====================
+  - name: Verify AIMKVCache is created with correct spec
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMKVCache
+          metadata:
+            name: (join('', ['kvcache-', $namespace]))
+            ownerReferences:
+            - name: dummy-w-kvcache
+              kind: AIMService
+          spec:
+            kvCacheType: redis
+            image: redis:latest
+            resources:
+              limits:
+                cpu: 800m
+                memory: 2Gi
+
+  - name: Verify KVCache StatefulSet is created
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            labels:
+              aim.silogen.ai/kvcache: (join('', ['kvcache-', $namespace]))
+              aim.silogen.ai/kvcache-type: redis
+          spec:
+            replicas: 1
+            template:
+              spec:
+                containers:
+                - name: redis
+                  image: redis:latest
+
+  - name: Verify KVCache Service is created
+    try:
+    - assert:
+        timeout: 15s
+        resource:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            labels:
+              aim.silogen.ai/kvcache: (join('', ['kvcache-', $namespace]))
+              aim.silogen.ai/kvcache-type: redis
+          spec:
+            ports:
+            - port: 6379
+              name: redis
+
+  - name: Verify LMCache ConfigMap is created with correct config
+    try:
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            ownerReferences:
+            - name: dummy-w-kvcache
+              kind: AIMService
+          "(contains(data.\"lmcache_config.yaml\" || '', 'chunk_size: 200'))": true
+
+  # ==================== VERIFY KVCACHE BECOMES READY ====================
+  - name: Verify AIMKVCache becomes Ready
+    try:
+    - assert:
+        timeout: 90s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMKVCache
+          metadata:
+            name: (join('', ['kvcache-', $namespace]))
+          status:
+            status: Ready
+            readyReplicas: 1
+            (starts_with(endpoint, 'redis://')): true
+            (conditions[?type == 'Ready']):
+            - status: "True"
+              reason: StatefulSetReady
+
+  # ==================== VERIFY INFERENCESERVICE POD HAS CONFIGMAP MOUNTED ====================
+  - name: Verify InferenceService pod has LMCache ConfigMap mounted
+    try:
+    - assert:
+        timeout: 120s
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            labels:
+              serving.kserve.io/inferenceservice: dummy-w-kvcache
+          spec:
+            (volumes[?name == 'lmcache-config-volume']):
+            - name: lmcache-config-volume
+              configMap:
+                (items[?key == 'lmcache_config.yaml']):
+                - key: lmcache_config.yaml
+                  path: lmcache_config.yaml
+            (containers[?name == 'kserve-container']):
+            - (volumeMounts[?mountPath == '/lmcache']):
+              - mountPath: /lmcache
+                readOnly: true
+              # Verify LMCache env vars are set
+              (env[?name == 'PYTHONHASHSEED']):
+              - value: "0"
+              (env[?name == 'LMCACHE_CONFIG_FILE']):
+              - value: /lmcache/lmcache_config.yaml
+
+  # ==================== VERIFY AIMSERVICE BECOMES RUNNING ====================
+  - name: Verify AIMService transitions to Running
+    try:
+    - assert:
+        timeout: 10m
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: dummy-w-kvcache
+          status:
+            status: Running
+            (conditions[?type == 'Ready']):
+            - status: "True"
+            (conditions[?type == 'RuntimeReady']):
+            - status: "True"
+

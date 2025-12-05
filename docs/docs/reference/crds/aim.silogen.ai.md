@@ -1118,7 +1118,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | Name specifies the name of the AIMKVCache resource to use.<br />If an AIMKVCache with this name exists, it will be used.<br />If it doesn't exist, a new AIMKVCache will be created with this name.<br />If not specified, defaults to "kvcache-\{service-name\}". |  |  |
+| `name` _string_ | Name specifies the name of the AIMKVCache resource to use.<br />If an AIMKVCache with this name exists, it will be used.<br />If it doesn't exist, a new AIMKVCache will be created with this name.<br />If not specified, defaults to "kvcache-\{namespace\}". |  |  |
 | `type` _string_ | Type specifies the type of KV cache backend.<br />Only used when creating a new AIMKVCache (ignored if referencing existing). | redis | Enum: [redis] <br /> |
 | `image` _string_ | Image specifies the container image to use for the KV cache service.<br />Only used when creating a new AIMKVCache (ignored if referencing existing).<br />If not specified, defaults to appropriate images based on Type. |  |  |
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to set in the KV cache container.<br />Only used when creating a new AIMKVCache (ignored if referencing existing).<br />If not specified (nil), no additional environment variables are set.<br />If explicitly set to an empty array, no environment variables are added. |  |  |

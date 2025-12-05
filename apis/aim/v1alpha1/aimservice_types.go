@@ -57,7 +57,7 @@ type AIMServiceKVCache struct {
 	// Name specifies the name of the AIMKVCache resource to use.
 	// If an AIMKVCache with this name exists, it will be used.
 	// If it doesn't exist, a new AIMKVCache will be created with this name.
-	// If not specified, defaults to "kvcache-{service-name}".
+	// If not specified, defaults to "kvcache-{namespace}".
 	// +optional
 	Name string `json:"name,omitempty"`
 
