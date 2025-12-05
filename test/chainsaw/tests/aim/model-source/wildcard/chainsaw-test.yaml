@@ -1,0 +1,45 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: wildcard-model-discovery
+spec:
+  description: Test AIMClusterModelSource wildcard discovery from DockerHub and GHCR with maxModels limits
+  concurrent: False
+  steps:
+  - name: Create DockerHub AIMClusterModelSource
+    try:
+    - apply:
+        file: cluster-model-source-dockerhub.yaml
+
+  - name: Create GHCR AIMClusterModelSource
+    try:
+    - apply:
+        file: cluster-model-source-ghcr.yaml
+
+  - name: Wait for DockerHub source to be Ready with 5 models
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterModelSource
+          metadata:
+            name: dockerhub
+          status:
+            status: Ready
+            # Match the limit
+            discoveredModels: 5
+            # There should be more models which we have skipped
+            modelsLimitReached: true
+
+  - name: Wait for GHCR source to be Ready with 4 models
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterModelSource
+          metadata:
+            name: test-ghcr
+          status:
+            status: Ready
+            # There should only be four models that match the filters
+            discoveredModels: 4

@@ -292,6 +292,11 @@ func normalizeConstraint(constraint string) string {
 	return constraint
 }
 
+// FilterHasWildcard checks if a filter contains wildcard patterns.
+func FilterHasWildcard(filter aimv1alpha1.ModelSourceFilter) bool {
+	return strings.Contains(filter.Image, "*")
+}
+
 // isVersionConstraint checks if a version string is a constraint (like ">=1.0.0")
 // rather than an exact version (like "1.0.0" or "0.9.0-rc2").
 // Returns true for constraints, false for exact versions.

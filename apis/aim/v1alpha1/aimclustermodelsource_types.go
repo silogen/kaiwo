@@ -61,7 +61,6 @@ type AIMClusterModelSource struct {
 }
 
 // AIMClusterModelSourceSpec defines the desired state of AIMClusterModelSource.
-// +kubebuilder:validation:XValidation:rule="(self.registry == \"\" || self.registry == 'docker.io' || self.registry == 'hub.docker.com' || self.registry == 'index.docker.io') || !self.filters.exists(f, f.image.contains('*'))",message="Wildcard patterns in filters are only supported for docker.io registry. Other registries (ghcr.io, gcr.io, etc.) do not support repository discovery. Use exact repository names or switch to docker.io."
 type AIMClusterModelSourceSpec struct {
 	// Registry to sync from (e.g., docker.io, ghcr.io, gcr.io).
 	// Defaults to docker.io if not specified.
@@ -102,6 +101,16 @@ type AIMClusterModelSourceSpec struct {
 	// will fetch all tags from ghcr.io/silogen/aim-llama and include only those >=1.0.0.
 	// +optional
 	Versions []string `json:"versions,omitempty"`
+
+	// MaxModels is the maximum number of AIMClusterModel resources to create from this source.
+	// Once this limit is reached, no new models will be created, even if more matching images are discovered.
+	// Existing models are never deleted.
+	// This prevents runaway model creation from overly broad filters.
+	// +kubebuilder:default=100
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=10000
+	// +optional
+	MaxModels *int `json:"maxModels,omitempty"`
 }
 
 // ModelSourceFilter defines a pattern for discovering images.
@@ -169,10 +178,15 @@ type AIMClusterModelSourceStatus struct {
 	// +optional
 	DiscoveredModels int `json:"discoveredModels,omitempty"`
 
-	// DiscoveredImages provides a summary of recently discovered images.
-	// Limited to avoid excessive status size. Typically shows the most recent 50 images.
+	// AvailableModels is the total count of images discovered in the registry that match the filters.
+	// This may be higher than DiscoveredModels if maxModels limit was reached.
 	// +optional
-	DiscoveredImages []DiscoveredImageInfo `json:"discoveredImages,omitempty"`
+	AvailableModels int `json:"availableModels,omitempty"`
+
+	// ModelsLimitReached indicates whether the maxModels limit has been reached.
+	// When true, no new models will be created even if more matching images are discovered.
+	// +optional
+	ModelsLimitReached bool `json:"modelsLimitReached,omitempty"`
 
 	// Conditions represent the latest available observations of the source's state.
 	// Standard conditions: Ready, Syncing, RegistryReachable.
@@ -186,24 +200,17 @@ type AIMClusterModelSourceStatus struct {
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
-// DiscoveredImageInfo provides information about a discovered image.
-type DiscoveredImageInfo struct {
-	// Image is the full image reference (repository:tag).
-	Image string `json:"image"`
-
-	// Tag is the image tag.
-	Tag string `json:"tag"`
-
-	// ModelName is the name of the generated AIMClusterModel resource.
-	ModelName string `json:"modelName"`
-
-	// CreatedAt is when this image was first discovered.
-	CreatedAt metav1.Time `json:"createdAt"`
-}
-
 // GetStatus returns a pointer to the status for use with the controller pipeline.
 func (s *AIMClusterModelSource) GetStatus() *AIMClusterModelSourceStatus {
 	return &s.Status
+}
+
+// GetMaxModels returns the maximum number of models, defaulting to 100 if not set.
+func (s *AIMClusterModelSource) GetMaxModels() int {
+	if s.Spec.MaxModels == nil {
+		return 100
+	}
+	return *s.Spec.MaxModels
 }
 
 // GetConditions returns the status conditions.

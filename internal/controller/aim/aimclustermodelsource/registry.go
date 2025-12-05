@@ -24,6 +24,7 @@ package aimclustermodelsource
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -33,6 +34,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
@@ -41,6 +43,7 @@ import (
 
 const (
 	dockerHost = "docker.io"
+	ghcrHost   = "ghcr.io"
 )
 
 // RegistryClient provides methods for listing images from container registries.
@@ -73,6 +76,9 @@ func (rc *RegistryClient) ListImages(
 	if reg == dockerHost || strings.Contains(reg, "hub.docker.com") {
 		return rc.listDockerHubImages(ctx, spec)
 	}
+	if reg == ghcrHost || strings.Contains(reg, "ghcr.io") {
+		return rc.listGitHubContainerRegistryImages(ctx, spec)
+	}
 	return rc.listRegistryV2Images(ctx, spec)
 }
 
@@ -93,20 +99,42 @@ func (rc *RegistryClient) listDockerHubImages(
 			return nil, fmt.Errorf("failed to fetch repos for namespace %s: %w", namespace, err)
 		}
 
-		// For each repository, fetch tags
+		// For each repository, check if it matches any filter pattern
 		for _, repo := range repos {
+			// Check if this repository matches any filter pattern
+			matchesAnyFilter := false
+			for _, filter := range spec.Filters {
+				// Parse filter to get the repository pattern
+				parsed := parseImageFilter(filter.Image)
+				// Match against the full repo path
+				if matchesWildcard(parsed.repository, repo) {
+					matchesAnyFilter = true
+					break
+				}
+			}
+
+			if !matchesAnyFilter {
+				continue
+			}
+
 			tags, err := rc.fetchImageTags(ctx, repo, spec.ImagePullSecrets)
 			if err != nil {
 				// Log but continue - some repos might be inaccessible
 				continue
 			}
 
+			// Filter tags by version constraints and exclusions
 			for _, tag := range tags {
-				allImages = append(allImages, RegistryImage{
+				img := RegistryImage{
 					Registry:   dockerHost,
 					Repository: repo,
 					Tag:        tag,
-				})
+				}
+
+				// Check if this tag matches version constraints and exclusions
+				if MatchesFilters(img, spec.Filters, spec.Versions) {
+					allImages = append(allImages, img)
+				}
 			}
 		}
 	}
@@ -240,8 +268,24 @@ func (rc *RegistryClient) listRegistryV2Images(
 		return nil, fmt.Errorf("failed to list catalog for %s: %w", spec.Registry, err)
 	}
 
-	// For each repository, fetch tags
+	// For each repository, check if it matches any filter pattern
 	for _, repo := range repos {
+		// Check if this repository matches any filter pattern
+		matchesAnyFilter := false
+		for _, filter := range spec.Filters {
+			// Parse filter to get the repository pattern
+			parsed := parseImageFilter(filter.Image)
+			// Match against the repo path (without registry prefix)
+			if matchesWildcard(parsed.repository, repo) {
+				matchesAnyFilter = true
+				break
+			}
+		}
+
+		if !matchesAnyFilter {
+			continue
+		}
+
 		fullRepo := fmt.Sprintf("%s/%s", spec.Registry, repo)
 		tags, err := rc.fetchImageTags(ctx, fullRepo, spec.ImagePullSecrets)
 		if err != nil {
@@ -249,16 +293,239 @@ func (rc *RegistryClient) listRegistryV2Images(
 			continue
 		}
 
+		// Filter tags by version constraints and exclusions
 		for _, tag := range tags {
-			allImages = append(allImages, RegistryImage{
+			img := RegistryImage{
 				Registry:   spec.Registry,
 				Repository: repo,
 				Tag:        tag,
-			})
+			}
+
+			// Check if this tag matches version constraints and exclusions
+			if MatchesFilters(img, spec.Filters, spec.Versions) {
+				allImages = append(allImages, img)
+			}
 		}
 	}
 
 	return allImages, nil
+}
+
+// listGitHubContainerRegistryImages uses the GitHub API to list packages for organizations.
+// GHCR does not support the Docker catalog API, so we use GitHub's REST API instead.
+func (rc *RegistryClient) listGitHubContainerRegistryImages(
+	ctx context.Context,
+	spec aimv1alpha1.AIMClusterModelSourceSpec,
+) ([]RegistryImage, error) {
+	var allImages []RegistryImage
+
+	// Extract organizations from filter patterns
+	orgs := extractGitHubOrgs(spec.Filters)
+	if len(orgs) == 0 {
+		return nil, fmt.Errorf("no GitHub organizations found in filters")
+	}
+
+	// Extract GitHub token from image pull secrets
+	token, err := rc.extractGitHubToken(ctx, spec.ImagePullSecrets)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract GitHub token: %w", err)
+	}
+
+	// For each organization, fetch packages
+	for _, org := range orgs {
+		packages, err := rc.fetchGitHubPackages(ctx, token, org)
+		if err != nil {
+			// Log but continue - some orgs might be inaccessible
+			continue
+		}
+
+		// For each package, check if it matches any filter pattern
+		for _, pkg := range packages {
+			fullRepo := fmt.Sprintf("%s/%s", org, pkg)
+
+			// Check if this package matches any filter pattern
+			matchesAnyFilter := false
+			for _, filter := range spec.Filters {
+				// Parse filter to get the repository pattern
+				parsed := parseImageFilter(filter.Image)
+				// Match against the full repo path (org/package)
+				if matchesWildcard(parsed.repository, fullRepo) {
+					matchesAnyFilter = true
+					break
+				}
+			}
+
+			if !matchesAnyFilter {
+				continue
+			}
+
+			fullRepoWithRegistry := fmt.Sprintf("%s/%s", ghcrHost, fullRepo)
+			tags, err := rc.fetchImageTags(ctx, fullRepoWithRegistry, spec.ImagePullSecrets)
+			if err != nil {
+				// Log but continue - some packages might be inaccessible
+				continue
+			}
+
+			// Filter tags by version constraints
+			for _, tag := range tags {
+				img := RegistryImage{
+					Registry:   ghcrHost,
+					Repository: fullRepo,
+					Tag:        tag,
+				}
+
+				// Check if this tag matches version constraints
+				if MatchesFilters(img, spec.Filters, spec.Versions) {
+					allImages = append(allImages, img)
+				}
+			}
+		}
+	}
+
+	return allImages, nil
+}
+
+// extractGitHubOrgs extracts unique GitHub organizations from filter patterns.
+// For example, "silogen/aim-*" -> "silogen"
+func extractGitHubOrgs(filters []aimv1alpha1.ModelSourceFilter) []string {
+	orgMap := make(map[string]bool)
+
+	for _, filter := range filters {
+		// Remove leading slash if present (can happen with some parsing)
+		image := strings.TrimPrefix(filter.Image, "/")
+
+		// Split by / to get org
+		parts := strings.Split(image, "/")
+		if len(parts) >= 1 {
+			// Remove wildcards and registry prefix
+			org := strings.TrimRight(parts[0], "*")
+			// Skip if it looks like a registry (contains a dot) or is empty/wildcard
+			if org != "" && org != "*" && !strings.Contains(org, ".") {
+				orgMap[org] = true
+			}
+		}
+	}
+
+	orgs := make([]string, 0, len(orgMap))
+	for org := range orgMap {
+		orgs = append(orgs, org)
+	}
+	return orgs
+}
+
+// extractGitHubToken extracts the GitHub token from Kubernetes image pull secrets.
+// It looks for credentials for ghcr.io in the Docker config JSON.
+func (rc *RegistryClient) extractGitHubToken(ctx context.Context, imagePullSecrets []corev1.LocalObjectReference) (string, error) {
+	if rc.clientset == nil || rc.secretNamespace == "" || len(imagePullSecrets) == 0 {
+		return "", fmt.Errorf("no image pull secrets configured")
+	}
+
+	// Try each secret until we find one with ghcr.io credentials
+	for _, secretRef := range imagePullSecrets {
+		secret, err := rc.clientset.CoreV1().Secrets(rc.secretNamespace).Get(ctx, secretRef.Name, metav1.GetOptions{})
+		if err != nil {
+			continue
+		}
+
+		// Parse .dockerconfigjson
+		dockerConfigJSON, ok := secret.Data[corev1.DockerConfigJsonKey]
+		if !ok {
+			continue
+		}
+
+		var dockerConfig struct {
+			Auths map[string]struct {
+				Auth     string `json:"auth"`
+				Username string `json:"username"`
+				Password string `json:"password"`
+			} `json:"auths"`
+		}
+
+		if err := json.Unmarshal(dockerConfigJSON, &dockerConfig); err != nil {
+			continue
+		}
+
+		// Look for ghcr.io credentials
+		ghcrAuth, ok := dockerConfig.Auths[ghcrHost]
+		if !ok {
+			continue
+		}
+
+		// If password is set directly, use it
+		if ghcrAuth.Password != "" {
+			return ghcrAuth.Password, nil
+		}
+
+		// Otherwise decode base64 auth string (format: "username:password")
+		if ghcrAuth.Auth != "" {
+			decoded, err := base64.StdEncoding.DecodeString(ghcrAuth.Auth)
+			if err != nil {
+				continue
+			}
+
+			parts := strings.SplitN(string(decoded), ":", 2)
+			if len(parts) == 2 {
+				return parts[1], nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("no ghcr.io credentials found in image pull secrets")
+}
+
+// fetchGitHubPackages fetches all container packages for a GitHub organization using the GitHub API.
+func (rc *RegistryClient) fetchGitHubPackages(ctx context.Context, token, org string) ([]string, error) {
+	var packages []string
+	page := 1
+	perPage := 100
+
+	for {
+		url := fmt.Sprintf("https://api.github.com/orgs/%s/packages?package_type=container&per_page=%d&page=%d",
+			org, perPage, page)
+
+		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %w", err)
+		}
+
+		req.Header.Set("Accept", "application/vnd.github+json")
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+		req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+		resp, err := rc.httpClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch packages: %w", err)
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			return nil, fmt.Errorf("unexpected status %d from GitHub API: %s", resp.StatusCode, string(body))
+		}
+
+		var result []struct {
+			Name string `json:"name"`
+		}
+
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			_ = resp.Body.Close()
+			return nil, fmt.Errorf("failed to decode JSON response: %w", err)
+		}
+		_ = resp.Body.Close()
+
+		for _, pkg := range result {
+			packages = append(packages, pkg.Name)
+		}
+
+		// If we got fewer than perPage results, we're done
+		if len(result) < perPage {
+			break
+		}
+
+		page++
+	}
+
+	return packages, nil
 }
 
 // FetchImagesUsingTagsList queries specific repositories using the tags list API when:

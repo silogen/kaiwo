@@ -128,6 +128,7 @@ _Appears in:_
 | `filters` _[ModelSourceFilter](#modelsourcefilter) array_ | Filters define which images to discover and sync.<br />Each filter specifies an image pattern with optional version constraints and exclusions.<br />Multiple filters are combined with OR logic (any match includes the image). |  | MaxItems: 100 <br />MinItems: 1 <br /> |
 | `syncInterval` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#duration-v1-meta)_ | SyncInterval defines how often to sync with the registry.<br />Defaults to 1h. Minimum recommended interval is 15m to avoid rate limiting.<br />Format: duration string (e.g., "30m", "1h", "2h30m"). | 1h |  |
 | `versions` _string array_ | Versions specifies global semantic version constraints applied to all filters.<br />Individual filters can override this with their own version constraints.<br />Constraints use semver syntax: >=1.0.0, <2.0.0, ~1.2.0, ^1.0.0, etc.<br />Non-semver tags (e.g., "latest", "dev") are silently skipped.<br />Version ranges work on all registries (including ghcr.io, gcr.io) when combined with<br />exact repository names (no wildcards). The controller uses the Tags List API to fetch<br />all tags for the repository and filters them by the semver constraint.<br />Example: registry=ghcr.io, filters=[\{image: "silogen/aim-llama"\}], versions=[">=1.0.0"]<br />will fetch all tags from ghcr.io/silogen/aim-llama and include only those >=1.0.0. |  |  |
+| `maxModels` _integer_ | MaxModels is the maximum number of AIMClusterModel resources to create from this source.<br />Once this limit is reached, no new models will be created, even if more matching images are discovered.<br />Existing models are never deleted.<br />This prevents runaway model creation from overly broad filters. | 100 | Maximum: 10000 <br />Minimum: 1 <br /> |
 
 
 #### AIMClusterModelSourceStatus
@@ -146,7 +147,8 @@ _Appears in:_
 | `status` _string_ | Status represents the overall state of the model source. |  | Enum: [Pending Starting Progressing Ready Running Degraded NotAvailable Failed] <br /> |
 | `lastSyncTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | LastSyncTime is the timestamp of the last successful registry sync.<br />Updated after each successful sync operation. |  |  |
 | `discoveredModels` _integer_ | DiscoveredModels is the count of AIMClusterModel resources managed by this source.<br />Includes both existing and newly created models. |  |  |
-| `discoveredImages` _[DiscoveredImageInfo](#discoveredimageinfo) array_ | DiscoveredImages provides a summary of recently discovered images.<br />Limited to avoid excessive status size. Typically shows the most recent 50 images. |  |  |
+| `availableModels` _integer_ | AvailableModels is the total count of images discovered in the registry that match the filters.<br />This may be higher than DiscoveredModels if maxModels limit was reached. |  |  |
+| `modelsLimitReached` _boolean_ | ModelsLimitReached indicates whether the maxModels limit has been reached.<br />When true, no new models will be created even if more matching images are discovered. |  |  |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions represent the latest available observations of the source's state.<br />Standard conditions: Ready, Syncing, RegistryReachable. |  |  |
 | `observedGeneration` _integer_ | ObservedGeneration reflects the generation of the most recently observed spec. |  |  |
 
@@ -1676,25 +1678,6 @@ _Appears in:_
 | `Ready` | AIMTemplateStatusReady denotes that discovery succeeded and, if requested, caches are warmed.<br /> |
 | `Degraded` | AIMTemplateStatusDegraded denotes that the template is non-functional for some reason, for example that the cluster doesn't have the resources specified.<br /> |
 | `Failed` | AIMTemplateStatusFailed denotes a terminal failure for discovery or warm operations.<br /> |
-
-
-#### DiscoveredImageInfo
-
-
-
-DiscoveredImageInfo provides information about a discovered image.
-
-
-
-_Appears in:_
-- [AIMClusterModelSourceStatus](#aimclustermodelsourcestatus)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `image` _string_ | Image is the full image reference (repository:tag). |  |  |
-| `tag` _string_ | Tag is the image tag. |  |  |
-| `modelName` _string_ | ModelName is the name of the generated AIMClusterModel resource. |  |  |
-| `createdAt` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | CreatedAt is when this image was first discovered. |  |  |
 
 
 #### ImageMetadata

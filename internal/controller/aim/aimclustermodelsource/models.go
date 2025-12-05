@@ -69,51 +69,6 @@ func BuildClusterModel(
 	}
 }
 
-// BuildDiscoveredImagesSummary creates a summary of discovered images for the status.
-// Limited to the most recent 50 images to avoid excessive status size.
-func BuildDiscoveredImagesSummary(
-	filteredImages []RegistryImage,
-	existingByURI map[string]*aimv1alpha1.AIMClusterModel,
-) []aimv1alpha1.DiscoveredImageInfo {
-	const maxSummarySize = 50
-
-	var summary []aimv1alpha1.DiscoveredImageInfo
-
-	for _, img := range filteredImages {
-		if len(summary) >= maxSummarySize {
-			break
-		}
-
-		imageURI := img.ToImageURI()
-		model, exists := existingByURI[imageURI]
-
-		var modelName string
-		var createdAt metav1.Time
-
-		if exists {
-			modelName = model.Name
-			createdAt = model.CreationTimestamp
-		} else {
-			// New image - generate name but no creation time yet
-			modelName, _ = baseutils.GenerateDerivedNameWithHashLength(
-				[]string{img.Repository, img.Tag},
-				6,
-				img.Registry, img.Repository, img.Tag,
-			)
-			createdAt = metav1.Now()
-		}
-
-		summary = append(summary, aimv1alpha1.DiscoveredImageInfo{
-			Image:     imageURI,
-			Tag:       img.Tag,
-			ModelName: modelName,
-			CreatedAt: createdAt,
-		})
-	}
-
-	return summary
-}
-
 // RegistryImage represents a container image discovered in a registry.
 type RegistryImage struct {
 	Registry   string
