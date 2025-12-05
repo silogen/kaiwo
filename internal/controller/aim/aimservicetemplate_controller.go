@@ -27,6 +27,7 @@ package aim
 import (
 	"context"
 	"fmt"
+	"time"
 
 	servingv1alpha1 "github.com/kserve/kserve/pkg/apis/serving/v1alpha1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -90,8 +91,11 @@ func (r *AIMServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	baseutils.Debug(logger, "Reconciling AIMServiceTemplate", "name", template.Name, "namespace", template.Namespace)
 
+	// Track if we need to requeue
+	var needsRequeue bool
+
 	// Use framework orchestrator with closures
-	return controllerutils.Reconcile(ctx, controllerutils.ReconcileSpec[*aimv1alpha1.AIMServiceTemplate, aimv1alpha1.AIMServiceTemplateStatus]{
+	result, err := controllerutils.Reconcile(ctx, controllerutils.ReconcileSpec[*aimv1alpha1.AIMServiceTemplate, aimv1alpha1.AIMServiceTemplateStatus]{
 		Client:     r.Client,
 		Scheme:     r.Scheme,
 		Object:     &template,
@@ -111,7 +115,9 @@ func (r *AIMServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.R
 					return nil, fmt.Errorf("unexpected observation type %T", obs)
 				}
 			}
-			return r.plan(ctx, &template, o)
+			desired, requeue := r.plan(ctx, &template, o)
+			needsRequeue = requeue
+			return desired, nil
 		},
 
 		ProjectFn: func(ctx context.Context, obs any, errs controllerutils.ReconcileErrors) error {
@@ -128,6 +134,14 @@ func (r *AIMServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 		FinalizeFn: nil, // No external cleanup needed
 	})
+
+	// If we need to requeue due to job limit, do so with a delay
+	if needsRequeue && err == nil {
+		baseutils.Debug(logger, "Requeueing due to discovery job limit", "name", template.Name, "namespace", template.Namespace)
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
+	return result, err
 }
 
 // namespaceTemplateObservation holds observed state
@@ -232,13 +246,13 @@ func (r *AIMServiceTemplateReconciler) observe(ctx context.Context, template *ai
 }
 
 // plan computes desired state (pure function)
-func (r *AIMServiceTemplateReconciler) plan(ctx context.Context, template *aimv1alpha1.AIMServiceTemplate, obs *namespaceTemplateObservation) ([]client.Object, error) {
+func (r *AIMServiceTemplateReconciler) plan(ctx context.Context, template *aimv1alpha1.AIMServiceTemplate, obs *namespaceTemplateObservation) ([]client.Object, bool) {
 	var observation *shared.TemplateObservation
 	if obs != nil {
 		observation = &obs.TemplateObservation
 	}
 
-	desired := shared.PlanTemplateResources(shared.TemplatePlanContext{
+	desired, needsRequeue := shared.PlanTemplateResources(shared.TemplatePlanContext{
 		Ctx:         ctx,
 		Client:      r.Client,
 		Template:    template,
@@ -293,7 +307,7 @@ func (r *AIMServiceTemplateReconciler) plan(ctx context.Context, template *aimv1
 
 	}
 
-	return desired, nil
+	return desired, needsRequeue
 }
 
 func buildTemplateCache(template *aimv1alpha1.AIMServiceTemplate, runtimeConfigResolution *shared.RuntimeConfigResolution) *aimv1alpha1.AIMTemplateCache {

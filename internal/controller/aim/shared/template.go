@@ -448,13 +448,14 @@ func CheckInferenceServicePodImagePullStatus(ctx context.Context, k8sClient clie
 
 // PlanTemplateResources produces desired objects based on the observation and controller-provided builders.
 // It respects the global limit on concurrent discovery jobs (MaxConcurrentDiscoveryJobs).
-func PlanTemplateResources(ctx TemplatePlanContext, builders TemplatePlanBuilders) []client.Object {
+// Returns the desired objects and a boolean indicating if a requeue is needed (when job limit is reached).
+func PlanTemplateResources(ctx TemplatePlanContext, builders TemplatePlanBuilders) ([]client.Object, bool) {
 	if ctx.Observation != nil && ctx.Observation.GPUChecked && !ctx.Observation.GPUAvailable {
-		return nil
+		return nil, false
 	}
 
 	if ctx.Observation == nil || ctx.Observation.Image == "" {
-		return nil
+		return nil, false
 	}
 
 	logger := ctrl.LoggerFrom(ctx.Ctx)
@@ -505,8 +506,8 @@ func PlanTemplateResources(ctx TemplatePlanContext, builders TemplatePlanBuilder
 					"template", ctx.Template.GetName(),
 					"activeJobs", activeJobCount,
 					"limit", MaxConcurrentDiscoveryJobs)
-				// Don't create the job - it will be retried on next reconciliation
-				return desired
+				// Don't create the job - signal that we need to requeue
+				return desired, true
 			} else {
 				baseutils.Debug(logger, "Discovery job limit not reached, proceeding with job creation",
 					"template", ctx.Template.GetName(),
@@ -520,7 +521,7 @@ func PlanTemplateResources(ctx TemplatePlanContext, builders TemplatePlanBuilder
 		}
 	}
 
-	return desired
+	return desired, false
 }
 
 // FormatRuntimeConfigSources renders a human-readable list of runtime config sources for logging/events.
