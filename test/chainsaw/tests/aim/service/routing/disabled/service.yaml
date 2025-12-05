@@ -6,6 +6,5 @@ spec:
   model:
     ref: default-testing-llama-3-8b
   replicas: 1
-  runtimeOverrides:
-    routing:
-      enabled: false
+  routing:
+    enabled: false

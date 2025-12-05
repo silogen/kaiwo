@@ -8,9 +8,8 @@ spec:
   model:
     ref: default-testing-llama-3-8b
   runtimeConfigName: routing-template-config
-  runtimeOverrides:
-    routing:
-      enabled: true
-      gatewayRef:
-        name: kserve-ingress-gateway
-        namespace: kgateway-system
+  routing:
+    enabled: true
+    gatewayRef:
+      name: kserve-ingress-gateway
+      namespace: kgateway-system

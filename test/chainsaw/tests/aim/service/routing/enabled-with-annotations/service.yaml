@@ -6,12 +6,11 @@ spec:
   model:
     ref: default-testing-llama-3-8b
   replicas: 1
-  runtimeOverrides:
-    routing:
-      enabled: true
-      gatewayRef:
-        name: kserve-ingress-gateway
-        namespace: kgateway-system
-      annotations:
-        auth.example.com/groups: "admin,developer"
-        custom.example.com/policy: "strict"
+  routing:
+    enabled: true
+    gatewayRef:
+      name: kserve-ingress-gateway
+      namespace: kgateway-system
+    annotations:
+      auth.example.com/groups: "admin,developer"
+      custom.example.com/policy: "strict"
