@@ -35,9 +35,11 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 	"github.com/silogen/kaiwo/internal/controller/aim/aimclustermodelsource"
@@ -91,7 +93,7 @@ func (r *ClusterModelSourceReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	baseutils.Debug(logger, "Reconciling AIMClusterModelSource", "name", source.Name)
 
-	return controllerutils.Reconcile(ctx, controllerutils.ReconcileSpec[*aimv1alpha1.AIMClusterModelSource, aimv1alpha1.AIMClusterModelSourceStatus]{
+	result, err := controllerutils.Reconcile(ctx, controllerutils.ReconcileSpec[*aimv1alpha1.AIMClusterModelSource, aimv1alpha1.AIMClusterModelSourceStatus]{
 		Client:     r.Client,
 		Scheme:     r.Scheme,
 		Object:     &source,
@@ -130,6 +132,18 @@ func (r *ClusterModelSourceReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 		FinalizeFn: nil,
 	})
+
+	// If reconciliation succeeded, schedule periodic requeue based on syncInterval
+	if err == nil && result.RequeueAfter == 0 {
+		syncInterval := source.Spec.SyncInterval.Duration
+		if syncInterval == 0 {
+			syncInterval = aimv1alpha1.DefaultSyncInterval
+		}
+		result.RequeueAfter = syncInterval
+		baseutils.Debug(logger, "Scheduled next sync", "interval", syncInterval)
+	}
+
+	return result, err
 }
 
 // observe gathers current cluster state (read-only)
@@ -274,7 +288,8 @@ func (r *ClusterModelSourceReconciler) Project(
 func (r *ClusterModelSourceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Recorder = mgr.GetEventRecorderFor("aim-cluster-model-source-controller")
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&aimv1alpha1.AIMClusterModelSource{}).
+		For(&aimv1alpha1.AIMClusterModelSource{},
+			builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Owns(&aimv1alpha1.AIMClusterModel{}).
 		Named("aim-cluster-model-source").
 		Complete(r)
