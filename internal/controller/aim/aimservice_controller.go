@@ -443,6 +443,9 @@ func (r *AIMServiceReconciler) planTemplateCache(ctx context.Context, logger log
 			},
 		}
 
+		// Propagate labels from service to template cache based on runtime config
+		shared.PropagateLabels(service, cache, &obs.RuntimeConfigSpec.AIMRuntimeConfigCommon)
+
 		// Only set owner reference for namespace-scoped templates
 		// Kubernetes doesn't allow namespace-scoped resources to own cluster-scoped resources
 		if obs.Scope == shared.TemplateScopeNamespace {
@@ -668,6 +671,9 @@ func (r *AIMServiceReconciler) planInferenceServiceAndRoute(logger logr.Logger, 
 			baseutils.Debug(logger, "Failed to build service PVC", "error", servicePVCErr)
 			// This error will be handled in status projection
 		} else {
+			// Propagate labels from service to PVC based on runtime config
+			shared.PropagateLabels(service, servicePVC, &obs.RuntimeConfigSpec.AIMRuntimeConfigCommon)
+
 			desired = append(desired, servicePVC)
 		}
 	}
@@ -755,6 +761,9 @@ func (r *AIMServiceReconciler) planInferenceServiceAndRoute(logger logr.Logger, 
 			addServicePVCMount(inferenceService, servicePVC.Name)
 		}
 
+		// Propagate labels from service to inference service based on runtime config
+		shared.PropagateLabels(service, inferenceService, &obs.RuntimeConfigSpec.AIMRuntimeConfigCommon)
+
 		desired = append(desired, inferenceService)
 	} else {
 		if servicePVCErr != nil {
@@ -774,6 +783,10 @@ func (r *AIMServiceReconciler) planInferenceServiceAndRoute(logger logr.Logger, 
 			"gateway", serviceState.Routing.GatewayRef.Name,
 			"path", routePath)
 		route := shared.BuildInferenceServiceHTTPRoute(serviceState, ownerRef)
+
+		// Propagate labels from service to HTTP route based on runtime config
+		shared.PropagateLabels(service, route, &obs.RuntimeConfigSpec.AIMRuntimeConfigCommon)
+
 		desired = append(desired, route)
 	}
 
@@ -799,6 +812,9 @@ func (r *AIMServiceReconciler) plan(ctx context.Context, service *aimv1alpha1.AI
 
 	// Plan derived template if needed
 	if template := r.planDerivedTemplate(logger, service, obs); template != nil {
+		// Propagate labels from service to derived template based on runtime config
+		shared.PropagateLabels(service, template, &obs.RuntimeConfigSpec.AIMRuntimeConfigCommon)
+
 		desired = append(desired, template)
 	}
 

@@ -188,16 +188,15 @@ type AIMServiceSpec struct {
 	// +optional
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 
-	// RuntimeOverrides allows overriding runtime configuration settings for this service.
+	// AIMRuntimeConfigCommon is embedded inline to allow overriding runtime configuration settings for this service.
 	// When specified, these values take precedence over both namespace and cluster-level runtime configs.
 	// This provides fine-grained control over storage, model behavior, routing, and other runtime settings.
 	//
 	// The precedence order is:
-	// 1. AIMService.Spec.RuntimeOverrides (highest priority)
+	// 1. AIMService.Spec inline fields (highest priority)
 	// 2. AIMRuntimeConfig (namespace-level)
 	// 3. AIMClusterRuntimeConfig (cluster-level)
 	// +optional
-	// Inline AIMRuntimeConfigCommon fields for cleaner access
 	AIMRuntimeConfigCommon `json:",inline"`
 }
 

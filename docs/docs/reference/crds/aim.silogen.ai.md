@@ -206,6 +206,7 @@ _Appears in:_
 | `model` _[AIMModelConfig](#aimmodelconfig)_ | Model controls model creation and discovery defaults. |  |  |
 | `routing` _[AIMRuntimeRoutingConfig](#aimruntimeroutingconfig)_ | Routing controls HTTP routing defaults applied to AIM resources.<br />When set, these defaults are used for AIMService resources that enable routing<br />but do not specify their own routing configuration. |  |  |
 | `pvcHeadroomPercent` _integer_ | PVCHeadroomPercent specifies the percentage of extra space to add to PVCs<br />for model storage. This accounts for filesystem overhead and temporary files<br />during model loading. The value represents a percentage (e.g., 10 means 10% extra space).<br />If not specified, defaults to 10%. |  | Minimum: 0 <br /> |
+| `labelPropagation` _[AIMRuntimeConfigLabelPropagationSpec](#aimruntimeconfiglabelpropagationspec)_ | LabelPropagation controls how labels from parent AIM resources are propagated to child resources.<br />When enabled, labels matching the specified patterns are automatically copied from parent resources<br />(e.g., AIMService, AIMTemplateCache) to their child resources (e.g., Deployments, Services, PVCs).<br />This is useful for propagating organizational metadata like cost centers, team identifiers,<br />or compliance labels through the resource hierarchy. |  |  |
 
 
 #### AIMClusterServiceTemplate
@@ -940,6 +941,27 @@ _Appears in:_
 | `model` _[AIMModelConfig](#aimmodelconfig)_ | Model controls model creation and discovery defaults. |  |  |
 | `routing` _[AIMRuntimeRoutingConfig](#aimruntimeroutingconfig)_ | Routing controls HTTP routing defaults applied to AIM resources.<br />When set, these defaults are used for AIMService resources that enable routing<br />but do not specify their own routing configuration. |  |  |
 | `pvcHeadroomPercent` _integer_ | PVCHeadroomPercent specifies the percentage of extra space to add to PVCs<br />for model storage. This accounts for filesystem overhead and temporary files<br />during model loading. The value represents a percentage (e.g., 10 means 10% extra space).<br />If not specified, defaults to 10%. |  | Minimum: 0 <br /> |
+| `labelPropagation` _[AIMRuntimeConfigLabelPropagationSpec](#aimruntimeconfiglabelpropagationspec)_ | LabelPropagation controls how labels from parent AIM resources are propagated to child resources.<br />When enabled, labels matching the specified patterns are automatically copied from parent resources<br />(e.g., AIMService, AIMTemplateCache) to their child resources (e.g., Deployments, Services, PVCs).<br />This is useful for propagating organizational metadata like cost centers, team identifiers,<br />or compliance labels through the resource hierarchy. |  |  |
+
+
+#### AIMRuntimeConfigLabelPropagationSpec
+
+
+
+
+
+
+
+_Appears in:_
+- [AIMClusterRuntimeConfigSpec](#aimclusterruntimeconfigspec)
+- [AIMRuntimeConfigCommon](#aimruntimeconfigcommon)
+- [AIMRuntimeConfigSpec](#aimruntimeconfigspec)
+- [AIMServiceSpec](#aimservicespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | Enabled, if true, allows propagating parent labels to all child resources it creates directly<br />Only label keys that match the ones in Match are propagated. | false |  |
+| `match` _string array_ | Match is a list of label keys that will be propagated to any child resources created.<br />Wildcards are supported, so for example `org.my/my-key-*` would match any label with that prefix. |  |  |
 
 
 #### AIMRuntimeConfigList
@@ -977,6 +999,7 @@ _Appears in:_
 | `model` _[AIMModelConfig](#aimmodelconfig)_ | Model controls model creation and discovery defaults. |  |  |
 | `routing` _[AIMRuntimeRoutingConfig](#aimruntimeroutingconfig)_ | Routing controls HTTP routing defaults applied to AIM resources.<br />When set, these defaults are used for AIMService resources that enable routing<br />but do not specify their own routing configuration. |  |  |
 | `pvcHeadroomPercent` _integer_ | PVCHeadroomPercent specifies the percentage of extra space to add to PVCs<br />for model storage. This accounts for filesystem overhead and temporary files<br />during model loading. The value represents a percentage (e.g., 10 means 10% extra space).<br />If not specified, defaults to 10%. |  | Minimum: 0 <br /> |
+| `labelPropagation` _[AIMRuntimeConfigLabelPropagationSpec](#aimruntimeconfiglabelpropagationspec)_ | LabelPropagation controls how labels from parent AIM resources are propagated to child resources.<br />When enabled, labels matching the specified patterns are automatically copied from parent resources<br />(e.g., AIMService, AIMTemplateCache) to their child resources (e.g., Deployments, Services, PVCs).<br />This is useful for propagating organizational metadata like cost centers, team identifiers,<br />or compliance labels through the resource hierarchy. |  |  |
 
 
 #### AIMRuntimeConfigStatus
@@ -1039,9 +1062,9 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | Enabled controls whether HTTP routing is managed for inference services using this config.<br />When true, the operator creates HTTPRoute resources for services that reference this config.<br />When false or unset, routing must be explicitly enabled on each service.<br />This provides a namespace or cluster-wide default that individual services can override. |  |  |
 | `gatewayRef` _[ParentReference](#parentreference)_ | GatewayRef specifies the Gateway API Gateway resource that should receive HTTPRoutes.<br />This identifies the parent gateway for routing traffic to inference services.<br />The gateway can be in any namespace (cross-namespace references are supported).<br />If routing is enabled but GatewayRef is not specified, service reconciliation will fail<br />with a validation error. |  |  |
-| `pathTemplate` _string_ | PathTemplate defines the HTTP path template for routes, evaluated using JSONPath expressions.<br />The template is rendered against the AIMService object to generate unique paths.<br />Example templates:<br />- `/\{.metadata.namespace\}/\{.metadata.name\}` - namespace and service name<br />- `/\{.metadata.namespace\}/\{.metadata.labels['team']\}/inference` - with label<br />- `/models/\{.spec.aimModelName\}` - based on model name<br />The template must:<br />- Use valid JSONPath expressions wrapped in \{...\}<br />- Reference fields that exist on the service<br />- Produce a path ≤ 200 characters after rendering<br />- Result in valid URL path segments (lowercase, RFC 1123 compliant)<br />If evaluation fails, the service enters Degraded state with PathTemplateInvalid reason.<br />Individual services can override this template via spec.runtimeOverrides.routing.pathTemplate. |  |  |
+| `pathTemplate` _string_ | PathTemplate defines the HTTP path template for routes, evaluated using JSONPath expressions.<br />The template is rendered against the AIMService object to generate unique paths.<br />Example templates:<br />- `/\{.metadata.namespace\}/\{.metadata.name\}` - namespace and service name<br />- `/\{.metadata.namespace\}/\{.metadata.labels['team']\}/inference` - with label<br />- `/models/\{.spec.aimModelName\}` - based on model name<br />The template must:<br />- Use valid JSONPath expressions wrapped in \{...\}<br />- Reference fields that exist on the service<br />- Produce a path ≤ 200 characters after rendering<br />- Result in valid URL path segments (lowercase, RFC 1123 compliant)<br />If evaluation fails, the service enters Degraded state with PathTemplateInvalid reason.<br />Individual services can override this template via spec.Routing.pathTemplate. |  |  |
 | `annotations` _object (keys:string, values:string)_ | Annotations defines additional annotations to add to the HTTPRoute resource.<br />These annotations can be used for various purposes such as configuring ingress<br />behavior, adding metadata, or triggering external integrations.<br />Individual services can override these via spec.routing.annotations. |  |  |
-| `requestTimeout` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#duration-v1-meta)_ | RequestTimeout defines the HTTP request timeout for routes.<br />This sets the maximum duration for a request to complete before timing out.<br />The timeout applies to the entire request/response cycle.<br />If not specified, no timeout is set on the route.<br />Individual services can override this value via spec.runtimeOverrides.routing.requestTimeout. |  |  |
+| `requestTimeout` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#duration-v1-meta)_ | RequestTimeout defines the HTTP request timeout for routes.<br />This sets the maximum duration for a request to complete before timing out.<br />The timeout applies to the entire request/response cycle.<br />If not specified, no timeout is set on the route.<br />Individual services can override this value via spec.routing.requestTimeout. |  |  |
 
 
 #### AIMService
@@ -1326,6 +1349,7 @@ _Appears in:_
 | `model` _[AIMModelConfig](#aimmodelconfig)_ | Model controls model creation and discovery defaults. |  |  |
 | `routing` _[AIMRuntimeRoutingConfig](#aimruntimeroutingconfig)_ | Routing controls HTTP routing defaults applied to AIM resources.<br />When set, these defaults are used for AIMService resources that enable routing<br />but do not specify their own routing configuration. |  |  |
 | `pvcHeadroomPercent` _integer_ | PVCHeadroomPercent specifies the percentage of extra space to add to PVCs<br />for model storage. This accounts for filesystem overhead and temporary files<br />during model loading. The value represents a percentage (e.g., 10 means 10% extra space).<br />If not specified, defaults to 10%. |  | Minimum: 0 <br /> |
+| `labelPropagation` _[AIMRuntimeConfigLabelPropagationSpec](#aimruntimeconfiglabelpropagationspec)_ | LabelPropagation controls how labels from parent AIM resources are propagated to child resources.<br />When enabled, labels matching the specified patterns are automatically copied from parent resources<br />(e.g., AIMService, AIMTemplateCache) to their child resources (e.g., Deployments, Services, PVCs).<br />This is useful for propagating organizational metadata like cost centers, team identifiers,<br />or compliance labels through the resource hierarchy. |  |  |
 
 
 #### AIMServiceStatus

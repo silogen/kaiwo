@@ -63,6 +63,27 @@ type AIMRuntimeConfigCommon struct {
 	// +kubebuilder:validation:Minimum=0
 	// +optional
 	PVCHeadroomPercent *int32 `json:"pvcHeadroomPercent,omitempty"`
+
+	// LabelPropagation controls how labels from parent AIM resources are propagated to child resources.
+	// When enabled, labels matching the specified patterns are automatically copied from parent resources
+	// (e.g., AIMService, AIMTemplateCache) to their child resources (e.g., Deployments, Services, PVCs).
+	// This is useful for propagating organizational metadata like cost centers, team identifiers,
+	// or compliance labels through the resource hierarchy.
+	// +optional
+	LabelPropagation *AIMRuntimeConfigLabelPropagationSpec `json:"labelPropagation,omitempty"`
+}
+
+type AIMRuntimeConfigLabelPropagationSpec struct {
+	// Enabled, if true, allows propagating parent labels to all child resources it creates directly
+	// Only label keys that match the ones in Match are propagated.
+	// +kubebuilder:default=false
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Match is a list of label keys that will be propagated to any child resources created.
+	// Wildcards are supported, so for example `org.my/my-key-*` would match any label with that prefix.
+	// +optional
+	Match []string `json:"match,omitempty"`
 }
 
 // AIMClusterRuntimeConfigSpec defines cluster-wide defaults for AIM resources.
@@ -108,7 +129,7 @@ type AIMRuntimeRoutingConfig struct {
 	// - Result in valid URL path segments (lowercase, RFC 1123 compliant)
 	//
 	// If evaluation fails, the service enters Degraded state with PathTemplateInvalid reason.
-	// Individual services can override this template via spec.runtimeOverrides.routing.pathTemplate.
+	// Individual services can override this template via spec.Routing.pathTemplate.
 	// +optional
 	PathTemplate string `json:"pathTemplate,omitempty"`
 
@@ -123,7 +144,7 @@ type AIMRuntimeRoutingConfig struct {
 	// This sets the maximum duration for a request to complete before timing out.
 	// The timeout applies to the entire request/response cycle.
 	// If not specified, no timeout is set on the route.
-	// Individual services can override this value via spec.runtimeOverrides.routing.requestTimeout.
+	// Individual services can override this value via spec.routing.requestTimeout.
 	// +optional
 	RequestTimeout *metav1.Duration `json:"requestTimeout,omitempty"`
 }

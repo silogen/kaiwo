@@ -28,6 +28,7 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
+	"time"
 
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 
@@ -92,8 +93,11 @@ func (r *AIMClusterServiceTemplateReconciler) Reconcile(ctx context.Context, req
 
 	baseutils.Debug(logger, "Reconciling AIMClusterServiceTemplate", "name", template.Name)
 
+	// Track if we need to requeue
+	var needsRequeue bool
+
 	// Use framework orchestrator with closures
-	return controllerutils.Reconcile(ctx, controllerutils.ReconcileSpec[*aimv1alpha1.AIMClusterServiceTemplate, aimv1alpha1.AIMServiceTemplateStatus]{
+	result, err := controllerutils.Reconcile(ctx, controllerutils.ReconcileSpec[*aimv1alpha1.AIMClusterServiceTemplate, aimv1alpha1.AIMServiceTemplateStatus]{
 		Client:     r.Client,
 		Scheme:     r.Scheme,
 		Object:     &template,
@@ -113,7 +117,9 @@ func (r *AIMClusterServiceTemplateReconciler) Reconcile(ctx context.Context, req
 					return nil, fmt.Errorf("unexpected observation type %T", obs)
 				}
 			}
-			return r.plan(ctx, &template, o)
+			desired, requeue := r.plan(ctx, &template, o)
+			needsRequeue = requeue
+			return desired, nil
 		},
 
 		ProjectFn: func(ctx context.Context, obs any, errs controllerutils.ReconcileErrors) error {
@@ -130,6 +136,14 @@ func (r *AIMClusterServiceTemplateReconciler) Reconcile(ctx context.Context, req
 
 		FinalizeFn: nil, // No external cleanup needed
 	})
+
+	// If we need to requeue due to job limit, do so with a delay
+	if needsRequeue && err == nil {
+		baseutils.Debug(logger, "Requeueing due to discovery job limit", "name", template.Name)
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
+	return result, err
 }
 
 // clusterTemplateObservation holds observed state
@@ -224,7 +238,7 @@ func (r *AIMClusterServiceTemplateReconciler) observe(ctx context.Context, templ
 }
 
 // plan computes desired state (pure function)
-func (r *AIMClusterServiceTemplateReconciler) plan(ctx context.Context, template *aimv1alpha1.AIMClusterServiceTemplate, obs *clusterTemplateObservation) ([]client.Object, error) {
+func (r *AIMClusterServiceTemplateReconciler) plan(ctx context.Context, template *aimv1alpha1.AIMClusterServiceTemplate, obs *clusterTemplateObservation) ([]client.Object, bool) {
 	var observation *shared.TemplateObservation
 	if obs != nil {
 		observation = &obs.TemplateObservation
@@ -232,7 +246,7 @@ func (r *AIMClusterServiceTemplateReconciler) plan(ctx context.Context, template
 
 	operatorNamespace := shared.GetOperatorNamespace()
 
-	desired := shared.PlanTemplateResources(shared.TemplatePlanContext{
+	desired, needsRequeue := shared.PlanTemplateResources(shared.TemplatePlanContext{
 		Ctx:         ctx,
 		Client:      r.Client,
 		Template:    template,
@@ -270,7 +284,7 @@ func (r *AIMClusterServiceTemplateReconciler) plan(ctx context.Context, template
 		},
 	})
 
-	return desired, nil
+	return desired, needsRequeue
 }
 
 // projectStatus computes status from observation + errors (modifies template.Status directly)

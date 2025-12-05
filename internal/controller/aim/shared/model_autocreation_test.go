@@ -57,7 +57,7 @@ func TestResolveOrCreateModelFromImage_CreatesNamespaceModel(t *testing.T) {
 		},
 	}
 
-	modelName, scope, err := ResolveOrCreateModelFromImage(context.Background(), k8sClient, testNamespace, testImageURI, runtimeConfig, nil, "")
+	modelName, scope, err := ResolveOrCreateModelFromImage(context.Background(), k8sClient, testNamespace, testImageURI, runtimeConfig, nil, "", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestResolveOrCreateModelFromImage_FindsExistingModel(t *testing.T) {
 		},
 	}
 
-	modelName, scope, err := ResolveOrCreateModelFromImage(context.Background(), k8sClient, testNamespace, testImageURI, runtimeConfig, nil, "")
+	modelName, scope, err := ResolveOrCreateModelFromImage(context.Background(), k8sClient, testNamespace, testImageURI, runtimeConfig, nil, "", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -163,7 +163,7 @@ func TestResolveOrCreateModelFromImage_ErrorOnMultipleModels(t *testing.T) {
 		},
 	}
 
-	_, _, err := ResolveOrCreateModelFromImage(context.Background(), k8sClient, testNamespace, testImageURI, runtimeConfig, nil, "")
+	_, _, err := ResolveOrCreateModelFromImage(context.Background(), k8sClient, testNamespace, testImageURI, runtimeConfig, nil, "", nil)
 	if err == nil {
 		t.Fatal("expected error when multiple models match the same image")
 	}
