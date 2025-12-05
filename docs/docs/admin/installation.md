@@ -25,6 +25,21 @@ Kaiwo requires several core Kubernetes components to function correctly:
 5.  **AppWrapper**: Used by Kueue to manage atomic scheduling of complex workloads, particularly Ray clusters/services. ([GitHub](https://github.com/project-codeflare/appwrapper)).
 6.  **Prometheus (Recommended)**: For monitoring the Kaiwo operator and cluster metrics.
 
+### AIM Inference Dependencies
+
+The following components are required for deploying AIM inference services:
+
+7.  **KServe**: Serves as the inference runtime for AIM services. Provides model serving infrastructure with support for autoscaling and canary deployments. ([Docs](https://kserve.github.io/website/)).
+8.  **Gateway API / KGateway**: Handles HTTP routing for inference endpoints. KGateway provides a Gateway API implementation. ([Gateway API Docs](https://gateway-api.sigs.k8s.io/)).
+
+### Autoscaling Dependencies (Optional)
+
+The following components are required *only* if you want to use autoscaling for AIM inference services:
+
+9.  **KEDA**: Kubernetes Event-driven Autoscaling. Enables scaling based on custom metrics from various sources. ([Docs](https://keda.sh/)).
+10. **Kedify OpenTelemetry Add-on**: Provides the OpenTelemetry scaler for KEDA, enabling autoscaling based on metrics from vLLM and other inference runtimes. ([GitHub](https://github.com/kedify/otel-add-on)).
+11. **OpenTelemetry Operator**: Manages OpenTelemetry Collectors that scrape metrics from inference pods and forward them to KEDA. ([Docs](https://opentelemetry.io/docs/kubernetes/operator/)).
+
 ## Installation Methods
 
 There are two main phases: install dependencies (Step 1) and install Kaiwo (Step 2). Choose the option(s) that fit your environment.
@@ -132,6 +147,29 @@ kubectl get pods -A | grep kuberay-operator || true
 
 # Check AppWrapper
 kubectl get pods -n appwrapper-system
+```
+
+For AIM inference services, also verify:
+
+```bash
+# Check KServe
+kubectl get pods -n kserve-system
+
+# Check Gateway (KGateway)
+kubectl get pods -n kgateway-system
+```
+
+For autoscaling support, verify:
+
+```bash
+# Check KEDA
+kubectl get pods -n keda
+
+# Check Kedify OpenTelemetry Add-on (runs as keda-otel-scaler)
+kubectl get pods -n keda -l app.kubernetes.io/name=otel-add-on
+
+# Check OpenTelemetry Operator
+kubectl get pods -n opentelemetry-operator-system
 ```
 
 ### 2. Check Kaiwo Operator

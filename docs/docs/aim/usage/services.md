@@ -33,6 +33,122 @@ spec:
   replicas: 3
 ```
 
+### Autoscaling
+
+AIMService supports automatic scaling based on custom metrics using [KEDA](https://keda.sh/) (Kubernetes Event-driven Autoscaling). This enables your inference services to scale dynamically based on real-time demand.
+
+#### Basic Autoscaling
+
+Enable autoscaling by specifying minimum and maximum replica counts:
+
+```yaml
+spec:
+  model:
+    image: ghcr.io/silogen/aim-meta-llama-llama-3-1-8b-instruct:0.7.0
+  minReplicas: 1
+  maxReplicas: 5
+```
+
+This configures KEDA to manage scaling between 1 and 5 replicas. Without custom metrics, KEDA uses default scaling behavior.
+
+#### Custom Metrics with OpenTelemetry
+
+For precise control over scaling behavior, configure custom metrics from the inference runtime. vLLM exposes metrics via OpenTelemetry that can drive scaling decisions:
+
+```yaml
+spec:
+  model:
+    image: ghcr.io/silogen/aim-meta-llama-llama-3-1-8b-instruct:0.7.0
+  minReplicas: 1
+  maxReplicas: 3
+  autoScaling:
+    metrics:
+      - type: PodMetric
+        podmetric:
+          metric:
+            backend: "opentelemetry"
+            metricNames:
+              - vllm:num_requests_running
+            query: "vllm:num_requests_running"
+            operationOverTime: "avg"
+          target:
+            type: Value
+            value: "1"
+```
+
+This configuration scales based on the average number of running requests across pods. When the average exceeds 1, KEDA scales up; when it drops below, KEDA scales down.
+
+#### Metric Configuration Options
+
+| Field | Description | Default |
+|-------|-------------|---------|
+| `backend` | Metrics backend to use | `opentelemetry` |
+| `serverAddress` | Address of the metrics server | `keda-otel-scaler.keda.svc:4317` |
+| `metricNames` | List of metrics to collect from pods | - |
+| `query` | Query to retrieve metrics from the backend | - |
+| `operationOverTime` | Aggregation operation: `last_one`, `avg`, `max`, `min`, `rate`, `count` | `last_one` |
+
+#### Target Types
+
+| Type | Description | Field |
+|------|-------------|-------|
+| `Value` | Scale based on absolute metric value | `value` |
+| `AverageValue` | Scale based on average value across pods | `averageValue` |
+| `Utilization` | Scale based on percentage utilization (resource metrics only) | `averageUtilization` |
+
+#### Common vLLM Metrics
+
+These metrics are commonly used for autoscaling vLLM-based inference services:
+
+| Metric | Description | Scaling Use Case |
+|--------|-------------|------------------|
+| `vllm:num_requests_running` | Number of requests currently being processed | Scale based on concurrent load |
+| `vllm:num_requests_waiting` | Number of requests waiting in queue | Scale based on queue depth |
+
+
+#### How It Works
+
+When autoscaling is configured, AIMService:
+
+1. Creates a KServe InferenceService with the `serving.kserve.io/autoscalerClass: keda` annotation
+2. KEDA creates a `ScaledObject` that monitors the specified metrics
+3. KEDA creates and manages an `HorizontalPodAutoscaler` (HPA) based on the ScaledObject
+4. The HPA scales the deployment between `minReplicas` and `maxReplicas` based on metric values
+
+#### Monitoring Autoscaling
+
+Check the ScaledObject status:
+
+```bash
+kubectl -n <namespace> get scaledobject <service-name>-predictor -o yaml
+```
+
+Check the HPA created by KEDA:
+
+```bash
+kubectl -n <namespace> get hpa keda-hpa-<service-name>-predictor
+```
+
+Watch scaling events in real-time:
+
+```bash
+kubectl -n <namespace> get hpa keda-hpa-<service-name>-predictor -w
+```
+
+View current metrics:
+
+```bash
+kubectl -n <namespace> describe hpa keda-hpa-<service-name>-predictor
+```
+
+#### Prerequisites
+
+Autoscaling requires:
+
+- **KEDA** installed in the cluster
+- **KEDA OpenTelemetry Scaler** (`keda-otel-scaler`) deployed if using OpenTelemetry metrics
+- **OpenTelemetry Collector** configured to scrape metrics from inference pods
+
 ### Resource Limits
 
 Override default resource allocations:
