@@ -186,6 +186,7 @@ func (r *AIMClusterModelReconciler) plan(ctx context.Context, image *aimv1alpha1
 		OwnerReference:  ownerRef,
 		Clientset:       r.Clientset,
 		IsClusterScoped: true,
+		ParentObject:    image,
 	})
 
 	if err != nil {
@@ -256,6 +257,7 @@ func (r *AIMClusterModelReconciler) projectStatus(
 			OwnerReference:  ownerRef,
 			Clientset:       r.Clientset,
 			IsClusterScoped: true,
+			ParentObject:    image,
 		})
 
 		if err != nil {

@@ -517,6 +517,10 @@ func PlanTemplateResources(ctx TemplatePlanContext, builders TemplatePlanBuilder
 		}
 
 		if job := builders.BuildDiscoveryJob(input); job != nil {
+			// Propagate labels from template to discovery job based on runtime config
+			if parentObj, ok := ctx.Template.(client.Object); ok {
+				PropagateLabels(parentObj, job, &input.RuntimeConfigSpec.AIMRuntimeConfigCommon)
+			}
 			desired = append(desired, job)
 		}
 	}

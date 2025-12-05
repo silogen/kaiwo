@@ -186,6 +186,7 @@ func (r *AIMModelReconciler) plan(ctx context.Context, image *aimv1alpha1.AIMMod
 		OwnerReference:  ownerRef,
 		Clientset:       r.Clientset,
 		IsClusterScoped: false,
+		ParentObject:    image,
 	})
 
 	if err != nil {

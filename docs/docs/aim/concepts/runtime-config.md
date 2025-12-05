@@ -234,6 +234,91 @@ Result:
 
 This allows workloads without special requirements to proceed even when no default config exists.
 
+## Label Propagation
+
+Runtime configurations support automatic label propagation from parent AIM resources to their child Kubernetes resources. This feature helps maintain consistent metadata across the resource hierarchy for tracking, cost allocation, and compliance purposes.
+
+### Configuration
+
+Label propagation is configured in the runtime config's `labelPropagation` section:
+
+```yaml
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMRuntimeConfig
+metadata:
+  name: default
+  namespace: ml-team
+spec:
+  labelPropagation:
+    enabled: true
+    match:
+      - "org.example/cost-center"
+      - "org.example/team"
+      - "compliance.example/*"  # Wildcard matches any label with this prefix
+```
+
+### Propagation Behavior
+
+When enabled, labels matching the specified patterns are automatically copied from parent resources to child resources:
+
+- **AIMService** → InferenceService, HTTPRoute, PVCs, auto-created AIMModel
+- **AIMTemplateCache** → AIMModelCache resources
+- **AIMModelCache** → PVCs, download Jobs
+- **AIMModel/AIMClusterModel** → auto-created AIMServiceTemplates
+- **AIMServiceTemplate** → AIMTemplateCache
+- **AIMClusterModelSource** → auto-created AIMClusterModel resources
+
+### Pattern Matching
+
+The `match` field accepts exact label keys or wildcard patterns:
+
+- `"org.example/team"` - Matches exactly this label key
+- `"org.example/*"` - Matches any label with the prefix `org.example/`
+- `"compliance.*/severity"` - Matches labels like `compliance.sec/severity`, `compliance.audit/severity`
+
+### Special Handling
+
+For Job resources, propagated labels are applied to both:
+1. The Job's metadata labels
+2. The Job's PodTemplateSpec labels (enabling pod-level tracking)
+
+### Example Use Case
+
+A typical configuration for multi-tenant cost tracking:
+
+```yaml
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterRuntimeConfig
+metadata:
+  name: default
+spec:
+  labelPropagation:
+    enabled: true
+    match:
+      - "org.example/cost-center"
+      - "org.example/department"
+      - "org.example/project"
+```
+
+When users create an AIMService with these labels:
+
+```yaml
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: llama-chat
+  namespace: ml-team
+  labels:
+    org.example/cost-center: "eng-ml"
+    org.example/department: "engineering"
+    org.example/project: "chatbot-v2"
+spec:
+  model:
+    ref: meta-llama-3-8b
+```
+
+The operator propagates these labels to the InferenceService, HTTPRoute, and any PVCs created for the service, enabling cost tracking and chargeback at the infrastructure level.
+
 ## Operator Namespace
 
 The AIM controllers determine the operator namespace from the `AIM_OPERATOR_NAMESPACE` environment variable (default: `kaiwo-system`).
@@ -250,4 +335,3 @@ Cluster-scoped workflows such as:
 - [Models](models.md) - How models use runtime configs for discovery and auto-creation
 - [Templates](templates.md) - Template discovery and runtime config resolution
 - [Services Usage](../usage/services.md) - Practical service configuration
-- [Runtime Config Usage](../usage/runtime-config.md) - Configuration guide

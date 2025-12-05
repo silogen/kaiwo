@@ -65,6 +65,7 @@ type ClusterModelSourceObservation struct {
 	registryError     error
 	totalScanned      int
 	totalFiltered     int
+	runtimeConfig     *aimv1alpha1.AIMRuntimeConfigCommon // For label propagation
 }
 
 // ClusterModelSourceFetchResult contains data gathered during the Fetch phase.
@@ -185,6 +186,12 @@ func (r *ClusterModelSourceReconciler) observe(
 	}
 	obs.totalFiltered = len(obs.filteredImages)
 
+	// Resolve runtime config for label propagation (cluster-scoped, so use empty namespace)
+	// We silently ignore errors since label propagation is optional
+	if resolution, err := shared.ResolveRuntimeConfig(context.Background(), r.Client, "", shared.DefaultRuntimeConfigName); err == nil && resolution != nil {
+		obs.runtimeConfig = &resolution.EffectiveSpec.AIMRuntimeConfigCommon
+	}
+
 	return obs
 }
 
@@ -246,6 +253,9 @@ func (r *ClusterModelSourceReconciler) plan(
 		); err != nil {
 			return result, fmt.Errorf("failed to set owner reference: %w", err)
 		}
+
+		// Propagate labels from model source to cluster model based on runtime config
+		shared.PropagateLabels(source, model, obs.runtimeConfig)
 
 		result = append(result, model)
 	}

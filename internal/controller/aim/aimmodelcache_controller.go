@@ -241,6 +241,10 @@ func (r *AIMModelCacheReconciler) plan(ctx context.Context, mc *aimv1alpha1.AIMM
 		pvcSize := shared.QuantityWithHeadroom(mc.Spec.Size.Value(), headroomPercent)
 
 		pvc := r.buildPVC(mc, r.pvcName(mc), pvcSize, storageClassName)
+
+		// Propagate labels from model cache to PVC based on runtime config
+		shared.PropagateLabels(mc, pvc, &ob.runtimeConfigSpec.AIMRuntimeConfigCommon)
+
 		if err := ctrl.SetControllerReference(mc, pvc, r.Scheme); err != nil {
 			return desired, fmt.Errorf("owner pvc: %w", err)
 		}
@@ -255,6 +259,10 @@ func (r *AIMModelCacheReconciler) plan(ctx context.Context, mc *aimv1alpha1.AIMM
 			"waitForFirstConsumer", ob.waitForFirstConsumer)
 
 		job := r.buildDownloadJob(mc, r.jobName(mc), r.pvcName(mc))
+
+		// Propagate labels from model cache to download job based on runtime config
+		shared.PropagateLabels(mc, job, &ob.runtimeConfigSpec.AIMRuntimeConfigCommon)
+
 		if err := ctrl.SetControllerReference(mc, job, r.Scheme); err != nil {
 			return desired, fmt.Errorf("owner job: %w", err)
 		}

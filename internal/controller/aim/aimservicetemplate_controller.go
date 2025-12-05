@@ -302,6 +302,12 @@ func (r *AIMServiceTemplateReconciler) plan(ctx context.Context, template *aimv1
 		// Caching is enabled, and didn't find ours - create one
 		if !cacheFound {
 			newCache := buildTemplateCache(template, obs.RuntimeConfig)
+
+			// Propagate labels from template to template cache based on runtime config
+			if obs.RuntimeConfig != nil {
+				shared.PropagateLabels(template, newCache, &obs.RuntimeConfig.EffectiveSpec.AIMRuntimeConfigCommon)
+			}
+
 			desired = append(desired, newCache)
 		}
 
