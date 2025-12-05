@@ -1,0 +1,12 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterModelSource
+metadata:
+  name: test-ghcr-auth-failure
+spec:
+  registry: ghcr.io
+  maxModels: 10
+  filters:
+    - image: silogen/aim-openai-gpt-oss-*
+  versions:
+    - ">=0.8.0"
+    - "<=0.9.0-rc1"

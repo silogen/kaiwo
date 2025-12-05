@@ -97,6 +97,7 @@ spec:
 
                         When a full URI is specified (including registry like ghcr.io), only images from that
                         registry will match.
+                      maxLength: 512
                       type: string
                     versions:
                       description: |-
@@ -115,6 +116,7 @@ spec:
                   required:
                   - image
                   type: object
+                maxItems: 100
                 minItems: 1
                 type: array
               imagePullSecrets:
@@ -139,6 +141,16 @@ spec:
                   type: object
                   x-kubernetes-map-type: atomic
                 type: array
+              maxModels:
+                default: 100
+                description: |-
+                  MaxModels is the maximum number of AIMClusterModel resources to create from this source.
+                  Once this limit is reached, no new models will be created, even if more matching images are discovered.
+                  Existing models are never deleted.
+                  This prevents runaway model creation from overly broad filters.
+                maximum: 10000
+                minimum: 1
+                type: integer
               registry:
                 default: docker.io
                 description: |-
@@ -158,6 +170,9 @@ spec:
                   Individual filters can override this with their own version constraints.
                   Constraints use semver syntax: >=1.0.0, <2.0.0, ~1.2.0, ^1.0.0, etc.
                   Non-semver tags (e.g., "latest", "dev") are silently skipped.
+
+                  Version ranges work on all registries (including ghcr.io, gcr.io) when combined with
+                  exact repository names (no wildcards).
                 items:
                   type: string
                 type: array
@@ -168,6 +183,11 @@ spec:
             description: AIMClusterModelSourceStatus defines the observed state of
               AIMClusterModelSource.
             properties:
+              availableModels:
+                description: |-
+                  AvailableModels is the total count of images discovered in the registry that match the filters.
+                  This may be higher than DiscoveredModels if maxModels limit was reached.
+                type: integer
               conditions:
                 description: |-
                   Conditions represent the latest available observations of the source's state.
@@ -230,35 +250,6 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
-              discoveredImages:
-                description: |-
-                  DiscoveredImages provides a summary of recently discovered images.
-                  Limited to avoid excessive status size. Typically shows the most recent 50 images.
-                items:
-                  description: DiscoveredImageInfo provides information about a discovered
-                    image.
-                  properties:
-                    createdAt:
-                      description: CreatedAt is when this image was first discovered.
-                      format: date-time
-                      type: string
-                    image:
-                      description: Image is the full image reference (repository:tag).
-                      type: string
-                    modelName:
-                      description: ModelName is the name of the generated AIMClusterModel
-                        resource.
-                      type: string
-                    tag:
-                      description: Tag is the image tag.
-                      type: string
-                  required:
-                  - createdAt
-                  - image
-                  - modelName
-                  - tag
-                  type: object
-                type: array
               discoveredModels:
                 description: |-
                   DiscoveredModels is the count of AIMClusterModel resources managed by this source.
@@ -270,6 +261,11 @@ spec:
                   Updated after each successful sync operation.
                 format: date-time
                 type: string
+              modelsLimitReached:
+                description: |-
+                  ModelsLimitReached indicates whether the maxModels limit has been reached.
+                  When true, no new models will be created even if more matching images are discovered.
+                type: boolean
               observedGeneration:
                 description: ObservedGeneration reflects the generation of the most
                   recently observed spec.
