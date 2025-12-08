@@ -1,0 +1,8 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterModel
+metadata:
+  name: test-explicit-ref
+spec:
+  image: ghcr.io/silogen/aim-dummy:0.1.1-2
+  discovery:
+    enabled: false

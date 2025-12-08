@@ -1,0 +1,10 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: default-template-overrides
+spec:
+  model:
+    ref: default-testing-llama-3-8b
+  overrides:
+    metric: throughput
+    precision: fp8

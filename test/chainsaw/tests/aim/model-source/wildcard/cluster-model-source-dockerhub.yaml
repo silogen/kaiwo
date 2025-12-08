@@ -1,0 +1,13 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterModelSource
+metadata:
+  name: dockerhub
+spec:
+  syncInterval: 1h
+  maxModels: 5
+  filters:
+    - image: "amdenterpriseai/aim-*"
+      exclude:
+        - "amdenterpriseai/aim-base"
+  versions:
+    - "0.8.4"

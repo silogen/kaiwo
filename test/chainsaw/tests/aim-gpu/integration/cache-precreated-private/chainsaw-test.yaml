@@ -1,0 +1,106 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: integration-cache-precreated-private
+spec:
+  description: Test that an AIMService can use pre-created template cache with network isolation, using private/gated HF model
+  # using a cluster model, so parallel for safety
+  concurrent: false
+  steps:
+  - name: Create runtime config
+    try:
+    - apply:
+        file: runtime-config.yaml
+
+  - name: Create secrets
+    try:
+    - apply:
+        # Must exist in this folder
+        file: secrets.yaml
+
+  - name: Create cluster model
+    try:
+    - apply:
+        file: cluster-model.yaml
+
+  - name: Wait for model to be ready
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterModel
+          metadata:
+            name: aim-meta-llama-llama-3-2-1b-instruct-0-7-0-preview
+          status:
+            status: Ready
+
+  - name: Pre-create template cache
+    try:
+    - apply:
+        file: template-cache.yaml
+
+  - name: Verify template cache becomes available
+    try:
+    - assert:
+        timeout: 10m
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMTemplateCache
+          metadata:
+            name: integration-cache-precreated-private
+          status:
+            status: Available
+
+  - name: Apply network policy to block inference pod internet access
+    try:
+    - apply:
+        file: network-policy.yaml
+
+  - name: Create service
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service becomes ready despite network isolation
+    try:
+    - assert:
+        timeout: 10m
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: integration-cache-precreated-private
+          status:
+            status: Running
+            (conditions[?type == 'RuntimeReady']):
+            - status: "True"
+            (conditions[?type == 'CacheReady']):
+            - status: "True"
+
+  - name: Verify pod has cache mounts
+    try:
+    - assert:
+        timeout: 1m
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            labels:
+              aim.silogen.ai/service-name: integration-cache-precreated-private
+          spec:
+            (containers[?name == 'kserve-container']):
+            - (volumeMounts[?mountPath == '/workspace/model-cache/meta-llama/Llama-3.2-1B-Instruct']):
+              - mountPath: /workspace/model-cache/meta-llama/Llama-3.2-1B-Instruct
+              (env[?name == 'AIM_CACHE_PATH']):
+              - value: /workspace/model-cache
+          status:
+            phase: Running
+
+  - name: Verify the service responds
+    try:
+    - script:
+        timeout: 2m
+        env:
+        - name: HTTP_BASE_PATH
+          value: /integration/custom-path/integration-cache-precreated-private/v1
+        content: bash ../../_shared/validate-http.sh

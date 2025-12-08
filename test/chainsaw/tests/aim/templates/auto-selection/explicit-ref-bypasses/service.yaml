@@ -1,0 +1,9 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-explicit-ref-service
+spec:
+  model:
+    ref: test-explicit-ref
+  # Explicit templateRef - should use this even though latency would be preferred
+  templateRef: test-explicit-throughput

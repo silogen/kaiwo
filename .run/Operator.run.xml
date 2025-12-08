@@ -12,6 +12,7 @@
       <env name="RESOURCE_MONITORING_POLLING_INTERVAL" value="10s" />
       <env name="RESOURCE_MONITORING_TARGET_NAMESPACES" value="kaiwo-test-monitoring-conditions" />
       <env name="WEBHOOK_CERT_DIRECTORY" value="certs" />
+      <env name="LOG_LEVEL" value="debug" />
     </envs>
     <kind value="FILE" />
     <package value="github.com/silogen/kaiwo" />

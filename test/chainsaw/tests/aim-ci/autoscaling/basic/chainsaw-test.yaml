@@ -1,0 +1,94 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: autoscaling-basic
+spec:
+  description: Test that AIMService with autoScaling creates ScaledObject and HPA with resolved metrics
+  timeouts:
+    assert: 180s
+  steps:
+  - name: Create AIMService with autoscaling
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify AIMService is resolved
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-service
+          status:
+            (conditions[?type == 'Resolved']):
+            - status: "True"
+              reason: Resolved
+
+  - name: Verify InferenceService was created with KEDA autoscaler annotation
+    try:
+    - assert:
+        resource:
+          apiVersion: serving.kserve.io/v1beta1
+          kind: InferenceService
+          metadata:
+            name: test-service
+            annotations:
+              serving.kserve.io/autoscalerClass: "keda"
+            (ownerReferences[?kind == 'AIMService']):
+            - name: test-service
+
+  - name: Verify ScaledObject was created by KEDA
+    try:
+    - assert:
+        resource:
+          apiVersion: keda.sh/v1alpha1
+          kind: ScaledObject
+          metadata:
+            name: test-service-predictor
+          spec:
+            minReplicaCount: 1
+            maxReplicaCount: 3
+            scaleTargetRef:
+              name: test-service-predictor
+
+  - name: Verify HPA was created by KEDA
+    try:
+    - assert:
+        resource:
+          apiVersion: autoscaling/v2
+          kind: HorizontalPodAutoscaler
+          metadata:
+            name: keda-hpa-test-service-predictor
+          spec:
+            minReplicas: 1
+            maxReplicas: 3
+
+  - name: Verify HPA has resolved metrics (not unknown)
+    try:
+    - assert:
+        timeout: 300s
+        resource:
+          apiVersion: autoscaling/v2
+          kind: HorizontalPodAutoscaler
+          metadata:
+            name: keda-hpa-test-service-predictor
+          status:
+            # Verify currentMetrics array exists and has at least one entry
+            (length(currentMetrics || `[]`) > `0`): true
+            # Verify currentReplicas is set (HPA is actively managing replicas)
+            (currentReplicas != null): true
+
+  - name: Verify ScaledObject status shows Ready condition
+    try:
+    - assert:
+        timeout: 300s
+        resource:
+          apiVersion: keda.sh/v1alpha1
+          kind: ScaledObject
+          metadata:
+            name: test-service-predictor
+          status:
+            (conditions[?type == 'Ready']):
+            - status: "True"
+

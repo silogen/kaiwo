@@ -1,0 +1,8 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMModel
+metadata:
+  name: llama-3-8b-throughput-template-priority
+spec:
+  image: busybox:latest-aim-namespace
+  discovery:
+    enabled: false

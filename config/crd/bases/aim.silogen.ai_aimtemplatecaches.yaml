@@ -57,6 +57,11 @@ spec:
           spec:
             description: AIMTemplateCacheSpec defines the desired state of AIMTemplateCache
             properties:
+              downloadImage:
+                description: |-
+                  The image that should be used to download the models
+                  If not set the model cache controller will decide
+                type: string
               env:
                 description: |-
                   Env specifies environment variables to use for authentication when downloading models.
@@ -200,14 +205,50 @@ spec:
                   type: object
                   x-kubernetes-map-type: atomic
                 type: array
+              modelSources:
+                description: ModelSources are set by the template that wants these
+                  cached
+                items:
+                  description: |-
+                    AIMModelSource describes a model artifact that must be downloaded for inference.
+                    Discovery extracts these from the container's configuration to enable caching and validation.
+                  properties:
+                    name:
+                      description: |-
+                        Name is a human-readable identifier for this model artifact.
+                        May be empty if the source represents the primary model.
+                      type: string
+                    size:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      description: |-
+                        Size is the expected storage space required for this model artifact.
+                        Used for PVC sizing and capacity planning during cache creation.
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    sourceUri:
+                      description: |-
+                        SourceURI is the location from which the model should be downloaded.
+                        Supported schemes:
+                        - hf://org/model - Hugging Face Hub model
+                        - s3://bucket/key - S3-compatible storage
+                      pattern: ^(hf|s3)://[^ \t\r\n]+$
+                      type: string
+                  required:
+                  - size
+                  - sourceUri
+                  type: object
+                type: array
               runtimeConfigName:
                 default: default
                 description: RuntimeConfigName references the AIM runtime configuration
                   (by name) to use for this template cache.
                 type: string
               storageClassName:
-                description: StorageClassName is the name for the storage class to
-                  use for this cache
+                description: |-
+                  StorageClassName is the name for the storage class to use for this cache
+                  If not set the cluster default will be used
                 type: string
               templateRef:
                 description: |-
@@ -284,62 +325,78 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
-              effectiveRuntimeConfig:
-                description: EffectiveRuntimeConfig surfaces the runtime config references
-                  used to warm the cache.
-                properties:
-                  clusterRef:
-                    description: ClusterRef points at the cluster-scoped runtime config,
-                      if present.
-                    properties:
-                      kind:
-                        description: Kind is either "AIMRuntimeConfig" or "AIMClusterRuntimeConfig".
-                        type: string
-                      name:
-                        description: Name is the metadata.name of the runtime config.
-                        type: string
-                      namespace:
-                        description: Namespace is only set for namespace-scoped runtime
-                          configs.
-                        type: string
-                      uid:
-                        description: UID is included to detect stale references.
-                        type: string
-                    required:
-                    - kind
-                    - name
-                    type: object
-                  hash:
-                    description: Hash is a stable hash of the merged configuration
-                      used for change detection.
-                    type: string
-                  namespaceRef:
-                    description: NamespaceRef points at the namespace-scoped runtime
-                      config, if present.
-                    properties:
-                      kind:
-                        description: Kind is either "AIMRuntimeConfig" or "AIMClusterRuntimeConfig".
-                        type: string
-                      name:
-                        description: Name is the metadata.name of the runtime config.
-                        type: string
-                      namespace:
-                        description: Namespace is only set for namespace-scoped runtime
-                          configs.
-                        type: string
-                      uid:
-                        description: UID is included to detect stale references.
-                        type: string
-                    required:
-                    - kind
-                    - name
-                    type: object
+              modelCaches:
+                additionalProperties:
+                  description: AIMResolvedModelCache contains reference info and status
+                    for a cached model.
+                  properties:
+                    model:
+                      description: Model is the name of the model that is cached
+                      type: string
+                    mountPoint:
+                      description: MountPoint is the mount point for the model cache
+                      type: string
+                    name:
+                      description: Name of the AIMModelCache resource
+                      type: string
+                    persistentVolumeClaim:
+                      description: PersistentVolumeClaim name if available
+                      type: string
+                    status:
+                      description: Status of the model cache
+                      enum:
+                      - Pending
+                      - Progressing
+                      - Available
+                      - Failed
+                      type: string
+                    uid:
+                      description: UID of the AIMModelCache resource
+                      type: string
+                  required:
+                  - model
+                  - name
+                  - status
+                  - uid
+                  type: object
+                description: ModelCaches maps model names to their resolved AIMModelCache
+                  resources.
                 type: object
               observedGeneration:
                 description: ObservedGeneration is the most recent generation observed
                   by the controller.
                 format: int64
                 type: integer
+              resolvedRuntimeConfig:
+                description: ResolvedRuntimeConfig captures metadata about the runtime
+                  config that was resolved.
+                properties:
+                  kind:
+                    description: Kind is the fully-qualified kind of the resolved
+                      reference, when known.
+                    type: string
+                  name:
+                    description: Name is the resource name that satisfied the reference.
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace identifies where the resource was found when namespace-scoped.
+                      Empty indicates a cluster-scoped resource.
+                    type: string
+                  scope:
+                    description: Scope indicates whether the resolved resource was
+                      namespace or cluster scoped.
+                    enum:
+                    - Namespace
+                    - Cluster
+                    - Merged
+                    - Unknown
+                    type: string
+                  uid:
+                    description: UID captures the unique identifier of the resolved
+                      reference, when known.
+                    type: string
+                type: object
               resolvedTemplateKind:
                 description: |-
                   ResolvedTemplateKind indicates whether the template resolved to a namespace-scoped

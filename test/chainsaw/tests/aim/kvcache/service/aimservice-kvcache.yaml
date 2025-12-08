@@ -1,0 +1,24 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: dummy-w-kvcache
+spec:
+  model:
+    image: ghcr.io/silogen/aim-dummy:0.1.3
+  defaultStorageClassName: rwx-nfs
+  kvCache:
+    #name: shared-redis-cache
+    type: redis
+    image: redis:latest
+    resources:
+      limits:
+        cpu: "0.8"
+        memory: 2Gi
+    lmCacheConfig: |
+      local_cpu: false
+      chunk_size: 200
+      max_local_cpu_size: 1.0
+      remote_url: "redis://{SERVICE_URL}"
+      remote_serde: "naive"
+    storage:
+      storageClassName: rwx-nfs

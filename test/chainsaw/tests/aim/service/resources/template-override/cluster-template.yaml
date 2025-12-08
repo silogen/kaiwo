@@ -1,0 +1,19 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterServiceTemplate
+metadata:
+  name: template-override-template
+spec:
+  modelName: template-override-image
+  metric: throughput
+  resources:
+    limits:
+      cpu: "2"
+      memory: 2Gi
+      amd.com/gpu: '0'
+    requests:
+      cpu: "1"
+      memory: 1Gi
+      amd.com/gpu: '0'
+  gpuSelector:
+    count: 1
+    model: MI300X

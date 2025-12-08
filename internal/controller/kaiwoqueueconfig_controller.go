@@ -42,6 +42,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -66,6 +67,8 @@ type KaiwoQueueConfigReconciler struct {
 // +kubebuilder:rbac:groups=kaiwo.silogen.ai,resources=kaiwoqueueconfigs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=kaiwo.silogen.ai,resources=kaiwoqueueconfigs/finalizers,verbs=update
 // +kubebuilder:rbac:groups=config.kaiwo.silogen.ai,resources=kaiwoconfigs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=kueue.x-k8s.io,resources=resourceflavors;clusterqueues;localqueues;workloads;admissionchecks;workloadpriorityclasses;topologies,verbs=get;list;watch;create;update;patch;delete
 
 func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -82,25 +85,31 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	config := common.ConfigFromContext(ctx)
 
+	var queueConfig kaiwo.KaiwoQueueConfig
 	if config.DynamicallyUpdateDefaultClusterQueue {
-		if err := r.EnsureKaiwoQueueConfig(ctx, common.KaiwoQueueConfigName, config.DefaultClusterQueueName, config.DefaultClusterQueueCohortName); err != nil {
+		if err := r.EnsureKaiwoQueueConfig(ctx, common.KaiwoQueueConfigName, config.DefaultClusterQueueName, config.DefaultClusterQueueCohortName, &queueConfig); err != nil {
 			logger.Error(err, "Failed to create default KaiwoQueueConfig")
 			return ctrl.Result{}, err
 		}
-	}
-
-	// Fetch the requested KaiwoQueueConfig
-	var queueConfig kaiwo.KaiwoQueueConfig
-	err = r.Get(ctx, req.NamespacedName, &queueConfig)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			if err := r.EnsureKaiwoQueueConfig(ctx, common.KaiwoQueueConfigName, config.DefaultClusterQueueName, config.DefaultClusterQueueCohortName); err != nil {
-				logger.Error(err, "Failed to create default KaiwoQueueConfig")
+	} else {
+		// Fetch the requested KaiwoQueueConfig
+		err = r.Get(ctx, req.NamespacedName, &queueConfig)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				if err := r.EnsureKaiwoQueueConfig(ctx, common.KaiwoQueueConfigName, config.DefaultClusterQueueName, config.DefaultClusterQueueCohortName, &queueConfig); err != nil {
+					logger.Error(err, "Failed to create default KaiwoQueueConfig")
+					return ctrl.Result{}, err
+				}
+			} else {
+				logger.Error(err, "Failed to get KaiwoQueueConfig")
 				return ctrl.Result{}, err
 			}
 		} else {
-			logger.Error(err, "Failed to get KaiwoQueueConfig")
-			return ctrl.Result{}, err
+			// Label nodes by their current capacity
+			_, _, err := controllerutils.CreateDefaultResourceFlavors(ctx, r.Client)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
 		}
 	}
 
@@ -118,13 +127,25 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		queueConfig.Status.Status = kaiwo.QueueConfigStatusReady
 	}
 
-	// **Only Update WorkloadStatus If It Has Changed**
+	// Only Update WorkloadStatus If It Has Changed
 	if previousStatus != queueConfig.Status.Status {
-		if err := r.Status().Update(ctx, &queueConfig); err != nil {
+		latest := &kaiwo.KaiwoQueueConfig{}
+		if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+			logger.Error(err, "Failed to re-fetch KaiwoQueueConfig for status update")
+			return ctrl.Result{}, err
+		}
+
+		latest.Status.Status = queueConfig.Status.Status
+
+		if err := r.Status().Update(ctx, latest); err != nil {
 			logger.Error(err, "Failed to update KaiwoQueueConfig status")
 			return ctrl.Result{}, err
 		}
-		logger.Info("Updated KaiwoQueueConfig status", "name", queueConfig.Name, "WorkloadStatus", queueConfig.Status.Status)
+
+		logger.Info("Updated KaiwoQueueConfig status",
+			"name", latest.Name,
+			"WorkloadStatus", latest.Status.Status,
+		)
 	}
 
 	return ctrl.Result{}, nil
@@ -358,13 +379,22 @@ func (r *KaiwoQueueConfigReconciler) syncClusterQueues(ctx context.Context, queu
 			success = false
 		} else if !controllerutils.CompareClusterQueues(*existingQueue, kueueQueue) {
 			logger.Info("Updating ClusterQueue", "name", kueueQueue.Name)
-			existingQueue.Spec = kueueQueue.Spec
-			err := r.Update(ctx, existingQueue)
-			if err != nil {
-				logger.Error(err, "Failed to update ClusterQueue", "name", kueueQueue.Name)
+
+			updateErr := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+				var latest kueuev1beta1.ClusterQueue
+				if err := r.Get(ctx, client.ObjectKey{Name: kueueQueue.Name}, &latest); err != nil {
+					return err
+				}
+				latest.Spec = kueueQueue.Spec
+				return r.Update(ctx, &latest)
+			})
+
+			if updateErr != nil {
+				logger.Error(updateErr, "Failed to update ClusterQueue", "name", kueueQueue.Name)
 				success = false
 			}
-			r.emitEvent(queueConfig, "cluster queue", "update", existingQueue, err)
+			r.emitEvent(queueConfig, "cluster queue", "update", existingQueue, updateErr)
+
 		}
 		expectedQueues[kueueQueue.Name] = kueueQueue
 	}
@@ -373,7 +403,7 @@ func (r *KaiwoQueueConfigReconciler) syncClusterQueues(ctx context.Context, queu
 		if _, exists := expectedQueues[existingQueue.Name]; !exists {
 			logger.Info("Deleting ClusterQueue", "name", existingQueue.Name)
 			err := r.Delete(ctx, &existingQueue)
-			if err != nil {
+			if err := r.Delete(ctx, &existingQueue); err != nil && !errors.IsNotFound(err) {
 				logger.Error(err, "Failed to delete ClusterQueue", "name", existingQueue.Name)
 				success = false
 			}
@@ -596,7 +626,7 @@ func (r *KaiwoQueueConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			logger.Error(err, "Failed to create default topology on startup")
 		}
 		if config.DynamicallyUpdateDefaultClusterQueue {
-			if err = r.EnsureKaiwoQueueConfig(ctx, common.KaiwoQueueConfigName, config.DefaultClusterQueueName, config.DefaultClusterQueueCohortName); err != nil {
+			if err = r.EnsureKaiwoQueueConfig(ctx, common.KaiwoQueueConfigName, config.DefaultClusterQueueName, config.DefaultClusterQueueCohortName, &kaiwo.KaiwoQueueConfig{}); err != nil {
 				logger.Error(err, "Failed to ensure default KaiwoQueueConfig on startup")
 				return err
 			}
@@ -671,7 +701,18 @@ func (r *KaiwoQueueConfigReconciler) CreateTopology(ctx context.Context) error {
 	return nil
 }
 
-func (r *KaiwoQueueConfigReconciler) EnsureKaiwoQueueConfig(ctx context.Context, kaiwoQueueConfigName string, clusterQueueName string, cohort string) error {
+func sanitizeTopologies(in []kaiwo.Topology) []kaiwo.Topology {
+	out := make([]kaiwo.Topology, 0, len(in))
+	for _, t := range in {
+		out = append(out, kaiwo.Topology{
+			ObjectMeta: metav1.ObjectMeta{Name: t.Name},
+			Spec:       t.Spec,
+		})
+	}
+	return out
+}
+
+func (r *KaiwoQueueConfigReconciler) EnsureKaiwoQueueConfig(ctx context.Context, kaiwoQueueConfigName string, clusterQueueName string, cohort string, queueConfig *kaiwo.KaiwoQueueConfig) error {
 	logger := log.FromContext(ctx)
 
 	// Generate new flavors and clusterQueue
@@ -689,8 +730,9 @@ func (r *KaiwoQueueConfigReconciler) EnsureKaiwoQueueConfig(ctx context.Context,
 		return err
 	}
 
-	var existingConfig kaiwo.KaiwoQueueConfig
-	err = r.Get(ctx, client.ObjectKey{Name: kaiwoQueueConfigName}, &existingConfig)
+	newTopologies = sanitizeTopologies(newTopologies)
+
+	err = r.Get(ctx, client.ObjectKey{Name: kaiwoQueueConfigName}, queueConfig)
 	notFound := errors.IsNotFound(err)
 
 	if notFound {
@@ -721,7 +763,7 @@ func (r *KaiwoQueueConfigReconciler) EnsureKaiwoQueueConfig(ctx context.Context,
 	logger.Info("Merging with existing KaiwoQueueConfig")
 
 	flavorMap := make(map[string]kaiwo.ResourceFlavorSpec)
-	for _, rf := range existingConfig.Spec.ResourceFlavors {
+	for _, rf := range queueConfig.Spec.ResourceFlavors {
 		flavorMap[rf.Name] = rf
 	}
 	for _, rf := range newResourceFlavors {
@@ -733,7 +775,7 @@ func (r *KaiwoQueueConfigReconciler) EnsureKaiwoQueueConfig(ctx context.Context,
 	}
 
 	queueMap := make(map[string]kaiwo.ClusterQueue)
-	for _, cq := range existingConfig.Spec.ClusterQueues {
+	for _, cq := range queueConfig.Spec.ClusterQueues {
 		queueMap[cq.Name] = cq
 	}
 	queueMap[newClusterQueue.Name] = newClusterQueue
@@ -743,7 +785,7 @@ func (r *KaiwoQueueConfigReconciler) EnsureKaiwoQueueConfig(ctx context.Context,
 	}
 
 	topologyMap := make(map[string]kaiwo.Topology)
-	for _, t := range existingConfig.Spec.Topologies {
+	for _, t := range sanitizeTopologies(queueConfig.Spec.Topologies) {
 		topologyMap[t.Name] = t
 	}
 	for _, t := range newTopologies {
@@ -754,15 +796,15 @@ func (r *KaiwoQueueConfigReconciler) EnsureKaiwoQueueConfig(ctx context.Context,
 		mergedTopologies = append(mergedTopologies, t)
 	}
 
-	existingConfig.Spec.ResourceFlavors = mergedFlavors
-	existingConfig.Spec.ClusterQueues = mergedQueues
-	existingConfig.Spec.Topologies = mergedTopologies
+	queueConfig.Spec.ResourceFlavors = mergedFlavors
+	queueConfig.Spec.ClusterQueues = mergedQueues
+	queueConfig.Spec.Topologies = mergedTopologies
 
-	if err := r.Update(ctx, &existingConfig); err != nil {
+	if err := r.Update(ctx, queueConfig); err != nil {
 		logger.Error(err, "Failed to update KaiwoQueueConfig with merged values")
 		return err
 	}
 
-	logger.Info("Successfully updated KaiwoQueueConfig", "name", existingConfig.Name)
+	logger.Info("Successfully updated KaiwoQueueConfig", "name", queueConfig.Name)
 	return nil
 }

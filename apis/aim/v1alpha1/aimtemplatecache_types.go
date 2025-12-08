@@ -48,7 +48,17 @@ type AIMTemplateCacheSpec struct {
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 
 	// StorageClassName is the name for the storage class to use for this cache
+	// If not set the cluster default will be used
+	// +optional
 	StorageClassName string `json:"storageClassName,omitempty"`
+
+	// The image that should be used to download the models
+	// If not set the model cache controller will decide
+	// +optional
+	DownloadImage string `json:"downloadImage,omitempty"`
+
+	// ModelSources are set by the template that wants these cached
+	ModelSources []AIMModelSource `json:"modelSources,omitempty"`
 
 	// RuntimeConfigName references the AIM runtime configuration (by name) to use for this template cache.
 	// +kubebuilder:default=default
@@ -80,8 +90,9 @@ type AIMTemplateCacheStatus struct {
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// EffectiveRuntimeConfig surfaces the runtime config references used to warm the cache.
-	EffectiveRuntimeConfig *AIMEffectiveRuntimeConfig `json:"effectiveRuntimeConfig,omitempty"`
+	// ResolvedRuntimeConfig captures metadata about the runtime config that was resolved.
+	// +optional
+	ResolvedRuntimeConfig *AIMResolvedRuntimeConfig `json:"resolvedRuntimeConfig,omitempty"`
 
 	// Status represents the current high-level status of the template cache.
 	// +kubebuilder:default=Pending
@@ -91,6 +102,10 @@ type AIMTemplateCacheStatus struct {
 	// AIMServiceTemplate or cluster-scoped AIMClusterServiceTemplate.
 	// Values: "AIMServiceTemplate", "AIMClusterServiceTemplate"
 	ResolvedTemplateKind string `json:"resolvedTemplateKind,omitempty"`
+
+	// ModelCaches maps model names to their resolved AIMModelCache resources.
+	// +optional
+	ModelCaches map[string]AIMResolvedModelCache `json:"modelCaches,omitempty"`
 }
 
 // Condition types for AIMTemplateCache
@@ -141,6 +156,10 @@ type AIMTemplateCacheList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []AIMTemplateCache `json:"items"`
+}
+
+func (t *AIMTemplateCache) GetStatus() *AIMTemplateCacheStatus {
+	return &t.Status
 }
 
 func init() {

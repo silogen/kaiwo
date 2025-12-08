@@ -1,0 +1,41 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: routing-path-template-invalid-label
+spec:
+  description: Test that service is degraded when path template references non-existent label
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Ensure template is available
+    try:
+    - assert:
+        timeout: 5s
+        file: ../../_shared/template-available.yaml
+
+  - name: Create runtime config with invalid path template
+    try:
+    - apply:
+        file: runtime-config.yaml
+
+  - name: Create AIMService
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service is degraded due to invalid path template
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-service
+          status:
+            status: Degraded
+            (conditions[?type == 'Failure']):
+            - status: "True"
+              reason: PathTemplateInvalid
+            (conditions[?type == 'Ready']):
+            - status: "False"
+              reason: PathTemplateInvalid

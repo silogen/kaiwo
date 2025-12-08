@@ -1,7 +1,0 @@
-apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMImage
-metadata:
-  name: llama-3-8b-throughput-template-priority
-spec:
-  image: busybox:latest-aim-namespace
-  defaultServiceTemplate: llama-3-8b-throughput

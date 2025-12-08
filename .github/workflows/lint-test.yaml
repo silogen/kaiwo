@@ -3,8 +3,12 @@ name: lint-test-and-e2e
 
 on:
   push:
+    paths-ignore:
+      - 'docs/**'
     branches: [main, master]
-  pull_request: {}
+  pull_request:
+    paths-ignore:
+      - 'docs/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -133,15 +137,32 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Free disk space (preinstalled SDKs/tools)
+    - name: Free disk space
+      shell: bash
       run: |
-        sudo rm -rf /usr/local/lib/android    || true
-        sudo rm -rf /usr/share/dotnet         || true
-        sudo rm -rf /opt/ghc                  || true
-        sudo rm -rf /opt/hostedtoolcache      || true
-        sudo apt-get clean
-        docker system prune -af || true
-        df -h
+        set -euo pipefail
+
+        TARGETS=(
+          "/usr/local/lib/android"
+          "/usr/share/dotnet"
+          "/opt/ghc"
+          "/opt/hostedtoolcache"
+          "/usr/local/share/boost"
+          "/usr/local/share/powershell"
+          "/usr/share/swift"
+        )
+
+        echo "Deleting large preinstalled SDKs/tools in parallel..."
+        for d in "${TARGETS[@]}"; do
+          if [[ -e "$d" ]]; then
+            sudo rm -rf "$d" >/dev/null 2>&1 &
+          fi
+        done
+
+        docker builder prune -af || true
+        docker system prune -af --volumes || true
+        wait
+
 
     - uses: actions/setup-go@v5
       with:
@@ -195,6 +216,35 @@ jobs:
         kubectl -n kaiwo-system rollout status deployment/kaiwo-controller-manager --timeout=300s
         kubectl -n kube-system rollout status deployment/kaiwo-scheduler --timeout=300s
         kubectl -n kaiwo-system get pods -o wide
+
+    - name: Debug rollout failure
+      if: failure()
+      run: |
+        echo "=== Deployment status ==="
+        kubectl -n kaiwo-system get deployments -o wide
+        kubectl -n kube-system get deployments -o wide
+
+        echo "=== Pod status ==="
+        kubectl -n kaiwo-system get pods -o wide
+        kubectl -n kube-system get pods -o wide
+
+        echo "=== Controller manager pod details ==="
+        kubectl -n kaiwo-system describe deployment kaiwo-controller-manager
+        kubectl -n kaiwo-system describe pods -l control-plane=controller-manager
+
+        echo "=== Scheduler pod details ==="
+        kubectl -n kube-system describe deployment kaiwo-scheduler
+        kubectl -n kube-system describe pods -l component=kaiwo-scheduler
+
+        echo "=== Controller manager logs ==="
+        kubectl -n kaiwo-system logs -l control-plane=controller-manager --tail=100 --all-containers=true || true
+
+        echo "=== Scheduler logs ==="
+        kubectl -n kube-system logs -l component=kaiwo-scheduler --tail=100 --all-containers=true || true
+
+        echo "=== Events ==="
+        kubectl -n kaiwo-system get events --sort-by='.lastTimestamp'
+        kubectl -n kube-system get events --sort-by='.lastTimestamp'
 
     - name: Run E2E tests
       run: |

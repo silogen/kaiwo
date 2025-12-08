@@ -4,6 +4,8 @@ repositories:
     url: https://rocm.github.io/gpu-operator
   - name: nfs-ganesha-server-and-external-provisioner
     url: https://kubernetes-sigs.github.io/nfs-ganesha-server-and-external-provisioner/
+  - name: kedacore
+    url: https://kedacore.github.io/charts
 
 releases:
   - name: amd-gpu-operator
@@ -35,30 +37,75 @@ releases:
           create: true
           name: rwx-nfs
 
-  - name: kserve-crd
-    namespace: kserve-system
-    chart: oci://ghcr.io/kserve/charts/kserve-crd
-    version: v0.15.2
+  - name: kgateway-crd
+    namespace: kgateway-system
+    chart: oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
+    version: v2.1.0-main
     createNamespace: true
     wait: true
     timeout: 600
 
+  - name: kgateway
+    namespace: kgateway-system
+    chart: oci://cr.kgateway.dev/kgateway-dev/charts/kgateway
+    version: v2.1.0-main
+    createNamespace: false
+    wait: false              
+    disableValidation: true     
+    timeout: 600
+    needs:
+      - kgateway-system/kgateway-crd
+    values:
+      - agentgateway:
+          enabled: true
+
+  - name: keda
+    namespace: keda
+    chart: kedacore/keda
+    version: 2.18.1
+    createNamespace: true
+    wait: true
+    timeout: 600
+
+  - name: kedify-otel
+    namespace: keda
+    chart: oci://ghcr.io/kedify/charts/otel-add-on
+    version: v0.0.6
+    createNamespace: false
+    wait: true
+    timeout: 600
+    needs:
+      - keda/keda
+    values:
+      - validatingAdmissionPolicy:
+          enabled: false
+
+  - name: kserve-crd
+    namespace: kserve-system
+    chart: oci://ghcr.io/kserve/charts/kserve-crd
+    version: v0.16.0
+    createNamespace: true
+    wait: true
+    timeout: 600
+    needs:
+      - keda/kedify-otel
+
   - name: kserve
     namespace: kserve-system
     chart: oci://ghcr.io/kserve/charts/kserve
-    version: v0.15.2
+    version: v0.16.0
     createNamespace: false
-    wait: true
+    wait: false              
+    disableValidation: true    
     timeout: 600
     needs:
       - kserve-system/kserve-crd
     values:
       - kserve:
           controller:
-            deploymentMode: RawDeployment
+            deploymentMode: Standard
             gateway:
               ingressGateway:
-                enableGatewayApi: true
-                kserveGateway: aim-system/kserve-ingress-gateway
+                enableGatewayApi: false
           localmodel:
             enabled: false

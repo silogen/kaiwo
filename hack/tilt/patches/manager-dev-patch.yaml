@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kaiwo-controller-manager
+  namespace: kaiwo-system
+spec:
+  template:
+    spec:
+      containers:
+        - name: manager
+          # Use dev entrypoint for Tilt live updates
+          command:
+            - /usr/local/bin/dev-entrypoint.sh
+          args:
+            - --metrics-bind-address=:8443
+            - --leader-elect
+            - --health-probe-bind-address=:8081
+            - --metrics-cert-path=/tmp/k8s-metrics-server/metrics-certs
+            - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
+          # Increase resources for in-container Go builds
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 4Gi
+          securityContext:
+            # allow Tilt to write code + binary
+            readOnlyRootFilesystem: false
+            # keep the rest of your hardening if you like:
+            # runAsNonRoot: true
+            # runAsUser: 65532
+            # allowPrivilegeEscalation: false
+            # capabilities:
+            #   drop: ["ALL"]
+          # Give the initial build time to complete before probing
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 30  # 5 minutes total (60s + 30*10s)
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10

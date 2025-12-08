@@ -10,7 +10,6 @@ spec:
         image: busybox
         resources:
           limits:
-            cpu: 125m
             memory: 150Mi
           requests:
             cpu: 100m

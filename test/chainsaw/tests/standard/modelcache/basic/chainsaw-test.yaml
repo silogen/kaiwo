@@ -1,0 +1,27 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: test-model-cache
+spec:
+  concurrent: true
+  steps:
+  - try:
+    - apply:
+        file: test-model-cache.yaml
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: test-cache
+          status:
+            phase: Bound
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMModelCache
+          metadata:
+            name: test
+          status:
+            status: Available
+

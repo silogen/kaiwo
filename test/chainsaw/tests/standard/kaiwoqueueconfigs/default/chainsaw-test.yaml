@@ -82,8 +82,7 @@ spec:
     - apply:
         file: kaiwoqueueconfig1.yaml
     - script:
-        timeout: 20s
-        content: sleep 10
+        content: kubectl wait --for=create resourceflavor/bar --timeout 10s
     - script:
         content: kubectl get resourceflavor --no-headers | wc -l
         check:
@@ -95,8 +94,7 @@ spec:
     - apply:
         file: kaiwoqueueconfig2.yaml
     - script:
-        timeout: 20s
-        content: sleep 10
+        content: kubectl wait --for=delete resourceflavor/bar --timeout 10s
     - script:
         content: kubectl get resourceflavor --no-headers | wc -l
         check:

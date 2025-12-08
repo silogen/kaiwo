@@ -1,0 +1,90 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: integration-cluster-model-public-image
+spec:
+  description: Test that an AIMService can be started from an AIMClusterModel reference, with public AIM image and public model weights
+  # using a cluster model, so parallel for safety
+  concurrent: false
+  steps:
+  - name: Create cluster runtime config
+    try:
+    - apply:
+        file: cluster-runtime-config.yaml
+
+  - name: Create cluster model
+    try:
+    - apply:
+        file: cluster-model.yaml
+
+  - name: Ensure the correct templates were created
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: aim-meta-llama-llama-3-1-8b-instruct-0-7-1x-mi300x-lat-fp8-6729
+          spec:
+            precision: fp8
+            metric: latency
+            gpuSelector:
+              count: 1
+              model: MI300X
+          status:
+            status: Ready
+            modelSources:
+            - name: amd/Llama-3.1-8B-Instruct-FP8-KV
+              size: "9094593249"
+              sourceUri: hf://amd/Llama-3.1-8B-Instruct-FP8-KV
+
+  - name: Create service
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service becomes ready
+    try:
+    - assert:
+        timeout: 10m
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: integration-cluster-model-public-image
+          status:
+            status: Running
+            (conditions[?type == 'RuntimeReady']):
+            - status: "True"
+
+  - name: Verify the HTTP route was created
+    try:
+    - assert:
+        resource:
+          apiVersion: gateway.networking.k8s.io/v1
+          kind: HTTPRoute
+          metadata:
+            name: integration-cluster-model-public-image
+            annotations:
+              my-annotation: my-value
+          spec:
+            rules:
+            - matches:
+              - path:
+                  value: /integration/custom-path/integration-cluster-model-public-image
+              timeouts:
+                request: "3m0s"
+          status:
+            (parents[0].conditions[?type == 'ResolvedRefs']):
+            - status: "True"
+            (parents[0].conditions[?type == 'Accepted']):
+            - status: "True"
+
+  - name: Verify the service responds
+    try:
+    - script:
+        timeout: 2m
+        env:
+        - name: HTTP_BASE_PATH
+          value: /integration/custom-path/integration-cluster-model-public-image/v1
+        content: bash ../../_shared/validate-http.sh

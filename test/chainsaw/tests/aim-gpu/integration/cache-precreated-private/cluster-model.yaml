@@ -1,0 +1,8 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterModel
+metadata:
+  name: aim-meta-llama-llama-3-2-1b-instruct-0-7-0-preview
+spec:
+  image: ghcr.io/silogen/aim-meta-llama-llama-3-2-1b-instruct:0.7.0-preview
+  imagePullSecrets:
+  - name: ghcr-pull-secret

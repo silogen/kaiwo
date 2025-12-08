@@ -1,0 +1,41 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: auth-failure-ghcr
+spec:
+  description: Test AIMClusterModelSource fails gracefully with invalid credentials
+  concurrent: False
+  steps:
+  - name: Create AIMClusterModelSource with missing credentials
+    try:
+    - apply:
+        file: cluster-model-source-ghcr.yaml
+
+  - name: Wait for source to reach Failed status
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterModelSource
+          metadata:
+            name: test-ghcr-auth-failure
+          status:
+            status: Failed
+
+  - name: Verify no models were created
+    try:
+    - script:
+        timeout: 30s
+        content: |
+          set -e
+          count=$(kubectl get aimclustermodels -l aim.eai.amd.com/model-source=test-ghcr-auth-failure --no-headers 2>/dev/null | wc -l || echo "0")
+          echo "Found $count models (expected 0)"
+
+          if [ "$count" -eq 0 ]; then
+            echo "✓ No models created (as expected with auth failure)"
+            exit 0
+          else
+            echo "✗ Unexpected: $count models were created despite auth failure"
+            kubectl get aimclustermodels -l aim.eai.amd.com/model-source=test-ghcr-auth-failure
+            exit 1
+          fi

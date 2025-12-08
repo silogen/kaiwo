@@ -1,0 +1,291 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.1
+  name: aimclustermodelsources.aim.silogen.ai
+spec:
+  group: aim.silogen.ai
+  names:
+    categories:
+    - aim
+    - all
+    kind: AIMClusterModelSource
+    listKind: AIMClusterModelSourceList
+    plural: aimclustermodelsources
+    shortNames:
+    - aimclsrc
+    singular: aimclustermodelsource
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.status
+      name: Status
+      type: string
+    - jsonPath: .status.discoveredModels
+      name: Models
+      type: integer
+    - jsonPath: .status.lastSyncTime
+      name: LastSync
+      type: date
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: AIMClusterModelSource automatically discovers and syncs AI model
+          images from container registries.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: AIMClusterModelSourceSpec defines the desired state of AIMClusterModelSource.
+            properties:
+              filters:
+                description: |-
+                  Filters define which images to discover and sync.
+                  Each filter specifies an image pattern with optional version constraints and exclusions.
+                  Multiple filters are combined with OR logic (any match includes the image).
+                items:
+                  description: |-
+                    ModelSourceFilter defines a pattern for discovering images.
+                    Supports multiple formats:
+                    - Repository patterns: "org/repo*" - matches repositories with wildcards
+                    - Repository with tag: "org/repo:1.0.0" - exact tag match
+                    - Full URI: "ghcr.io/org/repo:1.0.0" - overrides registry and tag
+                    - Full URI with wildcard: "ghcr.io/org/repo*" - overrides registry, matches pattern
+                  properties:
+                    exclude:
+                      description: |-
+                        Exclude lists specific repository names to skip (exact match on repository name only, not registry).
+                        Useful for excluding base images or experimental versions.
+
+                        Examples:
+                        - ["amdenterpriseai/aim-base", "amdenterpriseai/aim-experimental"]
+                        - ["silogen/aim-base"] - works with "ghcr.io/silogen/aim-*" (registry is not checked in exclusion)
+
+                        Note: Exclusions match against repository names (e.g., "silogen/aim-base"), not full URIs.
+                      items:
+                        type: string
+                      type: array
+                    image:
+                      description: |-
+                        Image pattern with wildcard and full URI support.
+
+                        Supported formats:
+                        - Repository pattern: "amdenterpriseai/aim-*"
+                        - Repository with tag: "silogen/aim-llama:1.0.0" (overrides versions field)
+                        - Full URI: "ghcr.io/silogen/aim-google-gemma-3-1b-it:0.8.1-rc1" (overrides spec.registry and versions)
+                        - Full URI with wildcard: "ghcr.io/silogen/aim-*" (overrides spec.registry)
+
+                        When a full URI is specified (including registry like ghcr.io), only images from that
+                        registry will match.
+                      maxLength: 512
+                      type: string
+                    versions:
+                      description: |-
+                        Versions specifies semantic version constraints for this filter.
+                        If specified, overrides the global Versions field.
+                        Only tags that parse as valid semver are considered (including prereleases like 0.8.1-rc1).
+                        Ignored if the Image field includes an explicit tag (e.g., "repo:1.0.0").
+
+                        Examples: ">=1.0.0", "<2.0.0", "~1.2.0" (patch updates), "^1.0.0" (minor updates)
+
+                        Prerelease versions (e.g., 0.8.1-rc1) are supported and follow semver rules:
+                        - 0.8.1-rc1 matches ">=0.8.0" (prerelease is part of version 0.8.
+                      items:
+                        type: string
+                      type: array
+                  required:
+                  - image
+                  type: object
+                maxItems: 100
+                minItems: 1
+                type: array
+              imagePullSecrets:
+                description: |-
+                  ImagePullSecrets contains references to secrets for authenticating to private registries.
+                  Secrets must exist in the operator namespace (typically kaiwo-system).
+                  Used for both registry catalog listing and image metadata extraction.
+                items:
+                  description: |-
+                    LocalObjectReference contains enough information to let you locate the
+                    referenced object inside the same namespace.
+                  properties:
+                    name:
+                      default: ""
+                      description: |-
+                        Name of the referent.
+                        This field is effectively required, but due to backwards compatibility is
+                        allowed to be empty. Instances of this type with an empty value here are
+                        almost certainly wrong.
+                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                      type: string
+                  type: object
+                  x-kubernetes-map-type: atomic
+                type: array
+              maxModels:
+                default: 100
+                description: |-
+                  MaxModels is the maximum number of AIMClusterModel resources to create from this source.
+                  Once this limit is reached, no new models will be created, even if more matching images are discovered.
+                  Existing models are never deleted.
+                  This prevents runaway model creation from overly broad filters.
+                maximum: 10000
+                minimum: 1
+                type: integer
+              registry:
+                default: docker.io
+                description: |-
+                  Registry to sync from (e.g., docker.io, ghcr.io, gcr.io).
+                  Defaults to docker.io if not specified.
+                type: string
+              syncInterval:
+                default: 1h
+                description: |-
+                  SyncInterval defines how often to sync with the registry.
+                  Defaults to 1h. Minimum recommended interval is 15m to avoid rate limiting.
+                  Format: duration string (e.g., "30m", "1h", "2h30m").
+                type: string
+              versions:
+                description: |-
+                  Versions specifies global semantic version constraints applied to all filters.
+                  Individual filters can override this with their own version constraints.
+                  Constraints use semver syntax: >=1.0.0, <2.0.0, ~1.2.0, ^1.0.0, etc.
+                  Non-semver tags (e.g., "latest", "dev") are silently skipped.
+
+                  Version ranges work on all registries (including ghcr.io, gcr.io) when combined with
+                  exact repository names (no wildcards).
+                items:
+                  type: string
+                type: array
+            required:
+            - filters
+            type: object
+          status:
+            description: AIMClusterModelSourceStatus defines the observed state of
+              AIMClusterModelSource.
+            properties:
+              availableModels:
+                description: |-
+                  AvailableModels is the total count of images discovered in the registry that match the filters.
+                  This may be higher than DiscoveredModels if maxModels limit was reached.
+                type: integer
+              conditions:
+                description: |-
+                  Conditions represent the latest available observations of the source's state.
+                  Standard conditions: Ready, Syncing, RegistryReachable.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              discoveredModels:
+                description: |-
+                  DiscoveredModels is the count of AIMClusterModel resources managed by this source.
+                  Includes both existing and newly created models.
+                type: integer
+              lastSyncTime:
+                description: |-
+                  LastSyncTime is the timestamp of the last successful registry sync.
+                  Updated after each successful sync operation.
+                format: date-time
+                type: string
+              modelsLimitReached:
+                description: |-
+                  ModelsLimitReached indicates whether the maxModels limit has been reached.
+                  When true, no new models will be created even if more matching images are discovered.
+                type: boolean
+              observedGeneration:
+                description: ObservedGeneration reflects the generation of the most
+                  recently observed spec.
+                format: int64
+                type: integer
+              status:
+                description: Status represents the overall state of the model source.
+                enum:
+                - Pending
+                - Starting
+                - Progressing
+                - Ready
+                - Running
+                - Degraded
+                - NotAvailable
+                - Failed
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

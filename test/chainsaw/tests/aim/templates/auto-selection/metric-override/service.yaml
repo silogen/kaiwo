@@ -1,0 +1,10 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-metric-override-service
+spec:
+  model:
+    ref: test-metric-override
+  # Override metric to throughput - should filter out latency template
+  overrides:
+    metric: throughput

@@ -1,0 +1,46 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: default-template-overrides
+spec:
+  description: AIMService without templateRef but with overrides clones the default template
+  timeouts:
+    assert: 90s
+  steps:
+  - name: Ensure default template is available
+    try:
+    - assert:
+        timeout: 5s
+        file: ../../_shared/template-available.yaml
+
+  - name: Create AIMService with overrides
+    try:
+    - apply:
+        file: service.yaml
+    - sleep:
+        # Give the reconciler time to handle the object
+        duration: 5s
+
+  - name: Verify the service uses an overridden template, and that the derived template exists and becomes available
+    try:
+    - script:
+        content: kubectl get aimservice default-template-overrides -n $NAMESPACE -o jsonpath='{.status.resolvedTemplate.name}'
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        outputs:
+        - name: template_name
+          value: ($stdout)
+        check:
+          (starts_with($stdout, 'default-testing-llama-3-8b-ovr')): true
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMServiceTemplate
+          metadata:
+            name: ($template_name)
+          spec:
+            metric: throughput
+            precision: fp8
+          status:
+            status: Ready

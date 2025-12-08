@@ -1,0 +1,24 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: basic-creation-from-image-url
+spec:
+  description: Test that AIMService can be created by only specifying the Docker container image URL
+  timeouts:
+    assert: 180s
+  steps:
+  - name: Create AIMService
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify the model was created and is ready
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMModel
+          metadata:
+            name: aim-qwen-qwen3-4b-0-7-0-preview-1242eba8
+          status:
+            status: Ready

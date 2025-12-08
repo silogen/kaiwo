@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: block-inference-pod-internet
+spec:
+  podSelector:
+    matchLabels:
+      aim.silogen.ai/service-name: cache-svc-public
+  policyTypes:
+  - Egress
+  egress:
+  # Allow DNS
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+  # Allow internal cluster communication
+  - to:
+    - podSelector: {}
+  # Block all other egress (no internet access)

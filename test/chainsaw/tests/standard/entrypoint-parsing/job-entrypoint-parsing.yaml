@@ -9,7 +9,6 @@ spec:
       cpu: "1"
       memory: "1Gi"
     limits:
-      cpu: "1"
       memory: "1Gi"
   image: ghcr.io/silogen/ray-test:v0.3
   entrypoint: |

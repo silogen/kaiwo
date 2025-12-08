@@ -1,0 +1,66 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: namespace-template-priority
+spec:
+  description: Test that namespace template is selected over cluster template
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create cluster resources
+    try:
+    - apply:
+        file: cluster-template.yaml
+
+  - name: Create namespace resources
+    try:
+    - apply:
+        file: namespace-template.yaml
+
+  - name: Wait for templates to become Available
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: llama-3-8b-latency-ns-priority
+          status:
+            status: Ready
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMServiceTemplate
+          metadata:
+            name: llama-3-8b-latency-ns-priority
+          status:
+            status: Ready
+
+  - name: Create AIMService
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify namespace template was used
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-service
+          status:
+            resolvedTemplate:
+              name: llama-3-8b-latency-ns-priority
+              scope: Namespace
+
+  - name: Verify inference service uses the correct template
+    try:
+    - assert:
+        resource:
+          apiVersion: serving.kserve.io/v1beta1
+          kind: InferenceService
+          metadata:
+            name: test-service
+            labels:
+              aim.silogen.ai/template.precision: fp8

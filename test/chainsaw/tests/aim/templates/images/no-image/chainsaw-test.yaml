@@ -1,0 +1,29 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: cluster-template-no-image
+spec:
+  description: Test that cluster template fails when no image is found
+  timeouts:
+    assert: 30s
+  steps:
+  - name: Create cluster template without image
+    try:
+    - apply:
+        file: cluster-template.yaml
+    - assert:
+        timeout: 10s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: llama-3-8b-latency-no-image
+          status:
+            status: Degraded
+            conditions:
+            - type: Failure
+              status: "True"
+              reason: ImageNotFound
+            - type: Ready
+              status: "False"
+              reason: ImageNotFound

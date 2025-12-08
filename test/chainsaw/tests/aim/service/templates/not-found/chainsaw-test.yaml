@@ -1,0 +1,47 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: template-not-found
+spec:
+  description: Test that service fails when referenced template does not exist
+  timeouts:
+    assert: 60s
+  steps:
+
+  - name: Create AIMService referencing non-existent template
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service status shows Degraded with TemplateNotFound
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-service
+          status:
+            status: Degraded
+            (conditions[?type == 'Resolved']):
+            - status: "False"
+              reason: TemplateNotFound
+
+  - name: Verify no AIMServiceTemplate was auto-created
+    try:
+    - error:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMServiceTemplate
+          metadata:
+            name: non-existent-template
+
+
+  - name: Verify no InferenceService was created
+    try:
+    - error:
+        resource:
+          apiVersion: serving.kserve.io/v1beta1
+          kind: InferenceService
+          metadata:
+            name: test-service

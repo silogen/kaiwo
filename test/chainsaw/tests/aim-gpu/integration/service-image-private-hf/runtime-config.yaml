@@ -1,0 +1,12 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMRuntimeConfig
+metadata:
+  name: integration-service-image-private-hf
+spec:
+  defaultStorageClassName: "rwx-nfs"
+  routing:
+    enabled: true
+    gatewayRef:
+      name: kserve-ingress-gateway
+      namespace: kgateway-system
+    pathTemplate: "/integration/custom-path/{.metadata.name}"

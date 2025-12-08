@@ -1,0 +1,64 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: auto-select-gpu-selector
+spec:
+  description: Test that GPU selector override filters templates correctly
+  timeouts:
+    assert: 60s
+  steps:
+  - name: Create cluster image
+    try:
+    - apply:
+        file: cluster-image.yaml
+
+  - name: Create both templates
+    try:
+    - apply:
+        file: template-mi300x.yaml
+    - apply:
+        file: template-mi250x.yaml
+
+  - name: Wait for MI300X template to become Available
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: test-gpu-mi300x
+          status:
+            status: Ready
+
+  - name: Wait for MI250X template to become NotAvailable (GPU not in cluster)
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMClusterServiceTemplate
+          metadata:
+            name: test-gpu-mi250x
+          status:
+            status: NotAvailable
+
+  - name: Create service with MI300X GPU selector override
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify service selected MI300X template
+    try:
+    - assert:
+        timeout: 10s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-gpu-selector-service
+          status:
+            resolvedTemplate:
+              name: test-gpu-mi300x
+              scope: Cluster
+            (conditions[?type == 'Resolved']):
+            - status: "True"
+              reason: Resolved

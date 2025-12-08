@@ -57,5 +57,73 @@ func SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
+	// Setup AIMService controller
+	if err := (&AIMServiceReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("aim-service-controller"),
+	}).SetupWithManager(mgr); err != nil {
+		return err
+	}
+
+	if err := (&AIMModelCacheReconciler{
+		Client:    mgr.GetClient(),
+		Scheme:    mgr.GetScheme(),
+		Recorder:  mgr.GetEventRecorderFor("aim-modelcache-controller"),
+		Clientset: clientset,
+	}).SetupWithManager(mgr); err != nil {
+		return err
+	}
+
+	// Setup AIMModel controller
+	if err := (&AIMModelReconciler{
+		Client:    mgr.GetClient(),
+		Scheme:    mgr.GetScheme(),
+		Recorder:  mgr.GetEventRecorderFor("aim-image-controller"),
+		Clientset: clientset,
+	}).SetupWithManager(mgr); err != nil {
+		return err
+	}
+
+	// Setup AIMClusterModel controller
+	if err := (&AIMClusterModelReconciler{
+		Client:    mgr.GetClient(),
+		Scheme:    mgr.GetScheme(),
+		Recorder:  mgr.GetEventRecorderFor("aim-cluster-image-controller"),
+		Clientset: clientset,
+	}).SetupWithManager(mgr); err != nil {
+		return err
+	}
+
+	// Setup AIMTemplateCache controller
+	if err := (&AIMTemplateCacheReconciler{
+		Client:    mgr.GetClient(),
+		Scheme:    mgr.GetScheme(),
+		Recorder:  mgr.GetEventRecorderFor("aim-templatecache-controller"),
+		Clientset: clientset,
+	}).SetupWithManager(mgr); err != nil {
+		return err
+	}
+
+	// Setup AIMClusterModelSource controller
+	if err := (&ClusterModelSourceReconciler{
+		Client:    mgr.GetClient(),
+		Scheme:    mgr.GetScheme(),
+		Recorder:  mgr.GetEventRecorderFor("aim-cluster-image-source-controller"),
+		Clientset: clientset,
+	}).SetupWithManager(mgr); err != nil {
+		return err
+	}
+
+	// Setup AIMKVCache controller
+	if err := (&AIMKVCacheReconciler{
+		Client:    mgr.GetClient(),
+		Scheme:    mgr.GetScheme(),
+		Recorder:  mgr.GetEventRecorderFor("aimkvcache-controller"),
+		Clientset: clientset,
+	}).SetupWithManager(mgr); err != nil {
+		return err
+	}
+
 	return nil
 }

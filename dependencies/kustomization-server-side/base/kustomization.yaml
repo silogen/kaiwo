@@ -7,3 +7,11 @@ resources:
 - ray-operator
 - image-prepuller.yaml
 - storage/namespace.yaml
+- https://github.com/open-telemetry/opentelemetry-operator/releases/download/v0.140.0/opentelemetry-operator.yaml
+
+patches:
+- path: otel-collector-image-patch.yaml
+  target:
+    kind: Deployment
+    name: opentelemetry-operator-controller-manager
+    namespace: opentelemetry-operator-system

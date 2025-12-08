@@ -1,0 +1,5 @@
+# Values for AIMKVCache tests
+# Usage: chainsaw test --test-dir test/chainsaw/tests/aim/kvcache --values test/chainsaw/values/kvcache.yaml
+
+storageClass: openebs-hostpath
+

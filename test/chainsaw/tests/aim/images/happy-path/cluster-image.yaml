@@ -1,0 +1,10 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMClusterModel
+metadata:
+  name: qwen3-preview-happy-path
+spec:
+  image: ghcr.io/silogen/aim-dummy:0.1.1-2
+  discovery:
+    enabled: true
+    # default is true
+    # autoCreateTemplates: true

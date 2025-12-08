@@ -23,27 +23,67 @@
 package v1alpha1
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
-// AIMRuntimeConfigCommon captures configuration fields shared across cluster and namespace scopes.
-type AIMRuntimeConfigCommon struct {
-	// DefaultStorageClassName is the storage class used for model caches when one is not
-	// specified directly on the consumer resource.
-	DefaultStorageClassName string `json:"defaultStorageClassName,omitempty"`
+// AIMModelConfig controls model creation and discovery behavior.
+type AIMModelConfig struct {
+	// AutoDiscovery controls whether models run discovery by default.
+	// When true, models run discovery jobs to extract metadata and auto-create templates.
+	// When false, discovery is skipped. Discovery failures are non-fatal and reported via conditions.
+	// +kubebuilder:default=true
+	// +optional
+	AutoDiscovery *bool `json:"autoDiscovery,omitempty"`
 }
 
-// AIMRuntimeConfigCredentials captures namespace-scoped authentication knobs.
-type AIMRuntimeConfigCredentials struct {
-	// ServiceAccountName is the service account used for discovery jobs, cache warmers,
-	// and any other workloads spawned by the operator on behalf of this runtime config.
-	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+// AIMRuntimeConfigCommon captures configuration fields shared across cluster and namespace scopes.
+// These settings apply to both AIMRuntimeConfig (namespace-scoped) and AIMClusterRuntimeConfig (cluster-scoped).
+type AIMRuntimeConfigCommon struct {
+	// DefaultStorageClassName specifies the storage class to use for model caches and PVCs
+	// when the consuming resource (AIMModelCache, AIMTemplateCache, AIMServiceTemplate) does not
+	// specify a storage class. If this field is empty, the cluster's default storage class is used.
+	// +optional
+	DefaultStorageClassName string `json:"defaultStorageClassName,omitempty"`
 
-	// ImagePullSecrets are merged with controller defaults when creating pods that need
-	// to pull model or runtime images.
-	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+	// Model controls model creation and discovery defaults.
+	// +optional
+	Model *AIMModelConfig `json:"model,omitempty"`
+
+	// Routing controls HTTP routing defaults applied to AIM resources.
+	// When set, these defaults are used for AIMService resources that enable routing
+	// but do not specify their own routing configuration.
+	// +optional
+	Routing *AIMRuntimeRoutingConfig `json:"routing,omitempty"`
+
+	// PVCHeadroomPercent specifies the percentage of extra space to add to PVCs
+	// for model storage. This accounts for filesystem overhead and temporary files
+	// during model loading. The value represents a percentage (e.g., 10 means 10% extra space).
+	// If not specified, defaults to 10%.
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	PVCHeadroomPercent *int32 `json:"pvcHeadroomPercent,omitempty"`
+
+	// LabelPropagation controls how labels from parent AIM resources are propagated to child resources.
+	// When enabled, labels matching the specified patterns are automatically copied from parent resources
+	// (e.g., AIMService, AIMTemplateCache) to their child resources (e.g., Deployments, Services, PVCs).
+	// This is useful for propagating organizational metadata like cost centers, team identifiers,
+	// or compliance labels through the resource hierarchy.
+	// +optional
+	LabelPropagation *AIMRuntimeConfigLabelPropagationSpec `json:"labelPropagation,omitempty"`
+}
+
+type AIMRuntimeConfigLabelPropagationSpec struct {
+	// Enabled, if true, allows propagating parent labels to all child resources it creates directly
+	// Only label keys that match the ones in Match are propagated.
+	// +kubebuilder:default=false
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Match is a list of label keys that will be propagated to any child resources created.
+	// Wildcards are supported, so for example `org.my/my-key-*` would match any label with that prefix.
+	// +optional
+	Match []string `json:"match,omitempty"`
 }
 
 // AIMClusterRuntimeConfigSpec defines cluster-wide defaults for AIM resources.
@@ -53,8 +93,60 @@ type AIMClusterRuntimeConfigSpec struct {
 
 // AIMRuntimeConfigSpec defines namespace-scoped overrides for AIM resources.
 type AIMRuntimeConfigSpec struct {
-	AIMRuntimeConfigCommon      `json:",inline"`
-	AIMRuntimeConfigCredentials `json:",inline"`
+	AIMRuntimeConfigCommon `json:",inline"`
+}
+
+// AIMRuntimeRoutingConfig configures HTTP routing defaults for inference services.
+// These settings control how Gateway API HTTPRoutes are created and configured.
+type AIMRuntimeRoutingConfig struct {
+	// Enabled controls whether HTTP routing is managed for inference services using this config.
+	// When true, the operator creates HTTPRoute resources for services that reference this config.
+	// When false or unset, routing must be explicitly enabled on each service.
+	// This provides a namespace or cluster-wide default that individual services can override.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// GatewayRef specifies the Gateway API Gateway resource that should receive HTTPRoutes.
+	// This identifies the parent gateway for routing traffic to inference services.
+	// The gateway can be in any namespace (cross-namespace references are supported).
+	// If routing is enabled but GatewayRef is not specified, service reconciliation will fail
+	// with a validation error.
+	// +optional
+	GatewayRef *gatewayapiv1.ParentReference `json:"gatewayRef,omitempty"`
+
+	// PathTemplate defines the HTTP path template for routes, evaluated using JSONPath expressions.
+	// The template is rendered against the AIMService object to generate unique paths.
+	//
+	// Example templates:
+	// - `/{.metadata.namespace}/{.metadata.name}` - namespace and service name
+	// - `/{.metadata.namespace}/{.metadata.labels['team']}/inference` - with label
+	// - `/models/{.spec.aimModelName}` - based on model name
+	//
+	// The template must:
+	// - Use valid JSONPath expressions wrapped in {...}
+	// - Reference fields that exist on the service
+	// - Produce a path ≤ 200 characters after rendering
+	// - Result in valid URL path segments (lowercase, RFC 1123 compliant)
+	//
+	// If evaluation fails, the service enters Degraded state with PathTemplateInvalid reason.
+	// Individual services can override this template via spec.Routing.pathTemplate.
+	// +optional
+	PathTemplate string `json:"pathTemplate,omitempty"`
+
+	// Annotations defines additional annotations to add to the HTTPRoute resource.
+	// These annotations can be used for various purposes such as configuring ingress
+	// behavior, adding metadata, or triggering external integrations.
+	// Individual services can override these via spec.routing.annotations.
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
+
+	// RequestTimeout defines the HTTP request timeout for routes.
+	// This sets the maximum duration for a request to complete before timing out.
+	// The timeout applies to the entire request/response cycle.
+	// If not specified, no timeout is set on the route.
+	// Individual services can override this value via spec.routing.requestTimeout.
+	// +optional
+	RequestTimeout *metav1.Duration `json:"requestTimeout,omitempty"`
 }
 
 // AIMRuntimeConfigStatus records the resolved config reference surfaced to consumers.
@@ -68,31 +160,10 @@ type AIMRuntimeConfigStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
-// AIMRuntimeConfigReference records the source runtime config used during resolution.
-type AIMRuntimeConfigReference struct {
-	// Name is the metadata.name of the runtime config.
-	Name string `json:"name"`
-
-	// Namespace is only set for namespace-scoped runtime configs.
-	Namespace string `json:"namespace,omitempty"`
-
-	// UID is included to detect stale references.
-	UID types.UID `json:"uid,omitempty"`
-
-	// Kind is either "AIMRuntimeConfig" or "AIMClusterRuntimeConfig".
-	Kind string `json:"kind"`
-}
-
-// AIMEffectiveRuntimeConfig surfaces the resolved configuration applied to a consumer.
-type AIMEffectiveRuntimeConfig struct {
-	// NamespaceRef points at the namespace-scoped runtime config, if present.
-	NamespaceRef *AIMRuntimeConfigReference `json:"namespaceRef,omitempty"`
-
-	// ClusterRef points at the cluster-scoped runtime config, if present.
-	ClusterRef *AIMRuntimeConfigReference `json:"clusterRef,omitempty"`
-
-	// Hash is a stable hash of the merged configuration used for change detection.
-	Hash string `json:"hash,omitempty"`
+// AIMResolvedRuntimeConfig captures metadata about the runtime config that was resolved.
+// This follows the same pattern as AIMServiceResolvedTemplate for consistency.
+type AIMResolvedRuntimeConfig struct {
+	AIMResolvedReference `json:",inline"`
 }
 
 // +kubebuilder:object:root=true

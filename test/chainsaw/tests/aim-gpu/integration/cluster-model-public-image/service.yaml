@@ -1,0 +1,11 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: integration-cluster-model-public-image
+spec:
+  model:
+    ref: aim-meta-llama-llama-3-1-8b-instruct-0-7-0
+  runtimeConfigName: integration-cluster-model-public-image
+  routing:
+    annotations:
+      my-annotation: my-value

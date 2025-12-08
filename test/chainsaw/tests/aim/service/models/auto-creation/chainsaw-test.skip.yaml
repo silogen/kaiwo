@@ -1,0 +1,60 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: model-auto-creation
+spec:
+  description: Test automatic model creation from spec.model.image with namespace scope
+  timeouts:
+    assert: 90s
+  steps:
+  - name: Create runtime config for namespace-scoped model creation
+    try:
+    - apply:
+        file: runtime-config.yaml
+
+  - name: Create template for the model
+    try:
+    - apply:
+        file: template.yaml
+
+  - name: Create service with model.image (no pre-existing model)
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify auto-created model exists in namespace
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMModel
+          metadata:
+
+            labels:
+              aim.silogen.ai/auto-created: "true"
+          spec:
+            image: ghcr.io/amd/llama-3-8b-instruct:latest
+
+  - name: Verify service resolves to auto-created model
+    try:
+    - assert:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: auto-creation-service
+          status:
+            (resolvedImage != null): true
+            resolvedImage:
+              (name != null): true
+
+  - name: Verify only one model was created
+    try:
+    - script:
+        content: |
+          set -e
+          count=$(kubectl get aimmodels -n $NAMESPACE --selector=aim.silogen.ai/auto-created=true -o json | jq '.items | length')
+          if [ "$count" -ne 1 ]; then
+            echo "Expected 1 auto-created model, found $count"
+            exit 1
+          fi

@@ -1,12 +1,12 @@
 apiVersion: v2
-name: kaiwo
+name: kaiwo-operator
 description: Kubernetes AI Workload Orchestrator - A Kubernetes operator for managing AI workloads with GPU scheduling and resource management
 home: https://github.com/silogen/kaiwo
 sources:
 - https://github.com/silogen/kaiwo
 type: application
-version: 0.1.9
-appVersion: "v0.1.9"
+version: 0.2.0-rc5
+appVersion: "v0.2.0-rc5"
 keywords:
 - ai
 - gpu

@@ -1,0 +1,13 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMRuntimeConfig
+metadata:
+  name: cache-svc-public
+spec:
+  defaultStorageClassName: "rwx-nfs"
+  routing:
+    enabled: true
+    gatewayRef:
+      name: kserve-ingress-gateway
+      namespace: kgateway-system
+    pathTemplate: "/integration/custom-path/{.metadata.name}"
+    requestTimeout: "180s"

@@ -1,0 +1,8 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-no-available-service
+spec:
+  model:
+    ref: test-no-available
+  # No templateRef - should wait for template to become Available

@@ -17,7 +17,7 @@ jobs:
       with:
         go-version: '1.21'
     - name: Set up Helm
-      uses: azure/setup-helm@v4.3.0
+      uses: azure/setup-helm@v4.3.1
 
     - name: Extract version from tag
       shell: bash
@@ -61,6 +61,10 @@ jobs:
       run: |
         make helm-release TAG=${{ env.VERSION }} CHART_VERSION=${{ env.VERSION }}
 
+    - name: Build CRDs
+      run: |
+        kustomize build config/crd > crds.yaml
+
     - name: Push Helm chart to OCI registry
       run: |
         echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u $GITHUB_ACTOR --password-stdin
@@ -78,6 +82,12 @@ jobs:
         name: helm-chart
         path: dist/kaiwo-operator-*.tgz
 
+    - name: Upload CRDs artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: crds-yaml
+        path: crds.yaml
+
     - name: Create draft release and upload assets
       uses: softprops/action-gh-release@v2
       with:
@@ -85,6 +95,7 @@ jobs:
           builds/*
           workloads.zip
           install.yaml
+          crds.yaml
           dist/kaiwo-operator-*.tgz
         token: '${{ secrets.GITHUB_TOKEN }}'
         draft: true
@@ -97,6 +108,11 @@ jobs:
           kubectl apply -f https://github.com/${{ github.repository }}/releases/download/${{ env.VERSION }}/install.yaml --server-side
           ```
 
+           ### If using Helm - Install CRDs first
+          ```bash
+          kubectl apply -f https://github.com/${{ github.repository }}/releases/download/${{ env.VERSION }}/crds.yaml
+          ```
+
           ### Helm Install (from GitHub Releases)
           ```bash
           curl -L https://github.com/${{ github.repository }}/releases/download/${{ env.VERSION }}/kaiwo-operator-${{ env.VERSION }}.tgz -o kaiwo-operator.tgz
@@ -105,54 +121,10 @@ jobs:
 
           ### Helm Install (from OCI Registry)
           ```bash
-          helm install kaiwo oci://ghcr.io/${{ github.repository_owner }}/kaiwo-operator \
+          helm install kaiwo oci://ghcr.io/${{ github.repository_owner }}/charts/kaiwo-operator \
             --version ${{ env.VERSION }} --namespace kaiwo-system --create-namespace
           ```
 
           ### Docker Images
           - Operator: `ghcr.io/${{ github.repository_owner }}/kaiwo-operator:${{ env.VERSION }}`
 
-          ## What's Changed
-
-          *Fill in release notes...*
-  # sync-to-cluster-forge:
-  #   runs-on: ubuntu-latest
-  #   needs: build
-
-  #   steps:
-  #   - name: Checkout cluster-forge
-  #     run: |
-  #       git clone https://x-access-token:${{ secrets.CLUSTER_FORGE_PAT }}@github.com/silogen/cluster-forge.git
-  #       cd cluster-forge
-  #       git config user.name "github-actions"
-  #       git config user.email "github-actions@github.com"
-  #       git checkout -b kaiwo-release-${{ env.VERSION }}
-
-  #   - name: Download install.yaml artifact
-  #     uses: actions/download-artifact@v4
-  #     with:
-  #       name: install-yaml
-
-  #   - name: Copy install.yaml and commit if changed
-  #     run: |
-  #       set -e
-  #       cp install.yaml cluster-forge/input/kaiwo/install.yaml
-  #       cd cluster-forge
-  #       if ! git diff --quiet; then
-  #         git add input/kaiwo/install.yaml
-  #         git commit -m "Update kaiwo install.yaml for version ${{ env.VERSION }}"
-  #         git push origin kaiwo-release-${{ env.VERSION }}
-  #       else
-  #         echo "No changes to commit."
-  #       fi
-
-  #   - name: Create Pull Request
-  #     if: ${{ success() }}
-  #     uses: peter-evans/create-pull-request@v6
-  #     with:
-  #       token: ${{ secrets.CLUSTER_FORGE_PAT }}
-  #       path: cluster-forge
-  #       commit-message: "Update kaiwo install.yaml for version ${{ env.VERSION }}"
-  #       branch: kaiwo-release-${{ env.VERSION }}
-  #       title: "Update kaiwo install.yaml for ${{ env.VERSION }}"
-  #       base: main

@@ -1,0 +1,8 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-filters-unavailable-service
+spec:
+  model:
+    ref: test-filters-unavailable
+  # No templateRef - should auto-select MI300X template (H100 template is NotAvailable)

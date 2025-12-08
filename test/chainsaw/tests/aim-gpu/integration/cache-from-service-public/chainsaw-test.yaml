@@ -1,0 +1,156 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: cache-svc-public
+spec:
+  description: Test that an AIMService can use template cache with network isolation, caching enabled from service spec, with public model
+  steps:
+  - name: Create runtime config
+    try:
+    - apply:
+        file: runtime-config.yaml
+
+  - name: Create service with cacheModel enabled (will auto-create namespace-scoped model and template)
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Verify template cache becomes available
+    try:
+    - assert:
+        timeout: 10m
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMTemplateCache
+          metadata:
+            name: aim-meta-llama-llama-3-1-8b-instruct-0-7-1x-mi300x-lat-fp8-8d3e
+          status:
+            status: Available
+
+# TODO add later
+#  - name: Apply network policy to block inference pod internet access
+#    try:
+#    - apply:
+#        file: network-policy.yaml
+
+  - name: Verify service becomes ready  # despite network isolation
+    try:
+    - assert:
+        timeout: 10m
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: cache-svc-public
+          status:
+            status: Running
+            (conditions[?type == 'RuntimeReady']):
+            - status: "True"
+            (conditions[?type == 'CacheReady']):
+            - status: "True"
+
+  - name: Verify pod has cache mounts
+    try:
+    - assert:
+        timeout: 1m
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            labels:
+              serving.kserve.io/inferenceservice: cache-svc-public
+          spec:
+            (containers[?name == 'kserve-container']):
+            - (volumeMounts[?mountPath == '/workspace/model-cache/amd/Llama-3.1-8B-Instruct-FP8-KV']):
+              - mountPath: /workspace/model-cache/amd/Llama-3.1-8B-Instruct-FP8-KV
+              (env[?name == 'AIM_CACHE_PATH']):
+              - value: /workspace/model-cache
+          status:
+            phase: Running
+
+  - name: Validate actual PVC disk size
+    try:
+    - apply:
+        resource:
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: pvc-size-validator
+          spec:
+            template:
+              spec:
+                restartPolicy: Never
+                containers:
+                - name: validator
+                  image: busybox:latest
+                  command:
+                  - /bin/sh
+                  - -c
+                  - |
+                    echo "=== PVC Size Validation ==="
+                    df -h /workspace/model-cache/amd/Llama-3.1-8B-Instruct-FP8-KV
+                    echo "=== End PVC Size Validation ==="
+                  volumeMounts:
+                  - name: cache-volume
+                    mountPath: /workspace/model-cache/amd/Llama-3.1-8B-Instruct-FP8-KV
+                volumes:
+                - name: cache-volume
+                  persistentVolumeClaim:
+                    claimName: amd-llama-3-1-8b-instruct-fp8-kv-cache
+    - wait:
+        apiVersion: batch/v1
+        kind: Job
+        name: pvc-size-validator
+        timeout: 2m
+        for:
+          condition:
+            name: Complete
+            value: 'true'
+    - script:
+        content: 'kubectl logs -n $NAMESPACE job/pvc-size-validator'
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        outputs:
+        - name: PVC_SIZE_OUTPUT
+          value: ($stdout)
+    - script:
+        content: |
+          # Extract the size from df output (handles both single and multi-line NFS output)
+          SIZE=$(echo "$PVC_SIZE_OUTPUT" | grep -A1 "Filesystem" | tail -n 1 | awk '{print $1}')
+          echo "$SIZE"
+        env:
+        - name: PVC_SIZE_OUTPUT
+          value: ($PVC_SIZE_OUTPUT)
+        outputs:
+        - name: ACTUAL_SIZE
+          value: ($stdout)
+    - script:
+        content: |
+          # Validate size is approximately 10Gi (allowing for 9-11G range)
+          # With 200% headroom on ~3.3GB model = ~10GB PVC
+          ACTUAL="$ACTUAL_SIZE"
+          # Convert to numeric value in GB (strip G suffix)
+          ACTUAL_NUM=$(echo "$ACTUAL" | sed 's/G$//' | sed 's/\..*$//')
+
+          if [ "$ACTUAL_NUM" -ge 9 ] && [ "$ACTUAL_NUM" -le 11 ]; then
+            echo "PASS: PVC size $ACTUAL is within expected range (9-11G)"
+            exit 0
+          else
+            echo "FAIL: PVC size $ACTUAL is outside expected range (9-11G)"
+            exit 1
+          fi
+        env:
+        - name: ACTUAL_SIZE
+          value: ($ACTUAL_SIZE)
+        check:
+          ($error == null): true
+
+  - name: Verify the service responds
+    try:
+    - script:
+        timeout: 2m
+        env:
+        - name: HTTP_BASE_PATH
+          value: /integration/custom-path/cache-svc-public/v1
+        content: bash ../../_shared/validate-http.sh
