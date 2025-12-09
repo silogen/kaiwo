@@ -127,6 +127,11 @@ spec:
               - value: "0"
               (env[?name == 'LMCACHE_CONFIG_FILE']):
               - value: /lmcache/lmcache_config.yaml
+              # Verify AIM_ENGINE_ARGS is deep-merged (profile overrides kvcache defaults)
+              (env[?name == 'AIM_ENGINE_ARGS' && contains(value, '"max-model-len"')]):
+              - name: AIM_ENGINE_ARGS
+              (env[?name == 'AIM_ENGINE_ARGS' && contains(value, '"kv-transfer-config":"Overridden"')]):
+              - name: AIM_ENGINE_ARGS
 
   # ==================== VERIFY AIMSERVICE BECOMES RUNNING ====================
   - name: Verify AIMService transitions to Running

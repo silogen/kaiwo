@@ -28,10 +28,12 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/go-logr/logr"
 
+	"github.com/silogen/kaiwo/internal/controller/aim/helpers"
 	"github.com/silogen/kaiwo/internal/controller/aim/routingconfig"
 
 	servingv1beta1 "github.com/kserve/kserve/pkg/apis/serving/v1beta1"
@@ -66,6 +68,8 @@ const (
 	AIMCacheBasePath = "/workspace/model-cache"
 	// aimServiceFinalizer is used to clean up template caches on deletion
 	aimServiceFinalizer = "aim.silogen.ai/service-cache-cleanup"
+	// envVarAIMEngineArgs is the env var name for AIM engine arguments that should be JSON-merged
+	envVarAIMEngineArgs = "AIM_ENGINE_ARGS"
 )
 
 // AIMServiceReconciler reconciles AIMService resources into KServe InferenceServices.
@@ -708,7 +712,18 @@ func (r *AIMServiceReconciler) planInferenceServiceAndRoute(logger logr.Logger, 
 	if serviceReady {
 		inferenceService := shared.BuildInferenceService(serviceState, ownerRef)
 
-		// Collect all environment variables
+		// Build environment variables with hierarchical merging.
+		// Precedence order (highest to lowest):
+		// 1. User/Spec set (service.Spec.Env) - user-specified values take priority
+		// 2. Profile EnvVars (from template status) - discovered configuration
+		// 3. KVCache additions - infrastructure defaults
+		// 4. Template.Spec.Env - template-level defaults
+		// 5. System defaults - always present base values
+		//
+		// For JSON env vars like AIM_ENGINE_ARGS, values are deep-merged to preserve
+		// contributions from all levels while respecting precedence for conflicts.
+
+		// Start with system defaults (lowest precedence - level 5)
 		envVars := []v1.EnvVar{
 			{
 				Name:  "AIM_CACHE_PATH",
@@ -716,34 +731,62 @@ func (r *AIMServiceReconciler) planInferenceServiceAndRoute(logger logr.Logger, 
 			},
 		}
 
-		// Add LMCache env vars if ConfigMap is available
+		// Merge in template spec env vars (level 4)
+		// These are template-level defaults that apply to all services using this template
+		if obs.TemplateSpec != nil && len(obs.TemplateSpec.Env) > 0 {
+			envVars = helpers.MergeEnvVars(envVars, obs.TemplateSpec.Env, envVarAIMEngineArgs)
+		}
+
+		// Add KVCache env vars if ConfigMap is available (level 3)
 		if obs.KVCacheConfigMap != nil {
-			envVars = append(envVars,
-				v1.EnvVar{
+			kvCacheEnvVars := []v1.EnvVar{
+				{
 					Name:  "LMCACHE_USE_EXPERIMENTAL",
 					Value: "True",
 				},
-				v1.EnvVar{
+				{
 					Name:  "LMCACHE_CONFIG_FILE",
 					Value: "/lmcache/lmcache_config.yaml",
 				},
-				v1.EnvVar{
+				{
 					Name:  "LMCACHE_LOG_LEVEL",
 					Value: "INFO",
 				},
-				v1.EnvVar{
-					Name:  "AIM_ENGINE_ARGS",
+				{
+					Name:  envVarAIMEngineArgs,
 					Value: `{"kv-transfer-config": {"kv_connector":"LMCacheConnectorV1", "kv_role":"kv_both"}}`,
 				},
-				v1.EnvVar{
+				{
 					Name:  "PYTHONHASHSEED",
 					Value: "0",
 				},
-			)
+			}
+			envVars = helpers.MergeEnvVars(envVars, kvCacheEnvVars, envVarAIMEngineArgs)
 		}
 
-		// Merge in custom env vars from service spec (allows overriding defaults)
-		inferenceService.Spec.Predictor.Model.Env = mergeEnvVars(envVars, service.Spec.Env)
+		// Merge in profile env vars (level 2)
+		// Profile EnvVars come from the discovery result stored in template status
+		if obs.TemplateStatus != nil && len(obs.TemplateStatus.Profile.EnvVars) > 0 {
+			profileEnvVars := make([]v1.EnvVar, 0, len(obs.TemplateStatus.Profile.EnvVars))
+			for name, value := range obs.TemplateStatus.Profile.EnvVars {
+				profileEnvVars = append(profileEnvVars, v1.EnvVar{
+					Name:  name,
+					Value: value,
+				})
+			}
+			envVars = helpers.MergeEnvVars(envVars, profileEnvVars, envVarAIMEngineArgs)
+		}
+
+		// Merge in user/spec env vars (highest precedence - level 1)
+		envVars = helpers.MergeEnvVars(envVars, service.Spec.Env, envVarAIMEngineArgs)
+
+		// Sort final env vars for deterministic ordering across reconciliations
+		sort.Slice(envVars, func(i, j int) bool {
+			return envVars[i].Name < envVars[j].Name
+		})
+
+		// Set the final merged env vars on the inference service
+		inferenceService.Spec.Predictor.Model.Env = envVars
 
 		// Mount LMCache ConfigMap if available
 		if obs.KVCacheConfigMap != nil {
@@ -996,37 +1039,6 @@ func addLMCacheConfigMount(inferenceService *servingv1beta1.InferenceService, co
 		MountPath: "/lmcache",
 		ReadOnly:  true,
 	})
-}
-
-// mergeEnvVars combines default env vars with service-specific overrides.
-// Service env vars take precedence over defaults when env var names match.
-func mergeEnvVars(defaults []v1.EnvVar, overrides []v1.EnvVar) []v1.EnvVar {
-	// Create a map for quick lookup of overrides
-	overrideMap := make(map[string]v1.EnvVar)
-	for _, env := range overrides {
-		overrideMap[env.Name] = env
-	}
-
-	// Start with defaults, replacing any that are overridden
-	merged := make([]v1.EnvVar, 0, len(defaults)+len(overrides))
-	for _, env := range defaults {
-		if override, exists := overrideMap[env.Name]; exists {
-			merged = append(merged, override)
-			delete(overrideMap, env.Name) // Mark as processed
-		} else {
-			merged = append(merged, env)
-		}
-	}
-
-	// Add any remaining overrides that weren't in defaults
-	for _, env := range overrides {
-		if _, processed := overrideMap[env.Name]; !processed {
-			continue // Already added in the loop above
-		}
-		merged = append(merged, env)
-	}
-
-	return merged
 }
 
 func (r *AIMServiceReconciler) projectStatus(
