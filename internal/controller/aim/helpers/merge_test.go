@@ -84,17 +84,28 @@ func TestMergeEnvVars_JSONDeepMerge(t *testing.T) {
 	}
 }
 
+//nolint:goconst // test values don't need constants
 func TestDeepMergeMap(t *testing.T) {
 	dst := map[string]any{
 		"outer": map[string]any{
 			"keep":     "dst_value",
 			"override": "dst_value",
+			"override_map": map[string]any{
+				"override":   "dst_value",
+				"override_2": "dst_value",
+				"keep":       "dst_value",
+			},
 		},
 	}
 	src := map[string]any{
 		"outer": map[string]any{
 			"override": "src_value",
 			"add":      "src_value",
+			"override_map": map[string]any{
+				"override":   "src_value",
+				"override_2": "src_value",
+				"add":        "src_value",
+			},
 		},
 	}
 
@@ -109,5 +120,20 @@ func TestDeepMergeMap(t *testing.T) {
 	}
 	if outer["add"] != "src_value" {
 		t.Errorf("expected add='src_value', got %v", outer["add"])
+	}
+
+	// Verify recursive merge of nested maps
+	nestedMap := outer["override_map"].(map[string]any)
+	if nestedMap["keep"] != "dst_value" {
+		t.Errorf("nested: expected keep='dst_value', got %v", nestedMap["keep"])
+	}
+	if nestedMap["override"] != "src_value" {
+		t.Errorf("nested: expected override='src_value', got %v", nestedMap["override"])
+	}
+	if nestedMap["override_2"] != "src_value" {
+		t.Errorf("nested: expected override_2='src_value', got %v", nestedMap["override_2"])
+	}
+	if nestedMap["add"] != "src_value" {
+		t.Errorf("nested: expected add='src_value', got %v", nestedMap["add"])
 	}
 }
