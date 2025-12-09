@@ -437,9 +437,10 @@ func (r *AIMServiceReconciler) planTemplateCache(ctx context.Context, logger log
 				},
 			},
 			Spec: aimv1alpha1.AIMTemplateCacheSpec{
-				TemplateRef:      obs.TemplateName,
-				StorageClassName: storageClassName,
-				Env:              service.Spec.Env,
+				TemplateRef:       obs.TemplateName,
+				StorageClassName:  storageClassName,
+				Env:               service.Spec.Env,
+				RuntimeConfigName: service.Spec.RuntimeConfigName,
 			},
 		}
 
