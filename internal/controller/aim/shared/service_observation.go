@@ -197,7 +197,7 @@ func ResolveTemplateNameForService(
 
 	// When auto-selecting, don't filter by overrides - we're selecting a base template
 	// to potentially derive from. The derived template will have the overrides applied.
-	selected, count := SelectBestTemplate(candidates, nil, availableGPUs, service.Spec.Template.AllowUnoptimized)
+	selected, count, diag := SelectBestTemplate(candidates, nil, availableGPUs, service.Spec.Template.AllowUnoptimized)
 	status.CandidateCount = count
 
 	if count != 1 {
@@ -210,22 +210,23 @@ func ResolveTemplateNameForService(
 				return res, status, nil
 			}
 
-			// Templates exist but selection returned 0 - check why
-			// Count how many are Available vs other statuses
-			availableCount := 0
-			for _, c := range candidates {
-				if c.Status.Status == aimv1alpha1.AIMTemplateStatusReady {
-					availableCount++
-				}
-			}
-
-			if availableCount == 0 {
+			// Templates exist but selection returned 0 - check why using diagnostics
+			if diag.AfterAvailabilityFilter == 0 {
 				// Templates exist but none are Available yet - service should wait
 				status.TemplatesExistButNotReady = true
 				status.SelectionReason = ""
 				status.SelectionMessage = ""
+			} else if diag.AfterUnoptimizedFilter == 0 && diag.UnoptimizedTemplatesWereFiltered {
+				// Templates are Available but were filtered out because they are unoptimized
+				// and allowUnoptimized is false - provide a clear message
+				status.SelectionReason = aimv1alpha1.AIMServiceReasonTemplateNotFound
+				status.SelectionMessage = fmt.Sprintf(
+					"No available templates match the service requirements for image %q: "+
+						"%d unoptimized template(s) were filtered out because spec.template.allowUnoptimized is false. "+
+						"Set allowUnoptimized to true to use unoptimized templates, or wait for optimized templates to become available",
+					imageName, diag.AfterAvailabilityFilter)
 			} else {
-				// Templates are Available but don't match overrides/GPU requirements
+				// Templates are Available but don't match GPU requirements
 				status.SelectionReason = aimv1alpha1.AIMServiceReasonTemplateNotFound
 				status.SelectionMessage = fmt.Sprintf("No available templates match the service requirements for image %q", imageName)
 			}

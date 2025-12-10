@@ -26,6 +26,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -318,6 +319,7 @@ func (rc *RegistryClient) listGitHubContainerRegistryImages(
 	spec aimv1alpha1.AIMClusterModelSourceSpec,
 ) ([]RegistryImage, error) {
 	var allImages []RegistryImage
+	var errs []error
 
 	// Extract organizations from filter patterns
 	orgs := extractGitHubOrgs(spec.Filters)
@@ -333,9 +335,10 @@ func (rc *RegistryClient) listGitHubContainerRegistryImages(
 
 	// For each organization, fetch packages
 	for _, org := range orgs {
-		packages, err := rc.fetchGitHubPackages(ctx, token, org)
-		if err != nil {
-			// Log but continue - some orgs might be inaccessible
+		packages, packageErr := rc.fetchGitHubPackages(ctx, token, org)
+		if packageErr != nil {
+			// Track errors but continue - other orgs might succeed
+			errs = append(errs, fmt.Errorf("org %q: %w", org, packageErr))
 			continue
 		}
 
@@ -360,9 +363,10 @@ func (rc *RegistryClient) listGitHubContainerRegistryImages(
 			}
 
 			fullRepoWithRegistry := fmt.Sprintf("%s/%s", ghcrHost, fullRepo)
-			tags, err := rc.fetchImageTags(ctx, fullRepoWithRegistry, spec.ImagePullSecrets)
-			if err != nil {
-				// Log but continue - some packages might be inaccessible
+			tags, imageTagFetchErr := rc.fetchImageTags(ctx, fullRepoWithRegistry, spec.ImagePullSecrets)
+			if imageTagFetchErr != nil {
+				// Track tag fetch errors but continue - other packages might succeed
+				errs = append(errs, fmt.Errorf("package %q: %w", fullRepo, imageTagFetchErr))
 				continue
 			}
 
@@ -380,6 +384,14 @@ func (rc *RegistryClient) listGitHubContainerRegistryImages(
 				}
 			}
 		}
+	}
+
+	// Return any errors encountered, even if we got partial results
+	if len(errs) > 0 {
+		if len(allImages) == 0 {
+			return nil, fmt.Errorf("no images found: %w", errors.Join(errs...))
+		}
+		return allImages, fmt.Errorf("partial results, encountered errors: %w", errors.Join(errs...))
 	}
 
 	return allImages, nil

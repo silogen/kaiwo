@@ -39,6 +39,16 @@ type TemplateCandidate struct {
 	Status    aimv1alpha1.AIMServiceTemplateStatus
 }
 
+// SelectionDiagnostics provides detailed information about why template selection failed.
+type SelectionDiagnostics struct {
+	TotalCandidates                  int
+	AfterAvailabilityFilter          int
+	AfterUnoptimizedFilter           int
+	AfterOverridesFilter             int
+	AfterGPUAvailabilityFilter       int
+	UnoptimizedTemplatesWereFiltered bool
+}
+
 // QualifiedName returns a human-readable identifier for logging/debugging.
 func (c TemplateCandidate) QualifiedName() string {
 	if c.Scope == TemplateScopeNamespace && c.Namespace != "" {
@@ -54,42 +64,53 @@ func (c TemplateCandidate) QualifiedName() string {
 // 3. Filter by GPUs that exist in the cluster.
 // 4. Prefer namespace-scoped templates over cluster-scoped templates.
 // 5. Prefer higher-tier GPUs, then latency over throughput, then lower precision.
-// Returns (selected template, count of templates with identical preference scores).
+// Returns (selected template, count of templates with identical preference scores, diagnostics).
 // If count > 1, the templates are ambiguous (identical in all preference dimensions).
 func SelectBestTemplate(
 	candidates []TemplateCandidate,
 	overrides *aimv1alpha1.AIMServiceOverrides,
 	availableGPUs []string,
 	allowUnoptimized bool,
-) (*TemplateCandidate, int) {
-	filtered := filterAvailableTemplates(candidates)
-	if len(filtered) == 0 {
-		return nil, 0
+) (*TemplateCandidate, int, SelectionDiagnostics) {
+	diag := SelectionDiagnostics{
+		TotalCandidates: len(candidates),
 	}
 
-	filtered = filterUnoptimizedTemplates(filtered, allowUnoptimized)
+	filtered := filterAvailableTemplates(candidates)
+	diag.AfterAvailabilityFilter = len(filtered)
 	if len(filtered) == 0 {
-		return nil, 0
+		return nil, 0, diag
+	}
+
+	beforeUnoptimizedFilter := len(filtered)
+	filtered = filterUnoptimizedTemplates(filtered, allowUnoptimized)
+	diag.AfterUnoptimizedFilter = len(filtered)
+	diag.UnoptimizedTemplatesWereFiltered = beforeUnoptimizedFilter > len(filtered)
+	if len(filtered) == 0 {
+		return nil, 0, diag
 	}
 
 	filtered = filterTemplatesByOverrides(filtered, overrides)
+	diag.AfterOverridesFilter = len(filtered)
 	if len(filtered) == 0 {
-		return nil, 0
+		return nil, 0, diag
 	}
 
 	filtered = filterTemplatesByGPUAvailability(filtered, availableGPUs)
+	diag.AfterGPUAvailabilityFilter = len(filtered)
 	if len(filtered) == 0 {
-		return nil, 0
+		return nil, 0, diag
 	}
 
 	// Prefer namespace-scoped templates over cluster-scoped templates
 	filtered = preferNamespaceTemplates(filtered)
 
 	if len(filtered) == 1 {
-		return &filtered[0], 1
+		return &filtered[0], 1, diag
 	}
 
-	return choosePreferredTemplate(filtered)
+	selected, count := choosePreferredTemplate(filtered)
+	return selected, count, diag
 }
 
 func filterAvailableTemplates(candidates []TemplateCandidate) []TemplateCandidate {
