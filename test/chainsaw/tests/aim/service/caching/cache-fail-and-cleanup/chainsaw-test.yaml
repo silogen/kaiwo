@@ -46,3 +46,34 @@ spec:
             (conditions[?type == 'CacheFailed']):
             - status: "True"
               reason: CacheFailed
+
+  - name: Delete the AIMService
+    try:
+    - delete:
+        ref:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          name: test-cache-failure
+          namespace: ($namespace)
+  
+  - name: Verify AIMTemplateCache is deleted (cascade from service finalizer)
+    try:
+    - error:
+        timeout: 60s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMTemplateCache
+          metadata:
+            namespace: ($namespace)
+            labels:
+              aim.silogen.ai/service-name: test-cache-failure
+
+  - name: Verify AIMModelCache is deleted (cascade from template cache finalizer)
+    try:
+    - error:
+        timeout: 60s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMModelCache
+          metadata:
+            namespace: ($namespace)
