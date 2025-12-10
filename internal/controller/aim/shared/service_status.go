@@ -857,23 +857,5 @@ func ProjectServiceStatus(
 		}
 	}
 
-	// Handle KV cache status
-	if service.Spec.KVCache != nil {
-		if obs.KVCacheErr != nil {
-			setCondition(aimv1alpha1.AIMServiceConditionKVCacheReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonKVCacheFailed, fmt.Sprintf("KV cache error: %v", obs.KVCacheErr))
-			status.Status = aimv1alpha1.AIMServiceStatusDegraded
-		} else if obs.KVCache == nil {
-			setCondition(aimv1alpha1.AIMServiceConditionKVCacheReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonWaitingForKVCache, "Waiting for KV cache to be created")
-		} else if obs.KVCache.Status.Status == aimv1alpha1.AIMKVCacheStatusFailed {
-			setCondition(aimv1alpha1.AIMServiceConditionKVCacheReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonKVCacheFailed, fmt.Sprintf("KV cache failed: %s", obs.KVCache.Status.StatefulSetName))
-			status.Status = aimv1alpha1.AIMServiceStatusDegraded
-		} else if obs.KVCache.Status.Status == aimv1alpha1.AIMKVCacheStatusReady {
-			setCondition(aimv1alpha1.AIMServiceConditionKVCacheReady, metav1.ConditionTrue, aimv1alpha1.AIMServiceReasonKVCacheReady, "KV cache is ready")
-		} else {
-			// Pending or Progressing
-			setCondition(aimv1alpha1.AIMServiceConditionKVCacheReady, metav1.ConditionFalse, aimv1alpha1.AIMServiceReasonKVCacheProgressing, fmt.Sprintf("KV cache status: %s", obs.KVCache.Status.Status))
-		}
-	}
-
 	EvaluateInferenceServiceStatus(status, obs, inferenceService, httpRoute, routingEnabled, routingReady, setCondition)
 }
