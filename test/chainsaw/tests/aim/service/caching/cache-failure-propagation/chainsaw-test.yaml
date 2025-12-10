@@ -1,0 +1,48 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: cache-failure-propagation
+spec:
+  description: Test that AIMModelCache failure propagates to AIMService status
+  timeouts:
+    assert: 180s
+  steps:
+  - name: Create runtime config
+    try:
+    - apply:
+        file: runtime.yaml
+
+  - name: Create AIMService with cacheModel and failure trigger
+    try:
+    - apply:
+        file: aimservice.yaml
+
+  - name: Verify AIMModelCache is created and reaches Failed status
+    try:
+    - assert:
+        timeout: 120s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMModelCache
+          metadata:
+            namespace: ($namespace)
+          status:
+            status: Failed
+            (conditions[?type == 'Failure']):
+            - status: "True"
+              reason: DownloadFailed
+
+  - name: Verify AIMService reaches Failed status with CacheFailed condition
+    try:
+    - assert:
+        timeout: 60s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: test-cache-failure
+          status:
+            status: Failed
+            (conditions[?type == 'CacheFailed']):
+            - status: "True"
+              reason: CacheFailed
