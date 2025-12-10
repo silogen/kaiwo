@@ -73,6 +73,7 @@ type TemplateSelectionStatus struct {
 	ImageReadyReason          string
 	ImageReadyMessage         string
 	ModelResolutionErr        error
+	TemplateMatchingResults   []aimv1alpha1.AIMTemplateCandidateResult
 }
 
 // ServiceObservation holds observed state for an AIMService reconciliation.
@@ -107,6 +108,7 @@ type ServiceObservation struct {
 	ImageReadyReason              string
 	ImageReadyMessage             string
 	InferenceServicePodImageError *ImagePullError // Categorized image pull error from InferenceService pods
+	TemplateMatchingResults       []aimv1alpha1.AIMTemplateCandidateResult
 	TemplateCache                 *aimv1alpha1.AIMTemplateCache
 	ModelCaches                   *aimv1alpha1.AIMModelCacheList
 	KVCache                       *aimv1alpha1.AIMKVCache // Observed AIMKVCache resource
@@ -125,6 +127,24 @@ func (o *ServiceObservation) RuntimeName() string {
 		return ""
 	}
 	return o.TemplateName
+}
+
+// convertToTemplateMatchingResults converts CandidateEvaluation results to API types.
+// Returns a non-nil slice even if empty to indicate auto-selection was attempted.
+func convertToTemplateMatchingResults(evaluations []CandidateEvaluation) []aimv1alpha1.AIMTemplateCandidateResult {
+	// Return non-nil empty slice if no evaluations (indicates auto-selection with no candidates)
+	if len(evaluations) == 0 {
+		return []aimv1alpha1.AIMTemplateCandidateResult{}
+	}
+	results := make([]aimv1alpha1.AIMTemplateCandidateResult, len(evaluations))
+	for i, eval := range evaluations {
+		results[i] = aimv1alpha1.AIMTemplateCandidateResult{
+			Name:   eval.Candidate.Name,
+			Status: eval.Status,
+			Reason: eval.Reason,
+		}
+	}
+	return results
 }
 
 // ResolveTemplateNameForService determines the template name to use for a service.
@@ -197,8 +217,11 @@ func ResolveTemplateNameForService(
 
 	// When auto-selecting, don't filter by overrides - we're selecting a base template
 	// to potentially derive from. The derived template will have the overrides applied.
-	selected, count, diag := SelectBestTemplate(candidates, nil, availableGPUs, service.Spec.Template.AllowUnoptimized)
+	selected, count, diag, evaluations := SelectBestTemplate(candidates, nil, availableGPUs, service.Spec.Template.AllowUnoptimized)
 	status.CandidateCount = count
+
+	// Populate template matching status with detailed evaluation results
+	status.TemplateMatchingResults = convertToTemplateMatchingResults(evaluations)
 
 	if count != 1 {
 		if count == 0 {

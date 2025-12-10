@@ -174,6 +174,7 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 		ImageReadyReason:          selectionStatus.ImageReadyReason,
 		ImageReadyMessage:         selectionStatus.ImageReadyMessage,
 		ModelResolutionErr:        selectionStatus.ModelResolutionErr,
+		TemplateMatchingResults:   selectionStatus.TemplateMatchingResults,
 	}
 
 	// Observe template based on whether it's derived or not

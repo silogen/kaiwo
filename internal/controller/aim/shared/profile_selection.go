@@ -49,12 +49,70 @@ type SelectionDiagnostics struct {
 	UnoptimizedTemplatesWereFiltered bool
 }
 
+// CandidateEvaluation captures why a specific candidate was chosen or rejected.
+type CandidateEvaluation struct {
+	Candidate TemplateCandidate
+	Status    string // "chosen" or "rejected"
+	Reason    string // CamelCase reason
+	Rank      int    // For candidates that passed all filters
+}
+
 // QualifiedName returns a human-readable identifier for logging/debugging.
 func (c TemplateCandidate) QualifiedName() string {
 	if c.Scope == TemplateScopeNamespace && c.Namespace != "" {
 		return c.Namespace + "/" + c.Name
 	}
 	return c.Name
+}
+
+type rejectionStage string
+
+const (
+	stageAvailability rejectionStage = "availability"
+	stageUnoptimized  rejectionStage = "unoptimized"
+	stageOverrides    rejectionStage = "overrides"
+	stageGPU          rejectionStage = "gpu"
+)
+
+const (
+	statusChosen   = "chosen"
+	statusRejected = "rejected"
+
+	reasonBestMatch           = "BestMatch"
+	reasonLowerPreferenceRank = "LowerPreferenceRank"
+
+	reasonUnoptimizedFiltered = "UnoptimizedTemplateFiltered"
+	reasonOverridesNotMatched = "ServiceOverridesNotMatched"
+	reasonGPUNotInCluster     = "RequiredGPUNotInCluster"
+)
+
+// appendRejections emits CandidateEvaluation entries for all rejected candidates.
+func appendRejections(
+	evals *[]CandidateEvaluation,
+	rejectedByStage map[rejectionStage][]TemplateCandidate,
+) {
+	// availability uses per-template status-derived reason
+	for _, c := range rejectedByStage[stageAvailability] {
+		*evals = append(*evals, CandidateEvaluation{
+			Candidate: c,
+			Status:    statusRejected,
+			Reason:    getRejectionReasonForStatus(c.Status.Status),
+		})
+	}
+
+	addWithReason := func(stage rejectionStage, reason string) {
+		for _, c := range rejectedByStage[stage] {
+			*evals = append(*evals, CandidateEvaluation{
+				Candidate: c,
+				Status:    statusRejected,
+				Reason:    reason,
+			})
+		}
+	}
+
+	addWithReason(stageUnoptimized, reasonUnoptimizedFiltered)
+	addWithReason(stageOverrides, reasonOverridesNotMatched)
+	addWithReason(stageGPU, reasonGPUNotInCluster)
 }
 
 // SelectBestTemplate selects the best template candidate from the provided list.
@@ -64,73 +122,178 @@ func (c TemplateCandidate) QualifiedName() string {
 // 3. Filter by GPUs that exist in the cluster.
 // 4. Prefer namespace-scoped templates over cluster-scoped templates.
 // 5. Prefer higher-tier GPUs, then latency over throughput, then lower precision.
-// Returns (selected template, count of templates with identical preference scores, diagnostics).
+// Returns (selected template, count of templates with identical preference scores, diagnostics, per-candidate evaluations).
 // If count > 1, the templates are ambiguous (identical in all preference dimensions).
 func SelectBestTemplate(
 	candidates []TemplateCandidate,
 	overrides *aimv1alpha1.AIMServiceOverrides,
 	availableGPUs []string,
 	allowUnoptimized bool,
-) (*TemplateCandidate, int, SelectionDiagnostics) {
+) (*TemplateCandidate, int, SelectionDiagnostics, []CandidateEvaluation) {
 	diag := SelectionDiagnostics{
 		TotalCandidates: len(candidates),
 	}
 
-	filtered := filterAvailableTemplates(candidates)
+	evaluations := make([]CandidateEvaluation, 0, len(candidates))
+	rejectedByStage := make(map[rejectionStage][]TemplateCandidate)
+
+	// --- Stage 1: Availability filter ---
+
+	var filtered []TemplateCandidate
+	for _, c := range candidates {
+		if c.Status.Status == aimv1alpha1.AIMTemplateStatusReady {
+			filtered = append(filtered, c)
+		} else {
+			rejectedByStage[stageAvailability] = append(rejectedByStage[stageAvailability], c)
+		}
+	}
+
 	diag.AfterAvailabilityFilter = len(filtered)
 	if len(filtered) == 0 {
-		return nil, 0, diag
+		appendRejections(&evaluations, rejectedByStage)
+		return nil, 0, diag, evaluations
 	}
 
-	beforeUnoptimizedFilter := len(filtered)
-	filtered = filterUnoptimizedTemplates(filtered, allowUnoptimized)
+	// --- Stage 2: Unoptimized filter ---
+
+	beforeUnoptimized := filtered
+	filtered = filtered[:0] // reuse backing array
+	for _, c := range beforeUnoptimized {
+		if c.Status.Profile.Metadata.Type == aimv1alpha1.AIMProfileTypeOptimized || allowUnoptimized {
+			filtered = append(filtered, c)
+		} else {
+			rejectedByStage[stageUnoptimized] = append(rejectedByStage[stageUnoptimized], c)
+		}
+	}
+
 	diag.AfterUnoptimizedFilter = len(filtered)
-	diag.UnoptimizedTemplatesWereFiltered = beforeUnoptimizedFilter > len(filtered)
+	diag.UnoptimizedTemplatesWereFiltered = len(rejectedByStage[stageUnoptimized]) > 0
+
 	if len(filtered) == 0 {
-		return nil, 0, diag
+		appendRejections(&evaluations, rejectedByStage)
+		return nil, 0, diag, evaluations
 	}
 
-	filtered = filterTemplatesByOverrides(filtered, overrides)
+	// --- Stage 3: Overrides filter ---
+
+	beforeOverrides := filtered
+	filtered = filterTemplatesByOverrides(beforeOverrides, overrides)
 	diag.AfterOverridesFilter = len(filtered)
+
 	if len(filtered) == 0 {
-		return nil, 0, diag
+		// everything that made it to this stage but wasn’t kept is an overrides rejection
+		rejectedByStage[stageOverrides] = append(rejectedByStage[stageOverrides], beforeOverrides...)
+		appendRejections(&evaluations, rejectedByStage)
+		return nil, 0, diag, evaluations
 	}
 
-	filtered = filterTemplatesByGPUAvailability(filtered, availableGPUs)
+	// --- Stage 4: GPU availability filter ---
+
+	beforeGPU := filtered
+	filtered = filterTemplatesByGPUAvailability(beforeGPU, availableGPUs)
 	diag.AfterGPUAvailabilityFilter = len(filtered)
+
 	if len(filtered) == 0 {
-		return nil, 0, diag
+		// everything that made it to this stage but wasn’t kept is a GPU rejection
+		rejectedByStage[stageGPU] = append(rejectedByStage[stageGPU], beforeGPU...)
+		appendRejections(&evaluations, rejectedByStage)
+		return nil, 0, diag, evaluations
 	}
 
-	// Prefer namespace-scoped templates over cluster-scoped templates
+	// --- Stage 5: namespace-scoped vs cluster-scoped ---
+
 	filtered = preferNamespaceTemplates(filtered)
 
 	if len(filtered) == 1 {
-		return &filtered[0], 1, diag
+		// All rejected candidates (from all stages)
+		appendRejections(&evaluations, rejectedByStage)
+
+		// The chosen one
+		evaluations = append(evaluations, CandidateEvaluation{
+			Candidate: filtered[0],
+			Status:    statusChosen,
+			Reason:    reasonBestMatch,
+			Rank:      1,
+		})
+
+		return &filtered[0], 1, diag, evaluations
 	}
+
+	// --- Stage 6: preference scoring among remaining candidates ---
 
 	selected, count := choosePreferredTemplate(filtered)
-	return selected, count, diag
-}
 
-func filterAvailableTemplates(candidates []TemplateCandidate) []TemplateCandidate {
-	result := make([]TemplateCandidate, 0, len(candidates))
-	for _, candidate := range candidates {
-		if candidate.Status.Status == aimv1alpha1.AIMTemplateStatusReady {
-			result = append(result, candidate)
+	// First, record all stage-level rejections
+	appendRejections(&evaluations, rejectedByStage)
+
+	// Build preference maps once
+	gpuPref := makePreferenceMap(GPUPreferenceOrder)
+	metricPref := makePreferenceMap(MetricPreferenceOrder)
+	precisionPref := makePreferenceMap(PrecisionPreferenceOrder)
+	profileTypePref := makePreferenceMap(ProfileTypePreferenceOrder)
+
+	// Precompute the "best" scores once for the selected candidate
+	bestGPUScore := getPreferenceScore(candidateGPUModel(*selected), gpuPref)
+	bestMetricScore := getPreferenceScore(candidateMetric(*selected), metricPref)
+	bestPrecisionScore := getPreferenceScore(candidatePrecision(*selected), precisionPref)
+	bestProfileTypeScore := getPreferenceScore(candidateProfileType(*selected), profileTypePref)
+
+	for i, c := range filtered {
+		gpuScore := getPreferenceScore(candidateGPUModel(c), gpuPref)
+		metricScore := getPreferenceScore(candidateMetric(c), metricPref)
+		precisionScore := getPreferenceScore(candidatePrecision(c), precisionPref)
+		profileTypeScore := getPreferenceScore(candidateProfileType(c), profileTypePref)
+
+		switch {
+		case c.Name == selected.Name:
+			evaluations = append(evaluations, CandidateEvaluation{
+				Candidate: c,
+				Status:    statusChosen,
+				Reason:    reasonBestMatch,
+				Rank:      1,
+			})
+
+		case gpuScore == bestGPUScore &&
+			metricScore == bestMetricScore &&
+			precisionScore == bestPrecisionScore &&
+			profileTypeScore == bestProfileTypeScore:
+			// Same preference scores as the selected candidate but not chosen (tie-breaking elsewhere)
+			evaluations = append(evaluations, CandidateEvaluation{
+				Candidate: c,
+				Status:    statusRejected,
+				Reason:    reasonLowerPreferenceRank, // keep existing reason string for compatibility
+				Rank:      i + 1,
+			})
+
+		default:
+			evaluations = append(evaluations, CandidateEvaluation{
+				Candidate: c,
+				Status:    statusRejected,
+				Reason:    reasonLowerPreferenceRank,
+				Rank:      i + 1,
+			})
 		}
 	}
-	return result
+
+	return selected, count, diag, evaluations
 }
 
-func filterUnoptimizedTemplates(candidates []TemplateCandidate, allowUnoptimized bool) []TemplateCandidate {
-	result := make([]TemplateCandidate, 0, len(candidates))
-	for _, candidate := range candidates {
-		if candidate.Status.Profile.Metadata.Type == aimv1alpha1.AIMProfileTypeOptimized || allowUnoptimized {
-			result = append(result, candidate)
-		}
+// getRejectionReasonForStatus converts a template status to a rejection reason.
+func getRejectionReasonForStatus(status aimv1alpha1.AIMTemplateStatusEnum) string {
+	switch status {
+	case aimv1alpha1.AIMTemplateStatusPending:
+		return "TemplatePending"
+	case aimv1alpha1.AIMTemplateStatusProgressing:
+		return "TemplateProgressing"
+	case aimv1alpha1.AIMTemplateStatusNotAvailable:
+		return "TemplateNotAvailable"
+	case aimv1alpha1.AIMTemplateStatusDegraded:
+		return "TemplateDegraded"
+	case aimv1alpha1.AIMTemplateStatusFailed:
+		return "TemplateFailed"
+	default:
+		return "TemplateNotReady"
 	}
-	return result
 }
 
 func filterTemplatesByOverrides(candidates []TemplateCandidate, overrides *aimv1alpha1.AIMServiceOverrides) []TemplateCandidate {
