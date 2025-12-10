@@ -12,6 +12,11 @@ spec:
     - apply:
         file: cluster-runtime-config.yaml
 
+  - name: Create secrets
+    try:
+    - apply:
+        file: secrets.yaml
+
   - name: Create cluster model
     try:
     - apply:
