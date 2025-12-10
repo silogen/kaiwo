@@ -31,6 +31,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
@@ -333,6 +334,14 @@ func (rc *RegistryClient) listGitHubContainerRegistryImages(
 		return nil, fmt.Errorf("failed to extract GitHub token: %w", err)
 	}
 
+	// Collect all matching packages first
+	type packageInfo struct {
+		org      string
+		pkg      string
+		fullRepo string
+	}
+	var matchingPackages []packageInfo
+
 	// For each organization, fetch packages
 	for _, org := range orgs {
 		packages, packageErr := rc.fetchGitHubPackages(ctx, token, org)
@@ -358,23 +367,48 @@ func (rc *RegistryClient) listGitHubContainerRegistryImages(
 				}
 			}
 
-			if !matchesAnyFilter {
-				continue
+			if matchesAnyFilter {
+				matchingPackages = append(matchingPackages, packageInfo{
+					org:      org,
+					pkg:      pkg,
+					fullRepo: fullRepo,
+				})
 			}
+		}
+	}
 
-			fullRepoWithRegistry := fmt.Sprintf("%s/%s", ghcrHost, fullRepo)
+	// Fetch tags for all matching packages concurrently
+	const maxConcurrentFetches = 10
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	semaphore := make(chan struct{}, maxConcurrentFetches)
+
+	for _, pkgInfo := range matchingPackages {
+		wg.Add(1)
+		go func(pkg packageInfo) {
+			defer wg.Done()
+
+			// Acquire semaphore
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			fullRepoWithRegistry := fmt.Sprintf("%s/%s", ghcrHost, pkg.fullRepo)
 			tags, imageTagFetchErr := rc.fetchImageTags(ctx, fullRepoWithRegistry, spec.ImagePullSecrets)
+
+			mu.Lock()
+			defer mu.Unlock()
+
 			if imageTagFetchErr != nil {
 				// Track tag fetch errors but continue - other packages might succeed
-				errs = append(errs, fmt.Errorf("package %q: %w", fullRepo, imageTagFetchErr))
-				continue
+				errs = append(errs, fmt.Errorf("package %q: %w", pkg.fullRepo, imageTagFetchErr))
+				return
 			}
 
 			// Filter tags by version constraints
 			for _, tag := range tags {
 				img := RegistryImage{
 					Registry:   ghcrHost,
-					Repository: fullRepo,
+					Repository: pkg.fullRepo,
 					Tag:        tag,
 				}
 
@@ -383,8 +417,10 @@ func (rc *RegistryClient) listGitHubContainerRegistryImages(
 					allImages = append(allImages, img)
 				}
 			}
-		}
+		}(pkgInfo)
 	}
+
+	wg.Wait()
 
 	// Return any errors encountered, even if we got partial results
 	if len(errs) > 0 {
