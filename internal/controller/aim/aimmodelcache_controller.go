@@ -599,7 +599,8 @@ func (r *AIMModelCacheReconciler) buildDownloadJob(mc *aimv1alpha1.AIMModelCache
 								RunAsGroup: baseutils.Pointer(int64(1000)),
 							},
 							Env: append(mc.Spec.Env, []corev1.EnvVar{
-								{Name: "HF_HUB_DISABLE_XET", Value: "1"},
+								{Name: "HF_XET_CHUNK_CACHE_SIZE_BYTES", Value: "0"},
+								{Name: "HF_XET_SHARD_CACHE_SIZE_BYTES", Value: "0"},
 								{Name: "HF_HOME", Value: mountPath + "/.hf"},
 								{Name: "UMASK", Value: "0022"}, // Create files with 644 permissions (readable by others)
 							}...),
