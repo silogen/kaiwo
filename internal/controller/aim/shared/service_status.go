@@ -418,7 +418,7 @@ func HandleMissingModelSource(
 }
 
 func HandleModelCacheReadiness(service *aimv1alpha1.AIMService, status *aimv1alpha1.AIMServiceStatus, obs *ServiceObservation, setCondition func(conditionType string, conditionStatus metav1.ConditionStatus, reason, message string)) bool {
-	if obs == nil || obs.ModelCaches == nil {
+	if obs == nil {
 		return false
 	}
 
