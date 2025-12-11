@@ -88,6 +88,11 @@ func buildMergedEnvVars(service *aimv1alpha1.AIMService, obs *shared.ServiceObse
 		{Name: "AIM_CACHE_PATH", Value: AIMCacheBasePath},
 	}
 
+	// Add profile ID if set
+	if profileId := obs.TemplateSpecCommon.ProfileId; profileId != "" {
+		envVars = append(envVars, v1.EnvVar{Name: "AIM_PROFILE_ID", Value: profileId})
+	}
+
 	// Merge in template spec env vars (level 4)
 	if obs.TemplateSpec != nil && len(obs.TemplateSpec.Env) > 0 {
 		envVars = helpers.MergeEnvVars(envVars, obs.TemplateSpec.Env, envVarAIMEngineArgs)
@@ -722,6 +727,9 @@ func (r *AIMServiceReconciler) planInferenceServiceAndRoute(logger logr.Logger, 
 		RequestTimeout: obs.RouteTimeout,
 	})
 
+	// Compute merged env vars with proper precedence and assign to service state.
+	serviceState.Env = buildMergedEnvVars(service, obs)
+
 	// Compute model cache mounts
 	modelCachesToMount, modelsReady := r.computeModelCacheMounts(service, obs, templateState)
 	templateCacheReady := obs.TemplateCache != nil && obs.TemplateCache.Status.Status == aimv1alpha1.AIMTemplateCacheStatusAvailable
@@ -761,7 +769,6 @@ func (r *AIMServiceReconciler) planInferenceServiceAndRoute(logger logr.Logger, 
 	// Only create InferenceService if we have a model source and storage
 	if serviceReady {
 		inferenceService := shared.BuildInferenceService(serviceState, ownerRef)
-		inferenceService.Spec.Predictor.Model.Env = buildMergedEnvVars(service, obs)
 
 		// Mount LMCache ConfigMap if available
 		if obs.KVCacheConfigMap != nil {
