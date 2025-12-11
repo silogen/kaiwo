@@ -5,8 +5,12 @@ metadata:
 spec:
   model:
     image: ghcr.io/silogen/aim-meta-llama-llama-3-1-8b-instruct:0.7.0
+  template:
+    allowUnoptimized: true
   runtimeConfigName: cache-svc-public
   cacheModel: true
   routing:
     annotations:
       my-annotation: my-value
+  imagePullSecrets:
+  - name: ghcr-pull-secret
