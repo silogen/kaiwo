@@ -5,6 +5,8 @@ metadata:
 spec:
   model:
     image: ghcr.io/silogen/aim-meta-llama-llama-3-2-1b-instruct:0.7.0-preview
+  template:
+    allowUnoptimized: true
   runtimeConfigName: integration-service-image-private-hf
   routing:
     annotations:
