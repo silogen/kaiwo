@@ -4,3 +4,5 @@ metadata:
   name: aim-meta-llama-llama-3-1-8b-instruct-0-7-0
 spec:
   image: ghcr.io/silogen/aim-meta-llama-llama-3-1-8b-instruct:0.7.0
+  imagePullSecrets:
+  - name: ghcr-pull-secret
