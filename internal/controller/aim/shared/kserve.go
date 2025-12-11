@@ -302,16 +302,6 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 		labels[k] = v
 	}
 
-	env := helpers.CopyEnvVars(serviceState.Env)
-
-	// If a profile ID is set, propagate it
-	if profileId := serviceState.Template.SpecCommon.ProfileId; profileId != "" {
-		env = append(env, corev1.EnvVar{
-			Name:  "AIM_PROFILE_ID",
-			Value: profileId,
-		})
-	}
-
 	inferenceService := &servingv1beta1.InferenceService{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: servingv1beta1.SchemeGroupVersion.String(),
@@ -339,7 +329,7 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 					Runtime: baseutils.Pointer(serviceState.RuntimeName),
 					PredictorExtensionSpec: servingv1beta1.PredictorExtensionSpec{
 						Container: corev1.Container{
-							Env: env,
+							Env: helpers.CopyEnvVars(serviceState.Env),
 						},
 					},
 				},
