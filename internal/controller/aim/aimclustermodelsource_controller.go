@@ -66,15 +66,16 @@ type FilterResult struct {
 
 // ClusterModelSourceObservation contains interpreted state from fetched data.
 type ClusterModelSourceObservation struct {
-	filteredImages   []aimclustermodelsource.RegistryImage   // After all filters applied
-	newImages        []aimclustermodelsource.RegistryImage   // Need model creation
-	existingByURI    map[string]*aimv1alpha1.AIMClusterModel // Lookup map
-	filterResults    []FilterResult                          // Per-filter results
-	failedFilters    int                                     // Count of filters that failed
-	succeededFilters int                                     // Count of filters that succeeded
-	totalScanned     int
-	totalFiltered    int
-	runtimeConfig    *aimv1alpha1.AIMRuntimeConfigCommon // For label propagation
+	filteredImages    []aimclustermodelsource.RegistryImage   // After all filters applied
+	newImages         []aimclustermodelsource.RegistryImage   // Need model creation
+	existingByURI     map[string]*aimv1alpha1.AIMClusterModel // Lookup map
+	filterResults     []FilterResult                          // Per-filter results
+	filtersWithErrors int                                     // Count of filters that had errors (partial or total failure)
+	filtersWithImages int                                     // Count of filters that returned images (partial or full success)
+	totalFilters      int                                     // Total number of filters
+	totalScanned      int
+	totalFiltered     int
+	runtimeConfig     *aimv1alpha1.AIMRuntimeConfigCommon // For label propagation
 }
 
 // ClusterModelSourceFetchResult contains data gathered during the Fetch phase.
@@ -135,7 +136,11 @@ func (r *ClusterModelSourceReconciler) Reconcile(ctx context.Context, req ctrl.R
 			// Log any filter errors
 			for _, result := range observation.filterResults {
 				if result.Error != nil {
-					logger.Error(result.Error, "Filter failed", "filter", result.Filter.Image)
+					if len(result.Images) > 0 {
+						logger.Error(result.Error, "Filter had partial success", "filter", result.Filter.Image, "imagesFound", len(result.Images))
+					} else {
+						logger.Error(result.Error, "Filter failed", "filter", result.Filter.Image)
+					}
 				}
 			}
 
@@ -179,14 +184,17 @@ func (r *ClusterModelSourceReconciler) observe(
 	existingCount := len(fetched.existingModels)
 
 	// Process filter results
+	obs.totalFilters = len(fetched.filterResults)
 	for _, result := range fetched.filterResults {
-		if result.Error != nil {
-			obs.failedFilters++
-		} else {
-			obs.succeededFilters++
+		// A filter can have both images and errors (partial success)
+		hasImages := len(result.Images) > 0
+		hasError := result.Error != nil
+
+		if hasImages {
+			obs.filtersWithImages++
 			obs.totalScanned += len(result.Images)
 
-			// Collect all successful images
+			// Collect all images (even if there's also an error indicating partial success)
 			for _, img := range result.Images {
 				obs.filteredImages = append(obs.filteredImages, img)
 
@@ -199,6 +207,11 @@ func (r *ClusterModelSourceReconciler) observe(
 					}
 				}
 			}
+		}
+
+		// Track errors separately (includes both total failures and partial successes with errors)
+		if hasError {
+			obs.filtersWithErrors++
 		}
 	}
 	obs.totalFiltered = len(obs.filteredImages)
@@ -272,6 +285,18 @@ func (r *ClusterModelSourceReconciler) fetchFilter(
 
 	// Strategy 3: Try catalog API (works for wildcards on Docker Hub/Harbor/etc)
 	catalogImages, err := registryClient.ListImages(ctx, singleFilterSpec)
+
+	// Handle partial success: if we got images, use them even if there was an error
+	if len(catalogImages) > 0 {
+		result.Images = catalogImages
+		// If there's an error alongside the images, surface it in conditions (partial success/degraded state)
+		if err != nil {
+			result.Error = fmt.Errorf("partial results for filter %q: %w", filter.Image, err)
+		}
+		return result
+	}
+
+	// No images returned - handle error cases
 	if err != nil {
 		// Check if this filter has wildcards - if so, catalog API failure is a real error
 		hasWildcard := aimclustermodelsource.FilterHasWildcard(filter)
@@ -285,6 +310,7 @@ func (r *ClusterModelSourceReconciler) fetchFilter(
 		return result
 	}
 
+	// No images, no error - empty result
 	result.Images = catalogImages
 	return result
 }
@@ -323,15 +349,14 @@ func (r *ClusterModelSourceReconciler) Project(
 	status *aimv1alpha1.AIMClusterModelSourceStatus,
 	obs ClusterModelSourceObservation,
 ) {
-	totalFilters := obs.failedFilters + obs.succeededFilters
-
 	// Determine overall status based on filter success/failure
-	if obs.failedFilters == totalFilters && obs.failedFilters > 0 {
-		// All filters failed
+	// Note: A filter can have BOTH images and errors (partial success)
+	if obs.filtersWithImages == 0 && obs.filtersWithErrors > 0 {
+		// All filters failed completely (errors, no images)
 		status.Status = string(aimv1alpha1.AIMStatusFailed)
 		r.setFailedConditions(status, obs)
-	} else if obs.failedFilters > 0 {
-		// Some filters failed, some succeeded
+	} else if obs.filtersWithErrors > 0 {
+		// Some filters had errors (either total failures or partial successes)
 		status.Status = string(aimv1alpha1.AIMStatusDegraded)
 		r.setDegradedConditions(status, obs)
 	} else if obs.totalFiltered == 0 {
@@ -339,7 +364,7 @@ func (r *ClusterModelSourceReconciler) Project(
 		status.Status = string(aimv1alpha1.AIMStatusPending)
 		r.setPendingConditions(status, obs)
 	} else {
-		// All filters succeeded
+		// All filters succeeded without errors
 		status.Status = string(aimv1alpha1.AIMStatusReady)
 		r.setReadyConditions(status, obs)
 	}
@@ -365,7 +390,7 @@ func (r *ClusterModelSourceReconciler) setReadyConditions(
 		Type:    "Ready",
 		Status:  metav1.ConditionTrue,
 		Reason:  "AllFiltersSucceeded",
-		Message: fmt.Sprintf("Successfully discovered %d model(s) from %d filter(s)", obs.totalFiltered, obs.succeededFilters),
+		Message: fmt.Sprintf("Successfully discovered %d model(s) from %d filter(s)", obs.totalFiltered, obs.filtersWithImages),
 	})
 	shared.SetCondition(&status.Conditions, metav1.Condition{
 		Type:    "Degraded",
@@ -400,7 +425,7 @@ func (r *ClusterModelSourceReconciler) setDegradedConditions(
 	status *aimv1alpha1.AIMClusterModelSourceStatus,
 	obs ClusterModelSourceObservation,
 ) {
-	// Collect error messages from failed filters
+	// Collect error messages from filters with errors
 	var errorMsgs []string
 	for _, result := range obs.filterResults {
 		if result.Error != nil {
@@ -411,14 +436,14 @@ func (r *ClusterModelSourceReconciler) setDegradedConditions(
 	shared.SetCondition(&status.Conditions, metav1.Condition{
 		Type:    "Ready",
 		Status:  metav1.ConditionFalse,
-		Reason:  "SomeFiltersFailed",
-		Message: fmt.Sprintf("%d of %d filter(s) failed", obs.failedFilters, obs.failedFilters+obs.succeededFilters),
+		Reason:  "SomeFiltersHadErrors",
+		Message: fmt.Sprintf("%d of %d filter(s) had errors", obs.filtersWithErrors, obs.totalFilters),
 	})
 	shared.SetCondition(&status.Conditions, metav1.Condition{
 		Type:    "Degraded",
 		Status:  metav1.ConditionTrue,
-		Reason:  "SomeFiltersFailed",
-		Message: fmt.Sprintf("%d filter(s) failed: %s", obs.failedFilters, strings.Join(errorMsgs, "; ")),
+		Reason:  "SomeFiltersHadErrors",
+		Message: fmt.Sprintf("%d filter(s) had errors: %s", obs.filtersWithErrors, strings.Join(errorMsgs, "; ")),
 	})
 }
 
@@ -438,7 +463,7 @@ func (r *ClusterModelSourceReconciler) setFailedConditions(
 		Type:    "Ready",
 		Status:  metav1.ConditionFalse,
 		Reason:  "AllFiltersFailed",
-		Message: fmt.Sprintf("All %d filter(s) failed", obs.failedFilters),
+		Message: fmt.Sprintf("All %d filter(s) failed", obs.totalFilters),
 	})
 	shared.SetCondition(&status.Conditions, metav1.Condition{
 		Type:    "Degraded",

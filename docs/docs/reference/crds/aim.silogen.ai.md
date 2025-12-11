@@ -1377,6 +1377,7 @@ _Appears in:_
 | `resolvedTemplateCache` _[AIMResolvedReference](#aimresolvedreference)_ | ResolvedTemplateCache captures metadata about the template cache being used, if any. |  |  |
 | `modelCaches` _object (keys:string, values:[AIMResolvedModelCache](#aimresolvedmodelcache))_ | ModelCaches maps model names to their resolved AIMModelCache resources if they exist. |  |  |
 | `resolvedKVCache` _[AIMResolvedReference](#aimresolvedreference)_ | ResolvedKVCache captures metadata about the KV cache being used, if any. |  |  |
+| `templateMatching` _[AIMTemplateMatchingStatus](#aimtemplatematchingstatus)_ | TemplateMatching provides detailed information about template selection,<br />including which templates were evaluated and why each was chosen or rejected. |  |  |
 
 
 #### AIMServiceStatusEnum
@@ -1656,6 +1657,40 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | Enabled controls whether caching is enabled for this template.<br />Defaults to `false`. | false |  |
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to use when downloading the model.<br />These variables are available to the model download process and can be used<br />to configure download behavior, authentication, proxies, etc. |  |  |
+
+
+#### AIMTemplateCandidateResult
+
+
+
+AIMTemplateCandidateResult describes why a template was chosen or rejected.
+
+
+
+_Appears in:_
+- [AIMTemplateMatchingStatus](#aimtemplatematchingstatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | Name is the name of the template. |  |  |
+| `status` _string_ | Status indicates whether this template was chosen or rejected. |  | Enum: [chosen rejected] <br /> |
+| `reason` _string_ | Reason explains why the template was chosen or rejected.<br />Possible rejection reasons:<br />- TemplatePending: Template status is Pending<br />- TemplateDegraded: Template status is Degraded<br />- TemplateFailed: Template status is Failed<br />- TemplateNotAvailable: Template status is NotAvailable<br />- UnoptimizedTemplateFiltered: Template is unoptimized and allowUnoptimized is false<br />- ServiceOverridesNotMatched: Template doesn't match service overrides<br />- RequiredGPUNotInCluster: Template requires a GPU not available in cluster<br />- LowerPreferenceRank: Template passed all filters but scored lower in preference ranking<br />Chosen reason:<br />- BestMatch: Template was selected as the best match |  |  |
+
+
+#### AIMTemplateMatchingStatus
+
+
+
+AIMTemplateMatchingStatus captures the result of template selection for a service.
+
+
+
+_Appears in:_
+- [AIMServiceStatus](#aimservicestatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `candidates` _[AIMTemplateCandidateResult](#aimtemplatecandidateresult) array_ | Candidates lists all templates that were evaluated for this service. |  |  |
 
 
 #### AIMTemplateStatusEnum

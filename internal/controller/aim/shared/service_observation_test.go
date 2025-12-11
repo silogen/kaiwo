@@ -26,6 +26,7 @@ import (
 	"context"
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/utils/ptr"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -206,4 +207,109 @@ func TestFindMatchingTemplateForDerivedSpecNoMatch(t *testing.T) {
 	if match != nil {
 		t.Fatalf("expected no match, got %+v", match)
 	}
+}
+
+func TestResolveTemplateNameForServiceUnoptimizedFiltering(t *testing.T) {
+	t.Helper()
+
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add corev1 to scheme: %v", err)
+	}
+	if err := aimv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add aim to scheme: %v", err)
+	}
+
+	// Create a model
+	model := &aimv1alpha1.AIMModel{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-model",
+			Namespace: "default",
+		},
+		Spec: aimv1alpha1.AIMModelSpec{
+			Image: "test-image:latest",
+		},
+		Status: aimv1alpha1.AIMModelStatus{
+			Status: aimv1alpha1.AIMModelStatusReady,
+		},
+	}
+
+	// Create an unoptimized template
+	unoptimizedTemplate := &aimv1alpha1.AIMServiceTemplate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "unoptimized-template",
+			Namespace: "default",
+		},
+		Spec: aimv1alpha1.AIMServiceTemplateSpec{
+			AIMServiceTemplateSpecCommon: aimv1alpha1.AIMServiceTemplateSpecCommon{
+				ModelName:         "test-model",
+				RuntimeConfigName: "default",
+				AIMRuntimeParameters: aimv1alpha1.AIMRuntimeParameters{
+					GpuSelector: &aimv1alpha1.AIMGpuSelector{
+						Model: "MI300X",
+						Count: 1,
+					},
+				},
+			},
+		},
+		Status: aimv1alpha1.AIMServiceTemplateStatus{
+			Status: aimv1alpha1.AIMTemplateStatusReady,
+			Profile: aimv1alpha1.AIMProfile{
+				Metadata: aimv1alpha1.AIMProfileMetadata{
+					Type: aimv1alpha1.AIMProfileTypeUnoptimized,
+					GPU:  "MI300X",
+				},
+			},
+		},
+	}
+
+	// Create a service with allowUnoptimized=false
+	service := &aimv1alpha1.AIMService{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-service",
+			Namespace: "default",
+		},
+		Spec: aimv1alpha1.AIMServiceSpec{
+			Model: aimv1alpha1.AIMServiceModel{Ref: baseutils.Pointer("test-model")},
+			Template: aimv1alpha1.AIMServiceTemplateConfig{
+				AllowUnoptimized: false,
+			},
+		},
+	}
+
+	k8sClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(model, unoptimizedTemplate).
+		Build()
+
+	_, status, err := ResolveTemplateNameForService(context.Background(), k8sClient, service)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Check that the error message mentions unoptimized templates were filtered
+	expectedSubstring := "unoptimized template(s) were filtered out because spec.template.allowUnoptimized is false"
+	if status.SelectionMessage == "" {
+		t.Fatalf("expected error message, got empty string")
+	}
+	if !contains(status.SelectionMessage, expectedSubstring) {
+		t.Fatalf("expected error message to contain %q, got %q", expectedSubstring, status.SelectionMessage)
+	}
+
+	if status.SelectionReason != aimv1alpha1.AIMServiceReasonTemplateNotFound {
+		t.Fatalf("expected SelectionReason %q, got %q", aimv1alpha1.AIMServiceReasonTemplateNotFound, status.SelectionReason)
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && containsHelper(s, substr))
+}
+
+func containsHelper(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }

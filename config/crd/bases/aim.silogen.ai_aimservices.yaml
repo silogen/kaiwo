@@ -1308,6 +1308,39 @@ spec:
                 - Failed
                 - Degraded
                 type: string
+              templateMatching:
+                description: |-
+                  TemplateMatching provides detailed information about template selection,
+                  including which templates were evaluated and why each was chosen or rejected.
+                properties:
+                  candidates:
+                    description: Candidates lists all templates that were evaluated
+                      for this service.
+                    items:
+                      description: AIMTemplateCandidateResult describes why a template
+                        was chosen or rejected.
+                      properties:
+                        name:
+                          description: Name is the name of the template.
+                          type: string
+                        reason:
+                          description: Reason explains why the template was chosen
+                            or rejected.
+                          type: string
+                        status:
+                          description: Status indicates whether this template was
+                            chosen or rejected.
+                          enum:
+                          - chosen
+                          - rejected
+                          type: string
+                      required:
+                      - name
+                      - reason
+                      - status
+                      type: object
+                    type: array
+                type: object
             type: object
         type: object
     served: true

@@ -73,6 +73,7 @@ type TemplateSelectionStatus struct {
 	ImageReadyReason          string
 	ImageReadyMessage         string
 	ModelResolutionErr        error
+	TemplateMatchingResults   []aimv1alpha1.AIMTemplateCandidateResult
 }
 
 // ServiceObservation holds observed state for an AIMService reconciliation.
@@ -107,6 +108,7 @@ type ServiceObservation struct {
 	ImageReadyReason              string
 	ImageReadyMessage             string
 	InferenceServicePodImageError *ImagePullError // Categorized image pull error from InferenceService pods
+	TemplateMatchingResults       []aimv1alpha1.AIMTemplateCandidateResult
 	TemplateCache                 *aimv1alpha1.AIMTemplateCache
 	ModelCaches                   *aimv1alpha1.AIMModelCacheList
 	KVCache                       *aimv1alpha1.AIMKVCache // Observed AIMKVCache resource
@@ -125,6 +127,24 @@ func (o *ServiceObservation) RuntimeName() string {
 		return ""
 	}
 	return o.TemplateName
+}
+
+// convertToTemplateMatchingResults converts CandidateEvaluation results to API types.
+// Returns a non-nil slice even if empty to indicate auto-selection was attempted.
+func convertToTemplateMatchingResults(evaluations []CandidateEvaluation) []aimv1alpha1.AIMTemplateCandidateResult {
+	// Return non-nil empty slice if no evaluations (indicates auto-selection with no candidates)
+	if len(evaluations) == 0 {
+		return []aimv1alpha1.AIMTemplateCandidateResult{}
+	}
+	results := make([]aimv1alpha1.AIMTemplateCandidateResult, len(evaluations))
+	for i, eval := range evaluations {
+		results[i] = aimv1alpha1.AIMTemplateCandidateResult{
+			Name:   eval.Candidate.Name,
+			Status: eval.Status,
+			Reason: eval.Reason,
+		}
+	}
+	return results
 }
 
 // ResolveTemplateNameForService determines the template name to use for a service.
@@ -197,8 +217,11 @@ func ResolveTemplateNameForService(
 
 	// When auto-selecting, don't filter by overrides - we're selecting a base template
 	// to potentially derive from. The derived template will have the overrides applied.
-	selected, count := SelectBestTemplate(candidates, nil, availableGPUs, service.Spec.Template.AllowUnoptimized)
+	selected, count, diag, evaluations := SelectBestTemplate(candidates, nil, availableGPUs, service.Spec.Template.AllowUnoptimized)
 	status.CandidateCount = count
+
+	// Populate template matching status with detailed evaluation results
+	status.TemplateMatchingResults = convertToTemplateMatchingResults(evaluations)
 
 	if count != 1 {
 		if count == 0 {
@@ -210,22 +233,23 @@ func ResolveTemplateNameForService(
 				return res, status, nil
 			}
 
-			// Templates exist but selection returned 0 - check why
-			// Count how many are Available vs other statuses
-			availableCount := 0
-			for _, c := range candidates {
-				if c.Status.Status == aimv1alpha1.AIMTemplateStatusReady {
-					availableCount++
-				}
-			}
-
-			if availableCount == 0 {
+			// Templates exist but selection returned 0 - check why using diagnostics
+			if diag.AfterAvailabilityFilter == 0 {
 				// Templates exist but none are Available yet - service should wait
 				status.TemplatesExistButNotReady = true
 				status.SelectionReason = ""
 				status.SelectionMessage = ""
+			} else if diag.AfterUnoptimizedFilter == 0 && diag.UnoptimizedTemplatesWereFiltered {
+				// Templates are Available but were filtered out because they are unoptimized
+				// and allowUnoptimized is false - provide a clear message
+				status.SelectionReason = aimv1alpha1.AIMServiceReasonTemplateNotFound
+				status.SelectionMessage = fmt.Sprintf(
+					"No available templates match the service requirements for image %q: "+
+						"%d unoptimized template(s) were filtered out because spec.template.allowUnoptimized is false. "+
+						"Set allowUnoptimized to true to use unoptimized templates, or wait for optimized templates to become available",
+					imageName, diag.AfterAvailabilityFilter)
 			} else {
-				// Templates are Available but don't match overrides/GPU requirements
+				// Templates are Available but don't match GPU requirements
 				status.SelectionReason = aimv1alpha1.AIMServiceReasonTemplateNotFound
 				status.SelectionMessage = fmt.Sprintf("No available templates match the service requirements for image %q", imageName)
 			}
