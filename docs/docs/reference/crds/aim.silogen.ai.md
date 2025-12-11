@@ -524,7 +524,7 @@ _Appears in:_
 | `storageClassName` _string_ | StorageClassName specifies the storage class for the cache volume |  |  |
 | `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#quantity-resource-api)_ | Size specifies the size of the cache volume |  |  |
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env lists the environment variables to use for authentication when downloading models.<br />These variables are used for authentication with model registries (e.g., HuggingFace tokens). |  |  |
-| `modelDownloadImage` _string_ | ModelDownloadImage is the image used to download the model | kserve/storage-initializer:v0.16.0-rc0 |  |
+| `modelDownloadImage` _string_ | ModelDownloadImage is the image used to download the model | kserve/storage-initializer:v0.16.0 |  |
 | `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets references secrets for pulling AIM container images. |  |  |
 | `runtimeConfigName` _string_ | RuntimeConfigName references the AIM runtime configuration (by name) to use for this model cache.<br />This determines PVC headroom and other runtime settings. | default |  |
 
