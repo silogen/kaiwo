@@ -1,0 +1,16 @@
+  - name: Create service
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Check for Degraded or Failed state
+    try:
+    - error:
+        timeout: 1m
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: ${TEST_NAME}
+          status:
+            (status == 'Degraded' || status == 'Failed'): true

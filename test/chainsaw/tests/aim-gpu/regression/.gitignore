@@ -1,0 +1,2 @@
+# Exclude values.yaml as it contains secrets
+values.yaml

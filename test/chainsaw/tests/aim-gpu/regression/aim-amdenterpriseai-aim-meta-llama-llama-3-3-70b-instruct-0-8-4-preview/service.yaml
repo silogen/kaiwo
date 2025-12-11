@@ -1,0 +1,15 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: aim-amdenterpriseai-aim-meta-llama-llama-3-3-70b-instruct-0-8-4-preview
+spec:
+  model:
+    image: amdenterpriseai/aim-meta-llama-llama-3-3-70b-instruct:0.8.4-preview
+  template:
+    allowUnoptimized: true
+  env:
+  - name: HF_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: hf-token
+        key: token

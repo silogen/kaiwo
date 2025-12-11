@@ -1,0 +1,11 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: aim-ghcr-io-silogen-aim-openai-gpt-oss-20b-0-9-0-rc2
+spec:
+  model:
+    image: ghcr.io/silogen/aim-openai-gpt-oss-20b:0.9.0-rc2
+  template:
+    allowUnoptimized: true
+  imagePullSecrets:
+  - name: ghcr-pull-secret

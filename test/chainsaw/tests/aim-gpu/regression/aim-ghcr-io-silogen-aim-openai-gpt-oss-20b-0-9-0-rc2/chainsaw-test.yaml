@@ -1,0 +1,40 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: aim-ghcr-io-silogen-aim-openai-gpt-oss-20b-0-9-0-rc2
+spec:
+  description: Regression test for ghcr.io/silogen/aim-openai-gpt-oss-20b:0.9.0-rc2
+  steps:
+  - name: Create image pull secret
+    try:
+    - apply:
+        file: ../secret-imagepull.yaml
+  - name: Create service
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Check for Degraded or Failed state
+    try:
+    - error:
+        timeout: 1m
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: aim-ghcr-io-silogen-aim-openai-gpt-oss-20b-0-9-0-rc2
+          status:
+            (status == 'Degraded' || status == 'Failed'): true
+  - name: Verify service becomes ready
+    try:
+    - assert:
+        timeout: 10m
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: aim-ghcr-io-silogen-aim-openai-gpt-oss-20b-0-9-0-rc2
+          status:
+            status: Running
+            (conditions[?type == 'RuntimeReady']):
+            - status: "True"
