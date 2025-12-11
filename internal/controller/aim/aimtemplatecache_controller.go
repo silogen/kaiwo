@@ -357,6 +357,10 @@ func (r *AIMTemplateCacheReconciler) cleanupFailedModelCaches(ctx context.Contex
 			shared.LabelKeyTemplateCache: tc.Name,
 		},
 	); err != nil {
+		if controllerutils.IsNamespaceTerminatingError(err) {
+			ctrl.LoggerFrom(ctx).Info("Skipping cleanup in terminating namespace", "templateCache", tc.Name)
+			return nil
+		}
 		return fmt.Errorf("failed to list model caches for cleanup: %w", err)
 	}
 
@@ -365,6 +369,9 @@ func (r *AIMTemplateCacheReconciler) cleanupFailedModelCaches(ctx context.Contex
 	for _, mc := range modelCaches.Items {
 		if mc.Status.Status != aimv1alpha1.AIMModelCacheStatusAvailable {
 			if err := r.Delete(ctx, &mc); err != nil && !apierrors.IsNotFound(err) {
+				if controllerutils.IsNamespaceTerminatingError(err) {
+					continue
+				}
 				errs = append(errs, fmt.Errorf("failed to delete model cache %s: %w", mc.Name, err))
 			} else {
 				ctrl.LoggerFrom(ctx).Info("Deleted failed model cache during template cache cleanup",

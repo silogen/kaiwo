@@ -1083,6 +1083,10 @@ func (r *AIMServiceReconciler) cleanupTemplateCaches(ctx context.Context, servic
 			shared.LabelKeyServiceName: shared.SanitizeLabelValue(service.Name),
 		},
 	); err != nil {
+		if controllerutils.IsNamespaceTerminatingError(err) {
+			logger.Info("Skipping cleanup in terminating namespace", "service", service.Name)
+			return nil
+		}
 		return fmt.Errorf("failed to list template caches for cleanup: %w", err)
 	}
 
@@ -1091,6 +1095,9 @@ func (r *AIMServiceReconciler) cleanupTemplateCaches(ctx context.Context, servic
 	for _, tc := range templateCaches.Items {
 		if tc.Status.Status != aimv1alpha1.AIMTemplateCacheStatusAvailable {
 			if err := r.Delete(ctx, &tc); err != nil && !apierrors.IsNotFound(err) {
+				if controllerutils.IsNamespaceTerminatingError(err) {
+					continue
+				}
 				errs = append(errs, fmt.Errorf("failed to delete template cache %s: %w", tc.Name, err))
 			} else {
 				logger.Info("Deleted non-available template cache during service cleanup",
