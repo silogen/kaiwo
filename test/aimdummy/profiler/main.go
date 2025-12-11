@@ -108,6 +108,7 @@ func main() {
 			"VLLM_DO_NOT_TRACK":           "1",
 			"VLLM_USE_TRITON_FLASH_ATTN":  "0",
 			"VLLM_USE_V1":                 "0",
+			"AIM_ENGINE_ARGS":             `{"kv-transfer-config": "Overridden","max-model-len": 4096}`,
 		},
 	}
 
