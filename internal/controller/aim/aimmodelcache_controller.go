@@ -267,6 +267,8 @@ func (r *AIMModelCacheReconciler) plan(ctx context.Context, mc *aimv1alpha1.AIMM
 			return desired, fmt.Errorf("owner job: %w", err)
 		}
 		desired = append(desired, job)
+		controllerutils.EmitNormalEvent(r.Recorder, mc, "DownloadJobCreated",
+			fmt.Sprintf("Creating download job %s", r.jobName(mc)))
 	} else if !canCreateJob {
 		baseutils.Debug(logger, "Waiting for storage to be ready before creating job",
 			"pvcFound", ob.pvcFound,
@@ -601,6 +603,11 @@ func (r *AIMModelCacheReconciler) buildDownloadJob(mc *aimv1alpha1.AIMModelCache
 							Args: []string{
 								"-c",
 								fmt.Sprintf(`
+# Bail out if this AIM_DEBUG_CAUSE_FAILURE is set
+if [ -n "$AIM_DEBUG_CAUSE_FAILURE" ]; then
+	echo "AIM_DEBUG_CAUSE_FAILURE is set, bailing out"
+	exit 1
+fi
 # Download the model
 python /storage-initializer/scripts/initializer-entrypoint %s %s &&
 (
