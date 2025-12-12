@@ -253,7 +253,7 @@ func (r *AIMModelCacheReconciler) plan(ctx context.Context, mc *aimv1alpha1.AIMM
 
 	// Include Job when storage is ready OR when PVC is pending with WaitForFirstConsumer
 	canCreateJob := ob.storageReady || (ob.pvcFound && ob.pvc.Status.Phase == corev1.ClaimPending && ob.waitForFirstConsumer)
-	if canCreateJob && !ob.jobFound {
+	if canCreateJob && mc.Status.Status != aimv1alpha1.AIMModelCacheStatusAvailable && !ob.jobFound {
 		baseutils.Debug(logger, "Planning to create download job",
 			"storageReady", ob.storageReady,
 			"waitForFirstConsumer", ob.waitForFirstConsumer)
