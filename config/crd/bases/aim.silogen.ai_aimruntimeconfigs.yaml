@@ -184,6 +184,9 @@ spec:
                   - name
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               labelPropagation:
                 description: |-
                   LabelPropagation controls how labels from parent AIM resources are propagated to child resources.

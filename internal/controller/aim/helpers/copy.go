@@ -24,7 +24,6 @@ package helpers
 
 import (
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 )
 
 // CopyPullSecrets returns a deep copy of the provided image pull secrets slice.
@@ -49,15 +48,15 @@ func CopyEnvVars(in []corev1.EnvVar) []corev1.EnvVar {
 
 // mergeEnvVars combines default env vars with service-specific overrides.
 // Service env vars take precedence over defaults when env var names match.
-func MergeEnvVars(defaults []v1.EnvVar, overrides []v1.EnvVar) []v1.EnvVar {
+func MergeEnvVars(defaults []corev1.EnvVar, overrides []corev1.EnvVar) []corev1.EnvVar {
 	// Create a map for quick lookup of overrides
-	overrideMap := make(map[string]v1.EnvVar)
+	overrideMap := make(map[string]corev1.EnvVar)
 	for _, env := range overrides {
 		overrideMap[env.Name] = env
 	}
 
 	// Start with defaults, replacing any that are overridden
-	merged := make([]v1.EnvVar, 0, len(defaults)+len(overrides))
+	merged := make([]corev1.EnvVar, 0, len(defaults)+len(overrides))
 	for _, env := range defaults {
 		if override, exists := overrideMap[env.Name]; exists {
 			merged = append(merged, override)

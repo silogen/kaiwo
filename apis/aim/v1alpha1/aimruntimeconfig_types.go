@@ -78,7 +78,8 @@ type AIMRuntimeConfigCommon struct {
 	// If configmaps or secrets are referenced, they need to exist in the namespace referencing this runtime config.
 	// For cluster scoped runtime configs, any referenced configmaps or secrets need to exist in the system namespace.
 	// +optional
-	// +mapType=atomic
+	// +listType=map
+	// +listMapKey=name
 	Env []corev1.EnvVar `json:"env,omitempty"`
 }
 
