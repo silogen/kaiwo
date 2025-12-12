@@ -1,0 +1,7 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: ${TEST_NAME}
+spec:
+  description: Regression test for ${IMAGE}
+  steps:

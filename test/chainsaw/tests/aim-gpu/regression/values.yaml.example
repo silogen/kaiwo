@@ -1,0 +1,16 @@
+# Example values.yaml file for Chainsaw regression tests
+# Copy this to values.yaml and fill in your actual credentials
+# values.yaml is gitignored and will not be committed
+
+imagePullSecret: |
+  {
+    "auths": {
+      "ghcr.io": {
+        "username": "your-username",
+        "password": "your-github-pat",
+        "email": "you@example.com"
+      }
+    }
+  }
+
+hfToken: "hf_your_huggingface_token_here"

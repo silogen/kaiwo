@@ -1,0 +1,40 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: aim-amdenterpriseai-aim-meta-llama-llama-3-2-1b-instruct-0-8-4
+spec:
+  description: Regression test for amdenterpriseai/aim-meta-llama-llama-3-2-1b-instruct:0.8.4
+  steps:
+  - name: Create HF token secret
+    try:
+    - apply:
+        file: ../secret-hftoken.yaml
+  - name: Create service
+    try:
+    - apply:
+        file: service.yaml
+
+  - name: Check for Degraded or Failed state
+    try:
+    - error:
+        timeout: 1m
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: aim-amdenterpriseai-aim-meta-llama-llama-3-2-1b-instruct-0-8-4
+          status:
+            (status == 'Degraded' || status == 'Failed'): true
+  - name: Verify service becomes ready
+    try:
+    - assert:
+        timeout: 10m
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: aim-amdenterpriseai-aim-meta-llama-llama-3-2-1b-instruct-0-8-4
+          status:
+            status: Running
+            (conditions[?type == 'RuntimeReady']):
+            - status: "True"

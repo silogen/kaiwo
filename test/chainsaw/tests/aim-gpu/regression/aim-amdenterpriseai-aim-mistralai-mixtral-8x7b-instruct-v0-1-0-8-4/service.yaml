@@ -1,0 +1,7 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: aim-amdenterpriseai-aim-mistralai-mixtral-8x7b-instruct-v0-1-0-8-4
+spec:
+  model:
+    image: amdenterpriseai/aim-mistralai-mixtral-8x7b-instruct-v0-1:0.8.4
