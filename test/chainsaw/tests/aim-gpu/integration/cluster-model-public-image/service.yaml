@@ -5,6 +5,8 @@ metadata:
 spec:
   model:
     ref: aim-meta-llama-llama-3-1-8b-instruct-0-7-0
+  template:
+    allowUnoptimized: true
   runtimeConfigName: integration-cluster-model-public-image
   routing:
     annotations:

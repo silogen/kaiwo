@@ -5,10 +5,10 @@ metadata:
 spec:
   model:
     ref: aim-meta-llama-llama-3-2-1b-instruct-0-7-0-preview
+  template:
+    allowUnoptimized: true
   runtimeConfigName: integration-cache-precreated-private
   routing:
     annotations:
       my-annotation: my-value
   # No env needed, model exists in cache
-  imagePullSecrets:
-  - name: ghcr-pull-secret

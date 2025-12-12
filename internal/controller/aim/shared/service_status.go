@@ -418,7 +418,7 @@ func HandleMissingModelSource(
 }
 
 func HandleModelCacheReadiness(service *aimv1alpha1.AIMService, status *aimv1alpha1.AIMServiceStatus, obs *ServiceObservation, setCondition func(conditionType string, conditionStatus metav1.ConditionStatus, reason, message string)) bool {
-	if obs == nil || obs.ModelCaches == nil {
+	if obs == nil {
 		return false
 	}
 
@@ -590,6 +590,7 @@ func initializeStatusReferences(status *aimv1alpha1.AIMServiceStatus, obs *Servi
 	status.Routing = nil
 	status.ResolvedTemplateCache = nil
 	status.ResolvedKVCache = nil
+	status.TemplateMatching = nil
 
 	if obs != nil && obs.ResolvedRuntimeConfig != nil {
 		status.ResolvedRuntimeConfig = obs.ResolvedRuntimeConfig
@@ -618,6 +619,11 @@ func initializeStatusReferences(status *aimv1alpha1.AIMServiceStatus, obs *Servi
 			Kind:      "AIMKVCache",
 			Scope:     aimv1alpha1.AIMResolutionScopeNamespace, // KVCache is always namespace-scoped
 			UID:       obs.KVCache.UID,
+		}
+	}
+	if obs != nil && obs.TemplateMatchingResults != nil {
+		status.TemplateMatching = &aimv1alpha1.AIMTemplateMatchingStatus{
+			Candidates: obs.TemplateMatchingResults,
 		}
 	}
 }

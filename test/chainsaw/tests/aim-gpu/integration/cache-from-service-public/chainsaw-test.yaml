@@ -10,6 +10,11 @@ spec:
     - apply:
         file: runtime-config.yaml
 
+  - name: Create secrets
+    try:
+    - apply:
+        file: secrets.yaml
+
   - name: Create service with cacheModel enabled (will auto-create namespace-scoped model and template)
     try:
     - apply:

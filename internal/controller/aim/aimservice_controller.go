@@ -28,10 +28,12 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/go-logr/logr"
 
+	"github.com/silogen/kaiwo/internal/controller/aim/helpers"
 	"github.com/silogen/kaiwo/internal/controller/aim/routingconfig"
 
 	servingv1beta1 "github.com/kserve/kserve/pkg/apis/serving/v1beta1"
@@ -66,7 +68,67 @@ const (
 	AIMCacheBasePath = "/workspace/model-cache"
 	// aimServiceFinalizer is used to clean up template caches on deletion
 	aimServiceFinalizer = "aim.silogen.ai/service-cache-cleanup"
+	// envVarAIMEngineArgs is the env var name for AIM engine arguments that should be JSON-merged
+	envVarAIMEngineArgs = "AIM_ENGINE_ARGS"
 )
+
+// buildMergedEnvVars builds environment variables with hierarchical merging.
+// Precedence order (highest to lowest):
+// 1. User/Spec set (service.Spec.Env) - user-specified values take priority
+// 2. Profile EnvVars (from template status) - discovered configuration
+// 3. KVCache additions - infrastructure defaults
+// 4. Template.Spec.Env - template-level defaults
+// 5. System defaults - always present base values
+//
+// For JSON env vars like AIM_ENGINE_ARGS, values are deep-merged to preserve
+// contributions from all levels while respecting precedence for conflicts.
+func buildMergedEnvVars(service *aimv1alpha1.AIMService, obs *shared.ServiceObservation) []v1.EnvVar {
+	// Start with system defaults (lowest precedence - level 5)
+	envVars := []v1.EnvVar{
+		{Name: "AIM_CACHE_PATH", Value: AIMCacheBasePath},
+	}
+
+	// Add profile ID if set
+	if profileId := obs.TemplateSpecCommon.ProfileId; profileId != "" {
+		envVars = append(envVars, v1.EnvVar{Name: "AIM_PROFILE_ID", Value: profileId})
+	}
+
+	// Merge in template spec env vars (level 4)
+	if obs.TemplateSpec != nil && len(obs.TemplateSpec.Env) > 0 {
+		envVars = helpers.MergeEnvVars(envVars, obs.TemplateSpec.Env, envVarAIMEngineArgs)
+	}
+
+	// Add KVCache env vars if ConfigMap is available (level 3)
+	if obs.KVCacheConfigMap != nil {
+		kvCacheEnvVars := []v1.EnvVar{
+			{Name: "LMCACHE_USE_EXPERIMENTAL", Value: "True"},
+			{Name: "LMCACHE_CONFIG_FILE", Value: "/lmcache/lmcache_config.yaml"},
+			{Name: "LMCACHE_LOG_LEVEL", Value: "INFO"},
+			{Name: envVarAIMEngineArgs, Value: `{"kv-transfer-config": {"kv_connector":"LMCacheConnectorV1", "kv_role":"kv_both"}}`},
+			{Name: "PYTHONHASHSEED", Value: "0"},
+		}
+		envVars = helpers.MergeEnvVars(envVars, kvCacheEnvVars, envVarAIMEngineArgs)
+	}
+
+	// Merge in profile env vars (level 2)
+	if obs.TemplateStatus != nil && len(obs.TemplateStatus.Profile.EnvVars) > 0 {
+		profileEnvVars := make([]v1.EnvVar, 0, len(obs.TemplateStatus.Profile.EnvVars))
+		for name, value := range obs.TemplateStatus.Profile.EnvVars {
+			profileEnvVars = append(profileEnvVars, v1.EnvVar{Name: name, Value: value})
+		}
+		envVars = helpers.MergeEnvVars(envVars, profileEnvVars, envVarAIMEngineArgs)
+	}
+
+	// Merge in user/spec env vars (highest precedence - level 1)
+	envVars = helpers.MergeEnvVars(envVars, service.Spec.Env, envVarAIMEngineArgs)
+
+	// Sort for deterministic ordering across reconciliations
+	sort.Slice(envVars, func(i, j int) bool {
+		return envVars[i].Name < envVars[j].Name
+	})
+
+	return envVars
+}
 
 // AIMServiceReconciler reconciles AIMService resources into KServe InferenceServices.
 type AIMServiceReconciler struct {
@@ -174,6 +236,7 @@ func (r *AIMServiceReconciler) observe(ctx context.Context, service *aimv1alpha1
 		ImageReadyReason:          selectionStatus.ImageReadyReason,
 		ImageReadyMessage:         selectionStatus.ImageReadyMessage,
 		ModelResolutionErr:        selectionStatus.ModelResolutionErr,
+		TemplateMatchingResults:   selectionStatus.TemplateMatchingResults,
 	}
 
 	// Observe template based on whether it's derived or not
@@ -532,7 +595,7 @@ func buildKVCache(service *aimv1alpha1.AIMService, ownerRef metav1.OwnerReferenc
 	// Use specified type or default to redis
 	kvCacheType := service.Spec.KVCache.Type
 	if kvCacheType == "" {
-		kvCacheType = kvCacheTypeRedis
+		kvCacheType = "redis"
 	}
 
 	return &aimv1alpha1.AIMKVCache{
@@ -597,6 +660,18 @@ type cacheMount struct {
 	modelName string
 }
 
+// isKVCacheReady checks if the KV cache is ready for use by the service.
+// Returns true if KV cache is not requested, or if it's requested and fully ready.
+func isKVCacheReady(service *aimv1alpha1.AIMService, obs *shared.ServiceObservation) bool {
+	if service.Spec.KVCache == nil {
+		return true
+	}
+	// KV cache is ready when both the AIMKVCache is Ready AND the ConfigMap exists
+	return obs.KVCache != nil &&
+		obs.KVCache.Status.Status == aimv1alpha1.AIMKVCacheStatusReady &&
+		obs.KVCacheConfigMap != nil
+}
+
 func (r *AIMServiceReconciler) computeModelCacheMounts(service *aimv1alpha1.AIMService, obs *shared.ServiceObservation, templateState aimstate.TemplateState) ([]cacheMount, bool) {
 	modelsReady := templateState.ModelSource != nil
 	templateCacheReady := obs.TemplateCache != nil && obs.TemplateCache.Status.Status == aimv1alpha1.AIMTemplateCacheStatusAvailable
@@ -653,6 +728,9 @@ func (r *AIMServiceReconciler) planInferenceServiceAndRoute(logger logr.Logger, 
 		RequestTimeout: obs.RouteTimeout,
 	})
 
+	// Compute merged env vars with proper precedence and assign to service state.
+	serviceState.Env = buildMergedEnvVars(service, obs)
+
 	// Compute model cache mounts
 	modelCachesToMount, modelsReady := r.computeModelCacheMounts(service, obs, templateState)
 	templateCacheReady := obs.TemplateCache != nil && obs.TemplateCache.Status.Status == aimv1alpha1.AIMTemplateCacheStatusAvailable
@@ -680,23 +758,7 @@ func (r *AIMServiceReconciler) planInferenceServiceAndRoute(logger logr.Logger, 
 	}
 
 	// Check if KV cache is ready (if requested)
-	kvCacheReady := true
-	kvCacheStatusStr := "not found"
-	if obs.KVCache != nil {
-		kvCacheStatusStr = string(obs.KVCache.Status.Status)
-	}
-	if service.Spec.KVCache != nil {
-		// KV cache is ready when both the AIMKVCache is Ready AND the ConfigMap exists
-		kvCacheReady = obs.KVCache != nil &&
-			obs.KVCache.Status.Status == aimv1alpha1.AIMKVCacheStatusReady &&
-			obs.KVCacheConfigMap != nil
-		baseutils.Debug(logger, "KV cache status check",
-			"kvCacheRequested", true,
-			"kvCacheExists", obs.KVCache != nil,
-			"kvCacheStatus", kvCacheStatusStr,
-			"configMapExists", obs.KVCacheConfigMap != nil,
-			"kvCacheReady", kvCacheReady)
-	}
+	kvCacheReady := isKVCacheReady(service, obs)
 
 	// Service is ready if:
 	// - Models are ready AND
@@ -708,43 +770,6 @@ func (r *AIMServiceReconciler) planInferenceServiceAndRoute(logger logr.Logger, 
 	// Only create InferenceService if we have a model source and storage
 	if serviceReady {
 		inferenceService := shared.BuildInferenceService(serviceState, ownerRef)
-
-		// Collect all environment variables
-		envVars := []v1.EnvVar{
-			{
-				Name:  "AIM_CACHE_PATH",
-				Value: AIMCacheBasePath,
-			},
-		}
-
-		// Add LMCache env vars if ConfigMap is available
-		if obs.KVCacheConfigMap != nil {
-			envVars = append(envVars,
-				v1.EnvVar{
-					Name:  "LMCACHE_USE_EXPERIMENTAL",
-					Value: "True",
-				},
-				v1.EnvVar{
-					Name:  "LMCACHE_CONFIG_FILE",
-					Value: "/lmcache/lmcache_config.yaml",
-				},
-				v1.EnvVar{
-					Name:  "LMCACHE_LOG_LEVEL",
-					Value: "INFO",
-				},
-				v1.EnvVar{
-					Name:  "AIM_ENGINE_ARGS",
-					Value: `{"kv-transfer-config": {"kv_connector":"LMCacheConnectorV1", "kv_role":"kv_both"}}`,
-				},
-				v1.EnvVar{
-					Name:  "PYTHONHASHSEED",
-					Value: "0",
-				},
-			)
-		}
-
-		// Merge in custom env vars from service spec (allows overriding defaults)
-		inferenceService.Spec.Predictor.Model.Env = mergeEnvVars(envVars, service.Spec.Env)
 
 		// Mount LMCache ConfigMap if available
 		if obs.KVCacheConfigMap != nil {
@@ -770,9 +795,7 @@ func (r *AIMServiceReconciler) planInferenceServiceAndRoute(logger logr.Logger, 
 		if servicePVCErr != nil {
 			baseutils.Debug(logger, "Service not ready due to PVC creation error", "error", servicePVCErr)
 		} else if !kvCacheReady {
-			baseutils.Debug(logger, "Service not ready - waiting for KV cache",
-				"kvCacheExists", obs.KVCache != nil,
-				"kvCacheStatus", kvCacheStatusStr)
+			baseutils.Debug(logger, "Service not ready - waiting for KV cache")
 		} else {
 			baseutils.Debug(logger, "Model source not available, skipping InferenceService creation")
 		}
@@ -999,37 +1022,6 @@ func addLMCacheConfigMount(inferenceService *servingv1beta1.InferenceService, co
 	})
 }
 
-// mergeEnvVars combines default env vars with service-specific overrides.
-// Service env vars take precedence over defaults when env var names match.
-func mergeEnvVars(defaults []v1.EnvVar, overrides []v1.EnvVar) []v1.EnvVar {
-	// Create a map for quick lookup of overrides
-	overrideMap := make(map[string]v1.EnvVar)
-	for _, env := range overrides {
-		overrideMap[env.Name] = env
-	}
-
-	// Start with defaults, replacing any that are overridden
-	merged := make([]v1.EnvVar, 0, len(defaults)+len(overrides))
-	for _, env := range defaults {
-		if override, exists := overrideMap[env.Name]; exists {
-			merged = append(merged, override)
-			delete(overrideMap, env.Name) // Mark as processed
-		} else {
-			merged = append(merged, env)
-		}
-	}
-
-	// Add any remaining overrides that weren't in defaults
-	for _, env := range overrides {
-		if _, processed := overrideMap[env.Name]; !processed {
-			continue // Already added in the loop above
-		}
-		merged = append(merged, env)
-	}
-
-	return merged
-}
-
 func (r *AIMServiceReconciler) projectStatus(
 	ctx context.Context,
 	service *aimv1alpha1.AIMService,
@@ -1082,6 +1074,10 @@ func (r *AIMServiceReconciler) cleanupTemplateCaches(ctx context.Context, servic
 			shared.LabelKeyServiceName: shared.SanitizeLabelValue(service.Name),
 		},
 	); err != nil {
+		if controllerutils.IsNamespaceTerminatingError(err) {
+			logger.Info("Skipping cleanup in terminating namespace", "service", service.Name)
+			return nil
+		}
 		return fmt.Errorf("failed to list template caches for cleanup: %w", err)
 	}
 
@@ -1090,6 +1086,9 @@ func (r *AIMServiceReconciler) cleanupTemplateCaches(ctx context.Context, servic
 	for _, tc := range templateCaches.Items {
 		if tc.Status.Status != aimv1alpha1.AIMTemplateCacheStatusAvailable {
 			if err := r.Delete(ctx, &tc); err != nil && !apierrors.IsNotFound(err) {
+				if controllerutils.IsNamespaceTerminatingError(err) {
+					continue
+				}
 				errs = append(errs, fmt.Errorf("failed to delete template cache %s: %w", tc.Name, err))
 			} else {
 				logger.Info("Deleted non-available template cache during service cleanup",

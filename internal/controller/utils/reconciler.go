@@ -112,7 +112,7 @@ func Reconcile[T ObjectWithStatus[S], S any](ctx context.Context, spec Reconcile
 
 		if applyErr != nil {
 			// Don't log stack traces for namespace termination errors - this is expected during cleanup
-			if isNamespaceTerminatingError(applyErr) {
+			if IsNamespaceTerminatingError(applyErr) {
 				logger.V(1).Info("Skipping apply in terminating namespace", "error", applyErr.Error())
 			} else {
 				logger.Error(applyErr, "Apply failed")
@@ -238,10 +238,10 @@ func ReconcileWithoutStatus(ctx context.Context, spec ReconcileWithoutStatusSpec
 	return ctrl.Result{}, nil
 }
 
-// isNamespaceTerminatingError checks if an error is caused by attempting to create resources
+// IsNamespaceTerminatingError checks if an error is caused by attempting to create resources
 // in a namespace that is being deleted. This is a normal part of cleanup and doesn't need
 // error-level logging.
-func isNamespaceTerminatingError(err error) bool {
+func IsNamespaceTerminatingError(err error) bool {
 	if err == nil {
 		return false
 	}
