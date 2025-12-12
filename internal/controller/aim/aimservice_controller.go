@@ -94,11 +94,11 @@ func buildMergedEnvVars(service *aimv1alpha1.AIMService, obs *shared.ServiceObse
 	}
 
 	// Merge in runtime config env vars (level 5)
-	envVars = helpers.MergeEnvVars(envVars, obs.RuntimeConfigSpec.Env)
+	envVars = helpers.MergeEnvVars(envVars, obs.RuntimeConfigSpec.Env, envVarAIMEngineArgs)
 
 	// Merge in template spec env vars (level 4)
 	if obs.TemplateSpec != nil && len(obs.TemplateSpec.Env) > 0 {
-		envVars = helpers.MergeEnvVars(envVars, obs.TemplateSpec.Env)
+		envVars = helpers.MergeEnvVars(envVars, obs.TemplateSpec.Env, envVarAIMEngineArgs)
 	}
 
 	// Add KVCache env vars if ConfigMap is available (level 3)
@@ -110,7 +110,7 @@ func buildMergedEnvVars(service *aimv1alpha1.AIMService, obs *shared.ServiceObse
 			{Name: envVarAIMEngineArgs, Value: `{"kv-transfer-config": {"kv_connector":"LMCacheConnectorV1", "kv_role":"kv_both"}}`},
 			{Name: "PYTHONHASHSEED", Value: "0"},
 		}
-		envVars = helpers.MergeEnvVars(envVars, kvCacheEnvVars)
+		envVars = helpers.MergeEnvVars(envVars, kvCacheEnvVars, envVarAIMEngineArgs)
 	}
 
 	// Merge in profile env vars (level 2)
@@ -119,11 +119,11 @@ func buildMergedEnvVars(service *aimv1alpha1.AIMService, obs *shared.ServiceObse
 		for name, value := range obs.TemplateStatus.Profile.EnvVars {
 			profileEnvVars = append(profileEnvVars, v1.EnvVar{Name: name, Value: value})
 		}
-		envVars = helpers.MergeEnvVars(envVars, profileEnvVars)
+		envVars = helpers.MergeEnvVars(envVars, profileEnvVars, envVarAIMEngineArgs)
 	}
 
 	// Merge in user/spec env vars (highest precedence - level 1)
-	envVars = helpers.MergeEnvVars(envVars, service.Spec.Env)
+	envVars = helpers.MergeEnvVars(envVars, service.Spec.Env, envVarAIMEngineArgs)
 
 	// Sort for deterministic ordering across reconciliations
 	sort.Slice(envVars, func(i, j int) bool {
@@ -798,9 +798,7 @@ func (r *AIMServiceReconciler) planInferenceServiceAndRoute(logger logr.Logger, 
 		if servicePVCErr != nil {
 			baseutils.Debug(logger, "Service not ready due to PVC creation error", "error", servicePVCErr)
 		} else if !kvCacheReady {
-			baseutils.Debug(logger, "Service not ready - waiting for KV cache",
-				"kvCacheExists", obs.KVCache != nil,
-				"kvCacheStatus", kvCacheStatusStr)
+			baseutils.Debug(logger, "Service not ready - waiting for KV cache")
 		} else {
 			baseutils.Debug(logger, "Model source not available, skipping InferenceService creation")
 		}
