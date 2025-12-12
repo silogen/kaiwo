@@ -233,10 +233,12 @@ KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
+GO_LICENSES = $(LOCALBIN)/go-licenses
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.5.0
 CONTROLLER_TOOLS_VERSION ?= v0.17.1
+GO_LICENSES_VERSION ?= v1.6.0
 #ENVTEST_VERSION is the version of controller-runtime release branch to fetch the envtest setup script (i.e. release-0.20)
 ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
@@ -270,6 +272,18 @@ $(ENVTEST): $(LOCALBIN)
 golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
 $(GOLANGCI_LINT): $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
+
+.PHONY: go-licenses
+go-licenses: $(GO_LICENSES) ## Download go-licenses locally if necessary.
+$(GO_LICENSES): $(LOCALBIN)
+	$(call go-install-tool,$(GO_LICENSES),github.com/google/go-licenses,$(GO_LICENSES_VERSION))
+
+.PHONY: third-party-licenses
+third-party-licenses: go-licenses ## Generate third-party licenses directory.
+	@echo "Generating third-party licenses..."
+	@rm -rf third-party-licenses
+	"$(GO_LICENSES)" save ./... --save_path=third-party-licenses --ignore github.com/silogen/kaiwo 2>/dev/null || true
+	@git add third-party-licenses/ 2>/dev/null || true
 
 .PHONY: generate-crd-docs
 generate-crd-docs:
