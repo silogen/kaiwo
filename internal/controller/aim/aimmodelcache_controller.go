@@ -304,6 +304,10 @@ func (r *AIMModelCacheReconciler) projectStatus(ctx context.Context, mc *aimv1al
 	status := mc.Status
 	var conditions []metav1.Condition
 
+	if mc.Status.Status == "" {
+		mc.Status.Status = aimv1alpha1.AIMModelCacheStatusPending
+	}
+
 	// Report any outstanding errors to report from previous controller actions
 	if errs.HasError() {
 

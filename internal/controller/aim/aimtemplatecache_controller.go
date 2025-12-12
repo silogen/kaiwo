@@ -155,6 +155,9 @@ func (r *AIMTemplateCacheReconciler) observe(ctx context.Context, tc *aimv1alpha
 		found := false
 		bestStatusModelCache := aimv1alpha1.AIMModelCache{}
 		for _, cached := range caches.Items {
+			if cached.Status.Status == "" {
+				continue
+			}
 			// ModelCache is a match if it has the same SourceURI and a StorageClass matching our config
 			if cached.Spec.SourceURI == model.SourceURI &&
 				(tc.Spec.StorageClassName == "" || tc.Spec.StorageClassName == cached.Spec.StorageClassName) {
