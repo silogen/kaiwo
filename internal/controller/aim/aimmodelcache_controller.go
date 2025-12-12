@@ -48,6 +48,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
+	"github.com/silogen/kaiwo/internal/controller/aim/helpers"
 	"github.com/silogen/kaiwo/internal/controller/aim/shared"
 	controllerutils "github.com/silogen/kaiwo/internal/controller/utils"
 )
@@ -546,7 +547,12 @@ func (r *AIMModelCacheReconciler) buildDownloadJob(mc *aimv1alpha1.AIMModelCache
 	if len(mc.Spec.ModelDownloadImage) > 0 {
 		downloadImage = mc.Spec.ModelDownloadImage
 	}
-
+	new_env := helpers.MergeEnvVars([]corev1.EnvVar{
+		{Name: "HF_XET_CHUNK_CACHE_SIZE_BYTES", Value: "0"},
+		{Name: "HF_XET_SHARD_CACHE_SIZE_BYTES", Value: "0"},
+		{Name: "HF_HOME", Value: mountPath + "/.hf"},
+		{Name: "UMASK", Value: "0022"},
+	}, mc.Spec.Env)
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: batchv1.SchemeGroupVersion.String(),
@@ -598,12 +604,7 @@ func (r *AIMModelCacheReconciler) buildDownloadJob(mc *aimv1alpha1.AIMModelCache
 								RunAsUser:  baseutils.Pointer(int64(1000)),
 								RunAsGroup: baseutils.Pointer(int64(1000)),
 							},
-							Env: append(mc.Spec.Env, []corev1.EnvVar{
-								{Name: "HF_XET_CHUNK_CACHE_SIZE_BYTES", Value: "0"},
-								{Name: "HF_XET_SHARD_CACHE_SIZE_BYTES", Value: "0"},
-								{Name: "HF_HOME", Value: mountPath + "/.hf"},
-								{Name: "UMASK", Value: "0022"}, // Create files with 644 permissions (readable by others)
-							}...),
+							Env:     new_env, // Create files with 644 permissions (readable by others)
 							Command: []string{"/bin/sh"},
 							Args: []string{
 								"-c",

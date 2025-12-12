@@ -23,6 +23,7 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
@@ -71,6 +72,14 @@ type AIMRuntimeConfigCommon struct {
 	// or compliance labels through the resource hierarchy.
 	// +optional
 	LabelPropagation *AIMRuntimeConfigLabelPropagationSpec `json:"labelPropagation,omitempty"`
+
+	// Env specifies environment variables to use for the runtime config.
+	// These variables are used for the runtime config and are not propagated to child resources.
+	// If configmaps or secrets are referenced, they need to exist in the namespace referencing this runtime config.
+	// For cluster scoped runtime configs, any referenced configmaps or secrets need to exist in the system namespace.
+	// +optional
+	// +mapType=atomic
+	Env []corev1.EnvVar `json:"env,omitempty"`
 }
 
 type AIMRuntimeConfigLabelPropagationSpec struct {

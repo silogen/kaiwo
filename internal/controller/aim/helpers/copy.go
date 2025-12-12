@@ -22,7 +22,10 @@
 
 package helpers
 
-import corev1 "k8s.io/api/core/v1"
+import (
+	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
+)
 
 // CopyPullSecrets returns a deep copy of the provided image pull secrets slice.
 func CopyPullSecrets(in []corev1.LocalObjectReference) []corev1.LocalObjectReference {
@@ -42,4 +45,35 @@ func CopyEnvVars(in []corev1.EnvVar) []corev1.EnvVar {
 	out := make([]corev1.EnvVar, len(in))
 	copy(out, in)
 	return out
+}
+
+// mergeEnvVars combines default env vars with service-specific overrides.
+// Service env vars take precedence over defaults when env var names match.
+func MergeEnvVars(defaults []v1.EnvVar, overrides []v1.EnvVar) []v1.EnvVar {
+	// Create a map for quick lookup of overrides
+	overrideMap := make(map[string]v1.EnvVar)
+	for _, env := range overrides {
+		overrideMap[env.Name] = env
+	}
+
+	// Start with defaults, replacing any that are overridden
+	merged := make([]v1.EnvVar, 0, len(defaults)+len(overrides))
+	for _, env := range defaults {
+		if override, exists := overrideMap[env.Name]; exists {
+			merged = append(merged, override)
+			delete(overrideMap, env.Name) // Mark as processed
+		} else {
+			merged = append(merged, env)
+		}
+	}
+
+	// Add any remaining overrides that weren't in defaults
+	for _, env := range overrides {
+		if _, processed := overrideMap[env.Name]; !processed {
+			continue // Already added in the loop above
+		}
+		merged = append(merged, env)
+	}
+
+	return merged
 }
