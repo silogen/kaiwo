@@ -199,8 +199,10 @@ spec:
                 type: string
               env:
                 description: |-
-                  Env specifies environment variables to use for authentication when downloading models.
-                  These variables are used for authentication with model registries (e.g., HuggingFace tokens).
+                  Env specifies environment variables to use for the runtime config.
+                  These variables are used for the runtime config and are not propagated to child resources.
+                  If configmaps or secrets are referenced, they need to exist in the namespace referencing this runtime config.
+                  For cluster scoped runtime configs, any referenced configmaps or secrets need to exist in the system namespace.
                 items:
                   description: EnvVar represents an environment variable present in
                     a Container.
