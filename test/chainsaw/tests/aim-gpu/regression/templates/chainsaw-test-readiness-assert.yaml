@@ -1,0 +1,13 @@
+  - name: Verify service becomes ready
+    try:
+    - assert:
+        timeout: ${TIMEOUT}
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMService
+          metadata:
+            name: ${TEST_NAME}
+          status:
+            status: Running
+            (conditions[?type == 'RuntimeReady']):
+            - status: "True"

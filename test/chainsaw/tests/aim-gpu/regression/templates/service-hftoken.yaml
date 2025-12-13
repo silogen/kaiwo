@@ -1,0 +1,6 @@
+  env:
+  - name: HF_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: hf-token
+        key: token
