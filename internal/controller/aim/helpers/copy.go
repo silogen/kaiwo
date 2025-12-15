@@ -22,7 +22,9 @@
 
 package helpers
 
-import corev1 "k8s.io/api/core/v1"
+import (
+	corev1 "k8s.io/api/core/v1"
+)
 
 // CopyPullSecrets returns a deep copy of the provided image pull secrets slice.
 func CopyPullSecrets(in []corev1.LocalObjectReference) []corev1.LocalObjectReference {

@@ -93,6 +93,9 @@ func buildMergedEnvVars(service *aimv1alpha1.AIMService, obs *shared.ServiceObse
 		envVars = append(envVars, v1.EnvVar{Name: "AIM_PROFILE_ID", Value: profileId})
 	}
 
+	// Merge in runtime config env vars (level 5)
+	envVars = helpers.MergeEnvVars(envVars, obs.RuntimeConfigSpec.Env, envVarAIMEngineArgs)
+
 	// Merge in template spec env vars (level 4)
 	if obs.TemplateSpec != nil && len(obs.TemplateSpec.Env) > 0 {
 		envVars = helpers.MergeEnvVars(envVars, obs.TemplateSpec.Env, envVarAIMEngineArgs)

@@ -171,13 +171,6 @@ type AIMServiceSpec struct {
 	// +optional
 	Overrides *AIMServiceOverrides `json:"overrides,omitempty"`
 
-	// Env specifies environment variables to use for authentication when downloading models.
-	// These variables are used for authentication with model registries (e.g., HuggingFace tokens).
-	// +optional
-	// +listType=map
-	// +listMapKey=name
-	Env []corev1.EnvVar `json:"env,omitempty"`
-
 	// ImagePullSecrets references secrets for pulling AIM container images.
 	// +optional
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
