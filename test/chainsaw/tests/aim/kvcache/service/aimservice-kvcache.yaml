@@ -4,7 +4,7 @@ metadata:
   name: dummy-w-kvcache
 spec:
   model:
-    image: ghcr.io/silogen/aim-dummy:0.1.x # change to latest after deploy
+    image: ttl.sh/03049acb-f146-4ca2-9dca-62050799c4ae:1h # change to latest after deploy
   env:
     - name: AIM_ENGINE_ARGS
       value: '{"from-spec": "true"}'
