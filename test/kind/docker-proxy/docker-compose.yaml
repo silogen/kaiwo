@@ -1,0 +1,37 @@
+services:
+  proxy-docker-hub:
+    hostname: proxy-docker-hub
+    image: registry:2
+    restart: always
+    environment:
+      - REGISTRY_PROXY_REMOTEURL=https://registry-1.docker.io
+    volumes:
+      - /srv/kind-docker-cache/docker:/var/lib/registry
+    networks:
+      - kind
+  proxy-ghcr:
+    hostname: proxy-ghcr
+    image: registry:2
+    restart: always
+    environment:
+      - REGISTRY_PROXY_REMOTEURL=https://ghcr.io
+    volumes:
+      - /srv/kind-docker-cache/ghcr:/var/lib/registry
+    networks:
+      - kind
+  proxy-k8s:
+    hostname: proxy-k8s
+    image: registry:2
+    restart: always
+    environment:
+      - REGISTRY_PROXY_REMOTEURL=https://registry.k8s.io
+    volumes:
+      - /srv/kind-docker-cache/k8s:/var/lib/registry
+    networks:
+      - kind
+
+networks:
+  kind:
+    name: kind
+    driver: bridge
+    external: true
