@@ -1,6 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
+REPO_URL=${REPO_URL:-"ghcr.io/silogen/kaiwo"}
 CLUSTER_NAME=${CLUSTER_NAME:-"kaiwo-test"}
 VERSION_TAG=${1:?Usage: $0 <version_tag> [num_workers]}
 NUM_WORKERS=${2:-5}
@@ -19,9 +20,10 @@ ALL_NODES=("$CONTROL_PLANE" "${WORKERS[@]}")
 # Verify all snapshot images exist
 echo "Verifying snapshot images..."
 for NODE in "${ALL_NODES[@]}"; do
-  IMAGE="kind-snapshot-${NODE}:${VERSION_TAG}"
+  IMAGE="${REPO_URL}/kind-snapshot-${NODE}:${VERSION_TAG}"
   if ! docker image inspect "$IMAGE" &>/dev/null; then
     echo "ERROR: Missing snapshot image: $IMAGE"
+    echo "Run 'pull_kind_snapshots.sh $VERSION_TAG' first to pull images from the registry."
     exit 1
   fi
 done
@@ -31,7 +33,7 @@ docker stop "${ALL_NODES[@]}" 2>/dev/null || true
 
 echo "Restoring from snapshots..."
 for NODE in "${ALL_NODES[@]}"; do
-  IMAGE="kind-snapshot-${NODE}:${VERSION_TAG}"
+  IMAGE="${REPO_URL}/kind-snapshot-${NODE}:${VERSION_TAG}"
   
   # Get the current container's config for recreation
   if docker inspect "$NODE" &>/dev/null; then
@@ -128,5 +130,24 @@ fi
 echo "Kubeconfig saved to: $KUBECONFIG_FILE"
 
 kubectl --kubeconfig=$KUBECONFIG_FILE get nodes || true
+
+#kubectl rollout restart deployment -n kueue-system
+#kubectl wait --for=condition=ready pod -l control-plane=controller-manager -n kueue-system --timeout=120s
+
+# Restart kube-system components to refresh iptables/network rules
+echo "Restarting kube-system network components..."
+KUBECONFIG="$KUBECONFIG_FILE" kubectl rollout restart daemonset/kube-proxy -n kube-system
+KUBECONFIG="$KUBECONFIG_FILE" kubectl rollout restart daemonset/kindnet -n kube-system
+KUBECONFIG="$KUBECONFIG_FILE" kubectl rollout restart deployment/coredns -n kube-system
+
+echo "Waiting for kube-system components to be ready..."
+KUBECONFIG="$KUBECONFIG_FILE" kubectl rollout status daemonset/kube-proxy -n kube-system --timeout=60s
+KUBECONFIG="$KUBECONFIG_FILE" kubectl rollout status daemonset/kindnet -n kube-system --timeout=60s
+KUBECONFIG="$KUBECONFIG_FILE" kubectl rollout status deployment/coredns -n kube-system --timeout=60s
+
+# Restart webhook services that depend on refreshed network
+echo "Restarting webhook services..."
+KUBECONFIG="$KUBECONFIG_FILE" kubectl rollout restart deployment -n kueue-system 2>/dev/null || true
+KUBECONFIG="$KUBECONFIG_FILE" kubectl rollout status deployment -n kueue-system --timeout=120s 2>/dev/null || true
 
 echo "Restore complete!"

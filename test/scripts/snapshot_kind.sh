@@ -1,6 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
+REPO_URL=${REPO_URL:-"ghcr.io/silogen/kaiwo"}
 CLUSTER_NAME=${CLUSTER_NAME:-"kaiwo-test"}
 VERSION_TAG=${1:?Usage: $0 <version_tag>}
 
@@ -41,7 +42,7 @@ docker stop $CONTAINERS
 
 echo "Committing snapshots..."
 for CONTAINER in $CONTAINERS; do
-  IMAGE_NAME="kind-snapshot-${CONTAINER}:${VERSION_TAG}"
+  IMAGE_NAME="${REPO_URL}/kind-snapshot-${CONTAINER}:${VERSION_TAG}"
   echo "  $CONTAINER -> $IMAGE_NAME"
   docker commit "$CONTAINER" "$IMAGE_NAME"
 done
@@ -50,4 +51,4 @@ echo "Restarting containers..."
 docker start $CONTAINERS
 
 echo "Snapshot complete! Images created:"
-docker images --filter "reference=kind-snapshot-*:${VERSION_TAG}" --format "  {{.Repository}}:{{.Tag}}"
+docker images --filter "reference=${REPO_URL}/kind-snapshot-*:${VERSION_TAG}" --format "  {{.Repository}}:{{.Tag}}"
