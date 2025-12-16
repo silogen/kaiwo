@@ -23,7 +23,7 @@ TMPDIR=$(mktemp -d)
 trap "rm -rf $TMPDIR" EXIT
 
 # Pull all images in parallel
-echo "Pulling ${#ALL_NODES[@]} snapshot images in parallel..."
+echo "Pulling ${#ALL_NODES[@]} snapshot images..."
 for NODE in "${ALL_NODES[@]}"; do
   IMAGE="${REPO_URL}/kind-snapshot-${NODE}:${VERSION_TAG}"
   (
