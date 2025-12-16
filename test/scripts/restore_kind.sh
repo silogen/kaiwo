@@ -129,10 +129,22 @@ fi
 
 echo "Kubeconfig saved to: $KUBECONFIG_FILE"
 
-kubectl --kubeconfig=$KUBECONFIG_FILE get nodes || true
+# Wait for API server to be available
+echo "Waiting for Kubernetes API server..."
+for i in {1..10}; do
+  if kubectl --kubeconfig="$KUBECONFIG_FILE" get nodes &>/dev/null; then
+    echo "API server is ready!"
+    kubectl --kubeconfig="$KUBECONFIG_FILE" get nodes
+    break
+  fi
+  if [[ $i -eq 10 ]]; then
+    echo "ERROR: API server not available after 10 attempts"
+    exit 1
+  fi
+  echo "  Attempt $i/10 failed, retrying in 5s..."
+  sleep 5
+done
 
-#kubectl rollout restart deployment -n kueue-system
-#kubectl wait --for=condition=ready pod -l control-plane=controller-manager -n kueue-system --timeout=120s
 
 # Restart kube-system components to refresh iptables/network rules
 echo "Restarting kube-system network components..."

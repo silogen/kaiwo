@@ -6,6 +6,7 @@ CLUSTER_NAME=${CLUSTER_NAME:-"kaiwo-test"}
 VERSION_TAG=${1:?Usage: $0 <version_tag> [num_workers]}
 NUM_WORKERS=${2:-5}
 
+
 echo "Pulling Kind cluster snapshots for '$CLUSTER_NAME' with tag '$VERSION_TAG' from '$REPO_URL'..."
 
 # Build list of expected container names
@@ -18,8 +19,8 @@ done
 ALL_NODES=("$CONTROL_PLANE" "${WORKERS[@]}")
 
 # Create temp directory for tracking results
-RESULTS_DIR=$(mktemp -d)
-trap "rm -rf $RESULTS_DIR" EXIT
+TMPDIR=$(mktemp -d)
+trap "rm -rf $TMPDIR" EXIT
 
 # Pull all images in parallel
 echo "Pulling ${#ALL_NODES[@]} snapshot images in parallel..."

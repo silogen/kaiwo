@@ -1,0 +1,95 @@
+name: recreate-kind
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: 'Snapshot version tag to restore (e.g., v1.0.0)'
+        required: false
+        default: '0.1'
+        type: string
+      num_workers:
+        description: 'Number of worker nodes'
+        required: false
+        default: '5'
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  CLUSTER_NAME: kaiwo-test
+  REPO_URL: ghcr.io/silogen/kaiwo
+
+jobs:
+  recreate-kind:
+    name: Recreate Kind cluster from snapshot
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGETS=(
+            "/usr/local/lib/android"
+            "/usr/share/dotnet"
+            "/opt/ghc"
+            "/opt/hostedtoolcache"
+            "/usr/local/share/boost"
+            "/usr/local/share/powershell"
+            "/usr/share/swift"
+          )
+          echo "Deleting large preinstalled SDKs/tools..."
+          for d in "${TARGETS[@]}"; do
+            if [[ -e "$d" ]]; then
+              sudo rm -rf "$d" >/dev/null 2>&1 &
+            fi
+          done
+          docker system prune -af --volumes || true
+          wait
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Install kind CLI
+        run: |
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.26.0/kind-linux-amd64
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+          kind version
+
+      - name: Recreate Kind cluster from snapshot
+        env:
+          VERSION_TAG: ${{ inputs.version_tag }}
+          NUM_WORKERS: ${{ inputs.num_workers }}
+        run: |
+          chmod +x ./test/scripts/*.sh
+          time ./test/scripts/recreate_kind.sh "$VERSION_TAG" "$NUM_WORKERS"
+
+      - name: Verify cluster health
+        run: |
+          export KUBECONFIG="$(pwd)/kaiwo_test_kubeconfig.yaml"
+          echo "=== Node status ==="
+          kubectl get nodes -o wide
+          echo ""
+          echo "=== Pod status (all namespaces) ==="
+          kubectl get pods -A
+          echo ""
+          echo "=== Kueue status ==="
+          kubectl get pods -n kueue-system
+          kubectl get clusterqueue || true
+
+      - name: Debug on failure
+        if: failure()
+        run: |
+          echo "=== Docker containers ==="
+          docker ps -a
+          echo ""
+          echo "=== Kind clusters ==="
+          kind get clusters || true
+          echo ""
+          echo "=== Docker logs (control-plane) ==="
+          docker logs kaiwo-test-control-plane 2>&1 | tail -100 || true
