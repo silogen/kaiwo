@@ -118,6 +118,10 @@ jobs:
           docker system prune -af --volumes || true
           wait
 
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
       - name: Log in to GHCR
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $GITHUB_ACTOR --password-stdin
@@ -138,10 +142,6 @@ jobs:
           chmod +x ./test/scripts/*.sh
           echo "Restoring snapshot: $VERSION_TAG with $NUM_WORKERS workers"
           time ./test/scripts/recreate_kind.sh "$VERSION_TAG" "$NUM_WORKERS"
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
 
       - name: Download CLI artifact
         uses: actions/download-artifact@v4
