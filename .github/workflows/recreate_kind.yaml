@@ -1,6 +1,13 @@
 name: recreate-kind
 
 on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+  pull_request:
+    paths-ignore:
+      - 'docs/**'
   workflow_dispatch:
     inputs:
       version_tag:
@@ -14,6 +21,10 @@ on:
         default: '5'
         type: string
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   packages: read
@@ -21,6 +32,9 @@ permissions:
 env:
   CLUSTER_NAME: kaiwo-test
   REPO_URL: ghcr.io/silogen/kaiwo
+  # Defaults for auto-triggered runs (push/PR)
+  DEFAULT_VERSION_TAG: '0.1'
+  DEFAULT_NUM_WORKERS: '5'
 
 jobs:
   recreate-kind:
@@ -63,10 +77,12 @@ jobs:
 
       - name: Recreate Kind cluster from snapshot
         env:
-          VERSION_TAG: ${{ inputs.version_tag }}
-          NUM_WORKERS: ${{ inputs.num_workers }}
+          # Use inputs if available (manual dispatch), otherwise use defaults
+          VERSION_TAG: ${{ inputs.version_tag || env.DEFAULT_VERSION_TAG }}
+          NUM_WORKERS: ${{ inputs.num_workers || env.DEFAULT_NUM_WORKERS }}
         run: |
           chmod +x ./test/scripts/*.sh
+          echo "Restoring snapshot: $VERSION_TAG with $NUM_WORKERS workers"
           time ./test/scripts/recreate_kind.sh "$VERSION_TAG" "$NUM_WORKERS"
 
       - name: Verify cluster health
