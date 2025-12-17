@@ -463,6 +463,10 @@ spec:
                   - fp16
                   - fp8
                   - int8
+                  - int4
+                  - fp4
+                  - fp32
+                  - auto
                 - enum:
                   - auto
                   - fp4
@@ -711,6 +715,10 @@ spec:
                         - fp16
                         - fp8
                         - int8
+                        - int4
+                        - fp4
+                        - fp32
+                        - auto
                         type: string
                       type:
                         description: Type specifies the designation of the profile

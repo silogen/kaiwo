@@ -296,7 +296,7 @@ _Appears in:_
 | `gpu` _string_ | GPU specifies the GPU model this profile is optimized for (e.g., "MI300X", "MI325X"). |  |  |
 | `gpu_count` _integer_ | GPUCount indicates how many GPUs are required per replica for this profile. |  |  |
 | `metric` _[AIMMetric](#aimmetric)_ | Metric indicates the optimization goal for this profile ("latency" or "throughput"). |  | Enum: [latency throughput] <br /> |
-| `precision` _[AIMPrecision](#aimprecision)_ | Precision specifies the numeric precision used in this profile (e.g., "fp16", "fp8"). |  | Enum: [bf16 fp16 fp8 int8] <br /> |
+| `precision` _[AIMPrecision](#aimprecision)_ | Precision specifies the numeric precision used in this profile (e.g., "fp16", "fp8"). |  | Enum: [bf16 fp16 fp8 int8 int4 fp4 fp32 auto] <br /> |
 | `type` _[AIMProfileType](#aimprofiletype)_ | Type specifies the optimization level of this profile |  |  |
 
 
@@ -721,7 +721,7 @@ _Underlying type:_ _string_
 AIMPrecision enumerates supported numeric precisions
 
 _Validation:_
-- Enum: [bf16 fp16 fp8 int8]
+- Enum: [bf16 fp16 fp8 int8 int4 fp4 fp32 auto]
 
 _Appears in:_
 - [AIMClusterServiceTemplateSpec](#aimclusterservicetemplatespec)
@@ -790,7 +790,7 @@ _Appears in:_
 | `gpu` _string_ | GPU specifies the GPU model this profile is optimized for (e.g., "MI300X", "MI325X"). |  |  |
 | `gpuCount` _integer_ | GPUCount indicates how many GPUs are required per replica for this profile. |  |  |
 | `metric` _[AIMMetric](#aimmetric)_ | Metric indicates the optimization goal for this profile ("latency" or "throughput"). |  | Enum: [latency throughput] <br /> |
-| `precision` _[AIMPrecision](#aimprecision)_ | Precision specifies the numeric precision used in this profile (e.g., "fp16", "fp8"). |  | Enum: [bf16 fp16 fp8 int8] <br /> |
+| `precision` _[AIMPrecision](#aimprecision)_ | Precision specifies the numeric precision used in this profile (e.g., "fp16", "fp8"). |  | Enum: [bf16 fp16 fp8 int8 int4 fp4 fp32 auto] <br /> |
 | `type` _[AIMProfileType](#aimprofiletype)_ | Type specifies the designation of the profile |  |  |
 
 
