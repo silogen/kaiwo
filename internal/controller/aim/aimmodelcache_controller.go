@@ -686,7 +686,7 @@ rm -rf %s/.cache %s/.tmp %s/.hf_home %s/.hf_cache %s/.xet_cache 2>/dev/null || t
 
 # Report final sizes
 echo "Final storage usage:"
-du -sh %s
+du -sh %s || true
 )
 				`, mountPath, mountPath, mountPath, mountPath, mc.Spec.SourceURI, mountPath, mountPath, mountPath, mountPath, mountPath, mountPath, mountPath, mountPath, mountPath),
 							},
