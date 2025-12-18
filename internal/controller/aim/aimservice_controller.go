@@ -96,6 +96,16 @@ func buildMergedEnvVars(service *aimv1alpha1.AIMService, obs *shared.ServiceObse
 	// Merge in runtime config env vars (level 5)
 	envVars = helpers.MergeEnvVars(envVars, obs.RuntimeConfigSpec.Env, envVarAIMEngineArgs)
 
+	// Add metric if set
+	if obs.TemplateSpecCommon.Metric != nil {
+		envVars = append(envVars, v1.EnvVar{Name: "AIM_METRIC", Value: string(*obs.TemplateSpecCommon.Metric)})
+	}
+
+	// Add precision if set
+	if obs.TemplateSpecCommon.Precision != nil {
+		envVars = append(envVars, v1.EnvVar{Name: "AIM_PRECISION", Value: string(*obs.TemplateSpecCommon.Precision)})
+	}
+
 	// Merge in template spec env vars (level 4)
 	if obs.TemplateSpec != nil && len(obs.TemplateSpec.Env) > 0 {
 		envVars = helpers.MergeEnvVars(envVars, obs.TemplateSpec.Env, envVarAIMEngineArgs)
