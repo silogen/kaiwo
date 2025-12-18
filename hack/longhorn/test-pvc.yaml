@@ -1,0 +1,35 @@
+# Test PVC to verify Longhorn installation
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: longhorn-test-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+# Test pod that uses the PVC
+apiVersion: v1
+kind: Pod
+metadata:
+  name: longhorn-test-pod
+  namespace: default
+spec:
+  containers:
+  - name: test-container
+    image: busybox
+    command: ["/bin/sh"]
+    args: ["-c", "echo 'Longhorn volume test' > /data/test.txt && sleep 3600"]
+    volumeMounts:
+    - name: test-volume
+      mountPath: /data
+  volumes:
+  - name: test-volume
+    persistentVolumeClaim:
+      claimName: longhorn-test-pvc

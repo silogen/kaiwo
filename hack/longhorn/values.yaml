@@ -1,0 +1,178 @@
+# Longhorn Helm Chart Values
+# Optimized for 2-node cluster with RAID storage and no replication
+
+# Persistence settings
+persistence:
+  # Default StorageClass name
+  defaultClass: true
+  defaultClassReplicaCount: 1  # No replication - RAID provides redundancy
+  defaultDataLocality: best-effort  # Keep data on same node as pod for better performance
+  reclaimPolicy: Delete
+  migratable: false
+  recurringJobSelector:
+    enable: false
+    jobList: []
+
+# Default settings for Longhorn
+defaultSettings:
+  # Path where Longhorn stores data on nodes
+  # IMPORTANT: Ensure /data/longhorn exists on all nodes before installation
+  defaultDataPath: /data/longhorn
+
+  # Number of replicas for volumes (can be overridden per volume)
+  # Set to 1 since RAID array already provides redundancy
+  defaultReplicaCount: 1
+
+  # Minimum number of available replicas for volume
+  # Not applicable with single replica
+  replicaSoftAntiAffinity: false
+  replicaAutoBalance: disabled  # Options: disabled, least-effort, best-effort
+
+  # Storage reservation (percentage of disk space to reserve)
+  # With 13TB per node, reserve 20% to prevent filling root filesystem
+  storageOverProvisioningPercentage: 100  # No over-provisioning with 1 replica
+  storageMinimalAvailablePercentage: 20
+
+  # Upgrade strategy
+  upgradeChecker: true
+
+  # Backup settings
+  backupTarget: ""  # e.g., s3://bucket@region/path or nfs://server:/path
+  backupTargetCredentialSecret: ""
+
+  # Snapshot settings
+  allowRecurringJobWhileVolumeDetached: false
+
+  # Node drain settings
+  # With single replica, be cautious about node drains
+  nodeDownPodDeletionPolicy: do-nothing  # Options: do-nothing, delete-statefulset-pod, delete-deployment-pod, delete-both-statefulset-and-deployment-pod
+  nodeDrainPolicy: block-if-contains-last-replica  # Block drain if it contains the only replica
+
+  # Performance tuning
+  guaranteedInstanceManagerCPU: 12  # Percentage
+  orphanAutoDeletion: true
+
+  # Network settings - IMPORTANT: May need adjustment for your cluster
+  # priorityClass: longhorn-critical
+
+  # System namespace
+  systemManagedComponentsNodeSelector: ""
+
+  # Concurrent operations
+  # Not applicable with single replica, but keep reasonable defaults
+  concurrentReplicaRebuildPerNodeLimit: 5
+  concurrentVolumeBackupRestorePerNodeLimit: 5
+
+  # Tolerate control plane for 2-node cluster
+  # systemManagedPodsImagePullPolicy: IfNotPresent
+  taintToleration: "node-role.kubernetes.io/control-plane:NoSchedule"
+
+  # V2 Data Engine (experimental - leave false for production)
+  v2DataEngine: false
+
+# Longhorn Manager (control plane)
+longhornManager:
+  priorityClass: ~
+  # Tolerate control plane taint for 2-node cluster
+  tolerations:
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Exists"
+      effect: "NoSchedule"
+  nodeSelector: {}
+  # Both nodes will run Longhorn
+
+# Longhorn Driver (CSI)
+longhornDriver:
+  priorityClass: ~
+  # Tolerate control plane taint for 2-node cluster
+  tolerations:
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Exists"
+      effect: "NoSchedule"
+  nodeSelector: {}
+
+# Longhorn UI
+longhornUI:
+  replicas: 1  # Only need 1 replica for 2-node cluster
+  priorityClass: ~
+  tolerations:
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Exists"
+      effect: "NoSchedule"
+  nodeSelector: {}
+
+# Ingress configuration for Longhorn UI
+ingress:
+  enabled: false
+  host: longhorn.example.com
+  tls: false
+  tlsSecret: longhorn-tls-secret
+  annotations: {}
+  # Example annotations for nginx ingress with auth:
+  # annotations:
+  #   nginx.ingress.kubernetes.io/auth-type: basic
+  #   nginx.ingress.kubernetes.io/auth-secret: basic-auth
+  #   nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
+
+# Service configuration
+service:
+  ui:
+    type: ClusterIP
+    nodePort: null
+  manager:
+    type: ClusterIP
+    nodePort: ""
+
+# Resource limits and requests
+# IMPORTANT: Adjust based on your cluster capacity
+resources:
+  longhornManager:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    # limits:
+    #   cpu: 1000m
+    #   memory: 512Mi
+  longhornUI:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    # limits:
+    #   cpu: 200m
+    #   memory: 128Mi
+
+# Enable CSI Snapshot support
+enableCSISnapshot: true
+
+# Image pull policy
+image:
+  pullPolicy: IfNotPresent
+
+# Private registry configuration (if needed)
+privateRegistry:
+  createSecret: false
+  registryUrl: ""
+  registryUser: ""
+  registryPasswd: ""
+  registrySecret: ""
+
+# Kubernetes cluster autoscaler annotations
+annotations:
+  {}
+  # cluster-autoscaler.kubernetes.io/safe-to-evict-local-volumes: longhorn
+
+# Network policies
+networkPolicies:
+  enabled: false
+  type: k8s
+
+# OpenShift-specific settings
+openshift:
+  enabled: false
+
+# Monitoring (Prometheus)
+metrics:
+  serviceMonitor:
+    enabled: false
+    # Enable this if you have Prometheus Operator installed
+    # enabled: true
