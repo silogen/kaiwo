@@ -1,0 +1,223 @@
+name: recreate-kind
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+  pull_request:
+    paths-ignore:
+      - 'docs/**'
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: 'Snapshot version tag to restore (e.g., v1.0.0)'
+        required: false
+        default: '0.1'
+        type: string
+      num_workers:
+        description: 'Number of worker nodes'
+        required: false
+        default: '5'
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  CLUSTER_NAME: kaiwo-test
+  REPO_URL: ghcr.io/silogen/kaiwo
+  # Defaults for auto-triggered runs (push/PR)
+  DEFAULT_VERSION_TAG: '0.1'
+  DEFAULT_NUM_WORKERS: '5'
+  TTL_TAG: 1h
+
+jobs:
+  build-image:
+    name: Build & push (ttl.sh)
+#    needs: test                   # <-- waits for tests to pass
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.vars.outputs.full_image }}
+      repo: ${{ steps.vars.outputs.repo }}
+      tag: ${{ steps.vars.outputs.tag }}
+    steps:
+    - uses: actions/checkout@v4
+    - uses: docker/setup-qemu-action@v3
+    - uses: docker/setup-buildx-action@v3
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
+
+    - name: Compute ttl.sh image ref
+      id: vars
+      shell: bash
+      run: |
+        ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
+        REPO="ttl.sh/${ID}"
+        TAG="${{ env.TTL_TAG }}"
+        echo "repo=${REPO}"                >> "$GITHUB_OUTPUT"
+        echo "tag=${TAG}"                  >> "$GITHUB_OUTPUT"
+        echo "full_image=${REPO}:${TAG}"   >> "$GITHUB_OUTPUT"
+
+    - name: Build & push to ttl.sh
+      run: |
+        TTL=${{ env.TTL_TAG }} IMAGE_NAME=${{ steps.vars.outputs.full_image }} \
+        bash ./kaiwo.sh --build --push=ttl.sh
+
+    - name: Build CLI binary
+      run: |
+        make build-cli
+        make build-log
+        mkdir -p builds
+        cp bin/kaiwo builds/
+
+    - name: Upload CLI artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: kaiwo-builds
+        path: builds
+        if-no-files-found: error
+        retention-days: 5
+
+  e2e-recreated-kind:
+    name: Recreate Kind cluster from snapshot
+    needs: build-image
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        installer: [kustomization, helm]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGETS=(
+            "/usr/local/lib/android"
+            "/usr/share/dotnet"
+            "/opt/ghc"
+            "/opt/hostedtoolcache"
+            "/usr/local/share/boost"
+            "/usr/local/share/powershell"
+            "/usr/share/swift"
+          )
+          echo "Deleting large preinstalled SDKs/tools..."
+          for d in "${TARGETS[@]}"; do
+            if [[ -e "$d" ]]; then
+              sudo rm -rf "$d" >/dev/null 2>&1 &
+            fi
+          done
+          docker system prune -af --volumes || true
+          wait
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Log in to GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $GITHUB_ACTOR --password-stdin
+
+      - name: Install kind CLI
+        run: |
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.26.0/kind-linux-amd64
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+          kind version
+
+      - name: Recreate Kind cluster from snapshot
+        env:
+          # Use inputs if available (manual dispatch), otherwise use defaults
+          VERSION_TAG: ${{ inputs.version_tag || env.DEFAULT_VERSION_TAG }}
+          NUM_WORKERS: ${{ inputs.num_workers || env.DEFAULT_NUM_WORKERS }}
+        run: |
+          chmod +x ./test/scripts/*.sh
+          echo "Restoring snapshot: $VERSION_TAG with $NUM_WORKERS workers"
+          time ./test/scripts/recreate_kind.sh "$VERSION_TAG" "$NUM_WORKERS"
+
+      - name: Download CLI artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: kaiwo-builds
+          path: builds
+
+      - name: Make CLI executable
+        run: |
+          chmod +x builds/kaiwo
+          chmod +x builds/log
+          ls -l builds
+
+      - name: Install Chainsaw
+        uses: kyverno/action-install-chainsaw@v0.2.12
+        with:
+          release: v0.2.12
+
+      - name: Install Helmfile
+        run: |
+          curl -Lo helmfile.tar.gz https://github.com/helmfile/helmfile/releases/download/v1.1.5/helmfile_1.1.5_linux_amd64.tar.gz
+          tar -xzf helmfile.tar.gz
+          chmod +x ./helmfile
+          sudo mv ./helmfile /usr/local/bin/helmfile
+          rm helmfile.tar.gz
+          helmfile version
+
+      - name: Install CRDs and Deploy (${{ matrix.installer }})
+        env:
+          IMAGE_NAME: ${{ needs.build-image.outputs.image }}
+        run: |
+          bash ./kaiwo.sh --install-crds --deploy-via=${{ matrix.installer }} up
+
+      - name: Wait for rollout
+        run: |
+          kubectl -n kaiwo-system rollout status deployment/kaiwo-controller-manager --timeout=300s
+          kubectl -n kube-system rollout status deployment/kaiwo-scheduler --timeout=300s
+          kubectl -n kaiwo-system get pods -o wide
+
+      - name: Debug rollout failure
+        if: failure()
+        run: |
+          echo "=== Deployment status ==="
+          kubectl -n kaiwo-system get deployments -o wide
+          kubectl -n kube-system get deployments -o wide
+
+          echo "=== Pod status ==="
+          kubectl -n kaiwo-system get pods -o wide
+          kubectl -n kube-system get pods -o wide
+
+          echo "=== Controller manager pod details ==="
+          kubectl -n kaiwo-system describe deployment kaiwo-controller-manager
+          kubectl -n kaiwo-system describe pods -l control-plane=controller-manager
+
+          echo "=== Scheduler pod details ==="
+          kubectl -n kube-system describe deployment kaiwo-scheduler
+          kubectl -n kube-system describe pods -l component=kaiwo-scheduler
+
+          echo "=== Controller manager logs ==="
+          kubectl -n kaiwo-system logs -l control-plane=controller-manager --tail=100 --all-containers=true || true
+
+          echo "=== Scheduler logs ==="
+          kubectl -n kube-system logs -l component=kaiwo-scheduler --tail=100 --all-containers=true || true
+
+          echo "=== Events ==="
+          kubectl -n kaiwo-system get events --sort-by='.lastTimestamp'
+          kubectl -n kube-system get events --sort-by='.lastTimestamp'
+
+      - name: Run E2E tests
+        run: |
+          cd test
+          make test-kind
+
+      - name: Disk usage report (post-mortem)
+        if: always()
+        run: |-
+          df -h
+          sudo du -xh /var/lib/docker | sort -rh | head -n 20
+          sudo du -xh /home/runner/work | sort -rh | head -n 20
