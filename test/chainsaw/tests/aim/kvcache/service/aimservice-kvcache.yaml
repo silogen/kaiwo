@@ -4,7 +4,7 @@ metadata:
   name: dummy-w-kvcache
 spec:
   model:
-    image: ghcr.io/silogen/aim-dummy:0.1.3
+    image: ghcr.io/silogen/aim-dummy:0.1.8 # change to latest after deploy
   defaultStorageClassName: rwx-nfs
   kvCache:
     #name: shared-redis-cache

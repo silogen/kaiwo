@@ -201,7 +201,7 @@ spec:
                   x-kubernetes-map-type: atomic
                 type: array
               modelDownloadImage:
-                default: kserve/storage-initializer:v0.16.0-rc0
+                default: kserve/storage-initializer:v0.16.0
                 description: ModelDownloadImage is the image used to download the
                   model
                 type: string

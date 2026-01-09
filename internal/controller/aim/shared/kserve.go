@@ -302,16 +302,6 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 		labels[k] = v
 	}
 
-	env := helpers.CopyEnvVars(serviceState.Env)
-
-	// If a profile ID is set, propagate it
-	if profileId := serviceState.Template.SpecCommon.ProfileId; profileId != "" {
-		env = append(env, corev1.EnvVar{
-			Name:  "AIM_PROFILE_ID",
-			Value: profileId,
-		})
-	}
-
 	inferenceService := &servingv1beta1.InferenceService{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: servingv1beta1.SchemeGroupVersion.String(),
@@ -339,7 +329,7 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 					Runtime: baseutils.Pointer(serviceState.RuntimeName),
 					PredictorExtensionSpec: servingv1beta1.PredictorExtensionSpec{
 						Container: corev1.Container{
-							Env: env,
+							Env: helpers.CopyEnvVars(serviceState.Env),
 						},
 					},
 				},
@@ -361,6 +351,9 @@ func BuildInferenceService(serviceState aimstate.ServiceState, ownerRef metav1.O
 	// Auto-inject autoscaling-related annotations when AutoScaling is configured
 	if serviceState.AutoScaling != nil {
 		injectAutoscalingAnnotations(inferenceService)
+	} else {
+		// Disable HPA creation when autoscaling is not configured
+		disableHPA(inferenceService)
 	}
 
 	// Handle replica configuration with priority: AutoScaling config > explicit min/max > legacy Replicas field
@@ -480,6 +473,20 @@ func injectAutoscalingAnnotations(inferenceService *servingv1beta1.InferenceServ
 	// vLLM exposes metrics on port 8000 by default
 	if _, exists := inferenceService.Annotations["prometheus.kserve.io/port"]; !exists {
 		inferenceService.Annotations["prometheus.kserve.io/port"] = "8000"
+	}
+}
+
+// disableHPA sets the autoscalerClass annotation to "none" to prevent KServe from creating an HPA.
+// This is used when autoscaling is not configured, ensuring fixed replica count without autoscaling overhead.
+func disableHPA(inferenceService *servingv1beta1.InferenceService) {
+	if inferenceService.Annotations == nil {
+		inferenceService.Annotations = make(map[string]string)
+	}
+
+	// Set autoscalerClass to "none" to disable HPA creation
+	// This prevents KServe from creating an HPA when autoscaling is not desired
+	if _, exists := inferenceService.Annotations["serving.kserve.io/autoscalerClass"]; !exists {
+		inferenceService.Annotations["serving.kserve.io/autoscalerClass"] = "none"
 	}
 }
 

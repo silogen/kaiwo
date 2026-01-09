@@ -171,13 +171,6 @@ type AIMServiceSpec struct {
 	// +optional
 	Overrides *AIMServiceOverrides `json:"overrides,omitempty"`
 
-	// Env specifies environment variables to use for authentication when downloading models.
-	// These variables are used for authentication with model registries (e.g., HuggingFace tokens).
-	// +optional
-	// +listType=map
-	// +listMapKey=name
-	Env []corev1.EnvVar `json:"env,omitempty"`
-
 	// ImagePullSecrets references secrets for pulling AIM container images.
 	// +optional
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
@@ -344,6 +337,42 @@ type AIMServiceStatus struct {
 	// ResolvedKVCache captures metadata about the KV cache being used, if any.
 	// +optional
 	ResolvedKVCache *AIMResolvedReference `json:"resolvedKVCache,omitempty"`
+
+	// TemplateMatching provides detailed information about template selection,
+	// including which templates were evaluated and why each was chosen or rejected.
+	// +optional
+	TemplateMatching *AIMTemplateMatchingStatus `json:"templateMatching,omitempty"`
+}
+
+// AIMTemplateMatchingStatus captures the result of template selection for a service.
+type AIMTemplateMatchingStatus struct {
+	// Candidates lists all templates that were evaluated for this service.
+	// +optional
+	Candidates []AIMTemplateCandidateResult `json:"candidates,omitempty"`
+}
+
+// AIMTemplateCandidateResult describes why a template was chosen or rejected.
+type AIMTemplateCandidateResult struct {
+	// Name is the name of the template.
+	Name string `json:"name"`
+
+	// Status indicates whether this template was chosen or rejected.
+	// +kubebuilder:validation:Enum=chosen;rejected
+	Status string `json:"status"`
+
+	// Reason explains why the template was chosen or rejected.
+	// Possible rejection reasons:
+	// - TemplatePending: Template status is Pending
+	// - TemplateDegraded: Template status is Degraded
+	// - TemplateFailed: Template status is Failed
+	// - TemplateNotAvailable: Template status is NotAvailable
+	// - UnoptimizedTemplateFiltered: Template is unoptimized and allowUnoptimized is false
+	// - ServiceOverridesNotMatched: Template doesn't match service overrides
+	// - RequiredGPUNotInCluster: Template requires a GPU not available in cluster
+	// - LowerPreferenceRank: Template passed all filters but scored lower in preference ranking
+	// Chosen reason:
+	// - BestMatch: Template was selected as the best match
+	Reason string `json:"reason"`
 }
 
 // AIMServiceStatusEnum defines coarse-grained states for a service.

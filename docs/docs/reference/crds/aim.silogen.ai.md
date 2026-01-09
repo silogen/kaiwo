@@ -209,6 +209,7 @@ _Appears in:_
 | `routing` _[AIMRuntimeRoutingConfig](#aimruntimeroutingconfig)_ | Routing controls HTTP routing defaults applied to AIM resources.<br />When set, these defaults are used for AIMService resources that enable routing<br />but do not specify their own routing configuration. |  |  |
 | `pvcHeadroomPercent` _integer_ | PVCHeadroomPercent specifies the percentage of extra space to add to PVCs<br />for model storage. This accounts for filesystem overhead and temporary files<br />during model loading. The value represents a percentage (e.g., 10 means 10% extra space).<br />If not specified, defaults to 10%. |  | Minimum: 0 <br /> |
 | `labelPropagation` _[AIMRuntimeConfigLabelPropagationSpec](#aimruntimeconfiglabelpropagationspec)_ | LabelPropagation controls how labels from parent AIM resources are propagated to child resources.<br />When enabled, labels matching the specified patterns are automatically copied from parent resources<br />(e.g., AIMService, AIMTemplateCache) to their child resources (e.g., Deployments, Services, PVCs).<br />This is useful for propagating organizational metadata like cost centers, team identifiers,<br />or compliance labels through the resource hierarchy. |  |  |
+| `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to use for the runtime config.<br />These variables are used for the runtime config and are not propagated to child resources.<br />If configmaps or secrets are referenced, they need to exist in the namespace referencing this runtime config.<br />For cluster scoped runtime configs, any referenced configmaps or secrets need to exist in the system namespace. |  |  |
 
 
 #### AIMClusterServiceTemplate
@@ -295,7 +296,7 @@ _Appears in:_
 | `gpu` _string_ | GPU specifies the GPU model this profile is optimized for (e.g., "MI300X", "MI325X"). |  |  |
 | `gpu_count` _integer_ | GPUCount indicates how many GPUs are required per replica for this profile. |  |  |
 | `metric` _[AIMMetric](#aimmetric)_ | Metric indicates the optimization goal for this profile ("latency" or "throughput"). |  | Enum: [latency throughput] <br /> |
-| `precision` _[AIMPrecision](#aimprecision)_ | Precision specifies the numeric precision used in this profile (e.g., "fp16", "fp8"). |  | Enum: [bf16 fp16 fp8 int8] <br /> |
+| `precision` _[AIMPrecision](#aimprecision)_ | Precision specifies the numeric precision used in this profile (e.g., "fp16", "fp8"). |  | Enum: [bf16 fp16 fp8 int8 int4 fp4 fp32 auto] <br /> |
 | `type` _[AIMProfileType](#aimprofiletype)_ | Type specifies the optimization level of this profile |  |  |
 
 
@@ -524,7 +525,7 @@ _Appears in:_
 | `storageClassName` _string_ | StorageClassName specifies the storage class for the cache volume |  |  |
 | `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#quantity-resource-api)_ | Size specifies the size of the cache volume |  |  |
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env lists the environment variables to use for authentication when downloading models.<br />These variables are used for authentication with model registries (e.g., HuggingFace tokens). |  |  |
-| `modelDownloadImage` _string_ | ModelDownloadImage is the image used to download the model | kserve/storage-initializer:v0.16.0-rc0 |  |
+| `modelDownloadImage` _string_ | ModelDownloadImage is the image used to download the model | kserve/storage-initializer:v0.16.0 |  |
 | `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets references secrets for pulling AIM container images. |  |  |
 | `runtimeConfigName` _string_ | RuntimeConfigName references the AIM runtime configuration (by name) to use for this model cache.<br />This determines PVC headroom and other runtime settings. | default |  |
 
@@ -720,7 +721,7 @@ _Underlying type:_ _string_
 AIMPrecision enumerates supported numeric precisions
 
 _Validation:_
-- Enum: [bf16 fp16 fp8 int8]
+- Enum: [bf16 fp16 fp8 int8 int4 fp4 fp32 auto]
 
 _Appears in:_
 - [AIMClusterServiceTemplateSpec](#aimclusterservicetemplatespec)
@@ -789,7 +790,7 @@ _Appears in:_
 | `gpu` _string_ | GPU specifies the GPU model this profile is optimized for (e.g., "MI300X", "MI325X"). |  |  |
 | `gpuCount` _integer_ | GPUCount indicates how many GPUs are required per replica for this profile. |  |  |
 | `metric` _[AIMMetric](#aimmetric)_ | Metric indicates the optimization goal for this profile ("latency" or "throughput"). |  | Enum: [latency throughput] <br /> |
-| `precision` _[AIMPrecision](#aimprecision)_ | Precision specifies the numeric precision used in this profile (e.g., "fp16", "fp8"). |  | Enum: [bf16 fp16 fp8 int8] <br /> |
+| `precision` _[AIMPrecision](#aimprecision)_ | Precision specifies the numeric precision used in this profile (e.g., "fp16", "fp8"). |  | Enum: [bf16 fp16 fp8 int8 int4 fp4 fp32 auto] <br /> |
 | `type` _[AIMProfileType](#aimprofiletype)_ | Type specifies the designation of the profile |  |  |
 
 
@@ -944,6 +945,7 @@ _Appears in:_
 | `routing` _[AIMRuntimeRoutingConfig](#aimruntimeroutingconfig)_ | Routing controls HTTP routing defaults applied to AIM resources.<br />When set, these defaults are used for AIMService resources that enable routing<br />but do not specify their own routing configuration. |  |  |
 | `pvcHeadroomPercent` _integer_ | PVCHeadroomPercent specifies the percentage of extra space to add to PVCs<br />for model storage. This accounts for filesystem overhead and temporary files<br />during model loading. The value represents a percentage (e.g., 10 means 10% extra space).<br />If not specified, defaults to 10%. |  | Minimum: 0 <br /> |
 | `labelPropagation` _[AIMRuntimeConfigLabelPropagationSpec](#aimruntimeconfiglabelpropagationspec)_ | LabelPropagation controls how labels from parent AIM resources are propagated to child resources.<br />When enabled, labels matching the specified patterns are automatically copied from parent resources<br />(e.g., AIMService, AIMTemplateCache) to their child resources (e.g., Deployments, Services, PVCs).<br />This is useful for propagating organizational metadata like cost centers, team identifiers,<br />or compliance labels through the resource hierarchy. |  |  |
+| `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to use for the runtime config.<br />These variables are used for the runtime config and are not propagated to child resources.<br />If configmaps or secrets are referenced, they need to exist in the namespace referencing this runtime config.<br />For cluster scoped runtime configs, any referenced configmaps or secrets need to exist in the system namespace. |  |  |
 
 
 #### AIMRuntimeConfigLabelPropagationSpec
@@ -1002,6 +1004,7 @@ _Appears in:_
 | `routing` _[AIMRuntimeRoutingConfig](#aimruntimeroutingconfig)_ | Routing controls HTTP routing defaults applied to AIM resources.<br />When set, these defaults are used for AIMService resources that enable routing<br />but do not specify their own routing configuration. |  |  |
 | `pvcHeadroomPercent` _integer_ | PVCHeadroomPercent specifies the percentage of extra space to add to PVCs<br />for model storage. This accounts for filesystem overhead and temporary files<br />during model loading. The value represents a percentage (e.g., 10 means 10% extra space).<br />If not specified, defaults to 10%. |  | Minimum: 0 <br /> |
 | `labelPropagation` _[AIMRuntimeConfigLabelPropagationSpec](#aimruntimeconfiglabelpropagationspec)_ | LabelPropagation controls how labels from parent AIM resources are propagated to child resources.<br />When enabled, labels matching the specified patterns are automatically copied from parent resources<br />(e.g., AIMService, AIMTemplateCache) to their child resources (e.g., Deployments, Services, PVCs).<br />This is useful for propagating organizational metadata like cost centers, team identifiers,<br />or compliance labels through the resource hierarchy. |  |  |
+| `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to use for the runtime config.<br />These variables are used for the runtime config and are not propagated to child resources.<br />If configmaps or secrets are referenced, they need to exist in the namespace referencing this runtime config.<br />For cluster scoped runtime configs, any referenced configmaps or secrets need to exist in the system namespace. |  |  |
 
 
 #### AIMRuntimeConfigStatus
@@ -1344,7 +1347,6 @@ _Appears in:_
 | `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#resourcerequirements-v1-core)_ | Resources overrides the container resource requirements for this service.<br />When specified, these values take precedence over the template and image defaults. |  |  |
 | `kvCache` _[AIMServiceKVCache](#aimservicekvcache)_ | KVCache specifies KV cache configuration for the service.<br />When specified, enables LMCache with the configured KV cache backend. |  |  |
 | `overrides` _[AIMServiceOverrides](#aimserviceoverrides)_ | Overrides allows overriding specific template parameters for this service.<br />When specified, these values take precedence over the template values. |  |  |
-| `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to use for authentication when downloading models.<br />These variables are used for authentication with model registries (e.g., HuggingFace tokens). |  |  |
 | `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#localobjectreference-v1-core) array_ | ImagePullSecrets references secrets for pulling AIM container images. |  |  |
 | `serviceAccountName` _string_ | ServiceAccountName specifies the Kubernetes service account to use for the inference workload.<br />This service account is used by the deployed inference pods.<br />If empty, the default service account for the namespace is used. |  |  |
 | `defaultStorageClassName` _string_ | DefaultStorageClassName specifies the storage class to use for model caches and PVCs<br />when the consuming resource (AIMModelCache, AIMTemplateCache, AIMServiceTemplate) does not<br />specify a storage class. If this field is empty, the cluster's default storage class is used. |  |  |
@@ -1352,6 +1354,7 @@ _Appears in:_
 | `routing` _[AIMRuntimeRoutingConfig](#aimruntimeroutingconfig)_ | Routing controls HTTP routing defaults applied to AIM resources.<br />When set, these defaults are used for AIMService resources that enable routing<br />but do not specify their own routing configuration. |  |  |
 | `pvcHeadroomPercent` _integer_ | PVCHeadroomPercent specifies the percentage of extra space to add to PVCs<br />for model storage. This accounts for filesystem overhead and temporary files<br />during model loading. The value represents a percentage (e.g., 10 means 10% extra space).<br />If not specified, defaults to 10%. |  | Minimum: 0 <br /> |
 | `labelPropagation` _[AIMRuntimeConfigLabelPropagationSpec](#aimruntimeconfiglabelpropagationspec)_ | LabelPropagation controls how labels from parent AIM resources are propagated to child resources.<br />When enabled, labels matching the specified patterns are automatically copied from parent resources<br />(e.g., AIMService, AIMTemplateCache) to their child resources (e.g., Deployments, Services, PVCs).<br />This is useful for propagating organizational metadata like cost centers, team identifiers,<br />or compliance labels through the resource hierarchy. |  |  |
+| `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to use for the runtime config.<br />These variables are used for the runtime config and are not propagated to child resources.<br />If configmaps or secrets are referenced, they need to exist in the namespace referencing this runtime config.<br />For cluster scoped runtime configs, any referenced configmaps or secrets need to exist in the system namespace. |  |  |
 
 
 #### AIMServiceStatus
@@ -1377,6 +1380,7 @@ _Appears in:_
 | `resolvedTemplateCache` _[AIMResolvedReference](#aimresolvedreference)_ | ResolvedTemplateCache captures metadata about the template cache being used, if any. |  |  |
 | `modelCaches` _object (keys:string, values:[AIMResolvedModelCache](#aimresolvedmodelcache))_ | ModelCaches maps model names to their resolved AIMModelCache resources if they exist. |  |  |
 | `resolvedKVCache` _[AIMResolvedReference](#aimresolvedreference)_ | ResolvedKVCache captures metadata about the KV cache being used, if any. |  |  |
+| `templateMatching` _[AIMTemplateMatchingStatus](#aimtemplatematchingstatus)_ | TemplateMatching provides detailed information about template selection,<br />including which templates were evaluated and why each was chosen or rejected. |  |  |
 
 
 #### AIMServiceStatusEnum
@@ -1656,6 +1660,40 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | Enabled controls whether caching is enabled for this template.<br />Defaults to `false`. | false |  |
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#envvar-v1-core) array_ | Env specifies environment variables to use when downloading the model.<br />These variables are available to the model download process and can be used<br />to configure download behavior, authentication, proxies, etc. |  |  |
+
+
+#### AIMTemplateCandidateResult
+
+
+
+AIMTemplateCandidateResult describes why a template was chosen or rejected.
+
+
+
+_Appears in:_
+- [AIMTemplateMatchingStatus](#aimtemplatematchingstatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | Name is the name of the template. |  |  |
+| `status` _string_ | Status indicates whether this template was chosen or rejected. |  | Enum: [chosen rejected] <br /> |
+| `reason` _string_ | Reason explains why the template was chosen or rejected.<br />Possible rejection reasons:<br />- TemplatePending: Template status is Pending<br />- TemplateDegraded: Template status is Degraded<br />- TemplateFailed: Template status is Failed<br />- TemplateNotAvailable: Template status is NotAvailable<br />- UnoptimizedTemplateFiltered: Template is unoptimized and allowUnoptimized is false<br />- ServiceOverridesNotMatched: Template doesn't match service overrides<br />- RequiredGPUNotInCluster: Template requires a GPU not available in cluster<br />- LowerPreferenceRank: Template passed all filters but scored lower in preference ranking<br />Chosen reason:<br />- BestMatch: Template was selected as the best match |  |  |
+
+
+#### AIMTemplateMatchingStatus
+
+
+
+AIMTemplateMatchingStatus captures the result of template selection for a service.
+
+
+
+_Appears in:_
+- [AIMServiceStatus](#aimservicestatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `candidates` _[AIMTemplateCandidateResult](#aimtemplatecandidateresult) array_ | Candidates lists all templates that were evaluated for this service. |  |  |
 
 
 #### AIMTemplateStatusEnum
