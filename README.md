@@ -49,7 +49,7 @@ The easiest way to build and run the operator for development is via the `kaiwo.
 `kaiwo.sh` wraps build, image publishing, and deployment via Helm or Kustomize.
 
 - Kind + Helm (local dev loop):
-  
+
   ```bash
   ./kaiwo.sh --install-crds --build --push=kind --deploy-via=helm up
   # Tear down
@@ -76,7 +76,7 @@ Useful environment variables:
 - `CONTAINER_TOOL` (`docker` or `podman`)
 - `IMAGE_NAME` (override image name/reference), `IMAGE_REGISTRY`, `TAG`
 
-For Helm configuration and values, see: docs/docs/admin/helm-installation.md
+For Helm configuration and values, see: docs/docs/admin/installation.md
 
 ### Run Operator Locally (no container)
 

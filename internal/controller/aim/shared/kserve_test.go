@@ -27,6 +27,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
 	aimstate "github.com/silogen/kaiwo/internal/controller/aim/state"
@@ -226,4 +227,72 @@ func isRFC1123Compliant(s string) bool {
 
 func isAlphanumeric(ch byte) bool {
 	return (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')
+}
+
+func TestBuildInferenceService_EnvVarsIncluded(t *testing.T) {
+	metric := aimv1alpha1.AIMMetric("latency")
+	precision := aimv1alpha1.AIMPrecision("fp8")
+
+	templateState := aimstate.TemplateState{
+		Name:      "test-template",
+		Namespace: "default",
+		SpecCommon: aimv1alpha1.AIMServiceTemplateSpecCommon{
+			ModelName: "test-model",
+			AIMRuntimeParameters: aimv1alpha1.AIMRuntimeParameters{
+				Metric:    &metric,
+				Precision: &precision,
+			},
+		},
+		Status: &aimv1alpha1.AIMServiceTemplateStatus{
+			Profile: aimv1alpha1.AIMProfile{
+				Metadata: aimv1alpha1.AIMProfileMetadata{
+					GPUCount: 1,
+					GPU:      "MI300X",
+				},
+			},
+		},
+	}
+
+	serviceState := aimstate.ServiceState{
+		Name:        "test-service",
+		Namespace:   "default",
+		Template:    templateState,
+		RuntimeName: "test-runtime",
+		Env: []corev1.EnvVar{
+			{Name: "AIM_METRIC", Value: "latency"},
+			{Name: "AIM_PRECISION", Value: "fp8"},
+			{Name: "CUSTOM_VAR", Value: "custom_value"},
+		},
+	}
+
+	ownerRef := metav1.OwnerReference{
+		APIVersion: "aim.amd.com/v1alpha1",
+		Kind:       "AIMService",
+		Name:       "test-service",
+		UID:        "test-uid",
+	}
+
+	isvc := BuildInferenceService(serviceState, ownerRef)
+
+	// Verify env vars are present in the predictor container
+	envVars := isvc.Spec.Predictor.Model.Env
+	envMap := make(map[string]string)
+	for _, env := range envVars {
+		envMap[env.Name] = env.Value
+	}
+
+	// Verify the env vars we care about are present
+	expectedEnvVars := map[string]string{
+		"AIM_METRIC":    "latency",
+		"AIM_PRECISION": "fp8",
+		"CUSTOM_VAR":    "custom_value",
+	}
+
+	for key, expectedValue := range expectedEnvVars {
+		if actualValue, exists := envMap[key]; !exists {
+			t.Errorf("expected env var %s to exist in InferenceService", key)
+		} else if actualValue != expectedValue {
+			t.Errorf("expected %s=%s in InferenceService, got %s", key, expectedValue, actualValue)
+		}
+	}
 }
