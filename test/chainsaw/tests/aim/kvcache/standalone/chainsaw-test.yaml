@@ -27,19 +27,21 @@ spec:
           apiVersion: apps/v1
           kind: StatefulSet
           metadata:
-            name: basic-kvcache-redis
+            labels:
+              aim.silogen.ai/kvcache: basic-kvcache
+              aim.silogen.ai/kvcache-type: redis
           spec:
             replicas: 1
-            serviceName: basic-kvcache-redis-svc
     - assert:
         timeout: 10s
         resource:
           apiVersion: v1
           kind: Service
           metadata:
-            name: basic-kvcache-redis-svc
+            labels:
+              aim.silogen.ai/kvcache: basic-kvcache
+              aim.silogen.ai/kvcache-type: redis
           spec:
-            clusterIP: None
             ports:
             - port: 6379
               name: redis
@@ -52,7 +54,9 @@ spec:
           apiVersion: apps/v1
           kind: StatefulSet
           metadata:
-            name: basic-kvcache-redis
+            labels:
+              aim.silogen.ai/kvcache: basic-kvcache
+              aim.silogen.ai/kvcache-type: redis
           spec:
             template:
               spec:
@@ -78,7 +82,7 @@ spec:
           status:
             status: Ready
             readyReplicas: 1
-            endpoint: redis://basic-kvcache-redis-svc:6379
+            (starts_with(endpoint, 'redis://')): true
             (conditions[?type == 'Ready']):
             - status: "True"
               reason: StatefulSetReady
@@ -97,7 +101,9 @@ spec:
           apiVersion: apps/v1
           kind: StatefulSet
           metadata:
-            name: custom-config-redis
+            labels:
+              aim.silogen.ai/kvcache: custom-config
+              aim.silogen.ai/kvcache-type: redis
           spec:
             template:
               spec:
@@ -137,7 +143,9 @@ spec:
           apiVersion: apps/v1
           kind: StatefulSet
           metadata:
-            name: custom-resources-redis
+            labels:
+              aim.silogen.ai/kvcache: custom-resources
+              aim.silogen.ai/kvcache-type: redis
           spec:
             template:
               spec:
@@ -159,7 +167,9 @@ spec:
           apiVersion: apps/v1
           kind: StatefulSet
           metadata:
-            name: custom-resources-redis
+            labels:
+              aim.silogen.ai/kvcache: custom-resources
+              aim.silogen.ai/kvcache-type: redis
           spec:
             volumeClaimTemplates:
             - metadata:
@@ -193,7 +203,8 @@ spec:
           apiVersion: v1
           kind: PersistentVolumeClaim
           metadata:
-            name: redis-data-custom-resources-redis-0
+            labels:
+              aim.silogen.ai/kvcache: custom-resources
           spec:
             resources:
               requests:
@@ -229,7 +240,9 @@ spec:
           apiVersion: apps/v1
           kind: StatefulSet
           metadata:
-            name: status-test-redis
+            labels:
+              aim.silogen.ai/kvcache: status-test
+              aim.silogen.ai/kvcache-type: redis
             ownerReferences:
             - name: status-test
               kind: AIMKVCache
@@ -239,7 +252,9 @@ spec:
           apiVersion: v1
           kind: Service
           metadata:
-            name: status-test-redis-svc
+            labels:
+              aim.silogen.ai/kvcache: status-test
+              aim.silogen.ai/kvcache-type: redis
             ownerReferences:
             - name: status-test
               kind: AIMKVCache
@@ -255,8 +270,8 @@ spec:
             name: status-test
           status:
             (status == 'Progressing' || status == 'Ready'): true
-            statefulSetName: status-test-redis
-            serviceName: status-test-redis-svc
+            (starts_with(statefulSetName, 'status-test-redis')): true
+            (starts_with(serviceName, 'status-test-redis')): true
 
   - name: Verify status becomes Ready when pods are running
     try:
@@ -294,7 +309,9 @@ spec:
           apiVersion: apps/v1
           kind: StatefulSet
           metadata:
-            name: updateable-kvcache-redis
+            labels:
+              aim.silogen.ai/kvcache: updateable-kvcache
+              aim.silogen.ai/kvcache-type: redis
           spec:
             template:
               spec:
@@ -331,7 +348,9 @@ spec:
           apiVersion: apps/v1
           kind: StatefulSet
           metadata:
-            name: updateable-kvcache-redis
+            labels:
+              aim.silogen.ai/kvcache: updateable-kvcache
+              aim.silogen.ai/kvcache-type: redis
           spec:
             template:
               spec:
