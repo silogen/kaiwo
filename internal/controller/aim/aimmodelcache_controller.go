@@ -579,11 +579,12 @@ func (r *AIMModelCacheReconciler) buildDownloadJob(mc *aimv1alpha1.AIMModelCache
 			}),
 		},
 		Spec: batchv1.JobSpec{
-			BackoffLimit:            baseutils.Pointer(int32(2)),
+			BackoffLimit:            baseutils.Pointer(int32(200)),     // Since we kill the job after 5 minutes of no progress, we can set a high backoff limit
 			TTLSecondsAfterFinished: baseutils.Pointer(int32(60 * 10)), // Cleanup after 10min to allow status observation
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
-					RestartPolicy: corev1.RestartPolicyNever,
+					RestartPolicy:         corev1.RestartPolicyNever,
+					ShareProcessNamespace: baseutils.Pointer(true), // Enable cross-container signaling
 					SecurityContext: &corev1.PodSecurityContext{
 						RunAsUser:    baseutils.Pointer(int64(1000)), // kserve storage-initializer user
 						RunAsGroup:   baseutils.Pointer(int64(1000)),
@@ -666,6 +667,13 @@ if [ -n "$AIM_DEBUG_CAUSE_FAILURE" ]; then
 	echo "AIM_DEBUG_CAUSE_FAILURE is set, bailing out"
 	exit 1
 fi
+if [ -n "$AIM_DEBUG_CAUSE_HANG" ]; then
+	echo "AIM_DEBUG_CAUSE_HANG is set, will sleep for 120 minutes before exiting"
+	ret=$(python -c "import time; time.sleep(7200)")
+	echo "Sleep returned: $ret"
+	exit $ret
+fi
+
 # Set umask so downloaded files are readable by others
 umask 0022
 
@@ -741,6 +749,12 @@ log_json() {
 expected_size=${EXPECTED_SIZE_BYTES:-0}
 mount_path=${MOUNT_PATH:-/cache}
 interval=10
+stall_timeout=300  # 5 minutes
+
+log_json "start" "expectedBytes=$expected_size" "intervalSeconds=$interval" "stallTimeoutSeconds=$stall_timeout"
+
+last_size=0
+last_change_time=$(date +%s)
 
 log_json "start" "expectedBytes=$expected_size" "intervalSeconds=$interval"
 
@@ -760,6 +774,22 @@ while true; do
     fi
 
     current_size=$(du -sb "$mount_path" 2>/dev/null | cut -f1 || echo 0)
+    now=$(date +%s)
+
+    # Track progress for stall detection
+    if [ "$current_size" -gt "$last_size" ]; then
+        last_size=$current_size
+        last_change_time=$now
+    fi
+
+    # Check for stall (no progress for stall_timeout seconds)
+    stall_duration=$((now - last_change_time))
+    if [ "$stall_duration" -ge "$stall_timeout" ]; then
+        log_json "stall" "currentBytes=$current_size" "stallDurationSeconds=$stall_duration" "message=Download stalled, killing downloader"
+        # Find and kill the python process in the model-download container
+        pkill -9 -f "python" 2>/dev/null || true
+        exit 0
+    fi
 
     if [ "$expected_size" -gt 0 ] && [ "$current_size" -gt 0 ]; then
         percent=$((current_size * 100 / expected_size))
