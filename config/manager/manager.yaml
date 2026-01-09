@@ -64,10 +64,11 @@ spec:
         - --leader-elect
         - --health-probe-bind-address=:8081
         image: controller:latest
+        imagePullPolicy: Always
         env:
           # Setting this to true automatically creates a default kaiwo configuration object
           # If you want to set up your own configuration from the start, set this to false or remove the variable completely,
-          # and create your KaiwoConfig object separately 
+          # and create your KaiwoConfig object separately
 
         - name: DEFAULT_KAIWO_QUEUE_CONFIG_NAME
           value: "kaiwo"

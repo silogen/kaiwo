@@ -36,6 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	aimv1alpha1 "github.com/silogen/kaiwo/apis/aim/v1alpha1"
+	"github.com/silogen/kaiwo/internal/controller/aim/helpers"
 )
 
 // RuntimeConfigResolution captures the resolved runtime configuration.
@@ -159,6 +160,16 @@ func mergeRuntimeConfigSpecs(clusterSpec aimv1alpha1.AIMClusterRuntimeConfigSpec
 
 	// Merge routing configuration
 	merged.Routing = mergeRoutingConfig(clusterSpec.Routing, namespaceSpec.Routing)
+
+	// Merge label propagation configuration
+	if namespaceSpec.LabelPropagation != nil {
+		merged.LabelPropagation = namespaceSpec.LabelPropagation
+	}
+
+	// Merge env vars - namespace config takes precedence
+	if len(namespaceSpec.Env) > 0 {
+		merged.Env = helpers.MergeEnvVars(merged.Env, namespaceSpec.Env)
+	}
 
 	return merged
 }

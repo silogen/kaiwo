@@ -4,10 +4,7 @@ metadata:
   name: dummy-w-kvcache
 spec:
   model:
-    image: ghcr.io/silogen/aim-dummy:0.1.x # change to latest after deploy
-  env:
-    - name: AIM_ENGINE_ARGS
-      value: '{"from-spec": "true"}'
+    image: ghcr.io/silogen/aim-dummy:0.1.8 # change to latest after deploy
   defaultStorageClassName: rwx-nfs
   kvCache:
     #name: shared-redis-cache
