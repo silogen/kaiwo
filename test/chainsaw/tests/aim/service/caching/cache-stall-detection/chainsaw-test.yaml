@@ -1,0 +1,41 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: cache-stall-detection
+spec:
+  description: Test that download stall detection kills hung downloads
+  timeouts:
+    assert: 480s  # 8 minutes - stall timeout (5min) + buffer
+  steps:
+  - name: Create runtime config
+    try:
+    - apply:
+        file: runtime.yaml
+
+  - name: Create AIMService with cacheModel and hang trigger
+    try:
+    - apply:
+        file: aimservice.yaml
+
+  - name: Verify AIMModelCache is created and download job starts
+    try:
+    - assert:
+        timeout: 120s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMModelCache
+          metadata:
+            namespace: ($namespace)
+          status:
+            status: Progressing
+
+  - name: Verify stall detection triggered (Job has at least 1 failed pod)
+    try:
+    - assert:
+        timeout: 420s
+        resource:
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            namespace: ($namespace)
+          (status.failed >= `1`): true
