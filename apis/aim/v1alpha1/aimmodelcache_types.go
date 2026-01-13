@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	DefaultDownloadImage = "kserve/storage-initializer:v0.16.0-rc0"
+	DefaultDownloadImage = "ghcr.io/silogen/kaiwo/model-downloader:0.1"
 )
 
 // AIMResolvedModelCache contains reference info and status for a cached model.
@@ -71,7 +71,7 @@ type AIMModelCacheSpec struct {
 	Env []corev1.EnvVar `json:"env,omitempty"`
 
 	// ModelDownloadImage is the image used to download the model
-	// +kubebuilder:default="kserve/storage-initializer:v0.16.0"
+	// +kubebuilder:default="ghcr.io/silogen/kaiwo/model-downloader:0.1"
 	ModelDownloadImage string `json:"modelDownloadImage"`
 
 	// ImagePullSecrets references secrets for pulling AIM container images.
