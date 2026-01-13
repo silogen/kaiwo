@@ -1,0 +1,13 @@
+apiVersion: aim.silogen.ai/v1alpha1
+kind: AIMService
+metadata:
+  name: test-cache-stall
+spec:
+  model:
+    image: ghcr.io/silogen/aim-dummy:0.1.4
+  cacheModel: true
+  template:
+    allowUnoptimized: true
+  env:
+    - name: AIM_DEBUG_CAUSE_HANG
+      value: "true"

@@ -1,0 +1,232 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: cache-s3-download
+spec:
+  description: Test S3 model caching by comparing HF download with S3 round-trip
+  concurrent: false
+  timeouts:
+    assert: 600s
+  steps:
+  - name: Setup infrastructure
+    try:
+    - apply:
+        file: runtime.yaml
+    - apply:
+        file: s3-deployment.yaml
+    - wait:
+        apiVersion: apps/v1
+        kind: Deployment
+        name: minio-deployment
+        timeout: 2m
+        for:
+          condition:
+            name: Available
+            value: 'true'
+
+  - name: Create HuggingFace model cache
+    try:
+    - apply:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMModelCache
+          metadata:
+            name: hf-model-cache
+          spec:
+            sourceUri: hf://HuggingFaceTB/SmolLM2-135M
+            size: 1Gi
+
+  - name: Wait for HF cache to be available
+    try:
+    - assert:
+        timeout: 300s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMModelCache
+          metadata:
+            name: hf-model-cache
+          status:
+            status: Available
+
+  - name: Upload cached model to MinIO
+    try:
+    - apply:
+        resource:
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: upload-to-s3
+          spec:
+            backoffLimit: 2
+            template:
+              spec:
+                restartPolicy: Never
+                securityContext:
+                  runAsUser: 1000
+                  runAsGroup: 1000
+                  fsGroup: 1000
+                volumes:
+                - name: hf-cache
+                  persistentVolumeClaim:
+                    claimName: hf-model-cache-cache
+                containers:
+                - name: uploader
+                  image: ghcr.io/silogen/kaiwo/model-downloader:0.1
+                  command: ["/bin/sh", "-c"]
+                  args:
+                  - |
+                    set -eu
+                    BUCKET="test-models"
+                    S3_HOST="minio-service:9000"
+                    
+                    S3_OPTS="--host=$S3_HOST --host-bucket=$S3_HOST/%(bucket)s --access_key=$S3_ACCESS_KEY --secret_key=$S3_SECRET_KEY --no-ssl --signature-v2"
+                    
+                    echo "=== Creating bucket ==="
+                    s3cmd $S3_OPTS mb "s3://$BUCKET" || true
+                    
+                    echo "=== Uploading from HF cache to S3 ==="
+                    s3cmd $S3_OPTS --recursive put /cache/ "s3://$BUCKET/"
+                    
+                    echo "=== Verifying upload ==="
+                    s3cmd $S3_OPTS ls -r "s3://$BUCKET/"
+                  env:
+                  - name: S3_ACCESS_KEY
+                    valueFrom:
+                      secretKeyRef:
+                        name: minio-secret
+                        key: access_key_id
+                  - name: S3_SECRET_KEY
+                    valueFrom:
+                      secretKeyRef:
+                        name: minio-secret
+                        key: secret_key
+                  volumeMounts:
+                  - name: hf-cache
+                    mountPath: /cache
+                    readOnly: true
+    - wait:
+        apiVersion: batch/v1
+        kind: Job
+        name: upload-to-s3
+        timeout: 3m
+        for:
+          condition:
+            name: Complete
+            value: 'true'
+
+  - name: Create S3 model cache
+    try:
+    - apply:
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMModelCache
+          metadata:
+            name: s3-model-cache
+          spec:
+            sourceUri: s3://test-models/
+            size: 1Gi
+            env:
+            - name: S3_ENDPOINT
+              value: "minio-service:9000"
+            - name: S3_NO_SSL
+              value: "true"
+            - name: S3_SIGNATURE_V2
+              value: "true"
+            - name: S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: access_key_id
+            - name: S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: secret_key
+
+  - name: Wait for S3 cache to be available
+    try:
+    - assert:
+        timeout: 300s
+        resource:
+          apiVersion: aim.silogen.ai/v1alpha1
+          kind: AIMModelCache
+          metadata:
+            name: s3-model-cache
+          status:
+            status: Available
+
+  - name: Verify checksums match
+    try:
+    - apply:
+        resource:
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: verify-checksums
+          spec:
+            backoffLimit: 0
+            template:
+              spec:
+                restartPolicy: Never
+                securityContext:
+                  runAsUser: 1000
+                  runAsGroup: 1000
+                  fsGroup: 1000
+                volumes:
+                - name: hf-cache
+                  persistentVolumeClaim:
+                    claimName: hf-model-cache-cache
+                - name: s3-cache
+                  persistentVolumeClaim:
+                    claimName: s3-model-cache-cache
+                containers:
+                - name: verifier
+                  image: alpine:latest
+                  command: ["/bin/sh", "-c"]
+                  args:
+                  - |
+                    set -eu
+                    echo "=== Computing checksums for HF cache ==="
+                    cd /hf-cache
+                    find . -type f -exec md5sum {} \; | sort > /tmp/hf-checksums.txt
+                    cat /tmp/hf-checksums.txt
+                    
+                    echo "=== Computing checksums for S3 cache ==="
+                    cd /s3-cache
+                    find . -type f -exec md5sum {} \; | sort > /tmp/s3-checksums.txt
+                    cat /tmp/s3-checksums.txt
+                    
+                    echo "=== Comparing checksums ==="
+                    if diff /tmp/hf-checksums.txt /tmp/s3-checksums.txt; then
+                      echo "SUCCESS: All checksums match!"
+                      exit 0
+                    else
+                      echo "FAILURE: Checksums do not match!"
+                      exit 1
+                    fi
+                  volumeMounts:
+                  - name: hf-cache
+                    mountPath: /hf-cache
+                    readOnly: true
+                  - name: s3-cache
+                    mountPath: /s3-cache
+                    readOnly: true
+    - wait:
+        apiVersion: batch/v1
+        kind: Job
+        name: verify-checksums
+        timeout: 2m
+        for:
+          condition:
+            name: Complete
+            value: 'true'
+
+  catch:
+  - command:
+      entrypoint: kaiwo-dev
+      env:
+      - name: PRINT_LEVEL
+        value: ($values.print_level)
+      - name: NAMESPACE
+        value: ($namespace)
+      args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]

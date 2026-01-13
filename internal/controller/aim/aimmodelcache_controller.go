@@ -553,17 +553,24 @@ func (r *AIMModelCacheReconciler) buildDownloadJob(mc *aimv1alpha1.AIMModelCache
 	if len(mc.Spec.ModelDownloadImage) > 0 {
 		downloadImage = mc.Spec.ModelDownloadImage
 	}
+
+	// Expected size in bytes for progress calculation
+	expectedSizeBytes := mc.Spec.Size.Value()
+
 	// Merge env vars with precedence: mc.Spec.Env > runtimeConfigSpec.Env > defaults
 	newEnv := helpers.MergeEnvVars([]corev1.EnvVar{
 		{Name: "HF_XET_CHUNK_CACHE_SIZE_BYTES", Value: "0"},
 		{Name: "HF_XET_SHARD_CACHE_SIZE_BYTES", Value: "0"},
 		{Name: "HF_XET_HIGH_PERFORMANCE", Value: "1"},
-		{Name: "HF_HOME", Value: mountPath + "/.hf"},
+		{Name: "HF_HOME", Value: "/tmp/.hf"},
 		{Name: "UMASK", Value: "0022"},
+		{Name: "EXPECTED_SIZE_BYTES", Value: fmt.Sprintf("%d", expectedSizeBytes)},
+		{Name: "MOUNT_PATH", Value: mountPath},
+		{Name: "CACHE_NAME", Value: mc.Name},
+		{Name: "CACHE_NAMESPACE", Value: mc.Namespace},
+		{Name: "STALL_TIMEOUT", Value: "120"},
+		{Name: "TARGET_DIR", Value: mountPath},
 	}, helpers.MergeEnvVars(runtimeConfigSpec.Env, mc.Spec.Env))
-
-	// Expected size in bytes for progress calculation
-	expectedSizeBytes := mc.Spec.Size.Value()
 
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
@@ -598,54 +605,6 @@ func (r *AIMModelCacheReconciler) buildDownloadJob(mc *aimv1alpha1.AIMModelCache
 								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: pvcName},
 							},
 						},
-						{
-							Name: "tmp",
-							VolumeSource: corev1.VolumeSource{
-								EmptyDir: &corev1.EmptyDirVolumeSource{
-									SizeLimit: baseutils.Pointer(resource.MustParse("500Mi")), // Small temp space for system operations
-								},
-							},
-						},
-					},
-					// Native sidecar (Kubernetes 1.28+): init container with restartPolicy=Always
-					// runs alongside main containers and is automatically terminated by kubelet
-					// when all regular containers complete (success or failure)
-					InitContainers: []corev1.Container{
-						{
-							Name:            "progress-monitor",
-							Image:           "busybox:1.36",
-							ImagePullPolicy: corev1.PullIfNotPresent,
-							// restartPolicy: Always makes this a native sidecar that runs alongside main containers
-							// Kubernetes automatically sends SIGTERM when all regular containers terminate
-							RestartPolicy: baseutils.Pointer(corev1.ContainerRestartPolicyAlways),
-							SecurityContext: &corev1.SecurityContext{
-								RunAsUser:  baseutils.Pointer(int64(1000)),
-								RunAsGroup: baseutils.Pointer(int64(1000)),
-							},
-							Env: []corev1.EnvVar{
-								{Name: "EXPECTED_SIZE_BYTES", Value: fmt.Sprintf("%d", expectedSizeBytes)},
-								{Name: "MOUNT_PATH", Value: mountPath},
-							},
-							Command: []string{"/bin/sh"},
-							Args: []string{
-								"-c",
-								progressMonitorScript,
-							},
-							VolumeMounts: []corev1.VolumeMount{
-								{Name: "cache", MountPath: mountPath, ReadOnly: true},
-							},
-							// Minimal resources for the monitor
-							Resources: corev1.ResourceRequirements{
-								Requests: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse("10m"),
-									corev1.ResourceMemory: resource.MustParse("16Mi"),
-								},
-								Limits: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse("50m"),
-									corev1.ResourceMemory: resource.MustParse("32Mi"),
-								},
-							},
-						},
 					},
 					Containers: []corev1.Container{
 						{
@@ -656,43 +615,10 @@ func (r *AIMModelCacheReconciler) buildDownloadJob(mc *aimv1alpha1.AIMModelCache
 								RunAsUser:  baseutils.Pointer(int64(1000)),
 								RunAsGroup: baseutils.Pointer(int64(1000)),
 							},
-							Env:     newEnv,
-							Command: []string{"/bin/sh"},
-							Args: []string{
-								"-c",
-								fmt.Sprintf(`
-# Bail out if this AIM_DEBUG_CAUSE_FAILURE is set
-if [ -n "$AIM_DEBUG_CAUSE_FAILURE" ]; then
-	echo "AIM_DEBUG_CAUSE_FAILURE is set, bailing out"
-	exit 1
-fi
-# Set umask so downloaded files are readable by others
-umask 0022
-
-# Create temp directories on the same filesystem as destination
-mkdir -p %s/.tmp %s/.hf_home %s/.hf_cache %s/.xet_cache
-
-# Download the model
-python /storage-initializer/scripts/initializer-entrypoint %s %s &&
-(
-# Report sizes before cleanup
-echo "Storage usage before cleanup:"
-du -sh %s
-du -sh %s/.cache 2>/dev/null || true
-
-# Clean up HF cache directories to save space (keeps only final model files)
-echo "Cleaning up HF cache to save space..."
-rm -rf %s/.cache %s/.tmp %s/.hf_home %s/.hf_cache %s/.xet_cache 2>/dev/null || true
-
-# Report final sizes
-echo "Final storage usage:"
-du -sh %s || true
-)
-				`, mountPath, mountPath, mountPath, mountPath, mc.Spec.SourceURI, mountPath, mountPath, mountPath, mountPath, mountPath, mountPath, mountPath, mountPath, mountPath),
-							},
+							Env:  newEnv,
+							Args: []string{mc.Spec.SourceURI},
 							VolumeMounts: []corev1.VolumeMount{
 								{Name: "cache", MountPath: mountPath},
-								{Name: "tmp", MountPath: "/tmp"},
 							},
 						},
 					},
@@ -701,88 +627,6 @@ du -sh %s || true
 		},
 	}
 }
-
-// progressMonitorScript is the shell script for the download progress monitor sidecar.
-// It reports download progress every 10 seconds in JSON format.
-//
-// This runs as a native sidecar (init container with restartPolicy=Always).
-// Kubernetes automatically sends SIGTERM when all regular containers terminate,
-// so we just need to handle the signal gracefully.
-//
-// JSON output types:
-//   - "start": Initial message when monitor starts
-//   - "progress": Periodic progress update
-//   - "complete": Download finished successfully (detected via marker file)
-//   - "terminated": Received SIGTERM from kubelet (main container finished)
-const progressMonitorScript = `
-# Handle SIGTERM gracefully - kubelet sends this when main container terminates
-terminated=false
-trap 'terminated=true' TERM
-
-# Output a JSON log message
-# Usage: log_json <type> [key=value ...]
-log_json() {
-    type=$1
-    shift
-    timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    json="{\"timestamp\":\"$timestamp\",\"type\":\"$type\""
-    for kv in "$@"; do
-        key="${kv%%=*}"
-        value="${kv#*=}"
-        # Check if value is numeric
-        case "$value" in
-            ''|*[!0-9]*) json="$json,\"$key\":\"$value\"" ;;  # string
-            *) json="$json,\"$key\":$value" ;;                 # number
-        esac
-    done
-    echo "$json}"
-}
-
-expected_size=${EXPECTED_SIZE_BYTES:-0}
-mount_path=${MOUNT_PATH:-/cache}
-interval=10
-
-log_json "start" "expectedBytes=$expected_size" "intervalSeconds=$interval"
-
-while true; do
-    # Check if we received SIGTERM (main container terminated)
-    if [ "$terminated" = "true" ]; then
-        current_size=$(du -sb "$mount_path" 2>/dev/null | cut -f1 || echo 0)
-        log_json "terminated" "currentBytes=$current_size" "expectedBytes=$expected_size" "message=Main container terminated"
-        exit 0
-    fi
-
-    # Check if download completed successfully (marker file from main container)
-    if [ -f "$mount_path/.download-complete" ]; then
-        current_size=$(du -sb "$mount_path" 2>/dev/null | cut -f1 || echo 0)
-        log_json "complete" "currentBytes=$current_size" "expectedBytes=$expected_size"
-        exit 0
-    fi
-
-    current_size=$(du -sb "$mount_path" 2>/dev/null | cut -f1 || echo 0)
-
-    if [ "$expected_size" -gt 0 ] && [ "$current_size" -gt 0 ]; then
-        percent=$((current_size * 100 / expected_size))
-        # Cap at 100% (during download, temp files may exceed expected size)
-        if [ $percent -gt 100 ]; then
-            percent=100
-        fi
-        log_json "progress" "percent=$percent" "currentBytes=$current_size" "expectedBytes=$expected_size"
-    elif [ "$current_size" -gt 0 ]; then
-        log_json "progress" "currentBytes=$current_size" "expectedBytes=0" "message=Expected size unknown"
-    else
-        log_json "progress" "currentBytes=0" "expectedBytes=$expected_size" "message=Waiting for download to start"
-    fi
-
-    # Use a loop with short sleeps so we can check for SIGTERM more frequently
-    # sleep in busybox doesn't get interrupted by signals, so we poll
-    i=0
-    while [ $i -lt $interval ] && [ "$terminated" = "false" ]; do
-        sleep 1
-        i=$((i + 1))
-    done
-done
-`
 
 func (r *AIMModelCacheReconciler) pvcName(mc *aimv1alpha1.AIMModelCache) string {
 	return baseutils.FormatNameWithPostfix(mc.Name, "cache")

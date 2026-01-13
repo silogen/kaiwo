@@ -201,7 +201,7 @@ spec:
                   x-kubernetes-map-type: atomic
                 type: array
               modelDownloadImage:
-                default: kserve/storage-initializer:v0.16.0
+                default: ghcr.io/silogen/kaiwo/model-downloader:0.1
                 description: ModelDownloadImage is the image used to download the
                   model
                 type: string
