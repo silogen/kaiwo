@@ -1,6 +1,7 @@
 name: publish-main
 
 on:
+  pull_request: {}
   push:
     branches:
       - main
@@ -25,17 +26,19 @@ jobs:
       CHART_NAME: kaiwo-operator
 
     steps:
-      - name: Checkout main
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: main
           fetch-depth: 0
 
       - name: Create or update publish-main branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout -B publish-main
+          git fetch origin main:refs/remotes/origin/main --force
+          git checkout -B publish-main origin/main
+          git ls-files chart/
+          ls -R chart
 
       - name: Set up Go
         uses: actions/setup-go@v4
@@ -77,6 +80,7 @@ jobs:
       - name: Package Helm chart
         run: |
           make helm-release TAG=${IMAGE_TAG} CHART_VERSION=${CHART_VERSION}
+          make copy-helm-resources
 
       - name: Log in to GHCR (Helm/OCI)
         run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u $GITHUB_ACTOR --password-stdin
@@ -88,7 +92,7 @@ jobs:
       - name: Commit and push to publish-main
         run: |
           git add -A
-          git commit -m "Publish artifacts for commit $GITHUB_SHA" || echo "No changes to commit"
+          git commit --allow-empty -m "Publish artifacts for commit $GITHUB_SHA" || echo "No changes to commit"
           git push origin publish-main --force
 
 
