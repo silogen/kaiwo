@@ -11,6 +11,7 @@ on:
       - 'cmd/**'
       - 'config/**'
       - 'chart/**'
+      - '.github/workflows/publish-main.yaml'
 
 permissions:
   contents: write
