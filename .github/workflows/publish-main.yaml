@@ -10,6 +10,7 @@ on:
       - 'pkg/**'
       - 'cmd/**'
       - 'config/**'
+      - 'chart/**'
 
 permissions:
   contents: write
