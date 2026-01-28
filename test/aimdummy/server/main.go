@@ -31,7 +31,16 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"strings"
+	"sync/atomic"
 	"time"
+)
+
+// Metrics for Prometheus/OTEL scraping (vLLM-compatible)
+var (
+	activeRequests   int64 // vllm:num_requests_running
+	totalRequests    int64 // vllm:request_success_total
+	promptTokens     int64 // vllm:prompt_tokens_total
+	generationTokens int64 // vllm:generation_tokens_total
 )
 
 func printReqDebug(r *http.Request) {
@@ -103,6 +112,9 @@ func main() {
 	// Health check endpoint
 	http.HandleFunc("/health", healthHandler)
 
+	// Prometheus metrics endpoint (for KEDA/OTEL autoscaling)
+	http.HandleFunc("/metrics", metricsHandler)
+
 	// OpenAI API endpoints
 	http.HandleFunc("/v1/models", modelsHandler)
 	http.HandleFunc("/v1/chat/completions", chatCompletionsHandler)
@@ -125,6 +137,37 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, `{"status": "healthy"}`)
+}
+
+// metricsHandler exposes Prometheus metrics compatible with vLLM format.
+// These metrics are scraped by OTEL sidecar for KEDA autoscaling.
+func metricsHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+
+	// vllm:num_requests_running - number of requests currently being processed
+	fmt.Fprintf(w, "# HELP vllm_num_requests_running Number of requests currently running on the engine\n")
+	fmt.Fprintf(w, "# TYPE vllm_num_requests_running gauge\n")
+	fmt.Fprintf(w, "vllm:num_requests_running %d\n", atomic.LoadInt64(&activeRequests))
+
+	// vllm:num_requests_waiting - number of requests waiting (always 0 for this mock)
+	fmt.Fprintf(w, "# HELP vllm_num_requests_waiting Number of requests waiting to be processed\n")
+	fmt.Fprintf(w, "# TYPE vllm_num_requests_waiting gauge\n")
+	fmt.Fprintf(w, "vllm:num_requests_waiting 0\n")
+
+	// vllm:request_success_total - total successful requests
+	fmt.Fprintf(w, "# HELP vllm_request_success_total Total number of successful requests\n")
+	fmt.Fprintf(w, "# TYPE vllm_request_success_total counter\n")
+	fmt.Fprintf(w, "vllm:request_success_total %d\n", atomic.LoadInt64(&totalRequests))
+
+	// vllm:prompt_tokens_total - total prompt tokens processed
+	fmt.Fprintf(w, "# HELP vllm_prompt_tokens_total Total number of prompt tokens processed\n")
+	fmt.Fprintf(w, "# TYPE vllm_prompt_tokens_total counter\n")
+	fmt.Fprintf(w, "vllm:prompt_tokens_total %d\n", atomic.LoadInt64(&promptTokens))
+
+	// vllm:generation_tokens_total - total generation tokens produced
+	fmt.Fprintf(w, "# HELP vllm_generation_tokens_total Total number of generation tokens produced\n")
+	fmt.Fprintf(w, "# TYPE vllm_generation_tokens_total counter\n")
+	fmt.Fprintf(w, "vllm:generation_tokens_total %d\n", atomic.LoadInt64(&generationTokens))
 }
 
 func rootHandler(w http.ResponseWriter, r *http.Request) {
@@ -170,6 +213,10 @@ func modelsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func chatCompletionsHandler(w http.ResponseWriter, r *http.Request) {
+	// Track active requests for metrics
+	atomic.AddInt64(&activeRequests, 1)
+	defer atomic.AddInt64(&activeRequests, -1)
+
 	fmt.Println("chat completion called")
 	printReqDebug(r)
 
@@ -208,6 +255,15 @@ func chatCompletionsHandler(w http.ResponseWriter, r *http.Request) {
 	lastMessage := req.Messages[len(req.Messages)-1]
 	responseContent := generateMockResponse(lastMessage.Content)
 
+	// Calculate token counts
+	promptToks := estimateTokens(lastMessage.Content)
+	completionToks := estimateTokens(responseContent)
+
+	// Update metrics
+	atomic.AddInt64(&totalRequests, 1)
+	atomic.AddInt64(&promptTokens, int64(promptToks))
+	atomic.AddInt64(&generationTokens, int64(completionToks))
+
 	response := ChatCompletionResponse{
 		ID:      fmt.Sprintf("chatcmpl-%d", time.Now().Unix()),
 		Object:  "chat.completion",
@@ -224,9 +280,9 @@ func chatCompletionsHandler(w http.ResponseWriter, r *http.Request) {
 			},
 		},
 		Usage: Usage{
-			PromptTokens:     estimateTokens(lastMessage.Content),
-			CompletionTokens: estimateTokens(responseContent),
-			TotalTokens:      estimateTokens(lastMessage.Content) + estimateTokens(responseContent),
+			PromptTokens:     promptToks,
+			CompletionTokens: completionToks,
+			TotalTokens:      promptToks + completionToks,
 		},
 	}
 
