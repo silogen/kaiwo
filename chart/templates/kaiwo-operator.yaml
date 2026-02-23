@@ -116,6 +116,28 @@ spec:
           value: "kaiwo"
         - name: DEFAULT_CLUSTER_QUEUE_NAME
           value: "kaiwo"
+        {{- if .Values.gpuPreemption.enabled }}
+        - name: GPU_PREEMPTION_ENABLED
+          value: {{ .Values.gpuPreemption.enabled | quote }}
+        - name: GPU_PREEMPTION_METRICS_ENDPOINT
+          value: {{ .Values.gpuPreemption.metricsEndpoint | quote }}
+        - name: GPU_PREEMPTION_POLLING_INTERVAL
+          value: {{ .Values.gpuPreemption.pollingInterval | quote }}
+        - name: GPU_PREEMPTION_DEFAULT_THRESHOLD
+          value: {{ .Values.gpuPreemption.defaultThreshold | quote }}
+        - name: GPU_PREEMPTION_DEFAULT_GRACE_PERIOD
+          value: {{ .Values.gpuPreemption.defaultGracePeriod | quote }}
+        - name: GPU_PREEMPTION_DEFAULT_POLICY
+          value: {{ .Values.gpuPreemption.defaultPolicy | quote }}
+        - name: GPU_PREEMPTION_DEFAULT_AGGREGATION
+          value: {{ .Values.gpuPreemption.defaultAggregation | quote }}
+        - name: GPU_PREEMPTION_DEFAULT_TTL
+          value: {{ .Values.gpuPreemption.defaultTTL | quote }}
+        - name: GPU_PREEMPTION_OPERATOR_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        {{- end }}
         name: manager
         {{- if .Values.webhooks.enabled }}
         volumeMounts:
