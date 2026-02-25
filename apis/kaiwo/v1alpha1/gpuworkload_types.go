@@ -52,9 +52,16 @@ const (
 type GpuWorkloadPhase string
 
 const (
-	// GpuWorkloadPhasePending indicates pods are pending specifically due to
-	// insufficient GPU resources (validated via the scheduler condition message).
-	GpuWorkloadPhasePending GpuWorkloadPhase = "Pending"
+	// GpuWorkloadPhasePendingGpu indicates pods are unschedulable specifically
+	// due to insufficient GPU resources (validated via the scheduler condition
+	// message). Acts as the demand signal for OnPressure preemption.
+	GpuWorkloadPhasePendingGpu GpuWorkloadPhase = "PendingGpu"
+
+	// GpuWorkloadPhasePendingOther indicates pods exist but are not yet
+	// Running for non-GPU reasons: image pulls, init containers, PVC
+	// binding, node affinity, taints, etc. No idle time is counted and
+	// the phase does not trigger preemption evaluation.
+	GpuWorkloadPhasePendingOther GpuWorkloadPhase = "PendingOther"
 
 	// GpuWorkloadPhaseActive indicates pods are running and aggregated GPU
 	// utilization is at or above the configured threshold.
@@ -110,10 +117,10 @@ type GpuWorkloadSpec struct {
 	// +optional
 	UtilizationThreshold *float64 `json:"utilizationThreshold,omitempty"`
 
-	// GracePeriod overrides the cluster-wide default (GPU_PREEMPTION_DEFAULT_GRACE_PERIOD).
+	// IfIdleAfter overrides the cluster-wide default (GPU_PREEMPTION_DEFAULT_IF_IDLE_AFTER).
 	// The workload must be idle for at least this duration before becoming preemptible.
 	// +optional
-	GracePeriod *metav1.Duration `json:"gracePeriod,omitempty"`
+	IfIdleAfter *metav1.Duration `json:"ifIdleAfter,omitempty"`
 
 	// PreemptionPolicy overrides the cluster-wide default (GPU_PREEMPTION_DEFAULT_POLICY).
 	// +optional
@@ -181,7 +188,7 @@ type GpuWorkloadStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
 // +kubebuilder:printcolumn:name="Utilization",type="number",JSONPath=".status.aggregatedUtilization",format="float"
-// +kubebuilder:printcolumn:name="IdleSince",type="string",JSONPath=".status.idleSince"
+// +kubebuilder:printcolumn:name="Idle Since",type="date",JSONPath=".status.idleSince"
 // +kubebuilder:printcolumn:name="Owner",type="string",JSONPath=".spec.workloadRef.kind"
 // +kubebuilder:printcolumn:name="OwnerName",type="string",JSONPath=".spec.workloadRef.name"
 type GpuWorkload struct {

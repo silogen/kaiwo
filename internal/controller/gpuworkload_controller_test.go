@@ -201,7 +201,7 @@ var _ = Describe("GpuWorkload Controller", func() {
 			annotations := map[string]string{
 				AnnotationEnabled:     "true",
 				AnnotationThreshold:   "10.5",
-				AnnotationGracePeriod: "5m",
+				AnnotationIfIdleAfter: "5m",
 				AnnotationPolicy:      "Always",
 				AnnotationAggregation: "Avg",
 				AnnotationTTL:         "48h",
@@ -213,8 +213,8 @@ var _ = Describe("GpuWorkload Controller", func() {
 
 			Expect(spec.UtilizationThreshold).NotTo(BeNil())
 			Expect(*spec.UtilizationThreshold).To(BeNumerically("~", 10.5))
-			Expect(spec.GracePeriod).NotTo(BeNil())
-			Expect(spec.GracePeriod.Duration).To(Equal(5 * time.Minute))
+			Expect(spec.IfIdleAfter).NotTo(BeNil())
+			Expect(spec.IfIdleAfter.Duration).To(Equal(5 * time.Minute))
 			Expect(spec.PreemptionPolicy).NotTo(BeNil())
 			Expect(*spec.PreemptionPolicy).To(Equal(kaiwo.PreemptionPolicyAlways))
 			Expect(spec.AggregationPolicy).NotTo(BeNil())
@@ -226,7 +226,7 @@ var _ = Describe("GpuWorkload Controller", func() {
 		It("should ignore invalid annotations", func() {
 			annotations := map[string]string{
 				AnnotationThreshold:   "notanumber",
-				AnnotationGracePeriod: "invalid",
+				AnnotationIfIdleAfter: "invalid",
 				AnnotationPolicy:      "InvalidPolicy",
 				AnnotationAggregation: "InvalidAgg",
 			}
@@ -236,9 +236,43 @@ var _ = Describe("GpuWorkload Controller", func() {
 			parseAnnotationsIntoSpec(annotations, spec)
 
 			Expect(spec.UtilizationThreshold).To(BeNil())
-			Expect(spec.GracePeriod).To(BeNil())
+			Expect(spec.IfIdleAfter).To(BeNil())
 			Expect(spec.PreemptionPolicy).To(BeNil())
 			Expect(spec.AggregationPolicy).To(BeNil())
+		})
+	})
+
+	Context("isGpuPreemptionAnnotated", func() {
+		It("should return true with explicit enabled annotation", func() {
+			annotations := map[string]string{
+				AnnotationEnabled: "true",
+			}
+			Expect(isGpuPreemptionAnnotated(annotations)).To(BeTrue())
+		})
+
+		It("should return true with only if-idle-after (implicit enable)", func() {
+			annotations := map[string]string{
+				AnnotationIfIdleAfter: "5m",
+			}
+			Expect(isGpuPreemptionAnnotated(annotations)).To(BeTrue())
+		})
+
+		It("should return true with only policy annotation (implicit enable)", func() {
+			annotations := map[string]string{
+				AnnotationPolicy: "Always",
+			}
+			Expect(isGpuPreemptionAnnotated(annotations)).To(BeTrue())
+		})
+
+		It("should return false with nil annotations", func() {
+			Expect(isGpuPreemptionAnnotated(nil)).To(BeFalse())
+		})
+
+		It("should return false with no preemption annotations", func() {
+			annotations := map[string]string{
+				"some-other-annotation": "value",
+			}
+			Expect(isGpuPreemptionAnnotated(annotations)).To(BeFalse())
 		})
 	})
 

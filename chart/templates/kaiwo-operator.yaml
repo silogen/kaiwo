@@ -125,8 +125,8 @@ spec:
           value: {{ .Values.gpuPreemption.pollingInterval | quote }}
         - name: GPU_PREEMPTION_DEFAULT_THRESHOLD
           value: {{ .Values.gpuPreemption.defaultThreshold | quote }}
-        - name: GPU_PREEMPTION_DEFAULT_GRACE_PERIOD
-          value: {{ .Values.gpuPreemption.defaultGracePeriod | quote }}
+        - name: GPU_PREEMPTION_DEFAULT_IF_IDLE_AFTER
+          value: {{ .Values.gpuPreemption.defaultIfIdleAfter | quote }}
         - name: GPU_PREEMPTION_DEFAULT_POLICY
           value: {{ .Values.gpuPreemption.defaultPolicy | quote }}
         - name: GPU_PREEMPTION_DEFAULT_AGGREGATION

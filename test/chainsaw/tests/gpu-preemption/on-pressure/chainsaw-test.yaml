@@ -1,0 +1,70 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: test-gpu-preemption-on-pressure
+spec:
+  concurrent: false
+  steps:
+  - name: saturate-and-idle
+    description: Deploy victim Job that uses all cluster GPUs and wait for it to become idle
+    try:
+    - apply:
+        file: job-victim.yaml
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: GpuWorkload
+          spec:
+            workloadRef:
+              name: gpu-preemption-pressure-victim
+          status:
+            phase: Idle
+    - sleep:
+        duration: 20s
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+  - name: create-demand-and-verify-preemption
+    description: Deploy demand Job that triggers GPU pressure and verify victim is preempted
+    try:
+    - apply:
+        file: job-demand.yaml
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: GpuWorkload
+          spec:
+            workloadRef:
+              name: gpu-preemption-pressure-demand
+          status:
+            phase: PendingGpu
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: GpuWorkload
+          spec:
+            workloadRef:
+              name: gpu-preemption-pressure-victim
+          status:
+            phase: Preempted
+    - error:
+        resource:
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: gpu-preemption-pressure-victim
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]

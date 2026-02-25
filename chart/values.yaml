@@ -90,7 +90,7 @@ gpuPreemption:
   metricsEndpoint: ""       # AMD GPU metrics exporter URL (required when enabled)
   pollingInterval: "15s"    # How often the scraper polls the metrics endpoint
   defaultThreshold: "5"     # Default utilization threshold (%) below which a workload is idle
-  defaultGracePeriod: "10m" # Default idle duration before preemption eligibility
+  defaultIfIdleAfter: "10m" # Default idle duration before preemption eligibility
   defaultPolicy: "OnPressure" # Default preemption policy (OnPressure or Always)
   defaultAggregation: "Max"   # Default multi-pod aggregation (Min, Max, or Avg)
   defaultTTL: "24h"           # Default TTL for terminal GpuWorkload CRs ("0" = retain forever)

@@ -125,6 +125,7 @@ func (s *GpuMetricsScraper) poll(ctx context.Context) error {
 
 	samples := parseGpuSamples(family)
 	if len(samples) == 0 {
+		logger.Info("scrape completed: metric found but no valid samples", "metric", gpuActivityMetric)
 		return nil
 	}
 
@@ -145,6 +146,7 @@ func (s *GpuMetricsScraper) poll(ctx context.Context) error {
 		return fmt.Errorf("failed to list GpuWorkloads: %w", err)
 	}
 
+	activeGW := 0
 	gwByOwner := make(map[gwLookupKey]*kaiwo.GpuWorkload)
 	for i := range allGW.Items {
 		gw := &allGW.Items[i]
@@ -153,12 +155,16 @@ func (s *GpuMetricsScraper) poll(ctx context.Context) error {
 		}
 		k := gwLookupKey{namespace: gw.Namespace, uid: string(gw.Spec.WorkloadRef.UID)}
 		gwByOwner[k] = gw
+		activeGW++
 	}
 
 	// For each pod with metrics, find its owner pod and match to a GpuWorkload
+	matched := 0
+	updated := 0
 	for pk, podSamples := range samplesByPod {
 		pod := &corev1.Pod{}
 		if err := s.client.Get(ctx, client.ObjectKey{Namespace: pk.namespace, Name: pk.podName}, pod); err != nil {
+			logger.V(1).Info("pod from metrics not found in cluster", "namespace", pk.namespace, "pod", pk.podName)
 			continue
 		}
 
@@ -166,7 +172,10 @@ func (s *GpuMetricsScraper) poll(ctx context.Context) error {
 		if gwName, ok := pod.Labels["kaiwo.silogen.ai/gpu-workload"]; ok {
 			var gw kaiwo.GpuWorkload
 			if err := s.client.Get(ctx, client.ObjectKey{Namespace: pk.namespace, Name: gwName}, &gw); err == nil {
-				s.updatePodUtilizations(ctx, &gw, pk.podName, podSamples)
+				matched++
+				if s.updatePodUtilizations(ctx, &gw, pk.podName, podSamples) {
+					updated++
+				}
 				continue
 			}
 		}
@@ -174,10 +183,22 @@ func (s *GpuMetricsScraper) poll(ctx context.Context) error {
 		// Walk owner refs to find the root owner UID, then match
 		gw := s.findGpuWorkloadForPod(ctx, pod, gwByOwner)
 		if gw == nil {
+			logger.V(1).Info("pod has GPU metrics but no matching GpuWorkload", "namespace", pk.namespace, "pod", pk.podName)
 			continue
 		}
-		s.updatePodUtilizations(ctx, gw, pk.podName, podSamples)
+		matched++
+		if s.updatePodUtilizations(ctx, gw, pk.podName, podSamples) {
+			updated++
+		}
 	}
+
+	logger.Info("scrape completed",
+		"gpuSamples", len(samples),
+		"pods", len(samplesByPod),
+		"trackedGpuWorkloads", activeGW,
+		"podsMatched", matched,
+		"gpuWorkloadsUpdated", updated,
+	)
 
 	return nil
 }
@@ -196,7 +217,7 @@ func (s *GpuMetricsScraper) findGpuWorkloadForPod(ctx context.Context, pod *core
 	return gwByOwner[key]
 }
 
-func (s *GpuMetricsScraper) updatePodUtilizations(ctx context.Context, gw *kaiwo.GpuWorkload, podName string, samples []gpuSample) {
+func (s *GpuMetricsScraper) updatePodUtilizations(ctx context.Context, gw *kaiwo.GpuWorkload, podName string, samples []gpuSample) bool {
 	logger := log.FromContext(ctx).WithName("GpuMetricsScraper")
 	now := metav1.Now()
 	changed := false
@@ -231,8 +252,11 @@ func (s *GpuMetricsScraper) updatePodUtilizations(ctx context.Context, gw *kaiwo
 		gw.Status.LastMetricsUpdate = &now
 		if err := s.client.Status().Update(ctx, gw); err != nil {
 			logger.V(1).Info("failed to update pod utilizations", "gpuworkload", gw.Name, "error", err)
+			return false
 		}
+		return true
 	}
+	return false
 }
 
 func (s *GpuMetricsScraper) scrape() (map[string]*dto.MetricFamily, error) {

@@ -1,0 +1,31 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: test-gpu-preemption-discovery-pod
+spec:
+  concurrent: false
+  steps:
+  - name: discover-gpuworkload-for-pod
+    description: Verify GpuWorkload is created for a bare annotated Pod (no owner chain)
+    try:
+    - apply:
+        file: pod.yaml
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: GpuWorkload
+          spec:
+            workloadRef:
+              kind: Pod
+              name: gpu-preemption-discover-pod
+            gpuResources:
+              amd.com/gpu: 1
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]

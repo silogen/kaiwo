@@ -1,0 +1,29 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gpu-preemption-active-workload
+  annotations:
+    kaiwo.silogen.ai/gpu-preemption.policy: "Always"
+    kaiwo.silogen.ai/gpu-preemption.if-idle-after: "15s"
+spec:
+  template:
+    spec:
+      containers:
+      - name: gpu-stress
+        image: rocm/pytorch:latest
+        command: ["python3", "-c"]
+        args:
+        - |
+          import signal, sys, torch
+          signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+          d = torch.device('cuda')
+          a = torch.randn(4096, 4096, device=d)
+          while True:
+              a = torch.mm(a, a)
+              a = a / a.norm()
+        resources:
+          requests:
+            amd.com/gpu: "1"
+          limits:
+            amd.com/gpu: "1"
+      restartPolicy: Never

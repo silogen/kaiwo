@@ -23,8 +23,8 @@ spec:
       name: Utilization
       type: number
     - jsonPath: .status.idleSince
-      name: IdleSince
-      type: string
+      name: Idle Since
+      type: date
     - jsonPath: .spec.workloadRef.kind
       name: Owner
       type: string
@@ -79,9 +79,9 @@ spec:
                   Used for resource-name-aware pressure matching and capacity-aware fit
                   checks during preemption evaluation.
                 type: object
-              gracePeriod:
+              ifIdleAfter:
                 description: |-
-                  GracePeriod overrides the cluster-wide default (GPU_PREEMPTION_DEFAULT_GRACE_PERIOD).
+                  IfIdleAfter overrides the cluster-wide default (GPU_PREEMPTION_DEFAULT_IF_IDLE_AFTER).
                   The workload must be idle for at least this duration before becoming preemptible.
                 type: string
               preemptionPolicy:

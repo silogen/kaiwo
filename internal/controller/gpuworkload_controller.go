@@ -44,7 +44,6 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -56,7 +55,7 @@ const (
 	AnnotationPrefix        = "kaiwo.silogen.ai/gpu-preemption."
 	AnnotationEnabled       = AnnotationPrefix + "enabled"
 	AnnotationThreshold     = AnnotationPrefix + "threshold"
-	AnnotationGracePeriod   = AnnotationPrefix + "grace-period"
+	AnnotationIfIdleAfter   = AnnotationPrefix + "if-idle-after"
 	AnnotationPolicy        = AnnotationPrefix + "policy"
 	AnnotationAggregation   = AnnotationPrefix + "aggregation"
 	AnnotationTTL           = AnnotationPrefix + "ttl"
@@ -68,7 +67,7 @@ const (
 	EnvGpuPreemptionPrefix  = "GPU_PREEMPTION_"
 	EnvEnabled              = EnvGpuPreemptionPrefix + "ENABLED"
 	EnvDefaultThreshold     = EnvGpuPreemptionPrefix + "DEFAULT_THRESHOLD"
-	EnvDefaultGracePeriod   = EnvGpuPreemptionPrefix + "DEFAULT_GRACE_PERIOD"
+	EnvDefaultIfIdleAfter   = EnvGpuPreemptionPrefix + "DEFAULT_IF_IDLE_AFTER"
 	EnvDefaultPolicy        = EnvGpuPreemptionPrefix + "DEFAULT_POLICY"
 	EnvDefaultAggregation   = EnvGpuPreemptionPrefix + "DEFAULT_AGGREGATION"
 	EnvDefaultTTL           = EnvGpuPreemptionPrefix + "DEFAULT_TTL"
@@ -88,7 +87,7 @@ func IsGpuPreemptionEnabled() bool {
 // +kubebuilder:rbac:groups=ray.io,resources=rayjobs;rayservices;rayclusters,verbs=get;list;delete
 // +kubebuilder:rbac:groups=workload.codeflare.dev,resources=appwrappers,verbs=get;list;delete
 // +kubebuilder:rbac:groups=kaiwo.silogen.ai,resources=kaiwojobs;kaiwoservices,verbs=get;list;delete
-// +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;create;update
+// +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch;create;update
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 type GpuWorkloadReconciler struct {
@@ -126,9 +125,16 @@ func (r *GpuWorkloadReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		now := metav1.Now()
 		gw.Status.Phase = kaiwo.GpuWorkloadPhaseDeleted
 		gw.Status.FinishedAt = &now
+		gw.Status.IdleSince = nil
 		if err := r.Status().Update(ctx, &gw); err != nil {
+			if errors.IsConflict(err) {
+				return ctrl.Result{Requeue: true}, nil
+			}
 			return ctrl.Result{}, err
 		}
+		r.Recorder.Eventf(&gw, corev1.EventTypeNormal, "WorkloadDeleted",
+			"Underlying %s/%s no longer exists; GpuWorkload will be retained for TTL",
+			gw.Spec.WorkloadRef.Kind, gw.Spec.WorkloadRef.Name)
 		return ctrl.Result{RequeueAfter: IdleRequeueInterval}, nil
 	}
 
@@ -144,6 +150,9 @@ func (r *GpuWorkloadReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			ownedPods = append(ownedPods, podList.Items[i])
 		}
 	}
+
+	// Prune podUtilizations for pods that no longer exist
+	r.pruneStaleUtilizations(&gw, ownedPods)
 
 	oldPhase := gw.Status.Phase
 
@@ -162,18 +171,28 @@ func (r *GpuWorkloadReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	if err := r.Status().Update(ctx, &gw); err != nil {
+		if errors.IsConflict(err) {
+			return ctrl.Result{Requeue: true}, nil
+		}
 		return ctrl.Result{}, err
 	}
 
-	// Trigger preemption evaluation on relevant phase transitions
+	// Emit events on phase transitions
 	phaseChanged := oldPhase != phase
-	if phaseChanged && (phase == kaiwo.GpuWorkloadPhaseIdle || phase == kaiwo.GpuWorkloadPhasePending || phase == kaiwo.GpuWorkloadPhaseActive) {
+	if phaseChanged {
+		r.emitPhaseTransitionEvent(&gw, oldPhase, phase)
+	}
+
+	if phaseChanged && (phase == kaiwo.GpuWorkloadPhaseIdle || phase == kaiwo.GpuWorkloadPhasePendingGpu || phase == kaiwo.GpuWorkloadPhaseActive) {
 		if err := r.tryRunPreemptionEvaluation(ctx, &gw); err != nil {
-			logger.Error(err, "preemption evaluation failed")
+			return ctrl.Result{}, err
 		}
 	}
 
 	if phase == kaiwo.GpuWorkloadPhaseIdle {
+		if err := r.tryRunPreemptionEvaluation(ctx, &gw); err != nil {
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{RequeueAfter: IdleRequeueInterval}, nil
 	}
 
@@ -183,16 +202,33 @@ func (r *GpuWorkloadReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 func (r *GpuWorkloadReconciler) computePhase(_ context.Context, gw *kaiwo.GpuWorkload, pods []corev1.Pod) kaiwo.GpuWorkloadPhase {
 	if len(pods) == 0 {
 		if gw.Status.Phase == "" {
-			return kaiwo.GpuWorkloadPhasePending
+			return kaiwo.GpuWorkloadPhasePendingOther
 		}
+		// No pods but owner still exists (checked before this function) --
+		// keep the current phase and let the next reconcile sort it out.
 		return gw.Status.Phase
 	}
 
-	// Check if any pods are pending due to GPU insufficiency
+	// Check if any pods are pending specifically due to GPU insufficiency.
+	// This is the demand signal for OnPressure preemption.
 	for i := range pods {
 		if pods[i].Status.Phase == corev1.PodPending && isPendingDueToGPU(&pods[i], gw.Spec.GpuResources) {
-			return kaiwo.GpuWorkloadPhasePending
+			return kaiwo.GpuWorkloadPhasePendingGpu
 		}
+	}
+
+	// Only evaluate utilization once at least one pod is Running.
+	// Pods in ContainerCreating, pending for PVCs/affinity/etc., or running
+	// init containers are PendingOther -- not idle, not a GPU demand signal.
+	hasRunningPod := false
+	for i := range pods {
+		if pods[i].Status.Phase == corev1.PodRunning {
+			hasRunningPod = true
+			break
+		}
+	}
+	if !hasRunningPod {
+		return kaiwo.GpuWorkloadPhasePendingOther
 	}
 
 	// Compute aggregated utilization from status.podUtilizations
@@ -200,13 +236,7 @@ func (r *GpuWorkloadReconciler) computePhase(_ context.Context, gw *kaiwo.GpuWor
 	gw.Status.AggregatedUtilization = aggUtil
 
 	if aggUtil == nil {
-		// No utilization data yet; if pods are running, consider Active until data arrives
-		for i := range pods {
-			if pods[i].Status.Phase == corev1.PodRunning {
-				return kaiwo.GpuWorkloadPhaseActive
-			}
-		}
-		return gw.Status.Phase
+		return kaiwo.GpuWorkloadPhaseActive
 	}
 
 	threshold := r.getThreshold(gw)
@@ -292,6 +322,26 @@ func (r *GpuWorkloadReconciler) computeAggregatedUtilization(gw *kaiwo.GpuWorklo
 	return &result
 }
 
+func (r *GpuWorkloadReconciler) pruneStaleUtilizations(gw *kaiwo.GpuWorkload, ownedPods []corev1.Pod) {
+	if len(gw.Status.PodUtilizations) == 0 {
+		return
+	}
+	activePods := make(map[string]bool, len(ownedPods))
+	for i := range ownedPods {
+		activePods[ownedPods[i].Name] = true
+	}
+	kept := gw.Status.PodUtilizations[:0]
+	for _, pu := range gw.Status.PodUtilizations {
+		if activePods[pu.PodName] {
+			kept = append(kept, pu)
+		}
+	}
+	gw.Status.PodUtilizations = kept
+	if len(kept) == 0 {
+		gw.Status.AggregatedUtilization = nil
+	}
+}
+
 func (r *GpuWorkloadReconciler) handlePreempting(ctx context.Context, gw *kaiwo.GpuWorkload) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
@@ -310,6 +360,9 @@ func (r *GpuWorkloadReconciler) handlePreempting(ctx context.Context, gw *kaiwo.
 			gw.Status.PreemptedFor = ""
 			gw.Status.PreemptionReason = ""
 			if err := r.Status().Update(ctx, gw); err != nil {
+				if errors.IsConflict(err) {
+					return ctrl.Result{Requeue: true}, nil
+				}
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{RequeueAfter: IdleRequeueInterval}, nil
@@ -324,6 +377,7 @@ func (r *GpuWorkloadReconciler) handlePreempting(ctx context.Context, gw *kaiwo.
 	gw.Status.Phase = kaiwo.GpuWorkloadPhasePreempted
 	gw.Status.PreemptedAt = &now
 	gw.Status.FinishedAt = &now
+	gw.Status.IdleSince = nil
 
 	r.Recorder.Eventf(gw, corev1.EventTypeWarning, "Preempted",
 		"Workload %s/%s preempted for %s: %s",
@@ -331,6 +385,9 @@ func (r *GpuWorkloadReconciler) handlePreempting(ctx context.Context, gw *kaiwo.
 		gw.Status.PreemptedFor, gw.Status.PreemptionReason)
 
 	if err := r.Status().Update(ctx, gw); err != nil {
+		if errors.IsConflict(err) {
+			return ctrl.Result{Requeue: true}, nil
+		}
 		return ctrl.Result{}, err
 	}
 
@@ -385,19 +442,47 @@ func (r *GpuWorkloadReconciler) ownerExists(ctx context.Context, gw *kaiwo.GpuWo
 // GpuWorkload CR. It walks the pod's controller ownerReference chain looking
 // for a UID match against the workload ref.
 func isPodOwnedByWorkload(pod *corev1.Pod, gw *kaiwo.GpuWorkload) bool {
+	// Bare pod: the workloadRef points to the pod itself.
+	if gw.Spec.WorkloadRef.Kind == "Pod" && pod.UID == gw.Spec.WorkloadRef.UID {
+		return true
+	}
 	for _, ref := range pod.OwnerReferences {
 		if ref.UID == gw.Spec.WorkloadRef.UID {
 			return true
 		}
 	}
-	// The pod may not directly reference the root owner; the pod event handler
-	// set a label on the GpuWorkload. Instead, check for matching namespace and
-	// walk labels if needed. For now, we also check if the pod carries a label
-	// pointing to this GpuWorkload.
 	if pod.Labels != nil && pod.Labels["kaiwo.silogen.ai/gpu-workload"] == gw.Name {
 		return true
 	}
 	return false
+}
+
+func (r *GpuWorkloadReconciler) emitPhaseTransitionEvent(gw *kaiwo.GpuWorkload, oldPhase, newPhase kaiwo.GpuWorkloadPhase) {
+	if oldPhase == "" {
+		oldPhase = "(none)"
+	}
+	eventType := corev1.EventTypeNormal
+	reason := "PhaseTransition"
+	switch newPhase {
+	case kaiwo.GpuWorkloadPhaseIdle:
+		reason = "WorkloadIdle"
+	case kaiwo.GpuWorkloadPhaseActive:
+		reason = "WorkloadActive"
+	case kaiwo.GpuWorkloadPhasePendingGpu:
+		reason = "WorkloadPendingGpu"
+	case kaiwo.GpuWorkloadPhasePendingOther:
+		reason = "WorkloadPendingOther"
+	case kaiwo.GpuWorkloadPhasePreempting:
+		eventType = corev1.EventTypeWarning
+		reason = "PreemptionTriggered"
+	case kaiwo.GpuWorkloadPhasePreempted:
+		eventType = corev1.EventTypeWarning
+		reason = "WorkloadPreempted"
+	case kaiwo.GpuWorkloadPhaseDeleted:
+		reason = "WorkloadDeleted"
+	}
+	r.Recorder.Eventf(gw, eventType, reason,
+		"Phase changed: %s -> %s", oldPhase, newPhase)
 }
 
 // --- Preemption Evaluation ---
@@ -430,7 +515,7 @@ func (r *GpuWorkloadReconciler) tryRunPreemptionEvaluation(ctx context.Context, 
 		policy := r.getPreemptionPolicy(w)
 
 		switch w.Status.Phase {
-		case kaiwo.GpuWorkloadPhasePending:
+		case kaiwo.GpuWorkloadPhasePendingGpu:
 			for resName := range w.Spec.GpuResources {
 				pendingByResource[resName] = append(pendingByResource[resName], workloadEntry{
 					gw:       w,
@@ -443,16 +528,16 @@ func (r *GpuWorkloadReconciler) tryRunPreemptionEvaluation(ctx context.Context, 
 				continue
 			}
 
-			gracePeriod := r.getGracePeriod(w)
+			ifIdleAfter := r.getIfIdleAfter(w)
 			idleDuration := time.Since(w.Status.IdleSince.Time)
-			if idleDuration < gracePeriod {
+			if idleDuration < ifIdleAfter {
 				continue
 			}
 
 			if policy == kaiwo.PreemptionPolicyAlways {
-				// Always-policy: mark immediately regardless of demand
 				w.Status.Phase = kaiwo.GpuWorkloadPhasePreempting
-				w.Status.PreemptionReason = "PreemptionPolicy=Always: idle grace period expired"
+				w.Status.IdleSince = nil
+				w.Status.PreemptionReason = "PreemptionPolicy=Always: idle beyond if-idle-after threshold"
 				if err := r.Status().Update(ctx, w); err != nil {
 					if errors.IsConflict(err) {
 						logger.V(1).Info("conflict marking Always-policy workload, skipping", "name", w.Name)
@@ -460,6 +545,8 @@ func (r *GpuWorkloadReconciler) tryRunPreemptionEvaluation(ctx context.Context, 
 					}
 					return err
 				}
+				r.Recorder.Eventf(w, corev1.EventTypeWarning, "PreemptionTriggered",
+					"Workload idle beyond if-idle-after threshold (policy=Always); initiating preemption")
 				continue
 			}
 
@@ -528,6 +615,7 @@ func (r *GpuWorkloadReconciler) tryRunPreemptionEvaluation(ctx context.Context, 
 				claimed[victim.gw.Spec.WorkloadRef.UID] = true
 
 				victim.gw.Status.Phase = kaiwo.GpuWorkloadPhasePreempting
+				victim.gw.Status.IdleSince = nil
 				victim.gw.Status.PreemptedFor = pending.gw.Name
 				victim.gw.Status.PreemptionReason = fmt.Sprintf(
 					"GPU pressure: pending workload %s needs %d %s GPUs",
@@ -542,6 +630,9 @@ func (r *GpuWorkloadReconciler) tryRunPreemptionEvaluation(ctx context.Context, 
 					return err
 				}
 
+				r.Recorder.Eventf(victim.gw, corev1.EventTypeWarning, "PreemptionTriggered",
+					"Preempted to free %d %s GPUs for pending workload %s",
+					victim.gpuCount[resName], resName, pending.gw.Name)
 				logger.Info("marked workload for preemption",
 					"victim", victim.gw.Name,
 					"for", pending.gw.Name,
@@ -656,11 +747,11 @@ func (r *GpuWorkloadReconciler) getThreshold(gw *kaiwo.GpuWorkload) float64 {
 	return val
 }
 
-func (r *GpuWorkloadReconciler) getGracePeriod(gw *kaiwo.GpuWorkload) time.Duration {
-	if gw.Spec.GracePeriod != nil {
-		return gw.Spec.GracePeriod.Duration
+func (r *GpuWorkloadReconciler) getIfIdleAfter(gw *kaiwo.GpuWorkload) time.Duration {
+	if gw.Spec.IfIdleAfter != nil {
+		return gw.Spec.IfIdleAfter.Duration
 	}
-	val, err := time.ParseDuration(os.Getenv(EnvDefaultGracePeriod))
+	val, err := time.ParseDuration(os.Getenv(EnvDefaultIfIdleAfter))
 	if err != nil {
 		return 10 * time.Minute
 	}
@@ -732,7 +823,7 @@ func (r *GpuWorkloadReconciler) podToGpuWorkload(ctx context.Context, obj client
 	}
 
 	annotations := rootObj.GetAnnotations()
-	if annotations == nil || annotations[AnnotationEnabled] != "true" {
+	if !isGpuPreemptionAnnotated(annotations) {
 		return nil
 	}
 
@@ -759,10 +850,6 @@ func (r *GpuWorkloadReconciler) podToGpuWorkload(ctx context.Context, obj client
 
 		parseAnnotationsIntoSpec(annotations, &gw.Spec)
 
-		if err := controllerutil.SetOwnerReference(rootObj, gw, r.Scheme); err != nil {
-			logger.V(1).Info("could not set owner reference on GpuWorkload (non-fatal)", "error", err)
-		}
-
 		if err := r.Create(ctx, gw); err != nil {
 			if !errors.IsAlreadyExists(err) {
 				logger.Error(err, "failed to create GpuWorkload", "name", gwName)
@@ -770,10 +857,12 @@ func (r *GpuWorkloadReconciler) podToGpuWorkload(ctx context.Context, obj client
 			return []reconcile.Request{{NamespacedName: types.NamespacedName{Namespace: rootResult.Namespace, Name: gwName}}}
 		}
 
-		gw.Status.Phase = kaiwo.GpuWorkloadPhasePending
+		gw.Status.Phase = kaiwo.GpuWorkloadPhasePendingOther
 		gw.Status.OwnerChain = rootResult.OwnerChain
 		if err := r.Status().Update(ctx, gw); err != nil {
-			logger.Error(err, "failed to set initial status", "name", gwName)
+			if !errors.IsConflict(err) {
+				logger.Error(err, "failed to set initial status", "name", gwName)
+			}
 		}
 
 		logger.Info("created GpuWorkload", "name", gwName, "owner", rootResult.Ref.Kind+"/"+rootResult.Ref.Name)
@@ -827,16 +916,30 @@ func extractGpuResources(pod *corev1.Pod) map[string]int {
 	return resources
 }
 
+// isGpuPreemptionAnnotated returns true if the resource has the explicit
+// enabled annotation OR any other gpu-preemption annotation (implicit enable).
+func isGpuPreemptionAnnotated(annotations map[string]string) bool {
+	if len(annotations) == 0 {
+		return false
+	}
+	for k := range annotations {
+		if strings.HasPrefix(k, AnnotationPrefix) {
+			return true
+		}
+	}
+	return false
+}
+
 func parseAnnotationsIntoSpec(annotations map[string]string, spec *kaiwo.GpuWorkloadSpec) {
 	if v, ok := annotations[AnnotationThreshold]; ok {
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
 			spec.UtilizationThreshold = &f
 		}
 	}
-	if v, ok := annotations[AnnotationGracePeriod]; ok {
+	if v, ok := annotations[AnnotationIfIdleAfter]; ok {
 		if d, err := time.ParseDuration(v); err == nil {
 			dur := metav1.Duration{Duration: d}
-			spec.GracePeriod = &dur
+			spec.IfIdleAfter = &dur
 		}
 	}
 	if v, ok := annotations[AnnotationPolicy]; ok {

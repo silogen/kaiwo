@@ -1,0 +1,86 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: test-gpu-preemption-no-fit
+spec:
+  concurrent: false
+  steps:
+  - name: idle-victim
+    description: Deploy victim Job with 1 GPU and wait for it to become idle past if-idle-after
+    try:
+    - apply:
+        file: job-victim.yaml
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: GpuWorkload
+          spec:
+            workloadRef:
+              name: gpu-preemption-nofit-victim
+          status:
+            phase: Idle
+    - sleep:
+        duration: 20s
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+  - name: demand-without-fit
+    description: >
+      Deploy demand Job requesting 9999 GPUs (impossible to satisfy) and verify
+      the victim is NOT preempted since freeing 1 GPU would not help.
+    try:
+    - apply:
+        file: job-demand.yaml
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: GpuWorkload
+          spec:
+            workloadRef:
+              name: gpu-preemption-nofit-demand
+          status:
+            phase: PendingGpu
+    - sleep:
+        duration: 60s
+    - error:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: GpuWorkload
+          spec:
+            workloadRef:
+              name: gpu-preemption-nofit-victim
+          status:
+            phase: Preempting
+    - error:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: GpuWorkload
+          spec:
+            workloadRef:
+              name: gpu-preemption-nofit-victim
+          status:
+            phase: Preempted
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: GpuWorkload
+          spec:
+            workloadRef:
+              name: gpu-preemption-nofit-victim
+          status:
+            phase: Idle
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]

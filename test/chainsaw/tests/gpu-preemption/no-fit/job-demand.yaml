@@ -1,0 +1,20 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gpu-preemption-nofit-demand
+  annotations:
+    kaiwo.silogen.ai/gpu-preemption.enabled: "true"
+    kaiwo.silogen.ai/gpu-preemption.policy: "OnPressure"
+spec:
+  template:
+    spec:
+      containers:
+      - name: workload
+        image: busybox:latest
+        command: ["sleep", "600"]
+        resources:
+          requests:
+            amd.com/gpu: "9999"
+          limits:
+            amd.com/gpu: "9999"
+      restartPolicy: Never
