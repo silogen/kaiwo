@@ -136,6 +136,8 @@ func (r *GpuWorkloadReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		gw.Status.Phase = kaiwo.GpuWorkloadPhaseDeleted
 		gw.Status.FinishedAt = &now
 		gw.Status.IdleSince = nil
+		gw.Status.AggregatedUtilization = nil
+		gw.Status.PodUtilizations = nil
 		if err := r.Status().Update(ctx, &gw); err != nil {
 			if errors.IsConflict(err) {
 				return ctrl.Result{Requeue: true}, nil
@@ -148,41 +150,13 @@ func (r *GpuWorkloadReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{RequeueAfter: IdleRequeueInterval}, nil
 	}
 
-	// List pods belonging to this workload
-	podList := &corev1.PodList{}
-	if err := r.List(ctx, podList, client.InNamespace(gw.Namespace)); err != nil {
+	ownedPods, requeue, err := r.syncOwnedPods(ctx, req, &gw)
+	if requeue {
+		return ctrl.Result{Requeue: true}, nil
+	}
+	if err != nil {
 		return ctrl.Result{}, err
 	}
-
-	var ownedPods []corev1.Pod
-	for i := range podList.Items {
-		if r.isPodOwnedByWorkload(ctx, &podList.Items[i], &gw) {
-			ownedPods = append(ownedPods, podList.Items[i])
-		}
-	}
-
-	// Recompute total GPU resources from owned pods so fit checks are accurate
-	// for multi-pod workloads. Only update when pods exist to avoid zeroing out
-	// the value after the workload is deleted.
-	if len(ownedPods) > 0 {
-		totalGpu := computeTotalGpuResources(ownedPods)
-		if !gpuResourcesEqual(gw.Spec.GpuResources, totalGpu) {
-			gw.Spec.GpuResources = totalGpu
-			if err := r.Update(ctx, &gw); err != nil {
-				if errors.IsConflict(err) {
-					return ctrl.Result{Requeue: true}, nil
-				}
-				return ctrl.Result{}, err
-			}
-			// Re-fetch to avoid operating on stale resourceVersion
-			if err := r.Get(ctx, req.NamespacedName, &gw); err != nil {
-				return ctrl.Result{}, client.IgnoreNotFound(err)
-			}
-		}
-	}
-
-	// Prune podUtilizations for pods that no longer exist
-	r.pruneStaleUtilizations(&gw, ownedPods)
 
 	oldPhase := gw.Status.Phase
 
@@ -407,6 +381,8 @@ func (r *GpuWorkloadReconciler) handlePreempting(ctx context.Context, gw *kaiwo.
 	gw.Status.PreemptedAt = &now
 	gw.Status.FinishedAt = &now
 	gw.Status.IdleSince = nil
+	gw.Status.AggregatedUtilization = nil
+	gw.Status.PodUtilizations = nil
 
 	r.Recorder.Eventf(gw, corev1.EventTypeWarning, "WorkloadPreempted",
 		"%s/%s was deleted to free GPU resources; reason: %s",
@@ -442,6 +418,43 @@ func (r *GpuWorkloadReconciler) handleTerminal(ctx context.Context, gw *kaiwo.Gp
 	}
 
 	return ctrl.Result{RequeueAfter: ttl - elapsed}, nil
+}
+
+// syncOwnedPods lists pods in the workload's namespace, filters by ownership,
+// recomputes the workload-wide GPU resource total in the spec, and prunes
+// stale utilization entries. If the spec update hits an optimistic concurrency
+// conflict, requeue is returned as true so the caller can retry.
+func (r *GpuWorkloadReconciler) syncOwnedPods(ctx context.Context, req ctrl.Request, gw *kaiwo.GpuWorkload) (pods []corev1.Pod, requeue bool, err error) {
+	podList := &corev1.PodList{}
+	if err := r.List(ctx, podList, client.InNamespace(gw.Namespace)); err != nil {
+		return nil, false, err
+	}
+
+	var ownedPods []corev1.Pod
+	for i := range podList.Items {
+		if r.isPodOwnedByWorkload(ctx, &podList.Items[i], gw) {
+			ownedPods = append(ownedPods, podList.Items[i])
+		}
+	}
+
+	if len(ownedPods) > 0 {
+		totalGpu := computeTotalGpuResources(ownedPods)
+		if !gpuResourcesEqual(gw.Spec.GpuResources, totalGpu) {
+			gw.Spec.GpuResources = totalGpu
+			if err := r.Update(ctx, gw); err != nil {
+				if errors.IsConflict(err) {
+					return nil, true, nil
+				}
+				return nil, false, err
+			}
+			if err := r.Get(ctx, req.NamespacedName, gw); err != nil {
+				return nil, false, client.IgnoreNotFound(err)
+			}
+		}
+	}
+
+	r.pruneStaleUtilizations(gw, ownedPods)
+	return ownedPods, false, nil
 }
 
 func (r *GpuWorkloadReconciler) deleteWorkload(ctx context.Context, gw *kaiwo.GpuWorkload) error {
@@ -605,6 +618,21 @@ func (r *GpuWorkloadReconciler) emitPhaseTransitionEvent(gw *kaiwo.GpuWorkload, 
 
 // --- Preemption Evaluation ---
 
+type workloadEntry struct {
+	gw        *kaiwo.GpuWorkload
+	gpuCount  map[string]int
+	idleSince time.Time
+}
+
+type preemptionState struct {
+	pendingByResource map[string][]workloadEntry
+	idleByResource    map[string][]workloadEntry
+	// inFlight tracks GPU capacity already being freed for each pending
+	// workload (by name), keyed by resource name, preventing over-preemption
+	// across evaluation cycles.
+	inFlight map[string]map[string]int
+}
+
 func (r *GpuWorkloadReconciler) tryRunPreemptionEvaluation(ctx context.Context, _ *kaiwo.GpuWorkload, gpuCfg configapi.KaiwoGpuPreemptionConfig) error {
 	logger := log.FromContext(ctx)
 
@@ -619,30 +647,35 @@ func (r *GpuWorkloadReconciler) tryRunPreemptionEvaluation(ctx context.Context, 
 		return fmt.Errorf("failed to list GpuWorkloads: %w", err)
 	}
 
-	type workloadEntry struct {
-		gw        *kaiwo.GpuWorkload
-		gpuCount  map[string]int
-		idleSince time.Time
+	state, err := r.classifyWorkloads(ctx, allWorkloads.Items, gpuCfg)
+	if err != nil {
+		return err
 	}
 
-	pendingByResource := make(map[string][]workloadEntry)
-	idleByResource := make(map[string][]workloadEntry)
+	return r.matchAndMarkVictims(ctx, state)
+}
 
-	// Track GPU capacity already being freed for each pending workload name,
-	// keyed by resource name. This prevents over-preemption across evaluation
-	// cycles: if victims were marked Preempting in a previous cycle but the
-	// pending workload hasn't been scheduled yet, we don't select more victims.
-	// inFlight[pendingGwName][resourceName] = total GPUs already being freed
-	inFlight := make(map[string]map[string]int)
+// classifyWorkloads partitions all GpuWorkloads into pending, idle, and
+// in-flight buckets. Always-policy workloads that exceed their idle duration
+// are marked for preemption immediately. Both pending and idle lists are
+// sorted for deterministic victim selection.
+func (r *GpuWorkloadReconciler) classifyWorkloads(ctx context.Context, workloads []kaiwo.GpuWorkload, gpuCfg configapi.KaiwoGpuPreemptionConfig) (*preemptionState, error) {
+	logger := log.FromContext(ctx)
 
-	for i := range allWorkloads.Items {
-		w := &allWorkloads.Items[i]
+	state := &preemptionState{
+		pendingByResource: make(map[string][]workloadEntry),
+		idleByResource:    make(map[string][]workloadEntry),
+		inFlight:          make(map[string]map[string]int),
+	}
+
+	for i := range workloads {
+		w := &workloads[i]
 		policy := r.getPreemptionPolicy(w, gpuCfg)
 
 		switch w.Status.Phase {
 		case kaiwo.GpuWorkloadPhasePendingGpu:
 			for resName := range w.Spec.GpuResources {
-				pendingByResource[resName] = append(pendingByResource[resName], workloadEntry{
+				state.pendingByResource[resName] = append(state.pendingByResource[resName], workloadEntry{
 					gw:       w,
 					gpuCount: w.Spec.GpuResources,
 				})
@@ -650,11 +683,11 @@ func (r *GpuWorkloadReconciler) tryRunPreemptionEvaluation(ctx context.Context, 
 
 		case kaiwo.GpuWorkloadPhasePreempting:
 			if w.Status.PreemptedFor != "" {
-				if inFlight[w.Status.PreemptedFor] == nil {
-					inFlight[w.Status.PreemptedFor] = make(map[string]int)
+				if state.inFlight[w.Status.PreemptedFor] == nil {
+					state.inFlight[w.Status.PreemptedFor] = make(map[string]int)
 				}
 				for resName, count := range w.Spec.GpuResources {
-					inFlight[w.Status.PreemptedFor][resName] += count
+					state.inFlight[w.Status.PreemptedFor][resName] += count
 				}
 			}
 
@@ -681,7 +714,7 @@ func (r *GpuWorkloadReconciler) tryRunPreemptionEvaluation(ctx context.Context, 
 						logger.V(1).Info("conflict marking Always-policy workload, skipping", "name", w.Name)
 						continue
 					}
-					return err
+					return nil, err
 				}
 				r.Recorder.Eventf(w, corev1.EventTypeWarning, "PreemptionStarted",
 					"Workload has been idle for %s (limit: %s, policy: Always); preempting",
@@ -690,7 +723,7 @@ func (r *GpuWorkloadReconciler) tryRunPreemptionEvaluation(ctx context.Context, 
 			}
 
 			for resName := range w.Spec.GpuResources {
-				idleByResource[resName] = append(idleByResource[resName], workloadEntry{
+				state.idleByResource[resName] = append(state.idleByResource[resName], workloadEntry{
 					gw:        w,
 					gpuCount:  w.Spec.GpuResources,
 					idleSince: w.Status.IdleSince.Time,
@@ -699,25 +732,31 @@ func (r *GpuWorkloadReconciler) tryRunPreemptionEvaluation(ctx context.Context, 
 		}
 	}
 
-	// Sort idle workloads by idle duration (longest idle first) for each resource
-	for resName := range idleByResource {
-		sort.Slice(idleByResource[resName], func(i, j int) bool {
-			return idleByResource[resName][i].idleSince.Before(idleByResource[resName][j].idleSince)
+	for resName := range state.idleByResource {
+		sort.Slice(state.idleByResource[resName], func(i, j int) bool {
+			return state.idleByResource[resName][i].idleSince.Before(state.idleByResource[resName][j].idleSince)
+		})
+	}
+	for resName := range state.pendingByResource {
+		sort.Slice(state.pendingByResource[resName], func(i, j int) bool {
+			return state.pendingByResource[resName][i].gw.CreationTimestamp.Before(&state.pendingByResource[resName][j].gw.CreationTimestamp)
 		})
 	}
 
-	// Sort pending workloads by creation time (oldest first)
-	for resName := range pendingByResource {
-		sort.Slice(pendingByResource[resName], func(i, j int) bool {
-			return pendingByResource[resName][i].gw.CreationTimestamp.Before(&pendingByResource[resName][j].gw.CreationTimestamp)
-		})
-	}
+	return state, nil
+}
 
-	// Track which workloads have been claimed as victims to prevent double-claiming
+// matchAndMarkVictims walks pending workloads (oldest first) and accumulates
+// idle victims (longest-idle first) until each pending workload's GPU demand
+// is satisfied. Victims are marked Preempting only when the combined capacity
+// meets or exceeds the demand (all-or-nothing). The claimed map prevents
+// double-claiming a victim for multiple pending workloads.
+func (r *GpuWorkloadReconciler) matchAndMarkVictims(ctx context.Context, state *preemptionState) error {
+	logger := log.FromContext(ctx)
 	claimed := make(map[types.UID]bool)
 
-	for resName, pendingList := range pendingByResource {
-		idlePool, ok := idleByResource[resName]
+	for resName, pendingList := range state.pendingByResource {
+		idlePool, ok := state.idleByResource[resName]
 		if !ok || len(idlePool) == 0 {
 			continue
 		}
@@ -728,9 +767,7 @@ func (r *GpuWorkloadReconciler) tryRunPreemptionEvaluation(ctx context.Context, 
 				continue
 			}
 
-			// Subtract capacity already being freed by in-flight preemptions
-			// from a previous evaluation cycle targeting this pending workload.
-			if alreadyFreeing, ok := inFlight[pending.gw.Name]; ok {
+			if alreadyFreeing, ok := state.inFlight[pending.gw.Name]; ok {
 				demandCount -= alreadyFreeing[resName]
 				if demandCount <= 0 {
 					continue
