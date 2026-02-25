@@ -26,9 +26,19 @@ flowchart LR
 4. **Reconciliation** -- The reconciler aggregates utilization, determines the phase (`PendingOther`, `PendingGpu`, `Active`, `Idle`, etc.), and evaluates preemption when conditions are met.
 5. **Preemption** -- When an idle workload becomes eligible, a Lease-guarded evaluation ensures only one controller replica runs the global preemption decision at a time, preventing race conditions and over-preemption.
 
+## Configuration Hierarchy
+
+Each setting is resolved through a 4-tier chain. The first non-empty value wins:
+
+```
+per-workload annotation  >  KaiwoConfig  >  operator env var  >  hardcoded fallback
+```
+
+This lets you set cluster-wide runtime defaults (via `KaiwoConfig`) that can be overridden per workload (via annotations), while env vars and hardcoded values provide a safety net.
+
 ## Enabling GPU Preemption
 
-### 1. Cluster-wide: Helm values
+### 1. Operator startup: Helm values / env vars
 
 Enable the feature and point it at the AMD GPU metrics exporter:
 
@@ -45,9 +55,32 @@ gpuPreemption:
   defaultTTL: "24h"
 ```
 
-These map to operator environment variables (see [Environment Variables](#environment-variables) below).
+These map to operator environment variables (see [Environment Variables](#environment-variables) below). Changing them requires an operator restart.
 
-### 2. Per-workload: Annotations
+### 2. Cluster-wide runtime defaults: KaiwoConfig
+
+The `KaiwoConfig` cluster-scoped singleton provides live-tunable defaults that take effect without restarting the operator. Add a `gpuPreemption` section to the spec:
+
+```yaml
+apiVersion: config.kaiwo.silogen.ai/v1alpha1
+kind: KaiwoConfig
+metadata:
+  name: kaiwo
+spec:
+  gpuPreemption:
+    defaultThreshold: 10
+    defaultIfIdleAfter: "15m"
+    defaultPolicy: "OnPressure"
+    defaultAggregation: "Max"
+    defaultTTL: "12h"
+```
+
+All fields are optional. Omitted fields fall through to the env var / hardcoded fallback.
+
+!!!note
+    `metricsEndpoint` and `pollingInterval` are **not** in `KaiwoConfig` because they configure the background metrics scraper, which requires an operator restart to pick up changes.
+
+### 3. Per-workload: Annotations
 
 Add annotations to the **root owner** resource (the Job, Deployment, KaiwoJob, etc. -- not the Pod template) to opt it in:
 
@@ -77,20 +110,20 @@ spec:
 
     - `.enabled: "true"` on its own is valid -- all settings use cluster-wide defaults.
     - `.if-idle-after: "5m"` on its own is also valid -- it implicitly enables tracking without needing `.enabled`.
-    - Any combination works; omitted settings always fall back to the environment variable defaults.
+    - Any combination works; omitted settings fall back through KaiwoConfig, then env vars, then hardcoded defaults.
 
 ## Annotations Reference
 
-All annotations use the prefix `kaiwo.silogen.ai/gpu-preemption.` and are placed on the root owner resource.
+All annotations use the prefix `kaiwo.silogen.ai/gpu-preemption.` and are placed on the root owner resource. Each setting follows the resolution chain: **annotation > KaiwoConfig > env var > hardcoded fallback**.
 
-| Annotation | Description | Env var fallback | Default |
-|---|---|---|---|
-| `.enabled` | Explicitly enable tracking. Can be used on its own (all other settings fall back to cluster-wide defaults). Not required if any other preemption annotation is set. | -- | -- |
-| `.if-idle-after` | Duration the workload must be continuously idle before it becomes preemptible (e.g. `5m`, `1h`). | `GPU_PREEMPTION_DEFAULT_IF_IDLE_AFTER` | `10m` |
-| `.threshold` | Utilization percentage below which the workload is considered idle. | `GPU_PREEMPTION_DEFAULT_THRESHOLD` | `5` |
-| `.policy` | Preemption policy: `OnPressure` or `Always`. | `GPU_PREEMPTION_DEFAULT_POLICY` | `OnPressure` |
-| `.aggregation` | How utilization is aggregated across pods: `Min`, `Max`, or `Avg`. | `GPU_PREEMPTION_DEFAULT_AGGREGATION` | `Max` |
-| `.ttl` | How long the `GpuWorkload` CR is retained after the workload reaches a terminal state. `0` means retain forever. | `GPU_PREEMPTION_DEFAULT_TTL` | `24h` |
+| Annotation | Description | KaiwoConfig field | Env var | Default |
+|---|---|---|---|---|
+| `.enabled` | Explicitly enable tracking. Can be used on its own (all other settings fall back to defaults). Not required if any other preemption annotation is set. | -- | -- | -- |
+| `.if-idle-after` | Duration the workload must be continuously idle before it becomes preemptible (e.g. `5m`, `1h`). | `gpuPreemption.defaultIfIdleAfter` | `GPU_PREEMPTION_DEFAULT_IF_IDLE_AFTER` | `10m` |
+| `.threshold` | Utilization percentage below which the workload is considered idle. | `gpuPreemption.defaultThreshold` | `GPU_PREEMPTION_DEFAULT_THRESHOLD` | `5` |
+| `.policy` | Preemption policy: `OnPressure` or `Always`. | `gpuPreemption.defaultPolicy` | `GPU_PREEMPTION_DEFAULT_POLICY` | `OnPressure` |
+| `.aggregation` | How utilization is aggregated across pods: `Min`, `Max`, or `Avg`. | `gpuPreemption.defaultAggregation` | `GPU_PREEMPTION_DEFAULT_AGGREGATION` | `Max` |
+| `.ttl` | How long the `GpuWorkload` CR is retained after the workload reaches a terminal state. `0` means retain forever. | `gpuPreemption.defaultTTL` | `GPU_PREEMPTION_DEFAULT_TTL` | `24h` |
 
 ## Preemption Policies
 
@@ -209,7 +242,7 @@ metadata:
     kaiwo.silogen.ai/gpu-preemption.enabled: "true"
 ```
 
-Uses all cluster-wide defaults from the Helm values / environment variables.
+Uses all cluster-wide defaults from KaiwoConfig, then Helm values / environment variables.
 
 ## Comparison with Resource Monitoring
 

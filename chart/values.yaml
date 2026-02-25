@@ -131,6 +131,16 @@ kaiwoConfig:
       pollingInterval: "15s"
       prometheusEndpoint: "http://prometheus-k8s.monitoring.svc.cluster.local:9090"
 
+    # GPU preemption cluster-wide runtime defaults (live-tunable, no operator restart needed).
+    # These sit between per-workload annotations and operator env vars in the resolution chain.
+    # Omitted fields fall through to the gpuPreemption.* env vars / hardcoded defaults above.
+    # gpuPreemption:
+    #   defaultThreshold: 5
+    #   defaultIfIdleAfter: "10m"
+    #   defaultPolicy: "OnPressure"
+    #   defaultAggregation: "Max"
+    #   defaultTTL: "24h"
+
     # Default cluster queue settings
     defaultClusterQueueName: "kaiwo"
     defaultClusterQueueCohortName: "kaiwo"

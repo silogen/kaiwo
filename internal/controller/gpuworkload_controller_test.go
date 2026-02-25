@@ -28,6 +28,7 @@ import (
 	"context"
 	"time"
 
+	configapi "github.com/silogen/kaiwo/apis/config/v1alpha1"
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -37,6 +38,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -91,8 +93,9 @@ var _ = Describe("GpuWorkload Controller", func() {
 
 		It("should reconcile without error when owner does not exist", func() {
 			reconciler := &GpuWorkloadReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Recorder: record.NewFakeRecorder(10),
 			}
 			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: namespacedName})
 			Expect(err).NotTo(HaveOccurred())
@@ -118,8 +121,9 @@ var _ = Describe("GpuWorkload Controller", func() {
 			Expect(k8sClient.Status().Update(ctx, gw)).To(Succeed())
 
 			reconciler := &GpuWorkloadReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Recorder: record.NewFakeRecorder(10),
 			}
 			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: namespacedName})
 			Expect(err).NotTo(HaveOccurred())
@@ -346,7 +350,7 @@ var _ = Describe("GpuWorkload Controller", func() {
 				},
 			}
 			reconciler := &GpuWorkloadReconciler{}
-			result := reconciler.computeAggregatedUtilization(gw)
+			result := reconciler.computeAggregatedUtilization(gw, configapi.KaiwoGpuPreemptionConfig{})
 			Expect(result).NotTo(BeNil())
 			// pod-a avg = 15, pod-b avg = 50; max = 50
 			Expect(*result).To(BeNumerically("~", 50.0))
@@ -367,7 +371,7 @@ var _ = Describe("GpuWorkload Controller", func() {
 				},
 			}
 			reconciler := &GpuWorkloadReconciler{}
-			result := reconciler.computeAggregatedUtilization(gw)
+			result := reconciler.computeAggregatedUtilization(gw, configapi.KaiwoGpuPreemptionConfig{})
 			Expect(result).NotTo(BeNil())
 			// pod-a avg = 15, pod-b avg = 50; min = 15
 			Expect(*result).To(BeNumerically("~", 15.0))
@@ -388,7 +392,7 @@ var _ = Describe("GpuWorkload Controller", func() {
 				},
 			}
 			reconciler := &GpuWorkloadReconciler{}
-			result := reconciler.computeAggregatedUtilization(gw)
+			result := reconciler.computeAggregatedUtilization(gw, configapi.KaiwoGpuPreemptionConfig{})
 			Expect(result).NotTo(BeNil())
 			// pod-a avg = 15, pod-b avg = 50; avg = 32.5
 			Expect(*result).To(BeNumerically("~", 32.5))
@@ -399,7 +403,7 @@ var _ = Describe("GpuWorkload Controller", func() {
 				Status: kaiwo.GpuWorkloadStatus{},
 			}
 			reconciler := &GpuWorkloadReconciler{}
-			result := reconciler.computeAggregatedUtilization(gw)
+			result := reconciler.computeAggregatedUtilization(gw, configapi.KaiwoGpuPreemptionConfig{})
 			Expect(result).To(BeNil())
 		})
 	})

@@ -78,6 +78,25 @@ spec:
     prometheusEndpoint: {{ . | quote }}
     {{- end }}
   {{- end }}
+
+  {{- if .Values.kaiwoConfig.spec.gpuPreemption }}
+  gpuPreemption:
+    {{- with .Values.kaiwoConfig.spec.gpuPreemption.defaultThreshold }}
+    defaultThreshold: {{ . }}
+    {{- end }}
+    {{- with .Values.kaiwoConfig.spec.gpuPreemption.defaultIfIdleAfter }}
+    defaultIfIdleAfter: {{ . | quote }}
+    {{- end }}
+    {{- with .Values.kaiwoConfig.spec.gpuPreemption.defaultPolicy }}
+    defaultPolicy: {{ . | quote }}
+    {{- end }}
+    {{- with .Values.kaiwoConfig.spec.gpuPreemption.defaultAggregation }}
+    defaultAggregation: {{ . | quote }}
+    {{- end }}
+    {{- with .Values.kaiwoConfig.spec.gpuPreemption.defaultTTL }}
+    defaultTTL: {{ . | quote }}
+    {{- end }}
+  {{- end }}
   
   {{- with .Values.kaiwoConfig.spec.defaultClusterQueueName }}
   defaultClusterQueueName: {{ . | quote }}
