@@ -156,8 +156,28 @@ func (r *GpuWorkloadReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	var ownedPods []corev1.Pod
 	for i := range podList.Items {
-		if isPodOwnedByWorkload(&podList.Items[i], &gw) {
+		if r.isPodOwnedByWorkload(ctx, &podList.Items[i], &gw) {
 			ownedPods = append(ownedPods, podList.Items[i])
+		}
+	}
+
+	// Recompute total GPU resources from owned pods so fit checks are accurate
+	// for multi-pod workloads. Only update when pods exist to avoid zeroing out
+	// the value after the workload is deleted.
+	if len(ownedPods) > 0 {
+		totalGpu := computeTotalGpuResources(ownedPods)
+		if !gpuResourcesEqual(gw.Spec.GpuResources, totalGpu) {
+			gw.Spec.GpuResources = totalGpu
+			if err := r.Update(ctx, &gw); err != nil {
+				if errors.IsConflict(err) {
+					return ctrl.Result{Requeue: true}, nil
+				}
+				return ctrl.Result{}, err
+			}
+			// Re-fetch to avoid operating on stale resourceVersion
+			if err := r.Get(ctx, req.NamespacedName, &gw); err != nil {
+				return ctrl.Result{}, client.IgnoreNotFound(err)
+			}
 		}
 	}
 
@@ -448,20 +468,80 @@ func (r *GpuWorkloadReconciler) ownerExists(ctx context.Context, gw *kaiwo.GpuWo
 }
 
 // isPodOwnedByWorkload checks if a pod belongs to the workload tracked by a
-// GpuWorkload CR. It walks the pod's controller ownerReference chain looking
-// for a UID match against the workload ref.
-func isPodOwnedByWorkload(pod *corev1.Pod, gw *kaiwo.GpuWorkload) bool {
+// GpuWorkload CR. It handles bare pods (direct UID match), single-hop owners
+// (Job, StatefulSet), and multi-level hierarchies (Deployment -> ReplicaSet,
+// KaiwoJob -> RayCluster -> ...) by walking the controller ownerReference
+// chain. The expensive chain walk is only performed for pods that request GPU
+// resources, since non-GPU pods cannot belong to a GPU workload.
+func (r *GpuWorkloadReconciler) isPodOwnedByWorkload(ctx context.Context, pod *corev1.Pod, gw *kaiwo.GpuWorkload) bool {
+	targetUID := gw.Spec.WorkloadRef.UID
+
 	// Bare pod: the workloadRef points to the pod itself.
-	if gw.Spec.WorkloadRef.Kind == "Pod" && pod.UID == gw.Spec.WorkloadRef.UID {
+	if gw.Spec.WorkloadRef.Kind == "Pod" && pod.UID == targetUID {
 		return true
 	}
+
+	// Single-hop: pod's direct ownerReference matches (Job, StatefulSet).
 	for _, ref := range pod.OwnerReferences {
-		if ref.UID == gw.Spec.WorkloadRef.UID {
+		if ref.UID == targetUID {
 			return true
 		}
 	}
-	if pod.Labels != nil && pod.Labels["kaiwo.silogen.ai/gpu-workload"] == gw.Name {
-		return true
+
+	// Multi-hop: walk the controller owner chain upward (Deployment, RayJob, etc.).
+	// Only worth the API calls for pods that request GPU resources.
+	if hasGpuResources(pod) {
+		if controllerRef := getControllerOwnerRef(pod.OwnerReferences); controllerRef != nil {
+			if r.isAncestorOf(ctx, pod.Namespace, controllerRef, targetUID) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// isAncestorOf walks from startRef up the controller ownerReference chain,
+// returning true if targetUID appears as an ownerReference at any level.
+func (r *GpuWorkloadReconciler) isAncestorOf(ctx context.Context, namespace string, startRef *metav1.OwnerReference, targetUID types.UID) bool {
+	seen := map[types.UID]bool{startRef.UID: true}
+	currentRef := startRef
+
+	for i := 0; i < maxOwnerDepth && currentRef != nil; i++ {
+		obj := &unstructured.Unstructured{}
+		obj.SetGroupVersionKind(gvkFromAPIVersionKind(currentRef.APIVersion, currentRef.Kind))
+		if err := r.Get(ctx, client.ObjectKey{Namespace: namespace, Name: currentRef.Name}, obj); err != nil {
+			return false
+		}
+
+		for _, ref := range obj.GetOwnerReferences() {
+			if ref.UID == targetUID {
+				return true
+			}
+		}
+
+		nextRef := getControllerOwnerRef(obj.GetOwnerReferences())
+		if nextRef == nil || seen[nextRef.UID] {
+			return false
+		}
+		seen[nextRef.UID] = true
+		currentRef = nextRef
+	}
+	return false
+}
+
+func hasGpuResources(pod *corev1.Pod) bool {
+	for _, c := range pod.Spec.Containers {
+		for resName := range c.Resources.Requests {
+			if strings.HasPrefix(string(resName), GpuResourcePrefix) {
+				return true
+			}
+		}
+		for resName := range c.Resources.Limits {
+			if strings.HasPrefix(string(resName), GpuResourcePrefix) {
+				return true
+			}
+		}
 	}
 	return false
 }
@@ -548,6 +628,13 @@ func (r *GpuWorkloadReconciler) tryRunPreemptionEvaluation(ctx context.Context, 
 	pendingByResource := make(map[string][]workloadEntry)
 	idleByResource := make(map[string][]workloadEntry)
 
+	// Track GPU capacity already being freed for each pending workload name,
+	// keyed by resource name. This prevents over-preemption across evaluation
+	// cycles: if victims were marked Preempting in a previous cycle but the
+	// pending workload hasn't been scheduled yet, we don't select more victims.
+	// inFlight[pendingGwName][resourceName] = total GPUs already being freed
+	inFlight := make(map[string]map[string]int)
+
 	for i := range allWorkloads.Items {
 		w := &allWorkloads.Items[i]
 		policy := r.getPreemptionPolicy(w, gpuCfg)
@@ -559,6 +646,16 @@ func (r *GpuWorkloadReconciler) tryRunPreemptionEvaluation(ctx context.Context, 
 					gw:       w,
 					gpuCount: w.Spec.GpuResources,
 				})
+			}
+
+		case kaiwo.GpuWorkloadPhasePreempting:
+			if w.Status.PreemptedFor != "" {
+				if inFlight[w.Status.PreemptedFor] == nil {
+					inFlight[w.Status.PreemptedFor] = make(map[string]int)
+				}
+				for resName, count := range w.Spec.GpuResources {
+					inFlight[w.Status.PreemptedFor][resName] += count
+				}
 			}
 
 		case kaiwo.GpuWorkloadPhaseIdle:
@@ -629,6 +726,15 @@ func (r *GpuWorkloadReconciler) tryRunPreemptionEvaluation(ctx context.Context, 
 			demandCount := pending.gpuCount[resName]
 			if demandCount <= 0 {
 				continue
+			}
+
+			// Subtract capacity already being freed by in-flight preemptions
+			// from a previous evaluation cycle targeting this pending workload.
+			if alreadyFreeing, ok := inFlight[pending.gw.Name]; ok {
+				demandCount -= alreadyFreeing[resName]
+				if demandCount <= 0 {
+					continue
+				}
 			}
 
 			var victims []workloadEntry
@@ -985,6 +1091,30 @@ func extractGpuResources(pod *corev1.Pod) map[string]int {
 		}
 	}
 	return resources
+}
+
+// computeTotalGpuResources sums GPU resource requests across all pods to get
+// the workload-wide total (e.g. 4 pods each requesting 1 GPU = 4 total).
+func computeTotalGpuResources(pods []corev1.Pod) map[string]int {
+	total := make(map[string]int)
+	for i := range pods {
+		for name, count := range extractGpuResources(&pods[i]) {
+			total[name] += count
+		}
+	}
+	return total
+}
+
+func gpuResourcesEqual(a, b map[string]int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v := range a {
+		if b[k] != v {
+			return false
+		}
+	}
+	return true
 }
 
 // isGpuPreemptionAnnotated returns true if the resource has the explicit

@@ -1,25 +1,23 @@
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
-  name: test-gpu-preemption-discovery-deployment
+  name: test-gpu-preemption-discovery-multi-pod-job
 spec:
   concurrent: false
   steps:
-  - name: discover-gpuworkload-for-deployment
-    description: Verify GpuWorkload is created for an annotated Deployment (Pod -> ReplicaSet -> Deployment chain)
+  - name: create-multi-pod-job
+    description: Create a parallel Job with 2 pods each requesting 1 GPU
     try:
     - apply:
-        file: deployment.yaml
+        file: job.yaml
     - assert:
         resource:
           apiVersion: kaiwo.silogen.ai/v1alpha1
           kind: GpuWorkload
           spec:
             workloadRef:
-              kind: Deployment
-              name: gpu-preemption-discover-deploy
-            gpuResources:
-              amd.com/gpu: 1
+              kind: Job
+              name: gpu-preemption-multi-pod
     catch:
     - command:
         entrypoint: kaiwo-dev
@@ -29,8 +27,8 @@ spec:
         - name: PRINT_LEVEL
           value: ($values.print_level)
         args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
-  - name: verify-phase-transitions
-    description: Verify the reconciler can match pods through the ReplicaSet chain and compute a real phase (not stuck in PendingOther)
+  - name: verify-total-gpu-resources
+    description: Verify that GpuResources reflects the workload-wide total (2 pods x 1 GPU = 2), not the per-pod count (1)
     try:
     - assert:
         timeout: 120s
@@ -39,10 +37,10 @@ spec:
           kind: GpuWorkload
           spec:
             workloadRef:
-              kind: Deployment
-              name: gpu-preemption-discover-deploy
-          status:
-            (phase != 'PendingOther'): true
+              kind: Job
+              name: gpu-preemption-multi-pod
+            gpuResources:
+              amd.com/gpu: 2
     catch:
     - command:
         entrypoint: kaiwo-dev

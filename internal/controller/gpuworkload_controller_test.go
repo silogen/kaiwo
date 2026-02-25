@@ -33,6 +33,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -405,6 +406,260 @@ var _ = Describe("GpuWorkload Controller", func() {
 			reconciler := &GpuWorkloadReconciler{}
 			result := reconciler.computeAggregatedUtilization(gw, configapi.KaiwoGpuPreemptionConfig{})
 			Expect(result).To(BeNil())
+		})
+	})
+
+	Context("hasGpuResources", func() {
+		It("should return true for pod requesting amd.com/gpu", func() {
+			pod := &corev1.Pod{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{"amd.com/gpu": resource.MustParse("1")},
+						},
+					}},
+				},
+			}
+			Expect(hasGpuResources(pod)).To(BeTrue())
+		})
+
+		It("should return true when GPU is in limits only", func() {
+			pod := &corev1.Pod{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Resources: corev1.ResourceRequirements{
+							Limits: corev1.ResourceList{"amd.com/gpu": resource.MustParse("1")},
+						},
+					}},
+				},
+			}
+			Expect(hasGpuResources(pod)).To(BeTrue())
+		})
+
+		It("should return false for CPU-only pod", func() {
+			pod := &corev1.Pod{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{"cpu": resource.MustParse("4")},
+						},
+					}},
+				},
+			}
+			Expect(hasGpuResources(pod)).To(BeFalse())
+		})
+	})
+
+	Context("computeTotalGpuResources", func() {
+		It("should sum GPU resources across multiple pods", func() {
+			pods := []corev1.Pod{
+				{Spec: corev1.PodSpec{Containers: []corev1.Container{{
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{"amd.com/gpu": resource.MustParse("1")},
+					},
+				}}}},
+				{Spec: corev1.PodSpec{Containers: []corev1.Container{{
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{"amd.com/gpu": resource.MustParse("1")},
+					},
+				}}}},
+				{Spec: corev1.PodSpec{Containers: []corev1.Container{{
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{"amd.com/gpu": resource.MustParse("2")},
+					},
+				}}}},
+			}
+			total := computeTotalGpuResources(pods)
+			Expect(total).To(HaveKeyWithValue("amd.com/gpu", 4))
+		})
+
+		It("should handle multiple GPU resource types", func() {
+			pods := []corev1.Pod{
+				{Spec: corev1.PodSpec{Containers: []corev1.Container{{
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							"amd.com/gpu":   resource.MustParse("2"),
+							"amd.com/gpu-0": resource.MustParse("1"),
+						},
+					},
+				}}}},
+				{Spec: corev1.PodSpec{Containers: []corev1.Container{{
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							"amd.com/gpu-0": resource.MustParse("3"),
+						},
+					},
+				}}}},
+			}
+			total := computeTotalGpuResources(pods)
+			Expect(total).To(HaveKeyWithValue("amd.com/gpu", 2))
+			Expect(total).To(HaveKeyWithValue("amd.com/gpu-0", 4))
+		})
+
+		It("should return empty map for no pods", func() {
+			total := computeTotalGpuResources(nil)
+			Expect(total).To(BeEmpty())
+		})
+	})
+
+	Context("gpuResourcesEqual", func() {
+		It("should return true for equal maps", func() {
+			a := map[string]int{"amd.com/gpu": 4}
+			b := map[string]int{"amd.com/gpu": 4}
+			Expect(gpuResourcesEqual(a, b)).To(BeTrue())
+		})
+
+		It("should return false for different values", func() {
+			a := map[string]int{"amd.com/gpu": 4}
+			b := map[string]int{"amd.com/gpu": 2}
+			Expect(gpuResourcesEqual(a, b)).To(BeFalse())
+		})
+
+		It("should return false for different keys", func() {
+			a := map[string]int{"amd.com/gpu": 4}
+			b := map[string]int{"amd.com/gpu": 4, "amd.com/gpu-0": 1}
+			Expect(gpuResourcesEqual(a, b)).To(BeFalse())
+		})
+
+		It("should return true for both empty", func() {
+			Expect(gpuResourcesEqual(map[string]int{}, map[string]int{})).To(BeTrue())
+		})
+	})
+
+	Context("isPodOwnedByWorkload", func() {
+		ctx := context.Background()
+
+		It("should match bare pod by UID", func() {
+			podUID := types.UID("bare-pod-uid-12345")
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{UID: podUID},
+			}
+			gw := &kaiwo.GpuWorkload{
+				Spec: kaiwo.GpuWorkloadSpec{
+					WorkloadRef: kaiwo.WorkloadReference{Kind: "Pod", UID: podUID},
+				},
+			}
+			reconciler := &GpuWorkloadReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+			Expect(reconciler.isPodOwnedByWorkload(ctx, pod, gw)).To(BeTrue())
+		})
+
+		It("should match single-hop Job owner", func() {
+			jobUID := types.UID("job-uid-12345")
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					OwnerReferences: []metav1.OwnerReference{{
+						APIVersion: "batch/v1",
+						Kind:       "Job",
+						Name:       "my-job",
+						UID:        jobUID,
+					}},
+				},
+			}
+			gw := &kaiwo.GpuWorkload{
+				Spec: kaiwo.GpuWorkloadSpec{
+					WorkloadRef: kaiwo.WorkloadReference{Kind: "Job", UID: jobUID},
+				},
+			}
+			reconciler := &GpuWorkloadReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+			Expect(reconciler.isPodOwnedByWorkload(ctx, pod, gw)).To(BeTrue())
+		})
+
+		It("should match multi-hop Deployment owner via ReplicaSet chain", func() {
+			isController := true
+
+			deploy := &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-chain-deploy",
+					Namespace: "default",
+				},
+				Spec: appsv1.DeploymentSpec{
+					Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test-chain"}},
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "test-chain"}},
+						Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "c", Image: "busybox"}}},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, deploy)).To(Succeed())
+			defer func() { _ = k8sClient.Delete(ctx, deploy) }()
+
+			rs := &appsv1.ReplicaSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-chain-rs",
+					Namespace: "default",
+					OwnerReferences: []metav1.OwnerReference{{
+						APIVersion: "apps/v1",
+						Kind:       "Deployment",
+						Name:       deploy.Name,
+						UID:        deploy.UID,
+						Controller: &isController,
+					}},
+				},
+				Spec: appsv1.ReplicaSetSpec{
+					Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test-chain"}},
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "test-chain"}},
+						Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "c", Image: "busybox"}}},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, rs)).To(Succeed())
+			defer func() { _ = k8sClient.Delete(ctx, rs) }()
+
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "default",
+					OwnerReferences: []metav1.OwnerReference{{
+						APIVersion: "apps/v1",
+						Kind:       "ReplicaSet",
+						Name:       rs.Name,
+						UID:        rs.UID,
+						Controller: &isController,
+					}},
+				},
+				Spec: corev1.PodSpec{Containers: []corev1.Container{{
+					Name:  "c",
+					Image: "busybox",
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{"amd.com/gpu": resource.MustParse("1")},
+					},
+				}}},
+			}
+
+			gw := &kaiwo.GpuWorkload{
+				Spec: kaiwo.GpuWorkloadSpec{
+					WorkloadRef: kaiwo.WorkloadReference{
+						APIVersion: "apps/v1",
+						Kind:       "Deployment",
+						Name:       deploy.Name,
+						UID:        deploy.UID,
+					},
+				},
+			}
+
+			reconciler := &GpuWorkloadReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+			Expect(reconciler.isPodOwnedByWorkload(ctx, pod, gw)).To(BeTrue())
+		})
+
+		It("should NOT match unrelated pod", func() {
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					UID: "unrelated-pod-uid",
+					OwnerReferences: []metav1.OwnerReference{{
+						APIVersion: "batch/v1",
+						Kind:       "Job",
+						Name:       "other-job",
+						UID:        "other-job-uid",
+					}},
+				},
+			}
+			gw := &kaiwo.GpuWorkload{
+				Spec: kaiwo.GpuWorkloadSpec{
+					WorkloadRef: kaiwo.WorkloadReference{Kind: "Job", UID: "my-job-uid"},
+				},
+			}
+			reconciler := &GpuWorkloadReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+			Expect(reconciler.isPodOwnedByWorkload(ctx, pod, gw)).To(BeFalse())
 		})
 	})
 })
