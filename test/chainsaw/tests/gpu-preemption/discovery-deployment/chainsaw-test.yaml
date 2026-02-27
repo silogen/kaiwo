@@ -27,7 +27,7 @@ spec:
         - name: NAMESPACE
           value: ($namespace)
         - name: PRINT_LEVEL
-          value: ($values.print_level)
+          value: "debug"
         args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
   - name: verify-phase-transitions
     description: Verify the reconciler can match pods through the ReplicaSet chain and compute a real phase (not stuck in PendingOther)
@@ -50,5 +50,5 @@ spec:
         - name: NAMESPACE
           value: ($namespace)
         - name: PRINT_LEVEL
-          value: ($values.print_level)
+          value: "debug"
         args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]

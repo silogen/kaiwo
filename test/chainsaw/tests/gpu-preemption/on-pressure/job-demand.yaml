@@ -14,7 +14,7 @@ spec:
         command: ["sleep", "600"]
         resources:
           requests:
-            amd.com/gpu: ($values.total_gpus)
+            amd.com/gpu: ($total_gpus)
           limits:
-            amd.com/gpu: ($values.total_gpus)
+            amd.com/gpu: ($total_gpus)
       restartPolicy: Never

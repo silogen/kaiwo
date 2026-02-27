@@ -5,6 +5,15 @@ metadata:
 spec:
   concurrent: false
   steps:
+  - name: detect-cluster-gpus
+    description: Auto-detect total amd.com/gpu count from cluster nodes
+    try:
+    - script:
+        content: |
+          kubectl get nodes -o jsonpath='{range .items[*]}{.status.allocatable.amd\.com/gpu}{"\n"}{end}' | awk 'NF{s+=$1}END{printf "%d",s}'
+        outputs:
+        - name: total_gpus
+          value: ($stdout)
   - name: saturate-and-idle
     description: Deploy victim Job that uses all cluster GPUs and wait for it to become idle
     try:
@@ -28,7 +37,7 @@ spec:
         - name: NAMESPACE
           value: ($namespace)
         - name: PRINT_LEVEL
-          value: ($values.print_level)
+          value: "debug"
         args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
   - name: create-demand-and-verify-preemption
     description: Deploy demand Job that triggers GPU pressure and verify victim is preempted
@@ -66,5 +75,5 @@ spec:
         - name: NAMESPACE
           value: ($namespace)
         - name: PRINT_LEVEL
-          value: ($values.print_level)
+          value: "debug"
         args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]

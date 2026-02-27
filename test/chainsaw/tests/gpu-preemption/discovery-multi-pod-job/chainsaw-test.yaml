@@ -25,7 +25,7 @@ spec:
         - name: NAMESPACE
           value: ($namespace)
         - name: PRINT_LEVEL
-          value: ($values.print_level)
+          value: "debug"
         args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
   - name: verify-total-gpu-resources
     description: Verify that GpuResources reflects the workload-wide total (2 pods x 1 GPU = 2), not the per-pod count (1)
@@ -48,5 +48,5 @@ spec:
         - name: NAMESPACE
           value: ($namespace)
         - name: PRINT_LEVEL
-          value: ($values.print_level)
+          value: "debug"
         args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
