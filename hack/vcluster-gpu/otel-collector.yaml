@@ -1,0 +1,121 @@
+# Per-vcluster GPU metrics collector template.
+#
+# Apply via kustomize + envsubst:
+#   VCLUSTER_HOST_NS=<ns> kustomize build hack/vcluster-gpu \
+#     | envsubst '$VCLUSTER_HOST_NS' | kubectl --context <host> apply -f -
+#
+# The OTel operator creates a Service named "<metadata.name>-collector",
+# so the resulting endpoint is:
+#   http://gpu-metrics-<ns>-collector.kube-amd-gpu.svc:5000/metrics
+
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: gpu-metrics-${VCLUSTER_HOST_NS}
+  namespace: kube-amd-gpu
+spec:
+  mode: deployment
+  image: otel/opentelemetry-collector-contrib:0.120.0
+  serviceAccount: default
+
+  ports:
+  - name: telemetry
+    port: 8888
+    targetPort: 8888
+    protocol: TCP
+  - name: prometheus
+    port: 5000
+    targetPort: 5000
+    protocol: TCP
+
+  config:
+    receivers:
+      prometheus:
+        config:
+          scrape_configs:
+          - job_name: gpu-exporter
+            scrape_interval: 10s
+            honor_labels: true
+            kubernetes_sd_configs:
+            - role: endpoints
+              namespaces:
+                names: [kube-amd-gpu]
+
+            relabel_configs:
+            - source_labels: [__meta_kubernetes_service_name]
+              regex: default-metrics-exporter
+              action: keep
+            - source_labels: [__meta_kubernetes_endpoint_port_name]
+              regex: exporter-port
+              action: keep
+            - source_labels: [__meta_kubernetes_pod_node_name]
+              target_label: node
+
+            metrics_path: /metrics
+            scheme: http
+
+    processors:
+      # Drop metrics from pods outside this vcluster's host namespace.
+      filter/vcluster:
+        metrics:
+          datapoint:
+            - 'attributes["namespace"] != "${VCLUSTER_HOST_NS}"'
+
+      # Split metrics into separate resources per pod/namespace
+      # so k8sattributes can look up each pod independently.
+      groupbyattrs:
+        keys:
+          - pod
+          - namespace
+
+      # Copy to k8s semantic conventions for k8sattributes matching.
+      transform/k8s:
+        metric_statements:
+          - context: resource
+            statements:
+              - set(attributes["k8s.pod.name"], attributes["pod"]) where attributes["pod"] != nil
+              - set(attributes["k8s.namespace.name"], attributes["namespace"]) where attributes["namespace"] != nil
+
+      # Look up host pod and extract vcluster annotations.
+      k8sattributes:
+        auth_type: serviceAccount
+        passthrough: false
+        extract:
+          annotations:
+            - tag_name: vcluster_namespace
+              key: vcluster.loft.sh/namespace
+            - tag_name: vcluster_pod_name
+              key: vcluster.loft.sh/name
+        pod_association:
+          - sources:
+              - from: resource_attribute
+                name: k8s.pod.name
+              - from: resource_attribute
+                name: k8s.namespace.name
+
+      # Overwrite pod/namespace with vcluster-local values so the
+      # operator can do a direct client.Get() without any awareness
+      # of vcluster name mangling.
+      transform/enrich:
+        metric_statements:
+          - context: datapoint
+            statements:
+              - set(attributes["pod"], resource.attributes["pod"]) where resource.attributes["pod"] != nil
+              - set(attributes["namespace"], resource.attributes["namespace"]) where resource.attributes["namespace"] != nil
+              - set(attributes["host_pod"], attributes["pod"]) where resource.attributes["vcluster_pod_name"] != nil
+              - set(attributes["host_namespace"], attributes["namespace"]) where resource.attributes["vcluster_namespace"] != nil
+              - set(attributes["pod"], resource.attributes["vcluster_pod_name"]) where resource.attributes["vcluster_pod_name"] != nil
+              - set(attributes["namespace"], resource.attributes["vcluster_namespace"]) where resource.attributes["vcluster_namespace"] != nil
+
+      batch: {}
+
+    exporters:
+      prometheus:
+        endpoint: "0.0.0.0:5000"
+
+    service:
+      pipelines:
+        metrics:
+          receivers: [prometheus]
+          processors: [filter/vcluster, groupbyattrs, transform/k8s, k8sattributes, transform/enrich, batch]
+          exporters: [prometheus]

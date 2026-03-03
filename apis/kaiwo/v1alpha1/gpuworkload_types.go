@@ -93,7 +93,6 @@ type WorkloadReference struct {
 	Kind string `json:"kind"`
 	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
-	// +kubebuilder:validation:MinLength=1
 	UID types.UID `json:"uid"`
 }
 

@@ -106,10 +106,13 @@ spec:
                   tracked.
                 properties:
                   apiVersion:
+                    minLength: 1
                     type: string
                   kind:
+                    minLength: 1
                     type: string
                   name:
+                    minLength: 1
                     type: string
                   uid:
                     description: |-
@@ -216,6 +219,15 @@ spec:
                 type: string
               phase:
                 description: Phase is the current lifecycle phase of the tracked workload.
+                enum:
+                - PendingGpu
+                - PendingOther
+                - Active
+                - Idle
+                - Preempting
+                - Preempted
+                - Deleted
+                - ""
                 type: string
               podUtilizations:
                 description: |-
@@ -233,6 +245,8 @@ spec:
                     podName:
                       type: string
                     utilization:
+                      maximum: 100
+                      minimum: 0
                       type: number
                   required:
                   - lastUpdate

@@ -76,12 +76,12 @@ spec:
                     - Min
                     - Max
                     - Avg
-                    - ""
                     type: string
                   defaultIfIdleAfter:
                     description: |-
                       DefaultIfIdleAfter is the duration a workload must be continuously idle
                       before it becomes eligible for preemption (e.g. "10m", "1h").
+                    pattern: ^([0-9]+(s|m|h))+$
                     type: string
                   defaultPolicy:
                     description: 'DefaultPolicy is the preemption policy: "OnPressure"
@@ -89,17 +89,19 @@ spec:
                     enum:
                     - OnPressure
                     - Always
-                    - ""
                     type: string
                   defaultTTL:
                     description: |-
                       DefaultTTL controls how long terminal GpuWorkload CRs (Preempted or
                       Deleted) are retained before automatic cleanup (e.g. "24h", "0" for forever).
+                    pattern: ^([0-9]+(s|m|h))+$
                     type: string
                   defaultThreshold:
                     description: |-
                       DefaultThreshold is the utilization percentage below which a workload is
                       considered idle. Overridden by the per-workload annotation.
+                    maximum: 100
+                    minimum: 0
                     type: number
                 type: object
               nodes:
