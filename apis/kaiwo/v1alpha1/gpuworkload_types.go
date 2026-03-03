@@ -49,6 +49,7 @@ const (
 )
 
 // GpuWorkloadPhase represents the lifecycle phase of a tracked GPU workload.
+// +kubebuilder:validation:Enum=PendingGpu;PendingOther;Active;Idle;Preempting;Preempted;Deleted;""
 type GpuWorkloadPhase string
 
 const (
@@ -86,16 +87,22 @@ const (
 
 // WorkloadReference identifies the root owner resource that this GpuWorkload tracks.
 type WorkloadReference struct {
-	APIVersion string    `json:"apiVersion"`
-	Kind       string    `json:"kind"`
-	Name       string    `json:"name"`
-	UID        types.UID `json:"uid"`
+	// +kubebuilder:validation:MinLength=1
+	APIVersion string `json:"apiVersion"`
+	// +kubebuilder:validation:MinLength=1
+	Kind string `json:"kind"`
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+	// +kubebuilder:validation:MinLength=1
+	UID types.UID `json:"uid"`
 }
 
 // PodGpuUtilization holds a utilization sample for a single GPU on a single pod.
 type PodGpuUtilization struct {
-	PodName     string      `json:"podName"`
-	GpuID       string      `json:"gpuId,omitempty"`
+	PodName string `json:"podName"`
+	GpuID   string `json:"gpuId,omitempty"`
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=100
 	Utilization float64     `json:"utilization"`
 	LastUpdate  metav1.Time `json:"lastUpdate"`
 }

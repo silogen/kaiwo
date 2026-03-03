@@ -1,3 +1,6 @@
+# Demand job requesting an impossible GPU count (9999) to guarantee it stays
+# PendingGpu forever. The fit check should prevent the victim from being
+# preempted since freeing its 1 GPU would not satisfy this demand.
 apiVersion: batch/v1
 kind: Job
 metadata:

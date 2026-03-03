@@ -28,6 +28,7 @@ spec:
           kind: GpuWorkload
           spec:
             workloadRef:
+              kind: Job
               name: gpu-preemption-always
           status:
             phase: Preempted
@@ -43,6 +44,7 @@ spec:
           kind: GpuWorkload
           spec:
             workloadRef:
+              kind: Job
               name: gpu-preemption-always
     catch:
     - command:

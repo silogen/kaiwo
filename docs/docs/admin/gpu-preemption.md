@@ -20,11 +20,26 @@ flowchart LR
     E -- OnPressure +<br>pending demand<br>+ fit check --> Del
 ```
 
-1. **Discovery** -- The controller watches all Pods. When a Pod requesting `amd.com/gpu*` resources is created, the controller resolves its root owner (walking `ownerReferences` up through ReplicaSets, Jobs, etc.) and checks for preemption annotations.
+1. **Discovery** -- The controller watches all Pods. When a Pod requesting any `amd.com/*` GPU resource (e.g. `amd.com/gpu`, `amd.com/gpu-0`, partitioned resources) is created, the controller resolves its root owner (walking `ownerReferences` up through ReplicaSets, Jobs, etc.) and checks for preemption annotations.
 2. **Tracking** -- A `GpuWorkload` CR is created for each unique root owner, capturing the GPU resource counts and annotation-derived settings.
 3. **Metrics** -- A background scraper polls the AMD GPU operator's Prometheus endpoint (`gpu_gfx_activity`) and writes per-pod utilization into the `GpuWorkload` status.
 4. **Reconciliation** -- The reconciler aggregates utilization, determines the phase (`PendingOther`, `PendingGpu`, `Active`, `Idle`, etc.), and evaluates preemption when conditions are met.
 5. **Preemption** -- When an idle workload becomes eligible, a Lease-guarded evaluation ensures only one controller replica runs the global preemption decision at a time, preventing race conditions and over-preemption.
+
+!!! note "AMD GPUs only"
+    GPU preemption currently supports AMD GPU resources (`amd.com/*`). NVIDIA GPUs are not tracked by this feature.
+
+### Supported Owner Types
+
+The controller resolves pod ownership by walking the `ownerReferences` chain. The operator has RBAC permissions for the following owner types out of the box:
+
+- `batch/v1` Jobs
+- `apps/v1` Deployments, ReplicaSets, StatefulSets
+- `ray.io/v1` RayClusters, RayJobs
+- `kaiwo.silogen.ai/v1alpha1` KaiwoJobs, KaiwoServices
+- `workload.codeflare.dev/v1beta2` AppWrappers
+
+For workloads owned by other resource types (e.g. CronJobs, DaemonSets, custom controllers), add `get` permission for those resources to the operator `ServiceAccount`. Without it, the controller will log an RBAC error and skip the pod.
 
 ## Configuration Hierarchy
 

@@ -296,7 +296,8 @@ _Appears in:_
 
 | Field | Description |
 | --- | --- |
-| `Pending` | GpuWorkloadPhasePending indicates pods are pending specifically due to<br />insufficient GPU resources (validated via the scheduler condition message).<br /> |
+| `PendingGpu` | GpuWorkloadPhasePendingGpu indicates pods are unschedulable specifically due to<br />insufficient GPU resources (validated via the scheduler condition message).<br />Acts as the demand signal for OnPressure preemption.<br /> |
+| `PendingOther` | GpuWorkloadPhasePendingOther indicates pods exist but are not yet Running<br />for non-GPU reasons: image pulls, init containers, PVC binding, node affinity,<br />taints, etc. No idle time is counted and the phase does not trigger preemption evaluation.<br /> |
 | `Active` | GpuWorkloadPhaseActive indicates pods are running and aggregated GPU<br />utilization is at or above the configured threshold.<br /> |
 | `Idle` | GpuWorkloadPhaseIdle indicates pods are running but aggregated GPU<br />utilization is below the configured threshold.<br /> |
 | `Preempting` | GpuWorkloadPhasePreempting indicates the workload has been claimed for<br />preemption by the evaluator; deletion is in progress.<br /> |

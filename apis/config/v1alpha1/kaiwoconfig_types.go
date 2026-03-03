@@ -159,27 +159,31 @@ type KaiwoGpuPreemptionConfig struct {
 	// DefaultThreshold is the utilization percentage below which a workload is
 	// considered idle. Overridden by the per-workload annotation.
 	// +optional
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=100
 	DefaultThreshold *float64 `json:"defaultThreshold,omitempty"`
 
 	// DefaultIfIdleAfter is the duration a workload must be continuously idle
 	// before it becomes eligible for preemption (e.g. "10m", "1h").
 	// +optional
+	// +kubebuilder:validation:Pattern=`^([0-9]+(s|m|h))+$`
 	DefaultIfIdleAfter string `json:"defaultIfIdleAfter,omitempty"`
 
 	// DefaultPolicy is the preemption policy: "OnPressure" or "Always".
 	// +optional
-	// +kubebuilder:validation:Enum=OnPressure;Always;""
+	// +kubebuilder:validation:Enum=OnPressure;Always
 	DefaultPolicy string `json:"defaultPolicy,omitempty"`
 
 	// DefaultAggregation determines how utilization is aggregated across
 	// multiple pods: "Min", "Max", or "Avg".
 	// +optional
-	// +kubebuilder:validation:Enum=Min;Max;Avg;""
+	// +kubebuilder:validation:Enum=Min;Max;Avg
 	DefaultAggregation string `json:"defaultAggregation,omitempty"`
 
 	// DefaultTTL controls how long terminal GpuWorkload CRs (Preempted or
 	// Deleted) are retained before automatic cleanup (e.g. "24h", "0" for forever).
 	// +optional
+	// +kubebuilder:validation:Pattern=`^([0-9]+(s|m|h))+$`
 	DefaultTTL string `json:"defaultTTL,omitempty"`
 }
 

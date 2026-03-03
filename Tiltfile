@@ -3,7 +3,7 @@
 # ---------------------------------------------------------------------------
 
 allow_k8s_contexts([
-    'vcluster_alex-kaiwo-dev_alex-kaiwo-dev_kaiwo-tw',
+    'vcluster_kaiwo-asalinie-dev_kaiwo-asalinie-dev_tw038',
     'vcluster_alex-test_alex-test_app-dev',
 ])
 

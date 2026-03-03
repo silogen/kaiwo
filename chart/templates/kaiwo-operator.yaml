@@ -117,6 +117,9 @@ spec:
         - name: DEFAULT_CLUSTER_QUEUE_NAME
           value: "kaiwo"
         {{- if .Values.gpuPreemption.enabled }}
+        {{- if not .Values.gpuPreemption.metricsEndpoint }}
+        {{- fail "gpuPreemption.metricsEndpoint is required when gpuPreemption.enabled is true" }}
+        {{- end }}
         - name: GPU_PREEMPTION_ENABLED
           value: {{ .Values.gpuPreemption.enabled | quote }}
         - name: GPU_PREEMPTION_METRICS_ENDPOINT

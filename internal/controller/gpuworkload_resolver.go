@@ -35,6 +35,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 )
@@ -59,7 +60,6 @@ func ResolveRootOwner(ctx context.Context, c client.Client, namespace string, na
 	currentNamespace := namespace
 	currentGVK := gvkFromAPIVersionKind(apiVersion, kind)
 	currentName := name
-	currentUID := uid
 
 	for i := 0; i < maxOwnerDepth; i++ {
 		obj := &unstructured.Unstructured{}
@@ -70,17 +70,12 @@ func ResolveRootOwner(ctx context.Context, c client.Client, namespace string, na
 					"add get permission for this resource to the operator ServiceAccount: %w",
 					currentGVK.Kind, currentName, currentNamespace, err)
 			}
-			// NotFound or other transient error: treat the last known ref as root
-			return &RootOwnerResult{
-				Ref: kaiwo.WorkloadReference{
-					APIVersion: currentGVK.GroupVersion().String(),
-					Kind:       currentGVK.Kind,
-					Name:       currentName,
-					UID:        currentUID,
-				},
-				OwnerChain: strings.Join(chain, " -> "),
-				Namespace:  currentNamespace,
-			}, nil
+			if errors.IsNotFound(err) {
+				return nil, fmt.Errorf("owner %s %q not found in namespace %q: %w",
+					currentGVK.Kind, currentName, currentNamespace, err)
+			}
+			return nil, fmt.Errorf("transient error resolving owner %s %q in namespace %q: %w",
+				currentGVK.Kind, currentName, currentNamespace, err)
 		}
 
 		controllerRef := getControllerOwnerRef(obj.GetOwnerReferences())
@@ -99,7 +94,6 @@ func ResolveRootOwner(ctx context.Context, c client.Client, namespace string, na
 
 		currentGVK = gvkFromAPIVersionKind(controllerRef.APIVersion, controllerRef.Kind)
 		currentName = controllerRef.Name
-		currentUID = controllerRef.UID
 		chain = append(chain, fmt.Sprintf("%s/%s", controllerRef.Kind, controllerRef.Name))
 	}
 
@@ -118,6 +112,9 @@ func getControllerOwnerRef(refs []metav1.OwnerReference) *metav1.OwnerReference 
 func gvkFromAPIVersionKind(apiVersion, kind string) schema.GroupVersionKind {
 	gv, err := schema.ParseGroupVersion(apiVersion)
 	if err != nil {
+		logger := log.Log.WithName("gpuworkload-resolver")
+		logger.V(1).Info("failed to parse apiVersion, falling back to kind-only GVK",
+			"apiVersion", apiVersion, "kind", kind, "error", err)
 		return schema.GroupVersionKind{Kind: kind}
 	}
 	return gv.WithKind(kind)

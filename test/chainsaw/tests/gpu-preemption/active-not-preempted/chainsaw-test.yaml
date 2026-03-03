@@ -18,6 +18,7 @@ spec:
           kind: GpuWorkload
           spec:
             workloadRef:
+              kind: Job
               name: gpu-preemption-active-workload
           status:
             phase: Active
@@ -29,6 +30,7 @@ spec:
           kind: GpuWorkload
           spec:
             workloadRef:
+              kind: Job
               name: gpu-preemption-active-workload
           status:
             phase: Preempting
@@ -38,6 +40,7 @@ spec:
           kind: GpuWorkload
           spec:
             workloadRef:
+              kind: Job
               name: gpu-preemption-active-workload
           status:
             phase: Preempted
@@ -47,6 +50,7 @@ spec:
           kind: GpuWorkload
           spec:
             workloadRef:
+              kind: Job
               name: gpu-preemption-active-workload
           status:
             phase: Active

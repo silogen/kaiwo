@@ -65,15 +65,24 @@ const (
 	PreemptionEvalLeaseName = "gpu-preemption-eval"
 	PreemptionEvalLeaseDur  = 30 * time.Second
 	IdleRequeueInterval     = 60 * time.Second
-	GpuResourcePrefix       = "amd.com/gpu"
-	EnvGpuPreemptionPrefix  = "GPU_PREEMPTION_"
-	EnvEnabled              = EnvGpuPreemptionPrefix + "ENABLED"
-	EnvDefaultThreshold     = EnvGpuPreemptionPrefix + "DEFAULT_THRESHOLD"
-	EnvDefaultIfIdleAfter   = EnvGpuPreemptionPrefix + "DEFAULT_IF_IDLE_AFTER"
-	EnvDefaultPolicy        = EnvGpuPreemptionPrefix + "DEFAULT_POLICY"
-	EnvDefaultAggregation   = EnvGpuPreemptionPrefix + "DEFAULT_AGGREGATION"
-	EnvDefaultTTL           = EnvGpuPreemptionPrefix + "DEFAULT_TTL"
-	EnvOperatorNamespace    = EnvGpuPreemptionPrefix + "OPERATOR_NAMESPACE"
+
+	// GpuResourcePrefix matches all AMD device-plugin resources (amd.com/gpu,
+	// amd.com/gpu-0, etc.). NVIDIA resources are intentionally excluded.
+	GpuResourcePrefix = "amd.com/"
+
+	DefaultOperatorNamespace    = "kaiwo-system"
+	DefaultUtilizationThreshold = 5.0
+	DefaultIfIdleAfter          = 10 * time.Minute
+	DefaultTTL                  = 24 * time.Hour
+
+	EnvGpuPreemptionPrefix = "GPU_PREEMPTION_"
+	EnvEnabled             = EnvGpuPreemptionPrefix + "ENABLED"
+	EnvDefaultThreshold    = EnvGpuPreemptionPrefix + "DEFAULT_THRESHOLD"
+	EnvDefaultIfIdleAfter  = EnvGpuPreemptionPrefix + "DEFAULT_IF_IDLE_AFTER"
+	EnvDefaultPolicy       = EnvGpuPreemptionPrefix + "DEFAULT_POLICY"
+	EnvDefaultAggregation  = EnvGpuPreemptionPrefix + "DEFAULT_AGGREGATION"
+	EnvDefaultTTL          = EnvGpuPreemptionPrefix + "DEFAULT_TTL"
+	EnvOperatorNamespace   = EnvGpuPreemptionPrefix + "OPERATOR_NAMESPACE"
 )
 
 func IsGpuPreemptionEnabled() bool {
@@ -161,7 +170,7 @@ func (r *GpuWorkloadReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	oldPhase := gw.Status.Phase
 
 	// Phase computation
-	phase := r.computePhase(ctx, &gw, ownedPods, gpuCfg)
+	phase := r.computePhase(&gw, ownedPods, gpuCfg)
 	gw.Status.Phase = phase
 
 	// Update IdleSince tracking
@@ -203,7 +212,7 @@ func (r *GpuWorkloadReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	return ctrl.Result{}, nil
 }
 
-func (r *GpuWorkloadReconciler) computePhase(_ context.Context, gw *kaiwo.GpuWorkload, pods []corev1.Pod, gpuCfg configapi.KaiwoGpuPreemptionConfig) kaiwo.GpuWorkloadPhase {
+func (r *GpuWorkloadReconciler) computePhase(gw *kaiwo.GpuWorkload, pods []corev1.Pod, gpuCfg configapi.KaiwoGpuPreemptionConfig) kaiwo.GpuWorkloadPhase {
 	if len(pods) == 0 {
 		if gw.Status.Phase == "" {
 			return kaiwo.GpuWorkloadPhasePendingOther
@@ -258,9 +267,6 @@ func isPendingDueToGPU(pod *corev1.Pod, gpuResources map[string]int) bool {
 				if strings.Contains(msg, strings.ToLower("Insufficient "+resourceName)) {
 					return true
 				}
-			}
-			if strings.Contains(msg, strings.ToLower("Insufficient "+GpuResourcePrefix)) {
-				return true
 			}
 		}
 	}
@@ -517,6 +523,7 @@ func (r *GpuWorkloadReconciler) isPodOwnedByWorkload(ctx context.Context, pod *c
 // isAncestorOf walks from startRef up the controller ownerReference chain,
 // returning true if targetUID appears as an ownerReference at any level.
 func (r *GpuWorkloadReconciler) isAncestorOf(ctx context.Context, namespace string, startRef *metav1.OwnerReference, targetUID types.UID) bool {
+	logger := log.FromContext(ctx)
 	seen := map[types.UID]bool{startRef.UID: true}
 	currentRef := startRef
 
@@ -524,6 +531,8 @@ func (r *GpuWorkloadReconciler) isAncestorOf(ctx context.Context, namespace stri
 		obj := &unstructured.Unstructured{}
 		obj.SetGroupVersionKind(gvkFromAPIVersionKind(currentRef.APIVersion, currentRef.Kind))
 		if err := r.Get(ctx, client.ObjectKey{Namespace: namespace, Name: currentRef.Name}, obj); err != nil {
+			logger.V(1).Info("isAncestorOf: failed to get owner",
+				"kind", currentRef.Kind, "name", currentRef.Name, "error", err)
 			return false
 		}
 
@@ -834,7 +843,7 @@ func (r *GpuWorkloadReconciler) matchAndMarkVictims(ctx context.Context, state *
 func (r *GpuWorkloadReconciler) getOperatorNamespace() string {
 	ns := os.Getenv(EnvOperatorNamespace)
 	if ns == "" {
-		ns = "kaiwo-system"
+		ns = DefaultOperatorNamespace
 	}
 	return ns
 }
@@ -930,7 +939,7 @@ func (r *GpuWorkloadReconciler) getThreshold(gw *kaiwo.GpuWorkload, gpuCfg confi
 	}
 	val, err := strconv.ParseFloat(os.Getenv(EnvDefaultThreshold), 64)
 	if err != nil {
-		return 5.0
+		return DefaultUtilizationThreshold
 	}
 	return val
 }
@@ -946,7 +955,7 @@ func (r *GpuWorkloadReconciler) getIfIdleAfter(gw *kaiwo.GpuWorkload, gpuCfg con
 	}
 	val, err := time.ParseDuration(os.Getenv(EnvDefaultIfIdleAfter))
 	if err != nil {
-		return 10 * time.Minute
+		return DefaultIfIdleAfter
 	}
 	return val
 }
@@ -1004,7 +1013,7 @@ func (r *GpuWorkloadReconciler) getTTL(gw *kaiwo.GpuWorkload, gpuCfg configapi.K
 	}
 	val, err := time.ParseDuration(os.Getenv(EnvDefaultTTL))
 	if err != nil {
-		return 24 * time.Hour
+		return DefaultTTL
 	}
 	return val
 }
@@ -1203,7 +1212,11 @@ func parseAnnotationsIntoSpec(annotations map[string]string, spec *kaiwo.GpuWork
 // --- SetupWithManager ---
 
 func (r *GpuWorkloadReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	hostname, _ := os.Hostname()
+	hostname, err := os.Hostname()
+	if err != nil {
+		mgr.GetLogger().V(1).Info("failed to get hostname for lease holder ID", "error", err)
+		hostname = "unknown"
+	}
 	r.holderID = fmt.Sprintf("gpuworkload-%s-%d", hostname, os.Getpid())
 
 	return ctrl.NewControllerManagedBy(mgr).

@@ -26,6 +26,7 @@ package controller
 
 import (
 	"context"
+	"os"
 	"time"
 
 	configapi "github.com/silogen/kaiwo/apis/config/v1alpha1"
@@ -660,6 +661,171 @@ var _ = Describe("GpuWorkload Controller", func() {
 			}
 			reconciler := &GpuWorkloadReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
 			Expect(reconciler.isPodOwnedByWorkload(ctx, pod, gw)).To(BeFalse())
+		})
+	})
+
+	Context("extractGpuResources with InitContainers", func() {
+		It("should extract GPU resources from init containers only", func() {
+			pod := &corev1.Pod{
+				Spec: corev1.PodSpec{
+					InitContainers: []corev1.Container{
+						{
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									"amd.com/gpu": resource.MustParse("4"),
+								},
+							},
+						},
+					},
+					Containers: []corev1.Container{
+						{
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									"cpu": resource.MustParse("2"),
+								},
+							},
+						},
+					},
+				},
+			}
+			result := extractGpuResources(pod)
+			Expect(result).To(HaveKeyWithValue("amd.com/gpu", 4))
+		})
+
+		It("should take max of init container and regular container", func() {
+			pod := &corev1.Pod{
+				Spec: corev1.PodSpec{
+					InitContainers: []corev1.Container{
+						{
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									"amd.com/gpu": resource.MustParse("8"),
+								},
+							},
+						},
+					},
+					Containers: []corev1.Container{
+						{
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									"amd.com/gpu": resource.MustParse("2"),
+								},
+							},
+						},
+					},
+				},
+			}
+			result := extractGpuResources(pod)
+			Expect(result).To(HaveKeyWithValue("amd.com/gpu", 8))
+		})
+	})
+
+	Context("config fallback chains", func() {
+		var reconciler *GpuWorkloadReconciler
+		var gw *kaiwo.GpuWorkload
+		var emptyCfg configapi.KaiwoGpuPreemptionConfig
+
+		BeforeEach(func() {
+			reconciler = &GpuWorkloadReconciler{}
+			gw = &kaiwo.GpuWorkload{}
+			emptyCfg = configapi.KaiwoGpuPreemptionConfig{}
+		})
+
+		Context("getThreshold", func() {
+			It("should use spec value when set", func() {
+				threshold := 42.0
+				gw.Spec.UtilizationThreshold = &threshold
+				Expect(reconciler.getThreshold(gw, emptyCfg)).To(Equal(42.0))
+			})
+
+			It("should use config value when spec is nil", func() {
+				threshold := 15.0
+				cfg := configapi.KaiwoGpuPreemptionConfig{DefaultThreshold: &threshold}
+				Expect(reconciler.getThreshold(gw, cfg)).To(Equal(15.0))
+			})
+
+			It("should use env var when spec and config are nil", func() {
+				os.Setenv(EnvDefaultThreshold, "25.5")
+				defer os.Unsetenv(EnvDefaultThreshold)
+				Expect(reconciler.getThreshold(gw, emptyCfg)).To(BeNumerically("~", 25.5))
+			})
+
+			It("should fall back to default when nothing is set", func() {
+				os.Unsetenv(EnvDefaultThreshold)
+				Expect(reconciler.getThreshold(gw, emptyCfg)).To(Equal(DefaultUtilizationThreshold))
+			})
+		})
+
+		Context("getIfIdleAfter", func() {
+			It("should use spec value when set", func() {
+				dur := metav1.Duration{Duration: 30 * time.Minute}
+				gw.Spec.IfIdleAfter = &dur
+				Expect(reconciler.getIfIdleAfter(gw, emptyCfg)).To(Equal(30 * time.Minute))
+			})
+
+			It("should use config value when spec is nil", func() {
+				cfg := configapi.KaiwoGpuPreemptionConfig{DefaultIfIdleAfter: "20m"}
+				Expect(reconciler.getIfIdleAfter(gw, cfg)).To(Equal(20 * time.Minute))
+			})
+
+			It("should fall back to default when nothing is set", func() {
+				os.Unsetenv(EnvDefaultIfIdleAfter)
+				Expect(reconciler.getIfIdleAfter(gw, emptyCfg)).To(Equal(DefaultIfIdleAfter))
+			})
+		})
+
+		Context("getPreemptionPolicy", func() {
+			It("should use spec value when set", func() {
+				p := kaiwo.PreemptionPolicyAlways
+				gw.Spec.PreemptionPolicy = &p
+				Expect(reconciler.getPreemptionPolicy(gw, emptyCfg)).To(Equal(kaiwo.PreemptionPolicyAlways))
+			})
+
+			It("should use config value when spec is nil", func() {
+				cfg := configapi.KaiwoGpuPreemptionConfig{DefaultPolicy: "Always"}
+				Expect(reconciler.getPreemptionPolicy(gw, cfg)).To(Equal(kaiwo.PreemptionPolicyAlways))
+			})
+
+			It("should fall back to OnPressure by default", func() {
+				os.Unsetenv(EnvDefaultPolicy)
+				Expect(reconciler.getPreemptionPolicy(gw, emptyCfg)).To(Equal(kaiwo.PreemptionPolicyOnPressure))
+			})
+		})
+
+		Context("getAggregationPolicy", func() {
+			It("should use spec value when set", func() {
+				a := kaiwo.AggregationPolicyMin
+				gw.Spec.AggregationPolicy = &a
+				Expect(reconciler.getAggregationPolicy(gw, emptyCfg)).To(Equal(kaiwo.AggregationPolicyMin))
+			})
+
+			It("should use config value when spec is nil", func() {
+				cfg := configapi.KaiwoGpuPreemptionConfig{DefaultAggregation: "Avg"}
+				Expect(reconciler.getAggregationPolicy(gw, cfg)).To(Equal(kaiwo.AggregationPolicyAvg))
+			})
+
+			It("should fall back to Max by default", func() {
+				os.Unsetenv(EnvDefaultAggregation)
+				Expect(reconciler.getAggregationPolicy(gw, emptyCfg)).To(Equal(kaiwo.AggregationPolicyMax))
+			})
+		})
+
+		Context("getTTL", func() {
+			It("should use spec value when set", func() {
+				dur := metav1.Duration{Duration: 48 * time.Hour}
+				gw.Spec.TTLAfterFinished = &dur
+				Expect(reconciler.getTTL(gw, emptyCfg)).To(Equal(48 * time.Hour))
+			})
+
+			It("should use config value when spec is nil", func() {
+				cfg := configapi.KaiwoGpuPreemptionConfig{DefaultTTL: "12h"}
+				Expect(reconciler.getTTL(gw, cfg)).To(Equal(12 * time.Hour))
+			})
+
+			It("should fall back to default when nothing is set", func() {
+				os.Unsetenv(EnvDefaultTTL)
+				Expect(reconciler.getTTL(gw, emptyCfg)).To(Equal(DefaultTTL))
+			})
 		})
 	})
 })

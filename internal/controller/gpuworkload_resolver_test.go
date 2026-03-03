@@ -25,8 +25,12 @@ SOFTWARE.
 package controller
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -72,6 +76,15 @@ var _ = Describe("GpuWorkload Resolver", func() {
 		})
 	})
 
+	Context("gvkFromAPIVersionKind with invalid input", func() {
+		It("should fall back to kind-only GVK for malformed apiVersion", func() {
+			gvk := gvkFromAPIVersionKind("///invalid", "Widget")
+			Expect(gvk.Kind).To(Equal("Widget"))
+			Expect(gvk.Group).To(Equal(""))
+			Expect(gvk.Version).To(Equal(""))
+		})
+	})
+
 	Context("getControllerOwnerRef", func() {
 		It("should find the controller owner ref", func() {
 			trueVal := true
@@ -97,6 +110,101 @@ var _ = Describe("GpuWorkload Resolver", func() {
 		It("should return nil for empty refs", func() {
 			result := getControllerOwnerRef(nil)
 			Expect(result).To(BeNil())
+		})
+	})
+
+	Context("ResolveRootOwner", func() {
+		ctx := context.Background()
+
+		It("should resolve a bare pod (no owner refs) to itself", func() {
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "resolve-bare-pod",
+					Namespace: "default",
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{Name: "c", Image: "busybox"}},
+				},
+			}
+			Expect(k8sClient.Create(ctx, pod)).To(Succeed())
+			defer func() { _ = k8sClient.Delete(ctx, pod) }()
+
+			result, err := ResolveRootOwner(ctx, k8sClient, "default", pod.Name, "Pod", "v1", pod.UID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Ref.Kind).To(Equal("Pod"))
+			Expect(result.Ref.Name).To(Equal("resolve-bare-pod"))
+			Expect(result.Ref.UID).To(Equal(pod.UID))
+		})
+
+		It("should resolve single-hop Job owner", func() {
+			isController := true
+			job := &batchv1.Job{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "resolve-test-job",
+					Namespace: "default",
+				},
+				Spec: batchv1.JobSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers:    []corev1.Container{{Name: "c", Image: "busybox"}},
+							RestartPolicy: corev1.RestartPolicyNever,
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, job)).To(Succeed())
+			defer func() { _ = k8sClient.Delete(ctx, job) }()
+
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "resolve-test-pod",
+					Namespace: "default",
+					OwnerReferences: []metav1.OwnerReference{{
+						APIVersion: "batch/v1",
+						Kind:       "Job",
+						Name:       job.Name,
+						UID:        job.UID,
+						Controller: &isController,
+					}},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{Name: "c", Image: "busybox"}},
+				},
+			}
+			Expect(k8sClient.Create(ctx, pod)).To(Succeed())
+			defer func() { _ = k8sClient.Delete(ctx, pod) }()
+
+			result, err := ResolveRootOwner(ctx, k8sClient, "default", pod.Name, "Pod", "v1", pod.UID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Ref.Kind).To(Equal("Job"))
+			Expect(result.Ref.Name).To(Equal("resolve-test-job"))
+			Expect(result.Ref.UID).To(Equal(job.UID))
+		})
+
+		It("should return error when owner is not found", func() {
+			isController := true
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "resolve-orphan-pod",
+					Namespace: "default",
+					OwnerReferences: []metav1.OwnerReference{{
+						APIVersion: "batch/v1",
+						Kind:       "Job",
+						Name:       "nonexistent-job",
+						UID:        "fake-uid",
+						Controller: &isController,
+					}},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{Name: "c", Image: "busybox"}},
+				},
+			}
+			Expect(k8sClient.Create(ctx, pod)).To(Succeed())
+			defer func() { _ = k8sClient.Delete(ctx, pod) }()
+
+			_, err := ResolveRootOwner(ctx, k8sClient, "default", pod.Name, "Pod", "v1", pod.UID)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("not found"))
 		})
 	})
 })

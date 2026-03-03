@@ -1,3 +1,6 @@
+# busybox + amd.com/gpu is intentional: the GPU is never used so the workload
+# stays Idle, making it a preemption victim when the demand job creates pressure.
+# ($total_gpus) is substituted from the detect-cluster-gpus script step.
 apiVersion: batch/v1
 kind: Job
 metadata:

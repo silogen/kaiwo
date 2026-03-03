@@ -1,3 +1,5 @@
+# busybox + amd.com/gpu is intentional: the GPU is never used so the workload
+# reports 0% utilization and remains Idle, exercising the Always preemption path.
 apiVersion: batch/v1
 kind: Job
 metadata:

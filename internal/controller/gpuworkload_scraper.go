@@ -30,12 +30,14 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -44,10 +46,13 @@ import (
 )
 
 const (
-	EnvMetricsEndpoint = EnvGpuPreemptionPrefix + "METRICS_ENDPOINT"
-	EnvPollingInterval = EnvGpuPreemptionPrefix + "POLLING_INTERVAL"
-	gpuActivityMetric  = "gpu_gfx_activity"
-	scraperHTTPTimeout = 5 * time.Second
+	EnvMetricsEndpoint     = EnvGpuPreemptionPrefix + "METRICS_ENDPOINT"
+	EnvPollingInterval     = EnvGpuPreemptionPrefix + "POLLING_INTERVAL"
+	gpuActivityMetric      = "gpu_gfx_activity"
+	scraperHTTPTimeout     = 5 * time.Second
+	utilizationEpsilon     = 0.01
+	utilizationPrecision   = 100
+	defaultPollingInterval = "15s"
 )
 
 // GpuMetricsScraper is a manager.Runnable that periodically scrapes AMD GPU
@@ -65,9 +70,14 @@ func NewGpuMetricsScraper(c client.Client) (*GpuMetricsScraper, error) {
 		return nil, fmt.Errorf("environment variable %s is required when GPU preemption is enabled", EnvMetricsEndpoint)
 	}
 
+	u, err := url.Parse(endpoint)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return nil, fmt.Errorf("%s must use http or https scheme, got %q", EnvMetricsEndpoint, endpoint)
+	}
+
 	intervalStr := os.Getenv(EnvPollingInterval)
 	if intervalStr == "" {
-		intervalStr = "15s"
+		intervalStr = defaultPollingInterval
 	}
 	interval, err := time.ParseDuration(intervalStr)
 	if err != nil {
@@ -168,18 +178,6 @@ func (s *GpuMetricsScraper) poll(ctx context.Context) error {
 			continue
 		}
 
-		// Check if pod directly points to a GpuWorkload via label
-		if gwName, ok := pod.Labels["kaiwo.silogen.ai/gpu-workload"]; ok {
-			var gw kaiwo.GpuWorkload
-			if err := s.client.Get(ctx, client.ObjectKey{Namespace: pk.namespace, Name: gwName}, &gw); err == nil {
-				matched++
-				if s.updatePodUtilizations(ctx, &gw, pk.podName, podSamples) {
-					updated++
-				}
-				continue
-			}
-		}
-
 		// Walk owner refs to find the root owner UID, then match
 		gw := s.findGpuWorkloadForPod(ctx, pod, gwByOwner)
 		if gw == nil {
@@ -217,18 +215,15 @@ func (s *GpuMetricsScraper) findGpuWorkloadForPod(ctx context.Context, pod *core
 	return gwByOwner[key]
 }
 
-func (s *GpuMetricsScraper) updatePodUtilizations(ctx context.Context, gw *kaiwo.GpuWorkload, podName string, samples []gpuSample) bool {
-	logger := log.FromContext(ctx).WithName("GpuMetricsScraper")
-	now := metav1.Now()
+func (s *GpuMetricsScraper) applyUtilizationSamples(gw *kaiwo.GpuWorkload, podName string, samples []gpuSample, now metav1.Time) bool {
 	changed := false
-
 	for _, sample := range samples {
-		rounded := math.Round(sample.utilization*100) / 100
+		rounded := math.Round(sample.utilization*utilizationPrecision) / utilizationPrecision
 		found := false
 		for i := range gw.Status.PodUtilizations {
 			pu := &gw.Status.PodUtilizations[i]
 			if pu.PodName == podName && pu.GpuID == sample.gpuID {
-				if math.Abs(pu.Utilization-rounded) > 0.01 {
+				if math.Abs(pu.Utilization-rounded) > utilizationEpsilon {
 					pu.Utilization = rounded
 					pu.LastUpdate = now
 					changed = true
@@ -247,16 +242,44 @@ func (s *GpuMetricsScraper) updatePodUtilizations(ctx context.Context, gw *kaiwo
 			changed = true
 		}
 	}
-
 	if changed {
 		gw.Status.LastMetricsUpdate = &now
-		if err := s.client.Status().Update(ctx, gw); err != nil {
-			logger.V(1).Info("failed to update pod utilizations", "gpuworkload", gw.Name, "error", err)
-			return false
-		}
+	}
+	return changed
+}
+
+func (s *GpuMetricsScraper) updatePodUtilizations(ctx context.Context, gw *kaiwo.GpuWorkload, podName string, samples []gpuSample) bool {
+	logger := log.FromContext(ctx).WithName("GpuMetricsScraper")
+	now := metav1.Now()
+
+	if !s.applyUtilizationSamples(gw, podName, samples, now) {
+		return false
+	}
+
+	err := s.client.Status().Update(ctx, gw)
+	if err == nil {
 		return true
 	}
-	return false
+
+	if !apierrors.IsConflict(err) {
+		logger.V(1).Info("failed to update pod utilizations", "gpuworkload", gw.Name, "error", err)
+		return false
+	}
+
+	// Re-fetch and retry once on conflict.
+	fresh := &kaiwo.GpuWorkload{}
+	if err := s.client.Get(ctx, client.ObjectKeyFromObject(gw), fresh); err != nil {
+		logger.V(1).Info("failed to re-fetch GpuWorkload after conflict", "gpuworkload", gw.Name, "error", err)
+		return false
+	}
+	if !s.applyUtilizationSamples(fresh, podName, samples, now) {
+		return false
+	}
+	if err := s.client.Status().Update(ctx, fresh); err != nil {
+		logger.V(1).Info("failed to update pod utilizations after retry", "gpuworkload", gw.Name, "error", err)
+		return false
+	}
+	return true
 }
 
 func (s *GpuMetricsScraper) scrape() (map[string]*dto.MetricFamily, error) {
@@ -268,6 +291,11 @@ func (s *GpuMetricsScraper) scrape() (map[string]*dto.MetricFamily, error) {
 	defer func(Body io.ReadCloser) {
 		_ = Body.Close()
 	}(resp.Body)
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("metrics endpoint returned HTTP %d: %s", resp.StatusCode, string(body))
+	}
 
 	parser := expfmt.TextParser{}
 	return parser.TextToMetricFamilies(resp.Body)
