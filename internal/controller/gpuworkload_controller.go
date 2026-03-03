@@ -1034,7 +1034,11 @@ func (r *GpuWorkloadReconciler) podToGpuWorkload(ctx context.Context, obj client
 
 	rootResult, err := ResolveRootOwner(ctx, r.Client, pod.Namespace, pod.Name, "Pod", "v1", pod.UID)
 	if err != nil {
-		logger.Error(err, "failed to resolve root owner", "pod", pod.Name)
+		if errors.IsNotFound(err) {
+			logger.V(1).Info("owner not found (likely deleted), skipping", "pod", pod.Name)
+		} else {
+			logger.Error(err, "failed to resolve root owner", "pod", pod.Name)
+		}
 		return nil
 	}
 

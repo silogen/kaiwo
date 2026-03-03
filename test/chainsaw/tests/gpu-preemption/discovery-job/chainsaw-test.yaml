@@ -3,7 +3,7 @@ kind: Test
 metadata:
   name: test-gpu-preemption-discovery-job
 spec:
-  concurrent: false
+  concurrent: true
   steps:
   - name: discover-gpuworkload-for-job
     description: Verify GpuWorkload is created for an annotated Job (Pod -> Job chain)
@@ -20,6 +20,29 @@ spec:
               name: gpu-preemption-discover-job
             gpuResources:
               amd.com/gpu: 1
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: "debug"
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+  - name: verify-phase-transitions
+    description: Verify the reconciler resolves the owner chain and computes a phase
+    try:
+    - assert:
+        timeout: 120s
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: GpuWorkload
+          spec:
+            workloadRef:
+              kind: Job
+              name: gpu-preemption-discover-job
+          status:
+            (phase != 'PendingOther'): true
     catch:
     - command:
         entrypoint: kaiwo-dev

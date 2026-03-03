@@ -31,6 +31,16 @@ spec:
               kind: Job
               name: gpu-preemption-always
           status:
+            phase: Preempting
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: GpuWorkload
+          spec:
+            workloadRef:
+              kind: Job
+              name: gpu-preemption-always
+          status:
             phase: Preempted
     - error:
         resource:

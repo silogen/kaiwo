@@ -1,3 +1,6 @@
+# Requires rocm/pytorch:latest (or a compatible ROCm image) to be pullable.
+# The GPU stress loop keeps utilization above the default threshold so the
+# workload stays Active and is not preempted.
 apiVersion: batch/v1
 kind: Job
 metadata:

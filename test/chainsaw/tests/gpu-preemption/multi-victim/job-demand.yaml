@@ -1,7 +1,9 @@
+# Demand job requesting 2 GPUs. Neither victim alone (1 GPU each) satisfies
+# this demand, so the evaluator must accumulate both victims to proceed.
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: gpu-preemption-pressure-demand
+  name: gpu-preemption-multi-demand
   annotations:
     kaiwo.silogen.ai/gpu-preemption.enabled: "true"
     kaiwo.silogen.ai/gpu-preemption.policy: "OnPressure"
@@ -14,7 +16,7 @@ spec:
         command: ["sleep", "600"]
         resources:
           requests:
-            amd.com/gpu: ($node_gpus)
+            amd.com/gpu: "2"
           limits:
-            amd.com/gpu: ($node_gpus)
+            amd.com/gpu: "2"
       restartPolicy: Never

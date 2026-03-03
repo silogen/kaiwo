@@ -22,6 +22,8 @@ spec:
               name: gpu-preemption-active-workload
           status:
             phase: Active
+    # Wait well past if-idle-after (15s) plus several evaluation cycles to
+    # confirm the workload is never transitioned to Preempting/Preempted.
     - sleep:
         duration: 90s
     - error:

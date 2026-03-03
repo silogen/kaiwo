@@ -129,7 +129,7 @@ func (s *GpuMetricsScraper) poll(ctx context.Context) error {
 
 	family, ok := metrics[gpuActivityMetric]
 	if !ok {
-		logger.V(1).Info("metric not found in scrape response", "metric", gpuActivityMetric)
+		logger.Info("scrape completed: no gpu_gfx_activity metric in response", "metricsReturned", len(metrics))
 		return nil
 	}
 

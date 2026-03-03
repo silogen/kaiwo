@@ -1,15 +1,19 @@
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
-  name: test-gpu-preemption-no-fit
+  name: test-gpu-preemption-multi-victim
 spec:
   concurrent: false
   steps:
-  - name: idle-victim
-    description: Deploy victim Job with 1 GPU and wait for it to become idle past if-idle-after
+  - name: idle-two-victims
+    description: >
+      Deploy two single-GPU victim Jobs and wait for both to become idle past
+      the if-idle-after period.
     try:
     - apply:
-        file: job-victim.yaml
+        file: job-victim-a.yaml
+    - apply:
+        file: job-victim-b.yaml
     - assert:
         resource:
           apiVersion: kaiwo.silogen.ai/v1alpha1
@@ -17,9 +21,20 @@ spec:
           spec:
             workloadRef:
               kind: Job
-              name: gpu-preemption-nofit-victim
+              name: gpu-preemption-multi-victim-a
           status:
             phase: Idle
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: GpuWorkload
+          spec:
+            workloadRef:
+              kind: Job
+              name: gpu-preemption-multi-victim-b
+          status:
+            phase: Idle
+    # Must exceed if-idle-after (15s) so both victims are eligible.
     - sleep:
         duration: 20s
     catch:
@@ -31,10 +46,11 @@ spec:
         - name: PRINT_LEVEL
           value: "debug"
         args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
-  - name: demand-without-fit
+  - name: demand-triggers-multi-victim-preemption
     description: >
-      Deploy demand Job requesting 9999 GPUs (impossible to satisfy) and verify
-      the victim is NOT preempted since freeing 1 GPU would not help.
+      Deploy a demand Job requesting 2 GPUs. The evaluator must accumulate
+      both idle victims (1 GPU each) to satisfy the demand. Verify both
+      victims are preempted and their Jobs are deleted.
     try:
     - apply:
         file: job-demand.yaml
@@ -45,31 +61,17 @@ spec:
           spec:
             workloadRef:
               kind: Job
-              name: gpu-preemption-nofit-demand
+              name: gpu-preemption-multi-demand
           status:
             phase: PendingGpu
-    # Wait long enough for multiple evaluation cycles past if-idle-after (15s)
-    # to prove the victim is NOT preempted despite the pending demand.
-    - sleep:
-        duration: 30s
-    - error:
+    - assert:
         resource:
           apiVersion: kaiwo.silogen.ai/v1alpha1
           kind: GpuWorkload
           spec:
             workloadRef:
               kind: Job
-              name: gpu-preemption-nofit-victim
-          status:
-            phase: Preempting
-    - error:
-        resource:
-          apiVersion: kaiwo.silogen.ai/v1alpha1
-          kind: GpuWorkload
-          spec:
-            workloadRef:
-              kind: Job
-              name: gpu-preemption-nofit-victim
+              name: gpu-preemption-multi-victim-a
           status:
             phase: Preempted
     - assert:
@@ -79,9 +81,21 @@ spec:
           spec:
             workloadRef:
               kind: Job
-              name: gpu-preemption-nofit-victim
+              name: gpu-preemption-multi-victim-b
           status:
-            phase: Idle
+            phase: Preempted
+    - error:
+        resource:
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: gpu-preemption-multi-victim-a
+    - error:
+        resource:
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: gpu-preemption-multi-victim-b
     catch:
     - command:
         entrypoint: kaiwo-dev
