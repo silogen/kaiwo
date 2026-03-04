@@ -8,7 +8,7 @@ The system relies on a CRD, `GpuWorkload`, which tracks each opted-in workload's
 
 ```mermaid
 flowchart LR
-    P[Pod created with<br>amd.com/gpu request] --> D{Owner has<br>preemption<br>annotation?}
+    P[Pod created with<br>amd.com/gpu request] --> D{Owner or namespace<br>has preemption<br>annotation?}
     D -- Yes --> G[GpuWorkload CR created]
     D -- No --> X[Ignored]
     G --> S[Metrics scraper updates<br>per-pod utilization]
@@ -20,7 +20,7 @@ flowchart LR
     E -- OnPressure +<br>pending demand<br>+ fit check --> Del
 ```
 
-1. **Discovery** -- The controller watches all Pods. When a Pod requesting any `amd.com/*` GPU resource (e.g. `amd.com/gpu`, `amd.com/gpu-0`, partitioned resources) is created, the controller resolves its root owner (walking `ownerReferences` up through ReplicaSets, Jobs, etc.) and checks for preemption annotations.
+1. **Discovery** -- The controller watches all Pods. When a Pod requesting any `amd.com/*` GPU resource (e.g. `amd.com/gpu`, `amd.com/gpu-0`, partitioned resources) is created, the controller resolves its root owner (walking `ownerReferences` up through ReplicaSets, Jobs, etc.) and checks for preemption annotations on both the root owner and the pod's namespace. Namespace annotations serve as defaults; workload-level annotations override them.
 2. **Tracking** -- A `GpuWorkload` CR is created for each unique root owner, capturing the GPU resource counts and annotation-derived settings.
 3. **Metrics** -- A background scraper polls the AMD GPU operator's Prometheus endpoint (`gpu_gfx_activity`) and writes per-pod utilization into the `GpuWorkload` status.
 4. **Reconciliation** -- The reconciler aggregates utilization, determines the phase (`PendingOther`, `PendingGpu`, `Active`, `Idle`, etc.), and evaluates preemption when conditions are met.
@@ -43,13 +43,13 @@ For workloads owned by other resource types (e.g. CronJobs, DaemonSets, custom c
 
 ## Configuration Hierarchy
 
-Each setting is resolved through a 4-tier chain. The first non-empty value wins:
+Each setting is resolved through a 5-tier chain. The first non-empty value wins:
 
 ```
-per-workload annotation  >  KaiwoConfig  >  operator env var  >  hardcoded fallback
+per-workload annotation  >  namespace annotation  >  KaiwoConfig  >  operator env var  >  hardcoded fallback
 ```
 
-This lets you set cluster-wide runtime defaults (via `KaiwoConfig`) that can be overridden per workload (via annotations), while env vars and hardcoded values provide a safety net.
+This lets you set cluster-wide runtime defaults (via `KaiwoConfig`), override them per namespace (via namespace annotations), and further override per workload (via workload annotations), while env vars and hardcoded values provide a safety net.
 
 ## Enabling GPU Preemption
 
@@ -98,9 +98,26 @@ All fields are optional. Omitted fields fall through to the env var / hardcoded 
 !!!note
     `enabled`, `metricsEndpoint`, and `pollingInterval` are **not** available in `KaiwoConfig`. These are startup-only settings (Helm / env vars) that require an operator restart to change. All other settings (`defaultThreshold`, `defaultGracePeriod`, `defaultPolicy`, `defaultAggregation`, `defaultTTL`) can be tuned live via `KaiwoConfig` without restarting.
 
-### 3. Per-workload: Annotations
+### 3. Per-namespace: Annotations
 
-Add annotations to the **root owner** resource (the Job, Deployment, KaiwoJob, etc. -- not the Pod template) to opt it in:
+Annotate a **Namespace** to opt in all GPU workloads in that namespace. This is convenient when you want every GPU workload in a namespace to be tracked without annotating each one individually:
+
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ml-team
+  annotations:
+    kaiwo.silogen.ai/gpu-preemption.enabled: "true"
+    kaiwo.silogen.ai/gpu-preemption.grace-period: "15m"
+    kaiwo.silogen.ai/gpu-preemption.policy: "OnPressure"
+```
+
+Any GPU workload created in this namespace will be automatically tracked. Individual workloads can still override specific settings with their own annotations (see below).
+
+### 4. Per-workload: Annotations
+
+Add annotations to the **root owner** resource (the Job, Deployment, KaiwoJob, etc. -- not the Pod template) to opt it in or override namespace defaults:
 
 ```yaml
 apiVersion: batch/v1
@@ -128,11 +145,12 @@ spec:
 
     - `.enabled: "true"` on its own is valid -- all settings use cluster-wide defaults.
     - `.grace-period: "5m"` on its own is also valid -- it implicitly enables tracking without needing `.enabled`.
-    - Any combination works; omitted settings fall back through KaiwoConfig, then env vars, then hardcoded defaults.
+    - Any combination works; omitted settings fall back through namespace annotations, then KaiwoConfig, then env vars, then hardcoded defaults.
+    - Annotations on the workload take precedence over identical annotations on the namespace.
 
 ## Annotations Reference
 
-All annotations use the prefix `kaiwo.silogen.ai/gpu-preemption.` and are placed on the root owner resource. Each setting follows the resolution chain: **annotation > KaiwoConfig > env var > hardcoded fallback**.
+All annotations use the prefix `kaiwo.silogen.ai/gpu-preemption.` and can be placed on the root owner resource and/or the namespace. Each setting follows the resolution chain: **workload annotation > namespace annotation > KaiwoConfig > env var > hardcoded fallback**.
 
 | Annotation | Description | KaiwoConfig field | Env var | Default |
 |---|---|---|---|---|
@@ -218,6 +236,63 @@ The status includes:
 - `preemptedFor` -- the pending workload this was preempted to make room for
 - `preemptionReason` -- human-readable explanation
 
+### Example GpuWorkload CR
+
+The following shows a representative `GpuWorkload` for an idle training Job, with all fields populated as they would appear during normal operation:
+
+```yaml
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: GpuWorkload
+metadata:
+  name: job-batch-training-a1b2c3d4      # <lowercase-kind>-<name>-<uid-prefix>
+  namespace: ml-team
+spec:
+  workloadRef:
+    apiVersion: batch/v1
+    kind: Job
+    name: batch-training
+    uid: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+  gpuResources:
+    amd.com/gpu: 4                        # total GPUs requested across all pods
+  utilizationThreshold: 5.0              # % below which the workload is idle (optional override)
+  gracePeriod: 10m                       # idle duration before preemption eligibility (optional override)
+  preemptionPolicy: OnPressure           # OnPressure or Always (optional override)
+  aggregationPolicy: Max                 # Min, Max, or Avg across pods (optional override)
+  ttlAfterFinished: 24h                  # how long to retain after terminal phase (optional override)
+status:
+  phase: Idle
+  aggregatedUtilization: 1.2            # current %, below threshold → Idle
+  idleSince: "2026-03-04T10:00:00Z"
+  ownerChain: "Pod/batch-training-xw7n5 -> Job/batch-training"
+  lastMetricsUpdate: "2026-03-04T10:14:45Z"
+  podUtilizations:
+  - podName: batch-training-xw7n5
+    gpuId: "0"
+    utilization: 2.1
+    lastUpdate: "2026-03-04T10:14:45Z"
+  - podName: batch-training-xw7n5
+    gpuId: "1"
+    utilization: 0.3
+    lastUpdate: "2026-03-04T10:14:45Z"
+  conditions:
+  - type: PhaseUpdated
+    status: "True"
+    reason: PhaseIdle
+    message: "GPU utilization dropped to 1.2%, workload is now considered idle"
+    lastTransitionTime: "2026-03-04T10:00:00Z"
+```
+
+For a preempted workload the status also includes:
+
+```yaml
+status:
+  phase: Preempted
+  preemptedAt: "2026-03-04T10:15:00Z"
+  preemptedFor: "job-high-priority-demand-b2c3d4e5"
+  preemptionReason: "Preempted to free 4 amd.com/gpu for pending workload job-high-priority-demand-b2c3d4e5"
+  finishedAt: "2026-03-04T10:15:00Z"   # TTL countdown starts here
+```
+
 ## Examples
 
 ### Reclaim idle GPUs under pressure (default behavior)
@@ -262,12 +337,26 @@ metadata:
 
 Uses all cluster-wide defaults from KaiwoConfig, then Helm values / environment variables.
 
+### Namespace-wide opt-in
+
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ml-team
+  annotations:
+    kaiwo.silogen.ai/gpu-preemption.enabled: "true"
+    kaiwo.silogen.ai/gpu-preemption.grace-period: "15m"
+```
+
+All GPU workloads in `ml-team` are automatically tracked with a 15-minute grace period. Individual workloads can still override settings with their own annotations -- for example, setting `.policy: "Always"` on one Job overrides the default `OnPressure` inherited from the namespace.
+
 ## Comparison with Resource Monitoring
 
 | Aspect | Resource Monitoring | GPU Preemption |
 |---|---|---|
 | Scope | `KaiwoJob` and `KaiwoService` only | Any Kubernetes GPU workload |
-| Opt-in | Automatic for Kaiwo CRDs | Annotation on the root owner |
+| Opt-in | Automatic for Kaiwo CRDs | Annotation on the root owner or namespace |
 | CRD | None (status on Kaiwo CRDs) | `GpuWorkload` per tracked workload |
 | Demand awareness | No | Yes (`OnPressure` with fit checks) |
 | Audit trail | Status conditions on Kaiwo CRDs | Persistent `GpuWorkload` CRs with TTL |
@@ -276,7 +365,7 @@ Uses all cluster-wide defaults from KaiwoConfig, then Helm values / environment 
 ## Troubleshooting
 
 - **GpuWorkload not created?**
-    - Verify the root owner (not the Pod template) has at least one `kaiwo.silogen.ai/gpu-preemption.*` annotation.
+    - Verify the root owner (not the Pod template) or its namespace has at least one `kaiwo.silogen.ai/gpu-preemption.*` annotation.
     - Check that the Pod requests `amd.com/gpu*` resources.
     - Check operator logs for RBAC errors during owner resolution -- the operator needs `get` permissions on all resource types in the owner chain.
 

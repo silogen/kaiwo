@@ -282,6 +282,67 @@ var _ = Describe("GpuWorkload Controller", func() {
 		})
 	})
 
+	Context("mergePreemptionAnnotations", func() {
+		It("should return empty map when both inputs are nil", func() {
+			result := mergePreemptionAnnotations(nil, nil)
+			Expect(result).To(BeEmpty())
+		})
+
+		It("should use namespace annotations when workload has none", func() {
+			ns := map[string]string{
+				AnnotationGracePeriod: "15m",
+				AnnotationPolicy:     "Always",
+				"unrelated/key":      "ignored",
+			}
+			result := mergePreemptionAnnotations(ns, nil)
+			Expect(result).To(HaveLen(2))
+			Expect(result[AnnotationGracePeriod]).To(Equal("15m"))
+			Expect(result[AnnotationPolicy]).To(Equal("Always"))
+		})
+
+		It("should use workload annotations when namespace has none", func() {
+			workload := map[string]string{
+				AnnotationThreshold: "20",
+				"other/annotation":  "ignored",
+			}
+			result := mergePreemptionAnnotations(nil, workload)
+			Expect(result).To(HaveLen(1))
+			Expect(result[AnnotationThreshold]).To(Equal("20"))
+		})
+
+		It("should let workload annotations override namespace annotations", func() {
+			ns := map[string]string{
+				AnnotationGracePeriod: "15m",
+				AnnotationPolicy:     "OnPressure",
+				AnnotationThreshold:  "10",
+			}
+			workload := map[string]string{
+				AnnotationPolicy:    "Always",
+				AnnotationThreshold: "25",
+			}
+			result := mergePreemptionAnnotations(ns, workload)
+			Expect(result).To(HaveLen(3))
+			Expect(result[AnnotationGracePeriod]).To(Equal("15m"))
+			Expect(result[AnnotationPolicy]).To(Equal("Always"))
+			Expect(result[AnnotationThreshold]).To(Equal("25"))
+		})
+
+		It("should filter out non-preemption annotations from both sources", func() {
+			ns := map[string]string{
+				AnnotationEnabled:          "true",
+				"kubernetes.io/some-label": "value",
+			}
+			workload := map[string]string{
+				AnnotationTTL:            "12h",
+				"app.kubernetes.io/name": "test",
+			}
+			result := mergePreemptionAnnotations(ns, workload)
+			Expect(result).To(HaveLen(2))
+			Expect(result).To(HaveKey(AnnotationEnabled))
+			Expect(result).To(HaveKey(AnnotationTTL))
+		})
+	})
+
 	Context("isPendingDueToGPU", func() {
 		It("should return true when pod is unschedulable due to GPU", func() {
 			pod := &corev1.Pod{

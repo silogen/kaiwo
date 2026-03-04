@@ -1,0 +1,19 @@
+# No preemption annotations on the Job itself; discovery is expected to come
+# from the namespace-level annotations applied in the chainsaw-test.yaml step.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gpu-preemption-discover-ns
+spec:
+  template:
+    spec:
+      containers:
+      - name: workload
+        image: busybox:latest
+        command: ["sleep", "600"]
+        resources:
+          requests:
+            amd.com/gpu: "1"
+          limits:
+            amd.com/gpu: "1"
+      restartPolicy: Never

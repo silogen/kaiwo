@@ -1049,7 +1049,15 @@ func (r *GpuWorkloadReconciler) podToGpuWorkload(ctx context.Context, obj client
 		return nil
 	}
 
-	annotations := rootObj.GetAnnotations()
+	var nsAnnotations map[string]string
+	var ns corev1.Namespace
+	if err := r.Get(ctx, client.ObjectKey{Name: pod.Namespace}, &ns); err != nil {
+		logger.V(1).Info("could not fetch namespace for annotation lookup", "namespace", pod.Namespace, "error", err)
+	} else {
+		nsAnnotations = ns.GetAnnotations()
+	}
+
+	annotations := mergePreemptionAnnotations(nsAnnotations, rootObj.GetAnnotations())
 	if !isGpuPreemptionAnnotated(annotations) {
 		return nil
 	}
@@ -1165,6 +1173,23 @@ func gpuResourcesEqual(a, b map[string]int) bool {
 		}
 	}
 	return true
+}
+
+// mergePreemptionAnnotations builds a single map of GPU-preemption annotations
+// from two sources.  Values in override take precedence over base.
+func mergePreemptionAnnotations(base, override map[string]string) map[string]string {
+	merged := make(map[string]string)
+	for k, v := range base {
+		if strings.HasPrefix(k, AnnotationPrefix) {
+			merged[k] = v
+		}
+	}
+	for k, v := range override {
+		if strings.HasPrefix(k, AnnotationPrefix) {
+			merged[k] = v
+		}
+	}
+	return merged
 }
 
 // isGpuPreemptionAnnotated returns true if the resource has the explicit
