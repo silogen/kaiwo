@@ -1,5 +1,7 @@
-# Demand job requesting 2 GPUs. Neither victim alone (1 GPU each) satisfies
-# this demand, so the evaluator must accumulate both victims to proceed.
+# Demand job requesting node_gpus+1 GPUs. Neither victim alone (node_gpus
+# GPUs each) satisfies this, so the evaluator must accumulate both victims.
+# The demand exceeds per-node capacity and will remain PendingGpu even after
+# preemption — the test only verifies that both victims are preempted.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -16,7 +18,7 @@ spec:
         command: ["sleep", "600"]
         resources:
           requests:
-            amd.com/gpu: "2"
+            amd.com/gpu: ($demand_gpus)
           limits:
-            amd.com/gpu: "2"
+            amd.com/gpu: ($demand_gpus)
       restartPolicy: Never

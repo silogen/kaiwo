@@ -7,9 +7,38 @@ spec:
   steps:
   - name: idle-two-victims
     description: >
-      Deploy two single-GPU victim Jobs and wait for both to become idle past
-      the if-idle-after period.
+      Probe for actual available GPUs, deploy two victim Jobs (one per node)
+      that saturate all available GPUs, and wait for both to become idle.
     try:
+    - script:
+        timeout: 90s
+        env:
+        - name: NS
+          value: ($namespace)
+        content: |
+          max_alloc=$(kubectl get nodes -o jsonpath='{range .items[*]}{.status.allocatable.amd\.com/gpu}{"\n"}{end}' | awk 'NF{if($1+0>m)m=$1+0}END{printf "%d",m}')
+          if [ "$max_alloc" -eq 0 ] 2>/dev/null; then
+            echo "ERROR: no amd.com/gpu resources found in cluster" >&2
+            exit 1
+          fi
+          for n in $(seq "$max_alloc" -1 1); do
+            kubectl delete pod gpu-probe -n "$NS" --ignore-not-found --grace-period=1 >/dev/null 2>&1
+            OVR=$(printf '{"spec":{"containers":[{"name":"p","image":"busybox","command":["sleep","300"],"resources":{"requests":{"amd.com/gpu":"%d"},"limits":{"amd.com/gpu":"%d"}}}]}}' "$n" "$n")
+            kubectl run gpu-probe -n "$NS" --image=busybox --restart=Never --overrides="$OVR" >/dev/null 2>&1
+            if kubectl wait pod/gpu-probe -n "$NS" --for=condition=PodScheduled --timeout=10s >/dev/null 2>&1; then
+              kubectl delete pod gpu-probe -n "$NS" --ignore-not-found --grace-period=1 >/dev/null 2>&1
+              mkdir -p /tmp/chainsaw-multi-victim
+              printf "%d" "$n" > /tmp/chainsaw-multi-victim/node_gpus
+              printf "%d" "$n"
+              exit 0
+            fi
+          done
+          kubectl delete pod gpu-probe -n "$NS" --ignore-not-found --grace-period=1 >/dev/null 2>&1
+          echo "ERROR: no schedulable GPU count found" >&2
+          exit 1
+        outputs:
+        - name: node_gpus
+          value: ($stdout)
     - apply:
         file: job-victim-a.yaml
     - apply:
@@ -38,20 +67,31 @@ spec:
     - sleep:
         duration: 20s
     catch:
-    - command:
-        entrypoint: kaiwo-dev
+    - script:
         env:
-        - name: NAMESPACE
+        - name: NS
           value: ($namespace)
-        - name: PRINT_LEVEL
-          value: "debug"
-        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+        content: |
+          kubectl get gpuworkloads,jobs,pods -n "$NS" -o wide 2>&1 || true
   - name: demand-triggers-multi-victim-preemption
     description: >
-      Deploy a demand Job requesting 2 GPUs. The evaluator must accumulate
-      both idle victims (1 GPU each) to satisfy the demand. Verify both
-      victims are preempted and their Jobs are deleted.
+      Deploy a demand Job requesting node_gpus+1 GPUs. Neither victim alone
+      (node_gpus GPUs) satisfies this, so the evaluator must accumulate both.
     try:
+    - script:
+        content: |
+          NODE_GPUS=$(cat /tmp/chainsaw-multi-victim/node_gpus)
+          printf "%d" "$NODE_GPUS"
+        outputs:
+        - name: node_gpus
+          value: ($stdout)
+    - script:
+        content: |
+          NODE_GPUS=$(cat /tmp/chainsaw-multi-victim/node_gpus)
+          printf "%d" "$((NODE_GPUS + 1))"
+        outputs:
+        - name: demand_gpus
+          value: ($stdout)
     - apply:
         file: job-demand.yaml
     - assert:
@@ -97,11 +137,9 @@ spec:
           metadata:
             name: gpu-preemption-multi-victim-b
     catch:
-    - command:
-        entrypoint: kaiwo-dev
+    - script:
         env:
-        - name: NAMESPACE
+        - name: NS
           value: ($namespace)
-        - name: PRINT_LEVEL
-          value: "debug"
-        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+        content: |
+          kubectl get gpuworkloads,jobs,pods -n "$NS" -o wide 2>&1 || true

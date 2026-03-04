@@ -8,6 +8,10 @@ metadata:
 spec:
   template:
     spec:
+      # Pin to the victim's node so the demand is unschedulable while the
+      # victim holds the GPUs; after preemption the demand can schedule here.
+      nodeSelector:
+        kubernetes.io/hostname: ($victim_node)
       containers:
       - name: workload
         image: busybox:latest
