@@ -745,13 +745,13 @@ var _ = Describe("GpuWorkload Controller", func() {
 			})
 
 			It("should use env var when spec and config are nil", func() {
-				os.Setenv(EnvDefaultThreshold, "25.5")
-				defer os.Unsetenv(EnvDefaultThreshold)
+				Expect(os.Setenv(EnvDefaultThreshold, "25.5")).To(Succeed())
+				defer func() { Expect(os.Unsetenv(EnvDefaultThreshold)).To(Succeed()) }()
 				Expect(reconciler.getThreshold(gw, emptyCfg)).To(BeNumerically("~", 25.5))
 			})
 
 			It("should fall back to default when nothing is set", func() {
-				os.Unsetenv(EnvDefaultThreshold)
+				Expect(os.Unsetenv(EnvDefaultThreshold)).To(Succeed())
 				Expect(reconciler.getThreshold(gw, emptyCfg)).To(Equal(DefaultUtilizationThreshold))
 			})
 		})
@@ -769,7 +769,7 @@ var _ = Describe("GpuWorkload Controller", func() {
 			})
 
 			It("should fall back to default when nothing is set", func() {
-				os.Unsetenv(EnvDefaultGracePeriod)
+				Expect(os.Unsetenv(EnvDefaultGracePeriod)).To(Succeed())
 				Expect(reconciler.getGracePeriod(gw, emptyCfg)).To(Equal(DefaultGracePeriod))
 			})
 		})
@@ -787,7 +787,7 @@ var _ = Describe("GpuWorkload Controller", func() {
 			})
 
 			It("should fall back to OnPressure by default", func() {
-				os.Unsetenv(EnvDefaultPolicy)
+				Expect(os.Unsetenv(EnvDefaultPolicy)).To(Succeed())
 				Expect(reconciler.getPreemptionPolicy(gw, emptyCfg)).To(Equal(kaiwo.PreemptionPolicyOnPressure))
 			})
 		})
@@ -805,7 +805,7 @@ var _ = Describe("GpuWorkload Controller", func() {
 			})
 
 			It("should fall back to Max by default", func() {
-				os.Unsetenv(EnvDefaultAggregation)
+				Expect(os.Unsetenv(EnvDefaultAggregation)).To(Succeed())
 				Expect(reconciler.getAggregationPolicy(gw, emptyCfg)).To(Equal(kaiwo.AggregationPolicyMax))
 			})
 		})
@@ -823,7 +823,7 @@ var _ = Describe("GpuWorkload Controller", func() {
 			})
 
 			It("should fall back to default when nothing is set", func() {
-				os.Unsetenv(EnvDefaultTTL)
+				Expect(os.Unsetenv(EnvDefaultTTL)).To(Succeed())
 				Expect(reconciler.getTTL(gw, emptyCfg)).To(Equal(DefaultTTL))
 			})
 		})

@@ -193,7 +193,7 @@ func (r *GpuWorkloadReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// Emit events on phase transitions
 	phaseChanged := oldPhase != phase
 	if phaseChanged {
-		r.emitPhaseTransitionEvent(&gw, oldPhase, phase)
+		r.emitPhaseTransitionEvent(&gw, phase)
 	}
 
 	if phaseChanged && (phase == kaiwo.GpuWorkloadPhaseIdle || phase == kaiwo.GpuWorkloadPhasePendingGpu || phase == kaiwo.GpuWorkloadPhaseActive) {
@@ -568,7 +568,7 @@ func hasGpuResources(pod *corev1.Pod) bool {
 	return false
 }
 
-func (r *GpuWorkloadReconciler) emitPhaseTransitionEvent(gw *kaiwo.GpuWorkload, oldPhase, newPhase kaiwo.GpuWorkloadPhase) {
+func (r *GpuWorkloadReconciler) emitPhaseTransitionEvent(gw *kaiwo.GpuWorkload, newPhase kaiwo.GpuWorkloadPhase) {
 	var eventType, reason, message string
 
 	switch newPhase {

@@ -92,8 +92,8 @@ type WorkloadReference struct {
 	// +kubebuilder:validation:MinLength=1
 	Kind string `json:"kind"`
 	// +kubebuilder:validation:MinLength=1
-	Name string `json:"name"`
-	UID types.UID `json:"uid"`
+	Name string    `json:"name"`
+	UID  types.UID `json:"uid"`
 }
 
 // PodGpuUtilization holds a utilization sample for a single GPU on a single pod.
