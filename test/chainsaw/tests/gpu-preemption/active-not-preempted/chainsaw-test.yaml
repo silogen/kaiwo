@@ -8,7 +8,7 @@ spec:
   - name: active-workload-not-preempted
     description: >
       Verify a workload under real GPU load (utilization above threshold) stays
-      Active and is NOT preempted, even with Always policy past if-idle-after.
+      Active and is NOT preempted, even with Always policy past grace-period.
     try:
     - apply:
         file: job-active.yaml
@@ -22,7 +22,7 @@ spec:
               name: gpu-preemption-active-workload
           status:
             phase: Active
-    # Wait well past if-idle-after (15s) plus several evaluation cycles to
+    # Wait well past grace-period (15s) plus several evaluation cycles to
     # confirm the workload is never transitioned to Preempting/Preempted.
     - sleep:
         duration: 90s

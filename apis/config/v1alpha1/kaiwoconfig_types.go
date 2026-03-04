@@ -163,11 +163,11 @@ type KaiwoGpuPreemptionConfig struct {
 	// +kubebuilder:validation:Maximum=100
 	DefaultThreshold *float64 `json:"defaultThreshold,omitempty"`
 
-	// DefaultIfIdleAfter is the duration a workload must be continuously idle
+	// DefaultGracePeriod is the duration a workload must be continuously idle
 	// before it becomes eligible for preemption (e.g. "10m", "1h").
 	// +optional
 	// +kubebuilder:validation:Pattern=`^([0-9]+(s|m|h))+$`
-	DefaultIfIdleAfter string `json:"defaultIfIdleAfter,omitempty"`
+	DefaultGracePeriod string `json:"defaultGracePeriod,omitempty"`
 
 	// DefaultPolicy is the preemption policy: "OnPressure" or "Always".
 	// +optional

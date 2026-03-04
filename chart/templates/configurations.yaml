@@ -84,8 +84,8 @@ spec:
     {{- with .Values.kaiwoConfig.spec.gpuPreemption.defaultThreshold }}
     defaultThreshold: {{ . }}
     {{- end }}
-    {{- with .Values.kaiwoConfig.spec.gpuPreemption.defaultIfIdleAfter }}
-    defaultIfIdleAfter: {{ . | quote }}
+    {{- with .Values.kaiwoConfig.spec.gpuPreemption.defaultGracePeriod }}
+    defaultGracePeriod: {{ . | quote }}
     {{- end }}
     {{- with .Values.kaiwoConfig.spec.gpuPreemption.defaultPolicy }}
     defaultPolicy: {{ . | quote }}

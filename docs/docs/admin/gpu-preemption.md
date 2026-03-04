@@ -15,7 +15,7 @@ flowchart LR
     S --> R[Reconciler computes<br>aggregated utilization]
     R --> Ph{Phase?}
     Ph -- Active --> W[Requeue]
-    Ph -- Idle past<br>if-idle-after --> E[Preemption evaluation]
+    Ph -- Idle past<br>grace-period --> E[Preemption evaluation]
     E -- Always --> Del[Delete workload]
     E -- OnPressure +<br>pending demand<br>+ fit check --> Del
 ```
@@ -39,7 +39,7 @@ The controller resolves pod ownership by walking the `ownerReferences` chain. Th
 - `kaiwo.silogen.ai/v1alpha1` KaiwoJobs, KaiwoServices
 - `workload.codeflare.dev/v1beta2` AppWrappers
 
-For workloads owned by other resource types (e.g. CronJobs, DaemonSets, custom controllers), add `get` permission for those resources to the operator `ServiceAccount`. Without it, the controller will log an RBAC error and skip the pod.
+For workloads owned by other resource types (e.g. CronJobs, DaemonSets, custom controllers), add `get` and `delete` permissions for those resources to the operator `ServiceAccount`. `get` is needed to resolve the owner chain and read annotations; `delete` is needed for preemption. Without `get`, the controller will log an RBAC error and skip the pod.
 
 ## Configuration Hierarchy
 
@@ -64,13 +64,16 @@ gpuPreemption:
   metricsEndpoint: "http://amd-gpu-metrics-exporter.gpu-operator.svc:5000/metrics"
   pollingInterval: "15s"
   defaultThreshold: "5"
-  defaultIfIdleAfter: "10m"
+  defaultGracePeriod: "10m"
   defaultPolicy: "OnPressure"
   defaultAggregation: "Max"
   defaultTTL: "24h"
 ```
 
 These map to operator environment variables (see [Environment Variables](#environment-variables) below). Changing them requires an operator restart.
+
+!!! warning "Operator restart required"
+    `enabled`, `metricsEndpoint`, and `pollingInterval` can **only** be set via Helm values / environment variables — they are not available in `KaiwoConfig` or per-workload annotations. These settings control the controller and metrics scraper startup, so any change requires an **operator restart** to take effect.
 
 ### 2. Cluster-wide runtime defaults: KaiwoConfig
 
@@ -84,7 +87,7 @@ metadata:
 spec:
   gpuPreemption:
     defaultThreshold: 10
-    defaultIfIdleAfter: "15m"
+    defaultGracePeriod: "15m"
     defaultPolicy: "OnPressure"
     defaultAggregation: "Max"
     defaultTTL: "12h"
@@ -93,7 +96,7 @@ spec:
 All fields are optional. Omitted fields fall through to the env var / hardcoded fallback.
 
 !!!note
-    `metricsEndpoint` and `pollingInterval` are **not** in `KaiwoConfig` because they configure the background metrics scraper, which requires an operator restart to pick up changes.
+    `enabled`, `metricsEndpoint`, and `pollingInterval` are **not** available in `KaiwoConfig`. These are startup-only settings (Helm / env vars) that require an operator restart to change. All other settings (`defaultThreshold`, `defaultGracePeriod`, `defaultPolicy`, `defaultAggregation`, `defaultTTL`) can be tuned live via `KaiwoConfig` without restarting.
 
 ### 3. Per-workload: Annotations
 
@@ -105,7 +108,7 @@ kind: Job
 metadata:
   name: my-training-job
   annotations:
-    kaiwo.silogen.ai/gpu-preemption.if-idle-after: "5m"
+    kaiwo.silogen.ai/gpu-preemption.grace-period: "5m"
     kaiwo.silogen.ai/gpu-preemption.policy: "Always"
 spec:
   template:
@@ -124,7 +127,7 @@ spec:
     Any annotation with the `kaiwo.silogen.ai/gpu-preemption.` prefix enables preemption tracking. This means:
 
     - `.enabled: "true"` on its own is valid -- all settings use cluster-wide defaults.
-    - `.if-idle-after: "5m"` on its own is also valid -- it implicitly enables tracking without needing `.enabled`.
+    - `.grace-period: "5m"` on its own is also valid -- it implicitly enables tracking without needing `.enabled`.
     - Any combination works; omitted settings fall back through KaiwoConfig, then env vars, then hardcoded defaults.
 
 ## Annotations Reference
@@ -134,7 +137,7 @@ All annotations use the prefix `kaiwo.silogen.ai/gpu-preemption.` and are placed
 | Annotation | Description | KaiwoConfig field | Env var | Default |
 |---|---|---|---|---|
 | `.enabled` | Explicitly enable tracking. Can be used on its own (all other settings fall back to defaults). Not required if any other preemption annotation is set. | -- | -- | -- |
-| `.if-idle-after` | Duration the workload must be continuously idle before it becomes preemptible (e.g. `5m`, `1h`). | `gpuPreemption.defaultIfIdleAfter` | `GPU_PREEMPTION_DEFAULT_IF_IDLE_AFTER` | `10m` |
+| `.grace-period` | Duration the workload must be continuously idle before it becomes preemptible (e.g. `5m`, `1h`). | `gpuPreemption.defaultGracePeriod` | `GPU_PREEMPTION_DEFAULT_GRACE_PERIOD` | `10m` |
 | `.threshold` | Utilization percentage below which the workload is considered idle. | `gpuPreemption.defaultThreshold` | `GPU_PREEMPTION_DEFAULT_THRESHOLD` | `5` |
 | `.policy` | Preemption policy: `OnPressure` or `Always`. | `gpuPreemption.defaultPolicy` | `GPU_PREEMPTION_DEFAULT_POLICY` | `OnPressure` |
 | `.aggregation` | How utilization is aggregated across pods: `Min`, `Max`, or `Avg`. | `gpuPreemption.defaultAggregation` | `GPU_PREEMPTION_DEFAULT_AGGREGATION` | `Max` |
@@ -146,7 +149,7 @@ All annotations use the prefix `kaiwo.silogen.ai/gpu-preemption.` and are placed
 
 A workload is only preempted when **all** of the following are true:
 
-- It has been idle longer than `if-idle-after`.
+- It has been idle longer than `grace-period`.
 - Another `GpuWorkload` is in the `PendingGpu` phase -- meaning its pods are unschedulable **specifically because of insufficient GPU resources** (the scheduler's `PodScheduled` condition message must contain `Insufficient amd.com/gpu`). Pods pending for other reasons show as `PendingOther` and do not trigger preemption.
 - A **fit check** passes (see below).
 
@@ -156,7 +159,7 @@ Already-claimed victims are excluded from subsequent pending workloads' evaluati
 
 ### `Always`
 
-The workload is preempted as soon as it has been idle longer than `if-idle-after`, regardless of whether any other workload is waiting. This is useful for strict resource reclamation policies.
+The workload is preempted as soon as it has been idle longer than `grace-period`, regardless of whether any other workload is waiting. This is useful for strict resource reclamation policies.
 
 ## Environment Variables
 
@@ -168,7 +171,7 @@ These are set on the Kaiwo operator deployment, typically via Helm values under 
 | `GPU_PREEMPTION_METRICS_ENDPOINT` | URL of the AMD GPU metrics exporter Prometheus endpoint. | `gpuPreemption.metricsEndpoint` | _(required)_ |
 | `GPU_PREEMPTION_POLLING_INTERVAL` | How often the scraper polls the metrics endpoint (e.g. `15s`, `1m`). | `gpuPreemption.pollingInterval` | `15s` |
 | `GPU_PREEMPTION_DEFAULT_THRESHOLD` | Default utilization threshold (%) below which a workload is idle. | `gpuPreemption.defaultThreshold` | `5` |
-| `GPU_PREEMPTION_DEFAULT_IF_IDLE_AFTER` | Default idle duration before preemption eligibility (e.g. `10m`, `1h`). | `gpuPreemption.defaultIfIdleAfter` | `10m` |
+| `GPU_PREEMPTION_DEFAULT_GRACE_PERIOD` | Default idle duration before preemption eligibility (e.g. `10m`, `1h`). | `gpuPreemption.defaultGracePeriod` | `10m` |
 | `GPU_PREEMPTION_DEFAULT_POLICY` | Default preemption policy (`OnPressure` or `Always`). | `gpuPreemption.defaultPolicy` | `OnPressure` |
 | `GPU_PREEMPTION_DEFAULT_AGGREGATION` | Default multi-pod aggregation policy (`Min`, `Max`, or `Avg`). | `gpuPreemption.defaultAggregation` | `Max` |
 | `GPU_PREEMPTION_DEFAULT_TTL` | Default TTL for terminal `GpuWorkload` CRs (`0` = retain forever). | `gpuPreemption.defaultTTL` | `24h` |
@@ -183,7 +186,7 @@ Each `GpuWorkload` CR transitions through the following phases:
 | `PendingOther` | Pods exist but are not yet Running for non-GPU reasons: image pulls, init containers, PVC binding, node affinity, taints, etc. No idle time is counted and no preemption evaluation is triggered. |
 | `PendingGpu` | Pods are unschedulable **specifically because of insufficient GPU resources** (validated by checking the scheduler's `PodScheduled` condition for `Insufficient amd.com/gpu`). Acts as the demand signal for `OnPressure` preemption. |
 | `Active` | Pods are running and aggregated GPU utilization is at or above the threshold. |
-| `Idle` | Pods are running but aggregated GPU utilization is below the threshold. The `if-idle-after` timer starts. |
+| `Idle` | Pods are running but aggregated GPU utilization is below the threshold. The `grace-period` timer starts. |
 | `Preempting` | The workload has been selected for preemption; deletion of the root owner is in progress. |
 | `Preempted` | The root owner was successfully deleted by the preemption system. |
 | `Deleted` | The root owner disappeared on its own (completed, manually deleted, etc.). |
@@ -225,7 +228,7 @@ kind: Job
 metadata:
   name: batch-inference
   annotations:
-    kaiwo.silogen.ai/gpu-preemption.if-idle-after: "10m"
+    kaiwo.silogen.ai/gpu-preemption.grace-period: "10m"
 spec:
   # ...
 ```
@@ -241,7 +244,7 @@ metadata:
   name: dev-notebook
   annotations:
     kaiwo.silogen.ai/gpu-preemption.policy: "Always"
-    kaiwo.silogen.ai/gpu-preemption.if-idle-after: "5m"
+    kaiwo.silogen.ai/gpu-preemption.grace-period: "5m"
     kaiwo.silogen.ai/gpu-preemption.threshold: "10"
 spec:
   # ...
@@ -279,7 +282,7 @@ Uses all cluster-wide defaults from KaiwoConfig, then Helm values / environment 
 
 - **Workload stuck in Idle but not preempted?**
     - With `OnPressure` policy: preemption only happens when another `GpuWorkload` is in the `PendingGpu` phase (pods unschedulable due to `Insufficient amd.com/gpu`, not other reasons) and its demand fits. Check `kubectl get gpuworkloads` for a `PendingGpu` phase entry.
-    - With `Always` policy: ensure `if-idle-after` has elapsed. Check `idleSince` on the GpuWorkload status.
+    - With `Always` policy: ensure `grace-period` has elapsed. Check `idleSince` on the GpuWorkload status.
 
 - **Metrics not updating?**
     - Verify `GPU_PREEMPTION_METRICS_ENDPOINT` is reachable from the operator pod.

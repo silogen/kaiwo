@@ -77,9 +77,9 @@ spec:
                     - Max
                     - Avg
                     type: string
-                  defaultIfIdleAfter:
+                  defaultGracePeriod:
                     description: |-
-                      DefaultIfIdleAfter is the duration a workload must be continuously idle
+                      DefaultGracePeriod is the duration a workload must be continuously idle
                       before it becomes eligible for preemption (e.g. "10m", "1h").
                     pattern: ^([0-9]+(s|m|h))+$
                     type: string

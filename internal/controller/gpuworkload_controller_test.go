@@ -207,7 +207,7 @@ var _ = Describe("GpuWorkload Controller", func() {
 			annotations := map[string]string{
 				AnnotationEnabled:     "true",
 				AnnotationThreshold:   "10.5",
-				AnnotationIfIdleAfter: "5m",
+				AnnotationGracePeriod: "5m",
 				AnnotationPolicy:      "Always",
 				AnnotationAggregation: "Avg",
 				AnnotationTTL:         "48h",
@@ -219,8 +219,8 @@ var _ = Describe("GpuWorkload Controller", func() {
 
 			Expect(spec.UtilizationThreshold).NotTo(BeNil())
 			Expect(*spec.UtilizationThreshold).To(BeNumerically("~", 10.5))
-			Expect(spec.IfIdleAfter).NotTo(BeNil())
-			Expect(spec.IfIdleAfter.Duration).To(Equal(5 * time.Minute))
+			Expect(spec.GracePeriod).NotTo(BeNil())
+			Expect(spec.GracePeriod.Duration).To(Equal(5 * time.Minute))
 			Expect(spec.PreemptionPolicy).NotTo(BeNil())
 			Expect(*spec.PreemptionPolicy).To(Equal(kaiwo.PreemptionPolicyAlways))
 			Expect(spec.AggregationPolicy).NotTo(BeNil())
@@ -232,7 +232,7 @@ var _ = Describe("GpuWorkload Controller", func() {
 		It("should ignore invalid annotations", func() {
 			annotations := map[string]string{
 				AnnotationThreshold:   "notanumber",
-				AnnotationIfIdleAfter: "invalid",
+				AnnotationGracePeriod: "invalid",
 				AnnotationPolicy:      "InvalidPolicy",
 				AnnotationAggregation: "InvalidAgg",
 			}
@@ -242,7 +242,7 @@ var _ = Describe("GpuWorkload Controller", func() {
 			parseAnnotationsIntoSpec(annotations, spec)
 
 			Expect(spec.UtilizationThreshold).To(BeNil())
-			Expect(spec.IfIdleAfter).To(BeNil())
+			Expect(spec.GracePeriod).To(BeNil())
 			Expect(spec.PreemptionPolicy).To(BeNil())
 			Expect(spec.AggregationPolicy).To(BeNil())
 		})
@@ -256,9 +256,9 @@ var _ = Describe("GpuWorkload Controller", func() {
 			Expect(isGpuPreemptionAnnotated(annotations)).To(BeTrue())
 		})
 
-		It("should return true with only if-idle-after (implicit enable)", func() {
+		It("should return true with only grace-period (implicit enable)", func() {
 			annotations := map[string]string{
-				AnnotationIfIdleAfter: "5m",
+				AnnotationGracePeriod: "5m",
 			}
 			Expect(isGpuPreemptionAnnotated(annotations)).To(BeTrue())
 		})
@@ -756,21 +756,21 @@ var _ = Describe("GpuWorkload Controller", func() {
 			})
 		})
 
-		Context("getIfIdleAfter", func() {
+		Context("getGracePeriod", func() {
 			It("should use spec value when set", func() {
 				dur := metav1.Duration{Duration: 30 * time.Minute}
-				gw.Spec.IfIdleAfter = &dur
-				Expect(reconciler.getIfIdleAfter(gw, emptyCfg)).To(Equal(30 * time.Minute))
+				gw.Spec.GracePeriod = &dur
+				Expect(reconciler.getGracePeriod(gw, emptyCfg)).To(Equal(30 * time.Minute))
 			})
 
 			It("should use config value when spec is nil", func() {
-				cfg := configapi.KaiwoGpuPreemptionConfig{DefaultIfIdleAfter: "20m"}
-				Expect(reconciler.getIfIdleAfter(gw, cfg)).To(Equal(20 * time.Minute))
+				cfg := configapi.KaiwoGpuPreemptionConfig{DefaultGracePeriod: "20m"}
+				Expect(reconciler.getGracePeriod(gw, cfg)).To(Equal(20 * time.Minute))
 			})
 
 			It("should fall back to default when nothing is set", func() {
-				os.Unsetenv(EnvDefaultIfIdleAfter)
-				Expect(reconciler.getIfIdleAfter(gw, emptyCfg)).To(Equal(DefaultIfIdleAfter))
+				os.Unsetenv(EnvDefaultGracePeriod)
+				Expect(reconciler.getGracePeriod(gw, emptyCfg)).To(Equal(DefaultGracePeriod))
 			})
 		})
 

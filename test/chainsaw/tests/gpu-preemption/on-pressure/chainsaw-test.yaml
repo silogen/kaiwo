@@ -63,7 +63,7 @@ spec:
         outputs:
         - name: victim_node
           value: ($stdout)
-    # Must exceed if-idle-after (15s in job-victim.yaml) so the idle timer
+    # Must exceed grace-period (15s in job-victim.yaml) so the idle timer
     # expires before the demand is applied in the next step.
     - sleep:
         duration: 20s

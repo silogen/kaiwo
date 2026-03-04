@@ -123,10 +123,10 @@ type GpuWorkloadSpec struct {
 	// +optional
 	UtilizationThreshold *float64 `json:"utilizationThreshold,omitempty"`
 
-	// IfIdleAfter overrides the cluster-wide default (GPU_PREEMPTION_DEFAULT_IF_IDLE_AFTER).
+	// GracePeriod overrides the cluster-wide default (GPU_PREEMPTION_DEFAULT_GRACE_PERIOD).
 	// The workload must be idle for at least this duration before becoming preemptible.
 	// +optional
-	IfIdleAfter *metav1.Duration `json:"ifIdleAfter,omitempty"`
+	GracePeriod *metav1.Duration `json:"gracePeriod,omitempty"`
 
 	// PreemptionPolicy overrides the cluster-wide default (GPU_PREEMPTION_DEFAULT_POLICY).
 	// +optional

@@ -63,7 +63,7 @@ spec:
               name: gpu-preemption-multi-victim-b
           status:
             phase: Idle
-    # Must exceed if-idle-after (15s) so both victims are eligible.
+    # Must exceed grace-period (15s) so both victims are eligible.
     - sleep:
         duration: 20s
     catch:

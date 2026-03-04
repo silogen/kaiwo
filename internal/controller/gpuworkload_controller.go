@@ -57,7 +57,7 @@ const (
 	AnnotationPrefix        = "kaiwo.silogen.ai/gpu-preemption."
 	AnnotationEnabled       = AnnotationPrefix + "enabled"
 	AnnotationThreshold     = AnnotationPrefix + "threshold"
-	AnnotationIfIdleAfter   = AnnotationPrefix + "if-idle-after"
+	AnnotationGracePeriod   = AnnotationPrefix + "grace-period"
 	AnnotationPolicy        = AnnotationPrefix + "policy"
 	AnnotationAggregation   = AnnotationPrefix + "aggregation"
 	AnnotationTTL           = AnnotationPrefix + "ttl"
@@ -72,13 +72,13 @@ const (
 
 	DefaultOperatorNamespace    = "kaiwo-system"
 	DefaultUtilizationThreshold = 5.0
-	DefaultIfIdleAfter          = 10 * time.Minute
+	DefaultGracePeriod          = 10 * time.Minute
 	DefaultTTL                  = 24 * time.Hour
 
 	EnvGpuPreemptionPrefix = "GPU_PREEMPTION_"
 	EnvEnabled             = EnvGpuPreemptionPrefix + "ENABLED"
 	EnvDefaultThreshold    = EnvGpuPreemptionPrefix + "DEFAULT_THRESHOLD"
-	EnvDefaultIfIdleAfter  = EnvGpuPreemptionPrefix + "DEFAULT_IF_IDLE_AFTER"
+	EnvDefaultGracePeriod  = EnvGpuPreemptionPrefix + "DEFAULT_GRACE_PERIOD"
 	EnvDefaultPolicy       = EnvGpuPreemptionPrefix + "DEFAULT_POLICY"
 	EnvDefaultAggregation  = EnvGpuPreemptionPrefix + "DEFAULT_AGGREGATION"
 	EnvDefaultTTL          = EnvGpuPreemptionPrefix + "DEFAULT_TTL"
@@ -705,9 +705,9 @@ func (r *GpuWorkloadReconciler) classifyWorkloads(ctx context.Context, workloads
 				continue
 			}
 
-			ifIdleAfter := r.getIfIdleAfter(w, gpuCfg)
+			gracePeriod := r.getGracePeriod(w, gpuCfg)
 			idleDuration := time.Since(w.Status.IdleSince.Time)
-			if idleDuration < ifIdleAfter {
+			if idleDuration < gracePeriod {
 				continue
 			}
 
@@ -716,7 +716,7 @@ func (r *GpuWorkloadReconciler) classifyWorkloads(ctx context.Context, workloads
 				w.Status.IdleSince = nil
 				w.Status.PreemptionReason = fmt.Sprintf(
 					"Policy is Always and workload has been idle for %s (threshold: %s)",
-					idleDuration.Round(time.Second), ifIdleAfter,
+					idleDuration.Round(time.Second), gracePeriod,
 				)
 				if err := r.Status().Update(ctx, w); err != nil {
 					if errors.IsConflict(err) {
@@ -727,7 +727,7 @@ func (r *GpuWorkloadReconciler) classifyWorkloads(ctx context.Context, workloads
 				}
 				r.Recorder.Eventf(w, corev1.EventTypeWarning, "PreemptionStarted",
 					"Workload has been idle for %s (limit: %s, policy: Always); preempting",
-					idleDuration.Round(time.Second), ifIdleAfter)
+					idleDuration.Round(time.Second), gracePeriod)
 				continue
 			}
 
@@ -944,18 +944,18 @@ func (r *GpuWorkloadReconciler) getThreshold(gw *kaiwo.GpuWorkload, gpuCfg confi
 	return val
 }
 
-func (r *GpuWorkloadReconciler) getIfIdleAfter(gw *kaiwo.GpuWorkload, gpuCfg configapi.KaiwoGpuPreemptionConfig) time.Duration {
-	if gw.Spec.IfIdleAfter != nil {
-		return gw.Spec.IfIdleAfter.Duration
+func (r *GpuWorkloadReconciler) getGracePeriod(gw *kaiwo.GpuWorkload, gpuCfg configapi.KaiwoGpuPreemptionConfig) time.Duration {
+	if gw.Spec.GracePeriod != nil {
+		return gw.Spec.GracePeriod.Duration
 	}
-	if gpuCfg.DefaultIfIdleAfter != "" {
-		if d, err := time.ParseDuration(gpuCfg.DefaultIfIdleAfter); err == nil {
+	if gpuCfg.DefaultGracePeriod != "" {
+		if d, err := time.ParseDuration(gpuCfg.DefaultGracePeriod); err == nil {
 			return d
 		}
 	}
-	val, err := time.ParseDuration(os.Getenv(EnvDefaultIfIdleAfter))
+	val, err := time.ParseDuration(os.Getenv(EnvDefaultGracePeriod))
 	if err != nil {
-		return DefaultIfIdleAfter
+		return DefaultGracePeriod
 	}
 	return val
 }
@@ -1187,10 +1187,10 @@ func parseAnnotationsIntoSpec(annotations map[string]string, spec *kaiwo.GpuWork
 			spec.UtilizationThreshold = &f
 		}
 	}
-	if v, ok := annotations[AnnotationIfIdleAfter]; ok {
+	if v, ok := annotations[AnnotationGracePeriod]; ok {
 		if d, err := time.ParseDuration(v); err == nil {
 			dur := metav1.Duration{Duration: d}
-			spec.IfIdleAfter = &dur
+			spec.GracePeriod = &dur
 		}
 	}
 	if v, ok := annotations[AnnotationPolicy]; ok {

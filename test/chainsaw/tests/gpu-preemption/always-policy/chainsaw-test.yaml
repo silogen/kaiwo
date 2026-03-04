@@ -7,7 +7,7 @@ spec:
   steps:
   - name: always-policy-lifecycle
     description: >
-      Verify Always policy preempts an idle workload after the if-idle-after period,
+      Verify Always policy preempts an idle workload after the grace-period period,
       deletes the underlying Job, and cleans up the GpuWorkload CR via TTL.
     try:
     - apply:

@@ -79,9 +79,9 @@ spec:
                   Used for resource-name-aware pressure matching and capacity-aware fit
                   checks during preemption evaluation.
                 type: object
-              ifIdleAfter:
+              gracePeriod:
                 description: |-
-                  IfIdleAfter overrides the cluster-wide default (GPU_PREEMPTION_DEFAULT_IF_IDLE_AFTER).
+                  GracePeriod overrides the cluster-wide default (GPU_PREEMPTION_DEFAULT_GRACE_PERIOD).
                   The workload must be idle for at least this duration before becoming preemptible.
                 type: string
               preemptionPolicy:

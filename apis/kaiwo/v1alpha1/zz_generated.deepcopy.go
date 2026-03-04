@@ -472,8 +472,8 @@ func (in *GpuWorkloadSpec) DeepCopyInto(out *GpuWorkloadSpec) {
 		*out = new(float64)
 		**out = **in
 	}
-	if in.IfIdleAfter != nil {
-		in, out := &in.IfIdleAfter, &out.IfIdleAfter
+	if in.GracePeriod != nil {
+		in, out := &in.GracePeriod, &out.GracePeriod
 		*out = new(v1.Duration)
 		**out = **in
 	}

@@ -6,7 +6,7 @@ spec:
   concurrent: false
   steps:
   - name: idle-victim
-    description: Deploy victim Job with 1 GPU and wait for it to become idle past if-idle-after
+    description: Deploy victim Job with 1 GPU and wait for it to become idle past grace-period
     try:
     - apply:
         file: job-victim.yaml
@@ -48,7 +48,7 @@ spec:
               name: gpu-preemption-nofit-demand
           status:
             phase: PendingGpu
-    # Wait long enough for multiple evaluation cycles past if-idle-after (15s)
+    # Wait long enough for multiple evaluation cycles past grace-period (15s)
     # to prove the victim is NOT preempted despite the pending demand.
     - sleep:
         duration: 30s

@@ -6,7 +6,7 @@ metadata:
   name: gpu-preemption-always
   annotations:
     kaiwo.silogen.ai/gpu-preemption.policy: "Always"
-    kaiwo.silogen.ai/gpu-preemption.if-idle-after: "15s"
+    kaiwo.silogen.ai/gpu-preemption.grace-period: "15s"
     kaiwo.silogen.ai/gpu-preemption.ttl: "30s"
 spec:
   template:
