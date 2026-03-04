@@ -35,7 +35,7 @@ The controller resolves pod ownership by walking the `ownerReferences` chain. Th
 
 - `batch/v1` Jobs
 - `apps/v1` Deployments, ReplicaSets, StatefulSets
-- `ray.io/v1` RayClusters, RayJobs
+- `ray.io/v1` RayClusters, RayJobs, RayServices
 - `kaiwo.silogen.ai/v1alpha1` KaiwoJobs, KaiwoServices
 - `workload.codeflare.dev/v1beta2` AppWrappers
 
