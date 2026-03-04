@@ -35,6 +35,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -887,6 +888,166 @@ var _ = Describe("GpuWorkload Controller", func() {
 				Expect(os.Unsetenv(EnvDefaultTTL)).To(Succeed())
 				Expect(reconciler.getTTL(gw, emptyCfg)).To(Equal(DefaultTTL))
 			})
+		})
+	})
+
+	Context("podToGpuWorkload namespace annotation discovery", func() {
+		ctx := context.Background()
+
+		createNamespace := func(name string, annotations map[string]string) *corev1.Namespace {
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        name,
+					Annotations: annotations,
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+			return ns
+		}
+
+		createJobAndPod := func(namespace string, jobAnnotations map[string]string) (*batchv1.Job, *corev1.Pod) {
+			job := &batchv1.Job{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-job",
+					Namespace:   namespace,
+					Annotations: jobAnnotations,
+				},
+				Spec: batchv1.JobSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{{
+								Name:  "gpu",
+								Image: "busybox",
+								Resources: corev1.ResourceRequirements{
+									Requests: corev1.ResourceList{"amd.com/gpu": resource.MustParse("2")},
+									Limits:   corev1.ResourceList{"amd.com/gpu": resource.MustParse("2")},
+								},
+							}},
+							RestartPolicy: corev1.RestartPolicyNever,
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, job)).To(Succeed())
+
+			isController := true
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-job-pod",
+					Namespace: namespace,
+					OwnerReferences: []metav1.OwnerReference{{
+						APIVersion: "batch/v1",
+						Kind:       "Job",
+						Name:       job.Name,
+						UID:        job.UID,
+						Controller: &isController,
+					}},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Name:  "gpu",
+						Image: "busybox",
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{"amd.com/gpu": resource.MustParse("2")},
+							Limits:   corev1.ResourceList{"amd.com/gpu": resource.MustParse("2")},
+						},
+					}},
+					RestartPolicy: corev1.RestartPolicyNever,
+				},
+			}
+			Expect(k8sClient.Create(ctx, pod)).To(Succeed())
+			return job, pod
+		}
+
+		It("should create GpuWorkload from namespace annotations when workload has none", func() {
+			ns := createNamespace("ns-annotated", map[string]string{
+				AnnotationEnabled:     "true",
+				AnnotationGracePeriod: "20m",
+				AnnotationPolicy:      "Always",
+			})
+			defer func() { _ = k8sClient.Delete(ctx, ns) }()
+
+			job, pod := createJobAndPod("ns-annotated", nil)
+			defer func() {
+				_ = k8sClient.Delete(ctx, pod)
+				_ = k8sClient.Delete(ctx, job)
+			}()
+
+			reconciler := &GpuWorkloadReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Recorder: record.NewFakeRecorder(10),
+			}
+			requests := reconciler.podToGpuWorkload(ctx, pod)
+			Expect(requests).NotTo(BeEmpty())
+
+			gwName := requests[0].Name
+			var gw kaiwo.GpuWorkload
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: "ns-annotated", Name: gwName}, &gw)).To(Succeed())
+			defer func() { _ = k8sClient.Delete(ctx, &gw) }()
+
+			Expect(gw.Spec.GpuResources).To(HaveKeyWithValue("amd.com/gpu", 2))
+			Expect(gw.Spec.GracePeriod).NotTo(BeNil())
+			Expect(gw.Spec.GracePeriod.Duration).To(Equal(20 * time.Minute))
+			Expect(gw.Spec.PreemptionPolicy).NotTo(BeNil())
+			Expect(*gw.Spec.PreemptionPolicy).To(Equal(kaiwo.PreemptionPolicyAlways))
+		})
+
+		It("should let workload annotations override namespace annotations", func() {
+			ns := createNamespace("ns-override", map[string]string{
+				AnnotationGracePeriod: "20m",
+				AnnotationPolicy:     "OnPressure",
+				AnnotationThreshold:  "10",
+			})
+			defer func() { _ = k8sClient.Delete(ctx, ns) }()
+
+			job, pod := createJobAndPod("ns-override", map[string]string{
+				AnnotationPolicy:    "Always",
+				AnnotationThreshold: "30",
+			})
+			defer func() {
+				_ = k8sClient.Delete(ctx, pod)
+				_ = k8sClient.Delete(ctx, job)
+			}()
+
+			reconciler := &GpuWorkloadReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Recorder: record.NewFakeRecorder(10),
+			}
+			requests := reconciler.podToGpuWorkload(ctx, pod)
+			Expect(requests).NotTo(BeEmpty())
+
+			gwName := requests[0].Name
+			var gw kaiwo.GpuWorkload
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: "ns-override", Name: gwName}, &gw)).To(Succeed())
+			defer func() { _ = k8sClient.Delete(ctx, &gw) }()
+
+			Expect(gw.Spec.GracePeriod).NotTo(BeNil())
+			Expect(gw.Spec.GracePeriod.Duration).To(Equal(20 * time.Minute))
+			Expect(gw.Spec.PreemptionPolicy).NotTo(BeNil())
+			Expect(*gw.Spec.PreemptionPolicy).To(Equal(kaiwo.PreemptionPolicyAlways))
+			Expect(gw.Spec.UtilizationThreshold).NotTo(BeNil())
+			Expect(*gw.Spec.UtilizationThreshold).To(BeNumerically("~", 30.0))
+		})
+
+		It("should not create GpuWorkload when neither namespace nor workload is annotated", func() {
+			ns := createNamespace("ns-plain", nil)
+			defer func() { _ = k8sClient.Delete(ctx, ns) }()
+
+			job, pod := createJobAndPod("ns-plain", nil)
+			defer func() {
+				_ = k8sClient.Delete(ctx, pod)
+				_ = k8sClient.Delete(ctx, job)
+			}()
+
+			reconciler := &GpuWorkloadReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Recorder: record.NewFakeRecorder(10),
+			}
+			requests := reconciler.podToGpuWorkload(ctx, pod)
+			Expect(requests).To(BeEmpty())
 		})
 	})
 })
