@@ -471,7 +471,7 @@ func (r *GpuWorkloadReconciler) deleteWorkload(ctx context.Context, gw *kaiwo.Gp
 	obj.SetGroupVersionKind(gvkFromAPIVersionKind(ref.APIVersion, ref.Kind))
 	obj.SetName(ref.Name)
 	obj.SetNamespace(gw.Namespace)
-	return r.Delete(ctx, obj)
+	return r.Delete(ctx, obj, client.PropagationPolicy(metav1.DeletePropagationBackground))
 }
 
 func (r *GpuWorkloadReconciler) ownerExists(ctx context.Context, gw *kaiwo.GpuWorkload) (bool, error) {
@@ -950,10 +950,8 @@ func (r *GpuWorkloadReconciler) getGracePeriod(gw *kaiwo.GpuWorkload, gpuCfg con
 	if gw.Spec.GracePeriod != nil {
 		return gw.Spec.GracePeriod.Duration
 	}
-	if gpuCfg.DefaultGracePeriod != "" {
-		if d, err := time.ParseDuration(gpuCfg.DefaultGracePeriod); err == nil {
-			return d
-		}
+	if gpuCfg.DefaultGracePeriod != nil {
+		return gpuCfg.DefaultGracePeriod.Duration
 	}
 	val, err := time.ParseDuration(os.Getenv(EnvDefaultGracePeriod))
 	if err != nil {
@@ -1008,10 +1006,8 @@ func (r *GpuWorkloadReconciler) getTTL(gw *kaiwo.GpuWorkload, gpuCfg configapi.K
 	if gw.Spec.TTLAfterFinished != nil {
 		return gw.Spec.TTLAfterFinished.Duration
 	}
-	if gpuCfg.DefaultTTL != "" {
-		if d, err := time.ParseDuration(gpuCfg.DefaultTTL); err == nil {
-			return d
-		}
+	if gpuCfg.DefaultTTL != nil {
+		return gpuCfg.DefaultTTL.Duration
 	}
 	val, err := time.ParseDuration(os.Getenv(EnvDefaultTTL))
 	if err != nil {

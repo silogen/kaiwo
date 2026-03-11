@@ -826,7 +826,8 @@ var _ = Describe("GpuWorkload Controller", func() {
 			})
 
 			It("should use config value when spec is nil", func() {
-				cfg := configapi.KaiwoGpuPreemptionConfig{DefaultGracePeriod: "20m"}
+				dur := &metav1.Duration{Duration: 20 * time.Minute}
+				cfg := configapi.KaiwoGpuPreemptionConfig{DefaultGracePeriod: dur}
 				Expect(reconciler.getGracePeriod(gw, cfg)).To(Equal(20 * time.Minute))
 			})
 
@@ -880,7 +881,8 @@ var _ = Describe("GpuWorkload Controller", func() {
 			})
 
 			It("should use config value when spec is nil", func() {
-				cfg := configapi.KaiwoGpuPreemptionConfig{DefaultTTL: "12h"}
+				dur := &metav1.Duration{Duration: 12 * time.Hour}
+				cfg := configapi.KaiwoGpuPreemptionConfig{DefaultTTL: dur}
 				Expect(reconciler.getTTL(gw, cfg)).To(Equal(12 * time.Hour))
 			})
 

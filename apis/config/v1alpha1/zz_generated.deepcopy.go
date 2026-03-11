@@ -27,6 +27,7 @@
 package v1alpha1
 
 import (
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -115,6 +116,16 @@ func (in *KaiwoGpuPreemptionConfig) DeepCopyInto(out *KaiwoGpuPreemptionConfig) 
 	if in.DefaultThreshold != nil {
 		in, out := &in.DefaultThreshold, &out.DefaultThreshold
 		*out = new(float64)
+		**out = **in
+	}
+	if in.DefaultGracePeriod != nil {
+		in, out := &in.DefaultGracePeriod, &out.DefaultGracePeriod
+		*out = new(v1.Duration)
+		**out = **in
+	}
+	if in.DefaultTTL != nil {
+		in, out := &in.DefaultTTL, &out.DefaultTTL
+		*out = new(v1.Duration)
 		**out = **in
 	}
 }

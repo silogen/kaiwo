@@ -166,8 +166,7 @@ type KaiwoGpuPreemptionConfig struct {
 	// DefaultGracePeriod is the duration a workload must be continuously idle
 	// before it becomes eligible for preemption (e.g. "10m", "1h").
 	// +optional
-	// +kubebuilder:validation:Pattern=`^([0-9]+(s|m|h))+$`
-	DefaultGracePeriod string `json:"defaultGracePeriod,omitempty"`
+	DefaultGracePeriod *metav1.Duration `json:"defaultGracePeriod,omitempty"`
 
 	// DefaultPolicy is the preemption policy: "OnPressure" or "Always".
 	// +optional
@@ -183,8 +182,7 @@ type KaiwoGpuPreemptionConfig struct {
 	// DefaultTTL controls how long terminal GpuWorkload CRs (Preempted or
 	// Deleted) are retained before automatic cleanup (e.g. "24h", "0" for forever).
 	// +optional
-	// +kubebuilder:validation:Pattern=`^([0-9]+(s|m|h))+$`
-	DefaultTTL string `json:"defaultTTL,omitempty"`
+	DefaultTTL *metav1.Duration `json:"defaultTTL,omitempty"`
 }
 
 // KaiwoSchedulingConfig contains the configuration Kaiwo uses for workload scheduling
