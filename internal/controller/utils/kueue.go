@@ -198,6 +198,7 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 			NodeLabels: map[string]string{
 				common.DefaultNodePoolLabel: flavorName,
 			},
+			TopologyName: common.DefaultTopologyName,
 		}
 
 		// TODO: Look into why automatic scheduling is not working
