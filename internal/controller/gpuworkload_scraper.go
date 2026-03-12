@@ -36,7 +36,6 @@ import (
 
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -139,7 +138,6 @@ func (s *GpuMetricsScraper) poll(ctx context.Context) error {
 		return nil
 	}
 
-	// Group samples by namespace/podName
 	type podKey struct {
 		namespace string
 		podName   string
@@ -150,42 +148,35 @@ func (s *GpuMetricsScraper) poll(ctx context.Context) error {
 		samplesByPod[key] = append(samplesByPod[key], sample)
 	}
 
-	// Look up which pods are tracked by GpuWorkloads and update accordingly
 	var allGW kaiwo.GpuWorkloadList
 	if err := s.client.List(ctx, &allGW); err != nil {
 		return fmt.Errorf("failed to list GpuWorkloads: %w", err)
 	}
 
+	// Build a reverse map from (namespace, podName) → GpuWorkload using the
+	// TrackedPods list that the reconciler maintains in each GpuWorkload status.
+	gwByPod := make(map[podKey]*kaiwo.GpuWorkload)
 	activeGW := 0
-	gwByOwner := make(map[gwLookupKey]*kaiwo.GpuWorkload)
 	for i := range allGW.Items {
 		gw := &allGW.Items[i]
 		if gw.Status.Phase == kaiwo.GpuWorkloadPhasePreempted || gw.Status.Phase == kaiwo.GpuWorkloadPhaseDeleted {
 			continue
 		}
-		k := gwLookupKey{namespace: gw.Namespace, uid: string(gw.Spec.WorkloadRef.UID)}
-		gwByOwner[k] = gw
 		activeGW++
+		for _, tp := range gw.Status.TrackedPods {
+			gwByPod[podKey{namespace: gw.Namespace, podName: tp.PodName}] = gw
+		}
 	}
 
-	// For each pod with metrics, find its owner pod and match to a GpuWorkload
 	matched := 0
 	updated := 0
 	for pk, podSamples := range samplesByPod {
-		pod := &corev1.Pod{}
-		if err := s.client.Get(ctx, client.ObjectKey{Namespace: pk.namespace, Name: pk.podName}, pod); err != nil {
-			logger.V(1).Info("pod from metrics not found in cluster", "namespace", pk.namespace, "pod", pk.podName)
-			continue
-		}
-
-		// Walk owner refs to find the root owner UID, then match
-		gw := s.findGpuWorkloadForPod(ctx, pod, gwByOwner)
-		if gw == nil {
-			logger.V(1).Info("pod has GPU metrics but no matching GpuWorkload", "namespace", pk.namespace, "pod", pk.podName)
+		gw, ok := gwByPod[pk]
+		if !ok {
 			continue
 		}
 		matched++
-		if s.updatePodUtilizations(ctx, gw, pk.podName, podSamples) {
+		if s.updatePodMetrics(ctx, gw, pk.podName, podSamples) {
 			updated++
 		}
 	}
@@ -201,31 +192,28 @@ func (s *GpuMetricsScraper) poll(ctx context.Context) error {
 	return nil
 }
 
-type gwLookupKey struct {
-	namespace string
-	uid       string
-}
-
-func (s *GpuMetricsScraper) findGpuWorkloadForPod(ctx context.Context, pod *corev1.Pod, gwByOwner map[gwLookupKey]*kaiwo.GpuWorkload) *kaiwo.GpuWorkload {
-	rootResult, err := ResolveRootOwner(ctx, s.client, pod.Namespace, pod.Name, "Pod", "v1", pod.UID)
-	if err != nil {
-		return nil
-	}
-	key := gwLookupKey{namespace: pod.Namespace, uid: string(rootResult.Ref.UID)}
-	return gwByOwner[key]
-}
-
 func (s *GpuMetricsScraper) applyUtilizationSamples(gw *kaiwo.GpuWorkload, podName string, samples []gpuSample, now metav1.Time) bool {
+	var tp *kaiwo.TrackedPod
+	for i := range gw.Status.TrackedPods {
+		if gw.Status.TrackedPods[i].PodName == podName {
+			tp = &gw.Status.TrackedPods[i]
+			break
+		}
+	}
+	if tp == nil {
+		return false
+	}
+
 	changed := false
 	for _, sample := range samples {
 		rounded := math.Round(sample.utilization*utilizationPrecision) / utilizationPrecision
 		found := false
-		for i := range gw.Status.PodUtilizations {
-			pu := &gw.Status.PodUtilizations[i]
-			if pu.PodName == podName && pu.GpuID == sample.gpuID {
-				if math.Abs(pu.Utilization-rounded) > utilizationEpsilon {
-					pu.Utilization = rounded
-					pu.LastUpdate = now
+		for i := range tp.GpuMetrics {
+			gm := &tp.GpuMetrics[i]
+			if gm.GpuID == sample.gpuID {
+				if math.Abs(gm.Utilization-rounded) > utilizationEpsilon {
+					gm.Utilization = rounded
+					gm.LastUpdate = now
 					changed = true
 				}
 				found = true
@@ -233,8 +221,7 @@ func (s *GpuMetricsScraper) applyUtilizationSamples(gw *kaiwo.GpuWorkload, podNa
 			}
 		}
 		if !found {
-			gw.Status.PodUtilizations = append(gw.Status.PodUtilizations, kaiwo.PodGpuUtilization{
-				PodName:     podName,
+			tp.GpuMetrics = append(tp.GpuMetrics, kaiwo.GpuMetric{
 				GpuID:       sample.gpuID,
 				Utilization: rounded,
 				LastUpdate:  now,
@@ -248,7 +235,7 @@ func (s *GpuMetricsScraper) applyUtilizationSamples(gw *kaiwo.GpuWorkload, podNa
 	return changed
 }
 
-func (s *GpuMetricsScraper) updatePodUtilizations(ctx context.Context, gw *kaiwo.GpuWorkload, podName string, samples []gpuSample) bool {
+func (s *GpuMetricsScraper) updatePodMetrics(ctx context.Context, gw *kaiwo.GpuWorkload, podName string, samples []gpuSample) bool {
 	logger := log.FromContext(ctx).WithName("GpuMetricsScraper")
 	now := metav1.Now()
 

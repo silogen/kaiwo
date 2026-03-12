@@ -341,8 +341,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `phase` _[GpuWorkloadPhase](#gpuworkloadphase)_ | Phase is the current lifecycle phase of the tracked workload. |  |  |
-| `podUtilizations` _[PodGpuUtilization](#podgpuutilization) array_ | PodUtilizations holds per-pod, per-GPU utilization entries updated by the<br />metrics scraper. |  |  |
-| `aggregatedUtilization` _float_ | AggregatedUtilization is computed by the reconciler from PodUtilizations<br />using the configured AggregationPolicy. |  |  |
+| `trackedPods` _[TrackedPod](#trackedpod) array_ | TrackedPods lists pods currently owned by this workload together with<br />per-GPU utilization metrics. Pod entries are maintained by the reconciler;<br />metrics within each pod are updated by the scraper. |  |  |
+| `aggregatedUtilization` _float_ | AggregatedUtilization is computed by the reconciler from TrackedPods<br />using the configured AggregationPolicy. |  |  |
 | `lastMetricsUpdate` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | LastMetricsUpdate records the last time the scraper wrote utilization data. |  |  |
 | `idleSince` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | IdleSince records when the workload first entered the Idle phase. |  |  |
 | `finishedAt` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | FinishedAt records when a terminal phase (Preempted or Deleted) was entered.<br />Used together with TTLAfterFinished for automatic CR cleanup. |  |  |
@@ -680,11 +680,31 @@ _Appears in:_
 | `git` _[GitDownloadItem](#gitdownloaditem) array_ | Git lists any Git downloads |  |  |
 
 
-#### PodGpuUtilization
+#### GpuMetric
 
 
 
-PodGpuUtilization holds a utilization sample for a single GPU on a single pod.
+GpuMetric holds a utilization sample for a single GPU.
+
+
+
+_Appears in:_
+- [TrackedPod](#trackedpod)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `gpuId` _string_ |  |  |  |
+| `utilization` _float_ |  |  |  |
+| `lastUpdate` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ |  |  |  |
+
+
+#### TrackedPod
+
+
+
+TrackedPod represents a pod owned by this workload together with its
+per-GPU utilization metrics. Pod entries are maintained by the reconciler;
+metrics within each pod are updated by the scraper.
 
 
 
@@ -694,9 +714,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `podName` _string_ |  |  |  |
-| `gpuId` _string_ |  |  |  |
-| `utilization` _float_ |  |  |  |
-| `lastUpdate` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ |  |  |  |
+| `gpuMetrics` _[GpuMetric](#gpumetric) array_ |  |  |  |
 
 
 #### PreemptionPolicy

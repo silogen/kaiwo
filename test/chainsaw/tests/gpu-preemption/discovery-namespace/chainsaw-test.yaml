@@ -8,14 +8,11 @@ spec:
   - name: annotate-namespace
     description: Add GPU preemption annotations to the test namespace so workloads inherit them
     try:
-    - command:
-        entrypoint: kubectl
-        args:
-        - annotate
-        - namespace
-        - ($namespace)
-        - kaiwo.silogen.ai/gpu-preemption.enabled=true
-        - kaiwo.silogen.ai/gpu-preemption.grace-period=5m
+    - script:
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        content: kubectl annotate namespace "$NAMESPACE" kaiwo.silogen.ai/gpu-preemption.enabled=true kaiwo.silogen.ai/gpu-preemption.grace-period=5m
   - name: discover-gpuworkload-from-namespace
     description: >
       Verify a GpuWorkload is created for a Job that has NO preemption annotations itself,

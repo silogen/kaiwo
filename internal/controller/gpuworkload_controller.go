@@ -42,6 +42,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -148,7 +149,7 @@ func (r *GpuWorkloadReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		gw.Status.FinishedAt = &now
 		gw.Status.IdleSince = nil
 		gw.Status.AggregatedUtilization = nil
-		gw.Status.PodUtilizations = nil
+		gw.Status.TrackedPods = nil
 		if err := r.Status().Update(ctx, &gw); err != nil {
 			if errors.IsConflict(err) {
 				return ctrl.Result{Requeue: true}, nil
@@ -168,6 +169,23 @@ func (r *GpuWorkloadReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+
+	existingMetrics := make(map[string][]kaiwo.GpuMetric, len(gw.Status.TrackedPods))
+	for i := range gw.Status.TrackedPods {
+		tp := &gw.Status.TrackedPods[i]
+		if len(tp.GpuMetrics) > 0 {
+			existingMetrics[tp.PodName] = tp.GpuMetrics
+		}
+	}
+	tracked := make([]kaiwo.TrackedPod, len(ownedPods))
+	for i := range ownedPods {
+		tracked[i] = kaiwo.TrackedPod{
+			PodName:    ownedPods[i].Name,
+			GpuMetrics: existingMetrics[ownedPods[i].Name],
+		}
+	}
+	sort.Slice(tracked, func(i, j int) bool { return tracked[i].PodName < tracked[j].PodName })
+	gw.Status.TrackedPods = tracked
 
 	oldPhase := gw.Status.Phase
 
@@ -246,7 +264,7 @@ func (r *GpuWorkloadReconciler) computePhase(gw *kaiwo.GpuWorkload, pods []corev
 		return kaiwo.GpuWorkloadPhasePendingOther
 	}
 
-	// Compute aggregated utilization from status.podUtilizations
+	// Compute aggregated utilization from status.trackedPods
 	aggUtil := r.computeAggregatedUtilization(gw, gpuCfg)
 	gw.Status.AggregatedUtilization = aggUtil
 
@@ -276,15 +294,17 @@ func isPendingDueToGPU(pod *corev1.Pod, gpuResources map[string]int) bool {
 }
 
 func (r *GpuWorkloadReconciler) computeAggregatedUtilization(gw *kaiwo.GpuWorkload, gpuCfg configapi.KaiwoGpuPreemptionConfig) *float64 {
-	if len(gw.Status.PodUtilizations) == 0 {
-		return nil
-	}
-
 	policy := r.getAggregationPolicy(gw, gpuCfg)
 
 	podUtils := make(map[string][]float64)
-	for _, pu := range gw.Status.PodUtilizations {
-		podUtils[pu.PodName] = append(podUtils[pu.PodName], pu.Utilization)
+	for i := range gw.Status.TrackedPods {
+		tp := &gw.Status.TrackedPods[i]
+		for _, gm := range tp.GpuMetrics {
+			podUtils[tp.PodName] = append(podUtils[tp.PodName], gm.Utilization)
+		}
+	}
+	if len(podUtils) == 0 {
+		return nil
 	}
 
 	var podAverages []float64
@@ -334,26 +354,6 @@ func (r *GpuWorkloadReconciler) computeAggregatedUtilization(gw *kaiwo.GpuWorklo
 	return &result
 }
 
-func (r *GpuWorkloadReconciler) pruneStaleUtilizations(gw *kaiwo.GpuWorkload, ownedPods []corev1.Pod) {
-	if len(gw.Status.PodUtilizations) == 0 {
-		return
-	}
-	activePods := make(map[string]bool, len(ownedPods))
-	for i := range ownedPods {
-		activePods[ownedPods[i].Name] = true
-	}
-	kept := gw.Status.PodUtilizations[:0]
-	for _, pu := range gw.Status.PodUtilizations {
-		if activePods[pu.PodName] {
-			kept = append(kept, pu)
-		}
-	}
-	gw.Status.PodUtilizations = kept
-	if len(kept) == 0 {
-		gw.Status.AggregatedUtilization = nil
-	}
-}
-
 func (r *GpuWorkloadReconciler) handlePreempting(ctx context.Context, gw *kaiwo.GpuWorkload) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
@@ -390,7 +390,7 @@ func (r *GpuWorkloadReconciler) handlePreempting(ctx context.Context, gw *kaiwo.
 	gw.Status.FinishedAt = &now
 	gw.Status.IdleSince = nil
 	gw.Status.AggregatedUtilization = nil
-	gw.Status.PodUtilizations = nil
+	gw.Status.TrackedPods = nil
 
 	r.Recorder.Eventf(gw, corev1.EventTypeWarning, "WorkloadPreempted",
 		"%s/%s was deleted to free GPU resources; reason: %s",
@@ -461,7 +461,6 @@ func (r *GpuWorkloadReconciler) syncOwnedPods(ctx context.Context, req ctrl.Requ
 		}
 	}
 
-	r.pruneStaleUtilizations(gw, ownedPods)
 	return ownedPods, false, nil
 }
 
@@ -671,8 +670,6 @@ func (r *GpuWorkloadReconciler) tryRunPreemptionEvaluation(ctx context.Context, 
 // are marked for preemption immediately. Both pending and idle lists are
 // sorted for deterministic victim selection.
 func (r *GpuWorkloadReconciler) classifyWorkloads(ctx context.Context, workloads []kaiwo.GpuWorkload, gpuCfg configapi.KaiwoGpuPreemptionConfig) (*preemptionState, error) {
-	logger := log.FromContext(ctx)
-
 	state := &preemptionState{
 		pendingByResource: make(map[string][]workloadEntry),
 		idleByResource:    make(map[string][]workloadEntry),
@@ -714,18 +711,25 @@ func (r *GpuWorkloadReconciler) classifyWorkloads(ctx context.Context, workloads
 			}
 
 			if policy == kaiwo.PreemptionPolicyAlways {
-				w.Status.Phase = kaiwo.GpuWorkloadPhasePreempting
-				w.Status.IdleSince = nil
-				w.Status.PreemptionReason = fmt.Sprintf(
+				reason := fmt.Sprintf(
 					"Policy is Always and workload has been idle for %s (threshold: %s)",
 					idleDuration.Round(time.Second), gracePeriod,
 				)
-				if err := r.Status().Update(ctx, w); err != nil {
-					if errors.IsConflict(err) {
-						logger.V(1).Info("conflict marking Always-policy workload, skipping", "name", w.Name)
-						continue
+				alwaysErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					fresh := &kaiwo.GpuWorkload{}
+					if err := r.Get(ctx, client.ObjectKeyFromObject(w), fresh); err != nil {
+						return err
 					}
-					return nil, err
+					if fresh.Status.Phase != kaiwo.GpuWorkloadPhaseIdle {
+						return nil
+					}
+					fresh.Status.Phase = kaiwo.GpuWorkloadPhasePreempting
+					fresh.Status.IdleSince = nil
+					fresh.Status.PreemptionReason = reason
+					return r.Status().Update(ctx, fresh)
+				})
+				if alwaysErr != nil {
+					return nil, alwaysErr
 				}
 				r.Recorder.Eventf(w, corev1.EventTypeWarning, "PreemptionStarted",
 					"Workload has been idle for %s (limit: %s, policy: Always); preempting",
@@ -807,33 +811,40 @@ func (r *GpuWorkloadReconciler) matchAndMarkVictims(ctx context.Context, state *
 				continue
 			}
 
-			for _, victim := range victims {
-				claimed[victim.gw.Spec.WorkloadRef.UID] = true
+		for _, victim := range victims {
+			claimed[victim.gw.Spec.WorkloadRef.UID] = true
 
-				victim.gw.Status.Phase = kaiwo.GpuWorkloadPhasePreempting
-				victim.gw.Status.IdleSince = nil
-				victim.gw.Status.PreemptedFor = pending.gw.Name
-				victim.gw.Status.PreemptionReason = fmt.Sprintf(
-					"GPU pressure: pending workload %s needs %d %s GPUs",
-					pending.gw.Name, demandCount, resName,
-				)
+			reason := fmt.Sprintf(
+				"GPU pressure: pending workload %s needs %d %s GPUs",
+				pending.gw.Name, demandCount, resName,
+			)
 
-				if err := r.Status().Update(ctx, victim.gw); err != nil {
-					if errors.IsConflict(err) {
-						logger.V(1).Info("conflict marking victim, skipping", "victim", victim.gw.Name)
-						continue
-					}
+			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				fresh := &kaiwo.GpuWorkload{}
+				if err := r.Get(ctx, client.ObjectKeyFromObject(victim.gw), fresh); err != nil {
 					return err
 				}
-
-				r.Recorder.Eventf(victim.gw, corev1.EventTypeWarning, "PreemptionStarted",
-					"Freeing %d %s GPU(s) for pending workload %s",
-					victim.gpuCount[resName], resName, pending.gw.Name)
-				logger.Info("marked workload for preemption",
-					"victim", victim.gw.Name,
-					"for", pending.gw.Name,
-					"resource", resName)
+				if fresh.Status.Phase != kaiwo.GpuWorkloadPhaseIdle {
+					return nil
+				}
+				fresh.Status.Phase = kaiwo.GpuWorkloadPhasePreempting
+				fresh.Status.IdleSince = nil
+				fresh.Status.PreemptedFor = pending.gw.Name
+				fresh.Status.PreemptionReason = reason
+				return r.Status().Update(ctx, fresh)
+			})
+			if err != nil {
+				return err
 			}
+
+			r.Recorder.Eventf(victim.gw, corev1.EventTypeWarning, "PreemptionStarted",
+				"Freeing %d %s GPU(s) for pending workload %s",
+				victim.gpuCount[resName], resName, pending.gw.Name)
+			logger.Info("marked workload for preemption",
+				"victim", victim.gw.Name,
+				"for", pending.gw.Name,
+				"resource", resName)
+		}
 		}
 	}
 

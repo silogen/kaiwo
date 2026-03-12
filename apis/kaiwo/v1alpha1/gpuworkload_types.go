@@ -96,14 +96,21 @@ type WorkloadReference struct {
 	UID  types.UID `json:"uid"`
 }
 
-// PodGpuUtilization holds a utilization sample for a single GPU on a single pod.
-type PodGpuUtilization struct {
-	PodName string `json:"podName"`
-	GpuID   string `json:"gpuId,omitempty"`
+// GpuMetric holds a utilization sample for a single GPU.
+type GpuMetric struct {
+	GpuID string `json:"gpuId,omitempty"`
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=100
 	Utilization float64     `json:"utilization"`
 	LastUpdate  metav1.Time `json:"lastUpdate"`
+}
+
+// TrackedPod represents a pod owned by this workload together with its
+// per-GPU utilization metrics.  Pod entries are maintained by the reconciler;
+// metrics within each pod are updated by the scraper.
+type TrackedPod struct {
+	PodName    string      `json:"podName"`
+	GpuMetrics []GpuMetric `json:"gpuMetrics,omitempty"`
 }
 
 // GpuWorkloadSpec defines the desired state of a tracked GPU workload.
@@ -149,11 +156,12 @@ type GpuWorkloadStatus struct {
 	// Phase is the current lifecycle phase of the tracked workload.
 	Phase GpuWorkloadPhase `json:"phase,omitempty"`
 
-	// PodUtilizations holds per-pod, per-GPU utilization entries updated by the
-	// metrics scraper.
-	PodUtilizations []PodGpuUtilization `json:"podUtilizations,omitempty"`
+	// TrackedPods lists pods currently owned by this workload together with
+	// per-GPU utilization metrics. Pod entries are maintained by the reconciler;
+	// metrics within each pod are updated by the scraper.
+	TrackedPods []TrackedPod `json:"trackedPods,omitempty"`
 
-	// AggregatedUtilization is computed by the reconciler from PodUtilizations
+	// AggregatedUtilization is computed by the reconciler from TrackedPods
 	// using the configured AggregationPolicy.
 	AggregatedUtilization *float64 `json:"aggregatedUtilization,omitempty"`
 

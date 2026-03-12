@@ -232,7 +232,8 @@ kubectl describe gpuworkload job-training-a1b2c3d4 -n my-namespace
 
 The status includes:
 
-- `aggregatedUtilization` -- current utilization percentage
+- `trackedPods` -- owned pods and their per-GPU utilization metrics (pod name, GPU ID, utilization %, last update)
+- `aggregatedUtilization` -- current utilization percentage across all pods
 - `idleSince` -- when the workload became idle
 - `ownerChain` -- the full owner reference path (e.g. `Pod/worker-0 -> Job/training -> KaiwoJob/my-job`)
 - `preemptedFor` -- the pending workload this was preempted to make room for
@@ -267,15 +268,15 @@ status:
   idleSince: "2026-03-04T10:00:00Z"
   ownerChain: "Pod/batch-training-xw7n5 -> Job/batch-training"
   lastMetricsUpdate: "2026-03-04T10:14:45Z"
-  podUtilizations:
+  trackedPods:
   - podName: batch-training-xw7n5
-    gpuId: "0"
-    utilization: 2.1
-    lastUpdate: "2026-03-04T10:14:45Z"
-  - podName: batch-training-xw7n5
-    gpuId: "1"
-    utilization: 0.3
-    lastUpdate: "2026-03-04T10:14:45Z"
+    gpuMetrics:
+    - gpuId: "0"
+      utilization: 2.1
+      lastUpdate: "2026-03-04T10:14:45Z"
+    - gpuId: "1"
+      utilization: 0.3
+      lastUpdate: "2026-03-04T10:14:45Z"
   conditions:
   - type: PhaseUpdated
     status: "True"

@@ -406,10 +406,14 @@ var _ = Describe("GpuWorkload Controller", func() {
 					AggregationPolicy: &maxPolicy,
 				},
 				Status: kaiwo.GpuWorkloadStatus{
-					PodUtilizations: []kaiwo.PodGpuUtilization{
-						{PodName: "pod-a", GpuID: "0", Utilization: 10.0},
-						{PodName: "pod-a", GpuID: "1", Utilization: 20.0},
-						{PodName: "pod-b", GpuID: "0", Utilization: 50.0},
+					TrackedPods: []kaiwo.TrackedPod{
+						{PodName: "pod-a", GpuMetrics: []kaiwo.GpuMetric{
+							{GpuID: "0", Utilization: 10.0},
+							{GpuID: "1", Utilization: 20.0},
+						}},
+						{PodName: "pod-b", GpuMetrics: []kaiwo.GpuMetric{
+							{GpuID: "0", Utilization: 50.0},
+						}},
 					},
 				},
 			}
@@ -427,10 +431,14 @@ var _ = Describe("GpuWorkload Controller", func() {
 					AggregationPolicy: &minPolicy,
 				},
 				Status: kaiwo.GpuWorkloadStatus{
-					PodUtilizations: []kaiwo.PodGpuUtilization{
-						{PodName: "pod-a", GpuID: "0", Utilization: 10.0},
-						{PodName: "pod-a", GpuID: "1", Utilization: 20.0},
-						{PodName: "pod-b", GpuID: "0", Utilization: 50.0},
+					TrackedPods: []kaiwo.TrackedPod{
+						{PodName: "pod-a", GpuMetrics: []kaiwo.GpuMetric{
+							{GpuID: "0", Utilization: 10.0},
+							{GpuID: "1", Utilization: 20.0},
+						}},
+						{PodName: "pod-b", GpuMetrics: []kaiwo.GpuMetric{
+							{GpuID: "0", Utilization: 50.0},
+						}},
 					},
 				},
 			}
@@ -448,10 +456,14 @@ var _ = Describe("GpuWorkload Controller", func() {
 					AggregationPolicy: &avgPolicy,
 				},
 				Status: kaiwo.GpuWorkloadStatus{
-					PodUtilizations: []kaiwo.PodGpuUtilization{
-						{PodName: "pod-a", GpuID: "0", Utilization: 10.0},
-						{PodName: "pod-a", GpuID: "1", Utilization: 20.0},
-						{PodName: "pod-b", GpuID: "0", Utilization: 50.0},
+					TrackedPods: []kaiwo.TrackedPod{
+						{PodName: "pod-a", GpuMetrics: []kaiwo.GpuMetric{
+							{GpuID: "0", Utilization: 10.0},
+							{GpuID: "1", Utilization: 20.0},
+						}},
+						{PodName: "pod-b", GpuMetrics: []kaiwo.GpuMetric{
+							{GpuID: "0", Utilization: 50.0},
+						}},
 					},
 				},
 			}
@@ -1050,6 +1062,193 @@ var _ = Describe("GpuWorkload Controller", func() {
 			}
 			requests := reconciler.podToGpuWorkload(ctx, pod)
 			Expect(requests).To(BeEmpty())
+		})
+	})
+
+	Context("preemption evaluation", func() {
+		var (
+			reconciler *GpuWorkloadReconciler
+			ns         *corev1.Namespace
+			gpuCfg     configapi.KaiwoGpuPreemptionConfig
+		)
+
+		makeGW := func(name string, phase kaiwo.GpuWorkloadPhase, gpus int, opts ...func(*kaiwo.GpuWorkload)) *kaiwo.GpuWorkload {
+			onPressure := kaiwo.PreemptionPolicyOnPressure
+			gracePeriod := metav1.Duration{Duration: 5 * time.Second}
+			gw := &kaiwo.GpuWorkload{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name,
+					Namespace: ns.Name,
+				},
+				Spec: kaiwo.GpuWorkloadSpec{
+				WorkloadRef: kaiwo.WorkloadReference{
+					APIVersion: "batch/v1",
+					Kind:       "Job",
+					Name:       name,
+					UID:        types.UID(name + "-uid"),
+				},
+					GpuResources:     map[string]int{"amd.com/gpu": gpus},
+					PreemptionPolicy: &onPressure,
+					GracePeriod:      &gracePeriod,
+				},
+			}
+			for _, fn := range opts {
+				fn(gw)
+			}
+			ExpectWithOffset(1, k8sClient.Create(ctx, gw)).To(Succeed())
+
+			gw.Status.Phase = phase
+			if phase == kaiwo.GpuWorkloadPhaseIdle {
+				idle := metav1.NewTime(time.Now().Add(-30 * time.Second))
+				gw.Status.IdleSince = &idle
+			}
+			ExpectWithOffset(1, k8sClient.Status().Update(ctx, gw)).To(Succeed())
+			return gw
+		}
+
+		BeforeEach(func() {
+			ns = &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{GenerateName: "preempt-test-"}}
+			Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+
+			reconciler = &GpuWorkloadReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Recorder: record.NewFakeRecorder(10),
+			}
+			gpuCfg = configapi.KaiwoGpuPreemptionConfig{}
+		})
+
+		AfterEach(func() {
+			_ = k8sClient.Delete(ctx, ns)
+		})
+
+		It("should preempt a single victim when it satisfies demand", func() {
+			victim := makeGW("victim", kaiwo.GpuWorkloadPhaseIdle, 5)
+			demand := makeGW("demand", kaiwo.GpuWorkloadPhasePendingGpu, 5)
+
+			state, err := reconciler.classifyWorkloads(ctx, []kaiwo.GpuWorkload{*victim, *demand}, gpuCfg)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(reconciler.matchAndMarkVictims(ctx, state)).To(Succeed())
+
+			var updated kaiwo.GpuWorkload
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: ns.Name, Name: "victim"}, &updated)).To(Succeed())
+			Expect(updated.Status.Phase).To(Equal(kaiwo.GpuWorkloadPhasePreempting))
+			Expect(updated.Status.PreemptedFor).To(Equal("demand"))
+		})
+
+		It("should accumulate multiple victims when one is insufficient", func() {
+			victimA := makeGW("victim-a", kaiwo.GpuWorkloadPhaseIdle, 5)
+			victimB := makeGW("victim-b", kaiwo.GpuWorkloadPhaseIdle, 5)
+			demand := makeGW("demand", kaiwo.GpuWorkloadPhasePendingGpu, 6)
+
+			state, err := reconciler.classifyWorkloads(ctx, []kaiwo.GpuWorkload{*victimA, *victimB, *demand}, gpuCfg)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(reconciler.matchAndMarkVictims(ctx, state)).To(Succeed())
+
+			var updatedA, updatedB kaiwo.GpuWorkload
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: ns.Name, Name: "victim-a"}, &updatedA)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: ns.Name, Name: "victim-b"}, &updatedB)).To(Succeed())
+			Expect(updatedA.Status.Phase).To(Equal(kaiwo.GpuWorkloadPhasePreempting))
+			Expect(updatedB.Status.Phase).To(Equal(kaiwo.GpuWorkloadPhasePreempting))
+			Expect(updatedA.Status.PreemptedFor).To(Equal("demand"))
+			Expect(updatedB.Status.PreemptedFor).To(Equal("demand"))
+		})
+
+		It("should not preempt when idle capacity is insufficient (all-or-nothing)", func() {
+			victim := makeGW("small-victim", kaiwo.GpuWorkloadPhaseIdle, 3)
+			makeGW("big-demand", kaiwo.GpuWorkloadPhasePendingGpu, 10)
+
+			state, err := reconciler.classifyWorkloads(ctx, []kaiwo.GpuWorkload{*victim}, gpuCfg)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(reconciler.matchAndMarkVictims(ctx, state)).To(Succeed())
+
+			var updated kaiwo.GpuWorkload
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: ns.Name, Name: "small-victim"}, &updated)).To(Succeed())
+			Expect(updated.Status.Phase).To(Equal(kaiwo.GpuWorkloadPhaseIdle))
+		})
+
+		It("should subtract in-flight capacity from demand", func() {
+			victim := makeGW("idle-victim", kaiwo.GpuWorkloadPhaseIdle, 3)
+			demand := makeGW("inflight-demand", kaiwo.GpuWorkloadPhasePendingGpu, 5)
+
+			inFlight := makeGW("already-freeing", kaiwo.GpuWorkloadPhaseIdle, 3)
+			inFlight.Status.Phase = kaiwo.GpuWorkloadPhasePreempting
+			inFlight.Status.PreemptedFor = "inflight-demand"
+			Expect(k8sClient.Status().Update(ctx, inFlight)).To(Succeed())
+
+			state, err := reconciler.classifyWorkloads(ctx, []kaiwo.GpuWorkload{*victim, *demand, *inFlight}, gpuCfg)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(reconciler.matchAndMarkVictims(ctx, state)).To(Succeed())
+
+			var updated kaiwo.GpuWorkload
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: ns.Name, Name: "idle-victim"}, &updated)).To(Succeed())
+			Expect(updated.Status.Phase).To(Equal(kaiwo.GpuWorkloadPhasePreempting))
+		})
+
+		It("should not double-claim a victim across two pending workloads", func() {
+			victim := makeGW("shared-victim", kaiwo.GpuWorkloadPhaseIdle, 5)
+			makeGW("demand-1", kaiwo.GpuWorkloadPhasePendingGpu, 5)
+			demand2 := makeGW("demand-2", kaiwo.GpuWorkloadPhasePendingGpu, 5)
+
+			state, err := reconciler.classifyWorkloads(ctx, []kaiwo.GpuWorkload{*victim, *demand2}, gpuCfg)
+			Expect(err).NotTo(HaveOccurred())
+
+			state.pendingByResource["amd.com/gpu"] = append(
+				[]workloadEntry{{gw: demand2, gpuCount: demand2.Spec.GpuResources}},
+				state.pendingByResource["amd.com/gpu"]...,
+			)
+			Expect(reconciler.matchAndMarkVictims(ctx, state)).To(Succeed())
+
+			var updated kaiwo.GpuWorkload
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: ns.Name, Name: "shared-victim"}, &updated)).To(Succeed())
+			Expect(updated.Status.Phase).To(Equal(kaiwo.GpuWorkloadPhasePreempting))
+			Expect(updated.Status.PreemptedFor).To(Equal("demand-2"))
+		})
+
+		It("should skip victims still within grace period", func() {
+			gw := &kaiwo.GpuWorkload{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "young-victim",
+					Namespace: ns.Name,
+				},
+				Spec: kaiwo.GpuWorkloadSpec{
+				WorkloadRef: kaiwo.WorkloadReference{
+					APIVersion: "batch/v1",
+					Kind:       "Job",
+					Name:       "young-victim",
+					UID:        "young-uid",
+				},
+					GpuResources:     map[string]int{"amd.com/gpu": 5},
+					PreemptionPolicy: func() *kaiwo.PreemptionPolicy { p := kaiwo.PreemptionPolicyOnPressure; return &p }(),
+					GracePeriod:      &metav1.Duration{Duration: 10 * time.Minute},
+				},
+			}
+			Expect(k8sClient.Create(ctx, gw)).To(Succeed())
+			gw.Status.Phase = kaiwo.GpuWorkloadPhaseIdle
+			recent := metav1.NewTime(time.Now().Add(-30 * time.Second))
+			gw.Status.IdleSince = &recent
+			Expect(k8sClient.Status().Update(ctx, gw)).To(Succeed())
+
+			demand := makeGW("grace-demand", kaiwo.GpuWorkloadPhasePendingGpu, 5)
+
+			state, err := reconciler.classifyWorkloads(ctx, []kaiwo.GpuWorkload{*gw, *demand}, gpuCfg)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(state.idleByResource["amd.com/gpu"]).To(BeEmpty())
+		})
+
+		It("should mark Always-policy workload as Preempting immediately after grace period", func() {
+			always := kaiwo.PreemptionPolicyAlways
+			victim := makeGW("always-victim", kaiwo.GpuWorkloadPhaseIdle, 5, func(gw *kaiwo.GpuWorkload) {
+				gw.Spec.PreemptionPolicy = &always
+			})
+
+			state, err := reconciler.classifyWorkloads(ctx, []kaiwo.GpuWorkload{*victim}, gpuCfg)
+			Expect(err).NotTo(HaveOccurred())
+
+			var updated kaiwo.GpuWorkload
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: ns.Name, Name: "always-victim"}, &updated)).To(Succeed())
+			Expect(updated.Status.Phase).To(Equal(kaiwo.GpuWorkloadPhasePreempting))
+			Expect(state.idleByResource["amd.com/gpu"]).To(BeEmpty())
 		})
 	})
 })

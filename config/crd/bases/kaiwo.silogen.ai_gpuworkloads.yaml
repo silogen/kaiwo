@@ -136,7 +136,7 @@ spec:
             properties:
               aggregatedUtilization:
                 description: |-
-                  AggregatedUtilization is computed by the reconciler from PodUtilizations
+                  AggregatedUtilization is computed by the reconciler from TrackedPods
                   using the configured AggregationPolicy.
                 type: number
               conditions:
@@ -229,31 +229,6 @@ spec:
                 - Deleted
                 - ""
                 type: string
-              podUtilizations:
-                description: |-
-                  PodUtilizations holds per-pod, per-GPU utilization entries updated by the
-                  metrics scraper.
-                items:
-                  description: PodGpuUtilization holds a utilization sample for a
-                    single GPU on a single pod.
-                  properties:
-                    gpuId:
-                      type: string
-                    lastUpdate:
-                      format: date-time
-                      type: string
-                    podName:
-                      type: string
-                    utilization:
-                      maximum: 100
-                      minimum: 0
-                      type: number
-                  required:
-                  - lastUpdate
-                  - podName
-                  - utilization
-                  type: object
-                type: array
               preemptedAt:
                 description: PreemptedAt records when the preemption was initiated.
                 format: date-time
@@ -268,6 +243,42 @@ spec:
                   PreemptionReason provides a human-readable explanation of why the workload
                   was preempted.
                 type: string
+              trackedPods:
+                description: |-
+                  TrackedPods lists pods currently owned by this workload together with
+                  per-GPU utilization metrics. Pod entries are maintained by the reconciler;
+                  metrics within each pod are updated by the scraper.
+                items:
+                  description: |-
+                    TrackedPod represents a pod owned by this workload together with its
+                    per-GPU utilization metrics.  Pod entries are maintained by the reconciler;
+                    metrics within each pod are updated by the scraper.
+                  properties:
+                    gpuMetrics:
+                      items:
+                        description: GpuMetric holds a utilization sample for a single
+                          GPU.
+                        properties:
+                          gpuId:
+                            type: string
+                          lastUpdate:
+                            format: date-time
+                            type: string
+                          utilization:
+                            maximum: 100
+                            minimum: 0
+                            type: number
+                        required:
+                        - lastUpdate
+                        - utilization
+                        type: object
+                      type: array
+                    podName:
+                      type: string
+                  required:
+                  - podName
+                  type: object
+                type: array
             type: object
         type: object
     served: true
