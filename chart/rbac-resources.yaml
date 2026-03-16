@@ -105,6 +105,14 @@ rules:
   - update
   - watch
 - apiGroups:
+  - apps
+  resources:
+  - replicasets
+  verbs:
+  - delete
+  - get
+  - list
+- apiGroups:
   - batch
   resources:
   - jobs
@@ -129,6 +137,16 @@ rules:
   - update
   - watch
 - apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
   - gateway.networking.k8s.io
   resources:
   - httproutes
@@ -149,6 +167,7 @@ rules:
 - apiGroups:
   - kaiwo.silogen.ai
   resources:
+  - gpuworkloads
   - kaiwojobs
   - kaiwoqueueconfigs
   - kaiwoservices
@@ -163,6 +182,7 @@ rules:
 - apiGroups:
   - kaiwo.silogen.ai
   resources:
+  - gpuworkloads/finalizers
   - kaiwojobs/finalizers
   - kaiwoqueueconfigs/finalizers
   - kaiwoservices/finalizers
@@ -171,6 +191,7 @@ rules:
 - apiGroups:
   - kaiwo.silogen.ai
   resources:
+  - gpuworkloads/status
   - kaiwojobs/status
   - kaiwoqueueconfigs/status
   - kaiwoservices/status
@@ -196,6 +217,14 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - ray.io
+  resources:
+  - rayclusters
+  verbs:
+  - delete
+  - get
+  - list
 - apiGroups:
   - ray.io
   resources:

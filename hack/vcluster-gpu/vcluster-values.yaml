@@ -1,0 +1,15 @@
+sync:
+  fromHost:
+    nodes:
+      enabled: true
+      selector:
+        all: true
+    storageClasses:
+      enabled: true
+
+networking:
+  advanced:
+    # Fall back to host cluster DNS so the kaiwo operator can reach
+    # GPU metrics services running on the host (e.g.
+    # gpu-metrics-<ns>-collector.kube-amd-gpu.svc:5000).
+    fallbackHostCluster: true

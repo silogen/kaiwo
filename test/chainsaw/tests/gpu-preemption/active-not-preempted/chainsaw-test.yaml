@@ -1,0 +1,67 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: test-gpu-preemption-active-not-preempted
+spec:
+  concurrent: false
+  steps:
+  - name: active-workload-not-preempted
+    description: >
+      Verify a workload under real GPU load (utilization above threshold) stays
+      Active and is NOT preempted, even with Always policy past grace-period.
+    try:
+    - apply:
+        file: job-active.yaml
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: GpuWorkload
+          spec:
+            workloadRef:
+              kind: Job
+              name: gpu-preemption-active-workload
+          status:
+            phase: Active
+    # Wait well past grace-period (15s) plus several evaluation cycles to
+    # confirm the workload is never transitioned to Preempting/Preempted.
+    - sleep:
+        duration: 90s
+    - error:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: GpuWorkload
+          spec:
+            workloadRef:
+              kind: Job
+              name: gpu-preemption-active-workload
+          status:
+            phase: Preempting
+    - error:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: GpuWorkload
+          spec:
+            workloadRef:
+              kind: Job
+              name: gpu-preemption-active-workload
+          status:
+            phase: Preempted
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: GpuWorkload
+          spec:
+            workloadRef:
+              kind: Job
+              name: gpu-preemption-active-workload
+          status:
+            phase: Active
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: "debug"
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]

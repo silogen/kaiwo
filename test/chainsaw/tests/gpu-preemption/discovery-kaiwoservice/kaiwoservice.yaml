@@ -1,0 +1,11 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoService
+metadata:
+  name: gpu-preemption-discover-kwsvc
+  annotations:
+    kaiwo.silogen.ai/gpu-preemption.enabled: "true"
+spec:
+  user: test@amd.com
+  image: busybox:latest
+  entrypoint: "sleep 600"
+  gpus: 1

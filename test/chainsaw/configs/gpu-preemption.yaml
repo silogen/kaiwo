@@ -1,0 +1,25 @@
+apiVersion: chainsaw.kyverno.io/v1alpha2
+kind: Configuration
+metadata:
+  name: gpu-preemption-config
+spec:
+  discovery:
+    fullName: true
+  timeouts:
+    apply: 30s
+    assert: 300s
+    cleanup: 120s
+    delete: 120s
+    error: 120s
+    exec: 120s
+  error:
+    catch:
+    - command:
+        entrypoint: log
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        args:
+        - $NAMESPACE
+        - --namespaced-level=debug
+        - --cluster-level=info

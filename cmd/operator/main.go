@@ -376,6 +376,30 @@ func main() {
 		}
 	}
 
+	if controller.IsGpuPreemptionEnabled() {
+		setupLog.Info("GPU preemption enabled, registering GpuWorkload controller and metrics scraper")
+		if err = (&controller.GpuWorkloadReconciler{
+			Client:   mgr.GetClient(),
+			Scheme:   mgr.GetScheme(),
+			Recorder: mgr.GetEventRecorderFor("gpuworkload-controller"),
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "GpuWorkload")
+			os.Exit(1)
+		}
+
+		gpuScraper, err := controller.NewGpuMetricsScraper(mgr.GetClient())
+		if err != nil {
+			setupLog.Error(err, "unable to create GPU metrics scraper")
+			os.Exit(1)
+		}
+		if err := mgr.Add(gpuScraper); err != nil {
+			setupLog.Error(err, "unable to add GPU metrics scraper to manager")
+			os.Exit(1)
+		}
+	} else {
+		setupLog.Info("GPU preemption is not enabled")
+	}
+
 	if monitoring.IsMetricsMonitoringEnabled() {
 		setupLog.Info("Adding metrics watcher")
 		metricsWatcher, err := monitoring.NewMetricsWatcherFromEnv(

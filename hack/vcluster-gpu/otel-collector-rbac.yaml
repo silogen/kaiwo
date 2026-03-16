@@ -1,0 +1,24 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: gpu-otel-collector-k8sattributes
+rules:
+- apiGroups: [""]
+  resources: [pods, namespaces]
+  verbs: [get, list, watch]
+- apiGroups: [apps]
+  resources: [replicasets]
+  verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: gpu-otel-collector-k8sattributes
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: kube-amd-gpu
+roleRef:
+  kind: ClusterRole
+  name: gpu-otel-collector-k8sattributes
+  apiGroup: rbac.authorization.k8s.io

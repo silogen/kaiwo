@@ -1,0 +1,52 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: test-gpu-preemption-always-policy
+spec:
+  concurrent: false
+  steps:
+  - name: always-policy-lifecycle
+    description: >
+      Verify Always policy preempts an idle workload after the grace-period period,
+      deletes the underlying Job, and cleans up the GpuWorkload CR via TTL.
+    try:
+    - apply:
+        file: job.yaml
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: GpuWorkload
+          spec:
+            workloadRef:
+              kind: Job
+              name: gpu-preemption-always
+          status:
+            phase: Idle
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: GpuWorkload
+          spec:
+            workloadRef:
+              kind: Job
+              name: gpu-preemption-always
+          status:
+            phase: Preempted
+    - error:
+        resource:
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: gpu-preemption-always
+    - error:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: GpuWorkload
+          spec:
+            workloadRef:
+              kind: Job
+              name: gpu-preemption-always
+    catch:
+    - command:
+        entrypoint: kubectl
+        args: ["get", "gpuworkloads,jobs,pods", "-n", "($namespace)", "-o", "wide"]
