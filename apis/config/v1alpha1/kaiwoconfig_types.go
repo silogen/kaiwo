@@ -76,6 +76,11 @@ type KaiwoConfigSpec struct {
 	// If nodes are added or removed, the operator will update the default clusterqueue to reflect the current state of the cluster.
 	// +kubebuilder:default=false
 	DynamicallyUpdateDefaultClusterQueue bool `json:"dynamicallyUpdateDefaultClusterQueue,omitempty"`
+
+	// DefaultTopologyName is the name of the default Kueue Topology used for Topology Aware Scheduling.
+	// Auto-generated ResourceFlavors reference this topology when DynamicallyUpdateDefaultClusterQueue is enabled.
+	// +kubebuilder:default="default-topology"
+	DefaultTopologyName string `json:"defaultTopologyName,omitempty"`
 }
 
 // KaiwoRayConfig contains the Ray-specific configuration that Kaiwo uses.

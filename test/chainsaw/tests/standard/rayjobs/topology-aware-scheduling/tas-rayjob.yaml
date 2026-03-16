@@ -6,6 +6,7 @@ spec:
   user: test@amd.com
   ray: true
   image: rayproject/ray:2.41.0
+  preferredTopologyLabel: "kaiwo/topology-rack"
   gpuVendor: "nvidia"
   gpus: 16
   resources:
