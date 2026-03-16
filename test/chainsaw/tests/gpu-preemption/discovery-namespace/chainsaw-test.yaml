@@ -1,0 +1,65 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: test-gpu-preemption-discovery-namespace
+spec:
+  concurrent: true
+  steps:
+  - name: annotate-namespace
+    description: Add GPU preemption annotations to the test namespace so workloads inherit them
+    try:
+    - script:
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        content: kubectl annotate namespace "$NAMESPACE" kaiwo.silogen.ai/gpu-preemption.enabled=true kaiwo.silogen.ai/gpu-preemption.grace-period=5m
+  - name: discover-gpuworkload-from-namespace
+    description: >
+      Verify a GpuWorkload is created for a Job that has NO preemption annotations itself,
+      inheriting the opt-in from the namespace annotations.
+    try:
+    - apply:
+        file: job.yaml
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: GpuWorkload
+          spec:
+            workloadRef:
+              kind: Job
+              name: gpu-preemption-discover-ns
+            gpuResources:
+              amd.com/gpu: 1
+            gracePeriod: 5m0s
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: "debug"
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+  - name: verify-phase-transitions
+    description: Verify the reconciler resolves the owner chain and computes a phase
+    try:
+    - assert:
+        timeout: 120s
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: GpuWorkload
+          spec:
+            workloadRef:
+              kind: Job
+              name: gpu-preemption-discover-ns
+          status:
+            (phase != 'PendingOther'): true
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: "debug"
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]

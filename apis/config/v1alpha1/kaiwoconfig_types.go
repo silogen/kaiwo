@@ -54,6 +54,14 @@ type KaiwoConfigSpec struct {
 	// +kubebuilder:default={}
 	ResourceMonitoring KaiwoResourceMonitoringConfig `json:"resourceMonitoring,omitempty"`
 
+	// GpuPreemption configures cluster-wide defaults for the GPU preemption feature.
+	// These values sit between per-workload annotations and operator env vars in
+	// the resolution chain: annotation > KaiwoConfig > env var > hardcoded fallback.
+	// Note: metricsEndpoint and pollingInterval remain env-var-only because
+	// changing them requires restarting the metrics scraper.
+	// +kubebuilder:default={}
+	GpuPreemption KaiwoGpuPreemptionConfig `json:"gpuPreemption,omitempty"`
+
 	// DefaultClusterQueueName is the name of the default cluster queue that is used for workloads that don't explicitly specify a cluster queue.
 	// +kubebuilder:default="kaiwo"
 	DefaultClusterQueueName string `json:"defaultClusterQueueName,omitempty"`
@@ -147,6 +155,39 @@ type KaiwoResourceMonitoringConfig struct {
 	// +kubebuilder:validation:Pattern=`^([0-9]+(s|m|h))+$`
 	// +kubebuilder:default="24h"
 	TerminateUnderutilizedAfter string `json:"terminateUnderutilizedAfter,omitempty"`
+}
+
+// KaiwoGpuPreemptionConfig configures cluster-wide defaults for the GPU
+// preemption feature. All fields are optional; when unset the corresponding
+// operator env var (or hardcoded fallback) is used instead.
+type KaiwoGpuPreemptionConfig struct {
+	// DefaultThreshold is the utilization percentage below which a workload is
+	// considered idle. Overridden by the per-workload annotation.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=100
+	DefaultThreshold *float64 `json:"defaultThreshold,omitempty"`
+
+	// DefaultGracePeriod is the duration a workload must be continuously idle
+	// before it becomes eligible for preemption (e.g. "10m", "1h").
+	// +optional
+	DefaultGracePeriod *metav1.Duration `json:"defaultGracePeriod,omitempty"`
+
+	// DefaultPolicy is the preemption policy: "OnPressure" or "Always".
+	// +optional
+	// +kubebuilder:validation:Enum=OnPressure;Always
+	DefaultPolicy string `json:"defaultPolicy,omitempty"`
+
+	// DefaultAggregation determines how utilization is aggregated across
+	// multiple pods: "Min", "Max", or "Avg".
+	// +optional
+	// +kubebuilder:validation:Enum=Min;Max;Avg
+	DefaultAggregation string `json:"defaultAggregation,omitempty"`
+
+	// DefaultTTL controls how long terminal GpuWorkload CRs (Preempted or
+	// Deleted) are retained before automatic cleanup (e.g. "24h", "0" for forever).
+	// +optional
+	DefaultTTL *metav1.Duration `json:"defaultTTL,omitempty"`
 }
 
 // KaiwoSchedulingConfig contains the configuration Kaiwo uses for workload scheduling

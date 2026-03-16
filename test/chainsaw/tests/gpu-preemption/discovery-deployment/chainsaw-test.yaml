@@ -1,0 +1,54 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: test-gpu-preemption-discovery-deployment
+spec:
+  concurrent: true
+  steps:
+  - name: discover-gpuworkload-for-deployment
+    description: Verify GpuWorkload is created for an annotated Deployment (Pod -> ReplicaSet -> Deployment chain)
+    try:
+    - apply:
+        file: deployment.yaml
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: GpuWorkload
+          spec:
+            workloadRef:
+              kind: Deployment
+              name: gpu-preemption-discover-deploy
+            gpuResources:
+              amd.com/gpu: 1
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: "debug"
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+  - name: verify-phase-transitions
+    description: Verify the reconciler can match pods through the ReplicaSet chain and compute a real phase (not stuck in PendingOther)
+    try:
+    - assert:
+        timeout: 120s
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: GpuWorkload
+          spec:
+            workloadRef:
+              kind: Deployment
+              name: gpu-preemption-discover-deploy
+          status:
+            (phase != 'PendingOther'): true
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: "debug"
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]

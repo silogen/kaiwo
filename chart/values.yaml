@@ -83,6 +83,18 @@ admission:
   enforceNonPrivileged: true
 
 
+# GPU Preemption Configuration
+# Enables utilization-based preemption of idle GPU workloads
+gpuPreemption:
+  enabled: false
+  metricsEndpoint: ""       # AMD GPU metrics exporter URL (required when enabled)
+  pollingInterval: "15s"    # How often the scraper polls the metrics endpoint
+  defaultThreshold: "5"     # Default utilization threshold (%) below which a workload is idle
+  defaultGracePeriod: "10m" # Default idle duration before preemption eligibility
+  defaultPolicy: "OnPressure" # Default preemption policy (OnPressure or Always)
+  defaultAggregation: "Max"   # Default multi-pod aggregation (Min, Max, or Avg)
+  defaultTTL: "24h"           # Default TTL for terminal GpuWorkload CRs ("0" = retain forever)
+
 # Optional KaiwoConfig - global operator configuration
 # If provided, a KaiwoConfig resource will be created
 # If not provided, the operator will use defaults
@@ -118,6 +130,16 @@ kaiwoConfig:
       enabled: false
       pollingInterval: "15s"
       prometheusEndpoint: "http://prometheus-k8s.monitoring.svc.cluster.local:9090"
+
+    # GPU preemption cluster-wide runtime defaults (live-tunable, no operator restart needed).
+    # These sit between per-workload annotations and operator env vars in the resolution chain.
+    # Omitted fields fall through to the gpuPreemption.* env vars / hardcoded defaults above.
+    # gpuPreemption:
+    #   defaultThreshold: 5
+    #   defaultGracePeriod: "10m"
+    #   defaultPolicy: "OnPressure"
+    #   defaultAggregation: "Max"
+    #   defaultTTL: "24h"
 
     # Default cluster queue settings
     defaultClusterQueueName: "kaiwo"

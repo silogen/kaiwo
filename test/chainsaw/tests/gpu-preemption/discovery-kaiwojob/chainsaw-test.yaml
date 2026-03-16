@@ -1,0 +1,33 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: test-gpu-preemption-discovery-kaiwojob
+spec:
+  concurrent: true
+  steps:
+  - name: discover-gpuworkload-for-kaiwojob
+    description: >
+      Verify GpuWorkload is created for an annotated KaiwoJob
+      (Pod -> Job -> KaiwoJob owner chain). Phase progression is not
+      asserted because Kueue scheduling gates may prevent the pod from
+      running in vcluster dev environments.
+    try:
+    - apply:
+        file: kaiwojob.yaml
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: GpuWorkload
+          spec:
+            workloadRef:
+              kind: KaiwoJob
+              name: gpu-preemption-discover-kaiwojob
+            gpuResources:
+              amd.com/gpu: 1
+    catch:
+    - script:
+        env:
+        - name: NS
+          value: ($namespace)
+        content: |
+          kubectl get gpuworkloads,kaiwojobs,jobs,pods -n "$NS" -o wide 2>&1 || true

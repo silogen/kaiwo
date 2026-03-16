@@ -1,0 +1,55 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: test-gpu-preemption-discovery-rayjob
+spec:
+  concurrent: true
+  steps:
+  - name: discover-gpuworkload-for-rayjob
+    description: Verify GpuWorkload is created for an annotated standalone RayJob (Pod -> RayCluster -> RayJob chain)
+    try:
+    - apply:
+        file: rayjob.yaml
+    - assert:
+        timeout: 120s
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: GpuWorkload
+          spec:
+            workloadRef:
+              kind: RayJob
+              name: gpu-preemption-discover-rayjob
+            gpuResources:
+              amd.com/gpu: 1
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: "debug"
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+  - name: verify-phase-transitions
+    description: Verify the reconciler resolves the full owner chain and computes a phase
+    try:
+    - assert:
+        timeout: 120s
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: GpuWorkload
+          spec:
+            workloadRef:
+              kind: RayJob
+              name: gpu-preemption-discover-rayjob
+          status:
+            (phase != 'PendingOther'): true
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: "debug"
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]

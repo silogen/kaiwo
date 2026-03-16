@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gpu-preemption-discover-deploy
+  annotations:
+    kaiwo.silogen.ai/gpu-preemption.enabled: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gpu-preemption-discover-deploy
+  template:
+    metadata:
+      labels:
+        app: gpu-preemption-discover-deploy
+    spec:
+      containers:
+      - name: workload
+        image: busybox:latest
+        command: ["sleep", "600"]
+        resources:
+          requests:
+            amd.com/gpu: "1"
+          limits:
+            amd.com/gpu: "1"

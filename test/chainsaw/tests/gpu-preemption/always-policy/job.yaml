@@ -1,0 +1,23 @@
+# busybox + amd.com/gpu is intentional: the GPU is never used so the workload
+# reports 0% utilization and remains Idle, exercising the Always preemption path.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gpu-preemption-always
+  annotations:
+    kaiwo.silogen.ai/gpu-preemption.policy: "Always"
+    kaiwo.silogen.ai/gpu-preemption.grace-period: "15s"
+    kaiwo.silogen.ai/gpu-preemption.ttl: "30s"
+spec:
+  template:
+    spec:
+      containers:
+      - name: workload
+        image: busybox:latest
+        command: ["sleep", "600"]
+        resources:
+          requests:
+            amd.com/gpu: "1"
+          limits:
+            amd.com/gpu: "1"
+      restartPolicy: Never

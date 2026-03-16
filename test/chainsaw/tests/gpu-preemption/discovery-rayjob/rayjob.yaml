@@ -1,0 +1,26 @@
+apiVersion: ray.io/v1
+kind: RayJob
+metadata:
+  name: gpu-preemption-discover-rayjob
+  annotations:
+    kaiwo.silogen.ai/gpu-preemption.enabled: "true"
+spec:
+  entrypoint: "python -c 'import time; time.sleep(600)'"
+  shutdownAfterJobFinishes: false
+  rayClusterSpec:
+    headGroupSpec:
+      rayStartParams:
+        dashboard-host: '0.0.0.0'
+      template:
+        spec:
+          containers:
+          - name: ray-head
+            image: rayproject/ray:2.41.0
+            resources:
+              requests:
+                cpu: "1"
+                memory: "1Gi"
+                amd.com/gpu: "1"
+              limits:
+                memory: "1Gi"
+                amd.com/gpu: "1"
