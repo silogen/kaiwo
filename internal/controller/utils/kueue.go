@@ -198,7 +198,7 @@ func CreateDefaultResourceFlavors(ctx context.Context, c client.Client) ([]kaiwo
 			NodeLabels: map[string]string{
 				common.DefaultNodePoolLabel: flavorName,
 			},
-			TopologyName: common.DefaultTopologyName,
+			TopologyName: config.DefaultTopologyName,
 		}
 
 		// TODO: Look into why automatic scheduling is not working
@@ -386,6 +386,7 @@ func ConvertKaiwoToKueueResourceFlavor(kaiwoFlavor kaiwo.ResourceFlavorSpec) kue
 		ref := kueuev1beta1.TopologyReference(kaiwoFlavor.TopologyName)
 		topologyRef = &ref
 	}
+	nodeLabels[common.DefaultKaiwoWorkerLabel] = "true"
 
 	return kueuev1beta1.ResourceFlavor{
 		ObjectMeta: metav1.ObjectMeta{Name: kaiwoFlavor.Name},
@@ -519,9 +520,10 @@ func ComparePriorityClasses(a, b kueuev1beta1.WorkloadPriorityClass) bool {
 }
 
 func CreateDefaultTopology(ctx context.Context, c client.Client) ([]kaiwo.Topology, error) {
+	config := common.ConfigFromContext(ctx)
 	defaultTopology := kaiwo.Topology{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: common.DefaultTopologyName,
+			Name: config.DefaultTopologyName,
 		},
 		Spec: kaiwo.TopologySpec{
 			Levels: []kueuev1alpha1.TopologyLevel{
