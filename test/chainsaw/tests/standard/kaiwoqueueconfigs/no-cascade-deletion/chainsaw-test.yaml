@@ -1,0 +1,48 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: kaiwoqueueconfig-no-cascade-deletion
+spec:
+  concurrent: false
+  steps:
+  - name: Apply KaiwoQueueConfig and verify ClusterQueue has managed-by label and no ownerReferences
+    try:
+    - apply:
+        file: kaiwoqueueconfig.yaml
+    - assert:
+        resource:
+          apiVersion: "kueue.x-k8s.io/v1beta1"
+          kind: ClusterQueue
+          metadata:
+            name: fizz
+            labels:
+              kaiwo.silogen.ai/managed-by: kaiwo
+    - script:
+        content: kubectl get clusterqueue fizz -o jsonpath='{.metadata.ownerReferences}'
+        check:
+          ($stdout == ''): true
+
+  - name: Verify stale ownerReferences are removed from existing ClusterQueues
+    try:
+    - script:
+        content: kubectl get clusterqueue fizz -o jsonpath='{.metadata.ownerReferences}'
+        check:
+          ($stdout == ''): true
+    - script:
+        content: |
+          kubectl get clusterqueue -l kaiwo.silogen.ai/managed-by=kaiwo -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.ownerReferences}{"\n"}{end}'
+        check:
+          (contains($stdout, 'KaiwoQueueConfig')): false
+
+    finally:
+    - script:
+        content: kubectl delete kaiwoqueueconfig kaiwo --ignore-not-found
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]

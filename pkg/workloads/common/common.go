@@ -35,6 +35,8 @@ var DefaultClusterQueueName = baseutils.GetEnv("DEFAULT_CLUSTER_QUEUE_NAME", "ka
 const (
 	Finalizer            = "kaiwo.silogen.ai/finalizer"
 	KaiwoQueueConfigName = "kaiwo"
+	ManagedByLabel       = "kaiwo.silogen.ai/managed-by"
+	ManagedByValue       = "kaiwo"
 )
 
 var DefaultRequeueDuration = 2 * time.Second
