@@ -70,10 +70,33 @@ _Appears in:_
 | `nodes` _[KaiwoNodeConfig](#kaiwonodeconfig)_ | Nodes defines the node configuration settings | \{  \} |  |
 | `scheduling` _[KaiwoSchedulingConfig](#kaiwoschedulingconfig)_ | Scheduling contains the configuration Kaiwo uses for workload scheduling | \{  \} |  |
 | `resourceMonitoring` _[KaiwoResourceMonitoringConfig](#kaiworesourcemonitoringconfig)_ | ResourceMonitoring defines the resource-monitoring specific settings | \{  \} |  |
+| `gpuPreemption` _[KaiwoGpuPreemptionConfig](#kaiwogpupreemptionconfig)_ | GpuPreemption configures cluster-wide defaults for the GPU preemption feature.<br />These values sit between per-workload annotations and operator env vars in<br />the resolution chain: annotation > KaiwoConfig > env var > hardcoded fallback.<br />Note: metricsEndpoint and pollingInterval remain env-var-only because<br />changing them requires restarting the metrics scraper. | \{  \} |  |
 | `defaultClusterQueueName` _string_ | DefaultClusterQueueName is the name of the default cluster queue that is used for workloads that don't explicitly specify a cluster queue. | kaiwo |  |
 | `defaultClusterQueueCohortName` _string_ | DefaultClusterQueueCohortName is the name of the default cohort that is used for the default cluster queue.<br />ClusterQueues in the same cohort can share resources. | kaiwo |  |
 | `dynamicallyUpdateDefaultClusterQueue` _boolean_ | DynamicallyUpdateDefaultClusterQueue defines whether the Kaiwo operator should dynamically update default "kaiwo" clusterqueue.<br />If set to true, the operator will make sure that the default clusterqueue is always up to date and reflects total resources available.<br />If nodes are added or removed, the operator will update the default clusterqueue to reflect the current state of the cluster. | false |  |
 | `defaultTopologyName` _string_ | DefaultTopologyName is the name of the default Kueue Topology used for Topology Aware Scheduling.<br />Auto-generated ResourceFlavors reference this topology when DynamicallyUpdateDefaultClusterQueue is enabled. | default-topology |  |
+
+
+#### KaiwoGpuPreemptionConfig
+
+
+
+KaiwoGpuPreemptionConfig configures cluster-wide defaults for the GPU
+preemption feature. All fields are optional; when unset the corresponding
+operator env var (or hardcoded fallback) is used instead.
+
+
+
+_Appears in:_
+- [KaiwoConfigSpec](#kaiwoconfigspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `defaultThreshold` _float_ | DefaultThreshold is the utilization percentage below which a workload is<br />considered idle. Overridden by the per-workload annotation. |  | Maximum: 100 <br />Minimum: 0 <br />Optional: \{\} <br /> |
+| `defaultGracePeriod` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#duration-v1-meta)_ | DefaultGracePeriod is the duration a workload must be continuously idle<br />before it becomes eligible for preemption (e.g. "10m", "1h"). |  | Optional: \{\} <br /> |
+| `defaultPolicy` _string_ | DefaultPolicy is the preemption policy: "OnPressure" or "Always". |  | Enum: [OnPressure Always] <br />Optional: \{\} <br /> |
+| `defaultAggregation` _string_ | DefaultAggregation determines how utilization is aggregated across<br />multiple pods: "Min", "Max", or "Avg". |  | Enum: [Min Max Avg] <br />Optional: \{\} <br /> |
+| `defaultTTL` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#duration-v1-meta)_ | DefaultTTL controls how long terminal GpuWorkload CRs (Preempted or<br />Deleted) are retained before automatic cleanup (e.g. "24h", "0" for forever). |  | Optional: \{\} <br /> |
 
 
 #### KaiwoNodeConfig

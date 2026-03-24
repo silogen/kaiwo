@@ -243,6 +243,24 @@ _Appears in:_
 | `targetPath` _string_ | TargetPath specifies the destination path relative to the data volume's mount point (`DataStorageSpec.MountPath`) where the repository or `path` content should be copied. |  |  |
 
 
+#### GpuMetric
+
+
+
+GpuMetric holds a utilization sample for a single GPU.
+
+
+
+_Appears in:_
+- [TrackedPod](#trackedpod)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `gpuId` _string_ |  |  |  |
+| `utilization` _float_ |  |  | Maximum: 100 <br />Minimum: 0 <br /> |
+| `lastUpdate` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ |  |  |  |
+
+
 #### GpuWorkload
 
 
@@ -289,15 +307,16 @@ _Underlying type:_ _string_
 
 GpuWorkloadPhase represents the lifecycle phase of a tracked GPU workload.
 
-
+_Validation:_
+- Enum: [PendingGpu PendingOther Active Idle Preempting Preempted Deleted ]
 
 _Appears in:_
 - [GpuWorkloadStatus](#gpuworkloadstatus)
 
 | Field | Description |
 | --- | --- |
-| `PendingGpu` | GpuWorkloadPhasePendingGpu indicates pods are unschedulable specifically due to<br />insufficient GPU resources (validated via the scheduler condition message).<br />Acts as the demand signal for OnPressure preemption.<br /> |
-| `PendingOther` | GpuWorkloadPhasePendingOther indicates pods exist but are not yet Running<br />for non-GPU reasons: image pulls, init containers, PVC binding, node affinity,<br />taints, etc. No idle time is counted and the phase does not trigger preemption evaluation.<br /> |
+| `PendingGpu` | GpuWorkloadPhasePendingGpu indicates pods are unschedulable specifically<br />due to insufficient GPU resources (validated via the scheduler condition<br />message). Acts as the demand signal for OnPressure preemption.<br /> |
+| `PendingOther` | GpuWorkloadPhasePendingOther indicates pods exist but are not yet<br />Running for non-GPU reasons: image pulls, init containers, PVC<br />binding, node affinity, taints, etc. No idle time is counted and<br />the phase does not trigger preemption evaluation.<br /> |
 | `Active` | GpuWorkloadPhaseActive indicates pods are running and aggregated GPU<br />utilization is at or above the configured threshold.<br /> |
 | `Idle` | GpuWorkloadPhaseIdle indicates pods are running but aggregated GPU<br />utilization is below the configured threshold.<br /> |
 | `Preempting` | GpuWorkloadPhasePreempting indicates the workload has been claimed for<br />preemption by the evaluator; deletion is in progress.<br /> |
@@ -340,7 +359,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `phase` _[GpuWorkloadPhase](#gpuworkloadphase)_ | Phase is the current lifecycle phase of the tracked workload. |  |  |
+| `phase` _[GpuWorkloadPhase](#gpuworkloadphase)_ | Phase is the current lifecycle phase of the tracked workload. |  | Enum: [PendingGpu PendingOther Active Idle Preempting Preempted Deleted ] <br /> |
 | `trackedPods` _[TrackedPod](#trackedpod) array_ | TrackedPods lists pods currently owned by this workload together with<br />per-GPU utilization metrics. Pod entries are maintained by the reconciler;<br />metrics within each pod are updated by the scraper. |  |  |
 | `aggregatedUtilization` _float_ | AggregatedUtilization is computed by the reconciler from TrackedPods<br />using the configured AggregationPolicy. |  |  |
 | `lastMetricsUpdate` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | LastMetricsUpdate records the last time the scraper wrote utilization data. |  |  |
@@ -680,43 +699,6 @@ _Appears in:_
 | `git` _[GitDownloadItem](#gitdownloaditem) array_ | Git lists any Git downloads |  |  |
 
 
-#### GpuMetric
-
-
-
-GpuMetric holds a utilization sample for a single GPU.
-
-
-
-_Appears in:_
-- [TrackedPod](#trackedpod)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `gpuId` _string_ |  |  |  |
-| `utilization` _float_ |  |  |  |
-| `lastUpdate` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ |  |  |  |
-
-
-#### TrackedPod
-
-
-
-TrackedPod represents a pod owned by this workload together with its
-per-GPU utilization metrics. Pod entries are maintained by the reconciler;
-metrics within each pod are updated by the scraper.
-
-
-
-_Appears in:_
-- [GpuWorkloadStatus](#gpuworkloadstatus)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `podName` _string_ |  |  |  |
-| `gpuMetrics` _[GpuMetric](#gpumetric) array_ |  |  |  |
-
-
 #### PreemptionPolicy
 
 _Underlying type:_ _string_
@@ -869,6 +851,25 @@ _Appears in:_
 | `levels` _TopologyLevel array_ | levels define the levels of topology. |  | MaxItems: 8 <br />MinItems: 1 <br />Required: \{\} <br /> |
 
 
+#### TrackedPod
+
+
+
+TrackedPod represents a pod owned by this workload together with its
+per-GPU utilization metrics.  Pod entries are maintained by the reconciler;
+metrics within each pod are updated by the scraper.
+
+
+
+_Appears in:_
+- [GpuWorkloadStatus](#gpuworkloadstatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `podName` _string_ |  |  |  |
+| `gpuMetrics` _[GpuMetric](#gpumetric) array_ |  |  |  |
+
+
 #### ValueReference
 
 
@@ -903,9 +904,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `apiVersion` _string_ |  |  |  |
-| `kind` _string_ |  |  |  |
-| `name` _string_ |  |  |  |
+| `apiVersion` _string_ |  |  | MinLength: 1 <br /> |
+| `kind` _string_ |  |  | MinLength: 1 <br /> |
+| `name` _string_ |  |  | MinLength: 1 <br /> |
 | `uid` _[UID](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#uid-types-pkg)_ |  |  |  |
 
 

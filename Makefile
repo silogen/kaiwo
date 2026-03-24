@@ -171,7 +171,6 @@ helm-package: build-installer ## Package the Helm chart
 	@sed -i.bak 's/^appVersion:.*/appVersion: "$(APP_VERSION)"/' $(CHART_DIR)/Chart.yaml
 	helm package $(CHART_DIR) --version=$(CHART_VERSION) --app-version=$(APP_VERSION) --destination=dist/
 	@rm -f $(CHART_DIR)/Chart.yaml.bak
-	$(call clean-helm-resources)
 
 .PHONY: helm-install
 helm-install: helm-package ## Install the Helm chart locally
@@ -188,7 +187,6 @@ helm-template: build-installer ## Generate Helm templates for inspection
 	@sed -i.bak 's/^appVersion:.*/appVersion: "$(APP_VERSION)"/' $(CHART_DIR)/Chart.yaml
 	helm template kaiwo $(CHART_DIR) --namespace kaiwo-system --output-dir dist/helm-output/
 	@rm -f $(CHART_DIR)/Chart.yaml.bak
-	$(call clean-helm-resources)
 
 .PHONY: helm-push-oci
 helm-push-oci: helm-package ## Push Helm chart to OCI registry

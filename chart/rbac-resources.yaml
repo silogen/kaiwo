@@ -34,6 +34,14 @@ rules:
   - update
   - watch
 - apiGroups:
+  - aim.eai.amd.com
+  resources:
+  - aimservices
+  verbs:
+  - delete
+  - get
+  - list
+- apiGroups:
   - aim.silogen.ai
   resources:
   - aimclustermodels
