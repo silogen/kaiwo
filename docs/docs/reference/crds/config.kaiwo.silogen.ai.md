@@ -74,7 +74,7 @@ _Appears in:_
 | `defaultClusterQueueName` _string_ | DefaultClusterQueueName is the name of the default cluster queue that is used for workloads that don't explicitly specify a cluster queue. | kaiwo |  |
 | `defaultClusterQueueCohortName` _string_ | DefaultClusterQueueCohortName is the name of the default cohort that is used for the default cluster queue.<br />ClusterQueues in the same cohort can share resources. | kaiwo |  |
 | `dynamicallyUpdateDefaultClusterQueue` _boolean_ | DynamicallyUpdateDefaultClusterQueue defines whether the Kaiwo operator should dynamically update default "kaiwo" clusterqueue.<br />If set to true, the operator will make sure that the default clusterqueue is always up to date and reflects total resources available.<br />If nodes are added or removed, the operator will update the default clusterqueue to reflect the current state of the cluster. | false |  |
-| `defaultTopologyName` _string_ | DefaultTopologyName is the name of the default Kueue Topology used for Topology Aware Scheduling.<br />Auto-generated ResourceFlavors reference this topology when DynamicallyUpdateDefaultClusterQueue is enabled. | default-topology |  |
+| `defaultTopologyName` _string_ | DefaultTopologyName is the name of the default Kueue Topology used for Topology Aware Scheduling.<br />Auto-generated ResourceFlavors reference this topology to enable TAS capability.<br />Workloads opt in to TAS by setting preferredTopologyLabel or requiredTopologyLabel. | default-topology |  |
 
 
 #### KaiwoGpuPreemptionConfig
