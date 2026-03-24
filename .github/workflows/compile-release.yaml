@@ -203,3 +203,7 @@ jobs:
         # Force push to artifacts branch
         git push origin HEAD:artifacts --force
 
+        # Tag the artifacts commit for version-specific checkout
+        git tag "artifacts-${VERSION}"
+        git push origin "artifacts-${VERSION}" --force
+
