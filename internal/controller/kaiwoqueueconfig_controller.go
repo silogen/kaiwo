@@ -28,6 +28,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -39,6 +40,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/labels"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -118,10 +120,10 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// **Sync Kueue Resources**
 	logger.Info("Syncing Kueue resources for KaiwoQueueConfig", "name", queueConfig.Name)
-	err = r.SyncKueueResources(ctx, &queueConfig)
+	syncErr := r.SyncKueueResources(ctx, &queueConfig)
 
-	if err != nil {
-		logger.Error(err, "Failed to sync Kueue resources for KaiwoQueueConfig")
+	if syncErr != nil {
+		logger.Error(syncErr, "Failed to sync Kueue resources for KaiwoQueueConfig")
 		queueConfig.Status.Status = kaiwo.QueueConfigStatusFailed
 	} else {
 		queueConfig.Status.Status = kaiwo.QueueConfigStatusReady
@@ -146,6 +148,10 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			"name", latest.Name,
 			"WorkloadStatus", latest.Status.Status,
 		)
+	}
+
+	if syncErr != nil {
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
 	return ctrl.Result{}, nil
@@ -192,7 +198,8 @@ func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, que
 		logger.Error(err, "Failed to list ResourceFlavors")
 		return err
 	}
-	if err := r.List(ctx, existingQueues); err != nil {
+	managedBySelector := client.MatchingLabels{common.ManagedByLabel: common.ManagedByValue}
+	if err := r.List(ctx, existingQueues, managedBySelector); err != nil {
 		logger.Error(err, "Failed to list ClusterQueues")
 		return err
 	}
@@ -360,11 +367,8 @@ func (r *KaiwoQueueConfigReconciler) syncClusterQueues(ctx context.Context, queu
 
 		if errors.IsNotFound(err) {
 			logger.Info("Creating ClusterQueue", "name", kueueQueue.Name)
-			if err := ctrl.SetControllerReference(queueConfig, &kueueQueue, r.Scheme); err != nil {
-				logger.Error(err, "Failed to set owner reference", "name", kueueQueue.Name)
-				success = false
-				r.emitEvent(queueConfig, "cluster queue", "owner reference", &kueueQueue, err)
-				continue
+			kueueQueue.Labels = map[string]string{
+				common.ManagedByLabel: common.ManagedByValue,
 			}
 			err := r.Create(ctx, &kueueQueue)
 			if err != nil {
@@ -377,33 +381,56 @@ func (r *KaiwoQueueConfigReconciler) syncClusterQueues(ctx context.Context, queu
 			logger.Error(err, "Failed to get ClusterQueue", "name", kueueQueue.Name)
 			r.emitEvent(queueConfig, "cluster queue", "get", &kueueQueue, err)
 			success = false
-		} else if !controllerutils.CompareClusterQueues(*existingQueue, kueueQueue) {
-			logger.Info("Updating ClusterQueue", "name", kueueQueue.Name)
+		} else if existingQueue.DeletionTimestamp != nil {
+			logger.Info("ClusterQueue is terminating, waiting for deletion to complete", "name", kueueQueue.Name)
+			success = false
+		} else {
+			needsUpdate := !controllerutils.CompareClusterQueues(*existingQueue, kueueQueue)
 
-			updateErr := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-				var latest kueuev1beta1.ClusterQueue
-				if err := r.Get(ctx, client.ObjectKey{Name: kueueQueue.Name}, &latest); err != nil {
-					return err
-				}
-				latest.Spec = kueueQueue.Spec
-				return r.Update(ctx, &latest)
-			})
-
-			if updateErr != nil {
-				logger.Error(updateErr, "Failed to update ClusterQueue", "name", kueueQueue.Name)
-				success = false
+			if existingQueue.Labels == nil || existingQueue.Labels[common.ManagedByLabel] != common.ManagedByValue {
+				needsUpdate = true
 			}
-			r.emitEvent(queueConfig, "cluster queue", "update", existingQueue, updateErr)
 
+			hasStaleOwnerRef := len(existingQueue.OwnerReferences) > 0
+			if hasStaleOwnerRef {
+				needsUpdate = true
+			}
+
+			if needsUpdate {
+				logger.Info("Updating ClusterQueue", "name", kueueQueue.Name)
+
+				updateErr := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+					var latest kueuev1beta1.ClusterQueue
+					if err := r.Get(ctx, client.ObjectKey{Name: kueueQueue.Name}, &latest); err != nil {
+						return err
+					}
+					latest.Spec = kueueQueue.Spec
+					if latest.Labels == nil {
+						latest.Labels = make(map[string]string)
+					}
+					latest.Labels[common.ManagedByLabel] = common.ManagedByValue
+					latest.OwnerReferences = nil
+					return r.Update(ctx, &latest)
+				})
+
+				if updateErr != nil {
+					logger.Error(updateErr, "Failed to update ClusterQueue", "name", kueueQueue.Name)
+					success = false
+				}
+				r.emitEvent(queueConfig, "cluster queue", "update", existingQueue, updateErr)
+			}
 		}
 		expectedQueues[kueueQueue.Name] = kueueQueue
 	}
 
 	for _, existingQueue := range existingQueues.Items {
 		if _, exists := expectedQueues[existingQueue.Name]; !exists {
+			if existingQueue.DeletionTimestamp != nil {
+				continue
+			}
 			logger.Info("Deleting ClusterQueue", "name", existingQueue.Name)
 			err := r.Delete(ctx, &existingQueue)
-			if err := r.Delete(ctx, &existingQueue); err != nil && !errors.IsNotFound(err) {
+			if err != nil && !errors.IsNotFound(err) {
 				logger.Error(err, "Failed to delete ClusterQueue", "name", existingQueue.Name)
 				success = false
 			}
@@ -654,6 +681,8 @@ func (r *KaiwoQueueConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		},
 	}
 
+	managedByKaiwo, _ := labels.Parse(common.ManagedByLabel + "=" + common.ManagedByValue)
+
 	return builder.ControllerManagedBy(mgr).
 		For(&kaiwo.KaiwoQueueConfig{}).
 		Watches(
@@ -664,6 +693,17 @@ func (r *KaiwoQueueConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				}
 			}),
 			builder.WithPredicates(nodePred),
+		).
+		Watches(
+			&kueuev1beta1.ClusterQueue{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				if !managedByKaiwo.Matches(labels.Set(obj.GetLabels())) {
+					return nil
+				}
+				return []reconcile.Request{
+					{NamespacedName: types.NamespacedName{Name: common.KaiwoQueueConfigName}},
+				}
+			}),
 		).
 		Named("kaiwoqueueconfig").
 		Complete(r)
