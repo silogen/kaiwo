@@ -4,6 +4,10 @@ on:
     tags:
     - "v*"
 
+permissions:
+  contents: write
+  packages: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -127,4 +131,75 @@ jobs:
 
           ### Docker Images
           - Operator: `ghcr.io/${{ github.repository_owner }}/kaiwo-operator:${{ env.VERSION }}`
+
+    - name: Create or update artifacts branch
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+        # Stash artifacts before switching branches
+        cp -r chart /tmp/chart-artifacts
+        cp crds.yaml /tmp/crds.yaml
+
+        # Create orphan branch
+        git checkout --orphan artifacts-temp || true
+
+        # Clear the index
+        git rm -rf --cached . || true
+
+        # Add the chart directory
+        rm -rf chart
+        cp -r /tmp/chart-artifacts chart
+        git add chart/
+
+        # Add the CRDs
+        mkdir -p crd
+        cp /tmp/crds.yaml crd/crds.yaml
+        git add crd/crds.yaml
+
+        # Create a README for the branch
+        cat > README.md << 'EOF'
+        # kaiwo
+
+        This branch contains the auto-generated Helm chart and CRDs for kaiwo-operator.
+
+        ## Installation
+
+        CRDs must be installed before the operator:
+
+        ```bash
+        # 1. Install CRDs
+        kubectl apply -f https://raw.githubusercontent.com/${{ github.repository }}/artifacts/crd/crds.yaml
+        kubectl wait --for=condition=Established crd --all --timeout=60s
+
+        # 2a. Install operator via Helm OCI (recommended)
+        helm install kaiwo oci://ghcr.io/${{ github.repository_owner }}/charts/kaiwo-operator \
+          --version ${{ env.VERSION }} --namespace kaiwo-system --create-namespace
+
+        # 2b. Or install from this branch
+        helm install kaiwo ./chart --namespace kaiwo-system --create-namespace
+        ```
+
+        Or clone this branch:
+
+        ```bash
+        git clone -b artifacts https://github.com/${{ github.repository }}.git kaiwo
+        cd kaiwo
+
+        kubectl apply -f crd/crds.yaml
+        kubectl wait --for=condition=Established crd --all --timeout=60s
+        helm install kaiwo ./chart --namespace kaiwo-system --create-namespace
+        ```
+
+        ## Source
+
+        Generated from tag: ${{ env.VERSION }} (commit: ${{ github.sha }})
+        EOF
+        git add README.md
+
+        # Commit
+        git commit -m "Release ${VERSION}" --allow-empty
+
+        # Force push to artifacts branch
+        git push origin HEAD:artifacts --force
 
