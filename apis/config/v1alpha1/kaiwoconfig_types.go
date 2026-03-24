@@ -78,7 +78,8 @@ type KaiwoConfigSpec struct {
 	DynamicallyUpdateDefaultClusterQueue bool `json:"dynamicallyUpdateDefaultClusterQueue,omitempty"`
 
 	// DefaultTopologyName is the name of the default Kueue Topology used for Topology Aware Scheduling.
-	// Auto-generated ResourceFlavors reference this topology when DynamicallyUpdateDefaultClusterQueue is enabled.
+	// Auto-generated ResourceFlavors reference this topology to enable TAS capability.
+	// Workloads opt in to TAS by setting preferredTopologyLabel or requiredTopologyLabel.
 	// +kubebuilder:default="default-topology"
 	DefaultTopologyName string `json:"defaultTopologyName,omitempty"`
 }

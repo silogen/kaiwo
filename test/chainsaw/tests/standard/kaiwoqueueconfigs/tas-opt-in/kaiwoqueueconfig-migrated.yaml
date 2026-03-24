@@ -1,0 +1,34 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoQueueConfig
+metadata:
+  name: kaiwo
+spec:
+  clusterQueues:
+  - name: test-queue
+    spec:
+      namespaceSelector: {}
+      queueingStrategy: BestEffortFIFO
+      resourceGroups:
+      - coveredResources:
+        - cpu
+        - memory
+        flavors:
+        - name: no-topo-flavor
+          resources:
+          - name: cpu
+            nominalQuota: "4"
+          - name: memory
+            nominalQuota: "8Gi"
+        - name: topo-flavor
+          resources:
+          - name: cpu
+            nominalQuota: "4"
+          - name: memory
+            nominalQuota: "8Gi"
+  resourceFlavors:
+  - name: no-topo-flavor
+    nodeLabels:
+      kaiwo/nodepool: no-topo
+  - name: topo-flavor
+    nodeLabels:
+      kaiwo/nodepool: topo

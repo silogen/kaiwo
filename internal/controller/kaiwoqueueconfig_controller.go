@@ -209,11 +209,11 @@ func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, que
 		return err
 	}
 
-	success := r.syncResourceFlavors(ctx, queueConfig, existingFlavors)
+	success := r.syncTopologies(ctx, queueConfig, existingTopologies)
+	success = r.syncResourceFlavors(ctx, queueConfig, existingFlavors) && success
 	success = r.syncClusterQueues(ctx, queueConfig, existingQueues) && success
 	success = r.syncLocalQueues(ctx, queueConfig, existingLocalQueues) && success
 	success = r.syncWorkloadPriorityClasses(ctx, queueConfig, existingPriorityClasses) && success
-	success = r.syncTopologies(ctx, queueConfig, existingTopologies) && success
 
 	if success {
 		logger.Info("Successfully synced all Kueue resources")
@@ -247,15 +247,9 @@ func (r *KaiwoQueueConfigReconciler) syncResourceFlavors(ctx context.Context, qu
 			r.emitEvent(queueConfig, "resource flavor", "create", &kueueFlavor, err)
 
 		} else if !controllerutils.CompareResourceFlavors(existingFlavor, kueueFlavor) {
-			logger.Info("Updating ResourceFlavor", "name", kueueFlavor.Name)
-			existingFlavor.Spec = kueueFlavor.Spec
-			err := r.Update(ctx, &existingFlavor)
-			if err != nil {
-				logger.Error(err, "Failed to update ResourceFlavor", "name", kueueFlavor.Name)
+			if !r.replaceResourceFlavor(ctx, queueConfig, existingFlavor, kueueFlavor) {
 				success = false
 			}
-			r.emitEvent(queueConfig, "resource flavor", "update", &existingFlavor, err)
-
 		}
 		existingFlavorMap[kueueFlavor.Name] = kueueFlavor
 	}
@@ -273,6 +267,65 @@ func (r *KaiwoQueueConfigReconciler) syncResourceFlavors(ctx context.Context, qu
 	}
 
 	return success
+}
+
+// replaceResourceFlavor attempts an in-place update of a ResourceFlavor.
+// If the update is rejected due to immutability (Kueue makes specs immutable
+// when topologyName is set), it falls back to delete-and-recreate. The recreate
+// may not succeed in a single cycle if Kueue's resource-in-use finalizer is
+// present; in that case the next reconciliation will pick it up.
+func (r *KaiwoQueueConfigReconciler) replaceResourceFlavor(
+	ctx context.Context,
+	queueConfig *kaiwo.KaiwoQueueConfig,
+	existing kueuev1beta1.ResourceFlavor,
+	desired kueuev1beta1.ResourceFlavor,
+) bool {
+	logger := log.FromContext(ctx)
+
+	if existing.DeletionTimestamp != nil {
+		logger.Info("ResourceFlavor is terminating, will converge on a future cycle", "name", existing.Name)
+		return true
+	}
+
+	logger.Info("Updating ResourceFlavor", "name", desired.Name)
+	existing.Spec = desired.Spec
+	updateErr := r.Update(ctx, &existing)
+	if updateErr == nil {
+		r.emitEvent(queueConfig, "resource flavor", "update", &existing, nil)
+		return true
+	}
+
+	if !errors.IsInvalid(updateErr) && !errors.IsForbidden(updateErr) {
+		logger.Error(updateErr, "Failed to update ResourceFlavor", "name", desired.Name)
+		r.emitEvent(queueConfig, "resource flavor", "update", &existing, updateErr)
+		return false
+	}
+
+	logger.Info("ResourceFlavor spec is immutable, replacing via delete and recreate", "name", desired.Name)
+	if err := r.Delete(ctx, &existing); err != nil {
+		logger.Error(err, "Failed to delete immutable ResourceFlavor", "name", desired.Name)
+		r.emitEvent(queueConfig, "resource flavor", "delete", &existing, err)
+		return false
+	}
+
+	if err := ctrl.SetControllerReference(queueConfig, &desired, r.Scheme); err != nil {
+		logger.Error(err, "Failed to set owner reference on replacement ResourceFlavor", "name", desired.Name)
+		r.emitEvent(queueConfig, "resource flavor", "owner reference", &desired, err)
+		return false
+	}
+
+	if err := r.Create(ctx, &desired); err != nil {
+		// The old object may still be terminating (blocked by Kueue's resource-in-use
+		// finalizer). This is expected; the next reconciliation will create it once
+		// the old object is fully removed.
+		logger.Info("Replacement create pending, old ResourceFlavor still terminating", "name", desired.Name, "error", err)
+		r.emitEvent(queueConfig, "resource flavor", "recreate", &desired, err)
+		return true
+	}
+
+	logger.Info("Successfully replaced ResourceFlavor", "name", desired.Name)
+	r.emitEvent(queueConfig, "resource flavor", "recreate", &desired, nil)
+	return true
 }
 
 func (r *KaiwoQueueConfigReconciler) syncTopologies(
