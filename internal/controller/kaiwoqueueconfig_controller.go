@@ -46,6 +46,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -271,9 +272,11 @@ func (r *KaiwoQueueConfigReconciler) syncResourceFlavors(ctx context.Context, qu
 
 // replaceResourceFlavor attempts an in-place update of a ResourceFlavor.
 // If the update is rejected due to immutability (Kueue makes specs immutable
-// when topologyName is set), it falls back to delete-and-recreate. The recreate
-// may not succeed in a single cycle if Kueue's resource-in-use finalizer is
-// present; in that case the next reconciliation will pick it up.
+// when topologyName is set), it falls back to delete-and-recreate. Before
+// deletion, Kueue's resource-in-use finalizer is removed so the delete
+// completes immediately even when a ClusterQueue still references the flavor.
+// The ClusterQueue will pick up the replacement flavor (same name) once
+// it is recreated.
 func (r *KaiwoQueueConfigReconciler) replaceResourceFlavor(
 	ctx context.Context,
 	queueConfig *kaiwo.KaiwoQueueConfig,
@@ -302,9 +305,24 @@ func (r *KaiwoQueueConfigReconciler) replaceResourceFlavor(
 	}
 
 	logger.Info("ResourceFlavor spec is immutable, replacing via delete and recreate", "name", desired.Name)
-	if err := r.Delete(ctx, &existing); err != nil {
+
+	var fresh kueuev1beta1.ResourceFlavor
+	if err := r.Get(ctx, client.ObjectKey{Name: desired.Name}, &fresh); err != nil {
+		logger.Error(err, "Failed to re-read ResourceFlavor before replace", "name", desired.Name)
+		return false
+	}
+
+	if controllerutil.RemoveFinalizer(&fresh, "kueue.x-k8s.io/resource-in-use") {
+		if err := r.Update(ctx, &fresh); err != nil {
+			logger.Error(err, "Failed to remove resource-in-use finalizer", "name", desired.Name)
+			return false
+		}
+		logger.Info("Removed resource-in-use finalizer from ResourceFlavor", "name", desired.Name)
+	}
+
+	if err := r.Delete(ctx, &fresh); err != nil {
 		logger.Error(err, "Failed to delete immutable ResourceFlavor", "name", desired.Name)
-		r.emitEvent(queueConfig, "resource flavor", "delete", &existing, err)
+		r.emitEvent(queueConfig, "resource flavor", "delete", &fresh, err)
 		return false
 	}
 
@@ -315,9 +333,6 @@ func (r *KaiwoQueueConfigReconciler) replaceResourceFlavor(
 	}
 
 	if err := r.Create(ctx, &desired); err != nil {
-		// The old object may still be terminating (blocked by Kueue's resource-in-use
-		// finalizer). This is expected; the next reconciliation will create it once
-		// the old object is fully removed.
 		logger.Info("Replacement create pending, old ResourceFlavor still terminating", "name", desired.Name, "error", err)
 		r.emitEvent(queueConfig, "resource flavor", "recreate", &desired, err)
 		return true

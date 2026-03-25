@@ -13,42 +13,47 @@ spec:
       the nodeLabels must not change after creation).
     try:
     - script:
+        timeout: 30s
         content: |
+          for i in $(seq 1 15); do
+            flavors=$(kubectl get kaiwoqueueconfig kaiwo -o jsonpath='{.spec.resourceFlavors}' 2>/dev/null)
+            if [ -n "$flavors" ] && [ "$flavors" != "null" ]; then
+              echo "$flavors" | grep -q 'topologyName' && ! echo "$flavors" | grep -q 'kaiwo/worker' && {
+                echo "KaiwoQueueConfig flavors have topologyName and no kaiwo/worker"
+                exit 0
+              }
+            fi
+            sleep 2
+          done
+          echo "KaiwoQueueConfig flavors did not match expected state"
           kubectl get kaiwoqueueconfig kaiwo -o json
-        outputs:
-        - name: resourceFlavors
-          value: (to_string(json_parse($stdout).spec.resourceFlavors))
-    - script:
-        env:
-        - name: flavors
-          value: ($resourceFlavors)
-        content: |
-          echo $flavors
+          exit 1
         check:
-          # Auto-generated flavors must have topologyName (enables TAS opt-in at workload level)
-          (contains($stdout, 'topologyName')): true
-          # Auto-generated flavors must NOT have kaiwo/worker in their spec (would cause
-          # immutable spec drift since topologyName is set)
-          (contains($stdout, '"kaiwo/worker"')): false
+          ($error == null): true
 
   - name: Verify Kueue ResourceFlavors have topology but no kaiwo/worker
     try:
     - script:
-        content: kubectl get resourceflavors -o json
-        outputs:
-        - name: rfItems
-          value: (to_string(json_parse($stdout).items))
-    - script:
-        env:
-        - name: items
-          value: ($rfItems)
+        timeout: 30s
         content: |
-          echo $items
+          for i in $(seq 1 15); do
+            out=$(kubectl get resourceflavors -o json 2>/dev/null)
+            count=$(echo "$out" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('items',[])))" 2>/dev/null)
+            if [ "$count" != "" ] && [ "$count" != "0" ]; then
+              has_topo=$(echo "$out" | python3 -c "import sys,json; items=json.load(sys.stdin)['items']; print(any('topologyName' in str(i.get('spec',{})) for i in items))")
+              has_worker=$(echo "$out" | python3 -c "import sys,json; items=json.load(sys.stdin)['items']; print(any('kaiwo/worker' in str(i.get('spec',{}).get('nodeLabels',{})) for i in items))")
+              if [ "$has_topo" = "True" ] && [ "$has_worker" = "False" ]; then
+                echo "ResourceFlavors have topology but no kaiwo/worker"
+                exit 0
+              fi
+            fi
+            sleep 2
+          done
+          echo "ResourceFlavors did not match expected state in time"
+          kubectl get resourceflavors -o json
+          exit 1
         check:
-          # Kueue ResourceFlavors should have topologyName set
-          (contains($stdout, '"topologyName"')): true
-          # Kueue ResourceFlavors with topology should NOT have kaiwo/worker label
-          (contains($stdout, '"kaiwo/worker"')): false
+          ($error == null): true
     catch:
     - command:
         entrypoint: kaiwo-dev
