@@ -1,0 +1,22 @@
+# busybox + amd.com/gpu is intentional: the GPU is never used so the workload
+# stays Idle, making it a candidate for preemption in the no-fit test.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gpu-preemption-nofit-victim
+  annotations:
+    kaiwo.silogen.ai/gpu-preemption.policy: "OnPressure"
+    kaiwo.silogen.ai/gpu-preemption.grace-period: "15s"
+spec:
+  template:
+    spec:
+      containers:
+      - name: workload
+        image: busybox:latest
+        command: ["sleep", "600"]
+        resources:
+          requests:
+            amd.com/gpu: "1"
+          limits:
+            amd.com/gpu: "1"
+      restartPolicy: Never

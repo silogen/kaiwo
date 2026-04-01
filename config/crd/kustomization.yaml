@@ -5,6 +5,7 @@ resources:
 - bases/kaiwo.silogen.ai_kaiwojobs.yaml
 - bases/kaiwo.silogen.ai_kaiwoservices.yaml
 - bases/kaiwo.silogen.ai_kaiwoqueueconfigs.yaml
+- bases/kaiwo.silogen.ai_gpuworkloads.yaml
 - bases/config.kaiwo.silogen.ai_kaiwoconfigs.yaml
 - bases/config.kaiwo.silogen.ai_aimnamespaceconfigs.yaml
 - bases/aim.silogen.ai_aimmodels.yaml

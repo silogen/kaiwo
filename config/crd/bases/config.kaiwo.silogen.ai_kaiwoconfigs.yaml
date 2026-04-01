@@ -52,6 +52,12 @@ spec:
                   queue that is used for workloads that don't explicitly specify a
                   cluster queue.
                 type: string
+              defaultTopologyName:
+                default: default-topology
+                description: |-
+                  DefaultTopologyName is the name of the default Kueue Topology used for Topology Aware Scheduling.
+                  Auto-generated ResourceFlavors reference this topology when DynamicallyUpdateDefaultClusterQueue is enabled.
+                type: string
               dynamicallyUpdateDefaultClusterQueue:
                 default: false
                 description: |-
@@ -59,6 +65,49 @@ spec:
                   If set to true, the operator will make sure that the default clusterqueue is always up to date and reflects total resources available.
                   If nodes are added or removed, the operator will update the default clusterqueue to reflect the current state of the cluster.
                 type: boolean
+              gpuPreemption:
+                default: {}
+                description: |-
+                  GpuPreemption configures cluster-wide defaults for the GPU preemption feature.
+                  These values sit between per-workload annotations and operator env vars in
+                  the resolution chain: annotation > KaiwoConfig > env var > hardcoded fallback.
+                  Note: metricsEndpoint and pollingInterval remain env-var-only because
+                  changing them requires restarting the metrics scraper.
+                properties:
+                  defaultAggregation:
+                    description: |-
+                      DefaultAggregation determines how utilization is aggregated across
+                      multiple pods: "Min", "Max", or "Avg".
+                    enum:
+                    - Min
+                    - Max
+                    - Avg
+                    type: string
+                  defaultGracePeriod:
+                    description: |-
+                      DefaultGracePeriod is the duration a workload must be continuously idle
+                      before it becomes eligible for preemption (e.g. "10m", "1h").
+                    type: string
+                  defaultPolicy:
+                    description: 'DefaultPolicy is the preemption policy: "OnPressure"
+                      or "Always".'
+                    enum:
+                    - OnPressure
+                    - Always
+                    type: string
+                  defaultTTL:
+                    description: |-
+                      DefaultTTL controls how long terminal GpuWorkload CRs (Preempted or
+                      Deleted) are retained before automatic cleanup (e.g. "24h", "0" for forever).
+                    type: string
+                  defaultThreshold:
+                    description: |-
+                      DefaultThreshold is the utilization percentage below which a workload is
+                      considered idle. Overridden by the per-workload annotation.
+                    maximum: 100
+                    minimum: 0
+                    type: number
+                type: object
               nodes:
                 default: {}
                 description: Nodes defines the node configuration settings

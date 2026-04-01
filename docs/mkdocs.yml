@@ -40,6 +40,7 @@ nav:
   - "Maintenance": "admin/maintenance.md"
   - "Monitoring": "admin/monitoring.md"
   - "Resource monitoring": "admin/resource-monitoring.md"
+  - "GPU Preemption": "admin/gpu-preemption.md"
   - "Authentication & Authorization": "admin/auth.md"
   - "Troubleshooting": "admin/troubleshooting.md"
 - "AIM":

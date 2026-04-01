@@ -1,0 +1,31 @@
+apiVersion: ray.io/v1
+kind: RayService
+metadata:
+  name: gpu-preemption-discover-raysvc
+  annotations:
+    kaiwo.silogen.ai/gpu-preemption.enabled: "true"
+spec:
+  serveConfigV2: |
+    applications:
+    - name: default
+      route_prefix: /
+      import_path: ray.serve.tests.test_config_files.pizza.serve_dag
+      deployments:
+      - name: DAGDriver
+  rayClusterConfig:
+    headGroupSpec:
+      rayStartParams:
+        dashboard-host: '0.0.0.0'
+      template:
+        spec:
+          containers:
+          - name: ray-head
+            image: rayproject/ray:2.41.0
+            resources:
+              requests:
+                cpu: "1"
+                memory: "1Gi"
+                amd.com/gpu: "1"
+              limits:
+                memory: "1Gi"
+                amd.com/gpu: "1"

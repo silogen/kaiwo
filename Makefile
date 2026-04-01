@@ -46,7 +46,7 @@ generate: controller-gen
 	$(CONTROLLER_GEN) object:headerFile=".copyright-template.goheader" \
 		paths=./...
 	@rm .copyright-template.goheader
-	
+
 .PHONY: fmt
 fmt: ## Run go fmt against code.
 	go fmt ./...
@@ -150,6 +150,10 @@ define copy-helm-resources
 	@cat config/static/scheduler/kaiwo-scheduler.yaml > $(CHART_DIR)/scheduler-resources.yaml
 endef
 
+.PHONY: copy-helm-resources
+copy-helm-resources: ## Copy necessary resources into Helm chart directory
+	$(call copy-helm-resources)
+
 # Function to clean up copied resources
 define clean-helm-resources
 	@rm -f $(CHART_DIR)/rbac-resources.yaml $(CHART_DIR)/webhook-resources.yaml $(CHART_DIR)/scheduler-resources.yaml
@@ -167,7 +171,6 @@ helm-package: build-installer ## Package the Helm chart
 	@sed -i.bak 's/^appVersion:.*/appVersion: "$(APP_VERSION)"/' $(CHART_DIR)/Chart.yaml
 	helm package $(CHART_DIR) --version=$(CHART_VERSION) --app-version=$(APP_VERSION) --destination=dist/
 	@rm -f $(CHART_DIR)/Chart.yaml.bak
-	$(call clean-helm-resources)
 
 .PHONY: helm-install
 helm-install: helm-package ## Install the Helm chart locally
@@ -184,7 +187,6 @@ helm-template: build-installer ## Generate Helm templates for inspection
 	@sed -i.bak 's/^appVersion:.*/appVersion: "$(APP_VERSION)"/' $(CHART_DIR)/Chart.yaml
 	helm template kaiwo $(CHART_DIR) --namespace kaiwo-system --output-dir dist/helm-output/
 	@rm -f $(CHART_DIR)/Chart.yaml.bak
-	$(call clean-helm-resources)
 
 .PHONY: helm-push-oci
 helm-push-oci: helm-package ## Push Helm chart to OCI registry
@@ -214,7 +216,7 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/default | $(KUBECTL) apply --server-side -f -
-	$(KUBECTL) rollout status deployment/kaiwo-controller-manager -n kaiwo-system --timeout=5m  
+	$(KUBECTL) rollout status deployment/kaiwo-controller-manager -n kaiwo-system --timeout=5m
 
 .PHONY: undeploy
 undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.

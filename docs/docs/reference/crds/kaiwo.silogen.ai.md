@@ -9,6 +9,8 @@
 Package v1alpha1 contains API Schema definitions for the kaiwo v1alpha1 API group.
 
 ### Resource Types
+- [GpuWorkload](#gpuworkload)
+- [GpuWorkloadList](#gpuworkloadlist)
 - [KaiwoJob](#kaiwojob)
 - [KaiwoJobList](#kaiwojoblist)
 - [KaiwoQueueConfig](#kaiwoqueueconfig)
@@ -16,6 +18,25 @@ Package v1alpha1 contains API Schema definitions for the kaiwo v1alpha1 API grou
 - [KaiwoService](#kaiwoservice)
 - [KaiwoServiceList](#kaiwoservicelist)
 
+
+
+#### AggregationPolicy
+
+_Underlying type:_ _string_
+
+AggregationPolicy determines how utilization is aggregated across multiple pods.
+
+_Validation:_
+- Enum: [Min Max Avg]
+
+_Appears in:_
+- [GpuWorkloadSpec](#gpuworkloadspec)
+
+| Field | Description |
+| --- | --- |
+| `Min` |  |
+| `Max` |  |
+| `Avg` |  |
 
 
 #### AzureBlobStorageDownloadItem
@@ -97,10 +118,10 @@ _Appears in:_
 | `namespaceSelector` _[LabelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#labelselector-v1-meta)_ | namespaceSelector defines which namespaces are allowed to submit workloads to<br />this clusterQueue. Beyond this basic support for policy, a policy agent like<br />Gatekeeper should be used to enforce more advanced policies.<br />Defaults to null which is a nothing selector (no namespaces eligible).<br />If set to an empty selector `\{\}`, then all namespaces are eligible. |  |  |
 | `flavorFungibility` _[FlavorFungibility](#flavorfungibility)_ | flavorFungibility defines whether a workload should try the next flavor<br />before borrowing or preempting in the flavor being evaluated. | \{  \} |  |
 | `preemption` _[ClusterQueuePreemption](#clusterqueuepreemption)_ |  | \{  \} |  |
-| `admissionChecks` _[AdmissionCheckReference](#admissioncheckreference) array_ | admissionChecks lists the AdmissionChecks required by this ClusterQueue.<br />Cannot be used along with AdmissionCheckStrategy. |  |  |
-| `admissionChecksStrategy` _[AdmissionChecksStrategy](#admissionchecksstrategy)_ | admissionCheckStrategy defines a list of strategies to determine which ResourceFlavors require AdmissionChecks.<br />This property cannot be used in conjunction with the 'admissionChecks' property. |  |  |
-| `stopPolicy` _[StopPolicy](#stoppolicy)_ | stopPolicy - if set to a value different from None, the ClusterQueue is considered Inactive, no new reservation being<br />made.<br />Depending on its value, its associated workloads will:<br />- None - Workloads are admitted<br />- HoldAndDrain - Admitted workloads are evicted and Reserving workloads will cancel the reservation.<br />- Hold - Admitted workloads will run to completion and Reserving workloads will cancel the reservation. | None | Enum: [None Hold HoldAndDrain] <br /> |
-| `fairSharing` _[FairSharing](#fairsharing)_ | fairSharing defines the properties of the ClusterQueue when<br />participating in FairSharing.  The values are only relevant<br />if FairSharing is enabled in the Kueue configuration. |  |  |
+| `admissionChecks` _[AdmissionCheckReference](#admissioncheckreference) array_ | admissionChecks lists the AdmissionChecks required by this ClusterQueue.<br />Cannot be used along with AdmissionCheckStrategy. |  | Optional: \{\} <br /> |
+| `admissionChecksStrategy` _[AdmissionChecksStrategy](#admissionchecksstrategy)_ | admissionCheckStrategy defines a list of strategies to determine which ResourceFlavors require AdmissionChecks.<br />This property cannot be used in conjunction with the 'admissionChecks' property. |  | Optional: \{\} <br /> |
+| `stopPolicy` _[StopPolicy](#stoppolicy)_ | stopPolicy - if set to a value different from None, the ClusterQueue is considered Inactive, no new reservation being<br />made.<br />Depending on its value, its associated workloads will:<br />- None - Workloads are admitted<br />- HoldAndDrain - Admitted workloads are evicted and Reserving workloads will cancel the reservation.<br />- Hold - Admitted workloads will run to completion and Reserving workloads will cancel the reservation. | None | Enum: [None Hold HoldAndDrain] <br />Optional: \{\} <br /> |
+| `fairSharing` _[FairSharing](#fairsharing)_ | fairSharing defines the properties of the ClusterQueue when<br />participating in FairSharing.  The values are only relevant<br />if FairSharing is enabled in the Kueue configuration. |  | Optional: \{\} <br /> |
 
 
 #### CommonMetaSpec
@@ -220,6 +241,135 @@ _Appears in:_
 | `token` _[ValueReference](#valuereference)_ | Token optionally references a Secret containing the Git token (or password) for authentication. See `ValueReference`. |  |  |
 | `path` _string_ | Path specifies a sub-path within the repository to copy. If omitted, the entire repository is copied. |  |  |
 | `targetPath` _string_ | TargetPath specifies the destination path relative to the data volume's mount point (`DataStorageSpec.MountPath`) where the repository or `path` content should be copied. |  |  |
+
+
+#### GpuMetric
+
+
+
+GpuMetric holds a utilization sample for a single GPU.
+
+
+
+_Appears in:_
+- [TrackedPod](#trackedpod)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `gpuId` _string_ |  |  |  |
+| `utilization` _float_ |  |  | Maximum: 100 <br />Minimum: 0 <br /> |
+| `lastUpdate` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ |  |  |  |
+
+
+#### GpuWorkload
+
+
+
+GpuWorkload tracks a GPU workload for utilization monitoring and preemption.
+One GpuWorkload CR is created per tracked root-owner resource. The CR persists
+after the workload is deleted, providing audit history and preemption records.
+
+
+
+_Appears in:_
+- [GpuWorkloadList](#gpuworkloadlist)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `kaiwo.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `GpuWorkload` | | |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `spec` _[GpuWorkloadSpec](#gpuworkloadspec)_ |  |  |  |
+| `status` _[GpuWorkloadStatus](#gpuworkloadstatus)_ |  |  |  |
+
+
+#### GpuWorkloadList
+
+
+
+GpuWorkloadList contains a list of GpuWorkload resources.
+
+
+
+
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `kaiwo.silogen.ai/v1alpha1` | | |
+| `kind` _string_ | `GpuWorkloadList` | | |
+| `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `items` _[GpuWorkload](#gpuworkload) array_ |  |  |  |
+
+
+#### GpuWorkloadPhase
+
+_Underlying type:_ _string_
+
+GpuWorkloadPhase represents the lifecycle phase of a tracked GPU workload.
+
+_Validation:_
+- Enum: [PendingGpu PendingOther Active Idle Preempting Preempted Deleted ]
+
+_Appears in:_
+- [GpuWorkloadStatus](#gpuworkloadstatus)
+
+| Field | Description |
+| --- | --- |
+| `PendingGpu` | GpuWorkloadPhasePendingGpu indicates pods are unschedulable specifically<br />due to insufficient GPU resources (validated via the scheduler condition<br />message). Acts as the demand signal for OnPressure preemption.<br /> |
+| `PendingOther` | GpuWorkloadPhasePendingOther indicates pods exist but are not yet<br />Running for non-GPU reasons: image pulls, init containers, PVC<br />binding, node affinity, taints, etc. No idle time is counted and<br />the phase does not trigger preemption evaluation.<br /> |
+| `Active` | GpuWorkloadPhaseActive indicates pods are running and aggregated GPU<br />utilization is at or above the configured threshold.<br /> |
+| `Idle` | GpuWorkloadPhaseIdle indicates pods are running but aggregated GPU<br />utilization is below the configured threshold.<br /> |
+| `Preempting` | GpuWorkloadPhasePreempting indicates the workload has been claimed for<br />preemption by the evaluator; deletion is in progress.<br /> |
+| `Preempted` | GpuWorkloadPhasePreempted indicates the underlying workload was deleted<br />by the preemption system.<br /> |
+| `Deleted` | GpuWorkloadPhaseDeleted indicates the underlying workload disappeared<br />on its own (not by preemption).<br /> |
+
+
+#### GpuWorkloadSpec
+
+
+
+GpuWorkloadSpec defines the desired state of a tracked GPU workload.
+
+
+
+_Appears in:_
+- [GpuWorkload](#gpuworkload)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `workloadRef` _[WorkloadReference](#workloadreference)_ | WorkloadRef identifies the root owner resource being tracked. |  |  |
+| `gpuResources` _object (keys:string, values:integer)_ | GpuResources maps GPU resource names to the total count requested across<br />all pods belonging to this workload.<br />Example: \{"amd.com/gpu": 4\} or \{"amd.com/gpu": 2, "amd.com/gpu-0": 4\}.<br />Used for resource-name-aware pressure matching and capacity-aware fit<br />checks during preemption evaluation. |  |  |
+| `utilizationThreshold` _float_ | UtilizationThreshold overrides the cluster-wide default (GPU_PREEMPTION_DEFAULT_THRESHOLD).<br />Utilization below this percentage is considered idle. |  | Optional: \{\} <br /> |
+| `gracePeriod` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#duration-v1-meta)_ | GracePeriod overrides the cluster-wide default (GPU_PREEMPTION_DEFAULT_GRACE_PERIOD).<br />The workload must be idle for at least this duration before becoming preemptible. |  | Optional: \{\} <br /> |
+| `preemptionPolicy` _[PreemptionPolicy](#preemptionpolicy)_ | PreemptionPolicy overrides the cluster-wide default (GPU_PREEMPTION_DEFAULT_POLICY). |  | Enum: [OnPressure Always] <br />Optional: \{\} <br /> |
+| `aggregationPolicy` _[AggregationPolicy](#aggregationpolicy)_ | AggregationPolicy overrides the cluster-wide default (GPU_PREEMPTION_DEFAULT_AGGREGATION).<br />Determines how utilization across multiple pods is aggregated. |  | Enum: [Min Max Avg] <br />Optional: \{\} <br /> |
+| `ttlAfterFinished` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#duration-v1-meta)_ | TTLAfterFinished controls how long this CR is retained after the workload<br />reaches a terminal phase (Preempted or Deleted).<br />Falls back to GPU_PREEMPTION_DEFAULT_TTL. Use "0" to retain forever. |  | Optional: \{\} <br /> |
+
+
+#### GpuWorkloadStatus
+
+
+
+GpuWorkloadStatus defines the observed state of a tracked GPU workload.
+
+
+
+_Appears in:_
+- [GpuWorkload](#gpuworkload)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `phase` _[GpuWorkloadPhase](#gpuworkloadphase)_ | Phase is the current lifecycle phase of the tracked workload. |  | Enum: [PendingGpu PendingOther Active Idle Preempting Preempted Deleted ] <br /> |
+| `trackedPods` _[TrackedPod](#trackedpod) array_ | TrackedPods lists pods currently owned by this workload together with<br />per-GPU utilization metrics. Pod entries are maintained by the reconciler;<br />metrics within each pod are updated by the scraper. |  |  |
+| `aggregatedUtilization` _float_ | AggregatedUtilization is computed by the reconciler from TrackedPods<br />using the configured AggregationPolicy. |  |  |
+| `lastMetricsUpdate` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | LastMetricsUpdate records the last time the scraper wrote utilization data. |  |  |
+| `idleSince` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | IdleSince records when the workload first entered the Idle phase. |  |  |
+| `finishedAt` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | FinishedAt records when a terminal phase (Preempted or Deleted) was entered.<br />Used together with TTLAfterFinished for automatic CR cleanup. |  |  |
+| `ownerChain` _string_ | OwnerChain describes the owner reference path from pod to root owner.<br />Example: "Pod/worker-0 -> Job/training -> KaiwoJob/my-job" |  |  |
+| `preemptedAt` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#time-v1-meta)_ | PreemptedAt records when the preemption was initiated. |  |  |
+| `preemptedFor` _string_ | PreemptedFor holds the name of the pending GpuWorkload this workload was<br />preempted to make room for. |  |  |
+| `preemptionReason` _string_ | PreemptionReason provides a human-readable explanation of why the workload<br />was preempted. |  |  |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#condition-v1-meta) array_ | Conditions follows standard Kubernetes condition conventions. |  |  |
 
 
 #### HfStorageSpec
@@ -549,6 +699,24 @@ _Appears in:_
 | `git` _[GitDownloadItem](#gitdownloaditem) array_ | Git lists any Git downloads |  |  |
 
 
+#### PreemptionPolicy
+
+_Underlying type:_ _string_
+
+PreemptionPolicy determines when an idle GpuWorkload is eligible for preemption.
+
+_Validation:_
+- Enum: [OnPressure Always]
+
+_Appears in:_
+- [GpuWorkloadSpec](#gpuworkloadspec)
+
+| Field | Description |
+| --- | --- |
+| `OnPressure` |  |
+| `Always` |  |
+
+
 #### QueueConfigStatusDescription
 
 _Underlying type:_ _string_
@@ -680,7 +848,26 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `levels` _TopologyLevel array_ | levels define the levels of topology. |  | MaxItems: 8 <br />MinItems: 1 <br /> |
+| `levels` _TopologyLevel array_ | levels define the levels of topology. |  | MaxItems: 8 <br />MinItems: 1 <br />Required: \{\} <br /> |
+
+
+#### TrackedPod
+
+
+
+TrackedPod represents a pod owned by this workload together with its
+per-GPU utilization metrics.  Pod entries are maintained by the reconciler;
+metrics within each pod are updated by the scraper.
+
+
+
+_Appears in:_
+- [GpuWorkloadStatus](#gpuworkloadstatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `podName` _string_ |  |  |  |
+| `gpuMetrics` _[GpuMetric](#gpumetric) array_ |  |  |  |
 
 
 #### ValueReference
@@ -702,6 +889,25 @@ _Appears in:_
 | `file` _string_ | File specifies the expected path within the download job's container where the secret value will be mounted as a file. This path is usually automatically generated by the controller based on SecretName and SecretKey. |  |  |
 | `secretName` _string_ | SecretName is the name of the Kubernetes Secret resource containing the value. |  |  |
 | `secretKey` _string_ | SecretKey is the key within the specified Secret whose value should be used. |  |  |
+
+
+#### WorkloadReference
+
+
+
+WorkloadReference identifies the root owner resource that this GpuWorkload tracks.
+
+
+
+_Appears in:_
+- [GpuWorkloadSpec](#gpuworkloadspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ |  |  | MinLength: 1 <br /> |
+| `kind` _string_ |  |  | MinLength: 1 <br /> |
+| `name` _string_ |  |  | MinLength: 1 <br /> |
+| `uid` _[UID](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#uid-types-pkg)_ |  |  |  |
 
 
 #### WorkloadStatus

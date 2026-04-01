@@ -19,6 +19,12 @@ repos:
     language: system
     pass_filenames: false
 
+  - id: copy-helm-resources
+    name: Copy files for Helm chart
+    entry: make copy-helm-resources
+    language: system
+    pass_filenames: false
+
   - id: make-generate-crd-docs
     name: Run make generate-crd-docs
     entry: make generate-crd-docs
