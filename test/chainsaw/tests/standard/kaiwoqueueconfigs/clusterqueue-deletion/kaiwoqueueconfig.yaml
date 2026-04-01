@@ -1,0 +1,36 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoQueueConfig
+metadata:
+  name: kaiwo
+spec:
+  clusterQueues:
+  - name: fizz
+    namespaces:
+    - cq-deletion-test
+    spec:
+      flavorFungibility:
+        whenCanBorrow: Borrow
+        whenCanPreempt: TryNextFlavor
+      namespaceSelector: {}
+      preemption:
+        borrowWithinCohort:
+          policy: Never
+        reclaimWithinCohort: Never
+        withinClusterQueue: Never
+      queueingStrategy: BestEffortFIFO
+      resourceGroups:
+      - coveredResources:
+        - cpu
+        - memory
+        flavors:
+        - name: foo
+          resources:
+          - name: cpu
+            nominalQuota: "4"
+          - name: memory
+            nominalQuota: "8Gi"
+      stopPolicy: None
+  resourceFlavors:
+  - name: foo
+    nodeLabels:
+      kaiwo/nodepool: foo

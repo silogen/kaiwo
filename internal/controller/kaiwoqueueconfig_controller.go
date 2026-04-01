@@ -110,6 +110,20 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			if err != nil {
 				return ctrl.Result{}, err
 			}
+
+			// One-time self-healing: remove any empty-named topology entries that
+			// were written by the unfixed operator (when DefaultTopologyName was "").
+			// We patch the spec directly so that subsequent reconciles no longer see
+			// the invalid entry, without requiring a manual delete/recreate.
+			if cleaned := sanitizeTopologies(queueConfig.Spec.Topologies); len(cleaned) != len(queueConfig.Spec.Topologies) {
+				logger.Info("Pruning empty-named topology entries from spec", "removed", len(queueConfig.Spec.Topologies)-len(cleaned))
+				queueConfig.Spec.Topologies = cleaned
+				if err := r.Update(ctx, &queueConfig); err != nil {
+					logger.Error(err, "Failed to prune empty-named topologies from spec")
+					return ctrl.Result{}, err
+				}
+				return ctrl.Result{Requeue: true}, nil
+			}
 		}
 	}
 
@@ -287,6 +301,13 @@ func (r *KaiwoQueueConfigReconciler) syncTopologies(
 	existingTopologyMap := make(map[string]kueuev1alpha1.Topology)
 
 	for _, kueueTopology := range expectedTopologies {
+		if kueueTopology.Name == "" {
+			// A topology entry with no name in the spec cannot be created — skip it
+			// rather than letting the API-server rejection fail the whole sync.
+			// Root cause: DefaultTopologyName is unset in KaiwoConfig (see fix #2).
+			logger.Info("Skipping Topology with empty name in spec; set defaultTopologyName in KaiwoConfig to resolve")
+			continue
+		}
 		existingTopology, found := controllerutils.FindTopology(existingTopologies.Items, kueueTopology.Name)
 		if !found {
 			logger.Info("Creating Topology", "name", kueueTopology.Name)
@@ -321,7 +342,7 @@ func (r *KaiwoQueueConfigReconciler) syncTopologies(
 		if _, exists := existingTopologyMap[existingTopology.Name]; !exists {
 			logger.Info("Deleting Topology", "name", existingTopology.Name)
 			err := r.Delete(ctx, &existingTopology)
-			if err != nil {
+			if err != nil && !errors.IsNotFound(err) {
 				logger.Error(err, "Failed to delete Topology", "name", existingTopology.Name)
 				success = false
 			}
@@ -403,7 +424,7 @@ func (r *KaiwoQueueConfigReconciler) syncClusterQueues(ctx context.Context, queu
 		if _, exists := expectedQueues[existingQueue.Name]; !exists {
 			logger.Info("Deleting ClusterQueue", "name", existingQueue.Name)
 			err := r.Delete(ctx, &existingQueue)
-			if err := r.Delete(ctx, &existingQueue); err != nil && !errors.IsNotFound(err) {
+			if err != nil && !errors.IsNotFound(err) {
 				logger.Error(err, "Failed to delete ClusterQueue", "name", existingQueue.Name)
 				success = false
 			}
@@ -441,9 +462,19 @@ func (r *KaiwoQueueConfigReconciler) syncLocalQueues(
 	// Reconcile expected LocalQueues
 	for _, clusterQueue := range kaiwoQueueConfig.Spec.ClusterQueues {
 		clusterQueueLookup[clusterQueue.Name] = clusterQueue
-		// Fetch the actual cluster queue to use for the owner reference
+		// Fetch the actual cluster queue to use for the owner reference.
 		actualClusterQueue := &kueuev1beta1.ClusterQueue{}
 		if err := r.Get(ctx, client.ObjectKey{Name: clusterQueue.Name}, actualClusterQueue); err != nil {
+			if errors.IsNotFound(err) {
+				// The ClusterQueue may have been deleted externally while still present in
+				// the spec, or it was just created by syncClusterQueues in the same reconcile
+				// but is not yet visible in the informer cache.  Either way this is transient:
+				// skip LocalQueue management for this entry and let the next reconcile handle
+				// it (triggered by the Owns watch when the ClusterQueue is created, or by the
+				// RequeueAfter on a FAILED status).
+				logger.Info("ClusterQueue not yet available, deferring LocalQueue sync", "name", clusterQueue.Name)
+				continue
+			}
 			logger.Error(err, "Failed to get ClusterQueue", "name", clusterQueue.Name)
 			success = false
 			r.emitEvent(kaiwoQueueConfig, "cluster queue", "get", actualClusterQueue, err)
@@ -521,7 +552,7 @@ func (r *KaiwoQueueConfigReconciler) syncLocalQueues(
 		for namespace, localQueue := range namespaceMap {
 			logger.Info("Deleting stale LocalQueue", "name", queueName, "namespace", namespace)
 			err := r.Delete(ctx, &localQueue)
-			if err != nil {
+			if err != nil && !errors.IsNotFound(err) {
 				logger.Error(err, "Failed to delete stale LocalQueue", "name", queueName, "namespace", namespace)
 				success = false
 			}
@@ -577,7 +608,7 @@ func (r *KaiwoQueueConfigReconciler) syncWorkloadPriorityClasses(ctx context.Con
 		if _, exists := expectedPriorityClasses[existingPriorityClass.Name]; !exists {
 			logger.Info("Deleting WorkloadPriorityClass", "name", existingPriorityClass.Name)
 			err := r.Delete(ctx, &existingPriorityClass)
-			if err != nil {
+			if err != nil && !errors.IsNotFound(err) {
 				logger.Error(err, "Failed to delete WorkloadPriorityClass", "name", existingPriorityClass.Name)
 				success = false
 			}
@@ -656,6 +687,7 @@ func (r *KaiwoQueueConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return builder.ControllerManagedBy(mgr).
 		For(&kaiwo.KaiwoQueueConfig{}).
+		Owns(&kueuev1beta1.ClusterQueue{}).
 		Watches(
 			&corev1.Node{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
@@ -704,6 +736,14 @@ func (r *KaiwoQueueConfigReconciler) CreateTopology(ctx context.Context) error {
 func sanitizeTopologies(in []kaiwo.Topology) []kaiwo.Topology {
 	out := make([]kaiwo.Topology, 0, len(in))
 	for _, t := range in {
+		if t.Name == "" {
+			// Prune entries that were written by the unfixed operator when
+			// KaiwoConfig.spec.defaultTopologyName was empty.  Filtering here
+			// (rather than just skipping at sync time) removes them from the spec
+			// on the next EnsureKaiwoQueueConfig call, so no manual migration is
+			// needed on upgraded clusters.
+			continue
+		}
 		out = append(out, kaiwo.Topology{
 			ObjectMeta: metav1.ObjectMeta{Name: t.Name},
 			Spec:       t.Spec,
