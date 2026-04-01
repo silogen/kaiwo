@@ -28,7 +28,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -111,6 +110,20 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			if err != nil {
 				return ctrl.Result{}, err
 			}
+
+			// One-time self-healing: remove any empty-named topology entries that
+			// were written by the unfixed operator (when DefaultTopologyName was "").
+			// We patch the spec directly so that subsequent reconciles no longer see
+			// the invalid entry, without requiring a manual delete/recreate.
+			if cleaned := sanitizeTopologies(queueConfig.Spec.Topologies); len(cleaned) != len(queueConfig.Spec.Topologies) {
+				logger.Info("Pruning empty-named topology entries from spec", "removed", len(queueConfig.Spec.Topologies)-len(cleaned))
+				queueConfig.Spec.Topologies = cleaned
+				if err := r.Update(ctx, &queueConfig); err != nil {
+					logger.Error(err, "Failed to prune empty-named topologies from spec")
+					return ctrl.Result{}, err
+				}
+				return ctrl.Result{Requeue: true}, nil
+			}
 		}
 	}
 
@@ -149,9 +162,6 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		)
 	}
 
-	if queueConfig.Status.Status == kaiwo.QueueConfigStatusFailed {
-		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
-	}
 	return ctrl.Result{}, nil
 }
 
@@ -268,7 +278,7 @@ func (r *KaiwoQueueConfigReconciler) syncResourceFlavors(ctx context.Context, qu
 		if _, exists := existingFlavorMap[existingFlavor.Name]; !exists {
 			logger.Info("Deleting ResourceFlavor", "name", existingFlavor.Name)
 			err := r.Delete(ctx, &existingFlavor)
-			if err != nil && !errors.IsNotFound(err) {
+			if err != nil {
 				logger.Error(err, "Failed to delete ResourceFlavor", "name", existingFlavor.Name)
 				success = false
 			}
@@ -726,6 +736,14 @@ func (r *KaiwoQueueConfigReconciler) CreateTopology(ctx context.Context) error {
 func sanitizeTopologies(in []kaiwo.Topology) []kaiwo.Topology {
 	out := make([]kaiwo.Topology, 0, len(in))
 	for _, t := range in {
+		if t.Name == "" {
+			// Prune entries that were written by the unfixed operator when
+			// KaiwoConfig.spec.defaultTopologyName was empty.  Filtering here
+			// (rather than just skipping at sync time) removes them from the spec
+			// on the next EnsureKaiwoQueueConfig call, so no manual migration is
+			// needed on upgraded clusters.
+			continue
+		}
 		out = append(out, kaiwo.Topology{
 			ObjectMeta: metav1.ObjectMeta{Name: t.Name},
 			Spec:       t.Spec,
