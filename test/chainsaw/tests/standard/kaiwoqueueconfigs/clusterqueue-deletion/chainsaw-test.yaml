@@ -1,0 +1,155 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  # Regression test for: KaiwoQueueConfig enters FAILED when a ClusterQueue that is
+  # present in the spec is missing from the cluster (e.g. during project teardown).
+  #
+  # Root cause: syncLocalQueues treated IsNotFound for a ClusterQueue as fatal, setting
+  # success=false and causing the overall sync to return an error, which flipped the
+  # KaiwoQueueConfig status to FAILED.
+  #
+  # Expected behaviour after the fix:
+  #   1. A missing ClusterQueue (still referenced in the spec) is treated as a transient
+  #      condition — syncLocalQueues skips it without marking the sync as failed.
+  #   2. The controller requeues so that both the ClusterQueue and its LocalQueues are
+  #      eventually reconciled back into existence.
+  name: kaiwoqueueconfig-clusterqueue-deletion-stays-ready
+spec:
+  concurrent: false
+  steps:
+
+  # ── Step 1: Initial setup ─────────────────────────────────────────────────────────
+  # Apply a KaiwoQueueConfig that owns a single ClusterQueue "fizz" with a namespace-
+  # scoped LocalQueue.  Confirm the controller reaches READY and all child objects exist
+  # before we start disrupting things.
+  - name: setup-apply-queue-config-and-confirm-ready
+    try:
+    - apply:
+        resource:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: cq-deletion-test
+    - apply:
+        file: kaiwoqueueconfig.yaml
+    # Wait for the controller to create the ClusterQueue
+    - script:
+        content: kubectl wait --for=create clusterqueue/fizz --timeout=30s
+    # Wait for the LocalQueue to appear in the test namespace
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: kueue.x-k8s.io/v1beta1
+          kind: LocalQueue
+          metadata:
+            name: fizz
+            namespace: cq-deletion-test
+    # Confirm KaiwoQueueConfig is READY before we proceed
+    - script:
+        content: kubectl get kaiwoqueueconfig kaiwo
+        check:
+          (contains($stdout, 'READY')): true
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+
+  # ── Step 2: Core regression – status must never flip to FAILED ───────────────────
+  # Delete the ClusterQueue "fizz" directly (simulating what happens when a project is
+  # torn down while the KaiwoQueueConfig spec still references it).  We then explicitly
+  # trigger a new reconcile so that the controller runs syncClusterQueues (which
+  # recreates the ClusterQueue) and syncLocalQueues (which previously returned
+  # success=false when it could not Get the just-recreated ClusterQueue from the cache).
+  #
+  # We repeat the delete+trigger cycle three times to maximise the probability of
+  # hitting the cache-lag window between syncClusterQueues creating the object and
+  # syncLocalQueues reading it back.  Each iteration independently verifies that the
+  # status has not become FAILED.
+  - name: delete-clusterqueue-verify-status-stays-ready
+    try:
+    - script:
+        content: |
+          set -e
+          for i in 1 2 3; do
+            echo "=== Iteration $i: deleting ClusterQueue fizz ==="
+            kubectl delete clusterqueue fizz --ignore-not-found
+
+            # Wait until the object is fully gone from the API server so that the next
+            # reconcile genuinely encounters a missing ClusterQueue.
+            kubectl wait --for=delete clusterqueue/fizz --timeout=15s 2>/dev/null || true
+
+            echo "  Triggering reconcile via annotation..."
+            kubectl annotate kaiwoqueueconfig kaiwo test/reconcile-trigger="$i" --overwrite
+
+            # Allow time for the reconcile to complete.  The controller is fast; 5 s is
+            # more than enough even under moderate load.
+            sleep 5
+
+            STATUS=$(kubectl get kaiwoqueueconfig kaiwo -o jsonpath='{.status.status}' 2>/dev/null || echo "UNKNOWN")
+            echo "  Status after reconcile: $STATUS"
+
+            if [ "$STATUS" = "FAILED" ]; then
+              echo "FAIL: KaiwoQueueConfig entered FAILED state on iteration $i"
+              exit 1
+            fi
+          done
+          echo "PASS: KaiwoQueueConfig remained READY across all iterations"
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+
+  # ── Step 3: Recovery – ClusterQueue and LocalQueue must be recreated ─────────────
+  # After the final deletion + reconcile in step 2, the controller must eventually
+  # bring both the ClusterQueue and the LocalQueue back into existence without any
+  # external trigger.  This requires either a watch on owned ClusterQueues (fix #3) or
+  # a RequeueAfter on the reconcile result (fix #2); a 90 s timeout accommodates both.
+  - name: verify-clusterqueue-and-localqueue-recreated
+    try:
+    - assert:
+        timeout: 90s
+        resource:
+          apiVersion: kueue.x-k8s.io/v1beta1
+          kind: ClusterQueue
+          metadata:
+            name: fizz
+    - assert:
+        timeout: 90s
+        resource:
+          apiVersion: kueue.x-k8s.io/v1beta1
+          kind: LocalQueue
+          metadata:
+            name: fizz
+            namespace: cq-deletion-test
+    # Final confirmation that KaiwoQueueConfig is still READY after full recovery
+    - script:
+        content: kubectl get kaiwoqueueconfig kaiwo
+        check:
+          (contains($stdout, 'READY')): true
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+
+  finally:
+  # Restore the cluster: delete the test-specific KaiwoQueueConfig so the operator
+  # recreates the default, and remove the test namespace.
+  - script:
+      content: kubectl delete kaiwoqueueconfig kaiwo --ignore-not-found
+  - script:
+      content: kubectl delete namespace cq-deletion-test --ignore-not-found
