@@ -28,6 +28,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -160,6 +161,10 @@ func (r *KaiwoQueueConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			"name", latest.Name,
 			"WorkloadStatus", latest.Status.Status,
 		)
+	}
+
+	if queueConfig.Status.Status == kaiwo.QueueConfigStatusFailed {
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
 	return ctrl.Result{}, nil
@@ -667,7 +672,12 @@ func (r *KaiwoQueueConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
-	// Create a predicate to filter when to run the reconciliation on node changes
+	enqueueKaiwoQueueConfig := handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+		return []reconcile.Request{
+			{NamespacedName: types.NamespacedName{Name: common.KaiwoQueueConfigName}},
+		}
+	})
+
 	nodePred := predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
 			return true
@@ -685,18 +695,18 @@ func (r *KaiwoQueueConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		},
 	}
 
+	nsPred := predicate.Funcs{
+		CreateFunc:  func(e event.CreateEvent) bool { return true },
+		DeleteFunc:  func(e event.DeleteEvent) bool { return true },
+		UpdateFunc:  func(e event.UpdateEvent) bool { return false },
+		GenericFunc: func(e event.GenericEvent) bool { return false },
+	}
+
 	return builder.ControllerManagedBy(mgr).
 		For(&kaiwo.KaiwoQueueConfig{}).
 		Owns(&kueuev1beta1.ClusterQueue{}).
-		Watches(
-			&corev1.Node{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-				return []reconcile.Request{
-					{NamespacedName: types.NamespacedName{Name: common.KaiwoQueueConfigName}},
-				}
-			}),
-			builder.WithPredicates(nodePred),
-		).
+		Watches(&corev1.Node{}, enqueueKaiwoQueueConfig, builder.WithPredicates(nodePred)).
+		Watches(&corev1.Namespace{}, enqueueKaiwoQueueConfig, builder.WithPredicates(nsPred)).
 		Named("kaiwoqueueconfig").
 		Complete(r)
 }
