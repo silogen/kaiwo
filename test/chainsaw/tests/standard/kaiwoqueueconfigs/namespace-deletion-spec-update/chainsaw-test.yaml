@@ -74,8 +74,10 @@ spec:
     try:
     - script:
         content: |
+          INDEX=$(kubectl get kaiwoqueueconfig kaiwo -o json | \
+            jq '[.spec.clusterQueues | to_entries[] | select(.value.name == "cq-ns-del-spec")] | .[0].key')
           kubectl patch kaiwoqueueconfig kaiwo --type=json \
-            -p '[{"op":"replace","path":"/spec/clusterQueues/0/namespaces","value":[]}]'
+            -p "[{\"op\":\"replace\",\"path\":\"/spec/clusterQueues/${INDEX}/namespaces\",\"value\":[]}]"
     - assert:
         timeout: 45s
         resource:
@@ -85,6 +87,15 @@ spec:
             name: kaiwo
           status:
             status: READY
+    catch:
+    - script:
+        content: |
+          echo "=== KaiwoQueueConfig spec.clusterQueues ==="
+          kubectl get kaiwoqueueconfig kaiwo -o json | jq '.spec.clusterQueues[] | {name, namespaces}'
+          echo "=== KaiwoQueueConfig status ==="
+          kubectl get kaiwoqueueconfig kaiwo -o jsonpath='{.status}' | jq .
+          echo "=== Controller logs (last 30 lines) ==="
+          kubectl logs -n kaiwo-system -l control-plane=controller-manager --tail=30 2>&1 || true
     finally:
     - script:
         content: kubectl delete kaiwoqueueconfig kaiwo --ignore-not-found
