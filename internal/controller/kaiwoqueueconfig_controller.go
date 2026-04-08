@@ -695,6 +695,25 @@ func (r *KaiwoQueueConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		},
 	}
 
+	cqPred := predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			return true
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			return true
+		},
+		GenericFunc: func(e event.GenericEvent) bool {
+			return false
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			if e.ObjectOld == nil || e.ObjectNew == nil {
+				return false
+			}
+			// Reconcile only when ClusterQueue spec changes (generation bump), not status churn.
+			return e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration()
+		},
+	}
+
 	nsPred := predicate.Funcs{
 		CreateFunc:  func(e event.CreateEvent) bool { return true },
 		DeleteFunc:  func(e event.DeleteEvent) bool { return true },
@@ -704,7 +723,7 @@ func (r *KaiwoQueueConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return builder.ControllerManagedBy(mgr).
 		For(&kaiwo.KaiwoQueueConfig{}).
-		Owns(&kueuev1beta1.ClusterQueue{}).
+		Owns(&kueuev1beta1.ClusterQueue{}, builder.WithPredicates(cqPred)).
 		Watches(&corev1.Node{}, enqueueKaiwoQueueConfig, builder.WithPredicates(nodePred)).
 		Watches(&corev1.Namespace{}, enqueueKaiwoQueueConfig, builder.WithPredicates(nsPred)).
 		Named("kaiwoqueueconfig").

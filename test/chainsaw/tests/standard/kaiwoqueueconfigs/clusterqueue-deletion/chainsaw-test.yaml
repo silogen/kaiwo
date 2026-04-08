@@ -22,11 +22,8 @@ spec:
 
     # ── Part 1: Setup ───────────────────────────────────────────────────────────────
     # Apply a KaiwoQueueConfig that owns a single ClusterQueue "fizz" with a namespace-
-    # scoped LocalQueue.  Wait for the controller to stabilise at READY before starting
-    # the regression check — the initial reconcile after a spec change can itself
-    # transiently flicker to FAILED due to cache lag, which is also the same root-cause
-    # bug.  We accept this here by polling until stable READY (≤ 30 s) and only then
-    # starting the watch stream that must see no FAILED.
+    # scoped LocalQueue. Wait for the controller to stabilise at READY before starting
+    # the regression check.
     - apply:
         resource:
           apiVersion: v1
@@ -35,8 +32,13 @@ spec:
             name: cq-deletion-test
     - apply:
         file: kaiwoqueueconfig.yaml
-    - script:
-        content: kubectl wait --for=create clusterqueue/fizz --timeout=30s
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: kueue.x-k8s.io/v1beta1
+          kind: ClusterQueue
+          metadata:
+            name: fizz
     - assert:
         timeout: 30s
         resource:
@@ -45,22 +47,15 @@ spec:
           metadata:
             name: fizz
             namespace: cq-deletion-test
-    # Wait for a stable READY state.  We poll rather than assert-once because the first
-    # reconcile may transiently set the status to FAILED before recovering.
-    - script:
-        timeout: 35s
-        content: |
-          for i in $(seq 1 15); do
-            STATUS=$(kubectl get kaiwoqueueconfig kaiwo -o jsonpath='{.status.status}' 2>/dev/null || echo "UNKNOWN")
-            echo "[$i/15] status=$STATUS"
-            if [ "$STATUS" = "READY" ]; then
-              echo "KaiwoQueueConfig reached READY"
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "FAIL: KaiwoQueueConfig did not reach READY within 30s"
-          exit 1
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoQueueConfig
+          metadata:
+            name: kaiwo
+          status:
+            status: READY
 
     # ── Part 2: Core regression ─────────────────────────────────────────────────────
     # From a stable READY state, start a continuous watch stream.  Then delete the
@@ -119,10 +114,9 @@ spec:
           echo "PASS: KaiwoQueueConfig remained READY across all reconcile cycles"
 
     # ── Part 3: Recovery ────────────────────────────────────────────────────────────
-    # After the final deletion + reconcile above, the controller must self-heal within
-    # 90 s without any further external trigger.  This requires either fix #2
-    # (RequeueAfter) or fix #3 (Owns watch on ClusterQueue); the 90 s timeout
-    # accommodates both.
+    # After the final deletion + reconcile above, the controller must self-heal.
+    # The Owns watch on ClusterQueue triggers immediate reconciliation; RequeueAfter
+    # acts as a fallback.
     - assert:
         timeout: 90s
         resource:
@@ -138,10 +132,15 @@ spec:
           metadata:
             name: fizz
             namespace: cq-deletion-test
-    - script:
-        content: kubectl get kaiwoqueueconfig kaiwo
-        check:
-          (contains($stdout, 'READY')): true
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoQueueConfig
+          metadata:
+            name: kaiwo
+          status:
+            status: READY
 
     catch:
     - script:
