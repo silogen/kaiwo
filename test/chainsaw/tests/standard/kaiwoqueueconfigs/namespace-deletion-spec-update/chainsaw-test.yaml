@@ -1,0 +1,105 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: kaiwoqueueconfig-ns-deletion-recover-via-spec-update
+spec:
+  concurrent: false
+  steps:
+  - name: setup
+    try:
+    - apply:
+        resource:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: ns-del-spec
+    - apply:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoQueueConfig
+          metadata:
+            name: kaiwo
+          spec:
+            clusterQueues:
+              - name: cq-ns-del-spec
+                namespaces:
+                  - ns-del-spec
+            resourceFlavors:
+              - name: rf-ns-del-spec
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: kueue.x-k8s.io/v1beta1
+          kind: ClusterQueue
+          metadata:
+            name: cq-ns-del-spec
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: kueue.x-k8s.io/v1beta1
+          kind: LocalQueue
+          metadata:
+            name: cq-ns-del-spec
+            namespace: ns-del-spec
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoQueueConfig
+          metadata:
+            name: kaiwo
+          status:
+            status: READY
+
+  - name: delete-namespace-expect-failed
+    try:
+    - script:
+        timeout: 40s
+        content: |
+          kubectl delete namespace ns-del-spec
+          kubectl wait --for=delete namespace/ns-del-spec --timeout=30s 2>/dev/null || true
+    - script:
+        content: kubectl annotate kaiwoqueueconfig kaiwo test/trigger="ns-deleted" --overwrite
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoQueueConfig
+          metadata:
+            name: kaiwo
+          status:
+            status: FAILED
+
+  - name: remove-namespace-from-spec-expect-ready
+    try:
+    - script:
+        content: |
+          INDEX=$(kubectl get kaiwoqueueconfig kaiwo -o json | \
+            jq '[.spec.clusterQueues | to_entries[] | select(.value.name == "cq-ns-del-spec")] | .[0].key')
+          kubectl patch kaiwoqueueconfig kaiwo --type=json \
+            -p "[{\"op\":\"replace\",\"path\":\"/spec/clusterQueues/${INDEX}/namespaces\",\"value\":[]}]"
+    - assert:
+        timeout: 45s
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoQueueConfig
+          metadata:
+            name: kaiwo
+          status:
+            status: READY
+    catch:
+    - script:
+        content: |
+          echo "=== KaiwoQueueConfig spec.clusterQueues ==="
+          kubectl get kaiwoqueueconfig kaiwo -o json | jq '.spec.clusterQueues[] | {name, namespaces}'
+          echo "=== KaiwoQueueConfig status ==="
+          kubectl get kaiwoqueueconfig kaiwo -o jsonpath='{.status}' | jq .
+          echo "=== Controller logs (last 30 lines) ==="
+          kubectl logs -n kaiwo-system -l control-plane=controller-manager --tail=30 2>&1 || true
+    finally:
+    - script:
+        content: kubectl delete kaiwoqueueconfig kaiwo --ignore-not-found
+    - script:
+        content: kubectl delete namespace ns-del-spec --ignore-not-found
+    - script:
+        content: kubectl delete clusterqueue cq-ns-del-spec --ignore-not-found

@@ -522,9 +522,17 @@ func ComparePriorityClasses(a, b kueuev1beta1.WorkloadPriorityClass) bool {
 
 func CreateDefaultTopology(ctx context.Context, c client.Client) ([]kaiwo.Topology, error) {
 	config := common.ConfigFromContext(ctx)
+	name := config.DefaultTopologyName
+	if name == "" {
+		// KaiwoConfig.spec.defaultTopologyName is omitempty and may be absent on
+		// clusters upgraded from an older operator version that predates the
+		// kubebuilder default.  Fall back to the well-known constant so we never
+		// produce a Topology with an empty name.
+		name = common.DefaultTopologyName
+	}
 	defaultTopology := kaiwo.Topology{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: config.DefaultTopologyName,
+			Name: name,
 		},
 		Spec: kaiwo.TopologySpec{
 			Levels: []kueuev1alpha1.TopologyLevel{

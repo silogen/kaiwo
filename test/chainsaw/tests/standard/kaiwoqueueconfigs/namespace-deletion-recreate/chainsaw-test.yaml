@@ -1,0 +1,117 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: kaiwoqueueconfig-ns-deletion-recover-via-ns-recreation
+spec:
+  concurrent: false
+  steps:
+  - name: setup
+    try:
+    - apply:
+        resource:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: ns-del-recreate
+    - apply:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoQueueConfig
+          metadata:
+            name: kaiwo
+          spec:
+            clusterQueues:
+              - name: cq-ns-del-recreate
+                namespaces:
+                  - ns-del-recreate
+            resourceFlavors:
+              - name: rf-ns-del-recreate
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: kueue.x-k8s.io/v1beta1
+          kind: ClusterQueue
+          metadata:
+            name: cq-ns-del-recreate
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: kueue.x-k8s.io/v1beta1
+          kind: LocalQueue
+          metadata:
+            name: cq-ns-del-recreate
+            namespace: ns-del-recreate
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoQueueConfig
+          metadata:
+            name: kaiwo
+          status:
+            status: READY
+
+  - name: delete-namespace-expect-failed
+    try:
+    - script:
+        timeout: 40s
+        content: |
+          kubectl delete namespace ns-del-recreate
+          kubectl wait --for=delete namespace/ns-del-recreate --timeout=30s 2>/dev/null || true
+    - script:
+        content: kubectl annotate kaiwoqueueconfig kaiwo test/trigger="ns-deleted" --overwrite
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoQueueConfig
+          metadata:
+            name: kaiwo
+          status:
+            status: FAILED
+
+  - name: recreate-namespace-expect-ready
+    try:
+    - apply:
+        resource:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: ns-del-recreate
+    - assert:
+        timeout: 45s
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoQueueConfig
+          metadata:
+            name: kaiwo
+          status:
+            status: READY
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: kueue.x-k8s.io/v1beta1
+          kind: LocalQueue
+          metadata:
+            name: cq-ns-del-recreate
+            namespace: ns-del-recreate
+
+    catch:
+    - script:
+        timeout: 15s
+        content: |
+          echo "=== KaiwoQueueConfig ==="
+          kubectl get kaiwoqueueconfig kaiwo -o yaml
+          echo "=== ClusterQueues ==="
+          kubectl get clusterqueue -o wide
+          echo "=== LocalQueues ==="
+          kubectl get localqueue -A
+          echo "=== Controller logs (last 40 lines) ==="
+          kubectl logs -n kaiwo-system -l control-plane=controller-manager --tail=40
+    finally:
+    - script:
+        content: kubectl delete kaiwoqueueconfig kaiwo --ignore-not-found
+    - script:
+        content: kubectl delete namespace ns-del-recreate --ignore-not-found
+    - script:
+        content: kubectl delete clusterqueue cq-ns-del-recreate --ignore-not-found
