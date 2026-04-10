@@ -1,0 +1,25 @@
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoQueueConfig
+metadata:
+  name: kaiwo
+spec:
+  clusterQueues:
+  - name: update-test-queue
+    spec:
+      namespaceSelector: {}
+      queueingStrategy: BestEffortFIFO
+      resourceGroups:
+      - coveredResources:
+        - cpu
+        - memory
+        flavors:
+        - name: update-test-flavor
+          resources:
+          - name: cpu
+            nominalQuota: "4"
+          - name: memory
+            nominalQuota: "8Gi"
+  resourceFlavors:
+  - name: update-test-flavor
+    nodeLabels:
+      kaiwo/nodepool: update-test-initial

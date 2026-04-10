@@ -1,5 +1,52 @@
 # Scheduling
 
+## Topology Aware Scheduling (TAS)
+
+Kaiwo supports Kueue's [Topology Aware Scheduling](https://kueue.sigs.k8s.io/docs/concepts/topology_aware_scheduling/) to co-locate workload pods within the same topology domain (e.g., same rack or network block). This can significantly improve performance for distributed training by reducing inter-node communication latency.
+
+**TAS is opt-in at the workload level.** If you do not set either field, your workload is scheduled normally without topology constraints.
+
+**Fields:**
+
+*   `preferredTopologyLabel`: Kueue will *try* to place all pods within the topology domain identified by this label. If the pods cannot fit at that level, Kueue moves up to the next topology level. If they cannot fit even at the highest level, pods are distributed across multiple domains. This is a best-effort preference.
+*   `requiredTopologyLabel`: Kueue *must* place all pods within a single topology domain at the specified level. If this is not possible, the workload will not be admitted.
+
+**Topology label values** correspond to the levels defined in the cluster's `Topology` resource. Common levels from most specific to least specific:
+
+| Label | Meaning |
+| :---- | :------ |
+| `kubernetes.io/hostname` | Same physical node |
+| `kaiwo/topology-rack` | Same network rack |
+| `kaiwo/topology-block` | Same network block |
+
+**Example:**
+
+```yaml
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoJob
+metadata:
+  name: distributed-training
+  namespace: ai-research
+spec:
+  gpus: 16
+  gpuVendor: amd
+  ray: true
+  preferredTopologyLabel: kaiwo/topology-rack  # Try to place all workers in the same rack
+  image: my-training-image:latest
+```
+
+To *require* placement within a single rack (workload will wait if not possible):
+
+```yaml
+spec:
+  requiredTopologyLabel: kaiwo/topology-rack
+```
+
+!!! note "Prerequisites"
+    TAS requires that the cluster administrator has configured a `Topology` and that the `ResourceFlavor` used by your workload has `topologyName` set. If the flavor does not reference a topology, setting these fields will have no effect on scheduling. See the [admin configuration guide](/admin/configuration#topology-aware-scheduling-tas) for setup details.
+
+## Resource Allocation
+
 #### `replicas`, `gpus`, `gpusPerReplica`, and `gpuVendor`
 
 These fields collectively control the number of workload instances and how GPUs are allocated across them. Their interaction depends on the workload type (Job/Service) and whether Ray is used (`ray: true`).
