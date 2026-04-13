@@ -1,0 +1,260 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: auto-generated-flavors-topology-and-labels
+spec:
+  concurrent: false
+  steps:
+  - name: Verify auto-generated flavors have topology but no kaiwo/worker in nodeLabels
+    description: >
+      Auto-generated ResourceFlavors should reference the default topology
+      (enabling TAS capability) but should NOT have kaiwo/worker in their
+      nodeLabels (Kueue makes specs immutable when topologyName is set, so
+      the nodeLabels must not change after creation).
+    try:
+    - script:
+        timeout: 30s
+        content: |
+          for i in $(seq 1 15); do
+            flavors=$(kubectl get kaiwoqueueconfig kaiwo -o jsonpath='{.spec.resourceFlavors}' 2>/dev/null)
+            if [ -n "$flavors" ] && [ "$flavors" != "null" ]; then
+              echo "$flavors" | grep -q 'topologyName' && ! echo "$flavors" | grep -q 'kaiwo/worker' && {
+                echo "KaiwoQueueConfig flavors have topologyName and no kaiwo/worker"
+                exit 0
+              }
+            fi
+            sleep 2
+          done
+          echo "KaiwoQueueConfig flavors did not match expected state"
+          kubectl get kaiwoqueueconfig kaiwo -o json
+          exit 1
+        check:
+          ($error == null): true
+
+  - name: Verify Kueue ResourceFlavors have topology but no kaiwo/worker
+    try:
+    - script:
+        timeout: 30s
+        content: |
+          for i in $(seq 1 15); do
+            out=$(kubectl get resourceflavors -o json 2>/dev/null)
+            count=$(echo "$out" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('items',[])))" 2>/dev/null)
+            if [ "$count" != "" ] && [ "$count" != "0" ]; then
+              has_topo=$(echo "$out" | python3 -c "import sys,json; items=json.load(sys.stdin)['items']; print(any('topologyName' in str(i.get('spec',{})) for i in items))")
+              has_worker=$(echo "$out" | python3 -c "import sys,json; items=json.load(sys.stdin)['items']; print(any('kaiwo/worker' in str(i.get('spec',{}).get('nodeLabels',{})) for i in items))")
+              if [ "$has_topo" = "True" ] && [ "$has_worker" = "False" ]; then
+                echo "ResourceFlavors have topology but no kaiwo/worker"
+                exit 0
+              fi
+            fi
+            sleep 2
+          done
+          echo "ResourceFlavors did not match expected state in time"
+          kubectl get resourceflavors -o json
+          exit 1
+        check:
+          ($error == null): true
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+---
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: topology-flavor-labels
+spec:
+  concurrent: false
+  timeouts:
+    cleanup: 60s
+  steps:
+  - name: Apply config with topology and non-topology flavors
+    try:
+    - apply:
+        file: kaiwoqueueconfig-with-topology.yaml
+    - script:
+        content: kubectl wait --for=create resourceflavor/no-topo-flavor --timeout 30s
+    - script:
+        content: kubectl wait --for=create resourceflavor/topo-flavor --timeout 30s
+
+  - name: Verify non-topology flavor has kaiwo/worker label
+    try:
+    - script:
+        content: kubectl get resourceflavor no-topo-flavor -o json
+        outputs:
+        - name: noTopoSpec
+          value: (to_string(json_parse($stdout).spec))
+    - script:
+        env:
+        - name: spec
+          value: ($noTopoSpec)
+        content: |
+          echo $spec
+        check:
+          (contains($stdout, '"kaiwo/worker":"true"')): true
+          (contains($stdout, '"topologyName"')): false
+
+  - name: Verify topology flavor does NOT have kaiwo/worker label but has topologyName
+    try:
+    - script:
+        content: kubectl get resourceflavor topo-flavor -o json
+        outputs:
+        - name: topoSpec
+          value: (to_string(json_parse($stdout).spec))
+    - script:
+        env:
+        - name: spec
+          value: ($topoSpec)
+        content: |
+          echo $spec
+        check:
+          (contains($stdout, '"kaiwo/worker"')): false
+          (contains($stdout, '"topologyName":"test-topo"')): true
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+    finally:
+    - script:
+        content: kubectl delete kaiwoqueueconfig kaiwo --timeout 30s
+---
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: flavor-spec-update-mutable
+spec:
+  concurrent: false
+  timeouts:
+    cleanup: 60s
+  steps:
+  - name: Apply initial config with a mutable flavor (no topology)
+    try:
+    - apply:
+        file: kaiwoqueueconfig-initial.yaml
+    - script:
+        content: kubectl wait --for=create resourceflavor/update-test-flavor --timeout 30s
+    - script:
+        content: kubectl get resourceflavor update-test-flavor -o json
+        outputs:
+        - name: initialSpec
+          value: (to_string(json_parse($stdout).spec))
+    - script:
+        env:
+        - name: spec
+          value: ($initialSpec)
+        content: |
+          echo $spec
+        check:
+          (contains($stdout, '"kaiwo/nodepool":"update-test-initial"')): true
+
+  - name: Update nodeLabels on mutable flavor and verify the change takes effect
+    try:
+    - apply:
+        file: kaiwoqueueconfig-updated.yaml
+    - sleep:
+        duration: 5s
+    - script:
+        timeout: 30s
+        content: |
+          for i in $(seq 1 15); do
+            spec=$(kubectl get resourceflavor update-test-flavor -o jsonpath='{.spec.nodeLabels.kaiwo\/nodepool}' 2>/dev/null)
+            if [ "$spec" = "update-test-updated" ]; then
+              echo "Flavor nodeLabel updated successfully"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Flavor nodeLabel was not updated in time"
+          exit 1
+        check:
+          ($error == null): true
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+    finally:
+    - script:
+        content: kubectl delete kaiwoqueueconfig kaiwo --timeout 30s
+---
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: flavor-topology-migration
+spec:
+  description: >
+    Tests the migration path: a flavor starts with topologyName set (making
+    its Kueue spec immutable), then the config is updated to remove topology.
+    The controller must delete-and-recreate the ResourceFlavor to converge.
+  concurrent: false
+  timeouts:
+    cleanup: 120s
+  steps:
+  - name: Apply config with a topology-enabled flavor
+    try:
+    - apply:
+        file: kaiwoqueueconfig-with-topology.yaml
+    - script:
+        content: kubectl wait --for=create resourceflavor/topo-flavor --timeout 30s
+    - script:
+        content: kubectl get resourceflavor topo-flavor -o json
+        outputs:
+        - name: initialSpec
+          value: (to_string(json_parse($stdout).spec))
+    - script:
+        env:
+        - name: spec
+          value: ($initialSpec)
+        content: |
+          echo $spec
+        check:
+          (contains($stdout, '"topologyName":"test-topo"')): true
+
+  - name: Remove topology from flavor and verify convergence
+    try:
+    - apply:
+        file: kaiwoqueueconfig-migrated.yaml
+    - script:
+        timeout: 60s
+        content: |
+          for i in $(seq 1 30); do
+            topo=$(kubectl get resourceflavor topo-flavor -o jsonpath='{.spec.topologyName}' 2>/dev/null)
+            worker=$(kubectl get resourceflavor topo-flavor -o jsonpath='{.spec.nodeLabels.kaiwo\/worker}' 2>/dev/null)
+            deleting=$(kubectl get resourceflavor topo-flavor -o jsonpath='{.metadata.deletionTimestamp}' 2>/dev/null)
+            if [ -z "$topo" ] && [ "$worker" = "true" ] && [ -z "$deleting" ]; then
+              echo "Flavor migrated: topology removed, worker label present, not terminating"
+              exit 0
+            fi
+            echo "Waiting for convergence (attempt $i): topologyName=$topo worker=$worker deleting=$deleting"
+            sleep 2
+          done
+          echo "Flavor did not converge in time"
+          exit 1
+        check:
+          ($error == null): true
+    catch:
+    - command:
+        entrypoint: kaiwo-dev
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: PRINT_LEVEL
+          value: ($values.print_level)
+        args: ["debug", "chainsaw", "--namespace=$NAMESPACE", "--print-level=$PRINT_LEVEL"]
+    finally:
+    - script:
+        content: kubectl delete kaiwoqueueconfig kaiwo --timeout 30s

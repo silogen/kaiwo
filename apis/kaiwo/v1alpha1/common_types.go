@@ -124,10 +124,11 @@ type CommonMetaSpec struct {
 	// Duration specifies the maximum duration over which the workload can run. This is useful for avoiding workloads running indefinitely.
 	Duration *metav1.Duration `json:"duration,omitempty"`
 
-	// PreferredTopologyLabel specifies the preferred topology label for scheduling the workload. This is used to influence how the workload is distributed across nodes in the cluster.
-	// If not specified, Kaiwo will use the default topology labels defined in the default topology of KaiwoQueueConfig starting at the host level.
+	// PreferredTopologyLabel specifies the preferred topology label for scheduling the workload (opt-in).
+	// When set, Kueue's Topology Aware Scheduling is activated for this workload.
 	// The levels are evaluated one-by-one going up from the level indicated by the label. If the PodSet cannot fit within a given topology label then the next topology level up is considered.
-	// If the PodSet cannot fit at the highest topology level, then it is distributed among multiple topology domains
+	// If the PodSet cannot fit at the highest topology level, then it is distributed among multiple topology domains.
+	// If not specified, no topology-aware scheduling is applied.
 	PreferredTopologyLabel string `json:"preferredTopologyLabel,omitempty"`
 
 	// RequiredTopologyLabel specifies the required topology label for scheduling the workload. This is used to ensure that the workload is scheduled on nodes that match the specified topology label.

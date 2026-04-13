@@ -385,8 +385,9 @@ func ConvertKaiwoToKueueResourceFlavor(kaiwoFlavor kaiwo.ResourceFlavorSpec) kue
 	if kaiwoFlavor.TopologyName != "" {
 		ref := kueuev1beta1.TopologyReference(kaiwoFlavor.TopologyName)
 		topologyRef = &ref
+	} else {
+		nodeLabels[common.DefaultKaiwoWorkerLabel] = "true"
 	}
-	nodeLabels[common.DefaultKaiwoWorkerLabel] = "true"
 
 	return kueuev1beta1.ResourceFlavor{
 		ObjectMeta: metav1.ObjectMeta{Name: kaiwoFlavor.Name},

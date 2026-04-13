@@ -29,10 +29,16 @@ You can modify this automatically created configuration or create your own `kaiw
 *   **`resourceFlavors`**: Defines the types of hardware resources available in the cluster, corresponding to Kueue `ResourceFlavor` resources.
     *   `name`: A unique name for the flavor (e.g., `amd-mi300-8gpu`, `nvidia-a100-40gb`, `cpu-standard`).
     *   `nodeLabels`: A map of labels that nodes must possess to be considered part of this flavor. This is crucial for scheduling pods onto the correct hardware. Example: `{"kaiwo/nodepool": "amd-mi300-nodes"}`.
+    *   `topologyName`: (Optional) The name of a Kueue `Topology` (defined in `spec.topologies`) that this flavor references. When set, the flavor enables [Topology Aware Scheduling (TAS)](#topology-aware-scheduling-tas) for workloads that opt in. See the TAS section below for details.
     *   `taints`: (Optional) A list of Kubernetes taints associated with this flavor. Pods scheduled to this flavor will need corresponding tolerations. Kaiwo automatically adds tolerations for GPU taints if `ADD_TAINTS_TO_GPU_NODES` is enabled.
 
     !!! info "Auto-Discovery vs. Explicit Definition"
-        If `spec.resourceFlavors` is empty or omitted in the `kaiwo` `KaiwoQueueConfig`, the operator's startup logic attempts to **auto-discover** node pools and create corresponding flavors as described above. While convenient for initial setup, explicitly defining `resourceFlavors` in the `KaiwoQueueConfig` provides more precise control and is generally recommended for production environments. Explicitly defined flavors will override any auto-discovered ones during reconciliation.
+        If `spec.resourceFlavors` is empty or omitted in the `kaiwo` `KaiwoQueueConfig`, the operator's startup logic attempts to **auto-discover** node pools and create corresponding flavors as described above. Auto-discovered flavors automatically reference the default topology (configured via `KaiwoConfig.spec.defaultTopologyName`, defaulting to `default-topology`) to enable TAS capability. While convenient for initial setup, explicitly defining `resourceFlavors` in the `KaiwoQueueConfig` provides more precise control and is generally recommended for production environments. Explicitly defined flavors will override any auto-discovered ones during reconciliation.
+
+    !!! warning "ResourceFlavor Immutability"
+        Kueue makes `ResourceFlavor` specs **immutable** once `topologyName` is set. If you need to change the spec of such a flavor (e.g., changing or removing `topologyName`), the Kaiwo controller will automatically handle this by deleting and recreating the flavor. If the old flavor is still in use by a `ClusterQueue`, Kueue's `resource-in-use` finalizer may delay the deletion; the controller will converge on subsequent reconciliation cycles.
+
+*   **`topologies`**: Defines Kueue `Topology` resources that describe the physical or logical topology of the cluster (e.g., rack, block, host hierarchy). Topologies are referenced by `resourceFlavors` via the `topologyName` field. Each topology specifies a list of `levels`, where each level is a node label key (e.g., `kaiwo/topology-block`, `kaiwo/topology-rack`, `kubernetes.io/hostname`).
 
 *   **`clusterQueues`**: Defines the Kueue `ClusterQueue` resources managed by Kaiwo.
     *   `name`: The name of the `ClusterQueue` (e.g., `team-a-queue`, `default-gpu-queue`).
@@ -52,37 +58,41 @@ kind: KaiwoQueueConfig
 metadata:
   name: kaiwo # Must be named 'kaiwo' (or DEFAULT_KAIWO_QUEUE_CONFIG_NAME)
 spec:
+  topologies:
+    - name: gpu-topology
+      levels:
+        - kaiwo/topology-block
+        - kaiwo/topology-rack
+        - kubernetes.io/hostname
+
   resourceFlavors:
     - name: amd-mi300-8gpu
       nodeLabels:
-        kaiwo/nodepool: amd-mi300-nodes # Nodes with this label belong to this flavor
-        # Add other identifying labels if needed, e.g., topology.amd.com/gpu-count: '8'
-      # taints: # Optional, define if specific taints apply ONLY to these nodes
-      # - key: "amd.com/gpu"
-      #   operator: "Exists"
-      #   effect: "NoSchedule"
+        kaiwo/nodepool: amd-mi300-nodes
+      topologyName: gpu-topology  # Enables TAS for workloads using this flavor
     - name: cpu-high-mem
       nodeLabels:
         kaiwo/nodepool: cpu-high-mem-nodes
+        # No topologyName — TAS not available for this flavor
 
   clusterQueues:
-    - name: ai-research-queue # Name of the ClusterQueue
-      namespaces: # Auto-create/manage LocalQueues in these namespaces
+    - name: ai-research-queue
+      namespaces:
         - ai-research-ns-1
         - ai-research-ns-2
-      spec: # Standard Kueue ClusterQueueSpec
+      spec:
         queueingStrategy: BestEffortFIFO
         resourceGroups:
-          - coveredResources: ["cpu", "memory", "amd.com/gpu"] # Resources managed by this group
+          - coveredResources: ["cpu", "memory", "amd.com/gpu"]
             flavors:
-              - name: amd-mi300-8gpu # Reference to a defined resourceFlavor
+              - name: amd-mi300-8gpu
                 resources:
                   - name: "cpu"
-                    nominalQuota: "192" # Total CPU quota for this flavor in this queue
+                    nominalQuota: "192"
                   - name: "memory"
-                    nominalQuota: "1024Gi" # Total Memory quota
+                    nominalQuota: "1024Gi"
                   - name: "amd.com/gpu"
-                    nominalQuota: "8" # Total GPU quota
+                    nominalQuota: "8"
           - coveredResources: ["cpu", "memory"]
             flavors:
               - name: cpu-high-mem
@@ -91,8 +101,6 @@ spec:
                     nominalQuota: "256"
                   - name: "memory"
                     nominalQuota: "2048Gi"
-        # cohort: "gpu-cohort" # Optional: Group queues for borrowing/preemption
-        # preemption: ...
 
   workloadPriorityClasses:
     - name: high-priority
@@ -105,10 +113,15 @@ spec:
 
 The `KaiwoQueueConfigController` acts as a translator, continuously ensuring that the Kueue resources in your cluster accurately reflect the configuration defined in the single `kaiwo` `KaiwoQueueConfig` resource. It monitors this resource and automatically manages the lifecycle of the associated Kueue objects:
 
+*   **`spec.topologies` -> Kueue `Topology`:**
+    *   Each entry defines a Kueue `Topology` resource describing the cluster's physical or logical topology hierarchy.
+    *   Topologies are synced before ResourceFlavors to ensure flavors can reference them immediately.
+
 *   **`spec.resourceFlavors` -> Kueue `ResourceFlavor`:**
     *   Each entry in this list directly defines a Kueue `ResourceFlavor`.
-    *   The controller ensures a corresponding `ResourceFlavor` exists for each entry, creating or updating it as necessary based on the specified `name`, `nodeLabels`, and `taints`.
+    *   The controller ensures a corresponding `ResourceFlavor` exists for each entry, creating or updating it as necessary based on the specified `name`, `nodeLabels`, `topologyName`, and `taints`.
     *   If an entry is removed from this list, the controller deletes the corresponding `ResourceFlavor`.
+    *   For flavors with `topologyName` set, Kueue makes the spec immutable. If a spec change is needed, the controller handles this transparently via delete-and-recreate.
 
 *   **`spec.clusterQueues` -> Kueue `ClusterQueue` and `LocalQueue`:**
     *   Each entry in this list defines a Kueue `ClusterQueue`. The controller translates the structure into a standard `ClusterQueueSpec` and ensures the resource exists and matches the definition. Removing an entry deletes the corresponding `ClusterQueue`.
@@ -126,6 +139,28 @@ The `KaiwoQueueConfigController` acts as a translator, continuously ensuring tha
     Kaiwo takes ownership of Kueue `ResourceFlavor`, `ClusterQueue`, `LocalQueue` and `WorkloadPriorityClass` resources. This means that resources of these types that are created manually, i.e. not via the `KaiwoQueueConfig`, may be deleted by the Kaiwo Controller
 
 The controller updates the `status.status` field of the `KaiwoQueueConfig` resource (`Pending`, `Ready`, or `Failed`) to indicate the current state of synchronization between the desired configuration and the actual Kueue resources in the cluster. This continuous reconciliation keeps the Kueue setup aligned with the central `KaiwoQueueConfig`.
+
+### Topology Aware Scheduling (TAS)
+
+Kaiwo integrates with Kueue's [Topology Aware Scheduling](https://kueue.sigs.k8s.io/docs/concepts/topology_aware_scheduling/) to place workload pods close together in the cluster topology (e.g., same rack, same network block), which can improve performance for distributed training workloads.
+
+**How it works:**
+
+TAS in Kaiwo is a two-layer opt-in system:
+
+1.  **Infrastructure layer (admin):** ResourceFlavors must reference a `Topology` via the `topologyName` field to *enable* TAS capability. Without this, workloads cannot use TAS even if they request it. Auto-discovered flavors (when `dynamicallyUpdateDefaultClusterQueue` is enabled) automatically reference the default topology.
+2.  **Workload layer (user):** Individual workloads opt in to TAS by setting `preferredTopologyLabel` or `requiredTopologyLabel` in their spec. If neither is set, the workload is scheduled normally without topology constraints, even if the underlying flavor supports TAS.
+
+**Configuration:**
+
+1.  Define a `Topology` in `spec.topologies` with the appropriate hierarchy of node labels.
+2.  Reference that topology in your `ResourceFlavor` via `topologyName`.
+3.  Ensure the nodes in the cluster are labeled with the topology labels (e.g., `kaiwo/topology-rack`, `kaiwo/topology-block`, `kubernetes.io/hostname`).
+
+Users then activate TAS on individual workloads by setting `preferredTopologyLabel` or `requiredTopologyLabel`. See the [Scheduling guide](/scientist/scheduling#topology-aware-scheduling-tas) for workload-level configuration.
+
+!!! note "Default Topology"
+    The default topology name is configured in `KaiwoConfig` via `spec.defaultTopologyName` (defaults to `default-topology`). Auto-generated ResourceFlavors always reference this topology. The operator also creates this default topology with levels `kaiwo/topology-block`, `kaiwo/topology-rack`, and `kubernetes.io/hostname`.
 
 ## KaiwoConfig CRD
 
