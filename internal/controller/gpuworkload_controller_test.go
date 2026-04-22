@@ -292,8 +292,8 @@ var _ = Describe("GpuWorkload Controller", func() {
 		It("should use namespace annotations when workload has none", func() {
 			ns := map[string]string{
 				AnnotationGracePeriod: "15m",
-				AnnotationPolicy:     "Always",
-				"unrelated/key":      "ignored",
+				AnnotationPolicy:      "Always",
+				"unrelated/key":       "ignored",
 			}
 			result := mergePreemptionAnnotations(ns, nil)
 			Expect(result).To(HaveLen(2))
@@ -314,8 +314,8 @@ var _ = Describe("GpuWorkload Controller", func() {
 		It("should let workload annotations override namespace annotations", func() {
 			ns := map[string]string{
 				AnnotationGracePeriod: "15m",
-				AnnotationPolicy:     "OnPressure",
-				AnnotationThreshold:  "10",
+				AnnotationPolicy:      "OnPressure",
+				AnnotationThreshold:   "10",
 			}
 			workload := map[string]string{
 				AnnotationPolicy:    "Always",
@@ -1010,8 +1010,8 @@ var _ = Describe("GpuWorkload Controller", func() {
 		It("should let workload annotations override namespace annotations", func() {
 			ns := createNamespace("ns-override", map[string]string{
 				AnnotationGracePeriod: "20m",
-				AnnotationPolicy:     "OnPressure",
-				AnnotationThreshold:  "10",
+				AnnotationPolicy:      "OnPressure",
+				AnnotationThreshold:   "10",
 			})
 			defer func() { _ = k8sClient.Delete(ctx, ns) }()
 
@@ -1081,12 +1081,12 @@ var _ = Describe("GpuWorkload Controller", func() {
 					Namespace: ns.Name,
 				},
 				Spec: kaiwo.GpuWorkloadSpec{
-				WorkloadRef: kaiwo.WorkloadReference{
-					APIVersion: "batch/v1",
-					Kind:       "Job",
-					Name:       name,
-					UID:        types.UID(name + "-uid"),
-				},
+					WorkloadRef: kaiwo.WorkloadReference{
+						APIVersion: "batch/v1",
+						Kind:       "Job",
+						Name:       name,
+						UID:        types.UID(name + "-uid"),
+					},
 					GpuResources:     map[string]int{"amd.com/gpu": gpus},
 					PreemptionPolicy: &onPressure,
 					GracePeriod:      &gracePeriod,
@@ -1212,12 +1212,12 @@ var _ = Describe("GpuWorkload Controller", func() {
 					Namespace: ns.Name,
 				},
 				Spec: kaiwo.GpuWorkloadSpec{
-				WorkloadRef: kaiwo.WorkloadReference{
-					APIVersion: "batch/v1",
-					Kind:       "Job",
-					Name:       "young-victim",
-					UID:        "young-uid",
-				},
+					WorkloadRef: kaiwo.WorkloadReference{
+						APIVersion: "batch/v1",
+						Kind:       "Job",
+						Name:       "young-victim",
+						UID:        "young-uid",
+					},
 					GpuResources:     map[string]int{"amd.com/gpu": 5},
 					PreemptionPolicy: func() *kaiwo.PreemptionPolicy { p := kaiwo.PreemptionPolicyOnPressure; return &p }(),
 					GracePeriod:      &metav1.Duration{Duration: 10 * time.Minute},
