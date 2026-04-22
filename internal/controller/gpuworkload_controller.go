@@ -49,6 +49,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
+
 	configapi "github.com/silogen/kaiwo/apis/config/v1alpha1"
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
 	"github.com/silogen/kaiwo/pkg/workloads/common"
@@ -109,6 +111,7 @@ type GpuWorkloadReconciler struct {
 	holderID string
 }
 
+//nolint:gocyclo
 func (r *GpuWorkloadReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
@@ -168,6 +171,23 @@ func (r *GpuWorkloadReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
+	var wlList kueuev1beta1.WorkloadList
+	if err := r.List(ctx, &wlList, client.InNamespace(req.Namespace)); err != nil {
+		logger.Error(err, "failed to list Kueue Workloads")
+		return ctrl.Result{}, err
+	}
+
+	workloadByPodUID := make(map[types.UID]*kueuev1beta1.Workload)
+	for i := range wlList.Items {
+		wl := &wlList.Items[i]
+		for _, owner := range wl.OwnerReferences {
+			if owner.Kind == "Pod" {
+				workloadByPodUID[owner.UID] = wl
+				break
+			}
+		}
+	}
+
 	existingMetrics := make(map[string][]kaiwo.GpuMetric, len(gw.Status.TrackedPods))
 	for i := range gw.Status.TrackedPods {
 		tp := &gw.Status.TrackedPods[i]
@@ -188,7 +208,7 @@ func (r *GpuWorkloadReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	oldPhase := gw.Status.Phase
 
 	// Phase computation
-	phase := r.computePhase(&gw, ownedPods, gpuCfg)
+	phase := r.computePhase(&gw, ownedPods, workloadByPodUID, gpuCfg)
 	gw.Status.Phase = phase
 
 	// Update IdleSince tracking
@@ -230,7 +250,7 @@ func (r *GpuWorkloadReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	return ctrl.Result{}, nil
 }
 
-func (r *GpuWorkloadReconciler) computePhase(gw *kaiwo.GpuWorkload, pods []corev1.Pod, gpuCfg configapi.KaiwoGpuPreemptionConfig) kaiwo.GpuWorkloadPhase {
+func (r *GpuWorkloadReconciler) computePhase(gw *kaiwo.GpuWorkload, pods []corev1.Pod, workloadByPodUID map[types.UID]*kueuev1beta1.Workload, gpuCfg configapi.KaiwoGpuPreemptionConfig) kaiwo.GpuWorkloadPhase {
 	if len(pods) == 0 {
 		if gw.Status.Phase == "" {
 			return kaiwo.GpuWorkloadPhasePendingOther
@@ -243,7 +263,7 @@ func (r *GpuWorkloadReconciler) computePhase(gw *kaiwo.GpuWorkload, pods []corev
 	// Check if any pods are pending specifically due to GPU insufficiency.
 	// This is the demand signal for OnPressure preemption.
 	for i := range pods {
-		if pods[i].Status.Phase == corev1.PodPending && isPendingDueToGPU(&pods[i], gw.Spec.GpuResources) {
+		if pods[i].Status.Phase == corev1.PodPending && isPendingDueToGPU(&pods[i], workloadByPodUID, gw.Spec.GpuResources) {
 			return kaiwo.GpuWorkloadPhasePendingGpu
 		}
 	}
@@ -277,12 +297,48 @@ func (r *GpuWorkloadReconciler) computePhase(gw *kaiwo.GpuWorkload, pods []corev
 	return kaiwo.GpuWorkloadPhaseIdle
 }
 
-func isPendingDueToGPU(pod *corev1.Pod, gpuResources map[string]int) bool {
+func isPendingDueToGPU(pod *corev1.Pod, workloadByPodUID map[types.UID]*kueuev1beta1.Workload, gpuResources map[string]int) bool {
 	for _, cond := range pod.Status.Conditions {
 		if cond.Type == corev1.PodScheduled && cond.Status == corev1.ConditionFalse && cond.Reason == "Unschedulable" {
 			msg := strings.ToLower(cond.Message)
 			for resourceName := range gpuResources {
 				if strings.Contains(msg, strings.ToLower("Insufficient "+resourceName)) {
+					return true
+				}
+			}
+		}
+	}
+
+	isSchedulingGated := false
+	for _, cond := range pod.Status.Conditions {
+		if cond.Type == corev1.PodScheduled &&
+			cond.Status == corev1.ConditionFalse &&
+			cond.Reason == "SchedulingGated" {
+			isSchedulingGated = true
+			break
+		}
+	}
+
+	if !isSchedulingGated {
+		return false
+	}
+
+	if pod.Labels["kueue.x-k8s.io/managed"] != "true" {
+		return false
+	}
+
+	wl := workloadByPodUID[pod.UID]
+	if wl == nil {
+		return false
+	}
+	for _, cond := range wl.Status.Conditions {
+		if cond.Type == "QuotaReserved" &&
+			cond.Status == metav1.ConditionFalse {
+
+			msg := strings.ToLower(cond.Message)
+
+			for resourceName := range gpuResources {
+				if strings.Contains(msg, strings.ToLower(resourceName)) {
 					return true
 				}
 			}
