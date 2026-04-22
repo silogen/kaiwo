@@ -1,0 +1,82 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: test-gpu-preemption-kueue-pressure
+spec:
+  concurrent: false
+  steps:
+  - name: create-victim-and-wait-idle
+    description: >
+      Create victim job under Kueue queue that gets admitted and becomes idle.
+    try:
+    - apply:
+        file: kueue-queue.yaml # defines ClusterQueue + LocalQueue with limited GPUs
+
+    - apply:
+        file: job-victim-kueue.yaml
+    - sleep:
+        duration: 20s
+
+    - assert:
+        timeout: 120s
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: GpuWorkload
+          spec:
+            workloadRef:
+              kind: Job
+              name: gpu-preemption-kueue-victim
+          status:
+            phase: Idle
+
+    - sleep:
+        duration: 20s
+
+    catch:
+    - script:
+        env:
+        - name: NS
+          value: ($namespace)
+        content: |
+          kubectl get workloads,pods,gpuworkloads -n "$NS" -o wide || true
+
+  - name: create-demand-and-verify-kueue-pressure
+    description: >
+      Create second job that cannot be admitted due to GPU quota. Verify Kueue Workload condition and controller PendingGpu phase.
+    try:
+    - apply:
+        file: job-demand-kueue.yaml
+
+    - assert:
+        resource:
+          apiVersion: kueue.x-k8s.io/v1beta1
+          kind: Workload
+          status:
+            conditions:
+            - type: QuotaReserved
+              status: "False"
+              (message contains 'amd.com/gpu'): true
+
+    - assert:
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: GpuWorkload
+          spec:
+            workloadRef:
+              kind: Job
+              name: gpu-preemption-kueue-victim
+          status:
+            phase: Preempted
+
+    catch:
+    - script:
+        env:
+        - name: NS
+          value: ($namespace)
+        content: |
+          echo "=== Pods ==="
+          kubectl get pods -n "$NS" -o wide
+          echo "=== Workloads ==="
+          kubectl get workloads -n "$NS" -o yaml
+          echo "=== GpuWorkloads ==="
+          kubectl get gpuworkloads -n "$NS" -o wide

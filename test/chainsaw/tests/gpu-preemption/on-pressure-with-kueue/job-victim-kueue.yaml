@@ -1,0 +1,46 @@
+# busybox + amd.com/gpu is intentional: the GPU is never used so the workload
+# stays Idle, making it a preemption victim when the demand job creates pressure.
+# ($node_gpus) is the max GPUs on the largest single node (detect-cluster-gpus step).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gpu-preemption-kueue-victim
+  annotations:
+    kaiwo.silogen.ai/gpu-preemption.policy: "OnPressure"
+    kaiwo.silogen.ai/gpu-preemption.enabled: "true"
+    kaiwo.silogen.ai/gpu-preemption.grace-period: "15s"
+  labels:
+    kueue.x-k8s.io/queue-name: qa-gpupressure
+spec:
+  template:
+    spec:
+      containers:
+      - name: workload
+        image: busybox:latest
+        command: ["sleep", "600"]
+        resources:
+          requests:
+            amd.com/gpu: "8"
+          limits:
+            amd.com/gpu: "8"
+      restartPolicy: Never
+
+---
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gpu-preemption-pressure-nonvictim
+spec:
+  template:
+    spec:
+      containers:
+      - name: workload
+        image: busybox:latest
+        command: ["sleep", "600"]
+        resources:
+          requests:
+            amd.com/gpu: "8"
+          limits:
+            amd.com/gpu: "8"
+      restartPolicy: Never

@@ -1,0 +1,24 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gpu-preemption-kueue-demand
+  annotations:
+    kaiwo.silogen.ai/gpu-preemption.enabled: "true"
+    kaiwo.silogen.ai/gpu-preemption.policy: "OnPressure"
+  labels:
+    kueue.x-k8s.io/queue-name: qa-gpupressure
+spec:
+  template:
+    spec:
+      # Pin to the victim's node so the demand is unschedulable while the
+      # victim holds the GPUs; after preemption the demand can schedule here.
+      containers:
+      - name: workload
+        image: busybox:latest
+        command: ["sleep", "600"]
+        resources:
+          requests:
+            amd.com/gpu: "8"
+          limits:
+            amd.com/gpu: "8"
+      restartPolicy: Never
