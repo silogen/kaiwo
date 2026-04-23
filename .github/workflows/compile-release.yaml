@@ -5,6 +5,10 @@ on:
     - "v*"
     - "*int-test"
 
+permissions:
+  contents: write
+  packages: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -16,15 +20,18 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.21'
+        go-version: '1.24'
     - name: Set up Helm
       uses: azure/setup-helm@v4.3.1
 
     - name: Extract version from tag
       shell: bash
       run: |
-        echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
-        echo "Using version: ${VERSION}"
+        VERSION="${GITHUB_REF#refs/tags/}"
+        CHART_VERSION="${VERSION#v}"
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
+        echo "CHART_VERSION=$CHART_VERSION" >> $GITHUB_ENV
+        echo "Using version: $VERSION (chart: $CHART_VERSION)"
 
     - name: Run build script for CLI
       shell: bash
@@ -60,16 +67,16 @@ jobs:
 
     - name: Package Helm chart
       run: |
-        make helm-release TAG=${{ env.VERSION }} CHART_VERSION=${{ env.VERSION }}
+        make helm-release TAG=${{ env.VERSION }} CHART_VERSION=${{ env.CHART_VERSION }}
 
     - name: Build CRDs
       run: |
-        kustomize build config/crd > crds.yaml
+        ./bin/kustomize build config/crd > crds.yaml
 
     - name: Push Helm chart to OCI registry
       run: |
         echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u $GITHUB_ACTOR --password-stdin
-        make helm-push-oci TAG=${{ env.VERSION }} CHART_VERSION=${{ env.VERSION }}
+        make helm-push-oci TAG=${{ env.VERSION }} CHART_VERSION=${{ env.CHART_VERSION }}
 
     - name: Upload install.yaml artifact
       uses: actions/upload-artifact@v4
@@ -116,16 +123,91 @@ jobs:
 
           ### Helm Install (from GitHub Releases)
           ```bash
-          curl -L https://github.com/${{ github.repository }}/releases/download/${{ env.VERSION }}/kaiwo-operator-${{ env.VERSION }}.tgz -o kaiwo-operator.tgz
+          curl -L https://github.com/${{ github.repository }}/releases/download/${{ env.VERSION }}/kaiwo-operator-${{ env.CHART_VERSION }}.tgz -o kaiwo-operator.tgz
           helm install kaiwo kaiwo-operator.tgz --namespace kaiwo-system --create-namespace
           ```
 
           ### Helm Install (from OCI Registry)
           ```bash
           helm install kaiwo oci://ghcr.io/${{ github.repository_owner }}/charts/kaiwo-operator \
-            --version ${{ env.VERSION }} --namespace kaiwo-system --create-namespace
+            --version ${{ env.CHART_VERSION }} --namespace kaiwo-system --create-namespace
           ```
 
           ### Docker Images
           - Operator: `ghcr.io/${{ github.repository_owner }}/kaiwo-operator:${{ env.VERSION }}`
+
+    - name: Create or update artifacts branch
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+        # Stash artifacts before switching branches
+        cp -r chart /tmp/chart-artifacts
+        cp crds.yaml /tmp/crds.yaml
+
+        # Create orphan branch
+        git checkout --orphan artifacts-temp || true
+
+        # Clear the index
+        git rm -rf --cached . || true
+
+        # Add the chart directory
+        rm -rf chart
+        cp -r /tmp/chart-artifacts chart
+        git add chart/
+
+        # Add the CRDs
+        mkdir -p crd
+        cp /tmp/crds.yaml crd/crds.yaml
+        git add crd/crds.yaml
+
+        # Create a README for the branch
+        cat > README.md << 'EOF'
+        # kaiwo
+
+        This branch contains the auto-generated Helm chart and CRDs for kaiwo-operator.
+
+        ## Installation
+
+        CRDs must be installed before the operator:
+
+        ```bash
+        # 1. Install CRDs
+        kubectl apply -f https://raw.githubusercontent.com/${{ github.repository }}/artifacts/crd/crds.yaml
+        kubectl wait --for=condition=Established crd --all --timeout=60s
+
+        # 2a. Install operator via Helm OCI (recommended)
+        helm install kaiwo oci://ghcr.io/${{ github.repository_owner }}/charts/kaiwo-operator \
+          --version ${{ env.CHART_VERSION }} --namespace kaiwo-system --create-namespace
+
+        # 2b. Or install from this branch
+        helm install kaiwo ./chart --namespace kaiwo-system --create-namespace
+        ```
+
+        Or clone this branch:
+
+        ```bash
+        git clone -b artifacts https://github.com/${{ github.repository }}.git kaiwo
+        cd kaiwo
+
+        kubectl apply -f crd/crds.yaml
+        kubectl wait --for=condition=Established crd --all --timeout=60s
+        helm install kaiwo ./chart --namespace kaiwo-system --create-namespace
+        ```
+
+        ## Source
+
+        Generated from tag: ${{ env.VERSION }} (commit: ${{ github.sha }})
+        EOF
+        git add README.md
+
+        # Commit
+        git commit -m "Release ${VERSION}" --allow-empty
+
+        # Force push to artifacts branch
+        git push origin HEAD:artifacts --force
+
+        # Tag the artifacts commit for version-specific checkout
+        git tag "artifacts-${VERSION}"
+        git push origin "artifacts-${VERSION}" --force
 
