@@ -50,6 +50,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
+	"sigs.k8s.io/kueue/pkg/constants"
 
 	configapi "github.com/silogen/kaiwo/apis/config/v1alpha1"
 	kaiwo "github.com/silogen/kaiwo/apis/kaiwo/v1alpha1"
@@ -102,6 +103,7 @@ func IsGpuPreemptionEnabled() bool {
 // +kubebuilder:rbac:groups=workload.codeflare.dev,resources=appwrappers,verbs=get;list;delete
 // +kubebuilder:rbac:groups=kaiwo.silogen.ai,resources=kaiwojobs;kaiwoservices,verbs=get;list;delete
 // +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch;create;update
+// +kubebuilder:rbac:groups=kueue.x-k8s.io,resources=workloads,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 type GpuWorkloadReconciler struct {
@@ -178,12 +180,13 @@ func (r *GpuWorkloadReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	workloadByPodUID := make(map[types.UID]*kueuev1beta1.Workload)
+	workloadByOwnerUID := make(map[types.UID]*kueuev1beta1.Workload)
 	for i := range wlList.Items {
 		wl := &wlList.Items[i]
 		for _, owner := range wl.OwnerReferences {
+			workloadByOwnerUID[owner.UID] = wl
 			if owner.Kind == "Pod" {
 				workloadByPodUID[owner.UID] = wl
-				break
 			}
 		}
 	}
@@ -208,7 +211,7 @@ func (r *GpuWorkloadReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	oldPhase := gw.Status.Phase
 
 	// Phase computation
-	phase := r.computePhase(&gw, ownedPods, workloadByPodUID, gpuCfg)
+	phase := r.computePhase(&gw, ownedPods, workloadByPodUID, workloadByOwnerUID, gpuCfg)
 	gw.Status.Phase = phase
 
 	// Update IdleSince tracking
@@ -250,10 +253,18 @@ func (r *GpuWorkloadReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	return ctrl.Result{}, nil
 }
 
-func (r *GpuWorkloadReconciler) computePhase(gw *kaiwo.GpuWorkload, pods []corev1.Pod, workloadByPodUID map[types.UID]*kueuev1beta1.Workload, gpuCfg configapi.KaiwoGpuPreemptionConfig) kaiwo.GpuWorkloadPhase {
+func (r *GpuWorkloadReconciler) computePhase(gw *kaiwo.GpuWorkload, pods []corev1.Pod, workloadByPodUID map[types.UID]*kueuev1beta1.Workload, workloadByOwnerUID map[types.UID]*kueuev1beta1.Workload, gpuCfg configapi.KaiwoGpuPreemptionConfig) kaiwo.GpuWorkloadPhase {
 	if len(pods) == 0 {
 		if gw.Status.Phase == "" {
 			return kaiwo.GpuWorkloadPhasePendingOther
+		}
+		// Kueue Job integration can suspend the Job before any Pods exist; the
+		// owning Workload still reports QuotaReserved=False when cluster GPU
+		// quota is exhausted.
+		if wl := workloadByOwnerUID[gw.Spec.WorkloadRef.UID]; wl != nil {
+			if isWorkloadPendingDueToGPUQuota(wl, gw.Spec.GpuResources) {
+				return kaiwo.GpuWorkloadPhasePendingGpu
+			}
 		}
 		// No pods but owner still exists (checked before this function) --
 		// keep the current phase and let the next reconcile sort it out.
@@ -313,7 +324,7 @@ func isPendingDueToGPU(pod *corev1.Pod, workloadByPodUID map[types.UID]*kueuev1b
 	for _, cond := range pod.Status.Conditions {
 		if cond.Type == corev1.PodScheduled &&
 			cond.Status == corev1.ConditionFalse &&
-			cond.Reason == "SchedulingGated" {
+			cond.Reason == corev1.PodReasonSchedulingGated {
 			isSchedulingGated = true
 			break
 		}
@@ -323,7 +334,7 @@ func isPendingDueToGPU(pod *corev1.Pod, workloadByPodUID map[types.UID]*kueuev1b
 		return false
 	}
 
-	if pod.Labels["kueue.x-k8s.io/managed"] != "true" {
+	if pod.Labels[constants.ManagedByKueueLabelKey] != constants.ManagedByKueueLabelValue {
 		return false
 	}
 
@@ -332,11 +343,32 @@ func isPendingDueToGPU(pod *corev1.Pod, workloadByPodUID map[types.UID]*kueuev1b
 		return false
 	}
 	for _, cond := range wl.Status.Conditions {
-		if cond.Type == "QuotaReserved" &&
+		if cond.Type == kueuev1beta1.WorkloadQuotaReserved &&
 			cond.Status == metav1.ConditionFalse {
 
 			msg := strings.ToLower(cond.Message)
 
+			for resourceName := range gpuResources {
+				if strings.Contains(msg, strings.ToLower(resourceName)) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// isWorkloadPendingDueToGPUQuota is true when Kueue has not reserved quota for
+// the Workload and the failure message implicates a tracked GPU resource. Used
+// when the integrated controller (e.g. Job) has not created Pods yet.
+func isWorkloadPendingDueToGPUQuota(wl *kueuev1beta1.Workload, gpuResources map[string]int) bool {
+	if wl == nil || len(gpuResources) == 0 {
+		return false
+	}
+	for _, cond := range wl.Status.Conditions {
+		if cond.Type == kueuev1beta1.WorkloadQuotaReserved &&
+			cond.Status == metav1.ConditionFalse {
+			msg := strings.ToLower(cond.Message)
 			for resourceName := range gpuResources {
 				if strings.Contains(msg, strings.ToLower(resourceName)) {
 					return true
@@ -1081,41 +1113,30 @@ func (r *GpuWorkloadReconciler) getTTL(gw *kaiwo.GpuWorkload, gpuCfg configapi.K
 	return val
 }
 
-// --- Pod Event Handling & Discovery ---
+// --- Pod / Kueue Workload event handling & GpuWorkload discovery ---
 
-func (r *GpuWorkloadReconciler) podToGpuWorkload(ctx context.Context, obj client.Object) []reconcile.Request {
-	logger := log.FromContext(ctx)
-	pod, ok := obj.(*corev1.Pod)
-	if !ok {
-		return nil
-	}
-
-	gpuResources := extractGpuResources(pod)
-	if len(gpuResources) == 0 {
-		return nil
-	}
-
-	rootResult, err := ResolveRootOwner(ctx, r.Client, pod.Namespace, pod.Name, "Pod", "v1", pod.UID)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			logger.V(1).Info("owner not found (likely deleted), skipping", "pod", pod.Name)
-		} else {
-			logger.Error(err, "failed to resolve root owner", "pod", pod.Name)
+func extractGpuResourcesFromUnstructuredOwner(obj *unstructured.Unstructured) map[string]int {
+	podSpecMap, found, err := unstructured.NestedMap(obj.Object, "spec", "template", "spec")
+	if !found || err != nil {
+		podSpecMap, found, err = unstructured.NestedMap(obj.Object, "spec")
+		if !found || err != nil {
+			return nil
 		}
+	}
+	var podSpec corev1.PodSpec
+	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(podSpecMap, &podSpec); err != nil {
 		return nil
 	}
+	return extractGpuResources(&corev1.Pod{Spec: podSpec})
+}
 
-	rootObj := &unstructured.Unstructured{}
-	rootObj.SetGroupVersionKind(gvkFromAPIVersionKind(rootResult.Ref.APIVersion, rootResult.Ref.Kind))
-	if err := r.Get(ctx, client.ObjectKey{Namespace: rootResult.Namespace, Name: rootResult.Ref.Name}, rootObj); err != nil {
-		logger.V(1).Info("could not fetch root owner", "error", err)
-		return nil
-	}
+func (r *GpuWorkloadReconciler) upsertGpuWorkloadForPreemption(ctx context.Context, rootResult *RootOwnerResult, rootObj *unstructured.Unstructured, gpuResources map[string]int, namespace string) []reconcile.Request {
+	logger := log.FromContext(ctx)
 
 	var nsAnnotations map[string]string
 	var ns corev1.Namespace
-	if err := r.Get(ctx, client.ObjectKey{Name: pod.Namespace}, &ns); err != nil {
-		logger.V(1).Info("could not fetch namespace for annotation lookup", "namespace", pod.Namespace, "error", err)
+	if err := r.Get(ctx, client.ObjectKey{Name: namespace}, &ns); err != nil {
+		logger.V(1).Info("could not fetch namespace for annotation lookup", "namespace", namespace, "error", err)
 	} else {
 		nsAnnotations = ns.GetAnnotations()
 	}
@@ -1128,7 +1149,7 @@ func (r *GpuWorkloadReconciler) podToGpuWorkload(ctx context.Context, obj client
 	gwName := GpuWorkloadName(rootResult.Ref.Kind, rootResult.Ref.Name, rootResult.Ref.UID)
 
 	var existing kaiwo.GpuWorkload
-	err = r.Get(ctx, client.ObjectKey{Namespace: rootResult.Namespace, Name: gwName}, &existing)
+	err := r.Get(ctx, client.ObjectKey{Namespace: rootResult.Namespace, Name: gwName}, &existing)
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			logger.Error(err, "failed to check for existing GpuWorkload")
@@ -1184,6 +1205,87 @@ func (r *GpuWorkloadReconciler) podToGpuWorkload(ctx context.Context, obj client
 	}
 
 	return []reconcile.Request{{NamespacedName: types.NamespacedName{Namespace: rootResult.Namespace, Name: gwName}}}
+}
+
+func (r *GpuWorkloadReconciler) podToGpuWorkload(ctx context.Context, obj client.Object) []reconcile.Request {
+	logger := log.FromContext(ctx)
+	pod, ok := obj.(*corev1.Pod)
+	if !ok {
+		return nil
+	}
+
+	gpuResources := extractGpuResources(pod)
+	if len(gpuResources) == 0 {
+		return nil
+	}
+
+	rootResult, err := ResolveRootOwner(ctx, r.Client, pod.Namespace, pod.Name, "Pod", "v1", pod.UID)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			logger.V(1).Info("owner not found (likely deleted), skipping", "pod", pod.Name)
+		} else {
+			logger.Error(err, "failed to resolve root owner", "pod", pod.Name)
+		}
+		return nil
+	}
+
+	rootObj := &unstructured.Unstructured{}
+	rootObj.SetGroupVersionKind(gvkFromAPIVersionKind(rootResult.Ref.APIVersion, rootResult.Ref.Kind))
+	if err := r.Get(ctx, client.ObjectKey{Namespace: rootResult.Namespace, Name: rootResult.Ref.Name}, rootObj); err != nil {
+		logger.V(1).Info("could not fetch root owner", "error", err)
+		return nil
+	}
+
+	return r.upsertGpuWorkloadForPreemption(ctx, rootResult, rootObj, gpuResources, pod.Namespace)
+}
+
+func (r *GpuWorkloadReconciler) workloadToGpuWorkload(ctx context.Context, obj client.Object) []reconcile.Request {
+	logger := log.FromContext(ctx)
+	wl, ok := obj.(*kueuev1beta1.Workload)
+	if !ok || wl == nil {
+		return nil
+	}
+
+	var ownerRef *metav1.OwnerReference
+	for i := range wl.OwnerReferences {
+		if wl.OwnerReferences[i].Controller != nil && *wl.OwnerReferences[i].Controller {
+			ownerRef = &wl.OwnerReferences[i]
+			break
+		}
+	}
+	if ownerRef == nil {
+		for i := range wl.OwnerReferences {
+			ownerRef = &wl.OwnerReferences[i]
+			break
+		}
+	}
+	if ownerRef == nil {
+		return nil
+	}
+
+	rootResult, err := ResolveRootOwner(ctx, r.Client, wl.Namespace, ownerRef.Name, ownerRef.Kind, ownerRef.APIVersion, ownerRef.UID)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			logger.V(1).Info("workload owner not found, skipping", "workload", wl.Name)
+		} else {
+			logger.Error(err, "failed to resolve root owner from Kueue Workload", "workload", wl.Name)
+		}
+		return nil
+	}
+
+	rootObj := &unstructured.Unstructured{}
+	rootObj.SetGroupVersionKind(gvkFromAPIVersionKind(rootResult.Ref.APIVersion, rootResult.Ref.Kind))
+	if err := r.Get(ctx, client.ObjectKey{Namespace: rootResult.Namespace, Name: rootResult.Ref.Name}, rootObj); err != nil {
+		logger.V(1).Info("could not fetch root owner for Workload", "workload", wl.Name, "error", err)
+		return nil
+	}
+
+	gpuResources := extractGpuResourcesFromUnstructuredOwner(rootObj)
+	if len(gpuResources) == 0 {
+		return nil
+	}
+
+	return r.upsertGpuWorkloadForPreemption(ctx, rootResult, rootObj, gpuResources, wl.Namespace)
 }
 
 func extractGpuResources(pod *corev1.Pod) map[string]int {
@@ -1314,5 +1416,6 @@ func (r *GpuWorkloadReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kaiwo.GpuWorkload{}).
 		Watches(&corev1.Pod{}, handler.EnqueueRequestsFromMapFunc(r.podToGpuWorkload)).
+		Watches(&kueuev1beta1.Workload{}, handler.EnqueueRequestsFromMapFunc(r.workloadToGpuWorkload)).
 		Complete(r)
 }
