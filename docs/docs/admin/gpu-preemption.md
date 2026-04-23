@@ -37,8 +37,6 @@ The controller resolves pod ownership by walking the `ownerReferences` chain. Th
 - `apps/v1` Deployments, ReplicaSets, StatefulSets
 - `ray.io/v1` RayClusters, RayJobs, RayServices
 - `kaiwo.silogen.ai/v1alpha1` KaiwoJobs, KaiwoServices
-- `aim.silogen.ai/v1alpha1` AIMServices
-- `aim.eai.amd.com/v1alpha1` AIMServices
 - `workload.codeflare.dev/v1beta2` AppWrappers
 
 For workloads owned by other resource types (e.g. CronJobs, DaemonSets, custom controllers), add `get` and `delete` permissions for those resources to the operator `ServiceAccount`. `get` is needed to resolve the owner chain and read annotations; `delete` is needed for preemption. Without `get`, the controller will log an RBAC error and skip the pod.

@@ -1,7 +1,0 @@
-apiVersion: aim.silogen.ai/v1alpha1
-kind: AIMService
-metadata:
-  name: default-template-service
-spec:
-  model:
-    ref: default-testing-llama-3-8b

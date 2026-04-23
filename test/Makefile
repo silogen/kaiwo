@@ -1,6 +1,5 @@
 # Test directories for different environments
-# Automated AIM tests are disabled for now
-KIND_DIRS = chainsaw/tests/standard chainsaw/tests/aim-ci
+KIND_DIRS = chainsaw/tests/standard
 
 # Values file configuration (can be overridden via env var)
 VALUES_FILE ?= values/base.yaml
@@ -38,8 +37,6 @@ substitute-values: ## Create runtime values file with environment variable subst
 .PHONY: test-kind
 test-kind: substitute-values ## Run tests against Kind cluster
 	kubectl apply -f configs/kaiwoconfig/local-kind.yaml
-	kubectl apply -f chainsaw/tests/aim/service/_shared/default-cluster-image.yaml
-	kubectl apply -f chainsaw/tests/aim/service/_shared/default-cluster-template.yaml
 	sleep 3
 	@PATH="$(shell pwd)/../builds:$$PATH" chainsaw test \
 	  --config ./chainsaw/configs/local.yaml \
