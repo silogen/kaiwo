@@ -1,0 +1,33 @@
+# KaiwoQueueConfig translation of the former raw Kueue objects:
+#   ResourceFlavor "default" + ClusterQueue "gpu-limited" + LocalQueue "qa-gpupressure".
+#
+# The controller creates one LocalQueue per (clusterQueue.name, namespace) entry;
+# the LocalQueue's metadata.name equals the ClusterQueue name. To get a LocalQueue
+# named "kaiwo", the ClusterQueue must be named "kaiwo" (not "gpu-limited").
+#
+# Chainsaw applies ($namespace) and ($node_gpus) from the test step outputs.
+apiVersion: kaiwo.silogen.ai/v1alpha1
+kind: KaiwoQueueConfig
+metadata:
+  name: kaiwo
+spec:
+  resourceFlavors:
+    - name: default
+      nodeLabels:
+        kaiwo/worker: "true"
+  clusterQueues:
+    - name: kaiwo
+      namespaces:
+        - ($namespace)
+      spec:
+        namespaceSelector: {}
+        queueingStrategy: BestEffortFIFO
+        resourceGroups:
+          - coveredResources:
+              - amd.com/gpu
+            flavors:
+              - name: default
+                resources:
+                  - name: amd.com/gpu
+                    nominalQuota: ($node_gpus)
+        stopPolicy: None

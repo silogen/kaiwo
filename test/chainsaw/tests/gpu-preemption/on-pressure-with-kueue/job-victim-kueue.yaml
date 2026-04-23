@@ -10,7 +10,7 @@ metadata:
     kaiwo.silogen.ai/gpu-preemption.enabled: "true"
     kaiwo.silogen.ai/gpu-preemption.grace-period: "15s"
   labels:
-    kueue.x-k8s.io/queue-name: qa-gpupressure
+    kueue.x-k8s.io/queue-name: kaiwo
 spec:
   template:
     spec:

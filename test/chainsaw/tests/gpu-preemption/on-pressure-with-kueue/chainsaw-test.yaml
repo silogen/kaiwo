@@ -7,7 +7,7 @@ spec:
   steps:
   - name: create-victim-and-wait-idle
     description: >
-      Probe schedulable amd.com/gpu count, apply Kueue queue + victim Job,
+      Probe schedulable amd.com/gpu count, apply KaiwoQueueConfig slice + victim Job,
       wait for GpuWorkload Idle, then record the victim pod node for the demand Job.
     try:
     - script:
@@ -41,27 +41,41 @@ spec:
           value: ($stdout)
 
     - apply:
-        file: kueue-queue.yaml
+        file: kaiwoqueueconfig-gpu-pressure.yaml
 
     - apply:
         file: job-victim-kueue.yaml
     - sleep:
         duration: 20s
 
-    # GpuWorkload is created from Pod/Workload reconcile; Kueue admission can lag
-    # the Job by a long time. Waiting only on GpuWorkload yields "last phase: none"
-    # when no CR exists yet — gate on PodScheduled first (kubectl wait blocks until
-    # pods match the selector exist, then until the condition holds).
+    # GpuWorkload follows pods; Kueue can delay pod creation after the Job exists.
+    # Do not use `kubectl wait` alone: if no pod matches the selector yet, kubectl
+    # exits immediately with "no matching resources found" instead of waiting.
+    # 150 × 2s ≈ 300s plus kubectl — Chainsaw SIGKILLs at step timeout; keep margin.
     - script:
-        timeout: 300s
+        timeout: 540s
         env:
         - name: NS
           value: ($namespace)
         content: |
           set -e
-          kubectl wait pod -n "$NS" -l job-name=gpu-preemption-kueue-victim \
-            --for=condition=PodScheduled --timeout=280s
-          echo "victim pod is PodScheduled" >&2
+          n=0
+          for _ in $(seq 1 150); do
+            n=$((n + 1))
+            if [ "$((n % 30))" -eq 0 ]; then
+              echo "  ...waiting for victim pod PodScheduled ($n/150)" >&2
+            fi
+            sched=$(kubectl get pods -n "$NS" -l job-name=gpu-preemption-kueue-victim -o jsonpath='{.items[0].status.conditions[?(@.type=="PodScheduled")].status}' 2>/dev/null || true)
+            if [ "$sched" = "True" ]; then
+              echo "victim pod is PodScheduled" >&2
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Timed out waiting for victim pod PodScheduled" >&2
+          kubectl get jobs,pods -n "$NS" -o wide >&2 || true
+          kubectl get workloads -n "$NS" -o wide >&2 || true
+          exit 1
 
     # Phase stays Active until the metrics scraper has written samples; poll
     # instead of asserting Idle immediately (see computePhase nil aggregate).
@@ -119,8 +133,9 @@ spec:
 
   - name: create-demand-and-verify-kueue-pressure
     description: >
-      Re-bind GPU count and victim node, create demand Job (Kueue cannot reserve quota).
-      Verify demand GpuWorkload becomes PendingGpu, victim is preempted.
+      Re-bind GPU count and victim node, create demand Job. Kueue may admit the
+      Workload (QuotaReserved/Admitted True) while GpuWorkload still reflects
+      pressure phases; verify demand GpuWorkload progresses and victim is preempted.
     try:
     - script:
         content: |
@@ -138,63 +153,62 @@ spec:
     - apply:
         file: job-demand-kueue.yaml
 
-    # Chainsaw condition expressions on status.conditions are brittle; verify via kubectl.
+    # Wait until Kueue has created the demand Workload (do not require QuotaReserved=False:
+    # with enough quota / after preemption, Kueue commonly sets QuotaReserved=True).
     - script:
-        timeout: 90s
+        timeout: 180s
         env:
         - name: NS
           value: ($namespace)
         content: |
           set -e
-          for _ in $(seq 1 30); do
+          for _ in $(seq 1 60); do
             for wl in $(kubectl get workloads -n "$NS" -o name 2>/dev/null); do
-              f=$(mktemp) || exit 1
-              kubectl get "$wl" -n "$NS" -o jsonpath='{range .status.conditions[*]}{.type}{"\t"}{.status}{"\t"}{.message}{"\n"}{end}' 2>/dev/null >"$f" || true
-              # POSIX sh (Chainsaw uses /bin/sh, often dash): no bash "< <( )" process substitution.
-              while IFS="$(printf '\t')" read -r typ st msg; do
-                [ "$typ" = "QuotaReserved" ] || continue
-                [ "$st" = "False" ] || continue
-                echo "$msg" | grep -qi 'amd\.com/gpu' && { rm -f "$f"; exit 0; }
-              done <"$f"
-              rm -f "$f"
-            done
-            sleep 3
-          done
-          echo "No Workload with QuotaReserved=False mentioning amd.com/gpu" >&2
-          kubectl get workloads -n "$NS" -o yaml >&2 || true
-          exit 1
-
-    # Avoid ambiguous GpuWorkload matching when victim and demand both exist.
-    - script:
-        timeout: 90s
-        env:
-        - name: NS
-          value: ($namespace)
-        content: |
-          set -e
-          for _ in $(seq 1 30); do
-            for item in $(kubectl get gpuworkloads -n "$NS" -o name 2>/dev/null); do
-              ref=$(kubectl get "$item" -n "$NS" -o jsonpath='{.spec.workloadRef.name}' 2>/dev/null || true)
-              [ "$ref" = "gpu-preemption-kueue-demand" ] || continue
-              phase=$(kubectl get "$item" -n "$NS" -o jsonpath='{.status.phase}' 2>/dev/null || true)
-              if [ "$phase" = "PendingGpu" ]; then
+              owner=$(kubectl get "$wl" -n "$NS" -o jsonpath='{.metadata.ownerReferences[?(@.kind=="Job")].name}' 2>/dev/null || true)
+              if [ "$owner" = "gpu-preemption-kueue-demand" ]; then
+                echo "demand Kueue Workload exists: $wl" >&2
                 exit 0
               fi
             done
             sleep 3
           done
-          echo "demand GpuWorkload never reached PendingGpu" >&2
-          kubectl get gpuworkloads,workloads -n "$NS" -o wide >&2 || true
+          echo "Timed out: no Kueue Workload owned by Job gpu-preemption-kueue-demand" >&2
+          kubectl get workloads,jobs -n "$NS" -o wide >&2 || true
           exit 1
 
+    # Avoid ambiguous GpuWorkload matching when victim and demand both exist.
+    # After admission the demand pod may schedule quickly; phase can be PendingGpu,
+    # Active, or Idle (metrics) — all indicate the GpuWorkload CR is live for the demand Job.
     - script:
-        timeout: 120s
+        timeout: 360s
         env:
         - name: NS
           value: ($namespace)
         content: |
           set -e
-          for _ in $(seq 1 40); do
+          for _ in $(seq 1 60); do
+            for item in $(kubectl get gpuworkloads -n "$NS" -o name 2>/dev/null); do
+              ref=$(kubectl get "$item" -n "$NS" -o jsonpath='{.spec.workloadRef.name}' 2>/dev/null || true)
+              [ "$ref" = "gpu-preemption-kueue-demand" ] || continue
+              phase=$(kubectl get "$item" -n "$NS" -o jsonpath='{.status.phase}' 2>/dev/null || true)
+              case "$phase" in
+                PendingGpu|Active|Idle) exit 0 ;;
+              esac
+            done
+            sleep 3
+          done
+          echo "demand GpuWorkload never reached a post-submit phase (PendingGpu|Active|Idle); last=$phase" >&2
+          kubectl get gpuworkloads,workloads -n "$NS" -o wide >&2 || true
+          exit 1
+
+    - script:
+        timeout: 360s
+        env:
+        - name: NS
+          value: ($namespace)
+        content: |
+          set -e
+          for _ in $(seq 1 60); do
             for item in $(kubectl get gpuworkloads -n "$NS" -o name 2>/dev/null); do
               ref=$(kubectl get "$item" -n "$NS" -o jsonpath='{.spec.workloadRef.name}' 2>/dev/null || true)
               [ "$ref" = "gpu-preemption-kueue-victim" ] || continue

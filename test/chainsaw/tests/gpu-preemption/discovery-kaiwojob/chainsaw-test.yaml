@@ -13,8 +13,6 @@ spec:
       running in vcluster dev environments.
     try:
     - apply:
-        file: kueue-queue.yaml
-    - apply:
         file: kaiwojob.yaml
 
     # GpuWorkload follows qualifying GPU pods; KaiwoJob can stay PENDING until the operator

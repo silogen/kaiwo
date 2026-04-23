@@ -13,8 +13,6 @@ spec:
       may prevent the pod from running in vcluster dev environments.
     try:
     - apply:
-        file: kueue-queue.yaml
-    - apply:
         file: kaiwoservice.yaml
 
     # GpuWorkload is created only after a qualifying GPU pod exists (Pod watch). If the
