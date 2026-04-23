@@ -1,4 +1,4 @@
-apiVersion: kueue.x-k8s.io/v1beta2
+apiVersion: kueue.x-k8s.io/v1beta1
 kind: ResourceFlavor
 metadata:
   name: default
@@ -20,7 +20,7 @@ spec:
     - name: default
       resources:
       - name: amd.com/gpu
-        nominalQuota: 8
+        nominalQuota: ($node_gpus)
 
 ---
 apiVersion: kueue.x-k8s.io/v1beta1

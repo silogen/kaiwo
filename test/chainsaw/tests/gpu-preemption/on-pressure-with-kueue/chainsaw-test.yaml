@@ -7,10 +7,41 @@ spec:
   steps:
   - name: create-victim-and-wait-idle
     description: >
-      Create victim job under Kueue queue that gets admitted and becomes idle.
+      Probe schedulable amd.com/gpu count, apply Kueue queue + victim Job,
+      wait for GpuWorkload Idle, then record the victim pod node for the demand Job.
     try:
+    - script:
+        timeout: 90s
+        env:
+        - name: NS
+          value: ($namespace)
+        content: |
+          max_alloc=$(kubectl get nodes -o jsonpath='{range .items[*]}{.status.allocatable.amd\.com/gpu}{"\n"}{end}' | awk 'NF{if($1+0>m)m=$1+0}END{printf "%d",m}')
+          if [ "$max_alloc" -eq 0 ] 2>/dev/null; then
+            echo "ERROR: no amd.com/gpu resources found in cluster" >&2
+            exit 1
+          fi
+          for n in $(seq "$max_alloc" -1 1); do
+            kubectl delete pod gpu-probe-kueue -n "$NS" --ignore-not-found --grace-period=1 >/dev/null 2>&1
+            OVR=$(printf '{"spec":{"containers":[{"name":"p","image":"busybox","command":["sleep","300"],"resources":{"requests":{"amd.com/gpu":"%d"},"limits":{"amd.com/gpu":"%d"}}}]}}' "$n" "$n")
+            kubectl run gpu-probe-kueue -n "$NS" --image=busybox --restart=Never --overrides="$OVR" >/dev/null 2>&1
+            if kubectl wait pod/gpu-probe-kueue -n "$NS" --for=condition=PodScheduled --timeout=10s >/dev/null 2>&1; then
+              kubectl delete pod/gpu-probe-kueue -n "$NS" --ignore-not-found --grace-period=1 >/dev/null 2>&1
+              mkdir -p /tmp/chainsaw-on-pressure-kueue
+              printf "%d" "$n" > /tmp/chainsaw-on-pressure-kueue/node_gpus
+              printf "%d" "$n"
+              exit 0
+            fi
+          done
+          kubectl delete pod/gpu-probe-kueue -n "$NS" --ignore-not-found --grace-period=1 >/dev/null 2>&1
+          echo "ERROR: no schedulable GPU count found" >&2
+          exit 1
+        outputs:
+        - name: node_gpus
+          value: ($stdout)
+
     - apply:
-        file: kueue-queue.yaml # defines ClusterQueue + LocalQueue with limited GPUs
+        file: kueue-queue.yaml
 
     - apply:
         file: job-victim-kueue.yaml
@@ -29,6 +60,20 @@ spec:
           status:
             phase: Idle
 
+    - script:
+        env:
+        - name: NS
+          value: ($namespace)
+        content: |
+          NODE=$(kubectl get pods -n "$NS" -l job-name=gpu-preemption-kueue-victim -o jsonpath='{.items[0].spec.nodeName}')
+          printf "%s" "$NODE" > /tmp/chainsaw-on-pressure-kueue/victim_node
+          printf "%s" "$NODE"
+        outputs:
+        - name: victim_node
+          value: ($stdout)
+
+    # Must exceed grace-period (15s in job-victim-kueue.yaml) so the idle timer
+    # expires before the demand Job is applied in the next step.
     - sleep:
         duration: 20s
 
@@ -42,12 +87,27 @@ spec:
 
   - name: create-demand-and-verify-kueue-pressure
     description: >
-      Create second job that cannot be admitted due to GPU quota. Verify Kueue Workload condition and controller PendingGpu phase.
+      Re-bind GPU count and victim node, create demand Job (Kueue cannot reserve quota).
+      Verify demand GpuWorkload becomes PendingGpu, victim is preempted.
     try:
+    - script:
+        content: |
+          printf "%s" "$(cat /tmp/chainsaw-on-pressure-kueue/node_gpus)"
+        outputs:
+        - name: node_gpus
+          value: ($stdout)
+    - script:
+        content: |
+          printf "%s" "$(cat /tmp/chainsaw-on-pressure-kueue/victim_node)"
+        outputs:
+        - name: victim_node
+          value: ($stdout)
+
     - apply:
         file: job-demand-kueue.yaml
 
     - assert:
+        timeout: 90s
         resource:
           apiVersion: kueue.x-k8s.io/v1beta1
           kind: Workload
@@ -58,6 +118,19 @@ spec:
               (message contains 'amd.com/gpu'): true
 
     - assert:
+        timeout: 90s
+        resource:
+          apiVersion: kaiwo.silogen.ai/v1alpha1
+          kind: GpuWorkload
+          spec:
+            workloadRef:
+              kind: Job
+              name: gpu-preemption-kueue-demand
+          status:
+            phase: PendingGpu
+
+    - assert:
+        timeout: 120s
         resource:
           apiVersion: kaiwo.silogen.ai/v1alpha1
           kind: GpuWorkload
