@@ -14,6 +14,28 @@ spec:
     try:
     - apply:
         file: kaiwojob.yaml
+
+    - script:
+        timeout: 180s
+        env:
+        - name: NS
+          value: ($namespace)
+        content: |
+          set -e
+          for _ in $(seq 1 60); do
+            for item in $(kubectl get gpuworkloads -n "$NS" -o name 2>/dev/null); do
+              ref=$(kubectl get "$item" -n "$NS" -o jsonpath='{.spec.workloadRef.name}' 2>/dev/null || true)
+              kind=$(kubectl get "$item" -n "$NS" -o jsonpath='{.spec.workloadRef.kind}' 2>/dev/null || true)
+              if [ "$ref" = "gpu-preemption-discover-kaiwojob" ] && [ "$kind" = "KaiwoJob" ]; then
+                exit 0
+              fi
+            done
+            sleep 3
+          done
+          echo "GpuWorkload for KaiwoJob gpu-preemption-discover-kaiwojob never appeared" >&2
+          kubectl get gpuworkloads,kaiwojobs,jobs,pods -n "$NS" -o wide >&2 || true
+          exit 1
+
     - assert:
         resource:
           apiVersion: kaiwo.silogen.ai/v1alpha1

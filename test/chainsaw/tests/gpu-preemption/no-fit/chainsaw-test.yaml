@@ -6,20 +6,55 @@ spec:
   concurrent: false
   steps:
   - name: idle-victim
-    description: Deploy victim Job with 1 GPU and wait for it to become idle past grace-period
+    description: >
+      Deploy victim Job; wait for GpuWorkload (pod + operator lag) then Idle
+      (metrics), then sleep past grace before the demand step.
     try:
     - apply:
         file: job-victim.yaml
-    - assert:
-        resource:
-          apiVersion: kaiwo.silogen.ai/v1alpha1
-          kind: GpuWorkload
-          spec:
-            workloadRef:
-              kind: Job
-              name: gpu-preemption-nofit-victim
-          status:
-            phase: Idle
+
+    - script:
+        timeout: 360s
+        env:
+        - name: NS
+          value: ($namespace)
+        content: |
+          set -e
+          for _ in $(seq 1 60); do
+            for item in $(kubectl get gpuworkloads -n "$NS" -o name 2>/dev/null); do
+              ref=$(kubectl get "$item" -n "$NS" -o jsonpath='{.spec.workloadRef.name}' 2>/dev/null || true)
+              if [ "$ref" = "gpu-preemption-nofit-victim" ]; then
+                exit 0
+              fi
+            done
+            sleep 3
+          done
+          echo "GpuWorkload for gpu-preemption-nofit-victim never appeared" >&2
+          kubectl get jobs,pods,gpuworkloads -n "$NS" -o wide >&2 || true
+          exit 1
+
+    - script:
+        timeout: 360s
+        env:
+        - name: NS
+          value: ($namespace)
+        content: |
+          set -e
+          for _ in $(seq 1 60); do
+            for item in $(kubectl get gpuworkloads -n "$NS" -o name 2>/dev/null); do
+              ref=$(kubectl get "$item" -n "$NS" -o jsonpath='{.spec.workloadRef.name}' 2>/dev/null || true)
+              [ "$ref" = "gpu-preemption-nofit-victim" ] || continue
+              phase=$(kubectl get "$item" -n "$NS" -o jsonpath='{.status.phase}' 2>/dev/null || true)
+              if [ "$phase" = "Idle" ]; then
+                exit 0
+              fi
+            done
+            sleep 3
+          done
+          echo "victim GpuWorkload never reached Idle" >&2
+          kubectl get gpuworkloads,jobs,pods -n "$NS" -o wide >&2 || true
+          exit 1
+
     - sleep:
         duration: 20s
     catch:
@@ -38,50 +73,60 @@ spec:
     try:
     - apply:
         file: job-demand.yaml
-    - assert:
-        resource:
-          apiVersion: kaiwo.silogen.ai/v1alpha1
-          kind: GpuWorkload
-          spec:
-            workloadRef:
-              kind: Job
-              name: gpu-preemption-nofit-demand
-          status:
-            phase: PendingGpu
+    # Chainsaw assert without metadata.name matches a single GpuWorkload in the
+    # namespace (often the victim). Wait explicitly for the demand CR + phase.
+    - script:
+        timeout: 360s
+        env:
+        - name: NS
+          value: ($namespace)
+        content: |
+          set -e
+          for _ in $(seq 1 60); do
+            for item in $(kubectl get gpuworkloads -n "$NS" -o name 2>/dev/null); do
+              ref=$(kubectl get "$item" -n "$NS" -o jsonpath='{.spec.workloadRef.name}' 2>/dev/null || true)
+              [ "$ref" = "gpu-preemption-nofit-demand" ] || continue
+              phase=$(kubectl get "$item" -n "$NS" -o jsonpath='{.status.phase}' 2>/dev/null || true)
+              if [ "$phase" = "PendingGpu" ]; then
+                exit 0
+              fi
+            done
+            sleep 3
+          done
+          echo "GpuWorkload for gpu-preemption-nofit-demand never reached PendingGpu" >&2
+          kubectl get gpuworkloads -n "$NS" -o wide >&2 || true
+          exit 1
     # Wait long enough for multiple evaluation cycles past grace-period (15s)
     # to prove the victim is NOT preempted despite the pending demand.
     - sleep:
         duration: 30s
-    - error:
-        resource:
-          apiVersion: kaiwo.silogen.ai/v1alpha1
-          kind: GpuWorkload
-          spec:
-            workloadRef:
-              kind: Job
-              name: gpu-preemption-nofit-victim
-          status:
-            phase: Preempting
-    - error:
-        resource:
-          apiVersion: kaiwo.silogen.ai/v1alpha1
-          kind: GpuWorkload
-          spec:
-            workloadRef:
-              kind: Job
-              name: gpu-preemption-nofit-victim
-          status:
-            phase: Preempted
-    - assert:
-        resource:
-          apiVersion: kaiwo.silogen.ai/v1alpha1
-          kind: GpuWorkload
-          spec:
-            workloadRef:
-              kind: Job
-              name: gpu-preemption-nofit-victim
-          status:
-            phase: Idle
+    - script:
+        timeout: 60s
+        env:
+        - name: NS
+          value: ($namespace)
+        content: |
+          set -e
+          for item in $(kubectl get gpuworkloads -n "$NS" -o name 2>/dev/null); do
+            ref=$(kubectl get "$item" -n "$NS" -o jsonpath='{.spec.workloadRef.name}' 2>/dev/null || true)
+            [ "$ref" = "gpu-preemption-nofit-victim" ] || continue
+            phase=$(kubectl get "$item" -n "$NS" -o jsonpath='{.status.phase}' 2>/dev/null || true)
+            if [ "$phase" = "Preempting" ] || [ "$phase" = "Preempted" ]; then
+              echo "FAIL: victim GpuWorkload reached $phase (should stay Idle with no-fit demand)" >&2
+              kubectl get "$item" -n "$NS" -o yaml >&2 || true
+              exit 1
+            fi
+            if [ "$phase" != "Idle" ]; then
+              echo "FAIL: expected victim GpuWorkload phase Idle, got ${phase:-empty}" >&2
+              kubectl get "$item" -n "$NS" -o yaml >&2 || true
+              exit 1
+            fi
+            echo "PASS: victim GpuWorkload still Idle, not preempted"
+            exit 0
+          done
+          echo "FAIL: no GpuWorkload for gpu-preemption-nofit-victim" >&2
+          kubectl get gpuworkloads -n "$NS" -o wide >&2 || true
+          exit 1
     catch:
     - command:
         entrypoint: kaiwo-dev

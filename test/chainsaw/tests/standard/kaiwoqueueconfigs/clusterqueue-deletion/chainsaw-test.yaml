@@ -67,50 +67,62 @@ spec:
     # We repeat the delete+trigger cycle three times so that each iteration
     # independently re-creates the race window.
     #
-    # timeout override: 1s watcher start + 3 × ~21s iterations (15s wait + 5s sleep +
-    # overhead) + 2s flush ≈ 66s; pad to 90s for slower clusters.
+    # Per iteration: delete (non-blocking) + wait-for-delete (capped) + annotate +
+    # tight status poll + settle sleep. 3 iterations ≈ 3×(30+20+5)s plus margin.
+    # Avoid kubectl delete --wait (default): it can block indefinitely on stuck
+    # finalizers. Avoid kubectl get --watch in background: it can hang teardown.
     - script:
-        timeout: 90s
+        timeout: 180s
         content: |
+          set -eu
           WATCH_LOG=$(mktemp)
+          trap 'rm -f "$WATCH_LOG"' EXIT
 
-          # Watch the KaiwoQueueConfig status continuously in the background.
-          # kubectl get -w outputs one line per status change (plus an initial line),
-          # so any FAILED transition will appear in the log even if it lasts < 1 s.
-          kubectl get kaiwoqueueconfig kaiwo --watch --no-headers > "$WATCH_LOG" 2>&1 &
-          WATCH_PID=$!
-          sleep 1  # give the watch connection time to establish
+          LAST_LINE=""
+          log_line_if_changed() {
+            line="$1"
+            if [ "$line" != "$LAST_LINE" ]; then
+              echo "$line" >> "$WATCH_LOG"
+              LAST_LINE=$line
+            fi
+          }
 
           for i in 1 2 3; do
             echo "=== Iteration $i: deleting ClusterQueue fizz ==="
-            kubectl delete clusterqueue fizz --ignore-not-found
+            # Do not wait for deletion to finish here — that can hang CI for hours
+            # if finalizers or GC misbehave. Cap disappearance with kubectl wait.
+            kubectl delete clusterqueue fizz --ignore-not-found --wait=false
 
-            # Wait until the object is fully gone so the next reconcile genuinely
-            # encounters a missing ClusterQueue.
-            kubectl wait --for=delete clusterqueue/fizz --timeout=15s 2>/dev/null || true
+            kubectl wait --for=delete clusterqueue/fizz --timeout=30s 2>/dev/null || true
 
             echo "  Triggering reconcile via annotation..."
             kubectl annotate kaiwoqueueconfig kaiwo test/reconcile-trigger="$i" --overwrite
 
-            # Allow enough time for the reconcile (and any follow-up reconcile) to
-            # complete before moving on to the next iteration.
+            # Poll frequently so a brief FAILED is still observed (no long-lived watch).
+            end=$(( $(date +%s) + 20 ))
+            while [ "$(date +%s)" -lt "$end" ]; do
+              line=$(kubectl get kaiwoqueueconfig kaiwo --no-headers 2>/dev/null || echo "kaiwo ERROR")
+              log_line_if_changed "$line"
+              case "$line" in
+                *FAILED*)
+                  echo "FAIL: KaiwoQueueConfig entered FAILED state (transient or persistent)"
+                  exit 1
+                  ;;
+              esac
+              sleep 0.25
+            done
+
             sleep 5
           done
-
-          # Stop the watcher and let its buffer flush.
-          kill "$WATCH_PID" 2>/dev/null || true
-          sleep 1
 
           echo "Status transitions observed during test:"
           cat "$WATCH_LOG"
 
           if grep -q "FAILED" "$WATCH_LOG"; then
             echo "FAIL: KaiwoQueueConfig entered FAILED state (transient or persistent)"
-            rm -f "$WATCH_LOG"
             exit 1
           fi
 
-          rm -f "$WATCH_LOG"
           echo "PASS: KaiwoQueueConfig remained READY across all reconcile cycles"
 
     # ── Part 3: Recovery ────────────────────────────────────────────────────────────
@@ -155,6 +167,8 @@ spec:
     # Restore the cluster: delete the test-specific KaiwoQueueConfig so the operator
     # recreates the default, and remove the fixed test namespace.
     - script:
-        content: kubectl delete kaiwoqueueconfig kaiwo --ignore-not-found
+        timeout: 120s
+        content: kubectl delete kaiwoqueueconfig kaiwo --ignore-not-found --timeout=120s
     - script:
-        content: kubectl delete namespace cq-deletion-test --ignore-not-found
+        timeout: 120s
+        content: kubectl delete namespace cq-deletion-test --ignore-not-found --timeout=120s

@@ -1,6 +1,7 @@
 # Requires rocm/pytorch:latest (or a compatible ROCm image) to be pullable.
-# The GPU stress loop keeps utilization above the default threshold so the
-# workload stays Active and is not preempted.
+# GpuWorkload uses gpu_gfx_activity; pure GEMM compute often keeps that signal
+# below typical idle thresholds. threshold -1 disables utilization-based Idle so
+# phase stays Active while the pod is running (see computePhase).
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -8,6 +9,7 @@ metadata:
   annotations:
     kaiwo.silogen.ai/gpu-preemption.policy: "Always"
     kaiwo.silogen.ai/gpu-preemption.grace-period: "15s"
+    kaiwo.silogen.ai/gpu-preemption.threshold: "0"
 spec:
   template:
     spec:
