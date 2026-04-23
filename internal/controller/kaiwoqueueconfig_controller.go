@@ -40,6 +40,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -224,13 +225,34 @@ func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, que
 		logger.Error(err, "Failed to list LocalQueues")
 		return err
 	}
+
+	topologyAPIUnavailable := false
 	if err := r.List(ctx, existingTopologies); err != nil {
-		logger.Error(err, "Failed to list Topologies")
-		return err
+		// Clusters may run Kueue without the Topology CRD (older charts, trimmed installs,
+		// or CRD version skew). Listing fails with a "no matches for kind" error — treat
+		// as "no topologies" and sync ResourceFlavors without topology references so the
+		// operator does not wedge KaiwoQueueConfig in FAILED.
+		if meta.IsNoMatchError(err) {
+			logger.Info("Kueue Topology API is not available; skipping Topology sync and omitting topology references on ResourceFlavors",
+				"error", err)
+			topologyAPIUnavailable = true
+			existingTopologies = &kueuev1alpha1.TopologyList{}
+		} else {
+			logger.Error(err, "Failed to list Topologies")
+			return err
+		}
 	}
 
-	success := r.syncTopologies(ctx, queueConfig, existingTopologies)
-	success = r.syncResourceFlavors(ctx, queueConfig, existingFlavors) && success
+	flavorSpecs := queueConfig.Spec.ResourceFlavors
+	if topologyAPIUnavailable {
+		flavorSpecs = stripTopologyFromResourceFlavors(queueConfig.Spec.ResourceFlavors)
+	}
+
+	success := true
+	if !topologyAPIUnavailable {
+		success = r.syncTopologies(ctx, queueConfig, existingTopologies)
+	}
+	success = r.syncResourceFlavors(ctx, queueConfig, existingFlavors, flavorSpecs) && success
 	success = r.syncClusterQueues(ctx, queueConfig, existingQueues) && success
 	success = r.syncLocalQueues(ctx, queueConfig, existingLocalQueues) && success
 	success = r.syncWorkloadPriorityClasses(ctx, queueConfig, existingPriorityClasses) && success
@@ -242,11 +264,20 @@ func (r *KaiwoQueueConfigReconciler) SyncKueueResources(ctx context.Context, que
 	return fmt.Errorf("failed to sync some Kueue resources")
 }
 
-func (r *KaiwoQueueConfigReconciler) syncResourceFlavors(ctx context.Context, queueConfig *kaiwo.KaiwoQueueConfig, existingFlavors *kueuev1beta1.ResourceFlavorList) bool {
+func stripTopologyFromResourceFlavors(in []kaiwo.ResourceFlavorSpec) []kaiwo.ResourceFlavorSpec {
+	out := make([]kaiwo.ResourceFlavorSpec, len(in))
+	for i := range in {
+		out[i] = in[i]
+		out[i].TopologyName = ""
+	}
+	return out
+}
+
+func (r *KaiwoQueueConfigReconciler) syncResourceFlavors(ctx context.Context, queueConfig *kaiwo.KaiwoQueueConfig, existingFlavors *kueuev1beta1.ResourceFlavorList, kaiwoFlavorSpecs []kaiwo.ResourceFlavorSpec) bool {
 	logger := log.FromContext(ctx)
 
 	success := true
-	expectedFlavors := controllerutils.ConvertKaiwoToKueueResourceFlavors(queueConfig.Spec.ResourceFlavors)
+	expectedFlavors := controllerutils.ConvertKaiwoToKueueResourceFlavors(kaiwoFlavorSpecs)
 	existingFlavorMap := make(map[string]kueuev1beta1.ResourceFlavor)
 
 	for _, kueueFlavor := range expectedFlavors {
