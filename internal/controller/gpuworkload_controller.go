@@ -297,12 +297,18 @@ func (r *GpuWorkloadReconciler) computePhase(gw *kaiwo.GpuWorkload, pods []corev
 	aggUtil := r.computeAggregatedUtilization(gw, gpuCfg)
 	gw.Status.AggregatedUtilization = aggUtil
 
-	if aggUtil == nil {
-		return kaiwo.GpuWorkloadPhaseActive
+	// No samples yet (scraper interval, exporter labels, etc.). Treat as 0% for
+	// phase/threshold only so a running workload is not stuck in Active until
+	// the first scrape; leave aggregatedUtilization nil so UIs do not show a
+	// misleading numeric.
+	effectiveUtil := aggUtil
+	var unknownUtil float64
+	if effectiveUtil == nil {
+		effectiveUtil = &unknownUtil
 	}
 
 	threshold := r.getThreshold(gw, gpuCfg)
-	if *aggUtil >= threshold {
+	if *effectiveUtil >= threshold {
 		return kaiwo.GpuWorkloadPhaseActive
 	}
 	return kaiwo.GpuWorkloadPhaseIdle
