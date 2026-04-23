@@ -1,0 +1,31 @@
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ResourceFlavor
+metadata:
+  name: default
+spec:
+  nodeLabels:
+    kaiwo/worker: "true"
+
+---
+
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ClusterQueue
+metadata:
+  name: kaiwo
+spec:
+  namespaceSelector: {}
+  resourceGroups:
+  - coveredResources: ["amd.com/gpu"]
+    flavors:
+    - name: default
+      resources:
+      - name: amd.com/gpu
+        nominalQuota: 1
+
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: LocalQueue
+metadata:
+  name: kaiwo
+spec:
+  clusterQueue: kaiwo

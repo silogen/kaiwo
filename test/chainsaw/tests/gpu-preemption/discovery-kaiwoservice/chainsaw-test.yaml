@@ -13,16 +13,27 @@ spec:
       may prevent the pod from running in vcluster dev environments.
     try:
     - apply:
+        file: kueue-queue.yaml
+    - apply:
         file: kaiwoservice.yaml
 
+    # GpuWorkload is created only after a qualifying GPU pod exists (Pod watch). If the
+    # KaiwoService stays PENDING, the operator has not yet produced pods — give CI time
+    # (image pull, quota, etc.). 120 × 3s ≈ 360s sleep + kubectl → keep step timeout above that.
     - script:
-        timeout: 180s
+        timeout: 540s
         env:
         - name: NS
           value: ($namespace)
         content: |
           set -e
-          for _ in $(seq 1 60); do
+          n=0
+          for _ in $(seq 1 120); do
+            n=$((n + 1))
+            if [ "$((n % 20))" -eq 0 ]; then
+              kw=$(kubectl get kaiwoservice gpu-preemption-discover-kwsvc -n "$NS" -o jsonpath='{.status.status}' 2>/dev/null || true)
+              echo "  ...still waiting for GpuWorkload (KaiwoService.status=$kw, iteration $n/120)" >&2
+            fi
             for item in $(kubectl get gpuworkloads -n "$NS" -o name 2>/dev/null); do
               ref=$(kubectl get "$item" -n "$NS" -o jsonpath='{.spec.workloadRef.name}' 2>/dev/null || true)
               kind=$(kubectl get "$item" -n "$NS" -o jsonpath='{.spec.workloadRef.kind}' 2>/dev/null || true)
@@ -32,8 +43,11 @@ spec:
             done
             sleep 3
           done
-          echo "GpuWorkload for KaiwoService gpu-preemption-discover-kwsvc never appeared" >&2
+          echo "Timed out: no GpuWorkload for KaiwoService gpu-preemption-discover-kwsvc yet." >&2
+          echo "  (GpuWorkload is created after GPU pods exist; PENDING KaiwoService usually means no pods.)" >&2
+          kubectl get kaiwoservice gpu-preemption-discover-kwsvc -n "$NS" -o wide >&2 || true
           kubectl get gpuworkloads,kaiwoservices,deployments,pods -n "$NS" -o wide >&2 || true
+          kubectl describe kaiwoservice gpu-preemption-discover-kwsvc -n "$NS" 2>/dev/null | tail -n 80 >&2 || true
           exit 1
 
     - assert:
@@ -53,3 +67,4 @@ spec:
           value: ($namespace)
         content: |
           kubectl get gpuworkloads,kaiwoservices,deployments,pods -n "$NS" -o wide 2>&1 || true
+          kubectl describe kaiwoservice gpu-preemption-discover-kwsvc -n "$NS" 2>&1 | tail -n 120 || true

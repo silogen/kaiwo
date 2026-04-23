@@ -48,23 +48,37 @@ spec:
     - sleep:
         duration: 20s
 
+    # GpuWorkload is created from Pod/Workload reconcile; Kueue admission can lag
+    # the Job by a long time. Waiting only on GpuWorkload yields "last phase: none"
+    # when no CR exists yet — gate on PodScheduled first (kubectl wait blocks until
+    # pods match the selector exist, then until the condition holds).
+    - script:
+        timeout: 300s
+        env:
+        - name: NS
+          value: ($namespace)
+        content: |
+          set -e
+          kubectl wait pod -n "$NS" -l job-name=gpu-preemption-kueue-victim \
+            --for=condition=PodScheduled --timeout=280s
+          echo "victim pod is PodScheduled" >&2
+
     # Phase stays Active until the metrics scraper has written samples; poll
     # instead of asserting Idle immediately (see computePhase nil aggregate).
-    # Worst case: 60 iterations × 3s sleep ≈ 177s plus kubectl per loop — must stay
-    # below the script timeout or Chainsaw SIGKILLs the shell (looks like flaky Idle).
+    # Worst case: 80 × 3s sleep + kubectl — keep script timeout above ~240s + slack.
     - script:
-        timeout: 360s
+        timeout: 420s
         env:
         - name: NS
           value: ($namespace)
         content: |
           set -e
           p=""
-          for i in $(seq 1 60); do
+          for _ in $(seq 1 80); do
             for item in $(kubectl get gpuworkloads -n "$NS" -o name 2>/dev/null); do
-              ref=$(kubectl get "$item" -n "$NS" -o jsonpath='{.spec.workloadRef.name}')
+              ref=$(kubectl get "$item" -n "$NS" -o jsonpath='{.spec.workloadRef.name}' 2>/dev/null || true)
               if [ "$ref" = "gpu-preemption-kueue-victim" ]; then
-                p=$(kubectl get "$item" -n "$NS" -o jsonpath='{.status.phase}')
+                p=$(kubectl get "$item" -n "$NS" -o jsonpath='{.status.phase}' 2>/dev/null || true)
                 break
               fi
             done
@@ -73,8 +87,8 @@ spec:
             fi
             sleep 3
           done
-          echo "GpuWorkload for gpu-preemption-kueue-victim never reached Idle (last phase: ${p:-unknown})" >&2
-          kubectl get gpuworkloads -n "$NS" -o wide >&2 || true
+          echo "GpuWorkload for gpu-preemption-kueue-victim never reached Idle (last phase: ${p:-none})" >&2
+          kubectl get jobs,pods,gpuworkloads,workloads -n "$NS" -o wide >&2 || true
           exit 1
 
     - script:
@@ -100,7 +114,8 @@ spec:
         - name: NS
           value: ($namespace)
         content: |
-          kubectl get workloads,pods,gpuworkloads -n "$NS" -o wide || true
+          kubectl get jobs,pods,workloads,gpuworkloads -n "$NS" -o wide || true
+          kubectl describe job gpu-preemption-kueue-victim -n "$NS" 2>/dev/null || true
 
   - name: create-demand-and-verify-kueue-pressure
     description: >

@@ -15,8 +15,9 @@ spec:
     - apply:
         file: job-active.yaml
 
+    # 60 × 3s sleep ≈ 177s worst case plus kubectl — stay above that or Chainsaw SIGKILLs.
     - script:
-        timeout: 180s
+        timeout: 360s
         env:
         - name: NS
           value: ($namespace)
