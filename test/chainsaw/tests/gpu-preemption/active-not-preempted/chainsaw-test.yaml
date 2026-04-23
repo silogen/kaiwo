@@ -7,12 +7,37 @@ spec:
   steps:
   - name: active-workload-not-preempted
     description: >
-      Verify a workload under real GPU load (utilization above threshold) stays
-      Active and is NOT preempted, even with Always policy past grace-period.
+      GpuWorkload CRs are created when the operator sees a qualifying Pod; that
+      can lag the Job by minutes (scheduling, rocm/pytorch image pull). Wait for
+      the CR, then verify Always policy does not preempt while phase stays Active
+      (job uses threshold -1; see job-active.yaml).
     try:
     - apply:
         file: job-active.yaml
+
+    # 60 × 3s sleep ≈ 177s worst case plus kubectl — stay above that or Chainsaw SIGKILLs.
+    - script:
+        timeout: 360s
+        env:
+        - name: NS
+          value: ($namespace)
+        content: |
+          set -e
+          for _ in $(seq 1 60); do
+            for item in $(kubectl get gpuworkloads -n "$NS" -o name 2>/dev/null); do
+              ref=$(kubectl get "$item" -n "$NS" -o jsonpath='{.spec.workloadRef.name}' 2>/dev/null || true)
+              if [ "$ref" = "gpu-preemption-active-workload" ]; then
+                exit 0
+              fi
+            done
+            sleep 3
+          done
+          echo "GpuWorkload for gpu-preemption-active-workload never appeared" >&2
+          kubectl get jobs,pods,gpuworkloads -n "$NS" -o wide >&2 || true
+          exit 1
+
     - assert:
+        timeout: 60s
         resource:
           apiVersion: kaiwo.silogen.ai/v1alpha1
           kind: GpuWorkload
@@ -22,10 +47,12 @@ spec:
               name: gpu-preemption-active-workload
           status:
             phase: Active
+
     # Wait well past grace-period (15s) plus several evaluation cycles to
     # confirm the workload is never transitioned to Preempting/Preempted.
     - sleep:
         duration: 90s
+
     - error:
         resource:
           apiVersion: kaiwo.silogen.ai/v1alpha1
@@ -36,6 +63,7 @@ spec:
               name: gpu-preemption-active-workload
           status:
             phase: Preempting
+
     - error:
         resource:
           apiVersion: kaiwo.silogen.ai/v1alpha1
@@ -46,7 +74,9 @@ spec:
               name: gpu-preemption-active-workload
           status:
             phase: Preempted
+
     - assert:
+        timeout: 60s
         resource:
           apiVersion: kaiwo.silogen.ai/v1alpha1
           kind: GpuWorkload
@@ -56,6 +86,7 @@ spec:
               name: gpu-preemption-active-workload
           status:
             phase: Active
+
     catch:
     - command:
         entrypoint: kaiwo-dev

@@ -7,37 +7,88 @@ spec:
   steps:
   - name: always-policy-lifecycle
     description: >
-      Verify Always policy preempts an idle workload after the grace-period period,
-      deletes the underlying Job, and cleans up the GpuWorkload CR via TTL.
+      GpuWorkload is created only after a qualifying Pod exists (scheduling + image
+      pull). Phase may stay Active until the first metrics scrape, then Idle for
+      busybox. Always policy preempts after grace; GpuWorkload is removed after TTL.
     try:
     - apply:
         file: job.yaml
-    - assert:
-        resource:
-          apiVersion: kaiwo.silogen.ai/v1alpha1
-          kind: GpuWorkload
-          spec:
-            workloadRef:
-              kind: Job
-              name: gpu-preemption-always
-          status:
-            phase: Idle
-    - assert:
-        resource:
-          apiVersion: kaiwo.silogen.ai/v1alpha1
-          kind: GpuWorkload
-          spec:
-            workloadRef:
-              kind: Job
-              name: gpu-preemption-always
-          status:
-            phase: Preempted
+
+    # 60 × 3s sleep ≈ 177s worst case plus kubectl — stay above that or Chainsaw SIGKILLs.
+    - script:
+        timeout: 360s
+        env:
+        - name: NS
+          value: ($namespace)
+        content: |
+          set -e
+          for _ in $(seq 1 60); do
+            for item in $(kubectl get gpuworkloads -n "$NS" -o name 2>/dev/null); do
+              ref=$(kubectl get "$item" -n "$NS" -o jsonpath='{.spec.workloadRef.name}' 2>/dev/null || true)
+              if [ "$ref" = "gpu-preemption-always" ]; then
+                exit 0
+              fi
+            done
+            sleep 3
+          done
+          echo "GpuWorkload for gpu-preemption-always never appeared" >&2
+          kubectl get jobs,pods,gpuworkloads -n "$NS" -o wide >&2 || true
+          exit 1
+
+    - script:
+        timeout: 360s
+        env:
+        - name: NS
+          value: ($namespace)
+        content: |
+          set -e
+          for _ in $(seq 1 60); do
+            for item in $(kubectl get gpuworkloads -n "$NS" -o name 2>/dev/null); do
+              ref=$(kubectl get "$item" -n "$NS" -o jsonpath='{.spec.workloadRef.name}' 2>/dev/null || true)
+              [ "$ref" = "gpu-preemption-always" ] || continue
+              phase=$(kubectl get "$item" -n "$NS" -o jsonpath='{.status.phase}' 2>/dev/null || true)
+              if [ "$phase" = "Idle" ]; then
+                exit 0
+              fi
+            done
+            sleep 3
+          done
+          echo "GpuWorkload never reached Idle" >&2
+          kubectl get gpuworkloads -n "$NS" -o yaml >&2 || true
+          exit 1
+
+    - script:
+        timeout: 300s
+        env:
+        - name: NS
+          value: ($namespace)
+        content: |
+          set -e
+          for _ in $(seq 1 100); do
+            for item in $(kubectl get gpuworkloads -n "$NS" -o name 2>/dev/null); do
+              ref=$(kubectl get "$item" -n "$NS" -o jsonpath='{.spec.workloadRef.name}' 2>/dev/null || true)
+              [ "$ref" = "gpu-preemption-always" ] || continue
+              phase=$(kubectl get "$item" -n "$NS" -o jsonpath='{.status.phase}' 2>/dev/null || true)
+              if [ "$phase" = "Preempted" ]; then
+                exit 0
+              fi
+            done
+            sleep 3
+          done
+          echo "GpuWorkload never reached Preempted" >&2
+          kubectl get gpuworkloads,jobs,pods -n "$NS" -o wide >&2 || true
+          exit 1
+
+    - sleep:
+        duration: 35s
+
     - error:
         resource:
           apiVersion: batch/v1
           kind: Job
           metadata:
             name: gpu-preemption-always
+
     - error:
         resource:
           apiVersion: kaiwo.silogen.ai/v1alpha1
@@ -46,7 +97,11 @@ spec:
             workloadRef:
               kind: Job
               name: gpu-preemption-always
+
     catch:
-    - command:
-        entrypoint: kubectl
-        args: ["get", "gpuworkloads,jobs,pods", "-n", "($namespace)", "-o", "wide"]
+    - script:
+        env:
+        - name: NS
+          value: ($namespace)
+        content: |
+          kubectl get gpuworkloads,jobs,pods -n "$NS" -o wide 2>&1 || true

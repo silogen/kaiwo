@@ -14,6 +14,39 @@ spec:
     try:
     - apply:
         file: kaiwojob.yaml
+
+    # GpuWorkload follows qualifying GPU pods; KaiwoJob can stay PENDING until the operator
+    # creates Jobs/Pods. Allow long CI tails; 120 × 3s sleep needs a >~400s step timeout.
+    - script:
+        timeout: 540s
+        env:
+        - name: NS
+          value: ($namespace)
+        content: |
+          set -e
+          n=0
+          for _ in $(seq 1 120); do
+            n=$((n + 1))
+            if [ "$((n % 20))" -eq 0 ]; then
+              kj=$(kubectl get kaiwojob gpu-preemption-discover-kaiwojob -n "$NS" -o jsonpath='{.status.status}' 2>/dev/null || true)
+              echo "  ...still waiting for GpuWorkload (KaiwoJob.status=$kj, iteration $n/120)" >&2
+            fi
+            for item in $(kubectl get gpuworkloads -n "$NS" -o name 2>/dev/null); do
+              ref=$(kubectl get "$item" -n "$NS" -o jsonpath='{.spec.workloadRef.name}' 2>/dev/null || true)
+              kind=$(kubectl get "$item" -n "$NS" -o jsonpath='{.spec.workloadRef.kind}' 2>/dev/null || true)
+              if [ "$ref" = "gpu-preemption-discover-kaiwojob" ] && [ "$kind" = "KaiwoJob" ]; then
+                exit 0
+              fi
+            done
+            sleep 3
+          done
+          echo "Timed out: no GpuWorkload for KaiwoJob gpu-preemption-discover-kaiwojob yet." >&2
+          echo "  (GpuWorkload is created after GPU pods exist; PENDING KaiwoJob usually means no pods.)" >&2
+          kubectl get kaiwojob gpu-preemption-discover-kaiwojob -n "$NS" -o wide >&2 || true
+          kubectl get gpuworkloads,kaiwojobs,jobs,pods -n "$NS" -o wide >&2 || true
+          kubectl describe kaiwojob gpu-preemption-discover-kaiwojob -n "$NS" 2>/dev/null | tail -n 80 >&2 || true
+          exit 1
+
     - assert:
         resource:
           apiVersion: kaiwo.silogen.ai/v1alpha1
@@ -31,3 +64,4 @@ spec:
           value: ($namespace)
         content: |
           kubectl get gpuworkloads,kaiwojobs,jobs,pods -n "$NS" -o wide 2>&1 || true
+          kubectl describe kaiwojob gpu-preemption-discover-kaiwojob -n "$NS" 2>&1 | tail -n 120 || true

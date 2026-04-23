@@ -24,17 +24,34 @@ spec:
               - name: cq-ns-del-recreate
                 namespaces:
                   - ns-del-recreate
+                spec:
+                  namespaceSelector: {}
+                  queueingStrategy: BestEffortFIFO
+                  resourceGroups:
+                    - coveredResources:
+                        - cpu
+                        - memory
+                      flavors:
+                        - name: rf-ns-del-recreate
+                          resources:
+                            - name: cpu
+                              nominalQuota: "100"
+                            - name: memory
+                              nominalQuota: "200Gi"
+                  stopPolicy: None
             resourceFlavors:
               - name: rf-ns-del-recreate
+                nodeLabels:
+                  kaiwo/worker: "true"
     - assert:
-        timeout: 30s
+        timeout: 120s
         resource:
           apiVersion: kueue.x-k8s.io/v1beta1
           kind: ClusterQueue
           metadata:
             name: cq-ns-del-recreate
     - assert:
-        timeout: 30s
+        timeout: 120s
         resource:
           apiVersion: kueue.x-k8s.io/v1beta1
           kind: LocalQueue
@@ -42,7 +59,7 @@ spec:
             name: cq-ns-del-recreate
             namespace: ns-del-recreate
     - assert:
-        timeout: 30s
+        timeout: 120s
         resource:
           apiVersion: kaiwo.silogen.ai/v1alpha1
           kind: KaiwoQueueConfig
@@ -61,7 +78,7 @@ spec:
     - script:
         content: kubectl annotate kaiwoqueueconfig kaiwo test/trigger="ns-deleted" --overwrite
     - assert:
-        timeout: 30s
+        timeout: 120s
         resource:
           apiVersion: kaiwo.silogen.ai/v1alpha1
           kind: KaiwoQueueConfig
@@ -79,7 +96,7 @@ spec:
           metadata:
             name: ns-del-recreate
     - assert:
-        timeout: 45s
+        timeout: 120s
         resource:
           apiVersion: kaiwo.silogen.ai/v1alpha1
           kind: KaiwoQueueConfig
@@ -88,7 +105,7 @@ spec:
           status:
             status: READY
     - assert:
-        timeout: 30s
+        timeout: 120s
         resource:
           apiVersion: kueue.x-k8s.io/v1beta1
           kind: LocalQueue

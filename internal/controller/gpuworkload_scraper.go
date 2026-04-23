@@ -288,6 +288,31 @@ func (s *GpuMetricsScraper) scrape() (map[string]*dto.MetricFamily, error) {
 	return parser.TextToMetricFamilies(resp.Body)
 }
 
+// prometheusSampleValue returns the scalar sample value for metrics that may be
+// encoded as gauge or untyped. Prometheus text without a # TYPE line is parsed
+// as UNTYPED; reading only Gauge left utilization stuck at zero for those exporters.
+func prometheusSampleValue(m *dto.Metric) (float64, bool) {
+	if m == nil {
+		return 0, false
+	}
+	if g := m.GetGauge(); g != nil && g.Value != nil {
+		return *g.Value, true
+	}
+	if u := m.GetUntyped(); u != nil && u.Value != nil {
+		return *u.Value, true
+	}
+	return 0, false
+}
+
+func firstNonEmpty(labels map[string]string, keys ...string) string {
+	for _, k := range keys {
+		if v := labels[k]; v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 func parseGpuSamples(family *dto.MetricFamily) []gpuSample {
 	var samples []gpuSample
 	for _, m := range family.Metric {
@@ -298,17 +323,28 @@ func parseGpuSamples(family *dto.MetricFamily) []gpuSample {
 			}
 		}
 
-		ns := labels["namespace"]
-		pod := labels["pod"]
-		gpuID := labels["gpu_id"]
+		ns := firstNonEmpty(labels,
+			"namespace",
+			"kubernetes_namespace",
+			"k8s_namespace_name",
+			"k8s.namespace.name",
+		)
+		pod := firstNonEmpty(labels,
+			"pod",
+			"pod_name",
+			"kubernetes_pod_name",
+			"k8s_pod_name",
+			"k8s.pod.name",
+		)
+		gpuID := firstNonEmpty(labels, "gpu_id", "gpu")
 
 		if ns == "" || pod == "" {
 			continue
 		}
 
-		var util float64
-		if m.Gauge != nil && m.Gauge.Value != nil {
-			util = *m.Gauge.Value
+		util, ok := prometheusSampleValue(m)
+		if !ok {
+			continue
 		}
 
 		samples = append(samples, gpuSample{

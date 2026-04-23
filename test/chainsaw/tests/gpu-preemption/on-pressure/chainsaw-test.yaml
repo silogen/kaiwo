@@ -42,16 +42,31 @@ spec:
           value: ($stdout)
     - apply:
         file: job-victim.yaml
-    - assert:
-        resource:
-          apiVersion: kaiwo.silogen.ai/v1alpha1
-          kind: GpuWorkload
-          spec:
-            workloadRef:
-              kind: Job
-              name: gpu-preemption-pressure-victim
-          status:
-            phase: Idle
+
+    # 60 × 3s sleep ≈ 177s worst case plus kubectl — keep timeout comfortably above
+    # that or Chainsaw kills the script with SIGKILL (misread as Idle flake).
+    - script:
+        timeout: 360s
+        env:
+        - name: NS
+          value: ($namespace)
+        content: |
+          set -e
+          for _ in $(seq 1 60); do
+            for item in $(kubectl get gpuworkloads -n "$NS" -o name 2>/dev/null); do
+              ref=$(kubectl get "$item" -n "$NS" -o jsonpath='{.spec.workloadRef.name}' 2>/dev/null || true)
+              [ "$ref" = "gpu-preemption-pressure-victim" ] || continue
+              phase=$(kubectl get "$item" -n "$NS" -o jsonpath='{.status.phase}' 2>/dev/null || true)
+              if [ "$phase" = "Idle" ]; then
+                exit 0
+              fi
+            done
+            sleep 3
+          done
+          echo "victim GpuWorkload never reached Idle" >&2
+          kubectl get gpuworkloads,jobs,pods -n "$NS" -o wide >&2 || true
+          exit 1
+
     - script:
         env:
         - name: NS
@@ -93,26 +108,52 @@ spec:
           value: ($stdout)
     - apply:
         file: job-demand.yaml
-    - assert:
-        resource:
-          apiVersion: kaiwo.silogen.ai/v1alpha1
-          kind: GpuWorkload
-          spec:
-            workloadRef:
-              kind: Job
-              name: gpu-preemption-pressure-demand
-          status:
-            phase: PendingGpu
-    - assert:
-        resource:
-          apiVersion: kaiwo.silogen.ai/v1alpha1
-          kind: GpuWorkload
-          spec:
-            workloadRef:
-              kind: Job
-              name: gpu-preemption-pressure-victim
-          status:
-            phase: Preempted
+
+    # Chainsaw resource asserts match an arbitrary GpuWorkload in the namespace
+    # when several exist; select by workloadRef.name explicitly.
+    - script:
+        timeout: 120s
+        env:
+        - name: NS
+          value: ($namespace)
+        content: |
+          set -e
+          for _ in $(seq 1 40); do
+            for item in $(kubectl get gpuworkloads -n "$NS" -o name 2>/dev/null); do
+              ref=$(kubectl get "$item" -n "$NS" -o jsonpath='{.spec.workloadRef.name}' 2>/dev/null || true)
+              [ "$ref" = "gpu-preemption-pressure-demand" ] || continue
+              phase=$(kubectl get "$item" -n "$NS" -o jsonpath='{.status.phase}' 2>/dev/null || true)
+              if [ "$phase" = "PendingGpu" ]; then
+                exit 0
+              fi
+            done
+            sleep 3
+          done
+          echo "demand GpuWorkload never reached PendingGpu" >&2
+          kubectl get gpuworkloads,jobs,pods -n "$NS" -o wide >&2 || true
+          exit 1
+
+    - script:
+        timeout: 120s
+        env:
+        - name: NS
+          value: ($namespace)
+        content: |
+          set -e
+          for _ in $(seq 1 40); do
+            for item in $(kubectl get gpuworkloads -n "$NS" -o name 2>/dev/null); do
+              ref=$(kubectl get "$item" -n "$NS" -o jsonpath='{.spec.workloadRef.name}' 2>/dev/null || true)
+              [ "$ref" = "gpu-preemption-pressure-victim" ] || continue
+              phase=$(kubectl get "$item" -n "$NS" -o jsonpath='{.status.phase}' 2>/dev/null || true)
+              if [ "$phase" = "Preempted" ]; then
+                exit 0
+              fi
+            done
+            sleep 3
+          done
+          echo "victim GpuWorkload never reached Preempted" >&2
+          kubectl get gpuworkloads,jobs,pods -n "$NS" -o wide >&2 || true
+          exit 1
     - error:
         resource:
           apiVersion: batch/v1
@@ -128,17 +169,27 @@ spec:
           value: ($namespace)
         content: |
           kubectl delete pods -n "$NS" -l job-name=gpu-preemption-pressure-victim --grace-period=0 --force >/dev/null 2>&1 || true
-    - assert:
+    - script:
         timeout: 120s
-        resource:
-          apiVersion: kaiwo.silogen.ai/v1alpha1
-          kind: GpuWorkload
-          spec:
-            workloadRef:
-              kind: Job
-              name: gpu-preemption-pressure-demand
-          status:
-            (phase != 'PendingGpu'): true
+        env:
+        - name: NS
+          value: ($namespace)
+        content: |
+          set -e
+          for _ in $(seq 1 40); do
+            for item in $(kubectl get gpuworkloads -n "$NS" -o name 2>/dev/null); do
+              ref=$(kubectl get "$item" -n "$NS" -o jsonpath='{.spec.workloadRef.name}' 2>/dev/null || true)
+              [ "$ref" = "gpu-preemption-pressure-demand" ] || continue
+              phase=$(kubectl get "$item" -n "$NS" -o jsonpath='{.status.phase}' 2>/dev/null || true)
+              if [ "$phase" != "PendingGpu" ] && [ -n "$phase" ]; then
+                exit 0
+              fi
+            done
+            sleep 3
+          done
+          echo "demand GpuWorkload stayed PendingGpu or has empty phase" >&2
+          kubectl get gpuworkloads,jobs,pods -n "$NS" -o wide >&2 || true
+          exit 1
     catch:
     - script:
         env:

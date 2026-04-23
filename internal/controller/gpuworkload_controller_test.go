@@ -43,6 +43,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 )
 
 var _ = Describe("GpuWorkload Controller", func() {
@@ -360,7 +361,8 @@ var _ = Describe("GpuWorkload Controller", func() {
 				},
 			}
 			gpuResources := map[string]int{"amd.com/gpu": 2}
-			Expect(isPendingDueToGPU(pod, gpuResources)).To(BeTrue())
+			workloadByPodUID := map[types.UID]*kueuev1beta1.Workload{}
+			Expect(isPendingDueToGPU(pod, workloadByPodUID, gpuResources)).To(BeTrue())
 		})
 
 		It("should return false when pod is pending for other reasons", func() {
@@ -378,7 +380,8 @@ var _ = Describe("GpuWorkload Controller", func() {
 				},
 			}
 			gpuResources := map[string]int{"amd.com/gpu": 2}
-			Expect(isPendingDueToGPU(pod, gpuResources)).To(BeFalse())
+			workloadByPodUID := map[types.UID]*kueuev1beta1.Workload{}
+			Expect(isPendingDueToGPU(pod, workloadByPodUID, gpuResources)).To(BeFalse())
 		})
 
 		It("should return false when pod is scheduled", func() {
@@ -394,7 +397,102 @@ var _ = Describe("GpuWorkload Controller", func() {
 				},
 			}
 			gpuResources := map[string]int{"amd.com/gpu": 2}
-			Expect(isPendingDueToGPU(pod, gpuResources)).To(BeFalse())
+			workloadByPodUID := map[types.UID]*kueuev1beta1.Workload{}
+			Expect(isPendingDueToGPU(pod, workloadByPodUID, gpuResources)).To(BeFalse())
+		})
+
+		It("should return true when pod is scheduling gated and workload has insufficient GPU quota", func() {
+			podUID := types.UID("test-pod-uid")
+
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					UID: podUID,
+					Labels: map[string]string{
+						"kueue.x-k8s.io/managed": "true",
+					},
+				},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodPending,
+					Conditions: []corev1.PodCondition{
+						{
+							Type:   corev1.PodScheduled,
+							Status: corev1.ConditionFalse,
+							Reason: "SchedulingGated",
+						},
+					},
+				},
+			}
+
+			wl := &kueuev1beta1.Workload{
+				ObjectMeta: metav1.ObjectMeta{
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							Kind: "Pod",
+							UID:  podUID,
+						},
+					},
+				},
+				Status: kueuev1beta1.WorkloadStatus{
+					Conditions: []metav1.Condition{
+						{
+							Type:    "QuotaReserved",
+							Status:  metav1.ConditionFalse,
+							Reason:  "Pending",
+							Message: "insufficient unused quota for amd.com/gpu",
+						},
+					},
+				},
+			}
+
+			workloadByPodUID := map[types.UID]*kueuev1beta1.Workload{
+				podUID: wl,
+			}
+
+			gpuResources := map[string]int{"amd.com/gpu": 1}
+
+			Expect(isPendingDueToGPU(pod, workloadByPodUID, gpuResources)).To(BeTrue())
+		})
+		It("should return false when scheduling gated but not due to GPU", func() {
+			podUID := types.UID("test-pod-uid")
+
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					UID: podUID,
+					Labels: map[string]string{
+						"kueue.x-k8s.io/managed": "true",
+					},
+				},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodPending,
+					Conditions: []corev1.PodCondition{
+						{
+							Type:   corev1.PodScheduled,
+							Status: corev1.ConditionFalse,
+							Reason: "SchedulingGated",
+						},
+					},
+				},
+			}
+
+			wl := &kueuev1beta1.Workload{
+				Status: kueuev1beta1.WorkloadStatus{
+					Conditions: []metav1.Condition{
+						{
+							Type:    "QuotaReserved",
+							Status:  metav1.ConditionFalse,
+							Message: "insufficient unused quota for cpu",
+						},
+					},
+				},
+			}
+
+			workloadByPodUID := map[types.UID]*kueuev1beta1.Workload{
+				podUID: wl,
+			}
+
+			gpuResources := map[string]int{"amd.com/gpu": 1}
+
+			Expect(isPendingDueToGPU(pod, workloadByPodUID, gpuResources)).To(BeFalse())
 		})
 	})
 
