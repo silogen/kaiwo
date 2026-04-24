@@ -62,14 +62,24 @@ jobs:
       run: |
         make helm-release TAG=${{ env.VERSION }} CHART_VERSION=${{ env.VERSION }}
 
-    - name: Build CRDs
+    - name: Compile CRDs to a single manifest
       run: |
         kustomize build config/crd > crds.yaml
 
-    - name: Push Helm chart to OCI registry
+    - name: Package CRDs as Helm chart
       run: |
-        echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u $GITHUB_ACTOR --password-stdin
-        make helm-push-oci TAG=${{ env.VERSION }} CHART_VERSION=${{ env.VERSION }}
+        make crds-package CHART_VERSION=${env.VERSION} TAG=${env.VERSION}
+
+    - name: Log in to GHCR (Helm/OCI)
+      run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u $GITHUB_ACTOR --password-stdin
+
+
+    - name: Push Helm chart to OCI registry
+      run: make helm-push-oci TAG=${{ env.VERSION }} CHART_VERSION=${{ env.VERSION }}
+
+    - name: Push CRDs chart to OCI registry
+      run: make crds-push-oci CHART_VERSION=${env.VERSION} CHART_OCI_OWNER=${{ github.repository_owner }}
+
 
     - name: Upload install.yaml artifact
       uses: actions/upload-artifact@v4

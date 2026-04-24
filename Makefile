@@ -6,12 +6,13 @@ IMG ?= ghcr.io/silogen/kaiwo-operator:${TAG}
 
 # Helm chart configuration
 CHART_DIR ?= chart
-CHART_NAME ?= kaiwo-operator
+CHART_NAME ?= kaiwo-operator-chart
+CRDS_CHART_NAME ?= kaiwo-crds-chart
 CHART_VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "0.1.0")
 APP_VERSION ?= ${TAG}
 CHART_OCI_REGISTRY ?= $(shell echo $(IMG) | cut -d'/' -f1)
 CHART_OCI_OWNER ?= $(shell echo $(IMG) | cut -d'/' -f2)
-CHART_OCI_REPO ?= oci://$(CHART_OCI_REGISTRY)/$(CHART_OCI_OWNER)/charts
+CHART_OCI_REPO ?= oci://$(CHART_OCI_REGISTRY)/$(CHART_OCI_OWNER)
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -172,6 +173,17 @@ helm-package: build-installer ## Package the Helm chart
 	helm package $(CHART_DIR) --version=$(CHART_VERSION) --app-version=$(APP_VERSION) --destination=dist/
 	@rm -f $(CHART_DIR)/Chart.yaml.bak
 
+.PHONY: crds-package
+crds-package: crds ## Package CRDs as a Helm chart .tgz for OCI distribution.
+	@echo "Packaging CRDs as Helm chart with version $(CHART_VERSION)..."
+	@rm -rf dist/crds-chart
+	@mkdir -p dist/crds-chart/templates
+	@printf 'apiVersion: v2\nname: %s\ndescription: CRDs for kaiwo operator\ntype: application\nversion: %s\nappVersion: "%s"\n' \
+		"$(CRDS_CHART_NAME)" "$(CHART_VERSION)" "$(APP_VERSION)" > dist/crds-chart/Chart.yaml
+	@cp crds.yaml dist/crds-chart/templates/crds.yaml
+	helm package dist/crds-chart --version=$(CHART_VERSION) --app-version=$(APP_VERSION) --destination=dist/
+	@echo "CRDs chart packaged at dist/$(CRDS_CHART_NAME)-$(CHART_VERSION).tgz"
+
 .PHONY: helm-install
 helm-install: helm-package ## Install the Helm chart locally
 	@echo "Installing Helm chart to kaiwo-system namespace..."
@@ -192,6 +204,12 @@ helm-template: build-installer ## Generate Helm templates for inspection
 helm-push-oci: helm-package ## Push Helm chart to OCI registry
 	@echo "Pushing Helm chart to OCI registry..."
 	helm push dist/$(CHART_NAME)-$(CHART_VERSION).tgz $(CHART_OCI_REPO)
+
+.PHONY: crds-push-oci
+crds-push-oci: ## Push CRDs Helm chart to OCI registry (requires crds-package first).
+	@echo "Pushing CRDs chart to OCI registry $(CHART_OCI_REPO)..."
+	helm push dist/$(CRDS_CHART_NAME)-$(CHART_VERSION).tgz $(CHART_OCI_REPO)
+
 
 .PHONY: helm-release
 helm-release: helm-package ## Package chart for release (used by CI)
