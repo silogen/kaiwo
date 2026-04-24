@@ -35,7 +35,6 @@ rules:
   - watch
 - apiGroups:
   - aim.eai.amd.com
-  - aim.silogen.ai
   resources:
   - aimservices
   verbs:
