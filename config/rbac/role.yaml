@@ -34,6 +34,15 @@ rules:
   - update
   - watch
 - apiGroups:
+  - aim.eai.amd.com
+  - aim.silogen.ai
+  resources:
+  - aimservices
+  verbs:
+  - delete
+  - get
+  - list
+- apiGroups:
   - apiextensions.k8s.io
   resources:
   - customresourcedefinitions
