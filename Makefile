@@ -173,6 +173,10 @@ helm-package: build-installer ## Package the Helm chart
 	helm package $(CHART_DIR) --version=$(CHART_VERSION) --app-version=$(APP_VERSION) --destination=dist/
 	@rm -f $(CHART_DIR)/Chart.yaml.bak
 
+.PHONY: crds
+crds: kustomize ## Build consolidated CRD manifest to crds.yaml
+	$(KUSTOMIZE) build config/crd > crds.yaml
+
 .PHONY: crds-package
 crds-package: crds ## Package CRDs as a Helm chart .tgz for OCI distribution.
 	@echo "Packaging CRDs as Helm chart with version $(CHART_VERSION)..."

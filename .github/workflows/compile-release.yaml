@@ -64,7 +64,7 @@ jobs:
 
     - name: Compile CRDs to a single manifest
       run: |
-        kustomize build config/crd > crds.yaml
+        make crds
 
     - name: Package CRDs as Helm chart
       run: |
