@@ -68,7 +68,7 @@ jobs:
 
     - name: Package CRDs as Helm chart
       run: |
-        make crds-package CHART_VERSION=${env.VERSION} TAG=${env.VERSION}
+        make crds-package CHART_VERSION=${{ env.VERSION }} TAG=${{ env.VERSION }}
 
     - name: Log in to GHCR (Helm/OCI)
       run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u $GITHUB_ACTOR --password-stdin
@@ -78,7 +78,7 @@ jobs:
       run: make helm-push-oci TAG=${{ env.VERSION }} CHART_VERSION=${{ env.VERSION }}
 
     - name: Push CRDs chart to OCI registry
-      run: make crds-push-oci CHART_VERSION=${env.VERSION} CHART_OCI_OWNER=${{ github.repository_owner }}
+      run: make crds-push-oci CHART_VERSION=${{ env.VERSION }} CHART_OCI_OWNER=${{ github.repository_owner }}
 
 
     - name: Upload install.yaml artifact
