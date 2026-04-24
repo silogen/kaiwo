@@ -102,6 +102,7 @@ func IsGpuPreemptionEnabled() bool {
 // +kubebuilder:rbac:groups=ray.io,resources=rayjobs;rayservices;rayclusters,verbs=get;list;delete
 // +kubebuilder:rbac:groups=aim.eai.amd.com,resources=aimservices,verbs=get;list;delete
 // +kubebuilder:rbac:groups=workload.codeflare.dev,resources=appwrappers,verbs=get;list;delete
+// +kubebuilder:rbac:groups=serving.kserve.io,resources=inferenceservices,verbs=get;list;delete
 // +kubebuilder:rbac:groups=kaiwo.silogen.ai,resources=kaiwojobs;kaiwoservices,verbs=get;list;delete
 // +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch;create;update
 // +kubebuilder:rbac:groups=kueue.x-k8s.io,resources=workloads,verbs=get;list;watch

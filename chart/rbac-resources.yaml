@@ -188,6 +188,14 @@ rules:
   - list
   - watch
 - apiGroups:
+  - serving.kserve.io
+  resources:
+  - inferenceservices
+  verbs:
+  - delete
+  - get
+  - list
+- apiGroups:
   - workload.codeflare.dev
   resources:
   - appwrappers
