@@ -6,13 +6,12 @@ IMG ?= ghcr.io/silogen/kaiwo-operator:${TAG}
 
 # Helm chart configuration
 CHART_DIR ?= chart
-CHART_NAME ?= kaiwo-operator
+CHART_NAME ?= kaiwo-operator-chart
 CRDS_CHART_NAME ?= kaiwo-crds-chart
 CHART_VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "0.1.0")
 APP_VERSION ?= ${TAG}
-# OCI Helm charts must not share the same ghcr.io repo path as the operator container
-# image (both would be owner/kaiwo-operator). Push charts under .../charts/; Helm then
-# stores e.g. oci://ghcr.io/ORG/charts → ghcr.io/ORG/charts/kaiwo-operator:<chartVer>.
+# Keep Helm charts in a separate OCI path from container images to avoid
+# sharing the same ghcr.io/<owner>/<name> namespace.
 CHART_OCI_REGISTRY ?= $(shell echo $(IMG) | cut -d'/' -f1)
 CHART_OCI_OWNER ?= $(shell echo $(IMG) | cut -d'/' -f2)
 CHART_OCI_REPO ?= oci://$(CHART_OCI_REGISTRY)/$(CHART_OCI_OWNER)

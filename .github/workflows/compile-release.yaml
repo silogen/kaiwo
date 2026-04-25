@@ -75,10 +75,10 @@ jobs:
 
 
     - name: Push Helm chart to OCI registry
-      run: make helm-push-oci TAG=${{ env.VERSION }} CHART_VERSION=${{ env.VERSION }} IMG=ghcr.io/${{ github.repository_owner }}/kaiwo-operator-chart:${{ env.VERSION }}
+      run: make helm-push-oci TAG=${{ env.VERSION }} CHART_VERSION=${{ env.VERSION }} CHART_OCI_OWNER=${{ github.repository_owner }}
 
     - name: Push CRDs chart to OCI registry
-      run: make crds-push-oci CHART_VERSION=${{ env.VERSION }} IMG=ghcr.io/${{ github.repository_owner }}/kaiwo-operator-crds:${{ env.VERSION }}
+      run: make crds-push-oci CHART_VERSION=${{ env.VERSION }} CHART_OCI_OWNER=${{ github.repository_owner }}
 
 
     - name: Upload install.yaml artifact
@@ -121,7 +121,8 @@ jobs:
 
            ### If using Helm - Install CRDs first
           ```bash
-          kubectl apply -f https://github.com/${{ github.repository }}/releases/download/${{ env.VERSION }}/crds.yaml
+           helm install kaiwo oci://ghcr.io/${{ github.repository_owner }}/kaiwo-crds-chart \
+            --version ${{ env.VERSION }}
           ```
 
           ### Helm Install (from GitHub Releases)
@@ -132,7 +133,7 @@ jobs:
 
           ### Helm Install (from OCI Registry)
           ```bash
-          helm install kaiwo oci://ghcr.io/${{ github.repository_owner }}/charts/kaiwo-operator \
+          helm install kaiwo oci://ghcr.io/${{ github.repository_owner }}/kaiwo-operator-chart \
             --version ${{ env.VERSION }} --namespace kaiwo-system --create-namespace
           ```
 
