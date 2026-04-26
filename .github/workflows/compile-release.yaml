@@ -91,7 +91,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: helm-chart
-        path: dist/kaiwo-operator-*.tgz
+        path: dist/kaiwo-operator-chart-*.tgz
 
     - name: Upload CRDs artifact
       uses: actions/upload-artifact@v4
@@ -107,7 +107,7 @@ jobs:
           workloads.zip
           install.yaml
           crds.yaml
-          dist/kaiwo-operator-*.tgz
+          dist/kaiwo-operator-chart-*.tgz
         token: '${{ secrets.GITHUB_TOKEN }}'
         draft: true
         prerelease: true
@@ -119,16 +119,16 @@ jobs:
           kubectl apply -f https://github.com/${{ github.repository }}/releases/download/${{ env.VERSION }}/install.yaml --server-side
           ```
 
-           ### If using Helm - Install CRDs first
+          ### If using Helm - Install CRDs first
           ```bash
-           helm install kaiwo oci://ghcr.io/${{ github.repository_owner }}/kaiwo-crds-chart \
+          helm install kaiwo-crds oci://ghcr.io/${{ github.repository_owner }}/kaiwo-crds-chart \
             --version ${{ env.VERSION }}
           ```
 
           ### Helm Install (from GitHub Releases)
           ```bash
-          curl -L https://github.com/${{ github.repository }}/releases/download/${{ env.VERSION }}/kaiwo-operator-${{ env.VERSION }}.tgz -o kaiwo-operator.tgz
-          helm install kaiwo kaiwo-operator.tgz --namespace kaiwo-system --create-namespace
+          curl -L https://github.com/${{ github.repository }}/releases/download/${{ env.VERSION }}/kaiwo-operator-chart-${{ env.VERSION }}.tgz -o kaiwo-operator-chart.tgz
+          helm install kaiwo kaiwo-operator-chart.tgz --namespace kaiwo-system --create-namespace
           ```
 
           ### Helm Install (from OCI Registry)
