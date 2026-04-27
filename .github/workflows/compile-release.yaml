@@ -55,21 +55,31 @@ jobs:
 
     - name: Generate install.yaml
       run: |
-        make build-installer TAG=${{ env.VERSION }}
+        make build-installer TAG=${{ env.VERSION }} IMG=ghcr.io/${{ github.repository_owner }}/kaiwo-operator:${{ env.VERSION }}
         cp dist/install.yaml install.yaml
 
     - name: Package Helm chart
       run: |
-        make helm-release TAG=${{ env.VERSION }} CHART_VERSION=${{ env.VERSION }}
+        make helm-release TAG=${{ env.VERSION }} CHART_VERSION=${{ env.VERSION }} IMG=ghcr.io/${{ github.repository_owner }}/kaiwo-operator:${{ env.VERSION }}
 
-    - name: Build CRDs
+    - name: Compile CRDs to a single manifest
       run: |
-        kustomize build config/crd > crds.yaml
+        make crds
+
+    - name: Package CRDs as Helm chart
+      run: |
+        make crds-package CHART_VERSION=${{ env.VERSION }} TAG=${{ env.VERSION }}
+
+    - name: Log in to GHCR (Helm/OCI)
+      run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u $GITHUB_ACTOR --password-stdin
+
 
     - name: Push Helm chart to OCI registry
-      run: |
-        echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u $GITHUB_ACTOR --password-stdin
-        make helm-push-oci TAG=${{ env.VERSION }} CHART_VERSION=${{ env.VERSION }}
+      run: make helm-push-oci TAG=${{ env.VERSION }} CHART_VERSION=${{ env.VERSION }} CHART_OCI_OWNER=${{ github.repository_owner }}
+
+    - name: Push CRDs chart to OCI registry
+      run: make crds-push-oci CHART_VERSION=${{ env.VERSION }} TAG=${{ env.VERSION }} CHART_OCI_OWNER=${{ github.repository_owner }}
+
 
     - name: Upload install.yaml artifact
       uses: actions/upload-artifact@v4
@@ -81,7 +91,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: helm-chart
-        path: dist/kaiwo-operator-*.tgz
+        path: dist/kaiwo-operator-chart-*.tgz
 
     - name: Upload CRDs artifact
       uses: actions/upload-artifact@v4
@@ -97,7 +107,7 @@ jobs:
           workloads.zip
           install.yaml
           crds.yaml
-          dist/kaiwo-operator-*.tgz
+          dist/kaiwo-operator-chart-*.tgz
         token: '${{ secrets.GITHUB_TOKEN }}'
         draft: true
         prerelease: true
@@ -109,22 +119,26 @@ jobs:
           kubectl apply -f https://github.com/${{ github.repository }}/releases/download/${{ env.VERSION }}/install.yaml --server-side
           ```
 
-           ### If using Helm - Install CRDs first
+          ### If using Helm - Install CRDs first
           ```bash
-          kubectl apply -f https://github.com/${{ github.repository }}/releases/download/${{ env.VERSION }}/crds.yaml
+          helm install kaiwo-crds oci://ghcr.io/${{ github.repository_owner }}/kaiwo-crds-chart \
+            --version ${{ env.VERSION }} --namespace kaiwo-system --create-namespace
           ```
 
           ### Helm Install (from GitHub Releases)
           ```bash
-          curl -L https://github.com/${{ github.repository }}/releases/download/${{ env.VERSION }}/kaiwo-operator-${{ env.VERSION }}.tgz -o kaiwo-operator.tgz
-          helm install kaiwo kaiwo-operator.tgz --namespace kaiwo-system --create-namespace
+          curl -L https://github.com/${{ github.repository }}/releases/download/${{ env.VERSION }}/kaiwo-operator-chart-${{ env.VERSION }}.tgz -o kaiwo-operator-chart.tgz
+          helm install kaiwo kaiwo-operator-chart.tgz --namespace kaiwo-system --create-namespace
           ```
 
           ### Helm Install (from OCI Registry)
           ```bash
-          helm install kaiwo oci://ghcr.io/${{ github.repository_owner }}/charts/kaiwo-operator \
+          helm install kaiwo oci://ghcr.io/${{ github.repository_owner }}/kaiwo-operator-chart \
             --version ${{ env.VERSION }} --namespace kaiwo-system --create-namespace
           ```
+
+          > NOTE: OCI chart paths moved from `oci://ghcr.io/${{ github.repository_owner }}/charts/*`
+          > to `oci://ghcr.io/${{ github.repository_owner }}/*`. Update automation using the old paths.
 
           ### Docker Images
           - Operator: `ghcr.io/${{ github.repository_owner }}/kaiwo-operator:${{ env.VERSION }}`

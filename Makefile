@@ -1,17 +1,22 @@
 # Default tag from git
 TAG ?= $(shell git describe --tags --abbrev=0 2>/dev/null || echo "latest")
+GIT_ORG ?= $(shell git remote get-url origin 2>/dev/null | sed -n 's|.*github\.com[:/]\([^/]*\)/.*|\1|p')
 
 # Image URL to use for all building/pushing image targets
 IMG ?= ghcr.io/silogen/kaiwo-operator:${TAG}
 
 # Helm chart configuration
+# chart/Chart.yaml keeps the logical chart name (e.g. kaiwo-operator). HELM_OCI_CHART_NAME
+# is only for the packaged .tgz / OCI artifact (kaiwo-operator-chart), so CI can set
+# CHART_NAME=kaiwo-operator like the reference repo without breaking helm push paths.
 CHART_DIR ?= chart
-CHART_NAME ?= kaiwo-operator
+HELM_OCI_CHART_NAME ?= kaiwo-operator-chart
+CRDS_CHART_NAME ?= kaiwo-crds-chart
 CHART_VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "0.1.0")
 APP_VERSION ?= ${TAG}
-CHART_OCI_REGISTRY ?= $(shell echo $(IMG) | cut -d'/' -f1)
-CHART_OCI_OWNER ?= $(shell echo $(IMG) | cut -d'/' -f2)
-CHART_OCI_REPO ?= oci://$(CHART_OCI_REGISTRY)/$(CHART_OCI_OWNER)/charts
+CHART_OCI_REGISTRY ?= ghcr.io
+CHART_OCI_OWNER ?= $(if $(GIT_ORG),$(GIT_ORG),$(shell echo $(IMG) | cut -d'/' -f2))
+CHART_OCI_REPO ?= oci://$(CHART_OCI_REGISTRY)/$(CHART_OCI_OWNER)
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -54,10 +59,6 @@ fmt: ## Run go fmt against code.
 .PHONY: vet
 vet: ## Run go vet against code.
 	go vet ./...
-
-.PHONY: test
-test: manifests generate fmt vet setup-envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
 
 TEST_NAME ?= "kaiwo-test"
 
@@ -167,15 +168,32 @@ helm-package: build-installer ## Package the Helm chart
 	}
 	@echo "Packaging Helm chart with version $(CHART_VERSION) and app version $(APP_VERSION)"
 	$(call copy-helm-resources)
-	@sed -i.bak 's/^version:.*/version: $(CHART_VERSION)/' $(CHART_DIR)/Chart.yaml
-	@sed -i.bak 's/^appVersion:.*/appVersion: "$(APP_VERSION)"/' $(CHART_DIR)/Chart.yaml
-	helm package $(CHART_DIR) --version=$(CHART_VERSION) --app-version=$(APP_VERSION) --destination=dist/
-	@rm -f $(CHART_DIR)/Chart.yaml.bak
+	@cp "$(CHART_DIR)/Chart.yaml" "$(CHART_DIR)/Chart.yaml.prepackage"
+	@trap 'if [ -f "$(CHART_DIR)/Chart.yaml.prepackage" ]; then mv "$(CHART_DIR)/Chart.yaml.prepackage" "$(CHART_DIR)/Chart.yaml"; fi; rm -f "$(CHART_DIR)/Chart.yaml.bak"' EXIT; \
+		sed -i.bak 's/^name:.*/name: $(HELM_OCI_CHART_NAME)/' "$(CHART_DIR)/Chart.yaml"; \
+		sed -i.bak 's/^version:.*/version: $(CHART_VERSION)/' "$(CHART_DIR)/Chart.yaml"; \
+		sed -i.bak 's/^appVersion:.*/appVersion: "$(APP_VERSION)"/' "$(CHART_DIR)/Chart.yaml"; \
+		helm package "$(CHART_DIR)" --version="$(CHART_VERSION)" --app-version="$(APP_VERSION)" --destination=dist/
+
+.PHONY: crds
+crds: manifests kustomize ## Build consolidated CRD manifest to crds.yaml
+	$(KUSTOMIZE) build config/crd > crds.yaml
+
+.PHONY: crds-package
+crds-package: crds ## Package CRDs as a Helm chart .tgz for OCI distribution.
+	@echo "Packaging CRDs as Helm chart with version $(CHART_VERSION)..."
+	@rm -rf dist/crds-chart
+	@mkdir -p dist/crds-chart/templates
+	@printf 'apiVersion: v2\nname: %s\ndescription: CRDs for kaiwo operator\ntype: application\nversion: %s\nappVersion: "%s"\n' \
+		"$(CRDS_CHART_NAME)" "$(CHART_VERSION)" "$(APP_VERSION)" > dist/crds-chart/Chart.yaml
+	@cp crds.yaml dist/crds-chart/templates/crds.yaml
+	helm package dist/crds-chart --version=$(CHART_VERSION) --app-version=$(APP_VERSION) --destination=dist/
+	@echo "CRDs chart packaged at dist/$(CRDS_CHART_NAME)-$(CHART_VERSION).tgz"
 
 .PHONY: helm-install
 helm-install: helm-package ## Install the Helm chart locally
 	@echo "Installing Helm chart to kaiwo-system namespace..."
-	helm upgrade --install kaiwo dist/$(CHART_NAME)-$(CHART_VERSION).tgz --namespace kaiwo-system --create-namespace
+	helm upgrade --install kaiwo dist/$(HELM_OCI_CHART_NAME)-$(CHART_VERSION).tgz --namespace kaiwo-system --create-namespace
 
 .PHONY: helm-uninstall
 helm-uninstall: ## Uninstall the Helm chart
@@ -189,13 +207,20 @@ helm-template: build-installer ## Generate Helm templates for inspection
 	@rm -f $(CHART_DIR)/Chart.yaml.bak
 
 .PHONY: helm-push-oci
-helm-push-oci: helm-package ## Push Helm chart to OCI registry
+helm-push-oci: ## Push Helm chart to OCI registry (requires helm-package first).
 	@echo "Pushing Helm chart to OCI registry..."
-	helm push dist/$(CHART_NAME)-$(CHART_VERSION).tgz $(CHART_OCI_REPO)
+	@test -f dist/$(HELM_OCI_CHART_NAME)-$(CHART_VERSION).tgz || { echo "Missing dist/$(HELM_OCI_CHART_NAME)-$(CHART_VERSION).tgz; run 'make helm-package CHART_VERSION=$(CHART_VERSION) TAG=$(TAG)' first."; exit 1; }
+	helm push dist/$(HELM_OCI_CHART_NAME)-$(CHART_VERSION).tgz $(CHART_OCI_REPO)
+
+.PHONY: crds-push-oci
+crds-push-oci: crds-package ## Push CRDs Helm chart to OCI registry.
+	@echo "Pushing CRDs chart to OCI registry $(CHART_OCI_REPO)..."
+	helm push dist/$(CRDS_CHART_NAME)-$(CHART_VERSION).tgz $(CHART_OCI_REPO)
+
 
 .PHONY: helm-release
 helm-release: helm-package ## Package chart for release (used by CI)
-	@echo "Helm chart packaged for release: dist/$(CHART_NAME)-$(CHART_VERSION).tgz"
+	@echo "Helm chart packaged for release: dist/$(HELM_OCI_CHART_NAME)-$(CHART_VERSION).tgz"
 
 
 ##@ Deployment
