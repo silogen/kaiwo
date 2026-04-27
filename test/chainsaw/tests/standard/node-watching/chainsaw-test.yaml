@@ -6,6 +6,14 @@ spec:
   concurrent: false
   steps:
   - try:
+    - patch:
+        resource:
+          apiVersion: config.kaiwo.silogen.ai/v1alpha1
+          kind: KaiwoConfig
+          metadata:
+            name: kaiwo
+          spec:
+            dynamicallyUpdateDefaultClusterQueue: true
     - script:
         content: kubectl cordon kaiwo-test-worker
     - sleep:
