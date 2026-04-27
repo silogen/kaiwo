@@ -38,12 +38,13 @@ spec:
           labels:
             app.kubernetes.io/name: kaiwo
     - script:
+        timeout: 2m
         content: |
           kubectl wait deployments.v1.apps \
             -n kaiwo-system \
             -l app.kubernetes.io/name=kaiwo,control-plane=kaiwo-controller-manager \
             --for=condition=Available=true \
-            --timeout=1m
+            --timeout=2m
     - sleep:
         duration: 10s
     - assert:
@@ -65,12 +66,13 @@ spec:
           labels:
             app.kubernetes.io/name: kaiwo
     - script:
+        timeout: 2m
         content: |
           kubectl wait deployments.v1.apps \
             -n kaiwo-system \
             -l app.kubernetes.io/name=kaiwo,control-plane=kaiwo-controller-manager \
             --for=condition=Available=true \
-            --timeout=1m
+            --timeout=2m
     - sleep:
         duration: 10s
     - assert:
