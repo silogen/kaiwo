@@ -1,5 +1,6 @@
 # Default tag from git
 TAG ?= $(shell git describe --tags --abbrev=0 2>/dev/null || echo "latest")
+GIT_ORG ?= $(shell git remote get-url origin 2>/dev/null | sed -n 's|.*github\.com[:/]\([^/]*\)/.*|\1|p')
 
 # Image URL to use for all building/pushing image targets
 IMG ?= ghcr.io/silogen/kaiwo-operator:${TAG}
@@ -14,7 +15,7 @@ CRDS_CHART_NAME ?= kaiwo-crds-chart
 CHART_VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "0.1.0")
 APP_VERSION ?= ${TAG}
 CHART_OCI_REGISTRY ?= ghcr.io
-CHART_OCI_OWNER ?= $(shell echo $(IMG) | cut -d'/' -f2)
+CHART_OCI_OWNER ?= $(if $(GIT_ORG),$(GIT_ORG),$(shell echo $(IMG) | cut -d'/' -f2))
 CHART_OCI_REPO ?= oci://$(CHART_OCI_REGISTRY)/$(CHART_OCI_OWNER)
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
@@ -167,16 +168,15 @@ helm-package: build-installer ## Package the Helm chart
 	}
 	@echo "Packaging Helm chart with version $(CHART_VERSION) and app version $(APP_VERSION)"
 	$(call copy-helm-resources)
-	@cp $(CHART_DIR)/Chart.yaml $(CHART_DIR)/Chart.yaml.prepackage
-	@sed -i.bak 's/^name:.*/name: $(HELM_OCI_CHART_NAME)/' $(CHART_DIR)/Chart.yaml
-	@sed -i.bak 's/^version:.*/version: $(CHART_VERSION)/' $(CHART_DIR)/Chart.yaml
-	@sed -i.bak 's/^appVersion:.*/appVersion: "$(APP_VERSION)"/' $(CHART_DIR)/Chart.yaml
-	helm package $(CHART_DIR) --version=$(CHART_VERSION) --app-version=$(APP_VERSION) --destination=dist/
-	@mv $(CHART_DIR)/Chart.yaml.prepackage $(CHART_DIR)/Chart.yaml
-	@rm -f $(CHART_DIR)/Chart.yaml.bak
+	@cp "$(CHART_DIR)/Chart.yaml" "$(CHART_DIR)/Chart.yaml.prepackage"
+	@trap 'if [ -f "$(CHART_DIR)/Chart.yaml.prepackage" ]; then mv "$(CHART_DIR)/Chart.yaml.prepackage" "$(CHART_DIR)/Chart.yaml"; fi; rm -f "$(CHART_DIR)/Chart.yaml.bak"' EXIT; \
+		sed -i.bak 's/^name:.*/name: $(HELM_OCI_CHART_NAME)/' "$(CHART_DIR)/Chart.yaml"; \
+		sed -i.bak 's/^version:.*/version: $(CHART_VERSION)/' "$(CHART_DIR)/Chart.yaml"; \
+		sed -i.bak 's/^appVersion:.*/appVersion: "$(APP_VERSION)"/' "$(CHART_DIR)/Chart.yaml"; \
+		helm package "$(CHART_DIR)" --version="$(CHART_VERSION)" --app-version="$(APP_VERSION)" --destination=dist/
 
 .PHONY: crds
-crds: kustomize ## Build consolidated CRD manifest to crds.yaml
+crds: manifests kustomize ## Build consolidated CRD manifest to crds.yaml
 	$(KUSTOMIZE) build config/crd > crds.yaml
 
 .PHONY: crds-package
@@ -207,12 +207,13 @@ helm-template: build-installer ## Generate Helm templates for inspection
 	@rm -f $(CHART_DIR)/Chart.yaml.bak
 
 .PHONY: helm-push-oci
-helm-push-oci: helm-package ## Push Helm chart to OCI registry
+helm-push-oci: ## Push Helm chart to OCI registry (requires helm-package first).
 	@echo "Pushing Helm chart to OCI registry..."
+	@test -f dist/$(HELM_OCI_CHART_NAME)-$(CHART_VERSION).tgz || { echo "Missing dist/$(HELM_OCI_CHART_NAME)-$(CHART_VERSION).tgz; run 'make helm-package CHART_VERSION=$(CHART_VERSION) TAG=$(TAG)' first."; exit 1; }
 	helm push dist/$(HELM_OCI_CHART_NAME)-$(CHART_VERSION).tgz $(CHART_OCI_REPO)
 
 .PHONY: crds-push-oci
-crds-push-oci: ## Push CRDs Helm chart to OCI registry (requires crds-package first).
+crds-push-oci: crds-package ## Push CRDs Helm chart to OCI registry.
 	@echo "Pushing CRDs chart to OCI registry $(CHART_OCI_REPO)..."
 	helm push dist/$(CRDS_CHART_NAME)-$(CHART_VERSION).tgz $(CHART_OCI_REPO)
 

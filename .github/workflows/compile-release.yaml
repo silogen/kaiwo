@@ -78,7 +78,7 @@ jobs:
       run: make helm-push-oci TAG=${{ env.VERSION }} CHART_VERSION=${{ env.VERSION }} CHART_OCI_OWNER=${{ github.repository_owner }}
 
     - name: Push CRDs chart to OCI registry
-      run: make crds-push-oci CHART_VERSION=${{ env.VERSION }} CHART_OCI_OWNER=${{ github.repository_owner }}
+      run: make crds-push-oci CHART_VERSION=${{ env.VERSION }} TAG=${{ env.VERSION }} CHART_OCI_OWNER=${{ github.repository_owner }}
 
 
     - name: Upload install.yaml artifact
@@ -122,7 +122,7 @@ jobs:
           ### If using Helm - Install CRDs first
           ```bash
           helm install kaiwo-crds oci://ghcr.io/${{ github.repository_owner }}/kaiwo-crds-chart \
-            --version ${{ env.VERSION }}
+            --version ${{ env.VERSION }} --namespace kaiwo-system --create-namespace
           ```
 
           ### Helm Install (from GitHub Releases)
@@ -136,6 +136,9 @@ jobs:
           helm install kaiwo oci://ghcr.io/${{ github.repository_owner }}/kaiwo-operator-chart \
             --version ${{ env.VERSION }} --namespace kaiwo-system --create-namespace
           ```
+
+          > NOTE: OCI chart paths moved from `oci://ghcr.io/${{ github.repository_owner }}/charts/*`
+          > to `oci://ghcr.io/${{ github.repository_owner }}/*`. Update automation using the old paths.
 
           ### Docker Images
           - Operator: `ghcr.io/${{ github.repository_owner }}/kaiwo-operator:${{ env.VERSION }}`

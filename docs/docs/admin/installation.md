@@ -68,7 +68,8 @@ Install from the OCI registry:
 
 ```bash
 # Install Kaiwo CRDs (OCI chart name: kaiwo-crds-chart)
-helm install kaiwo-crds oci://ghcr.io/silogen/kaiwo-crds-chart
+helm install kaiwo-crds oci://ghcr.io/silogen/kaiwo-crds-chart \
+  --namespace kaiwo-system --create-namespace
 
 # Install latest operator chart (OCI chart name: kaiwo-operator-chart; Chart.yaml name stays kaiwo-operator)
 helm install kaiwo oci://ghcr.io/silogen/kaiwo-operator-chart \
@@ -79,6 +80,9 @@ helm install kaiwo oci://ghcr.io/silogen/kaiwo-operator-chart \
   --version <version> \
   --namespace kaiwo-system --create-namespace
 ```
+
+> Note: OCI chart paths used to include `/charts/` (for example
+> `oci://ghcr.io/silogen/charts/kaiwo-operator`). Use the new paths above.
 
 #### Option B — Kustomize Manifests
 
