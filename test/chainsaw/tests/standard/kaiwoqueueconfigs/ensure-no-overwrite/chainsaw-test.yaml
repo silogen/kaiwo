@@ -37,16 +37,14 @@ spec:
           namespace: kaiwo-system
           labels:
             app.kubernetes.io/name: kaiwo
-    - wait:
-        apiVersion: apps/v1
-        kind: Deployment
-        name: kaiwo-controller-manager
-        namespace: kaiwo-system
-        timeout: 1m
-        for:
-          condition:
-            name: Available
-            value: 'true'
+    - script:
+        timeout: 2m
+        content: |
+          kubectl wait deployments.v1.apps \
+            -n kaiwo-system \
+            -l app.kubernetes.io/name=kaiwo,control-plane=kaiwo-controller-manager \
+            --for=condition=Available=true \
+            --timeout=2m
     - sleep:
         duration: 10s
     - assert:
@@ -67,16 +65,14 @@ spec:
           namespace: kaiwo-system
           labels:
             app.kubernetes.io/name: kaiwo
-    - wait:
-        apiVersion: apps/v1
-        kind: Deployment
-        name: kaiwo-controller-manager
-        namespace: kaiwo-system
-        timeout: 1m
-        for:
-          condition:
-            name: Available
-            value: 'true'
+    - script:
+        timeout: 2m
+        content: |
+          kubectl wait deployments.v1.apps \
+            -n kaiwo-system \
+            -l app.kubernetes.io/name=kaiwo,control-plane=kaiwo-controller-manager \
+            --for=condition=Available=true \
+            --timeout=2m
     - sleep:
         duration: 10s
     - assert:
