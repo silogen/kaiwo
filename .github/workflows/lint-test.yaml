@@ -213,7 +213,13 @@ jobs:
 
     - name: Wait for rollout
       run: |
-        kubectl -n kaiwo-system rollout status deployment/kaiwo-controller-manager --timeout=300s
+        CONTROLLER_DEPLOYMENT=$(kubectl -n kaiwo-system get deployments -l app.kubernetes.io/name=kaiwo,control-plane=kaiwo-controller-manager -o jsonpath='{.items[0].metadata.name}')
+        if [ -z "$CONTROLLER_DEPLOYMENT" ]; then
+          echo "Could not find Kaiwo controller deployment in kaiwo-system"
+          kubectl -n kaiwo-system get deployments -o wide
+          exit 1
+        fi
+        kubectl -n kaiwo-system rollout status "deployment/$CONTROLLER_DEPLOYMENT" --timeout=300s
         kubectl -n kube-system rollout status deployment/kaiwo-scheduler --timeout=300s
         kubectl -n kaiwo-system get pods -o wide
 
@@ -229,15 +235,20 @@ jobs:
         kubectl -n kube-system get pods -o wide
 
         echo "=== Controller manager pod details ==="
-        kubectl -n kaiwo-system describe deployment kaiwo-controller-manager
-        kubectl -n kaiwo-system describe pods -l control-plane=controller-manager
+        CONTROLLER_DEPLOYMENT=$(kubectl -n kaiwo-system get deployments -l app.kubernetes.io/name=kaiwo,control-plane=kaiwo-controller-manager -o jsonpath='{.items[0].metadata.name}')
+        if [ -n "$CONTROLLER_DEPLOYMENT" ]; then
+          kubectl -n kaiwo-system describe "deployment/$CONTROLLER_DEPLOYMENT"
+        else
+          echo "Controller deployment not found via labels"
+        fi
+        kubectl -n kaiwo-system describe pods -l control-plane=kaiwo-controller-manager
 
         echo "=== Scheduler pod details ==="
         kubectl -n kube-system describe deployment kaiwo-scheduler
         kubectl -n kube-system describe pods -l component=kaiwo-scheduler
 
         echo "=== Controller manager logs ==="
-        kubectl -n kaiwo-system logs -l control-plane=controller-manager --tail=100 --all-containers=true || true
+        kubectl -n kaiwo-system logs -l control-plane=kaiwo-controller-manager --tail=100 --all-containers=true || true
 
         echo "=== Scheduler logs ==="
         kubectl -n kube-system logs -l component=kaiwo-scheduler --tail=100 --all-containers=true || true
