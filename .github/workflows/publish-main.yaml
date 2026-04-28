@@ -95,6 +95,15 @@ jobs:
         run: |
           make helm-package TAG=${IMAGE_TAG} CHART_VERSION=${CHART_VERSION} IMG=${PUSH_IMAGE_REPO}:${IMAGE_TAG}
 
+      # Makefile helm-package restores chart/Chart.yaml after packaging (so OCI .tgz
+      # can use HELM_OCI_CHART_NAME without leaving main-branch metadata dirty). For
+      # publish-main, persist SHA-derived chart metadata like the reference repo.
+      - name: Stamp chart/Chart.yaml for publish-main branch
+        run: |
+          sed -i.bak "s/^version:.*/version: ${CHART_VERSION}/" chart/Chart.yaml
+          sed -i.bak "s/^appVersion:.*/appVersion: \"${IMAGE_TAG}\"/" chart/Chart.yaml
+          rm -f chart/Chart.yaml.bak
+
       - name: Log in to GHCR (Helm/OCI)
         run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u $GITHUB_ACTOR --password-stdin
 
