@@ -1,6 +1,7 @@
 name: publish-main
 
 on:
+  pull_request: {}
   push:
     branches:
       - main
@@ -21,7 +22,8 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     env:
-      IMAGE_REPO: ghcr.io/${{ github.repository_owner }}/kaiwo-operator
+      PUSH_IMAGE_REPO: ${{ vars.PUSH_IMAGE_REPO || format('ghcr.io/{0}/kaiwo-operator', github.repository_owner) }}
+      PULL_IMAGE_REPO: ${{ vars.PULL_IMAGE_REPO || vars.PUSH_IMAGE_REPO || format('ghcr.io/{0}/kaiwo-operator', github.repository_owner) }}
       CHART_NAME: kaiwo-operator
 
     steps:
@@ -68,15 +70,30 @@ jobs:
 
       - name: Build and push operator image
         run: |
-          make docker-build IMG=${IMAGE_REPO}:${IMAGE_TAG}
-          make docker-push  IMG=${IMAGE_REPO}:${IMAGE_TAG}
+          make docker-build IMG=${PUSH_IMAGE_REPO}:${IMAGE_TAG} TAG=${IMAGE_TAG}
+          make docker-push  IMG=${PUSH_IMAGE_REPO}:${IMAGE_TAG}
           # Optionally tag with publish-main (instead of main)
-          docker tag ${IMAGE_REPO}:${IMAGE_TAG} ${IMAGE_REPO}:publish-main
-          docker push ${IMAGE_REPO}:publish-main
+          docker tag ${PUSH_IMAGE_REPO}:${IMAGE_TAG} ${PUSH_IMAGE_REPO}:publish-main
+          docker push ${PUSH_IMAGE_REPO}:publish-main
+
+      - name: Update Helm values with image repository and tag
+        run: |
+          CHART_IMAGE_REPO="${PULL_IMAGE_REPO:-$PUSH_IMAGE_REPO}"
+          CHART_IMAGE_REGISTRY="${CHART_IMAGE_REPO%%/*}"
+          CHART_IMAGE_PATH="${CHART_IMAGE_REPO#*/}"
+          if [ "$CHART_IMAGE_PATH" = "$CHART_IMAGE_REPO" ]; then
+            CHART_IMAGE_REGISTRY="ghcr.io"
+            CHART_IMAGE_PATH="$CHART_IMAGE_REPO"
+          fi
+
+          sed -i.bak "s|^  registry:.*|  registry: ${CHART_IMAGE_REGISTRY}|" chart/values.yaml
+          sed -i.bak "s|^  repository:.*|  repository: ${CHART_IMAGE_PATH}|" chart/values.yaml
+          sed -i.bak "s|^  tag:.*|  tag: \"${IMAGE_TAG}\"|" chart/values.yaml
+          rm -f chart/values.yaml.bak
 
       - name: Package Helm chart
         run: |
-          make helm-package TAG=${IMAGE_TAG} CHART_VERSION=${CHART_VERSION} IMG=${IMAGE_REPO}:${IMAGE_TAG}
+          make helm-package TAG=${IMAGE_TAG} CHART_VERSION=${CHART_VERSION} IMG=${PUSH_IMAGE_REPO}:${IMAGE_TAG}
 
       - name: Log in to GHCR (Helm/OCI)
         run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u $GITHUB_ACTOR --password-stdin
