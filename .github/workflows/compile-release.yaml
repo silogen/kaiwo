@@ -8,6 +8,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Static OCI chart version for integration tests (`helm install ... --version`).
+      # Operator image tag remains the release tag (VERSION).
+      INT_TEST_CHART_VERSION: "0.0.0-int-test"
 
     steps:
     - name: Checkout repository
@@ -79,6 +83,16 @@ jobs:
 
     - name: Push CRDs chart to OCI registry
       run: make crds-push-oci CHART_VERSION=${{ env.VERSION }} TAG=${{ env.VERSION }} CHART_OCI_OWNER=${{ github.repository_owner }}
+
+    - name: Push Helm and CRDs OCI charts for integration testing (static chart tag)
+      run: |
+        OWNER=${{ github.repository_owner }}
+        IMG=ghcr.io/${OWNER}/kaiwo-operator:${{ env.VERSION }}
+        TAG=${{ env.VERSION }}
+        CHART_VER=${{ env.INT_TEST_CHART_VERSION }}
+        make helm-package TAG="${TAG}" CHART_VERSION="${CHART_VER}" IMG="${IMG}"
+        make helm-push-oci TAG="${TAG}" CHART_VERSION="${CHART_VER}" CHART_OCI_OWNER="${OWNER}"
+        make crds-push-oci CHART_VERSION="${CHART_VER}" TAG="${TAG}" CHART_OCI_OWNER="${OWNER}"
 
 
     - name: Upload install.yaml artifact
