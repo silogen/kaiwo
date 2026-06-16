@@ -42,13 +42,13 @@ jobs:
       run: |
         zip -r workloads.zip ./workloads
 
-    - name: Log in to GitHub Container Registry
+    - name: Log in to DockerHub
       run: |
-        echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $GITHUB_ACTOR --password-stdin
+        echo "${{ secrets.DOCKER_HUB_PUSH }}" | docker login docker.io -u "${{ secrets.DOCKER_HUB_PUSH_USER }}" --password-stdin
 
     - name: Build and push operator image
       run: |
-        IMAGE_NAME=ghcr.io/${{ github.repository_owner }}/kaiwo-operator
+        IMAGE_NAME=docker.io/silogenai/kaiwo-operator
         TAG=${{ env.VERSION }}
 
         # Build the Docker image
@@ -59,12 +59,29 @@ jobs:
 
     - name: Generate install.yaml
       run: |
-        make build-installer TAG=${{ env.VERSION }} IMG=ghcr.io/${{ github.repository_owner }}/kaiwo-operator:${{ env.VERSION }}
+        make build-installer TAG=${{ env.VERSION }} IMG=docker.io/silogenai/kaiwo-operator:${{ env.VERSION }}
         cp dist/install.yaml install.yaml
+
+    - name: Point Helm chart at public mirror (amdenterpriseai)
+      run: |
+        # The packaged chart's image defaults to the PUBLIC
+        # docker.io/amdenterpriseai/kaiwo-operator mirror, which only carries
+        # this version *after* the manual silogenai -> amdenterpriseai image
+        # promotion has run. The operator image is actually pushed to the
+        # private docker.io/silogenai org by this workflow. To install
+        # *before* promotion, override back to silogenai and provide a pull
+        # secret:
+        #   --set image.repository=silogenai/kaiwo-operator \
+        #   --set imagePullSecrets[0].name=dockerhub-regcred
+        # (registry stays docker.io). Leave image.tag empty so it falls back
+        # to the chart appVersion (the release VERSION).
+        sed -i.bak 's|^  registry:.*|  registry: docker.io|' chart/values.yaml
+        sed -i.bak 's|^  repository:.*|  repository: amdenterpriseai/kaiwo-operator|' chart/values.yaml
+        rm -f chart/values.yaml.bak
 
     - name: Package Helm chart
       run: |
-        make helm-release TAG=${{ env.VERSION }} CHART_VERSION=${{ env.VERSION }} IMG=ghcr.io/${{ github.repository_owner }}/kaiwo-operator:${{ env.VERSION }}
+        make helm-release TAG=${{ env.VERSION }} CHART_VERSION=${{ env.VERSION }} IMG=docker.io/silogenai/kaiwo-operator:${{ env.VERSION }}
 
     - name: Compile CRDs to a single manifest
       run: |
@@ -74,25 +91,31 @@ jobs:
       run: |
         make crds-package CHART_VERSION=${{ env.VERSION }} TAG=${{ env.VERSION }}
 
-    - name: Log in to GHCR (Helm/OCI)
-      run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u $GITHUB_ACTOR --password-stdin
+    - name: Log in to DockerHub (Helm/OCI)
+      run: echo "${{ secrets.DOCKER_HUB_PUSH }}" | helm registry login registry-1.docker.io -u "${{ secrets.DOCKER_HUB_PUSH_USER }}" --password-stdin
 
 
     - name: Push Helm chart to OCI registry
-      run: make helm-push-oci TAG=${{ env.VERSION }} CHART_VERSION=${{ env.VERSION }} CHART_OCI_OWNER=${{ github.repository_owner }}
+      run: make helm-push-oci TAG=${{ env.VERSION }} CHART_VERSION=${{ env.VERSION }} CHART_OCI_REGISTRY=docker.io CHART_OCI_OWNER=silogenai
 
     - name: Push CRDs chart to OCI registry
-      run: make crds-push-oci CHART_VERSION=${{ env.VERSION }} TAG=${{ env.VERSION }} CHART_OCI_OWNER=${{ github.repository_owner }}
+      run: make crds-push-oci CHART_VERSION=${{ env.VERSION }} TAG=${{ env.VERSION }} CHART_OCI_REGISTRY=docker.io CHART_OCI_OWNER=silogenai
 
     - name: Push Helm and CRDs OCI charts for integration testing (static chart tag)
       run: |
-        OWNER=${{ github.repository_owner }}
-        IMG=ghcr.io/${OWNER}/kaiwo-operator:${{ env.VERSION }}
+        # Int-test images are pushed only to the private silogenai org and are
+        # NOT mirrored to amdenterpriseai, so the int-test chart must point at
+        # silogenai (where the image actually lives) rather than the public
+        # mirror baked into the real release chart above. Registry stays
+        # docker.io.
+        sed -i.bak 's|^  repository:.*|  repository: silogenai/kaiwo-operator|' chart/values.yaml
+        rm -f chart/values.yaml.bak
+        IMG=docker.io/silogenai/kaiwo-operator:${{ env.VERSION }}
         TAG=${{ env.VERSION }}
         CHART_VER=${{ env.INT_TEST_CHART_VERSION }}
         make helm-package TAG="${TAG}" CHART_VERSION="${CHART_VER}" IMG="${IMG}"
-        make helm-push-oci TAG="${TAG}" CHART_VERSION="${CHART_VER}" CHART_OCI_OWNER="${OWNER}"
-        make crds-push-oci CHART_VERSION="${CHART_VER}" TAG="${TAG}" CHART_OCI_OWNER="${OWNER}"
+        make helm-push-oci TAG="${TAG}" CHART_VERSION="${CHART_VER}" CHART_OCI_REGISTRY=docker.io CHART_OCI_OWNER=silogenai
+        make crds-push-oci CHART_VERSION="${CHART_VER}" TAG="${TAG}" CHART_OCI_REGISTRY=docker.io CHART_OCI_OWNER=silogenai
 
 
     - name: Upload install.yaml artifact
@@ -128,6 +151,34 @@ jobs:
         body: |
           ## Installation
 
+          The packaged Helm chart's `image.repository` points at the public
+          `docker.io/amdenterpriseai/kaiwo-operator`, which only carries this
+          version *after* the manual silogenai → amdenterpriseai image
+          promotion has run.
+
+          ### Internal install (pre-promotion, silogenai)
+
+          To install **before** promotion, override the image back to the
+          private `silogenai` org and provide a `dockerhub-regcred` pull
+          secret in the install namespace (skip if it is already present):
+
+          ```bash
+          kubectl create namespace kaiwo-system --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create secret docker-registry dockerhub-regcred \
+            --namespace kaiwo-system \
+            --docker-server=https://index.docker.io/v1/ \
+            --docker-username=<dockerhub-user> \
+            --docker-password=<dockerhub-token>
+
+          helm install kaiwo oci://docker.io/silogenai/kaiwo-operator-chart \
+            --version ${{ env.VERSION }} \
+            --namespace kaiwo-system --create-namespace \
+            --set image.repository=silogenai/kaiwo-operator \
+            --set imagePullSecrets[0].name=dockerhub-regcred
+          ```
+
+          ---
+
           ### Kubernetes Install (kubectl)
           ```bash
           kubectl apply -f https://github.com/${{ github.repository }}/releases/download/${{ env.VERSION }}/install.yaml --server-side
@@ -135,7 +186,7 @@ jobs:
 
           ### If using Helm - Install CRDs first
           ```bash
-          helm install kaiwo-crds oci://ghcr.io/${{ github.repository_owner }}/kaiwo-crds-chart \
+          helm install kaiwo-crds oci://docker.io/silogenai/kaiwo-crds-chart \
             --version ${{ env.VERSION }} --namespace kaiwo-system --create-namespace
           ```
 
@@ -147,13 +198,16 @@ jobs:
 
           ### Helm Install (from OCI Registry)
           ```bash
-          helm install kaiwo oci://ghcr.io/${{ github.repository_owner }}/kaiwo-operator-chart \
+          helm install kaiwo oci://docker.io/silogenai/kaiwo-operator-chart \
             --version ${{ env.VERSION }} --namespace kaiwo-system --create-namespace
           ```
 
-          > NOTE: OCI chart paths moved from `oci://ghcr.io/${{ github.repository_owner }}/charts/*`
-          > to `oci://ghcr.io/${{ github.repository_owner }}/*`. Update automation using the old paths.
+          > NOTE: OCI charts are published to `docker.io/silogenai/*` (previously
+          > `oci://ghcr.io/${{ github.repository_owner }}/*`). The chart's baked-in
+          > operator image points at `docker.io/amdenterpriseai/kaiwo-operator`
+          > (post-promotion). Update automation using the old paths.
 
           ### Docker Images
-          - Operator: `ghcr.io/${{ github.repository_owner }}/kaiwo-operator:${{ env.VERSION }}`
+          - Operator (chart default, post-promotion): `docker.io/amdenterpriseai/kaiwo-operator:${{ env.VERSION }}`
+          - Operator (pre-promotion source): `docker.io/silogenai/kaiwo-operator:${{ env.VERSION }}`
 
