@@ -59,6 +59,10 @@ scheduler:
   enabled: true
   # Namespace where scheduler will be deployed (typically kube-system)
   namespace: kube-system
+  # GPU scoring strategy for the NodeResourcesFit plugin:
+  #   RequestedToCapacityRatio - bin-pack, packs workloads onto fewest nodes (default)
+  #   LeastAllocated           - spread, distributes workloads across nodes
+  scoringStrategy: RequestedToCapacityRatio
 
 # Security settings
 security:
