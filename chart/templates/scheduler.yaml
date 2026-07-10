@@ -4,7 +4,11 @@ Kaiwo Scheduler resources
 {{- if .Values.scheduler.enabled }}
 # Generated from config/static/scheduler
 {{- $sched := (.Files.Get "scheduler-resources.yaml") | replace "namespace: kube-system" (printf "namespace: %s" .Values.scheduler.namespace) }}
-{{- if eq .Values.scheduler.scoringStrategy "LeastAllocated" }}
+{{- $strategy := .Values.scheduler.scoringStrategy }}
+{{- if not (or (eq $strategy "RequestedToCapacityRatio") (eq $strategy "LeastAllocated")) }}
+{{- fail (printf "scheduler.scoringStrategy must be RequestedToCapacityRatio or LeastAllocated, got %q" $strategy) }}
+{{- end }}
+{{- if eq $strategy "LeastAllocated" }}
 {{- $binpack := `RequestedToCapacityRatio
                 resources:
                   - name: nvidia.com/gpu
