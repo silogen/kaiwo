@@ -1,0 +1,2289 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../resource-monitoring/">
+      
+      
+        <link rel="next" href="../auth/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>GPU Preemption - Kaiwo - Kubernetes-native AI Workload Orchestrator</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#gpu-preemption" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Kaiwo - Kubernetes-native AI Workload Orchestrator" class="md-header__button md-logo" aria-label="Kaiwo - Kubernetes-native AI Workload Orchestrator" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Kaiwo - Kubernetes-native AI Workload Orchestrator
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              GPU Preemption
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../.." class="md-tabs__link">
+          
+  
+  
+  Home
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../scientist/overview/" class="md-tabs__link">
+          
+  
+  
+  AI Scientist
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../overview/" class="md-tabs__link">
+          
+  
+  
+  Administrator
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../reference/crds/kaiwo.silogen.ai/" class="md-tabs__link">
+          
+  
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Kaiwo - Kubernetes-native AI Workload Orchestrator" class="md-nav__button md-logo" aria-label="Kaiwo - Kubernetes-native AI Workload Orchestrator" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Kaiwo - Kubernetes-native AI Workload Orchestrator
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Home
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../general/main-components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Main Components
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../general/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Releases
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../general/support/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Support
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AI Scientist
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    AI Scientist
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../scientist/overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../scientist/quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quickstart
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../scientist/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../scientist/scheduling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scheduling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Administrator
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Administrator
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../maintenance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Maintenance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../monitoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Monitoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../resource-monitoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Resource monitoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GPU Preemption
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GPU Preemption
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="How It Works">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#supported-owner-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Supported Owner Types
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration-hierarchy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration Hierarchy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#enabling-gpu-preemption" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Enabling GPU Preemption
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Enabling GPU Preemption">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-operator-startup-helm-values-env-vars" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Operator startup: Helm values / env vars
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-cluster-wide-runtime-defaults-kaiwoconfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Cluster-wide runtime defaults: KaiwoConfig
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-per-namespace-annotations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Per-namespace: Annotations
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-per-workload-annotations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Per-workload: Annotations
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#annotations-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Annotations Reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#preemption-policies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Preemption Policies
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Preemption Policies">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#onpressure-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OnPressure (default)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#always" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Always
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#environment-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Environment Variables
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#gpuworkload-lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GpuWorkload Lifecycle
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="GpuWorkload Lifecycle">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#gpuworkload-naming" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GpuWorkload naming
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#inspecting-gpuworkloads" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Inspecting GpuWorkloads
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Inspecting GpuWorkloads">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#example-gpuworkload-cr" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example GpuWorkload CR
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Examples
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Examples">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reclaim-idle-gpus-under-pressure-default-behavior" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reclaim idle GPUs under pressure (default behavior)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#strict-reclamation-with-short-idle-window" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Strict reclamation with short idle window
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#opt-in-with-defaults-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Opt-in with defaults only
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#namespace-wide-opt-in" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Namespace-wide opt-in
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#comparison-with-resource-monitoring" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Comparison with Resource Monitoring
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Troubleshooting
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../auth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authentication & Authorization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/crds/kaiwo.silogen.ai/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Kaiwo API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/crds/config.kaiwo.silogen.ai/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Kaiwo Configuration API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="How It Works">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#supported-owner-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Supported Owner Types
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration-hierarchy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration Hierarchy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#enabling-gpu-preemption" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Enabling GPU Preemption
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Enabling GPU Preemption">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-operator-startup-helm-values-env-vars" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Operator startup: Helm values / env vars
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-cluster-wide-runtime-defaults-kaiwoconfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Cluster-wide runtime defaults: KaiwoConfig
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-per-namespace-annotations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Per-namespace: Annotations
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-per-workload-annotations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Per-workload: Annotations
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#annotations-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Annotations Reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#preemption-policies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Preemption Policies
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Preemption Policies">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#onpressure-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OnPressure (default)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#always" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Always
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#environment-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Environment Variables
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#gpuworkload-lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GpuWorkload Lifecycle
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="GpuWorkload Lifecycle">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#gpuworkload-naming" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GpuWorkload naming
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#inspecting-gpuworkloads" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Inspecting GpuWorkloads
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Inspecting GpuWorkloads">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#example-gpuworkload-cr" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example GpuWorkload CR
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Examples
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Examples">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reclaim-idle-gpus-under-pressure-default-behavior" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reclaim idle GPUs under pressure (default behavior)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#strict-reclamation-with-short-idle-window" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Strict reclamation with short idle window
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#opt-in-with-defaults-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Opt-in with defaults only
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#namespace-wide-opt-in" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Namespace-wide opt-in
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#comparison-with-resource-monitoring" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Comparison with Resource Monitoring
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Troubleshooting
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="gpu-preemption">GPU Preemption</h1>
+<p>GPU preemption automatically detects idle GPU workloads and terminates them to free resources for pending work. Unlike <a href="../resource-monitoring/">Resource Monitoring</a>, which is limited to Kaiwo CRDs (<code>KaiwoJob</code> / <code>KaiwoService</code>), GPU preemption works with <strong>any</strong> Kubernetes workload that requests AMD GPUs -- bare Pods, Jobs, Deployments, KaiwoJobs, RayJobs, or any other resource type.</p>
+<p>The system relies on a CRD, <code>GpuWorkload</code>, which tracks each opted-in workload's GPU utilization and lifecycle. These CRs are created automatically when a qualifying Pod is scheduled, and they persist after the workload is deleted to provide an audit trail.</p>
+<h2 id="how-it-works">How It Works</h2>
+<pre class="mermaid"><code>flowchart LR
+    P[Pod created with&lt;br&gt;amd.com/gpu request] --&gt; D{Owner or namespace&lt;br&gt;has preemption&lt;br&gt;annotation?}
+    D -- Yes --&gt; G[GpuWorkload CR created]
+    D -- No --&gt; X[Ignored]
+    G --&gt; S[Metrics scraper updates&lt;br&gt;per-pod utilization]
+    S --&gt; R[Reconciler computes&lt;br&gt;aggregated utilization]
+    R --&gt; Ph{Phase?}
+    Ph -- Active --&gt; W[Requeue]
+    Ph -- Idle past&lt;br&gt;grace-period --&gt; E[Preemption evaluation]
+    E -- Always --&gt; Del[Delete workload]
+    E -- OnPressure +&lt;br&gt;pending demand&lt;br&gt;+ fit check --&gt; Del</code></pre>
+<ol>
+<li><strong>Discovery</strong> -- The controller watches all Pods. When a Pod requesting any <code>amd.com/*</code> GPU resource (e.g. <code>amd.com/gpu</code>, <code>amd.com/gpu-0</code>, partitioned resources) is created, the controller resolves its root owner (walking <code>ownerReferences</code> up through ReplicaSets, Jobs, etc.) and checks for preemption annotations on both the root owner and the pod's namespace. Namespace annotations serve as defaults; workload-level annotations override them.</li>
+<li><strong>Tracking</strong> -- A <code>GpuWorkload</code> CR is created for each unique root owner, capturing the GPU resource counts and annotation-derived settings.</li>
+<li><strong>Metrics</strong> -- A background scraper polls the AMD GPU operator's Prometheus endpoint (<code>gpu_gfx_activity</code>) and writes per-pod utilization into the <code>GpuWorkload</code> status.</li>
+<li><strong>Reconciliation</strong> -- The reconciler aggregates utilization, determines the phase (<code>PendingOther</code>, <code>PendingGpu</code>, <code>Active</code>, <code>Idle</code>, etc.), and evaluates preemption when conditions are met.</li>
+<li><strong>Preemption</strong> -- When an idle workload becomes eligible, a Lease-guarded evaluation ensures only one controller replica runs the global preemption decision at a time, preventing race conditions and over-preemption.</li>
+</ol>
+<div class="admonition note">
+<p class="admonition-title">AMD GPUs only</p>
+<p>GPU preemption currently supports AMD GPU resources (<code>amd.com/*</code>). NVIDIA GPUs are not tracked by this feature.</p>
+</div>
+<h3 id="supported-owner-types">Supported Owner Types</h3>
+<p>The controller resolves pod ownership by walking the <code>ownerReferences</code> chain. The operator has RBAC permissions for the following owner types out of the box:</p>
+<ul>
+<li><code>batch/v1</code> Jobs</li>
+<li><code>apps/v1</code> Deployments, ReplicaSets, StatefulSets</li>
+<li><code>ray.io/v1</code> RayClusters, RayJobs, RayServices</li>
+<li><code>kaiwo.silogen.ai/v1alpha1</code> KaiwoJobs, KaiwoServices</li>
+<li><code>workload.codeflare.dev/v1beta2</code> AppWrappers</li>
+</ul>
+<p>For workloads owned by other resource types (e.g. CronJobs, DaemonSets, custom controllers), add <code>get</code> and <code>delete</code> permissions for those resources to the operator <code>ServiceAccount</code>. <code>get</code> is needed to resolve the owner chain and read annotations; <code>delete</code> is needed for preemption. Without <code>get</code>, the controller will log an RBAC error and skip the pod.</p>
+<h2 id="configuration-hierarchy">Configuration Hierarchy</h2>
+<p>Each setting is resolved through a 5-tier chain. The first non-empty value wins:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>per-workload annotation  &gt;  namespace annotation  &gt;  KaiwoConfig  &gt;  operator env var  &gt;  hardcoded fallback
+</span></code></pre></div>
+<p>This lets you set cluster-wide runtime defaults (via <code>KaiwoConfig</code>), override them per namespace (via namespace annotations), and further override per workload (via workload annotations), while env vars and hardcoded values provide a safety net.</p>
+<h2 id="enabling-gpu-preemption">Enabling GPU Preemption</h2>
+<h3 id="1-operator-startup-helm-values-env-vars">1. Operator startup: Helm values / env vars</h3>
+<p>Enable the feature and point it at the AMD GPU metrics exporter:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">gpuPreemption</span><span class="p">:</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span><span class="c1"># Replace with the actual in-cluster URL of your AMD GPU metrics exporter.</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span><span class="nt">metricsEndpoint</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;http://amd-gpu-metrics-exporter.gpu-operator.svc:5000/metrics&quot;</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">  </span><span class="nt">pollingInterval</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;15s&quot;</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">  </span><span class="nt">defaultThreshold</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;5&quot;</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">  </span><span class="nt">defaultGracePeriod</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;10m&quot;</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">  </span><span class="nt">defaultPolicy</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;OnPressure&quot;</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">  </span><span class="nt">defaultAggregation</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Max&quot;</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">  </span><span class="nt">defaultTTL</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;24h&quot;</span>
+</span></code></pre></div>
+<p>These map to operator environment variables (see <a href="#environment-variables">Environment Variables</a> below). Changing them requires an operator restart.</p>
+<div class="admonition warning">
+<p class="admonition-title">Operator restart required</p>
+<p><code>enabled</code>, <code>metricsEndpoint</code>, and <code>pollingInterval</code> can <strong>only</strong> be set via Helm values / environment variables — they are not available in <code>KaiwoConfig</code> or per-workload annotations. These settings control the controller and metrics scraper startup, so any change requires an <strong>operator restart</strong> to take effect.</p>
+</div>
+<h3 id="2-cluster-wide-runtime-defaults-kaiwoconfig">2. Cluster-wide runtime defaults: KaiwoConfig</h3>
+<p>The <code>KaiwoConfig</code> cluster-scoped singleton provides live-tunable defaults that take effect without restarting the operator. Add a <code>gpuPreemption</code> section to the spec:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">config.kaiwo.silogen.ai/v1alpha1</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">KaiwoConfig</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="nt">metadata</span><span class="p">:</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kaiwo</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="nt">spec</span><span class="p">:</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">  </span><span class="nt">gpuPreemption</span><span class="p">:</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">    </span><span class="nt">defaultThreshold</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">    </span><span class="nt">defaultGracePeriod</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;15m&quot;</span>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">    </span><span class="nt">defaultPolicy</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;OnPressure&quot;</span>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">    </span><span class="nt">defaultAggregation</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Max&quot;</span>
+</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">    </span><span class="nt">defaultTTL</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;12h&quot;</span>
+</span></code></pre></div>
+<p>All fields are optional. Omitted fields fall through to the env var / hardcoded fallback.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code>enabled</code>, <code>metricsEndpoint</code>, and <code>pollingInterval</code> are <strong>not</strong> available in <code>KaiwoConfig</code>. These are startup-only settings (Helm / env vars) that require an operator restart to change. All other settings (<code>defaultThreshold</code>, <code>defaultGracePeriod</code>, <code>defaultPolicy</code>, <code>defaultAggregation</code>, <code>defaultTTL</code>) can be tuned live via <code>KaiwoConfig</code> without restarting.</p>
+</div>
+<h3 id="3-per-namespace-annotations">3. Per-namespace: Annotations</h3>
+<p>Annotate a <strong>Namespace</strong> to opt in all GPU workloads in that namespace. This is convenient when you want every GPU workload in a namespace to be tracked without annotating each one individually:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v1</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Namespace</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="nt">metadata</span><span class="p">:</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ml-team</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">  </span><span class="nt">annotations</span><span class="p">:</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">    </span><span class="nt">kaiwo.silogen.ai/gpu-preemption.enabled</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;true&quot;</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">    </span><span class="nt">kaiwo.silogen.ai/gpu-preemption.grace-period</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;15m&quot;</span>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="w">    </span><span class="nt">kaiwo.silogen.ai/gpu-preemption.policy</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;OnPressure&quot;</span>
+</span></code></pre></div>
+<p>Any GPU workload created in this namespace will be automatically tracked. Individual workloads can still override specific settings with their own annotations (see below).</p>
+<h3 id="4-per-workload-annotations">4. Per-workload: Annotations</h3>
+<p>Add annotations to the <strong>root owner</strong> resource (the Job, Deployment, KaiwoJob, etc. -- not the Pod template) to opt it in or override namespace defaults:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">batch/v1</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Job</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="nt">metadata</span><span class="p">:</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-training-job</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">  </span><span class="nt">annotations</span><span class="p">:</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">    </span><span class="nt">kaiwo.silogen.ai/gpu-preemption.grace-period</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;5m&quot;</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">    </span><span class="nt">kaiwo.silogen.ai/gpu-preemption.policy</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Always&quot;</span>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="nt">spec</span><span class="p">:</span>
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="w">  </span><span class="nt">template</span><span class="p">:</span>
+</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="w">    </span><span class="nt">spec</span><span class="p">:</span>
+</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="w">      </span><span class="nt">containers</span><span class="p">:</span>
+</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">train</span>
+</span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="w">        </span><span class="nt">resources</span><span class="p">:</span>
+</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="w">          </span><span class="nt">requests</span><span class="p">:</span>
+</span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="w">            </span><span class="nt">amd.com/gpu</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;4&quot;</span>
+</span><span id="__span-4-16"><a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a><span class="w">          </span><span class="nt">limits</span><span class="p">:</span>
+</span><span id="__span-4-17"><a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a><span class="w">            </span><span class="nt">amd.com/gpu</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;4&quot;</span>
+</span><span id="__span-4-18"><a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a><span class="w">        </span><span class="c1"># ...</span>
+</span></code></pre></div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Any annotation with the <code>kaiwo.silogen.ai/gpu-preemption.</code> prefix enables preemption tracking. This means:</p>
+<ul>
+<li><code>.enabled: "true"</code> on its own is valid -- all settings use cluster-wide defaults.</li>
+<li><code>.grace-period: "5m"</code> on its own is also valid -- it implicitly enables tracking without needing <code>.enabled</code>.</li>
+<li>Any combination works; omitted settings fall back through namespace annotations, then KaiwoConfig, then env vars, then hardcoded defaults.</li>
+<li>Annotations on the workload take precedence over identical annotations on the namespace.</li>
+</ul>
+</div>
+<h2 id="annotations-reference">Annotations Reference</h2>
+<p>All annotations use the prefix <code>kaiwo.silogen.ai/gpu-preemption.</code> and can be placed on the root owner resource and/or the namespace. Each setting follows the resolution chain: <strong>workload annotation &gt; namespace annotation &gt; KaiwoConfig &gt; env var &gt; hardcoded fallback</strong>.</p>
+<table>
+<thead>
+<tr>
+<th>Annotation</th>
+<th>Description</th>
+<th>KaiwoConfig field</th>
+<th>Env var</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>.enabled</code></td>
+<td>Explicitly enable tracking. Can be used on its own (all other settings fall back to defaults). Not required if any other preemption annotation is set.</td>
+<td>--</td>
+<td>--</td>
+<td>--</td>
+</tr>
+<tr>
+<td><code>.grace-period</code></td>
+<td>Duration the workload must be continuously idle before it becomes preemptible (e.g. <code>5m</code>, <code>1h</code>).</td>
+<td><code>gpuPreemption.defaultGracePeriod</code></td>
+<td><code>GPU_PREEMPTION_DEFAULT_GRACE_PERIOD</code></td>
+<td><code>10m</code></td>
+</tr>
+<tr>
+<td><code>.threshold</code></td>
+<td>Utilization percentage below which the workload is considered idle.</td>
+<td><code>gpuPreemption.defaultThreshold</code></td>
+<td><code>GPU_PREEMPTION_DEFAULT_THRESHOLD</code></td>
+<td><code>5</code></td>
+</tr>
+<tr>
+<td><code>.policy</code></td>
+<td>Preemption policy: <code>OnPressure</code> or <code>Always</code>.</td>
+<td><code>gpuPreemption.defaultPolicy</code></td>
+<td><code>GPU_PREEMPTION_DEFAULT_POLICY</code></td>
+<td><code>OnPressure</code></td>
+</tr>
+<tr>
+<td><code>.aggregation</code></td>
+<td>How utilization is aggregated across pods: <code>Min</code>, <code>Max</code>, or <code>Avg</code>.</td>
+<td><code>gpuPreemption.defaultAggregation</code></td>
+<td><code>GPU_PREEMPTION_DEFAULT_AGGREGATION</code></td>
+<td><code>Max</code></td>
+</tr>
+<tr>
+<td><code>.ttl</code></td>
+<td>How long the <code>GpuWorkload</code> CR is retained after the workload reaches a terminal state. <code>0</code> means retain forever.</td>
+<td><code>gpuPreemption.defaultTTL</code></td>
+<td><code>GPU_PREEMPTION_DEFAULT_TTL</code></td>
+<td><code>24h</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="preemption-policies">Preemption Policies</h2>
+<h3 id="onpressure-default"><code>OnPressure</code> (default)</h3>
+<p>A workload is only preempted when <strong>all</strong> of the following are true:</p>
+<ul>
+<li>It has been idle longer than <code>grace-period</code>.</li>
+<li>Another <code>GpuWorkload</code> is in the <code>PendingGpu</code> phase -- meaning its pods are unschedulable <strong>specifically because of insufficient GPU resources</strong> (the scheduler's <code>PodScheduled</code> condition message must contain <code>Insufficient amd.com/gpu</code>). Pods pending for other reasons show as <code>PendingOther</code> and do not trigger preemption.</li>
+<li>A <strong>fit check</strong> passes (see below).</li>
+</ul>
+<p><strong>Fit check and multi-victim accumulation:</strong> The evaluator does not consider idle workloads in isolation. For each pending workload, it walks the idle pool (sorted oldest-idle first) and accumulates GPU counts across multiple idle workloads until the combined total meets the pending demand. If the combined total of all eligible idle workloads is still less than what the pending workload needs, <strong>none of them are preempted</strong> -- the system avoids pointless evictions. If the total does meet the demand, all workloads in the accumulated set are marked for preemption together. This is matched by GPU resource name (e.g. <code>amd.com/gpu</code>), so workloads using different GPU partition profiles do not interfere with each other.</p>
+<p>Already-claimed victims are excluded from subsequent pending workloads' evaluations, preventing double-preemption.</p>
+<h3 id="always"><code>Always</code></h3>
+<p>The workload is preempted as soon as it has been idle longer than <code>grace-period</code>, regardless of whether any other workload is waiting. This is useful for strict resource reclamation policies.</p>
+<h2 id="environment-variables">Environment Variables</h2>
+<p>These are set on the Kaiwo operator deployment, typically via Helm values under <code>gpuPreemption.*</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Description</th>
+<th>Helm value</th>
+<th>Hardcoded fallback</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GPU_PREEMPTION_ENABLED</code></td>
+<td>Enable the GPU preemption controller and metrics scraper (<code>true</code>/<code>false</code>).</td>
+<td><code>gpuPreemption.enabled</code></td>
+<td><code>false</code></td>
+</tr>
+<tr>
+<td><code>GPU_PREEMPTION_METRICS_ENDPOINT</code></td>
+<td>URL of the AMD GPU metrics exporter Prometheus endpoint.</td>
+<td><code>gpuPreemption.metricsEndpoint</code></td>
+<td><em>(required)</em></td>
+</tr>
+<tr>
+<td><code>GPU_PREEMPTION_POLLING_INTERVAL</code></td>
+<td>How often the scraper polls the metrics endpoint (e.g. <code>15s</code>, <code>1m</code>).</td>
+<td><code>gpuPreemption.pollingInterval</code></td>
+<td><code>15s</code></td>
+</tr>
+<tr>
+<td><code>GPU_PREEMPTION_DEFAULT_THRESHOLD</code></td>
+<td>Default utilization threshold (%) below which a workload is idle.</td>
+<td><code>gpuPreemption.defaultThreshold</code></td>
+<td><code>5</code></td>
+</tr>
+<tr>
+<td><code>GPU_PREEMPTION_DEFAULT_GRACE_PERIOD</code></td>
+<td>Default idle duration before preemption eligibility (e.g. <code>10m</code>, <code>1h</code>).</td>
+<td><code>gpuPreemption.defaultGracePeriod</code></td>
+<td><code>10m</code></td>
+</tr>
+<tr>
+<td><code>GPU_PREEMPTION_DEFAULT_POLICY</code></td>
+<td>Default preemption policy (<code>OnPressure</code> or <code>Always</code>).</td>
+<td><code>gpuPreemption.defaultPolicy</code></td>
+<td><code>OnPressure</code></td>
+</tr>
+<tr>
+<td><code>GPU_PREEMPTION_DEFAULT_AGGREGATION</code></td>
+<td>Default multi-pod aggregation policy (<code>Min</code>, <code>Max</code>, or <code>Avg</code>).</td>
+<td><code>gpuPreemption.defaultAggregation</code></td>
+<td><code>Max</code></td>
+</tr>
+<tr>
+<td><code>GPU_PREEMPTION_DEFAULT_TTL</code></td>
+<td>Default TTL for terminal <code>GpuWorkload</code> CRs (<code>0</code> = retain forever).</td>
+<td><code>gpuPreemption.defaultTTL</code></td>
+<td><code>24h</code></td>
+</tr>
+<tr>
+<td><code>GPU_PREEMPTION_OPERATOR_NAMESPACE</code></td>
+<td>Namespace where the operator runs (used for Lease coordination).</td>
+<td>--</td>
+<td><em>(auto-detected)</em></td>
+</tr>
+</tbody>
+</table>
+<h2 id="gpuworkload-lifecycle">GpuWorkload Lifecycle</h2>
+<p>Each <code>GpuWorkload</code> CR transitions through the following phases:</p>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PendingOther</code></td>
+<td>Pods exist but are not yet Running for non-GPU reasons: image pulls, init containers, PVC binding, node affinity, taints, etc. No idle time is counted and no preemption evaluation is triggered.</td>
+</tr>
+<tr>
+<td><code>PendingGpu</code></td>
+<td>Pods are unschedulable <strong>specifically because of insufficient GPU resources</strong> (validated by checking the scheduler's <code>PodScheduled</code> condition for <code>Insufficient amd.com/gpu</code>). Acts as the demand signal for <code>OnPressure</code> preemption.</td>
+</tr>
+<tr>
+<td><code>Active</code></td>
+<td>Pods are running and aggregated GPU utilization is at or above the threshold.</td>
+</tr>
+<tr>
+<td><code>Idle</code></td>
+<td>Pods are running but aggregated GPU utilization is below the threshold. The <code>grace-period</code> timer starts.</td>
+</tr>
+<tr>
+<td><code>Preempting</code></td>
+<td>The workload has been selected for preemption; deletion of the root owner is in progress.</td>
+</tr>
+<tr>
+<td><code>Preempted</code></td>
+<td>The root owner was successfully deleted by the preemption system.</td>
+</tr>
+<tr>
+<td><code>Deleted</code></td>
+<td>The root owner disappeared on its own (completed, manually deleted, etc.).</td>
+</tr>
+</tbody>
+</table>
+<p>After reaching <code>Preempted</code> or <code>Deleted</code>, the CR is retained for <code>ttlAfterFinished</code> (default 24h) to provide an audit trail, then automatically cleaned up.</p>
+<h3 id="gpuworkload-naming">GpuWorkload naming</h3>
+<p><code>GpuWorkload</code> CRs are named deterministically from the root owner: <code>&lt;lowercase-kind&gt;-&lt;name&gt;-&lt;uid-prefix&gt;</code>. For example, a Job named <code>training</code> with UID <code>a1b2c3d4-...</code> produces a <code>GpuWorkload</code> named <code>job-training-a1b2c3d4</code>.</p>
+<h2 id="inspecting-gpuworkloads">Inspecting GpuWorkloads</h2>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># List all tracked GPU workloads</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>gpuworkloads<span class="w"> </span>-A
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="c1"># Detailed view with utilization and phase</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>kubectl<span class="w"> </span>get<span class="w"> </span>gpuworkloads<span class="w"> </span>-A<span class="w"> </span>-o<span class="w"> </span>wide
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="c1"># Inspect a specific workload</span>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>kubectl<span class="w"> </span>describe<span class="w"> </span>gpuworkload<span class="w"> </span>job-training-a1b2c3d4<span class="w"> </span>-n<span class="w"> </span>my-namespace
+</span></code></pre></div>
+<p>The status includes:</p>
+<ul>
+<li><code>trackedPods</code> -- owned pods and their per-GPU utilization metrics (pod name, GPU ID, utilization %, last update)</li>
+<li><code>aggregatedUtilization</code> -- current utilization percentage across all pods</li>
+<li><code>idleSince</code> -- when the workload became idle</li>
+<li><code>ownerChain</code> -- the full owner reference path (e.g. <code>Pod/worker-0 -&gt; Job/training -&gt; KaiwoJob/my-job</code>)</li>
+<li><code>preemptedFor</code> -- the pending workload this was preempted to make room for</li>
+<li><code>preemptionReason</code> -- human-readable explanation</li>
+</ul>
+<h3 id="example-gpuworkload-cr">Example GpuWorkload CR</h3>
+<p>The following shows a representative <code>GpuWorkload</code> for an idle training Job, with all fields populated as they would appear during normal operation:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kaiwo.silogen.ai/v1alpha1</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">GpuWorkload</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="nt">metadata</span><span class="p">:</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">job-batch-training-a1b2c3d4</span><span class="w">      </span><span class="c1"># &lt;lowercase-kind&gt;-&lt;name&gt;-&lt;uid-prefix&gt;</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ml-team</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="nt">spec</span><span class="p">:</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="w">  </span><span class="nt">workloadRef</span><span class="p">:</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="w">    </span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">batch/v1</span>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Job</span>
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">batch-training</span>
+</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="w">    </span><span class="nt">uid</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">a1b2c3d4-e5f6-7890-abcd-ef1234567890</span>
+</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="w">  </span><span class="nt">gpuResources</span><span class="p">:</span>
+</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="w">    </span><span class="nt">amd.com/gpu</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span><span class="w">                        </span><span class="c1"># total GPUs requested across all pods</span>
+</span><span id="__span-6-14"><a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="w">  </span><span class="nt">utilizationThreshold</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5.0</span><span class="w">              </span><span class="c1"># % below which the workload is idle (optional override)</span>
+</span><span id="__span-6-15"><a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a><span class="w">  </span><span class="nt">gracePeriod</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10m</span><span class="w">                       </span><span class="c1"># idle duration before preemption eligibility (optional override)</span>
+</span><span id="__span-6-16"><a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a><span class="w">  </span><span class="nt">preemptionPolicy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">OnPressure</span><span class="w">           </span><span class="c1"># OnPressure or Always (optional override)</span>
+</span><span id="__span-6-17"><a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a><span class="w">  </span><span class="nt">aggregationPolicy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Max</span><span class="w">                 </span><span class="c1"># Min, Max, or Avg across pods (optional override)</span>
+</span><span id="__span-6-18"><a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a><span class="w">  </span><span class="nt">ttlAfterFinished</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">24h</span><span class="w">                  </span><span class="c1"># how long to retain after terminal phase (optional override)</span>
+</span><span id="__span-6-19"><a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a><span class="nt">status</span><span class="p">:</span>
+</span><span id="__span-6-20"><a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a><span class="w">  </span><span class="nt">phase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Idle</span>
+</span><span id="__span-6-21"><a id="__codelineno-6-21" name="__codelineno-6-21" href="#__codelineno-6-21"></a><span class="w">  </span><span class="nt">aggregatedUtilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.2</span><span class="w">            </span><span class="c1"># current %, below threshold → Idle</span>
+</span><span id="__span-6-22"><a id="__codelineno-6-22" name="__codelineno-6-22" href="#__codelineno-6-22"></a><span class="w">  </span><span class="nt">idleSince</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2026-03-04T10:00:00Z&quot;</span>
+</span><span id="__span-6-23"><a id="__codelineno-6-23" name="__codelineno-6-23" href="#__codelineno-6-23"></a><span class="w">  </span><span class="nt">ownerChain</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Pod/batch-training-xw7n5</span><span class="nv"> </span><span class="s">-&gt;</span><span class="nv"> </span><span class="s">Job/batch-training&quot;</span>
+</span><span id="__span-6-24"><a id="__codelineno-6-24" name="__codelineno-6-24" href="#__codelineno-6-24"></a><span class="w">  </span><span class="nt">lastMetricsUpdate</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2026-03-04T10:14:45Z&quot;</span>
+</span><span id="__span-6-25"><a id="__codelineno-6-25" name="__codelineno-6-25" href="#__codelineno-6-25"></a><span class="w">  </span><span class="nt">trackedPods</span><span class="p">:</span>
+</span><span id="__span-6-26"><a id="__codelineno-6-26" name="__codelineno-6-26" href="#__codelineno-6-26"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">podName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">batch-training-xw7n5</span>
+</span><span id="__span-6-27"><a id="__codelineno-6-27" name="__codelineno-6-27" href="#__codelineno-6-27"></a><span class="w">    </span><span class="nt">gpuMetrics</span><span class="p">:</span>
+</span><span id="__span-6-28"><a id="__codelineno-6-28" name="__codelineno-6-28" href="#__codelineno-6-28"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">gpuId</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;0&quot;</span>
+</span><span id="__span-6-29"><a id="__codelineno-6-29" name="__codelineno-6-29" href="#__codelineno-6-29"></a><span class="w">      </span><span class="nt">utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.1</span>
+</span><span id="__span-6-30"><a id="__codelineno-6-30" name="__codelineno-6-30" href="#__codelineno-6-30"></a><span class="w">      </span><span class="nt">lastUpdate</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2026-03-04T10:14:45Z&quot;</span>
+</span><span id="__span-6-31"><a id="__codelineno-6-31" name="__codelineno-6-31" href="#__codelineno-6-31"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">gpuId</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1&quot;</span>
+</span><span id="__span-6-32"><a id="__codelineno-6-32" name="__codelineno-6-32" href="#__codelineno-6-32"></a><span class="w">      </span><span class="nt">utilization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.3</span>
+</span><span id="__span-6-33"><a id="__codelineno-6-33" name="__codelineno-6-33" href="#__codelineno-6-33"></a><span class="w">      </span><span class="nt">lastUpdate</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2026-03-04T10:14:45Z&quot;</span>
+</span><span id="__span-6-34"><a id="__codelineno-6-34" name="__codelineno-6-34" href="#__codelineno-6-34"></a><span class="w">  </span><span class="nt">conditions</span><span class="p">:</span>
+</span><span id="__span-6-35"><a id="__codelineno-6-35" name="__codelineno-6-35" href="#__codelineno-6-35"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">PhaseUpdated</span>
+</span><span id="__span-6-36"><a id="__codelineno-6-36" name="__codelineno-6-36" href="#__codelineno-6-36"></a><span class="w">    </span><span class="nt">status</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;True&quot;</span>
+</span><span id="__span-6-37"><a id="__codelineno-6-37" name="__codelineno-6-37" href="#__codelineno-6-37"></a><span class="w">    </span><span class="nt">reason</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">PhaseIdle</span>
+</span><span id="__span-6-38"><a id="__codelineno-6-38" name="__codelineno-6-38" href="#__codelineno-6-38"></a><span class="w">    </span><span class="nt">message</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;GPU</span><span class="nv"> </span><span class="s">utilization</span><span class="nv"> </span><span class="s">dropped</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">1.2%,</span><span class="nv"> </span><span class="s">workload</span><span class="nv"> </span><span class="s">is</span><span class="nv"> </span><span class="s">now</span><span class="nv"> </span><span class="s">considered</span><span class="nv"> </span><span class="s">idle&quot;</span>
+</span><span id="__span-6-39"><a id="__codelineno-6-39" name="__codelineno-6-39" href="#__codelineno-6-39"></a><span class="w">    </span><span class="nt">lastTransitionTime</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2026-03-04T10:00:00Z&quot;</span>
+</span></code></pre></div>
+<p>For a preempted workload the status also includes:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nt">status</span><span class="p">:</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span><span class="nt">phase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Preempted</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span><span class="nt">preemptedAt</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2026-03-04T10:15:00Z&quot;</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">  </span><span class="nt">preemptedFor</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;job-high-priority-demand-b2c3d4e5&quot;</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">  </span><span class="nt">preemptionReason</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Preempted</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">free</span><span class="nv"> </span><span class="s">4</span><span class="nv"> </span><span class="s">amd.com/gpu</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">pending</span><span class="nv"> </span><span class="s">workload</span><span class="nv"> </span><span class="s">job-high-priority-demand-b2c3d4e5&quot;</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">  </span><span class="nt">finishedAt</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2026-03-04T10:15:00Z&quot;</span><span class="w">   </span><span class="c1"># TTL countdown starts here</span>
+</span></code></pre></div>
+<h2 id="examples">Examples</h2>
+<h3 id="reclaim-idle-gpus-under-pressure-default-behavior">Reclaim idle GPUs under pressure (default behavior)</h3>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">batch/v1</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Job</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="nt">metadata</span><span class="p">:</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">batch-inference</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">  </span><span class="nt">annotations</span><span class="p">:</span>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">    </span><span class="nt">kaiwo.silogen.ai/gpu-preemption.grace-period</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;10m&quot;</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="nt">spec</span><span class="p">:</span>
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="w">  </span><span class="c1"># ...</span>
+</span></code></pre></div>
+<p>This uses the default <code>OnPressure</code> policy. The Job will only be preempted if it has been idle for 10 minutes <strong>and</strong> another GPU workload is pending due to insufficient GPUs <strong>and</strong> the combined GPUs freed by this (and potentially other idle) workloads would satisfy the pending demand.</p>
+<h3 id="strict-reclamation-with-short-idle-window">Strict reclamation with short idle window</h3>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">apps/v1</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Deployment</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="nt">metadata</span><span class="p">:</span>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dev-notebook</span>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">  </span><span class="nt">annotations</span><span class="p">:</span>
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="w">    </span><span class="nt">kaiwo.silogen.ai/gpu-preemption.policy</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Always&quot;</span>
+</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="w">    </span><span class="nt">kaiwo.silogen.ai/gpu-preemption.grace-period</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;5m&quot;</span>
+</span><span id="__span-9-8"><a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="w">    </span><span class="nt">kaiwo.silogen.ai/gpu-preemption.threshold</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;10&quot;</span>
+</span><span id="__span-9-9"><a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a><span class="nt">spec</span><span class="p">:</span>
+</span><span id="__span-9-10"><a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a><span class="w">  </span><span class="c1"># ...</span>
+</span></code></pre></div>
+<p>The Deployment is terminated if GPU utilization stays below 10% for 5 minutes, regardless of cluster demand.</p>
+<h3 id="opt-in-with-defaults-only">Opt-in with defaults only</h3>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="nt">metadata</span><span class="p">:</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">  </span><span class="nt">annotations</span><span class="p">:</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">    </span><span class="nt">kaiwo.silogen.ai/gpu-preemption.enabled</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;true&quot;</span>
+</span></code></pre></div>
+<p>Uses all cluster-wide defaults from KaiwoConfig, then Helm values / environment variables.</p>
+<h3 id="namespace-wide-opt-in">Namespace-wide opt-in</h3>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v1</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Namespace</span>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="nt">metadata</span><span class="p">:</span>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ml-team</span>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="w">  </span><span class="nt">annotations</span><span class="p">:</span>
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="w">    </span><span class="nt">kaiwo.silogen.ai/gpu-preemption.enabled</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;true&quot;</span>
+</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="w">    </span><span class="nt">kaiwo.silogen.ai/gpu-preemption.grace-period</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;15m&quot;</span>
+</span></code></pre></div>
+<p>All GPU workloads in <code>ml-team</code> are automatically tracked with a 15-minute grace period. Individual workloads can still override settings with their own annotations -- for example, setting <code>.policy: "Always"</code> on one Job overrides the default <code>OnPressure</code> inherited from the namespace.</p>
+<h2 id="comparison-with-resource-monitoring">Comparison with Resource Monitoring</h2>
+<table>
+<thead>
+<tr>
+<th>Aspect</th>
+<th>Resource Monitoring</th>
+<th>GPU Preemption</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Scope</td>
+<td><code>KaiwoJob</code> and <code>KaiwoService</code> only</td>
+<td>Any Kubernetes GPU workload</td>
+</tr>
+<tr>
+<td>Opt-in</td>
+<td>Automatic for Kaiwo CRDs</td>
+<td>Annotation on the root owner or namespace</td>
+</tr>
+<tr>
+<td>CRD</td>
+<td>None (status on Kaiwo CRDs)</td>
+<td><code>GpuWorkload</code> per tracked workload</td>
+</tr>
+<tr>
+<td>Demand awareness</td>
+<td>No</td>
+<td>Yes (<code>OnPressure</code> with fit checks)</td>
+</tr>
+<tr>
+<td>Audit trail</td>
+<td>Status conditions on Kaiwo CRDs</td>
+<td>Persistent <code>GpuWorkload</code> CRs with TTL</td>
+</tr>
+<tr>
+<td>GPU vendor</td>
+<td>NVIDIA or AMD</td>
+<td>AMD (via <code>amd.com/gpu*</code> resources)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<ul>
+<li>
+<p><strong>GpuWorkload not created?</strong></p>
+<ul>
+<li>Verify the root owner (not the Pod template) or its namespace has at least one <code>kaiwo.silogen.ai/gpu-preemption.*</code> annotation.</li>
+<li>Check that the Pod requests <code>amd.com/gpu*</code> resources.</li>
+<li>Check operator logs for RBAC errors during owner resolution -- the operator needs <code>get</code> permissions on all resource types in the owner chain.</li>
+</ul>
+</li>
+<li>
+<p><strong>Workload stuck in Idle but not preempted?</strong></p>
+<ul>
+<li>With <code>OnPressure</code> policy: preemption only happens when another <code>GpuWorkload</code> is in the <code>PendingGpu</code> phase (pods unschedulable due to <code>Insufficient amd.com/gpu</code>, not other reasons) and its demand fits. Check <code>kubectl get gpuworkloads</code> for a <code>PendingGpu</code> phase entry.</li>
+<li>With <code>Always</code> policy: ensure <code>grace-period</code> has elapsed. Check <code>idleSince</code> on the GpuWorkload status.</li>
+</ul>
+</li>
+<li>
+<p><strong>Metrics not updating?</strong></p>
+<ul>
+<li>Verify <code>GPU_PREEMPTION_METRICS_ENDPOINT</code> is reachable from the operator pod.</li>
+<li>Check that the AMD GPU operator's metrics exporter is running and exposing <code>gpu_gfx_activity</code>.</li>
+</ul>
+</li>
+<li>
+<p><strong>Over-preemption concerns?</strong></p>
+<ul>
+<li>The system uses a Kubernetes Lease for mutual exclusion during preemption evaluation. Only one replica evaluates at a time. The fit check accumulates idle workloads until demand is met and skips entirely if even all idle workloads together cannot satisfy the demand. Already-claimed victims are excluded from subsequent evaluations to prevent double-preemption.</li>
+</ul>
+</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+      <div class="md-progress" data-md-component="progress" role="progressbar"></div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.instant.progress", "navigation.tabs", "navigation.sections", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
