@@ -5,7 +5,7 @@
 image:
   registry: ghcr.io
   repository: silogen/kaiwo-operator
-  tag: ""  # Will be set to appVersion from Chart.yaml during installation
+  tag: "publish-main-3a46fb9"
   pullPolicy: Always
   # Image digest for supply chain security (optional, overrides tag)
   # digest: "sha256:abcd1234..."
