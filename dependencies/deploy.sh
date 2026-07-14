@@ -84,8 +84,8 @@ case "$ACTION" in
 
        # Robust CRD wait (tolerate transient nil conditions)
       yq -r 'select(.kind == "CustomResourceDefinition") | .metadata.name' "$TMP_BUILD" \
-        | xargs -r -n1 -P8 -I{} bash -c '
-            CRD="{}"
+        | xargs -r -n1 -P8 bash -c '
+            CRD="$1"
             for i in {1..6}; do
               if kubectl wait --for=condition=Established --timeout=15s "crd/${CRD}" >/dev/null 2>&1; then
                 echo "CRD ${CRD}: Established"
@@ -95,7 +95,7 @@ case "$ACTION" in
             done
             echo "WARN: CRD ${CRD} not reported Established after retries; continuing"
             exit 0
-          '
+          ' _
 
       # Apply the rest (server-side)
       kubectl apply --server-side --force-conflicts -f "$TMP_BUILD"
